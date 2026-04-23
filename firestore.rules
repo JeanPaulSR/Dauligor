@@ -286,9 +286,9 @@ service cloud.firestore {
     }
 
     function isValidTool(data) {
-      return data.keys().hasAll(['name', 'category']) &&
+      return data.keys().hasAll(['name']) &&
              data.name is string && data.name.size() < 100 &&
-             data.category is string &&
+             (('category' in data && data.category is string) || ('categoryId' in data && data.categoryId is string)) &&
              (!('identifier' in data) || data.identifier is string) &&
              (!('foundryAlias' in data) || data.foundryAlias is string) &&
              (!('ability' in data) || data.ability in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) &&
@@ -300,9 +300,9 @@ service cloud.firestore {
     }
 
     function isValidWeapon(data) {
-      return data.keys().hasAll(['name', 'category']) &&
+      return data.keys().hasAll(['name']) &&
              data.name is string && data.name.size() < 100 &&
-             data.category is string &&
+             (('category' in data && data.category is string) || ('categoryId' in data && data.categoryId is string)) &&
              (!('weaponType' in data) || data.weaponType in ['Melee', 'Ranged']) &&
              (!('propertyIds' in data) || data.propertyIds is list) &&
              (!('identifier' in data) || data.identifier is string) &&
@@ -316,9 +316,9 @@ service cloud.firestore {
     }
 
     function isValidArmor(data) {
-      return data.keys().hasAll(['name', 'category']) &&
+      return data.keys().hasAll(['name']) &&
              data.name is string && data.name.size() < 100 &&
-             data.category is string &&
+             (('category' in data && data.category is string) || ('categoryId' in data && data.categoryId is string)) &&
              (!('identifier' in data) || data.identifier is string) &&
              (!('foundryAlias' in data) || data.foundryAlias is string) &&
              (!('ability' in data) || data.ability in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) &&
@@ -359,6 +359,11 @@ service cloud.firestore {
     // ===============================================================
     // Rules
     // ===============================================================
+
+    function isValidStandardMulticlassProgression(data) {
+      return data.keys().hasAll(['levels']) &&
+             data.levels is list;
+    }
 
     match /users/{userId} {
       allow get: if isAuthenticated();
@@ -501,6 +506,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /toolCategories/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
     match /weapons/{weaponId} {
       allow read: if true;
       allow create, update: if isAdmin() && isValidWeapon(request.resource.data);
@@ -559,6 +570,16 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /standardMulticlassProgression/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin() && isValidStandardMulticlassProgression(request.resource.data);
+    }
+
+    match /spellcastingTypes/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     match /characters/{characterId} {

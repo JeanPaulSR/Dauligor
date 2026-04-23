@@ -28,6 +28,7 @@ interface FeaturesViewProps {
   maxHeight?: string;
   hideChoices?: boolean;
   rootAdvancements?: any[];
+  hideAdvancementTypes?: boolean;
 }
 
 /**
@@ -47,7 +48,8 @@ export default function FeaturesView({
   className,
   maxHeight = "500px",
   hideChoices = false,
-  rootAdvancements = []
+  rootAdvancements = [],
+  hideAdvancementTypes = false
 }: FeaturesViewProps) {
   const selectedItem = items.find(i => i.id === selectedId) || items[0];
   const effectiveSelectedId = selectedItem?.id;
@@ -149,7 +151,7 @@ export default function FeaturesView({
                     <div key={idx} className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{adv.title || adv.configuration?.title || 'Advancement'}</span>
-                        <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>
+                        {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>}
                       </div>
                       {adv.type === 'ItemGrant' && adv.configuration?.pool && (
                         <div className="flex flex-wrap gap-1 mt-1">

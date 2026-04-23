@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { db } from '../../lib/firebase';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -48,10 +49,17 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [spellcasting, setSpellcasting] = useState<any>(null);
   const [altSpellcasting, setAltSpellcasting] = useState<any>(null);
   const [spellsKnown, setSpellsKnown] = useState<any>(null);
+  const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
+  const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
   const [allSkills, setAllSkills] = useState<any[]>([]);
   const [allTools, setAllTools] = useState<any[]>([]);
+  const [allToolCategories, setAllToolCategories] = useState<any[]>([]);
+  const [allWeaponCategories, setAllWeaponCategories] = useState<any[]>([]);
+  const [allArmorCategories, setAllArmorCategories] = useState<any[]>([]);
+  const [allWeapons, setAllWeapons] = useState<any[]>([]);
+  const [allArmor, setAllArmor] = useState<any[]>([]);
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [selectedSubclassId, setSelectedSubclassId] = useState<string | null>(null);
   const [selectedSubclass, setSelectedSubclass] = useState<any>(null);
@@ -86,11 +94,24 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         // Fetch Spellcasting Scalings for Subclass
         if (data.spellcasting) {
           const sc = data.spellcasting;
-          if (sc.progressionId) {
+          
+          if (sc.manualProgressionId) {
+            getDoc(doc(db, 'spellcastingScalings', sc.manualProgressionId)).then(s => s.exists() && setSubclassSpellcasting(s.data()));
+          } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
+            const type = spellcastingTypes.find(t => t.id === sc.progressionId);
+            if (type) {
+              const virtualLevels: Record<string, any> = {};
+              for (let level = 1; level <= 20; level++) {
+                const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
+                const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
+                virtualLevels[level.toString()] = { slots };
+              }
+              setSubclassSpellcasting({ name: type.name, levels: virtualLevels });
+            }
+          } else if (sc.progressionId && !sc.manualProgressionId) {
             getDoc(doc(db, 'spellcastingScalings', sc.progressionId)).then(s => s.exists() && setSubclassSpellcasting(s.data()));
-          } else {
-            setSubclassSpellcasting(null);
           }
+
           if (sc.altProgressionId) {
             getDoc(doc(db, 'pactMagicScalings', sc.altProgressionId)).then(s => s.exists() && setSubclassAltSpellcasting(s.data()));
           } else {
@@ -131,7 +152,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       unsubFeat();
       unsubCol();
     };
-  }, [selectedSubclassId]);
+  }, [selectedSubclassId, spellcastingTypes.length, !!masterMulticlassChart]);
 
   const allFeaturesWithSpellcasting = useMemo(() => {
     if (!classData) return [];
@@ -203,11 +224,28 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           if (data.spellcasting) {
             const sc = data.spellcasting;
             
-            if (sc.progressionId) {
+            if (sc.manualProgressionId) {
+              getDoc(doc(db, 'spellcastingScalings', sc.manualProgressionId)).then(snap => {
+                if (snap.exists()) setSpellcasting(snap.data());
+              });
+            } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
+              const type = spellcastingTypes.find(t => t.id === sc.progressionId);
+              if (type) {
+                const virtualLevels: Record<string, any> = {};
+                for (let level = 1; level <= 20; level++) {
+                  const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
+                  const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
+                  virtualLevels[level.toString()] = { slots };
+                }
+                setSpellcasting({ name: type.name, levels: virtualLevels });
+              }
+            } else if (sc.progressionId && !sc.manualProgressionId) {
+              // Fallback/Legacy
               getDoc(doc(db, 'spellcastingScalings', sc.progressionId)).then(snap => {
                 if (snap.exists()) setSpellcasting(snap.data());
               });
             }
+
             if (sc.altProgressionId) {
               getDoc(doc(db, 'pactMagicScalings', sc.altProgressionId)).then(snap => {
                 if (snap.exists()) setAltSpellcasting(snap.data());
@@ -276,7 +314,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       unsubscribeScaling();
       unsubscribeSubclasses();
     };
-  }, [id, navigate]);
+  }, [id, navigate, spellcastingTypes.length, !!masterMulticlassChart]);
 
   const allScalingColumns = useMemo(() => {
     return [...scalingColumns, ...subclassScalingColumns];
@@ -346,17 +384,72 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       setAllTools(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
+    const unsubscribeToolCategories = onSnapshot(collection(db, 'toolCategories'), (snap) => {
+      setAllToolCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeWeaponCategories = onSnapshot(collection(db, 'weaponCategories'), (snap) => {
+      setAllWeaponCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeArmorCategories = onSnapshot(collection(db, 'armorCategories'), (snap) => {
+      setAllArmorCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeWeapons = onSnapshot(collection(db, 'weapons'), (snap) => {
+      setAllWeapons(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeArmor = onSnapshot(collection(db, 'armor'), (snap) => {
+      setAllArmor(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeTypes = onSnapshot(collection(db, 'spellcastingTypes'), (snap) => {
+      setSpellcastingTypes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeMaster = onSnapshot(doc(db, 'standardMulticlassProgression', 'master'), (snap) => {
+      if (snap.exists()) setMasterMulticlassChart(snap.data());
+    });
+
     return () => {
       unsubscribeTagGroups();
       unsubscribeTags();
       unsubscribeSkills();
       unsubscribeTools();
+      unsubscribeToolCategories();
+      unsubscribeWeaponCategories();
+      unsubscribeArmorCategories();
+      unsubscribeWeapons();
+      unsubscribeArmor();
+      unsubscribeTypes();
+      unsubscribeMaster();
     };
   }, []);
 
   const hasAnySpellsKnown = !!(spellsKnown || subclassSpellsKnown);
   const hasAnyAltSpellcasting = !!(altSpellcasting || subclassAltSpellcasting);
   const hasAnySpellcasting = !!(spellcasting || subclassSpellcasting);
+
+  const maxSpellLevel = useMemo(() => {
+    // Check both base and subclass spellcasting to find the true max level across all levels
+    const candidates = [spellcasting, subclassSpellcasting].filter(Boolean);
+    let max = 0;
+    candidates.forEach(sc => {
+      if (!sc?.levels) return;
+      Object.values(sc.levels).forEach((lvl: any) => {
+        if (lvl.slots) {
+          for (let i = lvl.slots.length - 1; i >= 0; i--) {
+            if (lvl.slots[i] > 0) {
+              if (i + 1 > max) max = i + 1;
+              break;
+            }
+          }
+        }
+      });
+    });
+    return max;
+  }, [spellcasting, subclassSpellcasting]);
 
   if (loading) return (
     <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
@@ -593,13 +686,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                     </>
                   )}
                   {hasAnySpellcasting && (
-                    <th colSpan={9} className="p-1.5 label-text italic text-gold text-center">Spell Slots per Spell Level</th>
+                    <th colSpan={maxSpellLevel} className="p-1.5 label-text italic text-gold text-center">Spell Slots per Spell Level</th>
                   )}
                 </tr>
                 {hasAnySpellcasting && (
                   <tr className="border-b border-gold/10 bg-gold/5">
                     <th colSpan={3 + allScalingColumns.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/10"></th>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(lvl => (
+                    {Array.from({ length: maxSpellLevel }, (_, i) => i + 1).map(lvl => (
                       <th key={lvl} className="p-1 label-text italic text-gold text-center w-6 border-r border-gold/5 last:border-r-0">
                         {lvl}{lvl === 1 ? 'st' : lvl === 2 ? 'nd' : lvl === 3 ? 'rd' : 'th'}
                       </th>
@@ -624,7 +717,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                         <div className="flex flex-wrap gap-1">
                           {levelFeatures.map(f => (
                             <span key={f.id} className={`font-bold hover:underline cursor-help transition-colors ${f.isFromSubclass ? 'text-gold/80 italic' : 'text-gold'}`}>
-                              {f.name}{levelFeatures.indexOf(f) < levelFeatures.length - 1 ? ',' : ''}
+                              {f.name.split(' (')[0]}{levelFeatures.indexOf(f) < levelFeatures.length - 1 ? ',' : ''}
                             </span>
                           ))}
                           {levelFeatures.length === 0 && <span className="text-ink/20">—</span>}
@@ -664,11 +757,15 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                       )}
                       {hasAnySpellcasting && (
                         <>
-                          {(levelScaling?.slots || [0,0,0,0,0,0,0,0,0]).map((slots: number, idx: number) => (
-                            <td key={idx} className={`p-1 text-center font-mono border-r border-gold/5 last:border-r-0 ${slots > 0 ? 'text-ink font-bold' : 'text-ink/10'}`}>
-                              {slots > 0 ? slots : '—'}
-                            </td>
-                          ))}
+                          {(() => {
+                            const slots = levelScaling?.slots || [];
+                            const paddedSlots = [...slots, ...Array(Math.max(0, maxSpellLevel - slots.length)).fill(0)].slice(0, maxSpellLevel);
+                            return paddedSlots.map((sCount: number, idx: number) => (
+                              <td key={idx} className={`p-1 text-center font-mono border-r border-gold/5 last:border-r-0 ${sCount > 0 ? 'text-ink font-bold' : 'text-ink/10'}`}>
+                                {sCount > 0 ? sCount : '—'}
+                              </td>
+                            ));
+                          })()}
                         </>
                       )}
                     </tr>
@@ -894,17 +991,79 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                 <div className="space-y-1">
                   <p className="uppercase font-bold tracking-widest text-ink/40">Proficiencies</p>
                   <p className="text-ink/80"><strong>Saving Throws:</strong> {(classData.savingThrows || []).join(', ')}</p>
-                  <p className="text-ink/80"><strong>Armor:</strong> {classData.proficiencies?.armor || 'None'}</p>
-                  <p className="text-ink/80"><strong>Weapons:</strong> {classData.proficiencies?.weapons || 'None'}</p>
+                  <p className="text-ink/80">
+                    <strong>Armor:</strong> {(() => {
+                      const prof = classData.proficiencies?.armor;
+                      const displayName = classData.proficiencies?.armorDisplayName;
+                      if (typeof prof === 'string') return prof;
+                      if (displayName) return displayName;
+                      if (prof && typeof prof === 'object') {
+                        const categoryIds = prof.categoryIds || [];
+                        const catNames = categoryIds.map((cid: string) => allArmorCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                        
+                        const fixed = (prof.fixedIds || [])
+                          .filter((id: string) => {
+                            const item = allArmor.find(i => i.id === id);
+                            return !categoryIds.includes(item?.categoryId);
+                          })
+                          .map((id: string) => allArmor.find(i => i.id === id)?.name)
+                          .filter(Boolean);
+
+                        let parts = [];
+                        if (catNames.length > 0) parts.push(catNames.join(', '));
+                        if (fixed.length > 0) parts.push(fixed.join(', '));
+                        return parts.length > 0 ? parts.join(', ') : 'None';
+                      }
+                      return 'None';
+                    })()}
+                  </p>
+                  <p className="text-ink/80">
+                    <strong>Weapons:</strong> {(() => {
+                      const prof = classData.proficiencies?.weapons;
+                      const displayName = classData.proficiencies?.weaponsDisplayName;
+                      if (typeof prof === 'string') return prof;
+                      if (displayName) return displayName;
+                      if (prof && typeof prof === 'object') {
+                        const categoryIds = prof.categoryIds || [];
+                        const catNames = categoryIds.map((cid: string) => allWeaponCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                        
+                        const fixed = (prof.fixedIds || [])
+                          .filter((id: string) => {
+                            const item = allWeapons.find(i => i.id === id);
+                            return !categoryIds.includes(item?.categoryId);
+                          })
+                          .map((id: string) => allWeapons.find(i => i.id === id)?.name)
+                          .filter(Boolean);
+
+                        let parts = [];
+                        if (catNames.length > 0) parts.push(catNames.join(', '));
+                        if (fixed.length > 0) parts.push(fixed.join(', '));
+                        return parts.length > 0 ? parts.join(', ') : 'None';
+                      }
+                      return 'None';
+                    })()}
+                  </p>
                   <div className="text-ink/80">
                     <strong>Tools:</strong> {(() => {
                       const tools = classData.proficiencies?.tools;
+                      const displayName = classData.proficiencies?.toolsDisplayName;
                       if (!tools || typeof tools === 'string') return tools || 'None';
+                      if (displayName) return displayName;
                       
-                      const fixed = (tools.fixedIds || []).map((id: string) => allTools.find(t => t.id === id)?.name).filter(Boolean);
+                      const categoryIds = tools.categoryIds || [];
+                      const catNames = categoryIds.map((cid: string) => allToolCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                      
+                      const fixed = (tools.fixedIds || [])
+                        .filter((id: string) => {
+                          const tool = allTools.find(t => t.id === id);
+                          return !categoryIds.includes(tool?.categoryId);
+                        })
+                        .map((id: string) => allTools.find(t => t.id === id)?.name)
+                        .filter(Boolean);
                       const options = (tools.optionIds || []).map((id: string) => allTools.find(t => t.id === id)?.name).filter(Boolean);
                       
                       let parts = [];
+                      if (catNames.length > 0) parts.push(catNames.join(', '));
                       if (fixed.length > 0) parts.push(fixed.join(', '));
                       if (tools.choiceCount > 0 && options.length > 0) {
                         parts.push(`Choose ${tools.choiceCount} from: ${options.join(', ')}`);

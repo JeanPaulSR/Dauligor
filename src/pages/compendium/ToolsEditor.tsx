@@ -27,25 +27,17 @@ import {
 import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
 
-const CATEGORIES = [
-  "Artisan's Tools",
-  "Gaming Set",
-  "Musical Instrument",
-  "Other",
-  "Vehicles (Land)",
-  "Vehicles (Water)"
-];
-
 export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const navigate = useNavigate();
   const [tools, setTools] = useState<any[]>([]);
+  const [toolCategories, setToolCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [editingTool, setEditingTool] = useState<any>(null);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
-  const [category, setCategory] = useState("Artisan's Tools");
+  const [categoryId, setCategoryId] = useState('');
   const [description, setDescription] = useState('');
   const [foundryAlias, setFoundryAlias] = useState('');
   const [source, setSource] = useState('PHB');
@@ -60,34 +52,61 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
       query(collection(db, 'tools'), orderBy('name', 'asc')),
       (snapshot) => {
         setTools(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
       },
       (err) => {
         console.error("Error in Tools snapshot:", err);
-        setLoading(false);
       }
     );
 
-    return () => unsubscribe();
-  }, []);
+      // Fetch All Option Groups
+      const unsubscribeCategories = onSnapshot(
+        query(collection(db, 'toolCategories'), orderBy('name', 'asc')),
+        (snapshot) => {
+          const cats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setToolCategories(cats);
+          
+          // If we are NOT editing and don't have a categoryId yet, default to the first one
+          setCategoryId(prev => {
+            if (prev) return prev;
+            return cats.length > 0 ? cats[0].id : '';
+          });
+          
+          setLoading(false);
+        },
+        (err) => {
+          console.error("Error in toolCategories snapshot:", err);
+          setLoading(false);
+        }
+      );
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !category) return;
-
-    try {
-      const toolData = {
-        name,
-        identifier: identifier.trim() || slugify(name),
-        category,
-        foundryAlias: foundryAlias.trim(),
-        source,
-        ability,
-        page: page === '' ? null : Number(page),
-        basicRules,
-        description,
-        updatedAt: new Date().toISOString()
+      return () => {
+        unsubscribe();
+        unsubscribeCategories();
       };
+    }, []);
+
+    const handleSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      
+      const effectiveCategoryId = categoryId || toolCategories[0]?.id;
+      if (!name || !effectiveCategoryId) {
+        toast.error('Name and Category are required');
+        return;
+      }
+
+      try {
+        const toolData = {
+          name,
+          identifier: identifier.trim() || slugify(name),
+          categoryId: effectiveCategoryId,
+          foundryAlias: foundryAlias.trim(),
+          source,
+          ability,
+          page: page === '' ? null : Number(page),
+          basicRules,
+          description,
+          updatedAt: new Date().toISOString()
+        };
 
       if (editingTool) {
         await updateDoc(doc(db, 'tools', editingTool.id), toolData);
@@ -99,6 +118,8 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
 
       resetForm();
     } catch (error) {
+      console.error("Error saving tool:", error);
+      toast.error('Failed to save tool');
       handleFirestoreError(error, OperationType.WRITE, 'tools');
     }
   };
@@ -107,7 +128,7 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
     setEditingTool(null);
     setName('');
     setIdentifier('');
-    setCategory("Artisan's Tools");
+    setCategoryId(toolCategories[0]?.id || '');
     setDescription('');
     setFoundryAlias('');
     setSource('PHB');
@@ -122,6 +143,8 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
         await deleteDoc(doc(db, 'tools', id));
         toast.success('Tool deleted');
       } catch (error) {
+        console.error("Error deleting tool:", error);
+        toast.error('Failed to delete tool');
         handleFirestoreError(error, OperationType.DELETE, 'tools');
       }
     }
@@ -201,12 +224,12 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Category</label>
                       <select 
-                        value={category}
-                        onChange={e => setCategory(e.target.value)}
+                        value={categoryId}
+                        onChange={e => setCategoryId(e.target.value)}
                         className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
                       >
-                        {CATEGORIES.map(c => (
-                          <option key={c} value={c}>{c}</option>
+                        {toolCategories.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
                     </div>
@@ -299,7 +322,9 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                             {tool.identifier}
                           </span>
                         )}
-                        <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">{tool.category}</span>
+                        <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
+                          {toolCategories.find(c => c.id === tool.categoryId)?.name || 'Other'}
+                        </span>
                         {tool.ability && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{tool.ability}</span>
                         )}
@@ -319,7 +344,11 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                         setName(tool.name);
                         setIdentifier(tool.identifier || '');
                         setFoundryAlias(tool.foundryAlias || '');
-                        setCategory(tool.category || "Artisan's Tools");
+                        
+                        // Try to find categoryId, fallback to finding by name if it was old style
+                        const cid = tool.categoryId || toolCategories.find((c: any) => c.name === tool.category)?.id || '';
+                        setCategoryId(cid);
+                        
                         setAbility(tool.ability || 'DEX');
                         setDescription(tool.description || '');
                         setSource(tool.source || '');

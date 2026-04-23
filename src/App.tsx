@@ -168,7 +168,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-parchment">
-        <div className="text-2xl font-serif animate-pulse text-gold">Loading Archive...</div>
+        <div className="text-2xl font-serif animate-pulse text-gold">Loading Dauligor...</div>
       </div>
     );
   }
@@ -251,7 +251,7 @@ export default function App() {
           <footer className="bg-card border-t border-gold/10 text-ink py-8 mt-auto">
               <div className="container mx-auto px-4 text-center opacity-70">
                 <p className="font-serif italic">"This site contains material used under the Open Game License (OGL). All original content is the property of its respective creators. Access to this website is restricted to registered players for use within private tabletop roleplaying sessions."</p>
-                <p className="text-xs mt-2">© 2026 Dungeon Master's Archive</p>
+                <p className="text-xs mt-2">© 2026 Dauligor: Compendium and Lore Manager</p>
               </div>
             </footer>
             {effectiveProfile?.role === 'admin' && <DebugConsole />}

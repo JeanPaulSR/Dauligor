@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Crosshair, Brain, Hammer, Settings, MessageCircle, HeartPulse, Skull, Star } from 'lucide-react';
+import { ShieldCheck, Crosshair, Brain, Hammer, Settings, MessageCircle, HeartPulse, Skull, Star, Wand2 } from 'lucide-react';
 import SkillsEditor from '../compendium/SkillsEditor';
 import ToolsEditor from '../compendium/ToolsEditor';
 import WeaponsEditor from './WeaponsEditor';
 import ArmorEditor from './ArmorEditor';
 import SimplePropertyEditor from './SimplePropertyEditor';
+import SpellcastingAdvancementManager from './SpellcastingAdvancementManager';
 
 export default function AdminProficiencies({ userProfile }: { userProfile: any }) {
   const [activeTab, setActiveTab] = useState<
-    'skills' | 'tools' | 'weapons' | 'weaponCategories' | 'weaponProperties' | 'armor' | 'armorCategories' | 'languages' | 'languageCategories' | 'damageTypes' | 'conditions' | 'attributes'
+    'skills' | 'tools' | 'toolCategories' | 'weapons' | 'weaponCategories' | 'weaponProperties' | 'armor' | 'armorCategories' | 'languages' | 'languageCategories' | 'damageTypes' | 'conditions' | 'attributes' | 'spellcasting'
   >('skills');
 
   if (userProfile?.role !== 'admin') {
@@ -33,6 +34,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
         {[
           { id: 'skills', label: 'Skills', icon: Brain },
           { id: 'tools', label: 'Tools', icon: Hammer },
+          { id: 'toolCategories', label: 'Tool Categories', icon: Hammer },
           { id: 'weapons', label: 'Weapons', icon: Crosshair },
           { id: 'weaponCategories', label: 'Weapon Categories', icon: Crosshair },
           { id: 'weaponProperties', label: 'Weapon Properties', icon: Hammer },
@@ -42,7 +44,8 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
           { id: 'languageCategories', label: 'Language Categories', icon: MessageCircle },
           { id: 'damageTypes', label: 'Damage Types', icon: Skull },
           { id: 'conditions', label: 'Conditions', icon: HeartPulse },
-          { id: 'attributes', label: 'Attributes', icon: Star }
+          { id: 'attributes', label: 'Attributes', icon: Star },
+          { id: 'spellcasting', label: 'Spellcasting', icon: Wand2 }
         ].map(tab => (
           <button
             key={tab.id}
@@ -62,6 +65,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
       <div className="pt-4">
         {activeTab === 'skills' && <SkillsEditor userProfile={userProfile} hideHeader />}
         {activeTab === 'tools' && <ToolsEditor userProfile={userProfile} hideHeader />}
+        {activeTab === 'toolCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="toolCategories" title="Tool Category" descriptionText="Define broad tool proficiency groups such as Artisan's Tools, Gaming Sets, Musical Instruments, or homebrew categories." icon={Hammer} />}
         {activeTab === 'weapons' && <WeaponsEditor userProfile={userProfile} hideHeader />}
         {activeTab === 'weaponCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="weaponCategories" title="Weapon Category" descriptionText="Define broad weapon proficiency groups such as Simple, Martial, Firearms, Exotic, or other homebrew categories." icon={Crosshair} />}
         {activeTab === 'weaponProperties' && <SimplePropertyEditor userProfile={userProfile} collectionName="weaponProperties" title="Weapon Property" descriptionText="Define properties that can be applied to weapons, such as Finesse, Heavy, Reach, Versatile, or homebrew properties." icon={Hammer} />}
@@ -72,6 +76,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
         {activeTab === 'damageTypes' && <SimplePropertyEditor userProfile={userProfile} collectionName="damageTypes" title="Damage Type" descriptionText="Categories of damage a creature can be immune or resistant to." icon={Skull} />}
         {activeTab === 'conditions' && <SimplePropertyEditor userProfile={userProfile} collectionName="conditions" title="Condition" descriptionText="Categories of conditions a creature can be immune to." icon={HeartPulse} />}
         {activeTab === 'attributes' && <SimplePropertyEditor userProfile={userProfile} collectionName="attributes" title="Attribute" descriptionText="Define the core ability scores/attributes of the system." icon={Star} />}
+        {activeTab === 'spellcasting' && <SpellcastingAdvancementManager userProfile={userProfile} />}
       </div>
     </div>
   );

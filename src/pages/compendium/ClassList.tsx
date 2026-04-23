@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../../lib/firebase';
 import { collection, query, orderBy, onSnapshot, doc, getDoc, where } from 'firebase/firestore';
+import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -60,6 +61,15 @@ export function ClassList({
   const [sources, setSources] = useState<Record<string, any>>({});
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
+  const [allSkills, setAllSkills] = useState<any[]>([]);
+  const [allTools, setAllTools] = useState<any[]>([]);
+  const [allToolCategories, setAllToolCategories] = useState<any[]>([]);
+  const [allWeaponCategories, setAllWeaponCategories] = useState<any[]>([]);
+  const [allArmorCategories, setAllArmorCategories] = useState<any[]>([]);
+  const [allArmor, setAllArmor] = useState<any[]>([]);
+  const [allWeapons, setAllWeapons] = useState<any[]>([]);
+  const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
+  const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
   const [loadingStates, setLoadingStates] = useState({
     classes: true,
     sources: true,
@@ -135,10 +145,55 @@ export function ClassList({
       setLoadingStates(prev => ({ ...prev, tags: false }));
     });
 
+    const unsubscribeSkills = onSnapshot(collection(db, 'skills'), (snap) => {
+      setAllSkills(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeTools = onSnapshot(collection(db, 'tools'), (snap) => {
+      setAllTools(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeToolCategories = onSnapshot(collection(db, 'toolCategories'), (snap) => {
+      setAllToolCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeWeaponCategories = onSnapshot(collection(db, 'weaponCategories'), (snap) => {
+      setAllWeaponCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeArmorCategories = onSnapshot(collection(db, 'armorCategories'), (snap) => {
+      setAllArmorCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeArmor = onSnapshot(collection(db, 'armor'), (snap) => {
+      setAllArmor(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeWeapons = onSnapshot(collection(db, 'weapons'), (snap) => {
+      setAllWeapons(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeTypes = onSnapshot(collection(db, 'spellcastingTypes'), (snap) => {
+      setSpellcastingTypes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeMaster = onSnapshot(doc(db, 'standardMulticlassProgression', 'master'), (snap) => {
+      if (snap.exists()) setMasterMulticlassChart(snap.data());
+    });
+
     return () => {
       unsubscribeSources();
       unsubscribeTagGroups();
       unsubscribeTags();
+      unsubscribeSkills();
+      unsubscribeTools();
+      unsubscribeToolCategories();
+      unsubscribeWeaponCategories();
+      unsubscribeArmorCategories();
+      unsubscribeArmor();
+      unsubscribeWeapons();
+      unsubscribeTypes();
+      unsubscribeMaster();
     };
   }, []);
 
@@ -316,69 +371,81 @@ export function ClassList({
   useEffect(() => {
     if (selectedClass) {
       setPreviewLoading(true);
-      const q = query(
+      const featuresQ = query(
         collection(db, 'features'),
         where('parentId', '==', selectedClass.id),
         where('parentType', '==', 'class'),
         orderBy('level', 'asc')
       );
-      const unsubFeatures = onSnapshot(q, (snap) => {
-        setPreviewFeatures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        setPreviewLoading(false);
-      });
-      const qScalings = query(
+      
+      const scalingsQ = query(
         collection(db, 'scalingColumns'),
         where('parentId', '==', selectedClass.id),
         where('parentType', '==', 'class'),
         orderBy('name', 'asc')
       );
-      const unsubScalings = onSnapshot(qScalings, (snap) => {
-        setPreviewScalings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
 
-      setPreviewSpellcasting(null);
-      setPreviewAltSpellcasting(null);
-      setPreviewSpellsKnown(null);
-
-      if (selectedClass.spellcasting) {
-        const sc = selectedClass.spellcasting;
-        if (sc.progressionId) {
-          getDoc(doc(db, 'spellcastingScalings', sc.progressionId)).then(s => s.exists() && setPreviewSpellcasting(s.data()));
-        }
-        if (sc.altProgressionId) {
-          getDoc(doc(db, 'pactMagicScalings', sc.altProgressionId)).then(s => s.exists() && setPreviewAltSpellcasting(s.data()));
-        }
-        if (sc.spellsKnownId) {
-          getDoc(doc(db, 'spellsKnownScalings', sc.spellsKnownId)).then(s => s.exists() && setPreviewSpellsKnown(s.data()));
-        }
-      }
-
-      // Fetch UNIQUE OPTION GROUPS for the class
       const allGroupIds = (selectedClass.uniqueOptionMappings || [])
         .map((m: any) => m.groupId)
         .filter((v: any, i: number, a: any[]) => v && a.indexOf(v) === i);
+
+      // We'll use a promise-based approach for non-snapshot data to coordinate loading
+      const loadingPromises: Promise<any>[] = [];
+
+      if (selectedClass.spellcasting) {
+        const sc = selectedClass.spellcasting;
+        if (sc.manualProgressionId) {
+          loadingPromises.push(getDoc(doc(db, 'spellcastingScalings', sc.manualProgressionId)).then(s => setPreviewSpellcasting(s.exists() ? s.data() : null)));
+        } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
+          const type = spellcastingTypes.find(t => t.id === sc.progressionId);
+          if (type) {
+            const virtualLevels: Record<string, any> = {};
+            for (let level = 1; level <= 20; level++) {
+              const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
+              const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
+              virtualLevels[level.toString()] = { slots };
+            }
+            setPreviewSpellcasting({ name: type.name, levels: virtualLevels });
+          }
+        }
+        if (sc.altProgressionId) {
+          loadingPromises.push(getDoc(doc(db, 'pactMagicScalings', sc.altProgressionId)).then(s => setPreviewAltSpellcasting(s.exists() ? s.data() : null)));
+        }
+        if (sc.spellsKnownId) {
+          loadingPromises.push(getDoc(doc(db, 'spellsKnownScalings', sc.spellsKnownId)).then(s => setPreviewSpellsKnown(s.exists() ? s.data() : null)));
+        }
+      } else {
+        setPreviewSpellcasting(null);
+        setPreviewAltSpellcasting(null);
+        setPreviewSpellsKnown(null);
+      }
+
+      const unsubFeatures = onSnapshot(featuresQ, (snap) => {
+        setPreviewFeatures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+
+      const unsubScalings = onSnapshot(scalingsQ, (snap) => {
+        setPreviewScalings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
       let unsubGroups = () => {};
       let unsubItems = () => {};
 
       if (allGroupIds.length > 0) {
         const cappedIds = allGroupIds.slice(0, 30);
-        
-        unsubGroups = onSnapshot(query(
-          collection(db, 'uniqueOptionGroups'),
-          where('__name__', 'in', cappedIds)
-        ), (snap) => {
+        unsubGroups = onSnapshot(query(collection(db, 'uniqueOptionGroups'), where('__name__', 'in', cappedIds)), (snap) => {
           setPreviewOptionGroups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
-
-        unsubItems = onSnapshot(query(
-          collection(db, 'uniqueOptionItems'),
-          where('groupId', 'in', cappedIds),
-          orderBy('name', 'asc')
-        ), (snap) => {
+        unsubItems = onSnapshot(query(collection(db, 'uniqueOptionItems'), where('groupId', 'in', cappedIds), orderBy('name', 'asc')), (snap) => {
           setPreviewOptionItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
       }
+
+      // Final synchronization to stop loading
+      Promise.all(loadingPromises).then(() => {
+        // Simple delay to ensure snapshots also arrive
+        setTimeout(() => setPreviewLoading(false), 300);
+      });
 
       return () => {
         unsubFeatures();
@@ -386,15 +453,8 @@ export function ClassList({
         unsubGroups();
         unsubItems();
       };
-    } else {
-      setPreviewFeatures([]);
-      setPreviewScalings([]);
-      setPreviewOptionGroups([]);
-      setPreviewOptionItems([]);
-      setPreviewExpandedGroups({});
-      setPreviewSelectedOptions({});
     }
-  }, [selectedClass, previewFeatures.length]);
+  }, [selectedClass?.id, spellcastingTypes.length, !!masterMulticlassChart]);
 
   useEffect(() => {
     // Reset selections on class change
@@ -447,6 +507,22 @@ export function ClassList({
   const hasAnySpellsKnown = !!previewSpellsKnown;
   const hasAnyAltSpellcasting = !!previewAltSpellcasting;
   const hasAnySpellcasting = !!previewSpellcasting;
+
+  const maxSpellLevel = React.useMemo(() => {
+    if (!previewSpellcasting?.levels) return 0;
+    let max = 0;
+    Object.values(previewSpellcasting.levels).forEach((lvl: any) => {
+      if (lvl.slots) {
+        for (let i = lvl.slots.length - 1; i >= 0; i--) {
+          if (lvl.slots[i] > 0) {
+            if (i + 1 > max) max = i + 1;
+            break;
+          }
+        }
+      }
+    });
+    return max;
+  }, [previewSpellcasting]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
@@ -674,7 +750,7 @@ export function ClassList({
               <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/10">
                 <div className="space-y-10">
                   {/* Class Table */}
-                  <div className="overflow-x-auto border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg max-h-[40vh] overflow-y-auto">
+                  <div className="border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead className="sticky top-0 bg-card z-10 shadow-md">
                         <tr className="border-b border-gold/20 bg-gold/5">
@@ -697,13 +773,13 @@ export function ClassList({
                             </>
                           )}
                           {hasAnySpellcasting && (
-                            <th colSpan={9} className="p-1 px-2 label-text italic text-gold text-center text-[10px]">Spell Slots per Level</th>
+                            <th colSpan={maxSpellLevel} className="p-1 px-2 label-text italic text-gold text-center text-[10px]">Spell Slots per Level</th>
                           )}
                         </tr>
                         {hasAnySpellcasting && (
                           <tr className="border-b border-gold/10 bg-gold/5">
                             <th colSpan={3 + previewScalings.length + (hasAnySpellsKnown ? 2 : 0) + (hasAnyAltSpellcasting ? 2 : 0)} className="border-r border-gold/10"></th>
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(lvl => (
+                            {Array.from({ length: maxSpellLevel }, (_, i) => i + 1).map(lvl => (
                               <th key={lvl} className="p-0.5 label-text italic text-gold text-center w-5 border-r border-gold/5 last:border-r-0 text-[10px]">
                                 {lvl}{lvl === 1 ? 'st' : lvl === 2 ? 'nd' : lvl === 3 ? 'rd' : 'th'}
                               </th>
@@ -733,7 +809,7 @@ export function ClassList({
                                         f.isAdvancement ? "text-gold/60 italic font-medium" : "font-bold text-gold/80"
                                       )}
                                     >
-                                      {f.name}{idx < levelFeatures.length - 1 ? ',' : ''}
+                                      {f.name.split(' (')[0]}{idx < levelFeatures.length - 1 ? ',' : ''}
                                     </span>
                                   ))}
                                   {levelFeatures.length === 0 && <span className="text-ink/20 text-[10px]">—</span>}
@@ -767,7 +843,7 @@ export function ClassList({
                                   </td>
                                 </>
                               )}
-                              {hasAnySpellcasting && (levelScaling?.slots || [0,0,0,0,0,0,0,0,0]).map((slots: number, idx: number) => (
+                              {hasAnySpellcasting && (levelScaling?.slots || Array(maxSpellLevel).fill(0)).slice(0, maxSpellLevel).map((slots: number, idx: number) => (
                                 <td key={idx} className={`p-1 text-center font-mono text-[10px] border-r border-gold/5 last:border-r-0 ${slots > 0 ? 'text-ink font-bold' : 'text-ink/20'}`}>
                                   {slots > 0 ? slots : '—'}
                                 </td>
@@ -831,6 +907,7 @@ export function ClassList({
                                   uniqueOptionMappings={selectedClass.uniqueOptionMappings}
                                   hideChoices={true}
                                   rootAdvancements={selectedClass.advancements || []}
+                                  hideAdvancementTypes={true}
                                 />
                               </div>
                             )}
@@ -857,12 +934,78 @@ export function ClassList({
                     <div className="bg-background/50 border border-gold/10 rounded-md p-4 space-y-4">
                       <h4 className="label-text text-gold border-b border-gold/10 pb-1">Proficiencies</h4>
                       <div className="space-y-3">
-                        {['armor', 'weapons'].map(key => (
-                          <div key={key}>
-                            <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">{key}</span>
-                            <span className="text-xs text-ink/80">{selectedClass.proficiencies?.[key] || 'None'}</span>
-                          </div>
-                        ))}
+                        {['armor', 'weapons'].map(key => {
+                          const prof = selectedClass.proficiencies?.[key];
+                          const displayName = selectedClass.proficiencies?.[`${key}DisplayName`];
+                          const categories = key === 'armor' ? allArmorCategories : allWeaponCategories;
+                          
+                          let displayVal = 'None';
+                          if (typeof prof === 'string') displayVal = prof;
+                          else if (displayName) displayVal = displayName;
+                          else if (prof && typeof prof === 'object') {
+                             const fixed = prof.fixedIds || [];
+                             const categoryIds = prof.categoryIds || [];
+                             const catNames = categoryIds.map((cid: string) => categories.find(c => c.id === cid)?.name).filter(Boolean);
+                             
+                             // If we have selected categories, show them first
+                             if (catNames.length > 0) {
+                               displayVal = catNames.join(', ');
+                             } else if (fixed.length > 0) {
+                               const items = key === 'armor' ? allArmor : allWeapons;
+                               displayVal = fixed.map((id: string) => items.find(i => i.id === id)?.name).filter(Boolean).join(', ');
+                             }
+                          }
+
+                          return (
+                            <div key={key}>
+                              <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">{key}</span>
+                              <span className="text-xs text-ink/80">{displayVal}</span>
+                            </div>
+                          );
+                        })}
+                        <div className="space-y-1">
+                          <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">Tools</span>
+                          <span className="text-xs text-ink/80">
+                            {(() => {
+                              const tools = selectedClass.proficiencies?.tools;
+                              if (!tools || typeof tools === 'string') return tools || 'None';
+                              
+                              const categoryIds = tools.categoryIds || [];
+                              const catNames = categoryIds.map((cid: string) => allToolCategories.find(c => c.id === cid)?.name).filter(Boolean);
+                              
+                              const fixed = (tools.fixedIds || [])
+                                .filter((id: string) => {
+                                  // Hide if part of a selected category
+                                  const tool = allTools.find(t => t.id === id);
+                                  return !categoryIds.includes(tool?.categoryId);
+                                })
+                                .map((id: string) => allTools.find(t => t.id === id)?.name)
+                                .filter(Boolean);
+
+                              const options = (tools.optionIds || []).map((id: string) => allTools.find(t => t.id === id)?.name).filter(Boolean);
+                              let parts = [];
+                              if (catNames.length > 0) parts.push(catNames.join(', '));
+                              if (fixed.length > 0) parts.push(fixed.join(', '));
+                              if (tools.choiceCount > 0 && options.length > 0) parts.push(`Choose ${tools.choiceCount} from: ${options.join(', ')}`);
+                              return parts.length > 0 ? parts.join('; ') : 'None';
+                            })()}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">Skills</span>
+                          <span className="text-xs text-ink/80">
+                            {(() => {
+                              const skills = selectedClass.proficiencies?.skills;
+                              if (!skills || typeof skills === 'string') return skills || 'None';
+                              const fixed = (skills.fixedIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
+                              const options = (skills.optionIds || []).map((id: string) => allSkills.find(s => s.id === id)?.name).filter(Boolean);
+                              let parts = [];
+                              if (fixed.length > 0) parts.push(fixed.join(', '));
+                              if (skills.choiceCount > 0 && options.length > 0) parts.push(`Choose ${skills.choiceCount} from: ${options.join(', ')}`);
+                              return parts.length > 0 ? parts.join('; ') : 'None';
+                            })()}
+                          </span>
+                        </div>
                         <div>
                           <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">Saving Throws</span>
                           <div className="flex flex-wrap gap-1">

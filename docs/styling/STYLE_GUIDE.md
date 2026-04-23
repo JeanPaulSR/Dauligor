@@ -1,6 +1,6 @@
 # Archive Style Guide
 
-This document defines the semantic CSS classes used throughout the Dungeon Master's Archive. These classes ensure visual consistency across themes (Parchment, Light, Dark) and provide a clear structure for future AI assistants.
+This document defines the semantic CSS classes used throughout the Dauligor: Compendium and Lore Manager. These classes ensure visual consistency across themes (Parchment, Light, Dark) and provide a clear structure for future AI assistants.
 
 ## Typography Classes
 

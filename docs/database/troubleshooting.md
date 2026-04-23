@@ -1,6 +1,6 @@
 # Troubleshooting & Common Fixes
 
-This document outlines known solutions to common technical issues and maintenance tasks for the Dungeon Master's Archive.
+This document outlines known solutions to common technical issues and maintenance tasks for the Dauligor: Compendium and Lore Manager.
 
 ## 1. Firestore Permission Errors
 

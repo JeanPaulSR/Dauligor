@@ -26,14 +26,14 @@ import MarkdownEditor from '../../components/MarkdownEditor';
 
 export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const [armorItems, setArmorItems] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [editingArmor, setEditingArmor] = useState<any>(null);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
-  const [category, setCategory] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState('');
   const [foundryAlias, setFoundryAlias] = useState('');
   const [source, setSource] = useState('PHB');
@@ -63,10 +63,10 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
     const unsubscribe = onSnapshot(
       query(collection(db, 'armorCategories'), orderBy('name', 'asc')),
       (snapshot) => {
-        const managed = snapshot.docs
-          .map(doc => String(doc.data().name || '').trim())
-          .filter(Boolean);
-        setCategories(managed);
+        setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        if (!editingArmor && !categoryId && snapshot.docs.length > 0) {
+          setCategoryId(snapshot.docs[0].id);
+        }
       },
       (err) => {
         console.error("Error in Armor Categories snapshot:", err);
@@ -76,23 +76,28 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
     return () => unsubscribe();
   }, []);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !category) return;
-
-    try {
-      const armorData = {
-        name,
-        identifier: identifier.trim() || slugify(name),
-        category,
-        foundryAlias: foundryAlias.trim(),
-        source,
-        ability,
-        page: page === '' ? null : Number(page),
-        basicRules,
-        description,
-        updatedAt: new Date().toISOString()
-      };
+    const handleSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      
+      const effectiveCategoryId = categoryId || categories[0]?.id;
+      if (!name || !effectiveCategoryId) {
+        toast.error('Name and Category are required');
+        return;
+      }
+  
+      try {
+        const armorData = {
+          name,
+          identifier: identifier.trim() || slugify(name),
+          categoryId: effectiveCategoryId,
+          foundryAlias: foundryAlias.trim(),
+          source,
+          ability,
+          page: page === '' ? null : Number(page),
+          basicRules,
+          description,
+          updatedAt: new Date().toISOString()
+        };
 
       if (editingArmor) {
         await updateDoc(doc(db, 'armor', editingArmor.id), armorData);
@@ -103,16 +108,18 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
       }
 
       resetForm();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'armor');
-    }
-  };
+      } catch (error) {
+        console.error("Error saving armor:", error);
+        toast.error('Failed to save armor');
+        handleFirestoreError(error, OperationType.WRITE, 'armor');
+      }
+    };
 
   const resetForm = () => {
     setEditingArmor(null);
     setName('');
     setIdentifier('');
-    setCategory("");
+    setCategoryId(categories.length > 0 ? categories[0].id : "");
     setDescription('');
     setFoundryAlias('');
     setSource('PHB');
@@ -127,6 +134,8 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
         await deleteDoc(doc(db, 'armor', id));
         toast.success('Armor deleted');
       } catch (error) {
+        console.error("Error deleting armor:", error);
+        toast.error('Failed to delete armor');
         handleFirestoreError(error, OperationType.DELETE, 'armor');
       }
     }
@@ -192,14 +201,14 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Category</label>
                       <select 
-                        value={category}
-                        onChange={e => setCategory(e.target.value)}
+                        value={categoryId}
+                        onChange={e => setCategoryId(e.target.value)}
                         className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
                         required
                       >
                         <option value="" disabled>Select Category</option>
                         {categories.map(c => (
-                          <option key={c} value={c}>{c}</option>
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
                       <p className="text-[9px] text-ink/35 italic">Define categories in the Category Manager tab.</p>
@@ -293,8 +302,10 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                             {armor.identifier}
                           </span>
                         )}
-                        {armor.category && (
-                          <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">{armor.category}</span>
+                        {(armor.categoryId || armor.category) && (
+                          <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
+                            {categories.find(c => c.id === armor.categoryId)?.name || armor.category}
+                          </span>
                         )}
                         {armor.ability && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{armor.ability}</span>
@@ -315,7 +326,11 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                         setName(armor.name);
                         setIdentifier(armor.identifier || '');
                         setFoundryAlias(armor.foundryAlias || '');
-                        setCategory(armor.category || "");
+                        
+                        // Try to derive categoryId from category name if missing
+                        const cid = armor.categoryId || categories.find((c: any) => c.name === armor.category)?.id || '';
+                        setCategoryId(cid);
+                        
                         setAbility(armor.ability || 'STR');
                         setDescription(armor.description || '');
                         setSource(armor.source || '');

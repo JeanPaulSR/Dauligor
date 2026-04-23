@@ -177,14 +177,31 @@
         "proficiencies": {
           "type": "object",
           "properties": {
-            "armor": { "type": "string" },
-            "weapons": { "type": "string" },
+            "armor": { 
+              "type": "object",
+              "properties": {
+                "categoryIds": { "type": "array", "items": { "type": "string" } },
+                "fixedIds": { "type": "array", "items": { "type": "string" } },
+                "optionIds": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "armorDisplayName": { "type": "string" },
+            "weapons": { 
+              "type": "object",
+              "properties": {
+                "categoryIds": { "type": "array", "items": { "type": "string" } },
+                "fixedIds": { "type": "array", "items": { "type": "string" } },
+                "optionIds": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "weaponsDisplayName": { "type": "string" },
             "tools": { 
               "type": "object",
               "properties": {
                 "choiceCount": { "type": "number" },
                 "optionIds": { "type": "array", "items": { "type": "string" } },
-                "fixedIds": { "type": "array", "items": { "type": "string" } }
+                "fixedIds": { "type": "array", "items": { "type": "string" } },
+                "categoryIds": { "type": "array", "items": { "type": "string" } }
               }
             },
             "skills": { 
@@ -344,7 +361,7 @@
         "name": { "type": "string" },
         "identifier": { "type": "string" },
         "foundryAlias": { "type": "string" },
-        "category": { "type": "string" },
+        "categoryId": { "type": "string" },
         "ability": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] },
         "source": { "type": "string" },
         "page": { "type": "number" },
@@ -499,6 +516,36 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "identifier"]
+    },
+    "StandardMulticlassProgression": {
+      "title": "Standard Multiclass Progression",
+      "description": "The base spell slot table used for combined multiclass levels.",
+      "type": "object",
+      "properties": {
+        "levels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "level": { "type": "number" },
+              "slots": { "type": "array", "items": { "type": "number" } }
+            }
+          }
+        }
+      }
+    },
+    "SpellcastingType": {
+      "title": "Spellcasting Type",
+      "description": "Defines scaling math and foundry identifiers for class casting (e.g. Full vs Half caster).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "identifier": { "type": "string" },
+        "foundryName": { "type": "string" },
+        "formula": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "identifier"]
     }
   },
   "firestore": {
@@ -570,6 +617,10 @@
       "schema": "Tool",
       "description": "Standardized tools."
     },
+    "/toolCategories/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Tool categories."
+    },
     "/weapons/{weaponId}": {
       "schema": "Weapon",
       "description": "Standardized weapons."
@@ -613,6 +664,14 @@
     "/characters/{characterId}": {
       "schema": "Character",
       "description": "Player characters."
+    },
+    "/standardMulticlassProgression/{id}": {
+      "schema": "StandardMulticlassProgression",
+      "description": "Master reference for spell slots based on total casting level."
+    },
+    "/spellcastingTypes/{id}": {
+      "schema": "SpellcastingType",
+      "description": "Reference mapping for casting level formulas."
     }
   }
 }

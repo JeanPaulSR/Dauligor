@@ -26,7 +26,7 @@ import MarkdownEditor from '../../components/MarkdownEditor';
 
 export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const [weapons, setWeapons] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [allProperties, setAllProperties] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -34,7 +34,7 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
   const [editingWeapon, setEditingWeapon] = useState<any>(null);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
-  const [category, setCategory] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [weaponType, setWeaponType] = useState<'Melee' | 'Ranged'>('Melee');
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [description, setDescription] = useState('');
@@ -66,10 +66,10 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
     const unsubscribe = onSnapshot(
       query(collection(db, 'weaponCategories'), orderBy('name', 'asc')),
       (snapshot) => {
-        const managed = snapshot.docs
-          .map(doc => String(doc.data().name || '').trim())
-          .filter(Boolean);
-        setCategories(managed);
+        setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        if (!editingWeapon && !categoryId && snapshot.docs.length > 0) {
+          setCategoryId(snapshot.docs[0].id);
+        }
       },
       (err) => {
         console.error("Error in Weapon Categories snapshot:", err);
@@ -93,25 +93,30 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
     return () => unsubscribe();
   }, []);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !category) return;
-
-    try {
-      const weaponData = {
-        name,
-        identifier: identifier.trim() || slugify(name),
-        category,
-        weaponType,
-        propertyIds,
-        foundryAlias: foundryAlias.trim(),
-        source,
-        ability,
-        page: page === '' ? null : Number(page),
-        basicRules,
-        description,
-        updatedAt: new Date().toISOString()
-      };
+    const handleSave = async (e: React.FormEvent) => {
+      e.preventDefault();
+      
+      const effectiveCategoryId = categoryId || categories[0]?.id;
+      if (!name || !effectiveCategoryId) {
+        toast.error('Name and Category are required');
+        return;
+      }
+  
+      try {
+        const weaponData = {
+          name,
+          identifier: identifier.trim() || slugify(name),
+          categoryId: effectiveCategoryId,
+          weaponType,
+          propertyIds,
+          foundryAlias: foundryAlias.trim(),
+          source,
+          ability,
+          page: page === '' ? null : Number(page),
+          basicRules,
+          description,
+          updatedAt: new Date().toISOString()
+        };
 
       if (editingWeapon) {
         await updateDoc(doc(db, 'weapons', editingWeapon.id), weaponData);
@@ -122,16 +127,18 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
       }
 
       resetForm();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'weapons');
-    }
-  };
+      } catch (error) {
+        console.error("Error saving weapon:", error);
+        toast.error('Failed to save weapon');
+        handleFirestoreError(error, OperationType.WRITE, 'weapons');
+      }
+    };
 
   const resetForm = () => {
     setEditingWeapon(null);
     setName('');
     setIdentifier('');
-    setCategory('');
+    setCategoryId(categories.length > 0 ? categories[0].id : '');
     setWeaponType('Melee');
     setPropertyIds([]);
     setDescription('');
@@ -148,6 +155,8 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
         await deleteDoc(doc(db, 'weapons', id));
         toast.success('Weapon deleted');
       } catch (error) {
+        console.error("Error deleting weapon:", error);
+        toast.error('Failed to delete weapon');
         handleFirestoreError(error, OperationType.DELETE, 'weapons');
       }
     }
@@ -213,14 +222,14 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Category</label>
                       <select 
-                        value={category}
-                        onChange={e => setCategory(e.target.value)}
+                        value={categoryId}
+                        onChange={e => setCategoryId(e.target.value)}
                         className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
                         required
                       >
                         <option value="" disabled>Select Category</option>
                         {categories.map(c => (
-                          <option key={c} value={c}>{c}</option>
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
                     </div>
@@ -353,8 +362,10 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                             {weapon.identifier}
                           </span>
                         )}
-                        {weapon.category && (
-                          <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">{weapon.category}</span>
+                        {(weapon.categoryId || weapon.category) && (
+                          <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
+                            {categories.find(c => c.id === weapon.categoryId)?.name || weapon.category}
+                          </span>
                         )}
                         {weapon.weaponType && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.weaponType}</span>
@@ -389,7 +400,11 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                         setName(weapon.name);
                         setIdentifier(weapon.identifier || '');
                         setFoundryAlias(weapon.foundryAlias || '');
-                        setCategory(weapon.category || "");
+                        
+                        // Try to derive categoryId from category name if missing
+                        const cid = weapon.categoryId || categories.find((c: any) => c.name === weapon.category)?.id || '';
+                        setCategoryId(cid);
+                        
                         setWeaponType(weapon.weaponType || 'Melee');
                         setPropertyIds(weapon.propertyIds || []);
                         setAbility(weapon.ability || 'STR');
