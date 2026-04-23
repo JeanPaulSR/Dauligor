@@ -3,8 +3,6 @@ import { toast } from 'sonner';
 import { db } from '../../lib/firebase';
 import { 
   collection, 
-  query, 
-  orderBy, 
   onSnapshot, 
   doc, 
   addDoc, 
@@ -24,36 +22,64 @@ export default function SimpleProficiencyEditor({
     collectionName, 
     title, 
     descriptionText,
-    icon: Icon
+    icon: Icon,
+    categoryCollectionName,
+    categoryLabel = 'Category'
 }: { 
     userProfile: any, 
     collectionName: string, 
     title: string, 
     descriptionText: string,
-    icon: any
+    icon: any,
+    categoryCollectionName?: string,
+    categoryLabel?: string
 }) {
   const [items, setItems] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [editingItem, setEditingItem] = useState<any>(null);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
+  const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
 
   const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
-      query(collection(db, collectionName), orderBy('name', 'asc')),
+      collection(db, collectionName),
       (snapshot) => {
-        setItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setItems(
+          snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')))
+        );
         setLoading(false);
       }
     );
 
     return () => unsubscribe();
   }, [collectionName]);
+
+  useEffect(() => {
+    if (!categoryCollectionName) return;
+
+    const unsubscribe = onSnapshot(
+      collection(db, categoryCollectionName),
+      (snapshot) => {
+        setCategories(
+          snapshot.docs
+            .map(doc => String(doc.data().name || '').trim())
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b))
+        );
+      }
+    );
+
+    return () => unsubscribe();
+  }, [categoryCollectionName]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +89,7 @@ export default function SimpleProficiencyEditor({
       const itemData = {
         name,
         identifier: identifier.trim() || slugify(name),
+        ...(categoryCollectionName ? { category: category.trim() } : {}),
         description,
         updatedAt: new Date().toISOString()
       };
@@ -85,6 +112,7 @@ export default function SimpleProficiencyEditor({
     setEditingItem(null);
     setName('');
     setIdentifier('');
+    setCategory('');
     setDescription('');
   };
 
@@ -92,6 +120,7 @@ export default function SimpleProficiencyEditor({
     setEditingItem(item);
     setName(item.name);
     setIdentifier(item.identifier || '');
+    setCategory(item.category || '');
     setDescription(item.description || '');
   };
 
@@ -138,6 +167,23 @@ export default function SimpleProficiencyEditor({
             />
             <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">Fallback machine-readability alias</p>
           </div>
+
+          {categoryCollectionName && (
+            <div className="space-y-2">
+              <label className="text-[10px] uppercase font-black text-ink/60">{categoryLabel}</label>
+              <Input
+                list={`${collectionName}-categories`}
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className="h-9 bg-background/50 border-gold/10"
+              />
+              <datalist id={`${collectionName}-categories`}>
+                {categories.map((entry) => (
+                  <option key={entry} value={entry} />
+                ))}
+              </datalist>
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-[10px] uppercase font-black text-ink/60 flex items-center justify-between">
@@ -188,6 +234,11 @@ export default function SimpleProficiencyEditor({
                   {item.identifier && (
                     <div className="text-[10px] uppercase tracking-widest font-black text-gold/50 my-1 font-mono">
                       {item.identifier}
+                    </div>
+                  )}
+                  {item.category && (
+                    <div className="text-[10px] uppercase tracking-widest font-black text-ink/35">
+                      {item.category}
                     </div>
                   )}
                 </div>

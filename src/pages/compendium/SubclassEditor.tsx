@@ -601,6 +601,8 @@ export default function SubclassEditor() {
                 availableFeatures={features}
                 availableScalingColumns={[...scalingColumns, ...parentScalingColumns]}
                 availableOptionGroups={allOptionGroups}
+                availableOptionItems={allOptionItems}
+                defaultHitDie={parentClass?.hitDie}
               />
             </div>
           </div>

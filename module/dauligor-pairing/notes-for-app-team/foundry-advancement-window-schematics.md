@@ -1,303 +1,348 @@
 # Foundry Advancement Window Schematics
 
-## Scope
+## Purpose
 
-This note captures the layout of the `dnd5e` advancement windows in local Foundry.
+This note is a UI reference for the app team.
 
-Reference install:
+It captures the actual `dnd5e` advancement templates from local Foundry, with trimmed Handlebars/HTML skeletons and the real class names Foundry uses.
 
-- Foundry system: `C:\Users\Jean\AppData\Local\FoundryVTT\Data\systems\dnd5e`
-- Template folder: `C:\Users\Jean\AppData\Local\FoundryVTT\Data\systems\dnd5e\templates\advancement`
+Use this when the goal is:
 
-This is a layout reference for the website team.
+- mirror Foundry's layout structure
+- keep the same section order
+- improve the styling without changing the interaction model
 
-It is not the advancement data contract.
+Do not use this as the advancement data contract.
 
-For data structure and ownership rules, still use:
+For data and ownership rules, still use:
 
 - `docs/advancement-construction-guide.md`
 - `docs/class-import-and-advancement-guide.md`
 - `notes-for-app-team/correcting-advancemnts.md`
 
-## Shared Foundry Patterns
+## Local Source Of Truth
 
-Across advancement windows, Foundry reuses a small set of layout ideas.
+- system root:
+  - `C:\Users\Jean\AppData\Local\FoundryVTT\Data\systems\dnd5e`
+- advancement templates:
+  - `C:\Users\Jean\AppData\Local\FoundryVTT\Data\systems\dnd5e\templates\advancement`
+- item sheet advancement tab:
+  - `C:\Users\Jean\AppData\Local\FoundryVTT\Data\systems\dnd5e\templates\items\advancement.hbs`
 
-### 1. Authoring windows use stacked fieldsets
+## Repeated Foundry UI Primitives
 
-The editor windows are generally built as:
+These are the main design primitives Foundry reuses across advancement windows.
 
-1. shared advancement details block
-2. one or more type-specific fieldsets
-3. tables or card lists for level rows / trait rows / item rows
+### Structural wrappers
 
-Common shared controls come from:
+- `form`
+- `fieldset`
+- `legend`
+- `ol`
+- `ul`
 
-- `templates/advancement/parts/advancement-controls.hbs`
+### Repeated layout classes
 
-That block contains:
-
-- `Custom Title`
-- `Custom Icon`
-- `Class Restriction`
-- `Level`
-- `Hint`
-
-These fields appear at the top of most advancement editor windows before the type-specific controls.
-
-### 2. Player-facing flow windows use one content pane plus footer navigation
-
-The level-up / advancement runtime windows use:
-
-- title
-- optional hint text
-- one summary/content block
-- footer buttons controlled by the advancement manager
-
-Shared shell:
-
-- `templates/advancement/advancement-flow.hbs`
-- `templates/advancement/advancement-manager.hbs`
-
-The manager footer is:
-
-- `Previous Step`
-- `Restart`
-- `Next Step`
-- `Complete`
-
-depending on where the player is in the sequence.
-
-### 3. Foundry uses repeating visual primitives
-
-The windows repeatedly use:
-
-- `fieldset` + `legend` sections
+- `standard-form`
 - `items-section card`
 - `items-header header`
-- `item-list`
+- `item-list unlist`
 - `pill-lg`
-- `standard-form`
 - `split-group`
-- `table` style level grids
+- `flexrow`
+- `flexcol`
 
-For the website, these should become reusable components, not one-off layouts.
+### Repeated controls
 
-## Item Sheet Advancement Tab
+- `control-button`
+- `unbutton`
+- `item-control`
+- `dnd5e-checkbox`
+- `file-picker`
+- `prose-mirror`
+
+These should be treated as Foundry's layout language.
+
+## 1. Item Sheet Advancement Tab
 
 Template:
 
 - `templates/items/advancement.hbs`
 
-This is the tab shown on class/subclass/item sheets.
+### Actual trimmed template shape
 
-### Structure
+```hbs
+<section class="advancement tab {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+  {{#each advancement}}
+  <div class="items-section card" data-level="{{ @key }}">
+    <div class="items-header header">
+      <h3 class="item-name">Level Header</h3>
+      <div class="item-header advancement-value">Value</div>
+      <div class="item-header item-controls">Status / Configure</div>
+    </div>
 
-The advancement tab is grouped by level.
+    <ol class="item-list unlist">
+      {{#each items}}
+      <li class="advancement-item item {{ classes }}" data-id="{{ id }}" data-uuid="{{ uuid }}">
+        <div class="item-row">
+          <div class="item-name">
+            <dnd5e-icon class="item-image gold-icon"></dnd5e-icon>
+            <div class="name">
+              <div class="title">Title</div>
+              <div class="summary">Summary</div>
+            </div>
+            <div class="tags">Tag icons</div>
+          </div>
 
-Per level block:
-
-1. level header row
-2. `Value` column header
-3. controls/status column
-4. list of advancement rows
-
-Each advancement row contains:
-
-1. icon
-2. title
-3. optional summary
-4. optional tags/icons
-5. current value cell
-6. controls:
-   - edit
-   - delete
-   - context menu
-
-### Schematic
-
-```text
-Advancement Tab
-|
-+-- Level N Card
-    |
-    +-- Header
-    |   +-- "Level N"
-    |   +-- "Value"
-    |   +-- configure/status control
-    |
-    +-- Advancement Row
-        +-- icon
-        +-- title
-        +-- summary
-        +-- tags
-        +-- value
-        +-- row controls
+          <div class="item-detail advancement-value">Value</div>
+          <div class="item-detail item-controls">Edit / Delete / Menu</div>
+        </div>
+      </li>
+      {{/each}}
+    </ol>
+  </div>
+  {{/each}}
+</section>
 ```
 
-### Website implication
+### Layout meaning
 
-If the website wants a Foundry-like progression editor preview, this tab is the main list view to mirror.
+- grouped by level
+- each level is its own card
+- each advancement row behaves like an item row
+- `Value` is a narrow fixed column
+- row controls always live on the far right
 
-## Create Advancement Selection Dialog
+### Website guidance
+
+Mirror:
+
+- level-grouped cards
+- narrow value column
+- icon + title + summary item rows
+
+Improve:
+
+- spacing
+- readability of row controls
+- hierarchy between title and summary
+
+## 2. Advancement Type Picker
 
 Template:
 
 - `templates/advancement/advancement-selection.hbs`
 
-This is the chooser shown before creating a new advancement row.
+### Actual trimmed template shape
 
-### Structure
+```hbs
+<form autocomplete="off" onsubmit="event.preventDefault();">
+  <ol class="items-list">
+    {{#each types as |advancement name|}}
+    <li class="item flexrow">
+      <div class="item-name flexrow">
+        <div class="item-image"></div>
+        <h3>Type Label</h3>
+      </div>
+      <div class="item-controls flexrow">
+        <input name="type" type="radio" value="{{name}}">
+      </div>
+      <div class="item-hint notes">Hint</div>
+    </li>
+    {{/each}}
+  </ol>
 
-Single-column list of advancement types.
-
-Per row:
-
-1. icon
-2. advancement type label
-3. radio button
-4. short hint/description under the row
-
-Bottom:
-
-- one `Create Advancement` button
-
-### Schematic
-
-```text
-Choose Advancement Type
-|
-+-- Type Row
-|   +-- icon
-|   +-- label
-|   +-- radio
-|   +-- hint text
-|
-+-- Type Row
-|
-+-- Create button
+  <button class="dialog-button" data-button="submit" disabled>
+    Create Advancement
+  </button>
+</form>
 ```
 
-### Website implication
+### Layout meaning
 
-This should be a lightweight modal, not a large multi-tab editor.
+- one-column list
+- each row is icon + label + radio + hint
+- one action button at bottom
 
-Pick type first, then open the type-specific editor.
+### Website guidance
 
-## Shared Advancement Editor Shell
+This should remain a small chooser, not a full-screen builder.
+
+## 3. Shared Advancement Editor Shell
 
 Templates:
 
 - `templates/advancement/advancement-config.hbs`
 - `templates/advancement/parts/advancement-controls.hbs`
 
-### Shared top block
+### Actual shell
 
-Every authoring window should expect the following shared fields first:
-
-1. `Custom Title`
-2. `Custom Icon`
-3. `Class Restriction`
-4. `Level`
-5. `Hint`
-
-### Schematic
-
-```text
-Advancement Editor
-|
-+-- Shared Details
-|   +-- Custom Title
-|   +-- Custom Icon
-|   +-- Class Restriction
-|   +-- Level
-|   +-- Hint
-|
-+-- Type-Specific Sections
+```hbs
+<form autocomplete="off">
+  {{> "dnd5e.advancement-controls"}}
+</form>
 ```
 
-### Website implication
+### Actual shared controls partial
 
-Do not bury these fields per type.
+```hbs
+<div class="form-group">
+  <label>Custom Title</label>
+  <div class="form-fields">
+    <input type="text" name="title">
+  </div>
+</div>
 
-They should be in a consistent top section across all advancement editor windows.
+<div class="form-group">
+  <label>Custom Icon</label>
+  <div class="form-fields">
+    <file-picker type="image" name="icon"></file-picker>
+  </div>
+</div>
 
-## Hit Points Advancement
+<div class="form-group">
+  <label>Class Restriction</label>
+  <div class="form-fields">
+    <select name="classRestriction"></select>
+  </div>
+</div>
 
-### Authoring window
+<div class="form-group">
+  <label>Level</label>
+  <div class="form-fields">
+    <select name="level"></select>
+  </div>
+</div>
 
-Template:
-
-- `templates/advancement/hit-points-config.hbs`
-
-This editor is read-only for the derived numbers.
-
-It shows:
-
-1. `Hit Die`
-2. `Hit Points at 1st Level`
-3. `Average`
-
-### Schematic
-
-```text
-Hit Points Editor
-|
-+-- Shared Details
-|
-+-- Hit Points Fieldset
-    +-- Hit Die
-    +-- Hit Points at 1st Level
-    +-- Average
+<prose-mirror class="slim" name="hint" compact></prose-mirror>
 ```
 
-### Player-facing flow window
+### Layout meaning
 
-Template:
+Every advancement editor starts with the same top block:
 
-- `templates/advancement/hit-points-flow.hbs`
+1. custom title
+2. custom icon
+3. class restriction
+4. level
+5. hint
 
-This is the level-up window players see.
+### Website guidance
 
-Top area is a breakdown equation:
+Do not scatter these fields per type.
 
-- previous HP
-- plus roll or average or max
-- plus ability modifier
-- plus per-level bonus
-- equals final HP
+Keep one consistent top block across all advancement editors.
 
-If manual rolling is enabled, a die button appears beside the equation.
+## 4. Shared Player-Facing Advancement Flow
 
-Below that, for non-first-class levels, there is an `Options` fieldset with:
+Templates:
 
-- `Take Average` checkbox
+- `templates/advancement/advancement-flow.hbs`
+- `templates/advancement/advancement-manager.hbs`
 
-### Schematic
+### Actual flow shell
 
-```text
-Hit Points Flow
-|
-+-- Breakdown Row
-|   +-- Previous
-|   +-- +
-|   +-- Roll / Average / Max
-|   +-- + modifier
-|   +-- + bonus
-|   +-- = Final
-|   +-- optional roll die button
-|
-+-- Options Fieldset
-    +-- Take Average checkbox
+```hbs
+<form>
+  <h3>{{{ title }}}</h3>
+  {{#if hint}}<p>{{ hint }}</p>{{/if}}
+  {{{ summary }}}
+</form>
 ```
 
-### Website implication
+### Actual manager shell
 
-If recreating this flow, the HP window should feel like a compact equation dialog, not a generic form.
+```hbs
+<div class="flexcol">
+  <div class="step {{ flowClasses }}">
+    <template id="{{ flowId }}"></template>
+  </div>
+  <nav class="flexrow">
+    <button type="button" data-action="previous">Previous Step</button>
+    <button type="button" data-action="restart">Restart</button>
+    <button type="button" data-action="next">Next Step</button>
+    <button type="button" data-action="complete">Complete</button>
+  </nav>
+</div>
+```
 
-## Trait Advancement
+### Layout meaning
 
-### Authoring window
+- the flow body is intentionally small
+- the manager owns navigation
+- the content of each step is meant to be task-focused
+
+### Website guidance
+
+Player-facing windows should feel compact and decisive, not like admin panels.
+
+## 5. Hit Points
+
+Templates:
+
+- config:
+  - `templates/advancement/hit-points-config.hbs`
+- flow:
+  - `templates/advancement/hit-points-flow.hbs`
+
+### Actual config skeleton
+
+```hbs
+<fieldset>
+  <legend>Hit Points</legend>
+  <div class="form-group">
+    <label>Hit Die</label>
+    <span class="form-field-readonly">d6</span>
+  </div>
+  <div class="form-group">
+    <label>Hit Points at 1st Level</label>
+    <span class="form-field-readonly">6</span>
+  </div>
+  <div class="form-group">
+    <label>Average</label>
+    <span class="form-field-readonly">4</span>
+  </div>
+</fieldset>
+```
+
+### Actual flow skeleton
+
+```hbs
+<div class="standard-form">
+  <div class="breakdown form-group split-group">
+    <div class="form-fields">
+      <div class="form-group label-top">Previous</div>
+      <span class="separator">+</span>
+      <div class="form-group label-top">Roll / Max / Average</div>
+      <span class="separator">+</span>
+      <div class="form-group label-top">Modifier</div>
+      <span class="separator">+</span>
+      <div class="form-group label-top">Bonus</div>
+      <span class="separator">=</span>
+      <div class="form-group label-top">Final</div>
+    </div>
+    <button class="roll-button dice-button" type="button">d6</button>
+  </div>
+
+  <fieldset>
+    <legend>Options</legend>
+    <div class="form-group">
+      <label>Take Average</label>
+      <div class="form-fields">
+        <dnd5e-checkbox name="useAverage"></dnd5e-checkbox>
+      </div>
+    </div>
+  </fieldset>
+</div>
+```
+
+### Website guidance
+
+Keep the compact equation layout.
+
+This should not look like a long vertical form.
+
+## 6. Trait
 
 Templates:
 
@@ -305,519 +350,468 @@ Templates:
 - `templates/advancement/trait-config-guaranteed.hbs`
 - `templates/advancement/trait-config-choices.hbs`
 - `templates/advancement/trait-config-traits.hbs`
+- `templates/advancement/trait-flow.hbs`
 
-This editor is section-heavy.
+### Actual config sections
 
-It is effectively split into:
+#### Details
 
-1. details/config
-2. guaranteed traits
-3. choice bundles
-4. selectable trait list
-
-#### Trait Details
-
-Fields:
-
-- `Mode`
-- `Allow Replacements`
+```hbs
+<fieldset>
+  <legend>Details</legend>
+  Mode field
+  Allow replacements checkbox
+</fieldset>
+```
 
 #### Guaranteed
 
-Single selectable row representing fixed grants already attached to the advancement.
+```hbs
+<fieldset class="selected-trait">
+  <legend>Guaranteed</legend>
+  <ul class="unlist">
+    <li>
+      <label class="selected">
+        <input type="radio" name="selectedIndex">
+        <i class="fa-solid fa-arrow-right-long"></i>
+        <span>Granted traits summary</span>
+      </label>
+    </li>
+  </ul>
+</fieldset>
+```
 
 #### Choices
 
-List of choice bundles.
-
-Each row has:
-
-- radio/select current bundle
-- label
-- remove button
-
-Section header also has:
-
-- add choice button
-
-#### Traits section
-
-The main selectable pool card.
-
-Top split row includes:
-
-- count input, if present
-- trait type dropdown
-
-Main body is a trait checklist/grid using the standard trait list partial.
-
-### Schematic
-
-```text
-Trait Editor
-|
-+-- Shared Details
-|
-+-- Trait Details
-|   +-- Mode
-|   +-- Allow Replacements
-|
-+-- Guaranteed
-|   +-- one fixed grant row
-|
-+-- Choices
-|   +-- add choice button
-|   +-- choice row
-|   +-- choice row
-|
-+-- Traits Pool Card
-    +-- count
-    +-- trait type
-    +-- checklist/grid of traits
+```hbs
+<fieldset class="selected-trait">
+  <legend>
+    Choices
+    <button type="button" class="control-button unbutton" data-action="addChoice">
+      <i class="fas fa-plus"></i>
+    </button>
+  </legend>
+  <ul class="unlist">
+    <li>
+      <label>
+        <input type="radio" name="selectedIndex">
+        <i class="fa-solid fa-gear"></i>
+        <span>Choice bundle summary</span>
+      </label>
+      <button type="button" class="control-button unbutton" data-action="removeChoice">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+    </li>
+  </ul>
+</fieldset>
 ```
 
-### Player-facing flow window
+#### Traits pool
 
-Template:
+```hbs
+<fieldset class="card traits">
+  <legend>Trait Pool</legend>
+  <div class="form-group split-group">
+    <div class="form-fields">
+      Count input
+      Trait type selector
+    </div>
+  </div>
 
-- `templates/advancement/trait-flow.hbs`
-
-Structure:
-
-1. optional select box for adding a trait
-2. card containing currently chosen traits
-3. each chosen trait row can have delete control
-
-### Schematic
-
-```text
-Trait Flow
-|
-+-- optional "Select Trait" fieldset
-|
-+-- Traits Card
-    +-- header
-    +-- chosen trait row
-    +-- chosen trait row
+  {{> "dnd5e.traits-list"}}
+</fieldset>
 ```
 
-### Website implication
+### Actual flow skeleton
 
-Trait editing should be modeled as:
+```hbs
+<div class="standard-form">
+  <fieldset>
+    <legend>Select Trait</legend>
+    Trait input
+  </fieldset>
 
-- define fixed grants
-- define one or more choice bundles
-- define the pool to choose from
+  <div class="items-section card">
+    <div class="items-header header">
+      <h4 class="item-name">Traits</h4>
+    </div>
+    <ul class="item-list unlist">
+      <li class="item flexrow">
+        <div class="item-name flexrow">
+          <dnd5e-icon class="gold-icon"></dnd5e-icon>
+          <div class="name-stacked">
+            <div class="title">Trait label</div>
+          </div>
+        </div>
+        <div class="item-controls flexrow">
+          <button type="button" class="unbutton control-button item-control">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </li>
+    </ul>
+  </div>
+</div>
+```
 
-not as one flattened “pick traits” widget.
+### Website guidance
 
-## Item Choice Advancement
+Trait editing should look like a multi-section builder with a current selection context, not one giant list.
 
-### Authoring window
+## 7. Item Choice
 
 Templates:
 
 - `templates/advancement/item-choice-config-details.hbs`
-- `templates/advancement/item-choice-config-levels.hbs`
 - `templates/advancement/item-choice-config-items.hbs`
-
-This editor is structured in three major parts.
-
-#### Details fieldset
-
-Fields:
-
-- `Allow Drops`
-- `Type`
-- optional `Restriction Type`
-- optional `Restriction Subtype`
-- optional spell restrictions:
-  - level
-  - list
-
-#### Levels table
-
-Per level row:
-
-- level label
-- count
-- replacement toggle
-
-This is the section that makes Item Choice feel different from Trait.
-
-Item Choice is level-table driven.
-
-#### Items pool table
-
-List of selectable items in the pool.
-
-Per row:
-
-- item link / name
-- delete control
-
-Bottom hint:
-
-- drop area hint for dragging items in
-
-### Schematic
-
-```text
-Item Choice Editor
-|
-+-- Shared Details
-|
-+-- Item Choice Details
-|   +-- Allow Drops
-|   +-- Type
-|   +-- Restriction Type / Subtype
-|   +-- optional Spell Restrictions
-|
-+-- Levels Table
-|   +-- Level | Count | Replacement
-|   +-- row
-|   +-- row
-|
-+-- Items Pool Table
-    +-- item row
-    +-- item row
-    +-- drop hint
-```
-
-### Player-facing flow window
-
-Template:
-
+- `templates/advancement/item-choice-config-levels.hbs`
 - `templates/advancement/item-choice-flow.hbs`
 
-Structure:
+### Actual config details skeleton
 
-1. optional options fieldset
-   - ability dropdown
-   - replacement radio group
-2. one or more item sections
-   - grouped headers
-   - item rows with checkbox or radio behavior
-3. optional browse button at bottom
-
-### Schematic
-
-```text
-Item Choice Flow
-|
-+-- Options Fieldset
-|   +-- ability select
-|   +-- replacement controls
-|
-+-- Section Card
-|   +-- section header
-|   +-- item row
-|   +-- item row
-|
-+-- optional Browse button
+```hbs
+<fieldset>
+  <legend>Details</legend>
+  Allow drops checkbox
+  Type selector
+  Restriction type selector
+  Restriction subtype selector
+  Spell level restriction
+  Spell list restriction
+</fieldset>
 ```
 
-### Website implication
+### Actual config items skeleton
 
-For the web app:
-
-- editor: model Item Choice around `details + level table + pool`
-- player flow: model it around `sections of selectable items`
-
-Do not merge those two views together.
-
-## Subclass Advancement
-
-### Player-facing flow window
-
-Template:
-
-- `templates/advancement/subclass-flow.hbs`
-
-This flow is intentionally minimal.
-
-It is a single large pill/button.
-
-If no subclass is selected:
-
-- empty pill with `Select Subclass`
-
-If a subclass is selected:
-
-- icon
-- subclass name
-- delete button
-
-### Schematic
-
-```text
-Subclass Flow
-|
-+-- Large pill
-    +-- empty state: "Select Subclass"
-    +-- or selected state:
-        +-- icon
-        +-- name
-        +-- delete button
+```hbs
+<fieldset class="card items table">
+  <legend>Pool</legend>
+  <div class="header">
+    <div class="item-name name-header">Item</div>
+  </div>
+  <ol class="items-list unlist">
+    <li class="item flexrow">
+      <div class="item-name">Item link</div>
+      <div class="item-controls flexrow">
+        <a class="item-control item-action"><i class="fas fa-trash"></i></a>
+      </div>
+    </li>
+  </ol>
+  <div class="form-group">
+    <p class="hint centered drop-area">Drop hint</p>
+  </div>
+</fieldset>
 ```
 
-### Website implication
+### Actual config levels skeleton
 
-The subclass selector should be a compact, dedicated control.
+```hbs
+<fieldset class="card levels table">
+  <legend>Choices</legend>
+  <div class="header">
+    <span class="level-header">Lvl</span>
+    <span class="count-header">Count</span>
+    <span class="replacement-header">Replacement</span>
+  </div>
+  <ol class="levels-list unlist">
+    <li class="level">
+      <div class="level-level">3</div>
+      <div class="level-count"><input type="number"></div>
+      <div class="level-replacement"><dnd5e-checkbox></dnd5e-checkbox></div>
+    </li>
+  </ol>
+</fieldset>
+```
 
-It should not be buried as one row inside a generic choice list.
+### Actual flow skeleton
 
-## Scale Value Advancement
+```hbs
+<div class="standard-form">
+  <fieldset>
+    <legend>Options</legend>
+    Ability selector
+    Replacement radio set
+  </fieldset>
 
-### Authoring window
+  <div class="items-section card">
+    <div class="items-header header">
+      <h4 class="item-name">Section Header</h4>
+    </div>
+    <ul class="item-list unlist current-level">
+      <li class="item flexrow">
+        <div class="item-name flexrow">
+          <img class="gold-icon">
+          <div class="name-stacked">
+            <div class="title">Item name</div>
+          </div>
+        </div>
+        <div class="item-controls flexrow">
+          <dnd5e-checkbox></dnd5e-checkbox>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <div class="pill-lg roboto-upper empty" data-action="browse">
+    Browse / Select
+  </div>
+</div>
+```
+
+### Website guidance
+
+This is the clearest Foundry pattern for Metamagic-like UI.
+
+Keep:
+
+- details block
+- pool table
+- level progression table
+- grouped choice cards in the flow
+
+## 8. Item Grant
+
+Templates:
+
+- `templates/advancement/item-grant-config-details.hbs`
+- `templates/advancement/item-grant-config-items.hbs`
+- `templates/advancement/item-grant-flow-v2.hbs`
+
+### Actual config skeleton
+
+```hbs
+<fieldset>
+  <legend>Details</legend>
+  Optional checkbox
+</fieldset>
+
+<fieldset class="card items table">
+  <legend>Items</legend>
+  <div class="header">
+    <div class="item-optional">Optional</div>
+    <div class="item-name name-header">Item</div>
+  </div>
+  <ol class="items-list unlist">
+    <li class="item flexrow">
+      <div class="item-optional"><dnd5e-checkbox></dnd5e-checkbox></div>
+      <div class="item-name">Item link</div>
+      <div class="item-controls flexrow">
+        <a class="item-control item-action"><i class="fas fa-trash"></i></a>
+      </div>
+    </li>
+  </ol>
+</fieldset>
+```
+
+### Actual flow skeleton
+
+```hbs
+<div class="standard-form">
+  <fieldset>
+    <legend>Spell Ability</legend>
+    Ability selector
+  </fieldset>
+
+  <div class="items-section card">
+    <div class="items-header header">
+      <h4 class="item-name">Granted Items</h4>
+    </div>
+    <ul class="item-list unlist">
+      <li class="item flexrow">
+        <div class="item-name flexrow">
+          <img class="gold-icon">
+          <div class="name-stacked">
+            <div class="title">Item name</div>
+          </div>
+        </div>
+        <div class="item-controls flexrow">
+          <dnd5e-checkbox></dnd5e-checkbox>
+        </div>
+      </li>
+    </ul>
+  </div>
+</div>
+```
+
+### Website guidance
+
+Item Grant is visually simpler than Item Choice.
+
+It should read as a grant list, not a chooser.
+
+## 9. Scale Value
 
 Templates:
 
 - `templates/advancement/scale-value-config-details.hbs`
 - `templates/advancement/scale-value-config-levels.hbs`
-
-#### Details fieldset
-
-Fields:
-
-- `Type`
-- optional distance units
-- `Identifier`
-
-#### Levels table
-
-A level-based table where visible columns depend on the selected scale type.
-
-Examples:
-
-- number
-- die
-- distance
-
-### Schematic
-
-```text
-Scale Value Editor
-|
-+-- Shared Details
-|
-+-- Scale Details
-|   +-- Type
-|   +-- optional Units
-|   +-- Identifier
-|
-+-- Levels Table
-    +-- Level
-    +-- one or more type-specific value columns
-```
-
-### Player-facing flow window
-
-Template:
-
 - `templates/advancement/scale-value-flow.hbs`
 
-Very small display:
+### Actual config details skeleton
 
-- initial value
-- arrow
-- final value
+```hbs
+<fieldset>
+  <legend>Details</legend>
+  Type selector
+  Distance units selector
+  Identifier field
+  Identifier hint
+</fieldset>
+```
 
-### Website implication
+### Actual levels table skeleton
 
-Scale Value is one of the simplest player-facing advancement windows.
+```hbs
+<fieldset class="card levels table" data-type="{{ configuration.data.type }}">
+  <legend>Scale</legend>
+  <div class="header">
+    <span class="level-level">Lvl</span>
+    <span class="value-header">Value column(s)</span>
+  </div>
+  <ol class="levels-list unlist">
+    <li class="level">
+      <div class="level-level">2</div>
+      <div class="level-value"><input></div>
+    </li>
+  </ol>
+</fieldset>
+```
 
-The authoring complexity is in the table, not the runtime flow.
+### Actual flow skeleton
 
-## Ability Score Improvement Advancement
+```hbs
+<div>
+  <span class="initial-scale-value">Previous</span>
+  <span class="arrow">→</span>
+  <span class="new-scale-value">Final</span>
+</div>
+```
 
-### Player-facing flow window
+### Website guidance
 
-Template:
+Config should feel like a dense progression grid.
 
+Flow should feel like a compact “value changes from X to Y” display.
+
+## 10. Ability Score Improvement
+
+Templates:
+
+- `templates/advancement/ability-score-improvement-config-details.hbs`
+- `templates/advancement/ability-score-improvement-config-scores.hbs`
 - `templates/advancement/ability-score-improvement-flow.hbs`
 
-This flow has two distinct areas:
+### Actual flow skeleton
 
-1. ability score controls
-2. feat selection area
+```hbs
+<div class="standard-form">
+  <ul class="ability-scores unlist">
+    Score controls
+  </ul>
 
-#### Ability score area
-
-- list/grid of six ability controls
-- points remaining / lock message
-- optional point cap display
-
-#### Feat area
-
-- recommended feat pill
-- ASI pill
-- optional browse/select feat pill
-
-### Schematic
-
-```text
-ASI Flow
-|
-+-- Ability Score Controls
-|   +-- score control
-|   +-- score control
-|   +-- score control
-|
-+-- Feat Section
-    +-- recommended feat pill
-    +-- ASI pill
-    +-- browse/select feat pill
+  <div class="feat-section flexcol">
+    <div class="pill-lg">Recommended feat</div>
+    <div class="pill-lg">ASI option</div>
+    <div class="pill-lg roboto-upper empty">Browse feat</div>
+  </div>
+</div>
 ```
 
-### Website implication
+### Website guidance
 
-ASI is not just “modify stats.”
+Keep the “ASI versus feat” decision visually obvious.
 
-It is a split-choice window between:
-
-- direct score increases
-- feat choice
-
-## Item Grant Advancement
-
-### Player-facing flow window
+## 11. Subclass
 
 Template:
-
-- `templates/advancement/item-grant-flow-v2.hbs`
-
-Structure:
-
-1. optional spell ability fieldset
-2. item card list
-3. each item row has:
-   - icon
-   - name
-   - optional checkbox if the grant is optional
-
-### Schematic
-
-```text
-Item Grant Flow
-|
-+-- optional Spell Ability fieldset
-|
-+-- Items Card
-    +-- granted item row
-    +-- granted item row
-```
-
-## Confirmation / Deletion Dialog
-
-Template:
-
-- `templates/advancement/advancement-confirmation-dialog.hbs`
-
-Structure:
-
-1. warning/note paragraph
-2. options fieldset
-3. single checkbox to apply the advancement-side deletion behavior
-
-### Website implication
-
-If the website supports deleting or rewinding advancement rows, this is the confirmation pattern to mimic.
-
-## Recommended Website Component Map
-
-If the website wants to feel Foundry-aligned without copying the HTML exactly, the minimum component set should be:
-
-1. `AdvancementDetailsSection`
-   - title
-   - icon
-   - class restriction
-   - level
-   - hint
-2. `AdvancementFieldset`
-   - titled section with legend
-3. `AdvancementLevelsTable`
-   - reusable for Item Choice and Scale Value
-4. `AdvancementItemsCard`
-   - reusable for Item Choice and Item Grant
-5. `AdvancementTraitPoolCard`
-   - reusable for Trait grants and choices
-6. `AdvancementPillSelector`
-   - reusable for subclass and feat picks
-7. `AdvancementFlowShell`
-   - title
-   - hint
-   - summary/content
-   - footer navigation
-
-## Direct Template List
-
-Core shell:
-
-- `templates/advancement/advancement-config.hbs`
-- `templates/advancement/parts/advancement-controls.hbs`
-- `templates/advancement/advancement-flow.hbs`
-- `templates/advancement/advancement-manager.hbs`
-
-Item sheet tab:
-
-- `templates/items/advancement.hbs`
-
-Selection / confirmation:
-
-- `templates/advancement/advancement-selection.hbs`
-- `templates/advancement/advancement-confirmation-dialog.hbs`
-
-Hit Points:
-
-- `templates/advancement/hit-points-config.hbs`
-- `templates/advancement/hit-points-flow.hbs`
-
-Trait:
-
-- `templates/advancement/trait-config-details.hbs`
-- `templates/advancement/trait-config-guaranteed.hbs`
-- `templates/advancement/trait-config-choices.hbs`
-- `templates/advancement/trait-config-traits.hbs`
-- `templates/advancement/trait-flow.hbs`
-
-Item Choice:
-
-- `templates/advancement/item-choice-config-details.hbs`
-- `templates/advancement/item-choice-config-levels.hbs`
-- `templates/advancement/item-choice-config-items.hbs`
-- `templates/advancement/item-choice-flow.hbs`
-
-Scale Value:
-
-- `templates/advancement/scale-value-config-details.hbs`
-- `templates/advancement/scale-value-config-levels.hbs`
-- `templates/advancement/scale-value-flow.hbs`
-
-Subclass:
 
 - `templates/advancement/subclass-flow.hbs`
 
-Ability Score Improvement:
+### Actual flow skeleton
 
-- `templates/advancement/ability-score-improvement-flow.hbs`
+```hbs
+<div class="pill-lg {{#unless subclass}}roboto-upper empty{{/unless}}"
+     {{#if subclass}}data-uuid="{{ subclass.uuid }}"{{else}}data-action="browse"{{/if}}>
+  {{#if subclass}}
+  <img class="gold-icon" data-action="viewItem" src="{{ subclass.img }}" alt="{{ subclass.name }}">
+  <div class="name-stacked">
+    <div class="title">{{ subclass.name }}</div>
+  </div>
+  <button type="button" class="unbutton control-button item-control" data-action="deleteItem">
+    <i class="fas fa-trash"></i>
+  </button>
+  {{else}}
+  Select Subclass
+  {{/if}}
+</div>
+```
 
-Item Grant:
+### Website guidance
 
-- `templates/advancement/item-grant-flow-v2.hbs`
+This is intentionally a single focused selector.
 
-## Practical Rule For The App Team
+Do not turn subclass selection into a heavy admin form.
 
-If the website is rebuilding Foundry advancement UX, copy:
+## 12. Size
 
-1. the section order
-2. the split between authoring views and runtime/player views
-3. the repeated primitives: fieldsets, cards, tables, pill selectors
+Templates:
 
-Do not copy:
+- `templates/advancement/size-config-details.hbs`
+- `templates/advancement/size-flow.hbs`
 
-1. Foundry-specific custom elements
-2. exact CSS class names
-3. exact control chrome where it conflicts with the website design system
+### Actual flow skeleton
 
-The important part is preserving the information architecture, not the exact HTML.
+```hbs
+<div>
+  <fieldset>
+    <legend>Select Size</legend>
+    Size selector
+  </fieldset>
+</div>
+```
+
+### Website guidance
+
+This should stay narrow and minimal.
+
+## Best Website Mirroring Targets
+
+If the team only wants the windows most relevant to classes first, mirror these in order:
+
+1. item sheet advancement tab
+2. shared advancement controls
+3. Hit Points flow
+4. Trait config
+5. Item Choice config and flow
+6. Item Grant config and flow
+7. Scale Value config
+8. Subclass flow
+
+## What To Preserve
+
+Preserve these Foundry interaction rules:
+
+- shared controls in a fixed top block
+- `fieldset` and `legend` as the primary grouping pattern
+- level-grouped cards in the advancement tab
+- `ItemChoice` and `ItemGrant` as table/list hybrids
+- `ScaleValue` as a dense progression table
+- `HitPoints` as a compact equation flow
+- `Subclass` as a single-pill selector
+
+## What Can Be Improved Safely
+
+The website can improve:
+
+- spacing
+- visual hierarchy
+- action-button clarity
+- readability of dense tables
+- icon/button size
+- section separation
+
+The goal should be:
+
+- Foundry structure
+- cleaner presentation
+- no change in core interaction model

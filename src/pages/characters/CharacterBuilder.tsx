@@ -184,7 +184,10 @@ export default function CharacterBuilder({
           where("groupId", "==", choice.optionGroupId),
         );
         const snapshot = await getDocs(q);
-        const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const excludedOptionIds = new Set(choice.configuration?.excludedOptionIds || []);
+        const items = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((item: any) => !excludedOptionIds.has(item.id));
         setAvailableOptions(items);
         setOptionsCache((prev) => {
           const nc = { ...prev };
@@ -3173,7 +3176,7 @@ export default function CharacterBuilder({
                 <Edit2 className="w-10 h-10 text-gold mb-4" />
                 <p className="text-ink/60 font-serif italic text-sm">
                   Ability score management logic is currently being finalized.
-                  Please use the ± controls on the sheet interface for now.
+                  Please use the Â± controls on the sheet interface for now.
                 </p>
               </div>
               <Button

@@ -29,6 +29,41 @@ const FEATURE_TYPES = [
   { id: 'vehicle', name: 'Vehicle Feature' }
 ];
 
+function getScalingBreakpoints(values: Record<string, any> = {}) {
+  let lastValue: string | undefined;
+  return Object.entries(values)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .filter(([, value]) => {
+      const normalized = String(value ?? '');
+      if (!normalized || normalized === lastValue) return false;
+      lastValue = normalized;
+      return true;
+    });
+}
+
+function resolveLegacyProficiencyIds(legacyValue: string, entries: any[] = []) {
+  if (!legacyValue?.trim() || entries.length === 0) return [];
+  const parts = legacyValue
+    .split(',')
+    .map(part => part.trim().toLowerCase())
+    .filter(Boolean);
+
+  return entries
+    .filter(entry => {
+      const comparableValues = [
+        entry.name,
+        entry.identifier,
+        entry.category,
+        entry.foundryAlias
+      ]
+        .filter(Boolean)
+        .map((value: string) => String(value).trim().toLowerCase());
+
+      return parts.some(part => comparableValues.includes(part));
+    })
+    .map(entry => entry.id);
+}
+
 export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -40,6 +75,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [knownScalings, setKnownScalings] = useState<any[]>([]);
   const [allSkills, setAllSkills] = useState<any[]>([]);
   const [allTools, setAllTools] = useState<any[]>([]);
+  const [allArmor, setAllArmor] = useState<any[]>([]);
+  const [allWeapons, setAllWeapons] = useState<any[]>([]);
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -50,6 +87,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [proficiencies, setProficiencies] = useState<any>({
     armor: '',
     weapons: '',
+    armorIds: [],
+    weaponIds: [],
     tools: {
       choiceCount: 0,
       optionIds: [],
@@ -145,6 +184,16 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       setAllTools(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
+    // Fetch Armor
+    const unsubscribeArmor = onSnapshot(query(collection(db, 'armor'), orderBy('name')), (snap) => {
+      setAllArmor(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    // Fetch Weapons
+    const unsubscribeWeapons = onSnapshot(query(collection(db, 'weapons'), orderBy('name')), (snap) => {
+      setAllWeapons(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     // Fetch All Option Groups
     const unsubscribeGroups = onSnapshot(query(collection(db, 'uniqueOptionGroups'), orderBy('name')), (snap) => {
       console.log(`[ClassEditor] Option groups snapshot received. Count: ${snap.docs.length}`);
@@ -189,6 +238,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             setProficiencies({
               armor: rawProf.armor || '',
               weapons: rawProf.weapons || '',
+              armorIds: rawProf.armorIds || [],
+              weaponIds: rawProf.weaponIds || [],
               tools: {
                 choiceCount: tools.choiceCount || 0,
                 optionIds: tools.optionIds || [],
@@ -277,6 +328,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         unsubscribeKnownScalings();
         unsubscribeSkills();
         unsubscribeTools();
+        unsubscribeArmor();
+        unsubscribeWeapons();
         unsubscribeGroups();
         unsubscribeItems();
         unsubscribeTagGroups();
@@ -296,12 +349,47 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       unsubscribeKnownScalings();
       unsubscribeSkills();
       unsubscribeTools();
+      unsubscribeArmor();
+      unsubscribeWeapons();
       unsubscribeGroups();
       unsubscribeItems();
       unsubscribeTagGroups();
       unsubscribeTags();
     };
   }, [id]);
+
+  useEffect(() => {
+    if (allArmor.length === 0 && allWeapons.length === 0) return;
+
+    setProficiencies((prev: any) => {
+      const nextArmorIds = (prev.armorIds?.length ?? 0) > 0
+        ? prev.armorIds
+        : resolveLegacyProficiencyIds(prev.armor || '', allArmor);
+      const nextWeaponIds = (prev.weaponIds?.length ?? 0) > 0
+        ? prev.weaponIds
+        : resolveLegacyProficiencyIds(prev.weapons || '', allWeapons);
+
+      if (
+        JSON.stringify(nextArmorIds) === JSON.stringify(prev.armorIds || []) &&
+        JSON.stringify(nextWeaponIds) === JSON.stringify(prev.weaponIds || [])
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        armorIds: nextArmorIds,
+        weaponIds: nextWeaponIds
+      };
+    });
+  }, [
+    allArmor,
+    allWeapons,
+    proficiencies.armor,
+    proficiencies.weapons,
+    proficiencies.armorIds,
+    proficiencies.weaponIds
+  ]);
 
   const handleSaveFeature = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -425,6 +513,21 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         updatedAdvancements.splice(traitIndex, 1);
       }
 
+      const armorSelections = (proficiencies.armorIds || [])
+        .map((id: string) => allArmor.find((item: any) => item.id === id))
+        .filter(Boolean);
+      const weaponSelections = (proficiencies.weaponIds || [])
+        .map((id: string) => allWeapons.find((item: any) => item.id === id))
+        .filter(Boolean);
+
+      const normalizedProficiencies = {
+        ...proficiencies,
+        armorIds: proficiencies.armorIds || [],
+        weaponIds: proficiencies.weaponIds || [],
+        armor: armorSelections.map((item: any) => item.name).join(', '),
+        weapons: weaponSelections.map((item: any) => item.name).join(', ')
+      };
+
       const classData = {
         name,
         identifier: slugify(name),
@@ -433,7 +536,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         sourceId,
         hitDie,
         savingThrows,
-        proficiencies,
+        proficiencies: normalizedProficiencies,
         startingEquipment,
         primaryAbility,
         wealth,
@@ -648,23 +751,86 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             <div className="grid sm:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="label-text">Armor</label>
-                  <Input 
-                    value={proficiencies.armor}
-                    onChange={e => setProficiencies({...proficiencies, armor: e.target.value})}
-                    placeholder="e.g. Light armor, medium armor, shields"
-                    className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                  />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="label-text">Armor</label>
+                    <span className="text-[10px] text-ink/35">
+                      {(proficiencies.armorIds || []).length} selected
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 border border-gold/10 bg-background/30 rounded-md min-h-[100px]">
+                    {allArmor.map(armor => {
+                      const isSelected = proficiencies.armorIds?.includes(armor.id);
+                      return (
+                        <label key={armor.id} className="flex items-center gap-2 cursor-pointer group">
+                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                            {isSelected && <Check className="w-2 h-2 text-white" />}
+                          </div>
+                          <input
+                            type="checkbox"
+                            className="hidden"
+                            checked={isSelected}
+                            onChange={e => {
+                              const current = proficiencies.armorIds || [];
+                              const next = e.target.checked
+                                ? [...current, armor.id]
+                                : current.filter((id: string) => id !== armor.id);
+                              setProficiencies({
+                                ...proficiencies,
+                                armorIds: next
+                              });
+                            }}
+                          />
+                          <span className="text-[10px] font-bold text-ink/60 truncate">
+                            {armor.name}
+                            {armor.category ? <span className="font-normal text-ink/35"> ({armor.category})</span> : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {allArmor.length === 0 && <p className="text-[10px] text-ink/30 italic col-span-2">No armor proficiencies defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage proficiencies</Link></p>}
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="label-text">Weapons</label>
-                  <Input 
-                    value={proficiencies.weapons}
-                    onChange={e => setProficiencies({...proficiencies, weapons: e.target.value})}
-                    placeholder="e.g. Simple weapons, martial weapons"
-                    className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                  />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="label-text">Weapons</label>
+                    <span className="text-[10px] text-ink/35">
+                      {(proficiencies.weaponIds || []).length} selected
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 border border-gold/10 bg-background/30 rounded-md min-h-[100px]">
+                    {allWeapons.map(weapon => {
+                      const isSelected = proficiencies.weaponIds?.includes(weapon.id);
+                      return (
+                        <label key={weapon.id} className="flex items-center gap-2 cursor-pointer group">
+                          <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                            {isSelected && <Check className="w-2 h-2 text-white" />}
+                          </div>
+                          <input
+                            type="checkbox"
+                            className="hidden"
+                            checked={isSelected}
+                            onChange={e => {
+                              const current = proficiencies.weaponIds || [];
+                              const next = e.target.checked
+                                ? [...current, weapon.id]
+                                : current.filter((id: string) => id !== weapon.id);
+                              setProficiencies({
+                                ...proficiencies,
+                                weaponIds: next
+                              });
+                            }}
+                          />
+                          <span className="text-[10px] font-bold text-ink/60 truncate">
+                            {weapon.name}
+                            {weapon.category ? <span className="font-normal text-ink/35"> ({weapon.category})</span> : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {allWeapons.length === 0 && <p className="text-[10px] text-ink/30 italic col-span-2">No weapon proficiencies defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage proficiencies</Link></p>}
+                  </div>
                 </div>
               </div>
 
@@ -1214,6 +1380,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 availableFeatures={features}
                 availableScalingColumns={scalingColumns}
                 availableOptionGroups={allOptionGroups}
+                availableOptionItems={allOptionItems}
+                defaultHitDie={hitDie}
               />
             </div>
           </div>
@@ -1362,20 +1530,20 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-5 gap-1">
-                    {[1, 5, 10, 15, 20].map(lvl => (
-                      <div key={lvl} className="flex flex-col items-center">
-                        <span className="text-[8px] text-ink/30 font-mono">L{lvl}</span>
-                        <input 
-                          value={col.values?.[lvl.toString()] || "0"}
-                          onChange={e => {
-                            const nextValues = { ...col.values, [lvl.toString()]: e.target.value };
-                            updateDoc(doc(db, "scalingColumns", col.id), { values: nextValues });
-                          }}
-                          className="w-full h-5 text-[10px] text-center bg-background border border-gold/10 rounded outline-none focus:border-gold"
-                        />
+                  <div className="space-y-2">
+                    <p className="text-[9px] uppercase font-black tracking-widest text-gold/50">Breakpoints</p>
+                    {getScalingBreakpoints(col.values || {}).length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {getScalingBreakpoints(col.values || {}).map(([level, value]) => (
+                          <div key={level} className="rounded border border-gold/10 bg-background/60 px-2 py-1 min-w-[3.5rem]">
+                            <p className="text-[8px] text-ink/30 font-mono">L{level}</p>
+                            <p className="text-[10px] font-black text-ink">{String(value)}</p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : (
+                      <p className="text-[10px] text-ink/30 italic">No saved matrix values yet.</p>
+                    )}
                   </div>
 
                   <div className="pt-1">

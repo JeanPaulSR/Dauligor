@@ -24,7 +24,7 @@ import {
 import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   "Simple Melee Weapons",
   "Simple Ranged Weapons",
   "Martial Melee Weapons",
@@ -34,6 +34,7 @@ const CATEGORIES = [
 
 export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const [weapons, setWeapons] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [loading, setLoading] = useState(true);
   
   // Form State
@@ -56,6 +57,20 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
       (snapshot) => {
         setWeapons(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'weaponCategories'), orderBy('name', 'asc')),
+      (snapshot) => {
+        const managed = snapshot.docs
+          .map(doc => String(doc.data().name || '').trim())
+          .filter(Boolean);
+        setCategories(Array.from(new Set([...DEFAULT_CATEGORIES, ...managed])));
       }
     );
 
@@ -177,15 +192,19 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Category</label>
-                      <select 
+                      <Input
+                        list="weapon-category-options"
                         value={category}
                         onChange={e => setCategory(e.target.value)}
-                        className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                      >
-                        {CATEGORIES.map(c => (
-                          <option key={c} value={c}>{c}</option>
+                        placeholder="e.g. Martial Melee Weapons or Exotic Weapons"
+                        className="bg-background/50 border-gold/10 focus:border-gold"
+                      />
+                      <datalist id="weapon-category-options">
+                        {categories.map(c => (
+                          <option key={c} value={c} />
                         ))}
-                      </select>
+                      </datalist>
+                      <p className="text-[9px] text-ink/35 italic">Use the shared category list or type a new homebrew category.</p>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Ability Score</label>

@@ -7,7 +7,9 @@ import ArmorEditor from './ArmorEditor';
 import SimplePropertyEditor from './SimplePropertyEditor';
 
 export default function AdminProficiencies({ userProfile }: { userProfile: any }) {
-  const [activeTab, setActiveTab] = useState<'skills' | 'tools' | 'weapons' | 'armor' | 'languages' | 'damageTypes' | 'conditions' | 'attributes'>('skills');
+  const [activeTab, setActiveTab] = useState<
+    'skills' | 'tools' | 'weapons' | 'armor' | 'weaponCategories' | 'armorCategories' | 'languages' | 'languageCategories' | 'damageTypes' | 'conditions' | 'attributes'
+  >('skills');
 
   if (userProfile?.role !== 'admin') {
     return <div className="text-center py-20">Access Denied. Admins only.</div>;
@@ -32,8 +34,11 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
           { id: 'skills', label: 'Skills', icon: Brain },
           { id: 'tools', label: 'Tools', icon: Hammer },
           { id: 'weapons', label: 'Weapons', icon: Crosshair },
+          { id: 'weaponCategories', label: 'Weapon Categories', icon: Crosshair },
           { id: 'armor', label: 'Armor', icon: ShieldCheck },
+          { id: 'armorCategories', label: 'Armor Categories', icon: ShieldCheck },
           { id: 'languages', label: 'Languages', icon: MessageCircle },
+          { id: 'languageCategories', label: 'Language Categories', icon: MessageCircle },
           { id: 'damageTypes', label: 'Damage Types', icon: Skull },
           { id: 'conditions', label: 'Conditions', icon: HeartPulse },
           { id: 'attributes', label: 'Attributes', icon: Star }
@@ -57,8 +62,11 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
         {activeTab === 'skills' && <SkillsEditor userProfile={userProfile} hideHeader />}
         {activeTab === 'tools' && <ToolsEditor userProfile={userProfile} hideHeader />}
         {activeTab === 'weapons' && <WeaponsEditor userProfile={userProfile} hideHeader />}
+        {activeTab === 'weaponCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="weaponCategories" title="Weapon Category" descriptionText="Define broad weapon proficiency groups such as Simple, Martial, Firearms, Exotic, or other homebrew categories." icon={Crosshair} />}
         {activeTab === 'armor' && <ArmorEditor userProfile={userProfile} hideHeader />}
-        {activeTab === 'languages' && <SimplePropertyEditor userProfile={userProfile} collectionName="languages" title="Language" descriptionText="Define the languages available to be selected in race, class, and background proficiencies." icon={MessageCircle} />}
+        {activeTab === 'armorCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="armorCategories" title="Armor Category" descriptionText="Define broad armor proficiency groups such as Light, Medium, Heavy, Shields, or homebrew categories." icon={ShieldCheck} />}
+        {activeTab === 'languages' && <SimplePropertyEditor userProfile={userProfile} collectionName="languages" title="Language" descriptionText="Define the languages available to be selected in race, class, and background proficiencies." icon={MessageCircle} categoryCollectionName="languageCategories" categoryLabel="Language Category" />}
+        {activeTab === 'languageCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="languageCategories" title="Language Category" descriptionText="Define broad language groups such as Common Tongues, Exotic Tongues, Secret Scripts, or other homebrew categories." icon={MessageCircle} />}
         {activeTab === 'damageTypes' && <SimplePropertyEditor userProfile={userProfile} collectionName="damageTypes" title="Damage Type" descriptionText="Categories of damage a creature can be immune or resistant to." icon={Skull} />}
         {activeTab === 'conditions' && <SimplePropertyEditor userProfile={userProfile} collectionName="conditions" title="Condition" descriptionText="Categories of conditions a creature can be immune to." icon={HeartPulse} />}
         {activeTab === 'attributes' && <SimplePropertyEditor userProfile={userProfile} collectionName="attributes" title="Attribute" descriptionText="Define the core ability scores/attributes of the system." icon={Star} />}
