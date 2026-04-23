@@ -1,0 +1,504 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - username: string (required)
+    //   - displayName: string (required)
+    //   - role: string (enum: admin, co-dm, lore-writer, trusted-player, user)
+    //   - createdAt: timestamp
+    //
+    // Collection: lore
+    // Document ID: {pageId}
+    // Fields:
+    //   - title: string (required)
+    //   - content: string (required)
+    //   - category: string (required, enum: generic, building, character, country, military, deity, geography, item, organization, religion, species, vehicle, settlement, condition, conflict, document, culture, language, material, formation, myth, law, plot, profession, prose, title, spell, technology, tradition, session)
+    //   - status: string (required, enum: draft, published)
+    //   - excerpt: string
+    //   - imageUrl: string
+    //   - parentPageId: string
+    //   - metadata: map
+    //   - updatedAt: timestamp
+    //
+    // Collection: characterOptions
+    // Document ID: {optionId}
+    // Fields:
+    //   - name: string (required)
+    //   - type: string (required, enum: class, subclass, spell, feature)
+    //   - description: string (required)
+    //   - tags: list (strings)
+    //   - properties: map
+    //   - updatedAt: timestamp
+    //
+    // Collection: bookmarks
+    // Document ID: {bookmarkId}
+    // Fields:
+    //   - userId: string (required)
+    //   - optionId: string (required)
+    //   - createdAt: timestamp
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == "luapnaej101@gmail.com" ||
+        request.auth.token.email == "admin@archive.internal" ||
+        request.auth.token.email == "gm@archive.internal" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isStaff() {
+      return isAuthenticated() && (
+        request.auth.token.email == "luapnaej101@gmail.com" ||
+        request.auth.token.email == "admin@archive.internal" ||
+        request.auth.token.email == "gm@archive.internal" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'co-dm', 'lore-writer'])
+      );
+    }
+
+    function isCoDM() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'co-dm';
+    }
+
+    function isLoreWriter() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'lore-writer';
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'username', 'role', 'displayName']) &&
+             data.uid is string &&
+             data.username is string && data.username.size() >= 2 &&
+             data.displayName is string &&
+             data.role in ['admin', 'co-dm', 'lore-writer', 'trusted-player', 'user'] &&
+             (!('bio' in data) || data.bio == null || (data.bio is string && data.bio.size() < 500)) &&
+             (!('avatarUrl' in data) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() < 1000)) &&
+             (!('theme' in data) || data.theme in ['light', 'dark', 'parchment']) &&
+             (!('campaignIds' in data) || data.campaignIds is list) &&
+             (!('activeCampaignId' in data) || data.activeCampaignId == null || data.activeCampaignId is string);
+    }
+
+    function isValidCampaign(data) {
+      return data.keys().hasAll(['name', 'dmId']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.dmId is string &&
+             (!('eraId' in data) || data.eraId is string) &&
+             (!('playerIds' in data) || data.playerIds is list);
+    }
+
+    function isValidEra(data) {
+      return data.keys().hasAll(['name']) &&
+             data.name is string && data.name.size() > 0 &&
+             (!('description' in data) || data.description is string) &&
+             (!('order' in data) || data.order is number);
+    }
+
+    function isValidLore(data) {
+      return data.keys().hasAll(['title', 'content', 'category', 'status']) &&
+             data.title is string && data.title.size() < 200 &&
+             data.content is string && data.content.size() < 100000 &&
+             data.category in ['generic', 'building', 'character', 'country', 'military', 'deity', 'geography', 'item', 'organization', 'religion', 'species', 'vehicle', 'settlement', 'condition', 'conflict', 'document', 'culture', 'language', 'material', 'formation', 'myth', 'law', 'plot', 'profession', 'prose', 'title', 'spell', 'technology', 'tradition', 'session'] &&
+             data.status in ['draft', 'published'] &&
+             (!('excerpt' in data) || data.excerpt is string) &&
+             (!('imageUrl' in data) || data.imageUrl is string) &&
+             (!('parentPageId' in data) || data.parentPageId is string) &&
+             (!('metadata' in data) || data.metadata is map);
+    }
+
+    function isValidSecret(data) {
+      return data.keys().hasAll(['content', 'eraIds', 'revealedCampaignIds']) &&
+             data.content is string && data.content.size() < 10000 &&
+             data.eraIds is list &&
+             data.revealedCampaignIds is list;
+    }
+
+    function isValidDMNotes(data) {
+      return data.keys().hasAll(['content']) &&
+             data.content is string && data.content.size() < 50000;
+    }
+
+    function isValidSource(data) {
+      return data.keys().hasAll(['name', 'description']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.description is string && data.description.size() < 20000 &&
+             (!('url' in data) || data.url == null || (data.url is string && data.url.size() < 1000)) &&
+             (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() < 1000)) &&
+             (!('tags' in data) || data.tags is list) &&
+             (!('updatedAt' in data) || data.updatedAt is string) &&
+             (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidClass(data) {
+      return data.keys().hasAll(['name', 'sourceId']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.sourceId is string &&
+             (!('tagIds' in data) || data.tagIds is list) &&
+             (!('hitDie' in data) || data.hitDie is number) &&
+             (!('savingThrows' in data) || data.savingThrows is list) &&
+             (!('proficiencies' in data) || data.proficiencies is map) &&
+             (!('startingEquipment' in data) || data.startingEquipment is string) &&
+             (!('multiclassing' in data) || data.multiclassing is string) &&
+             (!('description' in data) || data.description is string) &&
+             (!('spellcasting' in data) || data.spellcasting is map) &&
+             (!('uniqueOptionGroupIds' in data) || data.uniqueOptionGroupIds is list) &&
+             (!('uniqueOptionMappings' in data) || data.uniqueOptionMappings is list) &&
+             (!('excludedOptionIds' in data) || data.excludedOptionIds is map);
+    }
+
+    function isValidSubclass(data) {
+      return data.keys().hasAll(['name', 'classId', 'sourceId']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.classId is string &&
+             data.sourceId is string &&
+             (!('tagIds' in data) || data.tagIds is list) &&
+             (!('description' in data) || data.description is string) &&
+             (!('spellcasting' in data) || data.spellcasting is map) &&
+             (!('uniqueOptionGroupIds' in data) || data.uniqueOptionGroupIds is list) &&
+             (!('uniqueOptionMappings' in data) || data.uniqueOptionMappings is list) &&
+             (!('excludedOptionIds' in data) || data.excludedOptionIds is map);
+    }
+
+    function isValidFeature(data) {
+      return data.keys().hasAll(['name', 'level', 'parentId', 'parentType']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.level is number && data.level >= 1 && data.level <= 20 &&
+             data.parentId is string &&
+             data.parentType in ['class', 'subclass'];
+    }
+
+    function isValidScalingColumn(data) {
+      return data.keys().hasAll(['name', 'parentId', 'parentType', 'values']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.parentId is string &&
+             data.parentType in ['class', 'subclass'] &&
+             data.values is map;
+    }
+
+    function isValidSpell(data) {
+      return data.keys().hasAll(['name', 'level', 'sourceId']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.level is number && data.level >= 0 && data.level <= 9 &&
+             data.sourceId is string;
+    }
+
+    function isValidUniqueOption(data) {
+      return data.keys().hasAll(['name', 'uniqueType', 'classId', 'sourceId']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.uniqueType is string &&
+             data.classId is string &&
+             data.sourceId is string;
+    }
+
+    function isValidUniqueOptionGroup(data) {
+      return data.keys().hasAll(['name', 'sourceId']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.sourceId is string &&
+             (!('maxSelections' in data) || data.maxSelections is number) &&
+             (!('scalingColumnId' in data) || data.scalingColumnId is string) &&
+             (!('featureId' in data) || data.featureId is string);
+    }
+
+    function isValidUniqueOptionItem(data) {
+      return data.keys().hasAll(['name', 'groupId', 'sourceId', 'description']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.groupId is string &&
+             data.sourceId is string &&
+             data.description is string &&
+             (!('levelPrerequisite' in data) || data.levelPrerequisite is number) &&
+             (!('stringPrerequisite' in data) || data.stringPrerequisite is string) &&
+             (!('page' in data) || data.page is string) &&
+             (!('isRepeatable' in data) || data.isRepeatable is bool) &&
+             (!('classIds' in data) || data.classIds is list) &&
+             (!('featureId' in data) || data.featureId is string);
+    }
+
+    function isValidPactMagicScaling(data) {
+      return data.keys().hasAll(['name', 'levels']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.levels is map;
+    }
+
+    function isValidSpellsKnownScaling(data) {
+      return data.keys().hasAll(['name', 'levels']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.levels is map;
+    }
+
+    function isValidSpellcastingScaling(data) {
+      return data.keys().hasAll(['name', 'levels']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.levels is map;
+    }
+
+    function isValidTagGroup(data) {
+      return data.keys().hasAll(['name', 'category']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.category is string &&
+             (!('description' in data) || data.description is string);
+    }
+
+    function isValidTag(data) {
+      return data.keys().hasAll(['name', 'groupId']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.groupId is string;
+    }
+
+    function isValidSkill(data) {
+      return data.keys().hasAll(['name', 'ability']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.ability in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] &&
+             (!('identifier' in data) || data.identifier is string) &&
+             (!('foundryAlias' in data) || data.foundryAlias is string) &&
+             (!('source' in data) || data.source is string) &&
+             (!('page' in data) || data.page is number || data.page == null) &&
+             (!('basicRules' in data) || data.basicRules is bool) &&
+             (!('description' in data) || data.description is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    function isValidTool(data) {
+      return data.keys().hasAll(['name', 'category']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.category is string &&
+             (!('identifier' in data) || data.identifier is string) &&
+             (!('foundryAlias' in data) || data.foundryAlias is string) &&
+             (!('ability' in data) || data.ability in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) &&
+             (!('source' in data) || data.source is string) &&
+             (!('page' in data) || data.page is number || data.page == null) &&
+             (!('basicRules' in data) || data.basicRules is bool) &&
+             (!('description' in data) || data.description is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    function isValidWeapon(data) {
+      return data.keys().hasAll(['name', 'category']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.category is string &&
+             (!('identifier' in data) || data.identifier is string) &&
+             (!('foundryAlias' in data) || data.foundryAlias is string) &&
+             (!('ability' in data) || data.ability in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) &&
+             (!('source' in data) || data.source is string) &&
+             (!('page' in data) || data.page is number || data.page == null) &&
+             (!('basicRules' in data) || data.basicRules is bool) &&
+             (!('description' in data) || data.description is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    function isValidArmor(data) {
+      return data.keys().hasAll(['name', 'category']) &&
+             data.name is string && data.name.size() < 100 &&
+             data.category is string &&
+             (!('identifier' in data) || data.identifier is string) &&
+             (!('foundryAlias' in data) || data.foundryAlias is string) &&
+             (!('ability' in data) || data.ability in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) &&
+             (!('source' in data) || data.source is string) &&
+             (!('page' in data) || data.page is number || data.page == null) &&
+             (!('basicRules' in data) || data.basicRules is bool) &&
+             (!('description' in data) || data.description is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    function isValidCharacter(data) {
+      return data.keys().hasAll(['userId', 'name']) &&
+             data.userId is string &&
+             data.name is string && data.name.size() < 100 &&
+             (!('info' in data) || data.info is map) &&
+             (!('raceId' in data) || data.raceId == null || data.raceId is string) &&
+             (!('backgroundId' in data) || data.backgroundId == null || data.backgroundId is string) &&
+             (!('campaignId' in data) || data.campaignId == null || data.campaignId is string) &&
+             (!('classId' in data) || data.classId == null || data.classId is string) &&
+             (!('subclassId' in data) || data.subclassId == null || data.subclassId is string) &&
+             (!('level' in data) || data.level is number) &&
+             (!('isLevelLocked' in data) || data.isLevelLocked is bool) &&
+             (!('stats' in data) || data.stats is map) &&
+             (!('bookmarks' in data) || data.bookmarks is list) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isAuthenticated();
+      allow list: if isStaff();
+      allow create: if (isOwner(userId) && isValidUser(request.resource.data) && 
+                    (request.resource.data.role == 'user' || request.resource.data.username == 'admin')) || isAdmin();
+      allow update: if (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role)) && isValidUser(request.resource.data);
+    }
+
+    match /campaigns/{campaignId} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isCoDM()) && isValidCampaign(request.resource.data);
+      allow delete: if isAdmin() || isCoDM();
+    }
+
+    match /eras/{eraId} {
+      allow read: if true;
+      allow create, update: if (isAdmin() || isCoDM()) && isValidEra(request.resource.data);
+      allow delete: if isAdmin() || isCoDM();
+    }
+
+    match /lore/{pageId} {
+      allow read: if isStaff() || (resource != null && resource.data.status == 'published');
+      allow create, update: if isStaff() && isValidLore(request.resource.data);
+      allow delete: if isAdmin() || isCoDM();
+
+      match /secrets/{secretId} {
+        allow read: if isStaff() || (
+          isAuthenticated() && 
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.activeCampaignId in resource.data.revealedCampaignIds
+        );
+        allow create, update: if isStaff() && isValidSecret(request.resource.data);
+        allow delete: if isStaff();
+      }
+
+      match /dmData/notes {
+        allow read: if isStaff();
+        allow create, update: if isStaff() && isValidDMNotes(request.resource.data);
+        allow delete: if isStaff();
+      }
+    }
+
+    match /sources/{document=**} {
+      allow read: if true;
+      allow create, update: if isStaff() && isValidSource(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /classes/{classId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidClass(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /subclasses/{subclassId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSubclass(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /features/{featureId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidFeature(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /scalingColumns/{columnId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidScalingColumn(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /spells/{spellId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSpell(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /uniqueOptions/{optionId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidUniqueOption(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /uniqueOptionGroups/{groupId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidUniqueOptionGroup(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /uniqueOptionItems/{itemId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidUniqueOptionItem(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /spellcastingScalings/{scalingId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSpellcastingScaling(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /pactMagicScalings/{scalingId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidPactMagicScaling(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /spellsKnownScalings/{scalingId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSpellsKnownScaling(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /tagGroups/{groupId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidTagGroup(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /tags/{tagId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidTag(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /skills/{skillId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSkill(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /tools/{toolId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidTool(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /weapons/{weaponId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidWeapon(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /armor/{armorId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidArmor(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /characters/{characterId} {
+      allow read: if isStaff() || isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.userId) && isValidCharacter(request.resource.data);
+      allow update: if (isStaff() || isOwner(resource.data.userId)) && isValidCharacter(request.resource.data) && (request.resource.data.userId == resource.data.userId);
+      allow delete: if isStaff() || isOwner(resource.data.userId);
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "kind": "dauligor.class-catalog.v1",
+  "schemaVersion": 1,
+  "source": {
+    "system": "dauligor",
+    "entity": "class-catalog",
+    "id": "source-phb-2014-classes",
+    "sourceId": "source-phb-2014"
+  },
+  "entries": [
+    {
+      "sourceId": "class-sorcerer",
+      "name": "Sorcerer",
+      "type": "class",
+      "img": "icons/svg/item-bag.svg",
+      "rules": "2014",
+      "description": "Sorcerers carry a magical birthright conferred upon them by an exotic bloodline, some otherworldly influence, or exposure to unknown cosmic forces. No one chooses sorcery; the power chooses the sorcer",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "sorcerer.json"
+    },
+    {
+      "sourceId": "class-artificer",
+      "name": "Artificer",
+      "type": "class",
+      "img": "icons/svg/item-bag.svg",
+      "rules": "2014",
+      "description": "Masters of invention, artificers use ingenuity and magic to unlock extraordinary capabilities in objects. They see magic as a complex system waiting to be decoded and then harnessed in their spells an",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "artificer.json"
+    }
+  ]
+}

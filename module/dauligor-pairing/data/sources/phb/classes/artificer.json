@@ -1,0 +1,1662 @@
+{
+  "class": {
+    "id": "wsXYRazx14xEPewtUerr",
+    "multiclassing": "*You must have an Intelligence score of 13 or higher in order to multiclass in or out of this class.*",
+    "identifier": "artificer",
+    "primaryAbility": [],
+    "sourceId": "source-phb-2014",
+    "uniqueOptionMappings": [
+      {
+        "groupId": "1fsjD9WDibqf8e34lxp5",
+        "featureId": "p4ES15G5gSSHb1vex0o2",
+        "scalingColumnId": "VdummJ30p8jVb6b1WpGd",
+        "quantityColumnId": "79yh84A4M9LupGHSrnOq"
+      }
+    ],
+    "name": "Artificer",
+    "description": "Masters of invention, artificers use ingenuity and magic to unlock extraordinary capabilities in objects. They see magic as a complex system waiting to be decoded and then harnessed in their spells and inventions. You can find everything you need to play one of these inventors in the next few sections.\n\nArtificers use a variety of tools to channel their arcane power. To cast a spell, an artificer might use alchemist's supplies to create a potent elixir, calligrapher's supplies to inscribe a sigil of power, or tinker's tools to craft a temporary charm. The magic of artificers is tied to their tools and their talents, and few other characters can produce the right tool for a job as well as an artificer.",
+    "subclassTitle": "Artificer Specialist",
+    "excludedOptionIds": {},
+    "proficiencies": {
+      "skills": {
+        "choiceCount": 2,
+        "options": [
+          "arc",
+          "his",
+          "inv",
+          "med",
+          "nat",
+          "prc",
+          "slt"
+        ],
+        "fixed": []
+      },
+      "weapons": "Simple weapons",
+      "tools": {
+        "choiceCount": 0,
+        "options": [],
+        "fixed": []
+      },
+      "armor": "Light armor, medium armor, shields"
+    },
+    "tagIds": [],
+    "savingThrows": [
+      "CON",
+      "INT"
+    ],
+    "lore": "",
+    "subclassFeatureLevels": [
+      3,
+      5,
+      9,
+      15
+    ],
+    "createdAt": "2026-04-21T05:10:58.577Z",
+    "wealth": "5d4*10",
+    "hitDie": 8,
+    "imageUrl": "",
+    "spellcasting": {
+      "spellsKnownFormula": "",
+      "type": "prepared",
+      "progression": "none",
+      "level": 1,
+      "hasSpellcasting": true,
+      "ability": "INT",
+      "spellsKnownId": "",
+      "description": "You've studied the workings of magic and how to cast spells, channeling the magic through objects. To observers, you don't appear to be casting spells in a conventional way; you appear to produce wonders from mundane items and outlandish inventions.\n\n## Tools Required\n\nYou produce your artificer spell effects through your tools. You must have a spellcasting focus - specifically thieves' tools or some kind of artisan's tool - in hand when you cast any spell with this Spellcasting feature (meaning the spell has an \"M\" component when you cast it). You must be proficient with the tool to use it in this way. See the equipment chapter in the Player's Handbook for descriptions of these tools.\n\nAfter you gain the Infuse Item feature at 2nd level, you can also use any item bearing one of your infusions as a spellcasting focus.\n\n## Cantrips (0-Level Spells)\n\nAt 1st level, you know two cantrips of your choice from the artificer spell list. At higher levels, you learn additional artificer cantrips of your choice, as shown in the Cantrips Known column of the Artificer table.\n\nWhen you gain a level in this class, you can replace one of the artificer cantrips you know with another cantrip from the artificer spell list.\n\n## Preparing and Casting Spells\n\nThe Artificer table shows how many spell slots you have to cast your artificer spells. To cast one of your artificer spells of 1st level or higher, you must expend a slot of the spell's level or higher. You regain all expended spell slots when you finish a long rest.\n\nYou prepare the list of artificer spells that are available for you to cast, choosing from the artificer spell list. When you do so, choose a number of artificer spells equal to your Intelligence modifier + half your artificer level, rounded down (minimum of one spell). The spells must be of a level for which you have spell slots.\n\nFor example, if you are a 5th-level artificer, you have four 1st-level and two 2nd-level spell slots. With an Intelligence of 14, your list of prepared spells can include four spells of 1st or 2nd level, in any combination. If you prepare the 1st-level spell Cure Wounds, you can cast it using a lst-level or a 2nd-level slot. Casting the spell doesn't remove it from your list of prepared spells.\n\nYou can change your list of prepared spells when you finish a long rest. Preparing a new list of artificer spells requires time spent tinkering with your spellcasting focuses: at least 1 minute per spell level for each spell on your list.\n\n## Spellcasting Ability\n\nIntelligence is your spellcasting ability for your artificer spells; your understanding of the theory behind magic allows you to wield these spells with superior skill. You use your Intelligence whenever an artificer spell refers to your spellcasting ability. In addition, you use your Intelligence modifier when setting the saving throw DC for an artificer spell you cast and when making an attack roll with one.\n\n**Spell save DC** = 8 + your proficiency bonus + your Intelligence modifier**Spell attack modifier** = your proficiency bonus + your Intelligence modifier\n\n## Ritual Casting\n\nYou can cast an artificer spell as a ritual if that spell has the ritual tag and you have the spell prepared.",
+      "progressionId": "",
+      "altProgressionId": ""
+    },
+    "updatedAt": "2026-04-21T08:23:26.472Z",
+    "startingEquipment": "You start with the following equipment, in addition to the equipment granted by your background:\n\n* any two simple weapons\n\n* a light crossbow and 20 bolts\n\n* (a) studded leather armor or (b) scale mail\n\n* thieves' tools and a dungeoneer's pack\n\nAlternatively, you may start with 5d4x10 starting gold",
+    "advancements": [],
+    "uniqueOptionGroupIds": []
+  },
+  "subclasses": [
+    {
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759161,
+        "nanoseconds": 107000000
+      },
+      "tagIds": [],
+      "lore": "",
+      "excludedOptionIds": {},
+      "imageUrl": "",
+      "spellcasting": {
+        "spellsKnownId": "",
+        "ability": "INT",
+        "hasSpellcasting": false,
+        "progressionId": "",
+        "altProgressionId": "",
+        "description": "",
+        "progression": "none",
+        "type": "prepared",
+        "level": 3,
+        "spellsKnownFormula": ""
+      },
+      "classIdentifier": "artificer",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759373,
+        "nanoseconds": 715000000
+      },
+      "classId": "wsXYRazx14xEPewtUerr",
+      "uniqueOptionGroupIds": [],
+      "identifier": "alchemist",
+      "name": "Alchemist",
+      "description": "***An Alchemist is an expert at combining reagents to produce mystical effects. Alchemists use their creations to give life and to leech it away. Alchemy is the oldest of artificer traditions, and its versatility has long been valued during times of war and peace.***",
+      "sourceId": "subclass-alchemist",
+      "id": "DB3NAD7aFQMzVI3AYe2F",
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "identifier": "battle-smith",
+      "uniqueOptionGroupIds": [],
+      "sourceId": "subclass-battle-smith",
+      "name": "Battle Smith",
+      "description": "Armies require protection, and someone has to put things back together if defenses fail. A combination of protector and medic, a Battle Smith is an expert at defending others and repairing both materiel and personnel. To aid in their work, Battle Smiths are accompanied by a steel defender, a protective companion of their own creation. Many soldiers tell stories of nearly dying before being saved by a Battle Smith and a steel defender.\n\nIn the world of Eberron, Battle Smiths played a key role in House Cannith's work on battle constructs and the original warforged, and after the Last War, these artificers led efforts to aid those who were injured in the war's horrific battles.",
+      "excludedOptionIds": {},
+      "lore": "",
+      "tagIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759719,
+        "nanoseconds": 629000000
+      },
+      "classId": "wsXYRazx14xEPewtUerr",
+      "classIdentifier": "artificer",
+      "spellcasting": {
+        "spellsKnownFormula": "",
+        "level": 3,
+        "progression": "none",
+        "type": "prepared",
+        "hasSpellcasting": false,
+        "spellsKnownId": "",
+        "ability": "INT",
+        "description": "",
+        "altProgressionId": "",
+        "progressionId": ""
+      },
+      "imageUrl": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759801,
+        "nanoseconds": 302000000
+      },
+      "id": "Mmh1UqfnWxnNfJpPJG0i",
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "classIdentifier": "artificer",
+      "spellcasting": {
+        "spellsKnownFormula": "",
+        "level": 3,
+        "progression": "none",
+        "type": "prepared",
+        "spellsKnownId": "",
+        "hasSpellcasting": false,
+        "ability": "INT",
+        "description": "",
+        "altProgressionId": "",
+        "progressionId": ""
+      },
+      "imageUrl": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759701,
+        "nanoseconds": 360000000
+      },
+      "classId": "wsXYRazx14xEPewtUerr",
+      "lore": "",
+      "tagIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759624,
+        "nanoseconds": 808000000
+      },
+      "excludedOptionIds": {},
+      "name": "Artillerist",
+      "description": "An Artillerist specializes in using magic to hurl energy, projectiles, and explosions on a battlefield. This destructive power is valued by armies in the wars on many different worlds. And when war passes, some members of this specialization seek to build a more peaceful world by using their powers to fight the resurgence of strife. The world-hopping gnome artificer Vi has been especially vocal about making things right: \"It's about time we fixed things instead of blowing them all to hell.\"",
+      "sourceId": "subclass-artillerist",
+      "identifier": "artillerist",
+      "uniqueOptionGroupIds": [],
+      "id": "WWUQ9lCtXm4mvD5deMzk",
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "identifier": "armorer",
+      "uniqueOptionGroupIds": [],
+      "description": "An artificer who specializes as an Armorer modifies armor to function almost like a second skin. The armor is enhanced to hone the artificer's magic, unleash potent attacks, and generate a formidable defense. The artificer bonds with this armor, becoming one with it even as they experiment with it and refine its magical capabilities.",
+      "name": "Armorer",
+      "sourceId": "subclass-armorer",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759515,
+        "nanoseconds": 608000000
+      },
+      "lore": "",
+      "tagIds": [],
+      "excludedOptionIds": {},
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759609,
+        "nanoseconds": 499000000
+      },
+      "spellcasting": {
+        "level": 3,
+        "progression": "none",
+        "type": "prepared",
+        "spellsKnownFormula": "",
+        "altProgressionId": "",
+        "progressionId": "",
+        "description": "",
+        "hasSpellcasting": false,
+        "spellsKnownId": "",
+        "ability": "INT"
+      },
+      "imageUrl": "",
+      "classIdentifier": "artificer",
+      "classId": "wsXYRazx14xEPewtUerr",
+      "id": "wRzQFAjwDK7RdzfIZfvc",
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-artificer"
+    }
+  ],
+  "features": [
+    {
+      "id": "0F02UKAX5M9CjRmjQDaQ",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "scalingColumnId": "",
+      "name": "Battle Ready",
+      "description": "When you reach 3rd level, your combat training and your experiments with magic have paid off in two ways:\n\n* You gain proficiency with martial weapons.\n\n* When you attack with a magic weapon, you can use your Intelligence modifier, instead of Strength or Dexterity modifier, for the attack and damage rolls.",
+      "quantityColumnId": "",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "Mmh1UqfnWxnNfJpPJG0i",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759741,
+        "nanoseconds": 678000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759741,
+        "nanoseconds": 678000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "identifier": "battle-ready",
+      "sourceId": "subclass-feature-battle-ready",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-battle-smith",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "3jy7TvM3D8IfCyiLtqLh",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "quantityColumnId": "",
+      "properties": [
+        "passive"
+      ],
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "name": "Soul of Artifice",
+      "scalingColumnId": "",
+      "description": "At 20th level, you develop a mystical connection to your magic items, which you can draw on for protection:\n\n* You gain a +1 bonus to all saving throws per magic item you are currently attuned to.\n\n* If you're reduced to 0 hit points but not killed out-right, you can use your reaction to end one of your artificer infusions, causing you to drop to 1 hit point instead of 0.",
+      "level": 20,
+      "type": "class",
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "createdAt": "2026-04-21T07:59:55.220Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-21T07:59:55.220Z",
+      "identifier": "soul-of-artifice",
+      "sourceId": "class-feature-soul-of-artifice",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "3x0VJNKCohq5bORC3Z6J",
+      "parentId": "WWUQ9lCtXm4mvD5deMzk",
+      "quantityColumnId": "",
+      "description": "Starting at 9th level, every eldritch cannon you create is more destructive:\n\n* The cannon's damage rolls all increase by 1d8.\n\n* As an action, you can command the cannon to detonate if you are within 60 feet of it. Doing so destroys the cannon and forces each creature within 20 feet of it to make a Dexterity saving throw against your spell save DC, taking 3d8 force damage on a failed save or half as much damage on a successful one.",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759671,
+        "nanoseconds": 547000000
+      },
+      "name": "Explosive Cannon",
+      "scalingColumnId": "",
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759671,
+        "nanoseconds": 547000000
+      },
+      "parentType": "subclass",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 9,
+      "uniqueOptionGroupIds": [],
+      "identifier": "explosive-cannon",
+      "sourceId": "subclass-feature-explosive-cannon",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-artillerist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "4mqNHHuqNjoiDat4L34F",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759279,
+        "nanoseconds": 594000000
+      },
+      "parentType": "subclass",
+      "isSubclassFeature": false,
+      "type": "class",
+      "level": 3,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759279,
+        "nanoseconds": 594000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "description": "Starting at 3rd level, you always have certain spells prepared after you reach particular levels in this class, as shown in the Alchemist Spells table. These spells count as artificer spells for you, but they don't count against the number of artificer spells you prepare.\n\nAlchemist Spells\n\nArtificer Level\tAlchemist Spells\n\n3rd\tHealing Word, Ray of Sickness\n\n5th\tFlaming Sphere, Melf's Acid Arrow\n\n9th\tGaseous Form, Mass Healing Word\n\n13th\tBlight, Death Ward\n\n17th\tCloudkill, Raise Dead",
+      "scalingColumnId": "",
+      "name": "Alchemist Spells",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "DB3NAD7aFQMzVI3AYe2F",
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "identifier": "alchemist-spells",
+      "sourceId": "subclass-feature-alchemist-spells",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-alchemist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "5ZiZEwv88pxO7Jv0ux9F",
+      "level": 11,
+      "type": "class",
+      "isSubclassFeature": false,
+      "createdAt": "2026-04-21T07:59:27.979Z",
+      "parentType": "class",
+      "updatedAt": "2026-04-21T07:59:27.979Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "name": "Spell-Storing Item",
+      "scalingColumnId": "",
+      "description": "At 11th level, you can now store a spell in an object. Whenever you finish a long rest, you can touch one simple or martial weapon or one item that you can use as a spellcasting focus, and you store a spell in it, choosing a 1st- or 2nd-level spell from the artificer spell list that requires 1 action to cast (you needn't have it prepared).\n\nWhile holding the object, a creature can take an action to produce the spell's effect from it, using your spellcasting ability modifier. If the spell requires concentration, the creature must concentrate. The spell stays in the object until it's been used a number of times equal to twice your Intelligence modifier (minimum of twice) or until you use this feature again to store a spell in an object.",
+      "quantityColumnId": "",
+      "properties": [
+        "passive"
+      ],
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "identifier": "spell-storing-item",
+      "sourceId": "class-feature-spell-storing-item",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "5umhJ3rJvflD9qQ7ePto",
+      "level": 14,
+      "type": "class",
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "createdAt": "2026-04-21T07:59:38.119Z",
+      "updatedAt": "2026-04-21T07:59:38.119Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "name": "Magic Item Savant",
+      "scalingColumnId": "",
+      "description": "At 14th level, your skill with magic items deepens more:\n\n* You can attune to up to five magic items at once.\n\n* You ignore all class, race, spell and level requirements on attuning to or using a magic item.",
+      "quantityColumnId": "",
+      "properties": [
+        "passive"
+      ],
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "identifier": "magic-item-savant",
+      "sourceId": "class-feature-magic-item-savant",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "6iAtdXVhf0LV5IQ7WSl0",
+      "type": "class",
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759640,
+        "nanoseconds": 939000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759640,
+        "nanoseconds": 939000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "quantityColumnId": "",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "WWUQ9lCtXm4mvD5deMzk",
+      "properties": [
+        "passive"
+      ],
+      "scalingColumnId": "",
+      "name": "Artillerist Spells",
+      "description": "Starting at 3rd level, you always have certain spells prepared after you reach particular levels in this class, as shown in the Artillerist Spells table. These spells count as artificer spells for you, but they don't count against the number of artificer spells you prepare.\n\nArtillerist Spells\n\nArtificer Level\tArtillerist Spells\n\n3rd\tShield, Thunderwave\n\n5th\tScorching Ray, Shatter\n\n9th\tFireball, Wind Wall\n\n13th\tIce Storm, Wall of Fire\n\n17th\tCone of Cold, Wall of Force",
+      "identifier": "artillerist-spells",
+      "sourceId": "subclass-feature-artillerist-spells",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-artillerist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "8ejec8wEQZ2V975weGuK",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759732,
+        "nanoseconds": 897000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "type": "class",
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759732,
+        "nanoseconds": 897000000
+      },
+      "isSubclassFeature": false,
+      "scalingColumnId": "",
+      "name": "Battle Smith Spells",
+      "description": "Starting at 3rd level, you always have certain spells prepared after you reach particular levels in this class, as shown in the Battle Smith Spells table. These spells count as artificer spells for you, but they don't count against the number of artificer spells you prepare.\n\nBattle Smith Spells\n\nArtificer Level\tBattle Smith Spells\n\n3rd\tHeroism, Shield\n\n5th\tBranding Smite, Warding Bond\n\n9th\tAura of Vitality, Conjure Barrage\n\n13th\tAura of Purity, Fire Shield\n\n17th\tBanishing Smite, Mass Cure Wounds",
+      "quantityColumnId": "",
+      "parentId": "Mmh1UqfnWxnNfJpPJG0i",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "battle-smith-spells",
+      "sourceId": "subclass-feature-battle-smith-spells",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-battle-smith",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "AELZEWE0H7Icn0UbXmWY",
+      "scalingColumnId": "",
+      "name": "Experimental Elixir",
+      "description": "Beginning at 3rd level, whenever you finish a long rest, you can magically produce an experimental elixir in an empty flask you touch. Roll on the Experimental Elixir table for the elixir's effect, which is triggered when someone drinks the elixir. As an action, a creature can drink the elixir or administer it to an incapacitated creature.\n\nYou can create additional experimental elixirs by expending a spell slot of 1st level or higher for each one. When you do so, you use your action to create the elixir in an empty flask you touch, and you choose the elixir's effect from the Experimental Elixir table.\n\nCreating an experimental elixir requires you to have alchemist supplies on your person, and any elixir you create with this feature lasts until it is drunk or until the end of your next long rest.\n\nWhen you reach certain levels in this class, you can make more elixirs at the end of a long rest: two at 6th level and three at 15th level. Roll for each elixir's effect separately. Each elixir requires its own flask.\n\nExperimental Elixir\n\nd6\tEffect\n\n1\tHealing. The drinker regains a number of hit points equal to 2d4 + your Intelligence Modifier\n\n2\tSwiftness. The drinker's walking speed increases by 10 feet for 1 hour.\n\n3\tResilience. The drinker gains a +1 bonus to AC for 10 minutes.\n\n4\tBoldness. The drinker can roll a d4 and add the number rolled to every attack roll and saving throw they make for the next minute.\n\n5\tFlight. The drinker gains a flying speed of 10 feet for 10 minutes.\n\n6\tTransformation. The drinker's body is transformed as if by the Alter Self spell. The drinker determines the transformation caused by the spell, the effects of which last for 10 minutes.",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759291,
+        "nanoseconds": 167000000
+      },
+      "quantityColumnId": "",
+      "parentId": "DB3NAD7aFQMzVI3AYe2F",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759291,
+        "nanoseconds": 167000000
+      },
+      "isSubclassFeature": false,
+      "identifier": "experimental-elixir",
+      "sourceId": "subclass-feature-experimental-elixir",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-alchemist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "Ag9DOlH3q615MUDUeje8",
+      "name": "Magical Tinkering",
+      "scalingColumnId": "",
+      "description": "At 1st level, you've learned how to invest a spark of magic into mundane objects. To use this ability, you must have thieves' tools or artisan's tools in hand. You then touch a Tiny nonmagical object as an action and give it one of the following magical properties of your choice:\n\n* The object sheds bright light in a 5-foot radius and dim light for an additional 5 feet.\n\n* Whenever tapped by a creature, the object emits a recorded message that can be heard up to 10 feet away. You utter the message when you bestow this property on the object, and the recording can be no more than 6 seconds long.\n\n* The object continuously emits your choice of an odor or a nonverbal sound (wind, waves, chirping, or the like). The chosen phenomenon is perceivable up to 10 feet away.\n\n* A static visual effect appears on one of the object's surfaces. This effect can be a picture, up to 25 words of text, lines and shapes, or a mixture of these elements, as you like.\n\nThe chosen property lasts indefinitely. As an action, you can touch the object and end the property early.\n\nYou can bestow magic on multiple objects, touching one object each time you use this feature, though a single object can only bear one property at a time. The maximum number of objects you can affect with this feature at one time is equal to your Intelligence modifier (minimum of one object). If you try to exceed your maximum, the oldest property immediately ends, and then the new property applies.",
+      "quantityColumnId": "",
+      "properties": [
+        "passive"
+      ],
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "updatedAt": "2026-04-21T06:44:47.338Z",
+      "configuration": {
+        "requiredLevel": 1,
+        "requiredIds": [],
+        "repeatable": false
+      },
+      "level": 1,
+      "type": "class",
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "createdAt": "2026-04-21T06:44:47.338Z",
+      "identifier": "magical-tinkering",
+      "sourceId": "class-feature-magical-tinkering",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "D41IUu6FNg7o9M6Hj3Ia",
+      "configuration": {
+        "requiredLevel": 3,
+        "requiredIds": [],
+        "repeatable": false
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759762,
+        "nanoseconds": 298000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759762,
+        "nanoseconds": 298000000
+      },
+      "parentType": "subclass",
+      "level": 3,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "parentId": "Mmh1UqfnWxnNfJpPJG0i",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "quantityColumnId": "",
+      "description": "By 3rd level, your tinkering has borne you a faithful companion, a steel defender. It's friendly to you and your companions, and it obeys your commands. See its game statistics in the Steel Defender stat block, which uses your proficiency bonus (PB) in several places. You determine the creature's appearance and whether it has two legs or four; your choice has no effect on its game statistics.\n\nIn combat, the defender shares your initiative count, but it takes its turn immediately after yours. It can move and use its reaction on its own, but the only action it takes on its turn is the Dodge action, unless you take a bonus action on your turn to command it to take another action. That action can be one in its stat block or some other action. If you are incapacitated, the defender can take any action of its choice, not just Dodge.\n\nIf the Mending spell is cast on it, it regains 2d6 hit points. If it has died within the last hour, you can use your smith's tools as an action to revive it, provided you are within 5 feet of it and you expend a spell slot of 1st level or higher. The steel defender returns to life after 1 minute with all its hit points restored.\n\nAt the end of a long rest, you can create a new steel defender if you have smith's tools with you. If you already have a defender from this feature, the first one immediately perishes. The defender also perishes if you die.",
+      "name": "Steel Defender",
+      "scalingColumnId": "",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "steel-defender",
+      "sourceId": "subclass-feature-steel-defender",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-battle-smith",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "Db75fygqJcFMwk5Kvrqa",
+      "parentId": "DB3NAD7aFQMzVI3AYe2F",
+      "quantityColumnId": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759316,
+        "nanoseconds": 271000000
+      },
+      "description": "Starting at 9th level, you can incorporate restorative reagents into some of your works:\n\n* Whenever a creature drinks an experimental elixir you created, the creature gains temporary hit points equal to 2d6 + your Intelligence modifier (minimum of 1 temporary hit point).\n\n* You can cast Lesser Restoration without expending a spell slot and without preparing the spell, provided you use alchemist's supplies as the spellcasting focus. You can do so a number of times equal to your Intelligence modifier (minimum of once), and you regain all expended uses when you finish a long rest.",
+      "scalingColumnId": "",
+      "name": "Restorative Reagents",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759316,
+        "nanoseconds": 271000000
+      },
+      "isSubclassFeature": false,
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 9,
+      "identifier": "restorative-reagents",
+      "sourceId": "subclass-feature-restorative-reagents",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-alchemist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "E6EuOVNEVW5mZ3v6eoj3",
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759326,
+        "nanoseconds": 226000000
+      },
+      "level": 15,
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "parentId": "DB3NAD7aFQMzVI3AYe2F",
+      "quantityColumnId": "",
+      "description": "By 15th level, you have been exposed to so many chemicals that they pose little risk to you, and you can use them to quickly end certain ailments:\n\n* You gain resistance to acid damage and poison damage, and you are now immune to the poisoned condition.\n\n* You can cast Greater Restoration and Heal without expending a spell slot, without preparing the spell, and without providing the material component, provided you use alchemist's supplies as the spellcasting focus. Once you cast either spell with this feature, you can't cast that spell with it again until you finish a long rest.",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759326,
+        "nanoseconds": 226000000
+      },
+      "name": "Chemical Mastery",
+      "scalingColumnId": "",
+      "identifier": "chemical-mastery",
+      "sourceId": "subclass-feature-chemical-mastery",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-alchemist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "ESfXZFj9CLQ634oUpjKX",
+      "quantityColumnId": "",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wRzQFAjwDK7RdzfIZfvc",
+      "properties": [
+        "passive"
+      ],
+      "scalingColumnId": "",
+      "name": "Armorer Spells",
+      "description": "Starting at 3rd level, you always have certain spells prepared after you reach particular levels in this class, as shown in the Armorer Spells table. These spells count as artificer spells for you, but they don't count against the number of artificer spells you prepare.\n\nArmorer Spells\n\nArtificer Level\tArmorer Spells\n\n3rd\tMagic Missile, Thunderwave\n\n5th\tMirror Image, Shatter\n\n9th\tHypnotic Pattern, Lightning Bolt\n\n13th\tFire Shield, Greater Invisibility\n\n17th\tPasswall, Wall of Force",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "configuration": {
+        "requiredLevel": 3,
+        "requiredIds": [],
+        "repeatable": false
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759529,
+        "nanoseconds": 849000000
+      },
+      "type": "class",
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759529,
+        "nanoseconds": 849000000
+      },
+      "isSubclassFeature": false,
+      "identifier": "armorer-spells",
+      "sourceId": "subclass-feature-armorer-spells",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-armorer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "EcPEKQAXRhPanwWqATqq",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 5,
+      "uniqueOptionGroupIds": [],
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759579,
+        "nanoseconds": 167000000
+      },
+      "name": "Extra Attack",
+      "scalingColumnId": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759579,
+        "nanoseconds": 167000000
+      },
+      "description": "Starting at 5th level, you can attack twice, rather than once, whenever you take the Attack action on your turn.",
+      "quantityColumnId": "",
+      "parentId": "wRzQFAjwDK7RdzfIZfvc",
+      "identifier": "extra-attack",
+      "sourceId": "subclass-feature-extra-attack",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-armorer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "El03UOAs700QgWRvucRu",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759780,
+        "nanoseconds": 901000000
+      },
+      "isSubclassFeature": false,
+      "type": "class",
+      "level": 9,
+      "configuration": {
+        "requiredIds": [],
+        "requiredLevel": 1,
+        "repeatable": false
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759798,
+        "nanoseconds": 686000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "Mmh1UqfnWxnNfJpPJG0i",
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "description": "At 9th level, you've learn new ways to channel arcane energy to harm or heal. When either you hit a target with a magic weapon attack or your steel defender hits a target, you can channel magical energy through the strike to create one of the following effects:\n\n* The target takes an extra 2d6 force damage.\n\n* Choose one creature or object you can see within 30 feet of the target. Healing energy flows into the chosen recipient, restoring 2d6 hit points to it.\n\nYou can use this energy a number of times equal to your Intelligence modifier (minimum of once), but you can do so no more than once on a turn. You regain all expended uses when you finish a long rest.",
+      "scalingColumnId": "",
+      "name": "Arcane Jolt",
+      "identifier": "arcane-jolt",
+      "sourceId": "subclass-feature-arcane-jolt",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-battle-smith",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "IIHSaFKzFtkm4C3NDvIy",
+      "level": 6,
+      "type": "class",
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "createdAt": "2026-04-21T07:57:44.425Z",
+      "updatedAt": "2026-04-21T07:57:44.424Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "name": "Tool Expertise",
+      "scalingColumnId": "",
+      "description": "At 6th level, your proficiency bonus is now doubled for any ability check you make that uses your proficiency with a tool.",
+      "quantityColumnId": "",
+      "properties": [
+        "passive"
+      ],
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "identifier": "tool-expertise",
+      "sourceId": "class-feature-tool-expertise",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "KlESyVSOzVuVseSk2KNb",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-21T07:58:02.850Z",
+      "createdAt": "2026-04-21T07:58:02.850Z",
+      "parentType": "class",
+      "isSubclassFeature": false,
+      "type": "class",
+      "level": 7,
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "description": "At 7th level, you've gained the ability to come up with solutions under pressure. When you or another creature you can see within 30 feet of you makes an ability check or a saving throw, you can use your reaction to add your Intelligence modifier to the roll.\n\nYou can use this feature a number of times equal to your Intelligence modifier (minimum of once). You regain all expended uses when you finish a long rest.",
+      "scalingColumnId": "",
+      "name": "Flash of Genius",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "flash-of-genius",
+      "sourceId": "class-feature-flash-of-genius",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "KseiGP6fV9hrbXshyl5m",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759598,
+        "nanoseconds": 780000000
+      },
+      "isSubclassFeature": false,
+      "uniqueOptionGroupIds": [],
+      "level": 15,
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "parentId": "wRzQFAjwDK7RdzfIZfvc",
+      "quantityColumnId": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759598,
+        "nanoseconds": 780000000
+      },
+      "description": "At 15th level, your Arcane Armor gains additional benefits based on its model, as shown below.\n\n**Guardian**. When a Huge or smaller creature you can see ends its turn within 30 feet of you, you can use your reaction to magically force it to make a Strength saving throw against your spell save DC. On a failed save, you pull the creature up to 25 feet directly to an unoccupied space. If you pull the target to a space within 5 feet of you, you can make a melee weapon attack against it as part of this reaction.\n\nYou can use this reaction a number of times equal to your proficiency bonus, and you regain all expended uses of it when you finish a long rest.\n\n**Infiltrator**. Any creature that takes lightning damage from your Lightning Launcher glimmers with magical light until the start of your next turn. The glimmering creature sheds dim light in a 5-foot radius, and it has disadvantage on attack rolls against you, as the light jolts it if it attacks you. In addition, the next attack roll against it has advantage, and if that attack hits, the target takes an extra 1d6 lightning damage.",
+      "scalingColumnId": "",
+      "name": "Perfected Armor",
+      "identifier": "perfected-armor",
+      "sourceId": "subclass-feature-perfected-armor",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-armorer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "MQAxykaCtBBHeRZUszup",
+      "configuration": {
+        "requiredIds": [],
+        "requiredLevel": 3,
+        "repeatable": false
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759522,
+        "nanoseconds": 669000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759522,
+        "nanoseconds": 669000000
+      },
+      "parentType": "subclass",
+      "isSubclassFeature": false,
+      "type": "class",
+      "level": 3,
+      "parentId": "wRzQFAjwDK7RdzfIZfvc",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "description": "When you adopt this specialization at 3rd level, you gain proficiency with heavy armor. You also gain proficiency with smith's tools. If you already have this tool proficiency, you gain proficiency with one other type of artisan's tools of your choice.",
+      "scalingColumnId": "",
+      "name": "Tools of the Trade",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "tools-of-the-trade",
+      "sourceId": "subclass-feature-tools-of-the-trade",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-armorer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "OPHRAQBveM0Ob35AEtAA",
+      "type": "class",
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759568,
+        "nanoseconds": 967000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 3,
+        "requiredIds": []
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759568,
+        "nanoseconds": 967000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "quantityColumnId": "",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wRzQFAjwDK7RdzfIZfvc",
+      "properties": [
+        "passive"
+      ],
+      "scalingColumnId": "",
+      "name": "Armor Model",
+      "description": "Beginning at 3rd level, you can customize your Arcane Armor. When you do so, choose one of the following armor models: Guardian or Infiltrator. The model you choose gives you special benefits while you wear it.\n\nEach model includes a special weapon. When you attack with that weapon, you can add your Intelligence modifier, instead of Strength or Dexterity, to the attack and damage rolls.\n\nYou can change the armor's model whenever you finish a short or long rest, provided you have smith's tools in hand.\n\n**Guardian**. You design your armor to be in the front line of conflict. It has the following features:\n\n[ol]* Thunder Gauntlets. Each of the armor's gauntlets counts as a simple melee weapon while you aren't holding anything in it, and it deals 1d8 thunder damage on a hit. A creature hit by the gauntlet has disadvantage on attack rolls against targets other than you until the start of your next turn, as the armor magically emits a distracting pulse when the creature attacks someone else.\n\n* Defensive Field. As a bonus action, you can gain temporary hit points equal to your level in this class, replacing any temporary hit points you already have. You lose these temporary hit points if you doff the armor. You can use this bonus action a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest.\n\n[/ol]**Infiltrator**. You customize your armor for subtle undertakings. It has the following features:\n\n[ol]* Lightning Launcher. A gemlike node appears on one of your armored fists or on the chest (your choice). It counts as a simple ranged weapon, with a normal range of 90 feet and a long range of 300 feet, and it deals 1d6 lightning damage on a hit. Once on each of your turns when you hit a creature with it, you can deal an extra 1d6 lightning damage to that target.\n\n* Powered Steps. Your walking speed increases by 5 feet.\n\n* Dampening Field. You have advantage on Dexterity (Stealth) checks. If the armor normally imposes disadvantage on such checks, the advantage and disadvantage cancel each other, as normal.\n\n[/ol]",
+      "identifier": "armor-model",
+      "sourceId": "subclass-feature-armor-model",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-armorer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "OZTkf2wpMQd6CPvRjzGj",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-21T08:13:26.563Z",
+      "parentType": "class",
+      "createdAt": "2026-04-21T08:13:18.537Z",
+      "isSubclassFeature": true,
+      "type": "class",
+      "level": 3,
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "description": "At 3rd level, you choose the type of specialist you are. Your choice grants you features at 5th level and again at 9th and 15th level.",
+      "scalingColumnId": "",
+      "name": "Artificer Specialist",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "artificer-specialist",
+      "sourceId": "class-feature-artificer-specialist",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "TIq0vCZEP7nzhQqgim2F",
+      "level": 9,
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759588,
+        "nanoseconds": 995000000
+      },
+      "quantityColumnId": "",
+      "parentId": "wRzQFAjwDK7RdzfIZfvc",
+      "name": "Armor Modifications",
+      "scalingColumnId": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759588,
+        "nanoseconds": 995000000
+      },
+      "description": "At 9th level, you learn how to use your artificer infusions to specially modify your Arcane Armor. That armor now counts as separate items for the purposes of your Infuse Items feature: armor (the chest piece), boots, helmet, and the armor's special weapon. Each of those items can bear one of your infusions, and the infusions transfer over if you change your armor's model with the Armor Model feature. In addition, the maximum number of items you can infuse at once increases by 2, but those extra items must be part of your Arcane Armor.",
+      "identifier": "armor-modifications",
+      "sourceId": "subclass-feature-armor-modifications",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-armorer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "W4mrZdvWOQ76FJAX7qkf",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "description": "Starting at 18th level, you can attune up to six magic items at once.",
+      "scalingColumnId": "",
+      "name": "Magic Item Master",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "configuration": {
+        "requiredIds": [],
+        "requiredLevel": 1,
+        "repeatable": false
+      },
+      "updatedAt": "2026-04-21T07:59:46.759Z",
+      "parentType": "class",
+      "createdAt": "2026-04-21T07:59:46.759Z",
+      "isSubclassFeature": false,
+      "type": "class",
+      "level": 18,
+      "identifier": "magic-item-master",
+      "sourceId": "class-feature-magic-item-master",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "XAbATfs7Y42TW4iCwzUu",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759789,
+        "nanoseconds": 304000000
+      },
+      "description": "At 15th level, your Arcane Jolt and steel defender become more powerful:\n\n* The extra damage and the healing of your Arcane Jolt both increase to 4d6.\n\n* Your steel defender gains a +2 bonus to Armor Class.\n\n* Whenever your steel defender uses its Deflect Attack, the attacker takes force damage equal to 1d4 + your Intelligence modifier.",
+      "name": "Improved Defender",
+      "scalingColumnId": "",
+      "parentId": "Mmh1UqfnWxnNfJpPJG0i",
+      "quantityColumnId": "",
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759789,
+        "nanoseconds": 304000000
+      },
+      "parentType": "subclass",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 15,
+      "uniqueOptionGroupIds": [],
+      "identifier": "improved-defender",
+      "sourceId": "subclass-feature-improved-defender",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-battle-smith",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "b4NEk5TlrUDiNj9jvPLd",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759679,
+        "nanoseconds": 656000000
+      },
+      "description": "By 15th level, you're a master at forming well-defended emplacements using Eldritch Cannon:\n\n* You and your allies have half cover while within 10 feet of a cannon you create with Eldritch Cannon, as a result of a shimmering field of magical protection that the cannon emits.\n\n* You can now have two cannons at the same time. You can create two with the same action (but not the same spell slot), and you can activate both of them with the same bonus action. You determine whether the cannons are identical to each other or different. You can't create a third cannon while you have two.",
+      "name": "Fortified Position",
+      "scalingColumnId": "",
+      "parentId": "WWUQ9lCtXm4mvD5deMzk",
+      "quantityColumnId": "",
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759679,
+        "nanoseconds": 656000000
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 1,
+      "uniqueOptionGroupIds": [],
+      "identifier": "fortified-position",
+      "sourceId": "subclass-feature-fortified-position",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-artillerist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "bRFuQACYfw1WyVAZB6NX",
+      "scalingColumnId": "",
+      "name": "Tool Proficiency",
+      "description": "When you adopt this specialization at 3rd level, you gain proficiency with smith's tools. If you already have this proficiency, you gain proficiency with one other type of artisan's tools of your choice.",
+      "quantityColumnId": "",
+      "parentId": "Mmh1UqfnWxnNfJpPJG0i",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759726,
+        "nanoseconds": 426000000
+      },
+      "configuration": {
+        "requiredLevel": 3,
+        "requiredIds": [],
+        "repeatable": false
+      },
+      "type": "class",
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759726,
+        "nanoseconds": 426000000
+      },
+      "isSubclassFeature": false,
+      "identifier": "tool-proficiency",
+      "sourceId": "subclass-feature-tool-proficiency",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-battle-smith",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "c7DQyS8QpFKqP5yJxv6I",
+      "level": 1,
+      "type": "class",
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "createdAt": "2026-04-21T07:58:13.055Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-21T07:58:13.055Z",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "quantityColumnId": "",
+      "properties": [
+        "passive"
+      ],
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "name": "Magic Item Adept",
+      "scalingColumnId": "",
+      "description": "When you reach 10th level, you achieve a profound understanding of how to use and make magic items:\n\n* You can attune to up to four magic items at once.\n\n* If you craft a magic item with a rarity of common or uncommon, it takes you a quarter of the normal time, and it costs you half as much of the usual gold.",
+      "identifier": "magic-item-adept",
+      "sourceId": "class-feature-magic-item-adept",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "cYhhjwNvOdui1ZLWD4YG",
+      "description": "At 5th level, you've developed masterful command of magical chemicals, enhancing the healing and damage you create through them. Whenever you cast a spell using your alchemist's supplies as the spellcasting focus, you gain a bonus to one roll of the spell. That roll must restore hit points or be a damage roll that deals acid, fire, necrotic, or poison damage, and the bonus equals your Intelligence modifier (minimum of +1).",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759301,
+        "nanoseconds": 566000000
+      },
+      "name": "Alchemical Savant",
+      "scalingColumnId": "",
+      "parentId": "DB3NAD7aFQMzVI3AYe2F",
+      "quantityColumnId": "",
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759301,
+        "nanoseconds": 566000000
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 5,
+      "uniqueOptionGroupIds": [],
+      "identifier": "alchemical-savant",
+      "sourceId": "subclass-feature-alchemical-savant",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-alchemist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "iKIwktddgYItX1BAHzsq",
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759771,
+        "nanoseconds": 743000000
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "level": 5,
+      "uniqueOptionGroupIds": [],
+      "parentId": "Mmh1UqfnWxnNfJpPJG0i",
+      "quantityColumnId": "",
+      "description": "Starting at 5th level, you can attack twice, rather than once, whenever you take the Attack action on your turn.",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759771,
+        "nanoseconds": 743000000
+      },
+      "name": "Extra Attack",
+      "scalingColumnId": "",
+      "identifier": "extra-attack",
+      "sourceId": "subclass-feature-extra-attack",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-battle-smith",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "jj4807ODcdt8JUGsAGpF",
+      "level": 5,
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759656,
+        "nanoseconds": 384000000
+      },
+      "parentType": "subclass",
+      "name": "Arcane Firearm",
+      "scalingColumnId": "",
+      "description": "At 5th level, You know how to turn a wand, staff, or rod into an arcane firearm, a conduit for your destructive spells. When you finish a long rest, you can use woodcarver's tools to carve special sigils into a wand, staff, or rod and thereby turn it into your arcane firearm. The sigils disappear from the object if you later carve them on a different item. The sigils otherwise last indefinitely.\n\nYou can use your arcane firearm as a spellcasting focus for your artificer spells. When you cast an artificer spell through the firearm, roll a d8, and you gain a bonus to one of the spell's damage rolls equal to the number rolled.",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759656,
+        "nanoseconds": 384000000
+      },
+      "quantityColumnId": "",
+      "parentId": "WWUQ9lCtXm4mvD5deMzk",
+      "identifier": "arcane-firearm",
+      "sourceId": "subclass-feature-arcane-firearm",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-artillerist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "p4ES15G5gSSHb1vex0o2",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "quantityColumnId": "",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "properties": [
+        "passive"
+      ],
+      "scalingColumnId": "",
+      "name": "Infuse Item",
+      "description": "At 2nd level, you've gained the ability to imbue mundane items with certain magical infusions, turning those objects into magic items.\n\n## Infusions Known\n\nWhen you gain this feature, pick four artificer infusions to learn. You learn additional infusions of your choice when you reach certain levels in this class, as shown in the Infusions Known column of the Artificer table.\n\nWhenever you gain a level in this class, you can replace one of the artificer infusions you learned with a new one.\n\n## Infusing an Item\n\nWhenever you finish a long rest, you can touch a nonmagical object and imbue it with one of your artificer infusions, turning it into a magic item. An infusion works on only certain kinds of objects, as specified in the infusion's description. If the item requires attunement, you can attune yourself to it the instant you infuse the item. If you decide to attune to the item later, you must do so using the normal process for attunement (see the attunement rules in the Dungeon Master's Guide).\n\nYour infusion remains in an item indefinitely, but when you die, the infusion vanishes after a number of days equal to your Intelligence modifier (minimum of 1 day). The infusion also vanishes if you replace your knowledge of the infusion.\n\nYou can infuse more than one nonmagical object at the end of a long rest; the maximum number of objects appears in the Infused Items column of the Artificer table. You must touch each of the objects, and each of your infusions can be in only one object at a time. Moreover, no object can bear more than one of your infusions at a time. If you try to exceed your maximum number of infusions, the oldest infusion ends, and then the new infusion applies.\n\nIf an infusion ends on an item that contains other things, like a bag of holding, its contents harmlessly appear in and around its space.",
+      "type": "class",
+      "level": 2,
+      "parentType": "class",
+      "createdAt": "2026-04-21T06:41:58.350Z",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 1,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-21T06:41:58.350Z",
+      "identifier": "infuse-item",
+      "sourceId": "class-feature-infuse-item",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "senAm6v7ZZmz36ANRUIt",
+      "description": "Beginning at 3rd level, your metallurgical pursuits have led to you making armor a conduit for your magic. As an action, you can turn a suit of armor you are wearing into Arcane Armor, provided you have smith's tools in hand.\n\n* [left]You gain the following benefits while wearing this armor:[/left]\n* [left]If the armor normally has a Strength requirement, the arcane armor lacks this requirement for you.[/left]\n* [left]You can use the arcane armor as a spellcasting focus for your artificer spells.[/left]\n* [left]The armor attaches to you and can't be removed against your will. It also expands to cover your entire body, although you can retract or deploy the helmet as a bonus action. The armor replaces any missing limbs, functioning identically to a body part it is replacing.[/left]\n* [left]You can doff or don the armor as an action.[/left]\n\nThe armor continues to be Arcane Armor until you don another suit of armor or you die.",
+      "scalingColumnId": "",
+      "name": "Arcane Armor",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "wRzQFAjwDK7RdzfIZfvc",
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759549,
+        "nanoseconds": 246000000
+      },
+      "configuration": {
+        "requiredLevel": 3,
+        "requiredIds": [],
+        "repeatable": false
+      },
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759549,
+        "nanoseconds": 246000000
+      },
+      "isSubclassFeature": false,
+      "type": "class",
+      "level": 3,
+      "identifier": "arcane-armor",
+      "sourceId": "subclass-feature-arcane-armor",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-armorer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "uSAKEm7uxbDUSrEFybZq",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "quantityColumnId": "",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "WWUQ9lCtXm4mvD5deMzk",
+      "properties": [
+        "passive"
+      ],
+      "scalingColumnId": "",
+      "name": "Tool Proficiency",
+      "description": "When you adopt this specialization at 3rd level, you gain proficiency with woodcarver's tools. If you already have this proficiency, you gain proficiency with one other type of artisan's tools of your choice.",
+      "type": "class",
+      "level": 3,
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759634,
+        "nanoseconds": 598000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "requiredLevel": 3,
+        "requiredIds": [],
+        "repeatable": false
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759634,
+        "nanoseconds": 598000000
+      },
+      "identifier": "tool-proficiency",
+      "sourceId": "subclass-feature-tool-proficiency",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-artillerist",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "wWG0Rs6vOS9T5P539539",
+      "configuration": {
+        "requiredIds": [],
+        "requiredLevel": 1,
+        "repeatable": false
+      },
+      "updatedAt": "2026-04-21T07:57:49.397Z",
+      "parentType": "class",
+      "createdAt": "2026-04-21T07:56:46.135Z",
+      "isSubclassFeature": false,
+      "type": "class",
+      "level": 3,
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "properties": [
+        "passive"
+      ],
+      "quantityColumnId": "",
+      "description": "At 3rd level, you've learned how to produce exactly the tool you need: with thieves' tools or artisan's tools in hand, you can magically create one set of artisan's tools in an unoccupied space within 5 feet of you. This creation requires 1 hour of uninterrupted work, which can coincide with a short or long rest. Though the product of magic, the tools are nonmagical, and they vanish when you use this feature again.",
+      "scalingColumnId": "",
+      "name": "The Right Tool for the Job",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "the-right-tool-for-the-job",
+      "sourceId": "class-feature-the-right-tool-for-the-job",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-artificer",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "id": "zk3yAS2PhcuOHDqSIMly",
+      "quantityColumnId": "",
+      "properties": [
+        "passive"
+      ],
+      "usage": {
+        "max": "",
+        "spent": 0
+      },
+      "parentId": "WWUQ9lCtXm4mvD5deMzk",
+      "name": "Eldritch Cannon",
+      "scalingColumnId": "",
+      "description": "Also at 3rd level, you've learned how to create a magical cannon. Using woodcarver's tools or smith's tools, you can take an action to magically create a Small or Tiny eldritch cannon in an unoccupied space on a horizontal surface within 5 feet of you. A Small eldritch cannon occupies its space, and a Tiny one can be held in one hand. Once you create a cannon, you can't do so again until you finish a long rest or until you expend a spell slot to create one. You can have only one cannon at a time and can't create one while your cannon is present.\n\nThe cannon is a magical object. Regardless of size, the cannon has an AC of 18 and a number of hit points equal to five times your artificer level. It is immune to poison damage and psychic damage. If it is forced to make an ability check or a saving throw, treat all its ability scores as 10 (+0). If the mending spell is cast on it, it regains 2d6 hit points. It disappears if it is reduced to 0 hit points or after 1 hour. You can dismiss it early as an action.\n\nWhen you create the cannon, you determine its appearance and whether it has legs. You also decide which type it is, choosing from the options on the Eldritch Cannons table. On each of your turns, you can take a bonus action to cause the cannon to activate if you are within 60 feet of it. As part of the same bonus action, you can direct the cannon to walk or climb up to 15 feet to an unoccupied space, provided it has legs.\n\nEldritch Cannon\n\nCannon\tActivation\n\nFlamethrower\tThe cannon exhales fire in an adjacent 15-foot cone that you designate. Each creature in that area must make a Dexterity saving throw against your spell save DC, taking 2d8 fire damage on a failed save or half as much damage on a successful one. The fire ignites any flammable objects in the area that aren't being worn or carried.\n\nForce Ballista\tMake a ranged spell attack, originating from the cannon, at one creature or object within 120 feet of it. On a hit, the target takes 2d8 force damage, and if the target is a creature, it is pushed up to 5 feet away from the cannon.\n\nProtector\tThe cannon emits a burst of positive energy that grants itself and each creature of your choice within 10 feet of it a number of temporary hit points equal to 1d8 + your Intelligence modifier (minimum of +1).",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "configuration": {
+        "requiredLevel": 3,
+        "requiredIds": [],
+        "repeatable": false
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759649,
+        "nanoseconds": 94000000
+      },
+      "level": 3,
+      "type": "class",
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1776759649,
+        "nanoseconds": 94000000
+      },
+      "parentType": "subclass",
+      "identifier": "eldritch-cannon",
+      "sourceId": "subclass-feature-eldritch-cannon",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-artillerist",
+      "classSourceId": "class-artificer"
+    }
+  ],
+  "scalingColumns": [
+    {
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "parentType": "class",
+      "createdAt": "2026-04-21T07:49:31.629Z",
+      "updatedAt": "2026-04-21T07:49:31.629Z",
+      "values": {
+        "2": "4",
+        "3": "4",
+        "4": "4",
+        "5": "4",
+        "6": "6",
+        "7": "6",
+        "8": "6",
+        "9": "6",
+        "10": "8",
+        "11": "8",
+        "12": "8",
+        "13": "8",
+        "14": "10",
+        "15": "10",
+        "16": "10",
+        "17": "10",
+        "18": "12",
+        "19": "12",
+        "20": "12"
+      },
+      "name": "Infusions Known",
+      "id": "79yh84A4M9LupGHSrnOq",
+      "identifier": "infusions-known",
+      "sourceId": "scale-infusions-known",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-artificer"
+    },
+    {
+      "parentId": "wsXYRazx14xEPewtUerr",
+      "updatedAt": "2026-04-21T07:50:06.988Z",
+      "createdAt": "2026-04-21T07:50:06.988Z",
+      "parentType": "class",
+      "name": "Infused Items",
+      "values": {
+        "1": "2",
+        "2": "2",
+        "3": "2",
+        "4": "2",
+        "5": "2",
+        "6": "3",
+        "7": "3",
+        "8": "3",
+        "9": "3",
+        "10": "4",
+        "11": "4",
+        "12": "4",
+        "13": "4",
+        "14": "4",
+        "15": "4",
+        "16": "4",
+        "17": "4",
+        "18": "4",
+        "19": "4",
+        "20": "4"
+      },
+      "id": "VdummJ30p8jVb6b1WpGd",
+      "identifier": "infused-items",
+      "sourceId": "scale-infused-items",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-artificer"
+    }
+  ],
+  "uniqueOptionGroups": [],
+  "uniqueOptionItems": [],
+  "spellcastingScalings": {},
+  "source": {
+    "id": "joi0FqfJfNvgzrUlMmbn",
+    "abbreviation": "PHB",
+    "rules": "2014",
+    "url": "",
+    "createdAt": "2026-04-20T15:29:16.300Z",
+    "status": "ready",
+    "imageUrl": "",
+    "name": "Player's Handbook",
+    "slug": "phb",
+    "updatedAt": "2026-04-20T16:08:59.612Z",
+    "tags": [
+      "Classes",
+      "Items",
+      "Spells",
+      "Feats"
+    ],
+    "description": "The Player's Hand Book"
+  }
+}

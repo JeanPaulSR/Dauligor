@@ -1,0 +1,11 @@
+{
+  "kind": "dauligor.class-catalog.v1",
+  "schemaVersion": 1,
+  "source": {
+    "system": "dauligor",
+    "entity": "class-catalog",
+    "id": "source-xge-2014-classes",
+    "sourceId": "source-xge-2014"
+  },
+  "entries": []
+}

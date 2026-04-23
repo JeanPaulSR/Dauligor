@@ -1,0 +1,51 @@
+{
+  "kind": "dauligor.class-catalog.v1",
+  "schemaVersion": 1,
+  "source": {
+    "system": "dauligor",
+    "entity": "class-catalog",
+    "id": "local-fixtures"
+  },
+  "entries": [
+    {
+      "sourceId": "fixture:class:sorcerer-bundle",
+      "name": "Sorcerer (Dauligor Bundle)",
+      "type": "class",
+      "img": "icons/svg/item-bag.svg",
+      "rules": "2014",
+      "description": "Preferred Dauligor class-bundle payload with class features and sourceId-based ItemGrant references.",
+      "payloadKind": "dauligor.class-bundle.v1",
+      "payloadUrl": "sorcerer-bundle.json"
+    },
+    {
+      "sourceId": "fixture:class:sorcerer-semantic-export",
+      "name": "Sorcerer (App Semantic Export)",
+      "type": "class",
+      "img": "icons/svg/item-bag.svg",
+      "rules": "2014",
+      "description": "Current Dauligor app semantic full export fixture normalized by the Foundry-side generalized class parser.",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "sorcerer-semantic-export.json"
+    },
+    {
+      "sourceId": "fixture:class:sorcerer-foundry-full",
+      "name": "Sorcerer (Raw Foundry Export)",
+      "type": "class",
+      "img": "icons/svg/item-bag.svg",
+      "rules": "2014",
+      "description": "Raw Foundry-like class export copied from current Dauligor research output.",
+      "payloadKind": "foundry.item.class",
+      "payloadUrl": "foundry-full-sorcerer.json"
+    },
+    {
+      "sourceId": "fixture:class:sorcerer-foundry-skeleton",
+      "name": "Sorcerer (Raw Skeleton Export)",
+      "type": "class",
+      "img": "icons/svg/item-bag.svg",
+      "rules": "2014",
+      "description": "Second raw Foundry-like class export for comparison during schema work.",
+      "payloadKind": "foundry.item.class",
+      "payloadUrl": "foundry-skeleton-sorcerer.json"
+    }
+  ]
+}

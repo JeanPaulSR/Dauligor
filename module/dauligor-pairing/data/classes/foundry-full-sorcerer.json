@@ -1,0 +1,515 @@
+{
+  "_id": "dx5wFVlqXKt31sSu",
+  "name": "Sorcerer",
+  "type": "class",
+  "img": "icons/svg/item-bag.svg",
+  "system": {
+    "identifier": "sorcerer",
+    "description": {
+      "value": "<p>Sorcerers carry a magical birthright conferred upon them by an exotic bloodline, some otherworldly influence, or exposure to unknown cosmic forces. No one chooses sorcery; the power chooses the sorcerer.</p><h2>Lore</h2><p>Test Lore</p>",
+      "chat": ""
+    },
+    "source": {
+      "custom": "",
+      "book": "Player's Hand Book",
+      "page": "0",
+      "license": "",
+      "rules": "2014",
+      "revision": 1
+    },
+    "levels": 1,
+    "hd": {
+      "denomination": "d6",
+      "spent": 0,
+      "additional": ""
+    },
+    "spellcasting": {
+      "progression": "full",
+      "ability": "cha",
+      "preparation": {
+        "formula": "",
+        "mode": "always"
+      }
+    },
+    "primaryAbility": {
+      "value": [],
+      "all": false
+    },
+    "wealth": "",
+    "advancement": {
+      "gtfttcPlWRwaaLim": {
+        "_id": "gtfttcPlWRwaaLim",
+        "type": "HitPoints",
+        "configuration": {},
+        "value": {
+          "1": "max"
+        },
+        "flags": {},
+        "hint": ""
+      },
+      "vMqb0LNjuRP7GDDF": {
+        "_id": "vMqb0LNjuRP7GDDF",
+        "type": "Trait",
+        "level": 1,
+        "title": "Saving Throws",
+        "configuration": {
+          "mode": "default",
+          "allowReplacements": false,
+          "grants": [
+            "saves:cha",
+            "saves:con"
+          ],
+          "choices": []
+        },
+        "value": {
+          "chosen": [
+            "saves:cha",
+            "saves:con"
+          ]
+        },
+        "flags": {},
+        "hint": ""
+      },
+      "9RzFchOw7VhucVbF": {
+        "_id": "9RzFchOw7VhucVbF",
+        "type": "ScaleValue",
+        "title": "Cantrips Known",
+        "configuration": {
+          "identifier": "cantrips-known",
+          "type": "number",
+          "distance": {
+            "units": ""
+          },
+          "scale": {
+            "1": {
+              "value": 4
+            },
+            "4": {
+              "value": 5
+            },
+            "10": {
+              "value": 6
+            }
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "sGJFiko3gcjtkh66": {
+        "_id": "sGJFiko3gcjtkh66",
+        "type": "ScaleValue",
+        "title": "Spells Known",
+        "configuration": {
+          "identifier": "spells-known",
+          "type": "number",
+          "distance": {
+            "units": ""
+          },
+          "scale": {
+            "1": {
+              "value": 2
+            },
+            "2": {
+              "value": 3
+            },
+            "3": {
+              "value": 4
+            },
+            "4": {
+              "value": 5
+            },
+            "5": {
+              "value": 6
+            },
+            "6": {
+              "value": 7
+            },
+            "7": {
+              "value": 8
+            },
+            "8": {
+              "value": 9
+            },
+            "9": {
+              "value": 10
+            },
+            "10": {
+              "value": 11
+            },
+            "11": {
+              "value": 12
+            },
+            "13": {
+              "value": 13
+            },
+            "15": {
+              "value": 14
+            },
+            "16": {
+              "value": 15
+            }
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "Kn28htfSdvHErH8m": {
+        "_id": "Kn28htfSdvHErH8m",
+        "type": "ScaleValue",
+        "title": "Sorcery Points",
+        "configuration": {
+          "identifier": "sorcery-points",
+          "type": "number",
+          "distance": {
+            "units": ""
+          },
+          "scale": {
+            "2": {
+              "value": 2
+            },
+            "3": {
+              "value": 3
+            },
+            "4": {
+              "value": 4
+            },
+            "5": {
+              "value": 5
+            },
+            "6": {
+              "value": 6
+            },
+            "7": {
+              "value": 7
+            },
+            "8": {
+              "value": 8
+            },
+            "9": {
+              "value": 9
+            },
+            "10": {
+              "value": 10
+            },
+            "11": {
+              "value": 11
+            },
+            "12": {
+              "value": 12
+            },
+            "13": {
+              "value": 13
+            },
+            "14": {
+              "value": 14
+            },
+            "15": {
+              "value": 15
+            },
+            "16": {
+              "value": 16
+            },
+            "17": {
+              "value": 17
+            },
+            "18": {
+              "value": 18
+            },
+            "19": {
+              "value": 19
+            },
+            "20": {
+              "value": 20
+            }
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "xl3UO94pyRs6LIqc": {
+        "_id": "xl3UO94pyRs6LIqc",
+        "type": "ScaleValue",
+        "title": "Metamagic",
+        "configuration": {
+          "identifier": "metamagic",
+          "type": "number",
+          "distance": {
+            "units": ""
+          },
+          "scale": {
+            "3": {
+              "value": 2
+            },
+            "7": {
+              "value": 3
+            },
+            "11": {
+              "value": 4
+            },
+            "15": {
+              "value": 5
+            },
+            "19": {
+              "value": 6
+            }
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "vvGMCqohNgEWQQSl": {
+        "_id": "vvGMCqohNgEWQQSl",
+        "type": "ItemGrant",
+        "level": 1,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.sorcerous-origin",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "XoIKrqv92bLFxNXO": {
+        "_id": "XoIKrqv92bLFxNXO",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.font-of-magic",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "MgI4rssplWDnSPqD": {
+        "_id": "MgI4rssplWDnSPqD",
+        "type": "ItemGrant",
+        "level": 3,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.metamagic",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "IHzeZZPGcAbJvVGT": {
+        "_id": "IHzeZZPGcAbJvVGT",
+        "type": "ItemGrant",
+        "level": 5,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.magical-guidance",
+              "optional": false
+            },
+            {
+              "uuid": "Item.magical-guidance",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "L3E9hDslMIongKj0": {
+        "_id": "L3E9hDslMIongKj0",
+        "type": "ItemGrant",
+        "level": 6,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.sorcerous-origin-feature",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "Kh9wVnTiJ3tQOCjw": {
+        "_id": "Kh9wVnTiJ3tQOCjw",
+        "type": "ItemGrant",
+        "level": 14,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.sorcerous-origin-feature",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "EMYu8GkySNHilWaR": {
+        "_id": "EMYu8GkySNHilWaR",
+        "type": "ItemGrant",
+        "level": 18,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.sorcerous-origin-feature",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      },
+      "YAgAaB84hOjEZs3a": {
+        "_id": "YAgAaB84hOjEZs3a",
+        "type": "ItemGrant",
+        "level": 20,
+        "title": "Features",
+        "configuration": {
+          "items": [
+            {
+              "uuid": "Item.sorcerous-restoration",
+              "optional": false
+            }
+          ],
+          "optional": false,
+          "spell": {
+            "ability": [
+              ""
+            ],
+            "uses": {
+              "max": "",
+              "per": "",
+              "requireSlot": false
+            },
+            "prepared": 0
+          }
+        },
+        "value": {},
+        "flags": {},
+        "hint": ""
+      }
+    },
+    "properties": []
+  },
+  "flags": {
+    "dauligor-pairing": {
+      "sourceId": "class-awWmrbo3YxCMU86t7Yb9"
+    },
+    "plutonium": {
+      "page": "classes.html",
+      "source": "Player's Hand Book",
+      "hash": "sorcerer",
+      "propDroppable": "class",
+      "isPrimaryClass": true
+    }
+  }
+}

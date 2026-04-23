@@ -1,0 +1,544 @@
+# Dauligor Advancement And Activity Implementation Guide
+
+This guide is the working handoff for finishing class advancements and class-feature activities.
+
+It is meant to answer:
+
+- what the app should keep exporting
+- what the app should change before the data is considered stable
+- which currently exported fields are likely legacy or deprecated
+- what the Foundry module must implement in order to consume the data correctly
+
+This guide is intentionally focused on:
+
+- classes
+- subclasses
+- class features
+- class option groups and option items
+- feature activities
+
+Use this alongside:
+
+- `docs/class-semantic-export-notes.md`
+- `docs/class-import-and-advancement-guide.md`
+- `docs/advancement-construction-guide.md`
+- `docs/class-feature-activity-contract.md`
+
+## Current Situation
+
+The current semantic class export is already good enough for:
+
+- class import
+- subclass import
+- fixed feature grants
+- scale generation
+- skill choices
+- HP persistence
+- custom option-group prompting in the Foundry importer
+
+The two areas that are still not fully native are:
+
+1. `ItemChoice`-style advancement generation
+2. feature `system.activities` generation
+
+Right now:
+
+- the module builds class progression from top-level semantic sections
+- the module does not yet consume feature-owned semantic `advancements`
+- the module preserves `feature.automation` in flags
+- the module does not yet convert semantic activities into native `system.activities`
+
+That means the current app export can already drive imports, but some of the newly added data is still advisory metadata rather than active import input.
+
+## Core Rule
+
+For classes, the class item or subclass item should own progression.
+
+That means:
+
+- the class item should own `HitPoints`
+- the class item should own `Trait`
+- the class item should own `ScaleValue`
+- the class item should own `ItemGrant`
+- the class item should eventually own `ItemChoice`
+- the subclass item should own subclass-side `ItemGrant`
+
+The feature item should usually own:
+
+- description
+- activities
+- effects
+- uses
+- references
+
+The feature item should usually not own:
+
+- grant timing
+- level progression
+- option-count progression
+- actor advancement state
+
+## What The App Should Export For Native ItemChoice
+
+For a class option pool like Metamagic, the app should continue treating the option group as the semantic source of truth.
+
+The clean target is:
+
+1. the class feature exists as a feature item
+2. the option group defines the option pool and count progression
+3. the option items define the selectable feat-like options
+4. the module synthesizes a native `ItemChoice` advancement on the class item
+
+### Recommended semantic source of truth
+
+For each option group, the export should provide:
+
+```json
+{
+  "sourceId": "class-option-group-metamagic",
+  "identifier": "metamagic",
+  "name": "Metamagic",
+  "featureSourceId": "class-feature-metamagic",
+  "scalingSourceId": "scale-metamagic",
+  "selectionCountsByLevel": {
+    "3": 2,
+    "7": 3,
+    "11": 4,
+    "15": 5
+  }
+}
+```
+
+For each option item, the export should provide:
+
+```json
+{
+  "sourceId": "class-option-careful-spell",
+  "identifier": "careful-spell",
+  "name": "Careful Spell",
+  "groupSourceId": "class-option-group-metamagic",
+  "levelPrerequisite": 0,
+  "description": "..."
+}
+```
+
+For the class feature that conceptually grants the pool, the export should provide:
+
+```json
+{
+  "sourceId": "class-feature-metamagic",
+  "identifier": "metamagic",
+  "name": "Metamagic",
+  "level": 3,
+  "featureKind": "classFeature",
+  "description": "..."
+}
+```
+
+The important part is:
+
+- the feature says what the thing is
+- the group says what the pool is
+- the scale says how many choices are available by level
+- the option items say what can be chosen
+
+## What The App Should Not Treat As Primary For ItemChoice
+
+The current `features[].advancements` block is not the right primary contract yet.
+
+Example of the current experimental Metamagic advancement:
+
+```json
+{
+  "_id": "qydkpizkq",
+  "level": 1,
+  "configuration": {
+    "scalingColumnId": "wfKNMWJOiam3tgRMg2U4",
+    "optionGroupId": "w9gFb8ga81xgWfopiZQ8",
+    "choiceType": "option-group",
+    "count": 1,
+    "pool": [],
+    "countSource": "scaling"
+  },
+  "type": "ItemChoice",
+  "title": ""
+}
+```
+
+This is not ideal yet because:
+
+- it is feature-owned rather than class-owned
+- `_id` is random instead of semantic
+- `level` does not match the class unlock level clearly
+- `count` conflicts with `countSource = "scaling"`
+- `pool` is empty
+- `title` is blank
+
+So for now, treat this as experimental metadata, not the production contract.
+
+## App-Side Changes Needed For ItemChoice
+
+### Must change
+
+- Add `featureSourceId` directly to every `uniqueOptionGroup`.
+- Keep `groupSourceId` on every `uniqueOptionItem`.
+- Keep `selectionCountsByLevel` as the canonical count progression field.
+- Keep `scalingSourceId` as the canonical scale link field.
+- Make sure progression agrees across:
+  - feature description
+  - scale values
+  - `selectionCountsByLevel`
+
+### Strongly recommended
+
+- Use semantic `sourceId` values everywhere.
+- Keep `identifier` on groups and option items.
+- Use semantic filenames and endpoint slugs where possible.
+
+### Do not rely on yet
+
+- `features[].advancements`
+
+That block can remain in the export while the app experiments, but it should not be considered authoritative until the module actually consumes it and the contract is cleaned up.
+
+## Module-Side Changes Needed For ItemChoice
+
+The module should implement native `ItemChoice` in this order.
+
+### 1. Synthesize `ItemChoice` from semantic option groups
+
+Add a new class-advancement builder in:
+
+- `scripts/class-import-service.js`
+
+Recommended helper:
+
+- `buildItemChoiceAdvancements(context)`
+
+This helper should:
+
+- iterate the semantic option groups
+- resolve each group's feature
+- resolve each group's option items
+- build one native `ItemChoice` advancement per group
+- attach it to the class item in `buildSemanticClassAdvancement(context)`
+
+Do not build this from `features[].advancements`.
+
+Build it from:
+
+- `uniqueOptionGroups`
+- `uniqueOptionItems`
+- `class.uniqueOptionMappings` as fallback only
+
+### 2. Convert semantic pool entries into Foundry-resolvable references
+
+When synthesizing the `ItemChoice`, the advancement should initially carry semantic references such as:
+
+```json
+{
+  "sourceId": "class-option-careful-spell"
+}
+```
+
+Then in world import preparation, extend the existing reference resolver so `ItemChoice.configuration.pool` is rewritten to Foundry UUIDs, similar to how `ItemGrant.configuration.items` is already resolved.
+
+### 3. Persist actor choices into `ItemChoice.value`
+
+After actor import embeds selected option items, the embedded class item should record those choices in:
+
+```json
+{
+  "value": {
+    "added": {},
+    "replaced": {}
+  }
+}
+```
+
+This should become the class-side memory of:
+
+- which options were actually chosen
+- what actor items they resolved to
+
+This is important for:
+
+- reimport
+- later level-up
+- export
+- character reconstruction
+
+### 4. Keep the custom wizard only as a UI layer
+
+The current custom option wizard is still useful, but it should become a front-end for writing real `ItemChoice.value`, not the only place where the choice exists.
+
+## What The App Should Export For Activities
+
+For class-feature items, the app should treat activities as part of the feature item, not part of the class advancement tree.
+
+The semantic home is:
+
+```json
+{
+  "sourceId": "class-feature-font-of-magic",
+  "name": "Font of Magic",
+  "automation": {
+    "activities": [
+      {
+        "type": "utility",
+        "...": "..."
+      }
+    ],
+    "effects": []
+  }
+}
+```
+
+This is the right conceptual home because the activity answers:
+
+- what the feature does
+- how it is activated
+- what it consumes
+- what it targets
+- what roll/save/damage/healing it creates
+
+It does not answer:
+
+- when the actor gets the feature
+- how many options the actor should choose
+- what level unlocks the feature
+
+## App-Side Changes Needed For Activities
+
+### Must change
+
+- Keep using `feature.automation.activities` as the canonical semantic activity container.
+- Make sure each activity is fully shaped according to:
+  - `docs/class-feature-activity-contract.md`
+- Keep effects in `feature.automation.effects`.
+- Avoid splitting activity configuration across unrelated feature fields when it belongs inside the activity block itself.
+
+### Strongly recommended
+
+- Keep semantic references in descriptions and formulas rather than pre-resolving Foundry UUIDs.
+- Use stable semantic identifiers inside activities where cross-linking is needed.
+- Use one complete activity contract consistently across all activity families.
+
+### Do not rely on
+
+- feature descriptions as the authoritative source for machine behavior
+
+Descriptions are still for display and fallback understanding. Machine behavior should live in the activity data itself.
+
+## Module-Side Changes Needed For Activities
+
+The module should implement activity normalization in this order.
+
+### 1. Add semantic-to-native activity normalization
+
+In:
+
+- `scripts/class-import-service.js`
+
+or a dedicated helper file, add a normalizer that converts:
+
+- `feature.automation.activities`
+
+into:
+
+- `featItem.system.activities`
+
+The current module only preserves semantic automation in flags.
+
+### 2. Keep the semantic copy during transition
+
+Even after native `system.activities` is created, keep the semantic source in flags for debugging and migration:
+
+```json
+{
+  "flags": {
+    "dauligor-pairing": {
+      "semanticAutomation": {
+        "activities": [],
+        "effects": []
+      }
+    }
+  }
+}
+```
+
+This helps with:
+
+- regression checks
+- reimport debugging
+- comparing semantic payloads to normalized Foundry state
+
+### 3. Run reference normalization on activities
+
+Any semantic refs inside activity text or formulas should be normalized during import using the module's reference service.
+
+Examples:
+
+- prose refs
+- formula refs
+- scale refs
+- semantic entity refs
+
+### 4. Add validation logging for unsupported fields
+
+If an activity family includes fields the module does not yet support, log them clearly instead of silently dropping them.
+
+This is especially helpful while the app is still building out activity exports.
+
+## Deprecated Or Likely Legacy Fields
+
+The list below is based on the current Sorcerer export and the current class normalizer.
+
+These fields are divided into:
+
+- safe to remove now
+- keep for now because they still bridge missing direct fields
+
+## Safe To Remove Now
+
+These are currently exported but not meaningfully used by the semantic class normalizer.
+
+### On `class`
+
+- `uniqueOptionGroupIds`
+- `tagIds`
+- `createdAt`
+- `updatedAt`
+- `excludedOptionIds`
+- `subclassTitle`
+
+### On `subclass`
+
+- `excludedOptionIds`
+- `tagIds`
+- `uniqueOptionGroupIds`
+- `uniqueOptionMappings`
+- `createdAt`
+- `updatedAt`
+- `classIdentifier`
+- `classId`
+
+### On `feature`
+
+- `advancements`
+- `usage`
+- `parentId`
+- `type`
+- `quantityColumnId`
+- `configuration`
+- `properties`
+- `parentType`
+- `createdAt`
+- `updatedAt`
+- `scalingColumnId`
+- `isSubclassFeature`
+
+### On `uniqueOptionGroup`
+
+- `description`
+- `createdAt`
+- `updatedAt`
+- `identifier`
+- `sourceBookId`
+
+### On `uniqueOptionItem`
+
+- `isRepeatable`
+- `createdAt`
+- `updatedAt`
+- `sourceBookId`
+- `groupId` once `groupSourceId` is universal and stable
+
+### On `scalingColumn`
+
+- `parentId`
+- `createdAt`
+- `updatedAt`
+- `parentType`
+- `sourceBookId`
+- `classSourceId`
+
+## Keep For Now
+
+These still serve as bridge fields and should stay until the replacement is universal.
+
+### `class.uniqueOptionMappings`
+
+Keep this until every option group exports:
+
+- `featureSourceId`
+- `scalingSourceId`
+
+directly and reliably.
+
+Right now the module still uses `uniqueOptionMappings` as fallback recovery when the group itself does not carry all relationship fields.
+
+### `uniqueOptionGroup.id`
+
+Keep this until all consumers rely only on semantic `sourceId`.
+
+### `uniqueOptionItem.groupId`
+
+Keep this until `groupSourceId` is universal and every consumer is source-id based.
+
+### `scalingColumn.id`
+
+Keep this until all mappings rely only on `scalingSourceId`.
+
+## Data Quality Checks Before Wiring Native ItemChoice
+
+Before the module consumes option groups as real `ItemChoice`, confirm:
+
+- each option group has one stable `sourceId`
+- each option item has one stable `sourceId`
+- each option item has `groupSourceId`
+- each option group has `featureSourceId`
+- each option group has `selectionCountsByLevel`
+- each option group has `scalingSourceId` when count comes from a scale
+- scale values and prose do not disagree
+- the option-item list matches the intended pool exactly
+
+For Metamagic specifically, confirm whether level 19 and 20 should remain at 6 selections. If not, fix that before the module relies on it.
+
+## Data Quality Checks Before Wiring Native Activities
+
+Before the module consumes feature activities, confirm:
+
+- every activity family is exported in `feature.automation.activities`
+- every activity uses the documented field/value families
+- no required machine behavior is only written in prose
+- any semantic references are stable and parseable
+- effects that belong with the feature are exported in `feature.automation.effects`
+
+## Recommended Implementation Order
+
+1. Clean the semantic option-group export:
+   - add `featureSourceId`
+   - confirm Metamagic progression
+   - keep `groupSourceId` everywhere
+2. Implement native `ItemChoice` synthesis in the module.
+3. Persist `ItemChoice.value` on actor imports.
+4. Clean the semantic activity export against the activity contract.
+5. Implement semantic activity normalization into `system.activities`.
+6. Preserve semantic activity data in flags during the transition.
+
+## When Reviewing A New Class Payload
+
+When a new class export is ready, review it in this order:
+
+1. Does the class/subclass/feature identity model still look stable?
+2. Do the top-level option-group sections still fully describe choice progression?
+3. Are any stale legacy fields still present that no longer add value?
+4. Are feature activities complete enough to normalize into native `system.activities`?
+5. Is anything duplicated between prose, feature metadata, and top-level progression sections in a conflicting way?
+
+That review order makes it easier to tell:
+
+- what the app should fix
+- what the module should implement
+- what is safe to ignore for now

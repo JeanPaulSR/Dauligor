@@ -1,0 +1,25 @@
+# Archive Project Overview
+
+## 1. System Intent
+The Archive is a specialized DM workspace designed for high-density information management and immersive player mechanical support. It balances a "Technical Dashboard" utility with a thematic "Sword & Sorcery" aesthetic.
+
+## 2. Core Modules
+- **World Engine (Wiki)**: A hierarchical lore repository. Supports DM-facing secrets (`[secret]...[/secret]`) and visual nesting of world entities.
+- **Rules Foundry (Compendium)**: A modular database for TTRPG mechanics. Handles class features, spell lists, and custom scaling tables (e.g., Cantrip scaling, Spell point progression).
+- **Character Workspace**: A high-fidelity character sheet implementation. 
+    - **Vitals**: Visual HP bars, Mana tracking, and Hit Dice management.
+    - **Identity**: Portrait integration and Background/Race metadata.
+    - **Mechanics**: Ability score plaques, skill proficiency dots, and saving throw trackers.
+- **Administrative Hub**: Role-Based Access Control (RBAC) implementation for DM, co-DM, and player tiers.
+
+## 3. UI/UX Standards
+- **Palette**: `Parchment` (#f5f5f0), `Ink` (#1a1a1a), and `Gold` (#c5a059).
+- **Typography**: Serif titles (`Cormorant Garamond`) and Sans-serif data (`Inter`).
+- **Icons**: Restricted to `lucide-react`.
+- **Styling**: Utility-first Tailwind CSS with custom thematic clip-paths and borders.
+
+## 4. Technical Constraints
+- No anonymous registration; users map to internal handles.
+- Server-side validation via Firestore Security Rules.
+- Client-side "Pseudo-Username" Auth to protect player PII.
+- Real-time synchronization for collaborative features.

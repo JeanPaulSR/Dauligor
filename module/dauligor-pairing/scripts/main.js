@@ -1,0 +1,552 @@
+import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
+import { openDauligorImporter } from "./importer-app.js";
+import { initializeSocket } from "./import-service.js";
+import { openSpellPreparationManager } from "./spell-preparation-app.js";
+import { log, notifyWarn } from "./utils.js";
+
+Hooks.once("init", () => {
+  log("Initializing");
+  registerSettings();
+  registerKeybindings();
+  registerSheetControls();
+  registerSpellTabControls();
+  registerLauncherControl();
+  registerSettingsUiButtons();
+  registerSidebarButtons();
+});
+
+Hooks.once("ready", () => {
+  initializeSocket();
+});
+
+function registerSettings() {
+  game.settings.register(MODULE_ID, SETTINGS.defaultImportUrl, {
+    name: "Default import URL",
+    hint: "Used as the pre-filled URL when importing JSON into a character sheet.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "http://127.0.0.1:3000/sample-character.json"
+  });
+
+  game.settings.register(MODULE_ID, SETTINGS.defaultClassCatalogUrl, {
+    name: "Default class catalog URL",
+    hint: "Used by the Dauligor class importer browser. Start with the bundled module fixture, then point it at the real app endpoint later.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: CLASS_CATALOG_FILE
+  });
+
+  game.settings.register(MODULE_ID, SETTINGS.defaultClassFolderPath, {
+    name: "Default class folder path",
+    hint: "Used by the Dauligor importer when saving class and class-feature world items.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "Classes"
+  });
+}
+
+function registerKeybindings() {
+  game.keybindings.register(MODULE_ID, "openImporter", {
+    name: "Open Dauligor Importer",
+    editable: [],
+    restricted: true,
+    onDown: () => {
+      openDauligorImporter();
+      return true;
+    }
+  });
+}
+
+function registerSheetControls() {
+  Hooks.on("getHeaderControlsBaseActorSheet", (sheet, controls) => {
+    if (sheet.document?.type === "character" && getDauligorLevelableClasses(sheet.document).length) {
+      injectControl(controls, {
+        action: `${MODULE_ID}.level-up`,
+        label: "Dauligor Level Up",
+        icon: "fas fa-circle-up",
+        onClick: async () => openDauligorLevelUp(sheet.document)
+      });
+    }
+
+    injectControl(controls, {
+      action: `${MODULE_ID}.open-importer-actor`,
+      label: "Dauligor Import",
+      icon: "fas fa-book",
+      onClick: async () => openDauligorImporter({ actor: sheet.document })
+    });
+
+    injectControl(controls, {
+      action: `${MODULE_ID}.open-options-actor`,
+      label: "Dauligor Options",
+      icon: "fas fa-screwdriver-wrench",
+      onClick: async () => openLauncher({ actor: sheet.document })
+    });
+  });
+}
+
+function registerLauncherControl() {
+  Hooks.on("getHeaderControlsSettings", (_app, controls) => {
+    injectControl(controls, {
+      action: `${MODULE_ID}.launcher`,
+      label: "Dauligor",
+      icon: "fas fa-plug",
+      onClick: async () => openLauncher()
+    });
+  });
+}
+
+function registerSidebarButtons() {
+  Hooks.on("renderActorDirectory", (_app, html) => {
+    injectSidebarDirectoryButtons(resolveHookRoot(html));
+  });
+
+  Hooks.on("renderItemDirectory", (_app, html) => {
+    injectSidebarDirectoryButtons(resolveHookRoot(html));
+  });
+}
+
+function registerSettingsUiButtons() {
+  Hooks.on("renderSettingsConfig", (_app, html) => {
+    injectSettingsButtons(resolveHookRoot(html));
+  });
+
+  Hooks.on("renderApplicationV2", (app, element) => {
+    injectSpellTabButton(app, resolveHookRoot(element));
+
+    const isSettingsConfig = app?.constructor?.name === "SettingsConfig" || app?.id === "settings";
+    if (!isSettingsConfig) return;
+    injectSettingsButtons(resolveHookRoot(element));
+  });
+}
+
+function registerSpellTabControls() {
+  Hooks.on("renderActorSheet", (sheet, html) => {
+    injectSpellTabButton(sheet, resolveHookRoot(html));
+  });
+}
+
+async function openLauncher({ actor = null } = {}) {
+  const actorDoc = resolveActorDocument(actor);
+  const buttons = [
+    {
+      action: "import",
+      label: "Import",
+      icon: "fas fa-book",
+      callback: async () => actorDoc ? openDauligorImporter({ actor: actorDoc }) : openDauligorImporter()
+    }
+  ];
+
+  if (actorDoc) {
+    buttons.push({
+      action: "actor-tools",
+      label: "Actor Tools",
+      icon: "fas fa-user-gear",
+      callback: async () => openActorToolsHub(actorDoc)
+    });
+  }
+
+  buttons.push(
+    {
+      action: "character-creator",
+      label: "Character Creator",
+      icon: "fas fa-user-plus",
+      callback: async () => openUnderConstructionDialog("Character Creator")
+    },
+    {
+      action: "hp-gain-behavior",
+      label: "HP Gain Behavior",
+      icon: "fas fa-heart-circle-bolt",
+      callback: async () => openUnderConstructionDialog("HP Gain Behavior")
+    },
+    {
+      action: "spell-points-behavior",
+      label: "Spell Points Behavior",
+      icon: "fas fa-wand-sparkles",
+      callback: async () => openSpellPointsBehaviorDialog()
+    },
+    {
+      action: "loot-generator",
+      label: "Loot Generator",
+      icon: "fas fa-coins",
+      callback: async () => openUnderConstructionDialog("Loot Generator")
+    },
+    {
+      action: "equipment-shop",
+      label: "Equipment Shop",
+      icon: "fas fa-cart-shopping",
+      callback: async () => openUnderConstructionDialog("Equipment Shop")
+    },
+    {
+      action: "close",
+      label: "Close",
+      default: true
+    }
+  );
+
+  new foundry.applications.api.DialogV2({
+    window: { title: actorDoc ? `Dauligor Options: ${actorDoc.name}` : "Dauligor Options" },
+    content: `
+      <p>Implemented now:</p>
+      <ul>
+        <li><strong>Import</strong>${actorDoc ? "</li><li><strong>Level Up</strong> from character sheets" : ""}</li>
+      </ul>
+      <p>The remaining entries here are placeholders and currently under construction.</p>
+    `,
+    buttons,
+    rejectClose: false,
+    modal: true
+  }).render({ force: true });
+}
+
+async function openActorToolsHub(actorLike) {
+  const actor = resolveActorDocument(actorLike);
+  if (!actor) {
+    notifyWarn("Open actor tools from an actor sheet.");
+    return;
+  }
+
+  new foundry.applications.api.DialogV2({
+    window: { title: `Actor Tools: ${actor.name}` },
+    content: `
+      <p><strong>Prepare Spells</strong> is now available as a first-pass manager for current actor spell items.</p>
+      <p>The remaining actor-side tools here are still under construction.</p>
+    `,
+    buttons: [
+      {
+        action: "item-cleaner",
+        label: "Item Cleaner",
+        icon: "fas fa-trash-can",
+        callback: async () => openUnderConstructionDialog("Item Cleaner", actor.name)
+      },
+      {
+        action: "prepare-spells",
+        label: "Prepare Spells",
+        icon: "fas fa-book-open",
+        callback: async () => openSpellPreparationManager(actor)
+      },
+      {
+        action: "polymorpher",
+        label: "Polymorpher",
+        icon: "fas fa-paw",
+        callback: async () => openUnderConstructionDialog("Polymorpher", actor.name)
+      },
+      {
+        action: "show-players",
+        label: "Show Players",
+        icon: "fas fa-eye",
+        callback: async () => openUnderConstructionDialog("Show Players", actor.name)
+      },
+      {
+        action: "close",
+        label: "Close",
+        default: true
+      }
+    ],
+    rejectClose: false,
+    modal: true
+  }).render({ force: true });
+}
+
+async function openUnderConstructionDialog(featureName, actorName = "") {
+  const actorLine = actorName ? `<p><strong>Context:</strong> ${foundry.utils.escapeHTML(actorName)}</p>` : "";
+  return foundry.applications.api.DialogV2.prompt({
+    window: { title: featureName },
+    content: `
+      <p><strong>Under Construction</strong></p>
+      <p>${foundry.utils.escapeHTML(featureName)} is not implemented yet.</p>
+      ${actorLine}
+    `,
+    ok: {
+      label: "Close"
+    },
+    rejectClose: false,
+    modal: true
+  });
+}
+
+async function openSpellPointsBehaviorDialog() {
+  const spellPointsModule = game.modules.get("dnd5e-spellpoints");
+  const isInstalled = Boolean(spellPointsModule);
+  const isActive = Boolean(spellPointsModule?.active);
+  const version = spellPointsModule?.version ?? "not installed";
+  const statusLabel = isActive
+    ? "Active"
+    : (isInstalled ? "Installed but disabled" : "Not installed");
+
+  return foundry.applications.api.DialogV2.prompt({
+    window: { title: "Spell Points Behavior" },
+    content: `
+      <p><strong>Detected module:</strong> Advanced Magic - Spell Points System 5e (<code>dnd5e-spellpoints</code>)</p>
+      <p><strong>Status:</strong> ${foundry.utils.escapeHTML(statusLabel)}${isInstalled ? ` (${foundry.utils.escapeHTML(version)})` : ""}</p>
+      <hr />
+      <p><strong>Recommended Dauligor integration model</strong></p>
+      <ol>
+        <li>Create or attach the spell-points item on spellcasting actors. The module is item-centered, not class-centered.</li>
+        <li>Let Advanced Magic own current and maximum spell points on that item. Dauligor should not keep a parallel actor-side spell-point pool.</li>
+        <li>Keep imported class and subclass spellcasting progression native on the class items. Advanced Magic recalculates from class levels and spellcasting progression.</li>
+        <li>If per-actor spell-point rules are needed, write them onto the spell-points item using <code>flags.spellpoints.override</code> and <code>flags.spellpoints.config</code>.</li>
+        <li>If Dauligor authors formulas, normalize semantic references into native Foundry roll-data paths before saving them into the spell-points item configuration.</li>
+      </ol>
+      <p><strong>Safe behavior for Dauligor</strong></p>
+      <ul>
+        <li>Import classes and subclasses normally.</li>
+        <li>Do not remove or zero spell slots just because spell points are enabled.</li>
+        <li>Do not overwrite the spell-points item on every import if it already exists.</li>
+        <li>Prefer importing the module compendium item or cloning its shape, instead of inventing a different resource item.</li>
+      </ul>
+      <p><strong>Current implementation</strong></p>
+      <ul>
+        <li>After a successful actor-side class import, Dauligor checks whether <code>dnd5e-spellpoints</code> is active.</li>
+        <li>If the actor now has spellcasting support and no spell-points item, Dauligor offers to add the module's default compendium item.</li>
+        <li>If the item already exists, Dauligor leaves it alone.</li>
+      </ul>
+      <p><strong>Next implementation target</strong></p>
+      <p>Add actor-side support for editing per-item spell-point overrides from Dauligor, while still leaving spell-point math to Advanced Magic.</p>
+    `,
+    ok: {
+      label: "Close"
+    },
+    rejectClose: false,
+    modal: true
+  });
+}
+
+function injectControl(controls, {
+  action,
+  label,
+  icon = "fas fa-file-export",
+  onClick
+}) {
+  if (controls.some((it) => it.action === action)) return;
+  controls.unshift({
+    action,
+    label,
+    icon,
+    visible: () => game.user?.isGM ?? false,
+    onClick
+  });
+}
+
+function resolveHookRoot(value) {
+  if (!value) return null;
+  if (value instanceof HTMLElement) return value;
+  if (value?.jquery && value[0] instanceof HTMLElement) return value[0];
+  if (value?.element instanceof HTMLElement) return value.element;
+  if (value?.[0] instanceof HTMLElement) return value[0];
+  return null;
+}
+
+function injectSettingsButtons(root) {
+  if (!game.user?.isGM) return;
+  if (!root || root.querySelector?.(`[data-${MODULE_ID}-tools]`)) return;
+
+  const importUrlInput = root.querySelector(`input[name="${MODULE_ID}.${SETTINGS.defaultImportUrl}"]`);
+  const classCatalogInput = root.querySelector(`input[name="${MODULE_ID}.${SETTINGS.defaultClassCatalogUrl}"]`);
+  const anchor = classCatalogInput?.closest?.(".form-group") ?? importUrlInput?.closest?.(".form-group");
+  if (!anchor?.parentElement) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "form-group";
+  wrapper.setAttribute(`data-${MODULE_ID}-tools`, "true");
+  wrapper.innerHTML = `
+    <label>Dauligor Tools</label>
+    <div class="form-fields" style="gap: 0.5rem; flex-wrap: wrap;">
+      <button type="button" data-action="open-importer">
+        <i class="fas fa-book"></i> Open Importer
+      </button>
+      <button type="button" data-action="open-options">
+        <i class="fas fa-screwdriver-wrench"></i> Open Options
+      </button>
+    </div>
+    <p class="hint">Import is live. The remaining tools are visible here as under-construction placeholders.</p>
+  `;
+
+  wrapper.querySelector(`[data-action="open-importer"]`)?.addEventListener("click", async () => {
+    await openDauligorImporter();
+  });
+  wrapper.querySelector(`[data-action="open-options"]`)?.addEventListener("click", async () => {
+    await openLauncher();
+  });
+
+  anchor.insertAdjacentElement("afterend", wrapper);
+}
+
+function injectSidebarDirectoryButtons(root) {
+  if (!game.user?.isGM) return;
+  if (!root || root.querySelector?.(`[data-${MODULE_ID}-sidebar-tools]`)) return;
+
+  const anchor = root.querySelector(".header-actions.action-buttons") ?? root.querySelector(".header-actions");
+  if (!anchor?.parentElement) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "header-actions action-buttons dauligor-directory-tools";
+  wrapper.setAttribute(`data-${MODULE_ID}-sidebar-tools`, "true");
+  wrapper.innerHTML = `
+    <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--primary" data-action="open-importer" title="Open Dauligor Importer">
+      <i class="fas fa-book"></i>
+      <span>Dauligor Import</span>
+    </button>
+    <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--icon" data-action="open-options" title="Open Dauligor Options">
+      <i class="fas fa-screwdriver-wrench"></i>
+    </button>
+  `;
+
+  wrapper.querySelector(`[data-action="open-importer"]`)?.addEventListener("click", async () => {
+    await openDauligorImporter();
+  });
+  wrapper.querySelector(`[data-action="open-options"]`)?.addEventListener("click", async () => {
+    await openLauncher();
+  });
+
+  anchor.insertAdjacentElement("afterend", wrapper);
+}
+
+function injectSpellTabButton(appLike, root) {
+  const actor = resolveActorDocument(appLike?.document ?? appLike?.actor ?? appLike);
+  if (!actor || actor.type !== "character") return;
+  if (!root) return;
+
+  const spellsTab = root.querySelector(`[data-tab="spells"]`);
+  if (!spellsTab) return;
+  if (spellsTab.querySelector?.(`[data-${MODULE_ID}-spell-tab-tools]`)) return;
+
+  const topSection = spellsTab.querySelector(`section.top`);
+  const inventorySection = spellsTab.querySelector(`.inventory-element`);
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "dauligor-spell-tab-tools";
+  wrapper.setAttribute(`data-${MODULE_ID}-spell-tab-tools`, "true");
+  wrapper.innerHTML = `
+    <button type="button" class="dauligor-spell-tab-tools__button" data-action="open-spell-manager">
+      <i class="fas fa-book-open"></i>
+      <span>Dauligor Prepare Spells</span>
+    </button>
+  `;
+
+  wrapper.querySelector(`[data-action="open-spell-manager"]`)?.addEventListener("click", async () => {
+    await openSpellPreparationManager(actor);
+  });
+
+  if (topSection?.parentElement === spellsTab) {
+    topSection.insertAdjacentElement("afterend", wrapper);
+    return;
+  }
+
+  if (inventorySection?.parentElement) {
+    inventorySection.insertAdjacentElement("beforebegin", wrapper);
+    return;
+  }
+
+  spellsTab.prepend(wrapper);
+}
+
+async function openDauligorLevelUp(actorLike) {
+  const actor = resolveActorDocument(actorLike);
+  if (!actor || actor.type !== "character") {
+    notifyWarn("Open Dauligor Level Up from a character actor sheet.");
+    return;
+  }
+
+  const classes = getDauligorLevelableClasses(actor);
+  if (!classes.length) {
+    notifyWarn("No Dauligor-imported classes were found on this actor. Import a class first, then use Dauligor Level Up.");
+    return;
+  }
+
+  const selected = classes.length === 1
+    ? classes[0]
+    : await promptForLevelUpClass(classes);
+  if (!selected) return;
+
+  await openDauligorImporter({
+    actor,
+    modeId: "classes",
+    selectedEntryIds: selected.sourceId ? [selected.sourceId] : [],
+    targetLevel: selected.nextLevel,
+    status: `Level up ${selected.name} from ${selected.currentLevel} to ${selected.nextLevel}, then import the updated class payload.`,
+    statusLevel: ""
+  });
+}
+
+function resolveActorDocument(actorLike) {
+  if (!actorLike) return null;
+  if (actorLike.documentName === "Actor") return actorLike;
+  if (actorLike.actor?.documentName === "Actor") return actorLike.actor;
+  return null;
+}
+
+function getDauligorLevelableClasses(actorLike) {
+  const actor = resolveActorDocument(actorLike);
+  if (!actor) return [];
+
+  return actor.items
+    .filter((item) => item.type === "class")
+    .map((item) => {
+      const currentLevel = clampActorClassLevel(item.system?.levels ?? 1);
+      const sourceId = item.getFlag(MODULE_ID, "sourceId")
+        ?? buildClassSourceIdFromIdentifier(item.system?.identifier);
+      if (!sourceId || currentLevel >= 20) return null;
+
+      return {
+        item,
+        name: item.name ?? "Class",
+        sourceId,
+        currentLevel,
+        nextLevel: clampActorClassLevel(currentLevel + 1)
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildClassSourceIdFromIdentifier(identifier) {
+  const normalized = String(identifier ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized ? `class-${normalized}` : null;
+}
+
+function clampActorClassLevel(level) {
+  const numeric = Number(level ?? 1);
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.min(20, Math.max(1, Math.round(numeric)));
+}
+
+async function promptForLevelUpClass(classes) {
+  const optionsHtml = classes
+    .map((classMeta) => `
+      <option value="${foundry.utils.escapeHTML(classMeta.sourceId)}">
+        ${foundry.utils.escapeHTML(`${classMeta.name} (${classMeta.currentLevel} -> ${classMeta.nextLevel})`)}
+      </option>
+    `)
+    .join("");
+
+  try {
+    const selectedSourceId = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Dauligor Level Up" },
+      content: `
+        <div class="form-group">
+          <label>Select the class to level up</label>
+          <select name="sourceId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">This opens the Dauligor importer in actor mode and preselects the next level for the chosen class.</p>
+        </div>
+      `,
+      ok: {
+        label: "Continue",
+        callback: (_event, button) => button.form.elements.sourceId.value
+      },
+      rejectClose: false,
+      modal: true
+    });
+
+    return classes.find((classMeta) => classMeta.sourceId === selectedSourceId) ?? null;
+  } catch {
+    return null;
+  }
+}

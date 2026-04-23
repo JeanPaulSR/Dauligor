@@ -1,0 +1,43 @@
+{
+  "kind": "dauligor.source.v1",
+  "schemaVersion": 1,
+  "sourceId": "source-phb-2014",
+  "slug": "players-handbook",
+  "name": "Player's Handbook",
+  "shortName": "PHB",
+  "description": "The Players Handbook",
+  "coverImage": "",
+  "status": "ready",
+  "rules": "2014",
+  "tags": [
+    "core",
+    "official",
+    "2014"
+  ],
+  "dates": {
+    "addedAt": "2026-04-13T00:00:00.000Z",
+    "updatedAt": "2026-04-20T00:00:00.000Z"
+  },
+  "linkedContent": {
+    "classes": {
+      "count": 1,
+      "catalogUrl": "classes/catalog.json"
+    },
+    "spells": {
+      "count": 0,
+      "catalogUrl": null
+    },
+    "items": {
+      "count": 0,
+      "catalogUrl": null
+    },
+    "bestiary": {
+      "count": 0,
+      "catalogUrl": null
+    },
+    "journals": {
+      "count": 0,
+      "catalogUrl": null
+    }
+  }
+}
