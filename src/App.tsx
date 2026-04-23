@@ -95,23 +95,39 @@ export default function App() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             const email = firebaseUser.email || '';
-            const isInternalAdmin = email === 'admin@archive.internal' || email === 'gm@archive.internal';
+            const internalUsername = email.endsWith('@archive.internal') ? email.split('@')[0] : null;
+            const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
             const isOwnerEmail = email === 'luapnaej101@gmail.com';
             const shouldBeAdmin = isInternalAdmin || isOwnerEmail;
             
-            if (shouldBeAdmin && (data.role !== 'admin' || (isInternalAdmin && data.username !== email.split('@')[0]))) {
+            // Critical check: Only update if the role is actually different to prevent infinite write loops
+            if (shouldBeAdmin && data.role !== 'admin') {
               const updatedProfile = { 
                 ...data, 
                 role: 'admin',
                 // Force correct username for internal admin accounts
-                username: isInternalAdmin ? email.split('@')[0] : data.username 
+                username: isInternalAdmin ? (internalUsername || data.username) : data.username 
               };
-              await setDoc(docRef, updatedProfile);
-              setUserProfile(updatedProfile);
+              try {
+                await setDoc(docRef, updatedProfile);
+              } catch (err) {
+                console.error("Failed to auto-promote admin:", err);
+              }
+              // The next snapshot will trigger setUserProfile
+            } else if (isInternalAdmin && data.username !== internalUsername) {
+              try {
+                await updateDoc(docRef, { username: internalUsername });
+              } catch (err) {
+                console.error("Failed to fix internal username:", err);
+              }
             } else {
               // Set default activeCampaignId if missing
               if (data.campaignIds?.length > 0 && !data.activeCampaignId) {
-                await updateDoc(docRef, { activeCampaignId: data.campaignIds[0] });
+                try {
+                  await updateDoc(docRef, { activeCampaignId: data.campaignIds[0] });
+                } catch (err) {
+                  console.error("Failed to set default campaign:", err);
+                }
               }
               setUserProfile(data);
             }
@@ -119,12 +135,14 @@ export default function App() {
             const email = firebaseUser.email || '';
             const isInternal = email.endsWith('@archive.internal');
             const internalUsername = isInternal ? email.split('@')[0] : null;
+            const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
+            const isOwnerEmail = email === 'luapnaej101@gmail.com';
             
             const newProfile = {
               uid: firebaseUser.uid,
               displayName: firebaseUser.displayName || (internalUsername ? internalUsername.charAt(0).toUpperCase() + internalUsername.slice(1) : 'Adventurer'),
               username: internalUsername || firebaseUser.displayName?.toLowerCase().replace(/\s/g, '') || 'user',
-              role: (internalUsername === 'admin' || internalUsername === 'gm' || email === 'luapnaej101@gmail.com') ? 'admin' : 'user',
+              role: (isInternalAdmin || isOwnerEmail) ? 'admin' : 'user',
               createdAt: new Date().toISOString()
             };
             await setDoc(docRef, newProfile);

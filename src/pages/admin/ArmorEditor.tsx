@@ -24,23 +24,16 @@ import {
 import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
 
-const DEFAULT_CATEGORIES = [
-  "Light Armor",
-  "Medium Armor",
-  "Heavy Armor",
-  "Shields"
-];
-
 export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const [armorItems, setArmorItems] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [editingArmor, setEditingArmor] = useState<any>(null);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
-  const [category, setCategory] = useState("Light Armor");
+  const [category, setCategory] = useState("");
   const [description, setDescription] = useState('');
   const [foundryAlias, setFoundryAlias] = useState('');
   const [source, setSource] = useState('PHB');
@@ -56,6 +49,10 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
       (snapshot) => {
         setArmorItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
+      },
+      (err) => {
+        console.error("Error in Armor snapshot:", err);
+        setLoading(false);
       }
     );
 
@@ -69,7 +66,10 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
         const managed = snapshot.docs
           .map(doc => String(doc.data().name || '').trim())
           .filter(Boolean);
-        setCategories(Array.from(new Set([...DEFAULT_CATEGORIES, ...managed])));
+        setCategories(managed);
+      },
+      (err) => {
+        console.error("Error in Armor Categories snapshot:", err);
       }
     );
 
@@ -112,7 +112,7 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
     setEditingArmor(null);
     setName('');
     setIdentifier('');
-    setCategory("Light Armor");
+    setCategory("");
     setDescription('');
     setFoundryAlias('');
     setSource('PHB');
@@ -191,19 +191,18 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Category</label>
-                      <Input
-                        list="armor-category-options"
+                      <select 
                         value={category}
                         onChange={e => setCategory(e.target.value)}
-                        placeholder="e.g. Light Armor or Exotic Armor"
-                        className="bg-background/50 border-gold/10 focus:border-gold"
-                      />
-                      <datalist id="armor-category-options">
+                        className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                        required
+                      >
+                        <option value="" disabled>Select Category</option>
                         {categories.map(c => (
-                          <option key={c} value={c} />
+                          <option key={c} value={c}>{c}</option>
                         ))}
-                      </datalist>
-                      <p className="text-[9px] text-ink/35 italic">Use the shared category list or type a new homebrew category.</p>
+                      </select>
+                      <p className="text-[9px] text-ink/35 italic">Define categories in the Category Manager tab.</p>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Ability Score</label>
@@ -294,7 +293,9 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                             {armor.identifier}
                           </span>
                         )}
-                        <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">{armor.category}</span>
+                        {armor.category && (
+                          <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">{armor.category}</span>
+                        )}
                         {armor.ability && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{armor.ability}</span>
                         )}
@@ -314,7 +315,7 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                         setName(armor.name);
                         setIdentifier(armor.identifier || '');
                         setFoundryAlias(armor.foundryAlias || '');
-                        setCategory(armor.category || "Light Armor");
+                        setCategory(armor.category || "");
                         setAbility(armor.ability || 'STR');
                         setDescription(armor.description || '');
                         setSource(armor.source || '');

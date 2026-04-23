@@ -53,6 +53,10 @@ export default function SkillsEditor({ userProfile, hideHeader }: { userProfile:
       (snapshot) => {
         setSkills(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
+      },
+      (err) => {
+        console.error("Error in Skills snapshot:", err);
+        setLoading(false);
       }
     );
 

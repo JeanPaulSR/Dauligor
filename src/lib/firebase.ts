@@ -10,26 +10,48 @@ import {
   updatePassword,
   updateEmail
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, getDocFromServer } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  getDocFromServer,
+  memoryLocalCache,
+  memoryLruGarbageCollector,
+  CACHE_SIZE_UNLIMITED
+} from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Switching to memory cache to resolve persistence-related "Unexpected state" errors 
+// which occur during rapid tab switching in the admin panel. 
+// Memory cache is safer and avoids corrupted IndexedDB states in preview environments.
+export const db = initializeFirestore(app, {
+  localCache: memoryLocalCache({
+    // Using a large memory cache but with LRU cleanup to keep state clean
+    garbageCollector: memoryLruGarbageCollector({
+      cacheSizeBytes: CACHE_SIZE_UNLIMITED
+    })
+  }),
+  // Force long polling to avoid gRPC stream issues in the preview environment
+  experimentalForceLongPolling: true
+}, firebaseConfig.firestoreDatabaseId);
+
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Helper to reset Firestore persistence if corrupted
+// Helper to reset Firestore state (reloads the page to clear memory cache)
 export const resetFirestore = async () => {
-  try {
-    const { terminate, clearIndexedDbPersistence } = await import('firebase/firestore');
-    await terminate(db);
-    await clearIndexedDbPersistence(db);
-    window.location.reload();
-  } catch (err) {
-    console.error("Failed to reset Firestore:", err);
-    window.location.reload();
-  }
+  window.location.reload();
 };
 
 // Helper to convert a username to a Firebase-compatible email
@@ -100,14 +122,3 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
-
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. ");
-    }
-  }
-}
-testConnection();

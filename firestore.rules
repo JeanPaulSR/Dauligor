@@ -57,36 +57,41 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
+    // Identifies if the user is a known project owner or automated staff account
+    function isHardcodedStaff() {
       return isAuthenticated() && (
         request.auth.token.email == "luapnaej101@gmail.com" ||
         request.auth.token.email == "admin@archive.internal" ||
-        request.auth.token.email == "gm@archive.internal" ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        request.auth.token.email == "gm@archive.internal"
+      );
+    }
+
+    function isAdmin() {
+      return isHardcodedStaff() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
       );
     }
 
     function isStaff() {
-      return isAuthenticated() && (
-        request.auth.token.email == "luapnaej101@gmail.com" ||
-        request.auth.token.email == "admin@archive.internal" ||
-        request.auth.token.email == "gm@archive.internal" ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'co-dm', 'lore-writer'])
+      return isHardcodedStaff() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'co-dm', 'lore-writer']
       );
     }
 
     function isCoDM() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'co-dm';
+      return isStaff() && (
+        request.auth.token.email == "gm@archive.internal" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'co-dm')
+      );
     }
 
     function isLoreWriter() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'lore-writer';
+      return isStaff() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'lore-writer';
     }
 
     function isValidUser(data) {
@@ -298,6 +303,8 @@ service cloud.firestore {
       return data.keys().hasAll(['name', 'category']) &&
              data.name is string && data.name.size() < 100 &&
              data.category is string &&
+             (!('weaponType' in data) || data.weaponType in ['Melee', 'Ranged']) &&
+             (!('propertyIds' in data) || data.propertyIds is list) &&
              (!('identifier' in data) || data.identifier is string) &&
              (!('foundryAlias' in data) || data.foundryAlias is string) &&
              (!('ability' in data) || data.ability in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) &&
@@ -318,6 +325,15 @@ service cloud.firestore {
              (!('source' in data) || data.source is string) &&
              (!('page' in data) || data.page is number || data.page == null) &&
              (!('basicRules' in data) || data.basicRules is bool) &&
+             (!('description' in data) || data.description is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    function isValidSimpleProperty(data) {
+      return data.keys().hasAll(['name', 'identifier']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.identifier is string && data.identifier.size() < 100 &&
+             (!('category' in data) || data.category is string) &&
              (!('description' in data) || data.description is string) &&
              (!('updatedAt' in data) || data.updatedAt is string);
     }
@@ -347,20 +363,22 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isAuthenticated();
       allow list: if isStaff();
+      // Allow creation for self or by admin
       allow create: if (isOwner(userId) && isValidUser(request.resource.data) && 
-                    (request.resource.data.role == 'user' || request.resource.data.username == 'admin')) || isAdmin();
+                    (request.resource.data.role == 'user' || request.resource.data.username == 'admin' || request.resource.data.username == 'gm' || request.auth.token.email == "luapnaej101@gmail.com")) || isAdmin();
+      // Allow update for self (keeping same role) or by admin
       allow update: if (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role)) && isValidUser(request.resource.data);
     }
 
     match /campaigns/{campaignId} {
       allow read: if true;
-      allow create, update: if (isAdmin() || isCoDM()) && isValidCampaign(request.resource.data);
+      allow create, update: if (isStaff()) && isValidCampaign(request.resource.data);
       allow delete: if isAdmin() || isCoDM();
     }
 
     match /eras/{eraId} {
       allow read: if true;
-      allow create, update: if (isAdmin() || isCoDM()) && isValidEra(request.resource.data);
+      allow create, update: if (isStaff()) && isValidEra(request.resource.data);
       allow delete: if isAdmin() || isCoDM();
     }
 
@@ -373,6 +391,7 @@ service cloud.firestore {
         allow read: if isStaff() || (
           isAuthenticated() && 
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          ('revealedCampaignIds' in resource.data) &&
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.activeCampaignId in resource.data.revealedCampaignIds
         );
         allow create, update: if isStaff() && isValidSecret(request.resource.data);
@@ -494,8 +513,58 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /weaponCategories/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /weaponProperties/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /armorCategories/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /languages/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /languageCategories/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /damageTypes/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /conditions/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /attributes/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
     match /characters/{characterId} {
-      allow read: if isStaff() || isOwner(resource.data.userId);
+      // Use explicit list rule to prevent scraping and ensure query filtering works
+      allow get: if isStaff() || isOwner(resource.data.userId);
+      allow list: if isStaff() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated() && isOwner(request.resource.data.userId) && isValidCharacter(request.resource.data);
       allow update: if (isStaff() || isOwner(resource.data.userId)) && isValidCharacter(request.resource.data) && (request.resource.data.userId == resource.data.userId);
       allow delete: if isStaff() || isOwner(resource.data.userId);

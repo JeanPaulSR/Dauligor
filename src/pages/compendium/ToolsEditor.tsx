@@ -61,6 +61,10 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
       (snapshot) => {
         setTools(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
+      },
+      (err) => {
+        console.error("Error in Tools snapshot:", err);
+        setLoading(false);
       }
     );
 

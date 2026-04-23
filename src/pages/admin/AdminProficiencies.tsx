@@ -8,7 +8,7 @@ import SimplePropertyEditor from './SimplePropertyEditor';
 
 export default function AdminProficiencies({ userProfile }: { userProfile: any }) {
   const [activeTab, setActiveTab] = useState<
-    'skills' | 'tools' | 'weapons' | 'armor' | 'weaponCategories' | 'armorCategories' | 'languages' | 'languageCategories' | 'damageTypes' | 'conditions' | 'attributes'
+    'skills' | 'tools' | 'weapons' | 'weaponCategories' | 'weaponProperties' | 'armor' | 'armorCategories' | 'languages' | 'languageCategories' | 'damageTypes' | 'conditions' | 'attributes'
   >('skills');
 
   if (userProfile?.role !== 'admin') {
@@ -35,6 +35,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
           { id: 'tools', label: 'Tools', icon: Hammer },
           { id: 'weapons', label: 'Weapons', icon: Crosshair },
           { id: 'weaponCategories', label: 'Weapon Categories', icon: Crosshair },
+          { id: 'weaponProperties', label: 'Weapon Properties', icon: Hammer },
           { id: 'armor', label: 'Armor', icon: ShieldCheck },
           { id: 'armorCategories', label: 'Armor Categories', icon: ShieldCheck },
           { id: 'languages', label: 'Languages', icon: MessageCircle },
@@ -63,6 +64,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
         {activeTab === 'tools' && <ToolsEditor userProfile={userProfile} hideHeader />}
         {activeTab === 'weapons' && <WeaponsEditor userProfile={userProfile} hideHeader />}
         {activeTab === 'weaponCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="weaponCategories" title="Weapon Category" descriptionText="Define broad weapon proficiency groups such as Simple, Martial, Firearms, Exotic, or other homebrew categories." icon={Crosshair} />}
+        {activeTab === 'weaponProperties' && <SimplePropertyEditor userProfile={userProfile} collectionName="weaponProperties" title="Weapon Property" descriptionText="Define properties that can be applied to weapons, such as Finesse, Heavy, Reach, Versatile, or homebrew properties." icon={Hammer} />}
         {activeTab === 'armor' && <ArmorEditor userProfile={userProfile} hideHeader />}
         {activeTab === 'armorCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="armorCategories" title="Armor Category" descriptionText="Define broad armor proficiency groups such as Light, Medium, Heavy, Shields, or homebrew categories." icon={ShieldCheck} />}
         {activeTab === 'languages' && <SimplePropertyEditor userProfile={userProfile} collectionName="languages" title="Language" descriptionText="Define the languages available to be selected in race, class, and background proficiencies." icon={MessageCircle} categoryCollectionName="languageCategories" categoryLabel="Language Category" />}

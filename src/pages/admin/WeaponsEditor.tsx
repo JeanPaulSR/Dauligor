@@ -24,24 +24,19 @@ import {
 import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
 
-const DEFAULT_CATEGORIES = [
-  "Simple Melee Weapons",
-  "Simple Ranged Weapons",
-  "Martial Melee Weapons",
-  "Martial Ranged Weapons",
-  "Firearms"
-];
-
 export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const [weapons, setWeapons] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [allProperties, setAllProperties] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [editingWeapon, setEditingWeapon] = useState<any>(null);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
-  const [category, setCategory] = useState("Simple Melee Weapons");
+  const [category, setCategory] = useState('');
+  const [weaponType, setWeaponType] = useState<'Melee' | 'Ranged'>('Melee');
+  const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [foundryAlias, setFoundryAlias] = useState('');
   const [source, setSource] = useState('PHB');
@@ -57,6 +52,10 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
       (snapshot) => {
         setWeapons(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
+      },
+      (err) => {
+        console.error("Error in Weapons snapshot:", err);
+        setLoading(false);
       }
     );
 
@@ -70,7 +69,24 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
         const managed = snapshot.docs
           .map(doc => String(doc.data().name || '').trim())
           .filter(Boolean);
-        setCategories(Array.from(new Set([...DEFAULT_CATEGORIES, ...managed])));
+        setCategories(managed);
+      },
+      (err) => {
+        console.error("Error in Weapon Categories snapshot:", err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'weaponProperties'), orderBy('name', 'asc')),
+      (snapshot) => {
+        setAllProperties(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      },
+      (err) => {
+        console.error("Error in Weapon Properties snapshot:", err);
       }
     );
 
@@ -86,6 +102,8 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
         name,
         identifier: identifier.trim() || slugify(name),
         category,
+        weaponType,
+        propertyIds,
         foundryAlias: foundryAlias.trim(),
         source,
         ability,
@@ -113,7 +131,9 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
     setEditingWeapon(null);
     setName('');
     setIdentifier('');
-    setCategory("Simple Melee Weapons");
+    setCategory('');
+    setWeaponType('Melee');
+    setPropertyIds([]);
     setDescription('');
     setFoundryAlias('');
     setSource('PHB');
@@ -192,20 +212,31 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Category</label>
-                      <Input
-                        list="weapon-category-options"
+                      <select 
                         value={category}
                         onChange={e => setCategory(e.target.value)}
-                        placeholder="e.g. Martial Melee Weapons or Exotic Weapons"
-                        className="bg-background/50 border-gold/10 focus:border-gold"
-                      />
-                      <datalist id="weapon-category-options">
+                        className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                        required
+                      >
+                        <option value="" disabled>Select Category</option>
                         {categories.map(c => (
-                          <option key={c} value={c} />
+                          <option key={c} value={c}>{c}</option>
                         ))}
-                      </datalist>
-                      <p className="text-[9px] text-ink/35 italic">Use the shared category list or type a new homebrew category.</p>
+                      </select>
                     </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Weapon Type</label>
+                      <select 
+                        value={weaponType}
+                        onChange={e => setWeaponType(e.target.value as any)}
+                        className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      >
+                        <option value="Melee">Melee</option>
+                        <option value="Ranged">Ranged</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Ability Score</label>
                       <select 
@@ -217,6 +248,33 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                           <option key={a} value={a}>{a}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+                  <div className="space-y-2 border-t border-gold/10 pt-4 mt-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40 block">Weapon Properties</label>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 max-h-[150px] overflow-y-auto p-2 border border-gold/5 bg-background/30 rounded-md custom-scrollbar">
+                      {allProperties.map(prop => (
+                        <label key={prop.id} className="flex items-center gap-2 cursor-pointer group">
+                          <input 
+                            type="checkbox"
+                            checked={propertyIds.includes(prop.id)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setPropertyIds([...propertyIds, prop.id]);
+                              } else {
+                                setPropertyIds(propertyIds.filter(id => id !== prop.id));
+                              }
+                            }}
+                            className="rounded border-gold/20 text-gold focus:ring-gold"
+                          />
+                          <span className="text-[11px] font-medium text-ink/60 group-hover:text-ink transition-colors truncate">
+                            {prop.name}
+                          </span>
+                        </label>
+                      ))}
+                      {allProperties.length === 0 && (
+                        <p className="col-span-2 text-[10px] text-ink/40 italic py-2">No properties defined. Create them in the Properties tab.</p>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -295,13 +353,29 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                             {weapon.identifier}
                           </span>
                         )}
-                        <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">{weapon.category}</span>
+                        {weapon.category && (
+                          <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">{weapon.category}</span>
+                        )}
+                        {weapon.weaponType && (
+                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.weaponType}</span>
+                        )}
                         {weapon.ability && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.ability}</span>
                         )}
                         {weapon.source && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/40 text-background rounded-full font-medium shadow-sm">{weapon.source}{weapon.page ? ` p.${weapon.page}` : ''}</span>
                         )}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {weapon.propertyIds?.map((pid: string) => {
+                          const prop = allProperties.find(p => p.id === pid);
+                          if (!prop) return null;
+                          return (
+                            <span key={pid} title={prop.description} className="text-[9px] px-1.5 py-0.5 bg-ink/5 border border-ink/10 text-ink/60 rounded uppercase tracking-tighter cursor-help">
+                              {prop.name}
+                            </span>
+                          );
+                        })}
                       </div>
                       {weapon.description && (
                         <div className="text-sm text-ink/60 line-clamp-2 italic font-serif">
@@ -315,7 +389,9 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                         setName(weapon.name);
                         setIdentifier(weapon.identifier || '');
                         setFoundryAlias(weapon.foundryAlias || '');
-                        setCategory(weapon.category || "Simple Melee Weapons");
+                        setCategory(weapon.category || "");
+                        setWeaponType(weapon.weaponType || 'Melee');
+                        setPropertyIds(weapon.propertyIds || []);
                         setAbility(weapon.ability || 'STR');
                         setDescription(weapon.description || '');
                         setSource(weapon.source || '');

@@ -363,6 +363,8 @@
         "identifier": { "type": "string" },
         "foundryAlias": { "type": "string" },
         "category": { "type": "string" },
+        "weaponType": { "type": "string", "enum": ["Melee", "Ranged"] },
+        "propertyIds": { "type": "array", "items": { "type": "string" } },
         "ability": { "type": "string", "enum": ["STR", "DEX", "CON", "INT", "WIS", "CHA"] },
         "source": { "type": "string" },
         "page": { "type": "number" },
@@ -484,6 +486,19 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "name"]
+    },
+    "SimpleProperty": {
+      "title": "Simple Property",
+      "description": "A generic game property with name and description.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "identifier": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "identifier"]
     }
   },
   "firestore": {
@@ -562,6 +577,38 @@
     "/armor/{armorId}": {
       "schema": "Armor",
       "description": "Standardized armor."
+    },
+    "/weaponCategories/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Weapon categories."
+    },
+    "/weaponProperties/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Individual weapon properties (Finesse, Heavy, etc)."
+    },
+    "/armorCategories/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Armor categories."
+    },
+    "/languages/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Languages."
+    },
+    "/languageCategories/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Language categories."
+    },
+    "/damageTypes/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Damage types."
+    },
+    "/conditions/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Conditions."
+    },
+    "/attributes/{id}": {
+      "schema": "SimpleProperty",
+      "description": "Game attributes."
     },
     "/characters/{characterId}": {
       "schema": "Character",

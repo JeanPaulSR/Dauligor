@@ -57,6 +57,10 @@ export default function SimpleProficiencyEditor({
             .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')))
         );
         setLoading(false);
+      },
+      (err) => {
+        console.error(`Error in ${collectionName} snapshot:`, err);
+        setLoading(false);
       }
     );
 
@@ -75,6 +79,9 @@ export default function SimpleProficiencyEditor({
             .filter(Boolean)
             .sort((a, b) => a.localeCompare(b))
         );
+      },
+      (err) => {
+        console.error(`Error in ${categoryCollectionName} snapshot:`, err);
       }
     );
 
