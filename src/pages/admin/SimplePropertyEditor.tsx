@@ -42,6 +42,7 @@ export default function SimpleProficiencyEditor({
   const [editingItem, setEditingItem] = useState<any>(null);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
+  const [order, setOrder] = useState<number | ''>('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
 
@@ -54,7 +55,12 @@ export default function SimpleProficiencyEditor({
         setItems(
           snapshot.docs
             .map(doc => ({ id: doc.id, ...doc.data() }))
-            .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')))
+            .sort((a: any, b: any) => {
+              const orderA = typeof a.order === 'number' ? a.order : 999;
+              const orderB = typeof b.order === 'number' ? b.order : 999;
+              if (orderA !== orderB) return orderA - orderB;
+              return String(a.name || '').localeCompare(String(b.name || ''));
+            })
         );
         setLoading(false);
       },
@@ -95,7 +101,8 @@ export default function SimpleProficiencyEditor({
     try {
       const itemData = {
         name,
-        identifier: identifier.trim() || slugify(name),
+        identifier: identifier.trim() ? (categoryCollectionName === 'attributes' ? identifier.trim().toUpperCase() : identifier.trim()) : slugify(name).toUpperCase(),
+        order: order === '' ? null : Number(order),
         ...(categoryCollectionName ? { category: category.trim() } : {}),
         description,
         updatedAt: new Date().toISOString()
@@ -119,6 +126,7 @@ export default function SimpleProficiencyEditor({
     setEditingItem(null);
     setName('');
     setIdentifier('');
+    setOrder('');
     setCategory('');
     setDescription('');
   };
@@ -127,6 +135,7 @@ export default function SimpleProficiencyEditor({
     setEditingItem(item);
     setName(item.name);
     setIdentifier(item.identifier || '');
+    setOrder(item.order ?? '');
     setCategory(item.category || '');
     setDescription(item.description || '');
   };
@@ -173,6 +182,17 @@ export default function SimpleProficiencyEditor({
               className="h-9 bg-background/50 border-gold/10 placeholder:text-ink/20 font-mono"
             />
             <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">Fallback machine-readability alias</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase font-black text-ink/60">Order</label>
+            <Input 
+              type="number"
+              value={order}
+              onChange={e => setOrder(e.target.value === '' ? '' : Number(e.target.value))}
+              className="h-9 bg-background/50 border-gold/10 font-mono"
+            />
+            <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">Display Priority (Lower values appear first)</p>
           </div>
 
           {categoryCollectionName && (
@@ -225,8 +245,13 @@ export default function SimpleProficiencyEditor({
               onClick={() => startEdit(item)}
             >
               <CardContent className="p-4 flex items-start gap-4">
-                <div className="w-10 h-10 rounded border border-gold/10 bg-background flex flex-col items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded border border-gold/10 bg-background flex flex-col items-center justify-center shrink-0 relative overflow-hidden">
                   <Icon className="w-4 h-4 text-gold/60" />
+                  {typeof item.order === 'number' && (
+                    <div className="absolute top-0 right-0 bg-gold/10 px-1 border-bl border-gold/10">
+                      <span className="text-[8px] font-mono font-bold text-gold/60">{item.order}</span>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="flex-1 min-w-0">

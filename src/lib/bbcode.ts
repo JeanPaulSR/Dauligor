@@ -56,10 +56,10 @@ export function bbcodeToHtml(text: string): string {
   html = html.replace(/\[url\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
   
   // Tables
-  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, '<div class="overflow-x-auto"><table class="w-full border-collapse border border-gold/20 my-4">$1</table></div>');
+  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, '<div class="overflow-x-auto"><table class="w-full border-collapse border border-gold/20 my-4 table-auto">$1</table></div>');
   html = html.replace(/\[tr\]([\s\S]*?)\[\/tr\]/gi, '<tr class="border-b border-gold/10 hover:bg-gold/5">$1</tr>');
-  html = html.replace(/\[th\]([\s\S]*?)\[\/th\]/gi, '<th class="p-2 text-left font-bold text-gold">$1</th>');
-  html = html.replace(/\[td\]([\s\S]*?)\[\/td\]/gi, '<td class="p-2">$1</td>');
+  html = html.replace(/\[th\]([\s\S]*?)\[\/th\]/gi, '<th class="p-2 text-left font-bold text-gold border border-gold/20 bg-gold/5">$1</th>');
+  html = html.replace(/\[td\]([\s\S]*?)\[\/td\]/gi, '<td class="p-2 border border-gold/10">$1</td>');
 
   // Custom World Anvil-like tags
   html = html.replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="spoiler" title="Click to reveal">$1</span>');
@@ -150,6 +150,7 @@ export function htmlToBbcode(html: string): string {
   // Tables
   bbcode = bbcode.replace(/<div class="overflow-x-auto">\s*<table[^>]*>([\s\S]*?)<\/table>\s*<\/div>/gi, '[table]$1[/table]');
   bbcode = bbcode.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, '[table]$1[/table]');
+  bbcode = bbcode.replace(/<\/?tbody[^>]*>/gi, '');
   bbcode = bbcode.replace(/<tr[^>]*>([\s\S]*?)<\/tr>/gi, '[tr]$1[/tr]');
   bbcode = bbcode.replace(/<th[^>]*>([\s\S]*?)<\/th>/gi, '[th]$1[/th]');
   bbcode = bbcode.replace(/<td[^>]*>([\s\S]*?)<\/td>/gi, '[td]$1[/td]');

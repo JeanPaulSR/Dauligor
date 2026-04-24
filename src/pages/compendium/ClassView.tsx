@@ -60,6 +60,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [allArmorCategories, setAllArmorCategories] = useState<any[]>([]);
   const [allWeapons, setAllWeapons] = useState<any[]>([]);
   const [allArmor, setAllArmor] = useState<any[]>([]);
+  const [allAttributes, setAllAttributes] = useState<any[]>([]);
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [selectedSubclassId, setSelectedSubclassId] = useState<string | null>(null);
   const [selectedSubclass, setSelectedSubclass] = useState<any>(null);
@@ -404,6 +405,24 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       setAllArmor(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
+    const unsubscribeAttributes = onSnapshot(query(collection(db, 'attributes')), (snapshot) => {
+      const attrs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const uniqueAttrsMap = new Map();
+      attrs.forEach((item: any) => {
+        const key = (item.identifier || item.id).toUpperCase();
+        if (!uniqueAttrsMap.has(key) || item.identifier) {
+          uniqueAttrsMap.set(key, item);
+        }
+      });
+      const uniqueAttrs = Array.from(uniqueAttrsMap.values());
+      setAllAttributes(uniqueAttrs.sort((a: any, b: any) => {
+        const orderA = typeof a.order === 'number' ? a.order : 999;
+        const orderB = typeof b.order === 'number' ? b.order : 999;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.name || '').localeCompare(b.name || '');
+      }));
+    });
+
     const unsubscribeTypes = onSnapshot(collection(db, 'spellcastingTypes'), (snap) => {
       setSpellcastingTypes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
@@ -422,6 +441,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       unsubscribeArmorCategories();
       unsubscribeWeapons();
       unsubscribeArmor();
+      unsubscribeAttributes();
       unsubscribeTypes();
       unsubscribeMaster();
     };
@@ -983,14 +1003,64 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               <div className="space-y-6">
                 <div className="space-y-1">
                   <p className="uppercase font-bold tracking-widest text-ink/40">Hit Points</p>
-                  <p className="text-ink/80"><strong>Hit Die:</strong> d{classData.hitDie || 8} per level</p>
-                  <p className="text-ink/80"><strong>HP at 1st Level:</strong> {classData.hitDie || 8} + Con modifier</p>
-                  <p className="text-ink/80"><strong>HP at Higher Levels:</strong> 1d{classData.hitDie || 8} (or {(classData.hitDie || 8) / 2 + 1}) + Con modifier</p>
+                  <p className="text-ink/80"><strong>Hit Die:</strong> D{classData.hitDie || 8} per level</p>
+                  <p className="text-ink/80"><strong>HP at 1st Level:</strong> {classData.hitDie || 8} + Con Modifier</p>
+                  <p className="text-ink/80"><strong>HP at Higher Levels:</strong> 1D{classData.hitDie || 8} (or {(classData.hitDie || 8) / 2 + 1}) + Con Modifier</p>
                 </div>
 
                 <div className="space-y-1">
                   <p className="uppercase font-bold tracking-widest text-ink/40">Proficiencies</p>
-                  <p className="text-ink/80"><strong>Saving Throws:</strong> {(classData.savingThrows || []).join(', ')}</p>
+                  <p className="text-ink/80"><strong>Saving Throws:</strong> {(() => {
+                    const st = classData.proficiencies?.savingThrows;
+                    
+                    let fixedIds = (st?.fixedIds || []);
+                    if (!Array.isArray(fixedIds)) fixedIds = [];
+                    // Fallback for legacy class structures
+                    if (fixedIds.length === 0 && Array.isArray(classData.savingThrows)) {
+                      fixedIds = classData.savingThrows.map((id: string) => id.toUpperCase());
+                    } else {
+                      fixedIds = fixedIds.map((id: string) => id.toUpperCase());
+                    }
+                    
+                    // Fixed attributes
+                    let fixedNames = allAttributes
+                      .filter(a => fixedIds.includes((a.identifier || a.id).toUpperCase()))
+                      .map(a => a.name);
+
+                    if (fixedNames.length < fixedIds.length) {
+                      fixedNames = fixedIds.map((id: string) => {
+                        const found = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                        return found ? found.name : id.charAt(0) + id.slice(1).toLowerCase();
+                      });
+                    }
+
+                    // Choice attribute
+                    let choiceStr = "";
+                    if (st?.choiceCount > 0 && st?.optionIds?.length > 0) {
+                      const options = st.optionIds.map((id: string) => {
+                        const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                        return attr ? attr.name : id;
+                      }).filter(Boolean);
+                      
+                      if (options.length > 0) {
+                        if (st.choiceCount === 1 && options.length === 2) {
+                          choiceStr = options.join(' or ');
+                        } else {
+                          const last = options.pop();
+                          choiceStr = `Choose ${st.choiceCount} from ${options.join(', ')}${options.length > 0 ? ', or ' : ''}${last}`;
+                        }
+                      }
+                    }
+
+                    const allParts = [...fixedNames];
+                    if (choiceStr) allParts.push(choiceStr);
+                    
+                    if (allParts.length > 1) {
+                      const last = allParts.pop();
+                      return allParts.join(', ') + ' and ' + last;
+                    }
+                    return allParts[0] || 'None';
+                  })()}</p>
                   <p className="text-ink/80">
                     <strong>Armor:</strong> {(() => {
                       const prof = classData.proficiencies?.armor;
@@ -1091,10 +1161,47 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </div>
                 </div>
 
-                {classData.multiclassing && (
+                {((classData.primaryAbility?.length || 0) > 0 || (classData.primaryAbilityChoice?.length || 0) > 0 || classData.multiclassing) && (
                   <div className="space-y-1">
                     <p className="uppercase font-bold tracking-widest text-ink/40">Multiclassing Requirements</p>
-                    <BBCodeRenderer content={classData.multiclassing} className="prose-sm italic text-xs" />
+                    <div className="prose-sm italic text-xs text-ink/80">
+                      {(() => {
+                        const fixedNames = (classData.primaryAbility || []).map((id: string) => {
+                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return attr ? attr.name : id.toUpperCase();
+                        });
+                        const choiceNames = (classData.primaryAbilityChoice || []).map((id: string) => {
+                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return attr ? attr.name : id.toUpperCase();
+                        });
+
+                        if (fixedNames.length === 0 && choiceNames.length === 0) {
+                          return classData.multiclassing ? <BBCodeRenderer content={classData.multiclassing} /> : null;
+                        }
+
+                        let requirementPart = "";
+                        if (fixedNames.length > 0) {
+                          requirementPart = fixedNames.join(" and ");
+                        }
+                        
+                        if (choiceNames.length > 0) {
+                          if (requirementPart) requirementPart += " and ";
+                          requirementPart += choiceNames.join(" or ");
+                        }
+
+                        if (classData.multiclassing && classData.multiclassing.trim() !== '') {
+                          return <BBCodeRenderer content={classData.multiclassing} />;
+                        }
+
+                        if (!requirementPart) return null;
+
+                        return (
+                          <div className="text-sm">
+                            You must have a {requirementPart} score of 13 or higher in order to multiclass in or out of this class.
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 )}
 
@@ -1120,8 +1227,12 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                 {classData.spellcasting?.hasSpellcasting && (
                   <div className="space-y-1">
                     <p className="uppercase font-bold tracking-widest text-ink/40">Spellcasting</p>
-                    <p className="text-ink/80"><strong>Ability:</strong> {classData.spellcasting.ability}</p>
-                    <p className="text-ink/80"><strong>Type:</strong> {classData.spellcasting.type}</p>
+                    <p className="text-ink/80"><strong>Ability:</strong> {(() => {
+                      const id = (classData.spellcasting.ability || '').toUpperCase();
+                      const attr = allAttributes.find(a => ((a.identifier || a.id).toUpperCase() === id));
+                      return attr ? attr.name : id;
+                    })()}</p>
+                    <p className="text-ink/80"><strong>Type:</strong> {classData.spellcasting.type ? classData.spellcasting.type.charAt(0).toUpperCase() + classData.spellcasting.type.slice(1) : ''}</p>
                     <p className="text-ink/80"><strong>Level Gained:</strong> {classData.spellcasting.level}</p>
                     {classData.spellcasting.spellsKnownFormula && (
                       <p className="text-ink/80"><strong>Spells Known:</strong> {classData.spellcasting.spellsKnownFormula}</p>

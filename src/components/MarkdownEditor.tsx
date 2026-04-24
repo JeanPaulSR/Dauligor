@@ -7,6 +7,10 @@ import TextAlign from '@tiptap/extension-text-align';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import Placeholder from '@tiptap/extension-placeholder';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
 import { Node, mergeAttributes } from '@tiptap/core';
 
 const IndentExtension = Node.create({
@@ -132,6 +136,27 @@ export default function MarkdownEditor({
       IndentExtension,
       Subscript,
       Superscript,
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'w-full border-collapse border border-gold/20 my-4 table-auto',
+        },
+      }),
+      TableRow.configure({
+        HTMLAttributes: {
+          class: 'border-b border-gold/10 hover:bg-gold/5',
+        },
+      }),
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'p-2 text-left font-bold text-gold border border-gold/20 bg-gold/5',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'p-2 border border-gold/10',
+        },
+      }),
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),

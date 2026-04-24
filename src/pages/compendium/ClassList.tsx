@@ -68,6 +68,7 @@ export function ClassList({
   const [allArmorCategories, setAllArmorCategories] = useState<any[]>([]);
   const [allArmor, setAllArmor] = useState<any[]>([]);
   const [allWeapons, setAllWeapons] = useState<any[]>([]);
+  const [allAttributes, setAllAttributes] = useState<any[]>([]);
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
   const [loadingStates, setLoadingStates] = useState({
@@ -173,6 +174,19 @@ export function ClassList({
       setAllWeapons(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
+    const unsubscribeAttributes = onSnapshot(collection(db, 'attributes'), (snap) => {
+      const attrs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const uniqueAttrsMap = new Map();
+      attrs.forEach((item: any) => {
+        const key = (item.identifier || item.id).toUpperCase();
+        if (!uniqueAttrsMap.has(key) || item.identifier) {
+          uniqueAttrsMap.set(key, item);
+        }
+      });
+      const uniqueAttrs = Array.from(uniqueAttrsMap.values());
+      setAllAttributes(uniqueAttrs);
+    });
+
     const unsubscribeTypes = onSnapshot(collection(db, 'spellcastingTypes'), (snap) => {
       setSpellcastingTypes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
@@ -192,6 +206,7 @@ export function ClassList({
       unsubscribeArmorCategories();
       unsubscribeArmor();
       unsubscribeWeapons();
+      unsubscribeAttributes();
       unsubscribeTypes();
       unsubscribeMaster();
     };
@@ -1008,18 +1023,97 @@ export function ClassList({
                         </div>
                         <div>
                           <span className="block text-[10px] uppercase font-bold text-ink/40 mb-1">Saving Throws</span>
-                          <div className="flex flex-wrap gap-1">
-                            {selectedClass.savingThrows?.map((st: string) => (
-                              <Badge key={st} variant="outline" className="text-[10px] px-1 py-0 h-4 border-gold/20 text-ink/60">{st}</Badge>
-                            )) || <span className="text-xs text-ink/80">None</span>}
-                          </div>
+                          <span className="text-xs text-ink/80">
+                            {(() => {
+                              const st = selectedClass.proficiencies?.savingThrows;
+                              let fixedIds = (st?.fixedIds || []);
+                              if (!Array.isArray(fixedIds)) fixedIds = [];
+                              // Fallback for legacy class structures
+                              if (fixedIds.length === 0 && Array.isArray(selectedClass.savingThrows)) {
+                                fixedIds = selectedClass.savingThrows.map((id: string) => id.toUpperCase());
+                              } else {
+                                fixedIds = fixedIds.map((id: string) => id.toUpperCase());
+                              }
+                              
+                              let fixedNames = allAttributes
+                                .filter(a => fixedIds.includes((a.identifier || a.id).toUpperCase()))
+                                .map(a => a.name);
+                              
+                              if (fixedNames.length < fixedIds.length) {
+                                fixedNames = fixedIds.map((id: string) => {
+                                  const found = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                                  return found ? found.name : id.charAt(0) + id.slice(1).toLowerCase();
+                                });
+                              }
+
+                              let choiceStr = "";
+                             if (st?.choiceCount > 0 && st?.optionIds?.length > 0) {
+                               const options = st.optionIds.map((id: string) => {
+                                 const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                                 return attr ? attr.name : id;
+                               }).filter(Boolean);
+                               
+                               if (options.length > 0) {
+                                 if (st.choiceCount === 1 && options.length === 2) {
+                                   choiceStr = options.join(' or ');
+                                 } else {
+                                   const last = options.pop();
+                                   choiceStr = `Choose ${st.choiceCount} from ${options.join(', ')}${options.length > 0 ? ', or ' : ''}${last}`;
+                                 }
+                               }
+                             }
+                             const allParts = [...fixedNames];
+                             if (choiceStr) allParts.push(choiceStr);
+                             
+                             if (allParts.length > 1) {
+                               const last = allParts.pop();
+                               return allParts.join(', ') + ' and ' + last;
+                             }
+                             return allParts[0] || 'None';
+                            })()}
+                          </span>
                         </div>
                       </div>
                     </div>
                     {/* Multiclassing Requirements */} 
                     <div className="bg-background/50 border border-gold/10 rounded-md p-4 space-y-4">
                       <h4 className="label-text text-gold border-b border-gold/10 pb-1">Multiclassing Requirements</h4>
-                      <BBCodeRenderer content={selectedClass.multiclassing || 'None'} className="text-xs" />
+                      {(() => {
+                        const fixedNames = (selectedClass.primaryAbility || []).map((id: string) => {
+                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return attr ? attr.name : id.toUpperCase();
+                        });
+                        const choiceNames = (selectedClass.primaryAbilityChoice || []).map((id: string) => {
+                          const attr = allAttributes.find(a => (a.identifier || a.id).toUpperCase() === id.toUpperCase());
+                          return attr ? attr.name : id.toUpperCase();
+                        });
+
+                        if (fixedNames.length === 0 && choiceNames.length === 0) {
+                          return <BBCodeRenderer content={selectedClass.multiclassing || 'None'} className="text-xs" />;
+                        }
+
+                        let requirementPart = "";
+                        if (fixedNames.length > 0) {
+                          requirementPart = fixedNames.join(" and ");
+                        }
+                        
+                        if (choiceNames.length > 0) {
+                          if (requirementPart) requirementPart += " and ";
+                          requirementPart += choiceNames.join(" or ");
+                        }
+
+                        if (selectedClass.multiclassing && selectedClass.multiclassing.trim() !== '') {
+                          return <BBCodeRenderer content={selectedClass.multiclassing} />;
+                        }
+
+                        if (!requirementPart) return null;
+
+                        return (
+                          <div className="text-sm">
+                            You must have a {requirementPart} score of 13 or higher in order to multiclass in or out of this class.
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Tags */} 

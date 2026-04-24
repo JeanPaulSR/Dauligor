@@ -217,14 +217,25 @@ export default function CharacterBuilder({
         if (!pool || pool.length === 0) {
           pool = choice.configuration?.pool || [];
         }
+        const traitType = choice.configuration?.choices?.[0]?.type || choice.configuration?.type;
+
         if (pool.length > 0) {
           try {
             const skillsQuery = query(collection(db, "skills"), where(documentId(), "in", pool.slice(0, 30)));
             const toolsQuery = query(collection(db, "tools"), where(documentId(), "in", pool.slice(0, 30)));
-            const [skillsSnap, toolsSnap] = await Promise.all([getDocs(skillsQuery).catch(() => ({ docs: [] })), getDocs(toolsQuery).catch(() => ({ docs: [] }))]);
+            const attrsQuery = query(collection(db, "attributes"), where(documentId(), "in", pool.slice(0, 30)));
+            
+            const [skillsSnap, toolsSnap, attrsSnap] = await Promise.all([
+              getDocs(skillsQuery).catch(() => ({ docs: [] })),
+              getDocs(toolsQuery).catch(() => ({ docs: [] })),
+              getDocs(attrsQuery).catch(() => ({ docs: [] }))
+            ]);
+            
             const skills = skillsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
             const tools = toolsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-            const merged = [...skills, ...tools];
+            const attrs = attrsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            
+            const merged = [...skills, ...tools, ...attrs];
             setAvailableOptions(merged);
             setOptionsCache((prev) => {
               const nc = { ...prev };
@@ -550,6 +561,7 @@ export default function CharacterBuilder({
 
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [allSkills, setAllSkills] = useState<any[]>([]);
+  const [allAttributes, setAllAttributes] = useState<any[]>([]);
   const isStaff = ["admin", "co-dm"].includes(userProfile?.role);
   const isAdmin = userProfile?.role === "admin";
 
@@ -596,16 +608,17 @@ export default function CharacterBuilder({
     });
 
     const abilities: Record<string, any> = {};
-    ["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((a) => {
+    const attrIdentifiers = allAttributes.length > 0 
+      ? allAttributes.map(a => a.identifier || a.id)
+      : ["STR", "DEX", "CON", "INT", "WIS", "CHA"];
+
+    attrIdentifiers.forEach((a) => {
       const key = a.toLowerCase();
       const isProf = character.savingThrows?.includes(a);
       const isHalf = character.halfProficientSavingThrows?.includes(a);
 
       abilities[key] = {
-        value:
-          character.stats?.base?.[
-            a as "STR" | "DEX" | "CON" | "INT" | "WIS" | "CHA"
-          ] ?? 10,
+        value: character.stats?.base?.[a] ?? 10,
         proficient: isProf ? 1 : isHalf ? 0.5 : 0,
       };
     });
@@ -656,16 +669,29 @@ export default function CharacterBuilder({
                   let chosenSemantic = chosenRaw;
                   if (adv.type === "Trait") {
                     chosenSemantic = chosenRaw.map((id: string) => {
-                       const cached = optionsCache[id] || allSkills.find(s => s.id === id);
-                       if (cached) {
-                         if (cached.ability) { // Assuming skills have 'ability'
-                           const code = (skillMap as any)[id] || id.substring(0,3);
-                           return `skills:${code}`;
-                         } else {
-                           return `tools:${id.replace(/[^a-z0-9]/g, '').substring(0,3)}`; // Fallback for tools
-                         }
-                       }
-                       return id;
+                      const cached =
+                        optionsCache[id] ||
+                        allSkills.find((s) => s.id === id) ||
+                        allAttributes.find(
+                          (a) => a.id === id || a.identifier === id,
+                        );
+                      if (cached) {
+                        if (cached.ability) {
+                          // Assuming skills have 'ability'
+                          const code =
+                            (skillMap as any)[id] || id.substring(0, 3);
+                          return `skills:${code}`;
+                        } else if (
+                          cached.identifier &&
+                          cached.identifier.length === 3
+                        ) {
+                          // Attributes/Saves
+                          return `saves:${cached.identifier.toLowerCase()}`;
+                        } else {
+                          return `tools:${id.replace(/[^a-z0-9]/g, "").substring(0, 3)}`; // Fallback for tools
+                        }
+                      }
+                      return id;
                     });
                   }
                   res.value = {
@@ -841,6 +867,12 @@ export default function CharacterBuilder({
           const snap = await getDoc(docRef);
           if (snap.exists()) {
             const data = snap.data();
+            const normalizedBase: Record<string, number> = {};
+            const rawBase = data.stats?.base || { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 };
+            Object.entries(rawBase).forEach(([key, val]) => {
+              normalizedBase[key.toUpperCase()] = Number(val);
+            });
+
             setCharacter({
               id: snap.id,
               ...data,
@@ -851,8 +883,9 @@ export default function CharacterBuilder({
               initiative: data.initiative ?? 0,
               speed: data.speed ?? 30,
               proficiencyBonus: data.proficiencyBonus ?? 2,
-              savingThrows: data.savingThrows || [],
-              halfProficientSavingThrows: data.halfProficientSavingThrows || [],
+              savingThrows: (data.savingThrows || []).map((s: string) => s.toUpperCase()),
+              expertiseSavingThrows: (data.expertiseSavingThrows || []).map((s: string) => s.toUpperCase()),
+              halfProficientSavingThrows: (data.halfProficientSavingThrows || []).map((s: string) => s.toUpperCase()),
               proficientSkills: data.proficientSkills || [],
               expertiseSkills: data.expertiseSkills || [],
               halfProficientSkills: data.halfProficientSkills || [],
@@ -889,9 +922,9 @@ export default function CharacterBuilder({
                 flaws: "",
                 appearance: "",
               },
-              stats: data.stats || {
-                method: "point-buy",
-                base: { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 },
+              stats: {
+                ...(data.stats || { method: "point-buy" }),
+                base: normalizedBase,
               },
             });
           } else {
@@ -906,6 +939,24 @@ export default function CharacterBuilder({
 
         const skillsSnap = await getDocs(query(collection(db, "skills")));
         setAllSkills(skillsSnap.docs.map((s) => ({ id: s.id, ...s.data() })));
+
+        // Fetch Attributes
+        const attrSnap = await getDocs(query(collection(db, "attributes")));
+        const attrs = attrSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const uniqueAttrsMap = new Map();
+        attrs.forEach((item: any) => {
+          const key = (item.identifier || item.id).toUpperCase();
+          if (!uniqueAttrsMap.has(key) || item.identifier) {
+            uniqueAttrsMap.set(key, item);
+          }
+        });
+        const uniqueAttrs = Array.from(uniqueAttrsMap.values());
+        setAllAttributes(uniqueAttrs.sort((a: any, b: any) => {
+          const orderA = typeof a.order === 'number' ? a.order : 999;
+          const orderB = typeof b.order === 'number' ? b.order : 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.name || '').localeCompare(b.name || '');
+        }));
       } catch (err) {
         handleFirestoreError(err, OperationType.GET, "characters");
       } finally {
@@ -1208,7 +1259,20 @@ export default function CharacterBuilder({
 
               {/* ABILITY SCORES - TIGHTER GRID */}
               <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4 mb-10">
-                {["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((attr) => (
+                {allAttributes.map((attr) => {
+                  const iden = attr.identifier || attr.id;
+                  return (
+                    <StatBlock
+                      key={attr.id}
+                      label={attr.name}
+                      value={getSafeModifier(iden)}
+                      score={getSafeStat(iden)}
+                      onPlus={() => handleStatChange(iden, 1)}
+                      onMinus={() => handleStatChange(iden, -1)}
+                    />
+                  );
+                })}
+                {allAttributes.length === 0 && ["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((attr) => (
                   <StatBlock
                     key={attr}
                     label={attr}
@@ -1416,15 +1480,24 @@ export default function CharacterBuilder({
                     </h3>
                   </div>
                   <div className="grid grid-cols-1 xs:grid-cols-2 gap-x-6 sm:gap-x-12 gap-y-3 sm:gap-y-4">
-                    {["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((attr) => {
+                    {(allAttributes.length > 0 ? allAttributes : [
+                      { id: 'STR', identifier: 'STR', name: 'STR' },
+                      { id: 'DEX', identifier: 'DEX', name: 'DEX' },
+                      { id: 'CON', identifier: 'CON', name: 'CON' },
+                      { id: 'INT', identifier: 'INT', name: 'INT' },
+                      { id: 'WIS', identifier: 'WIS', name: 'WIS' },
+                      { id: 'CHA', identifier: 'CHA', name: 'CHA' }
+                    ]).map((attrObj) => {
+                      const attrIden = attrObj.identifier || attrObj.id;
+                      const attrName = attrObj.name;
                       const isProficient =
-                        character.savingThrows?.includes(attr);
+                        character.savingThrows?.includes(attrIden);
                       const isExpert =
-                        character.expertiseSavingThrows?.includes(attr); // Added tracking for expert/half if needed
+                        character.expertiseSavingThrows?.includes(attrIden); 
                       const isHalf =
-                        character.halfProficientSavingThrows?.includes(attr);
+                        character.halfProficientSavingThrows?.includes(attrIden);
 
-                      const baseMod = parseInt(getModifier(getSafeStat(attr)));
+                      const baseMod = parseInt(getModifier(getSafeStat(attrIden)));
                       const bonus = character.proficiencyBonus || 2;
                       let profBonus = 0;
                       if (isExpert) profBonus = bonus * 2;
@@ -1435,7 +1508,7 @@ export default function CharacterBuilder({
 
                       return (
                         <div
-                          key={attr}
+                          key={attrObj.id}
                           className="flex items-center justify-between group/row cursor-pointer py-1"
                           onClick={() => {
                             let newProf = [...(character.savingThrows || [])];
@@ -1447,17 +1520,17 @@ export default function CharacterBuilder({
                             ];
                             if (isHalf)
                               newHalf = newHalf.filter(
-                                (s: string) => s !== attr,
+                                (s: string) => s !== attrIden,
                               );
                             else if (isExpert) {
-                              newExp = newExp.filter((s: string) => s !== attr);
-                              newHalf.push(attr);
+                              newExp = newExp.filter((s: string) => s !== attrIden);
+                              newHalf.push(attrIden);
                             } else if (isProficient) {
                               newProf = newProf.filter(
-                                (s: string) => s !== attr,
+                                (s: string) => s !== attrIden,
                               );
-                              newExp.push(attr);
-                            } else newProf.push(attr);
+                              newExp.push(attrIden);
+                            } else newProf.push(attrIden);
                             setCharacter({
                               ...character,
                               savingThrows: newProf,
@@ -1476,17 +1549,17 @@ export default function CharacterBuilder({
                             ];
                             if (isHalf) {
                               newHalf = newHalf.filter(
-                                (s: string) => s !== attr,
+                                (s: string) => s !== attrIden,
                               );
-                              newExp.push(attr);
+                              newExp.push(attrIden);
                             } else if (isExpert) {
-                              newExp = newExp.filter((s: string) => s !== attr);
-                              newProf.push(attr);
+                              newExp = newExp.filter((s: string) => s !== attrIden);
+                              newProf.push(attrIden);
                             } else if (isProficient)
                               newProf = newProf.filter(
-                                (s: string) => s !== attr,
+                                (s: string) => s !== attrIden,
                               );
-                            else newHalf.push(attr);
+                            else newHalf.push(attrIden);
                             setCharacter({
                               ...character,
                               savingThrows: newProf,
@@ -1517,7 +1590,7 @@ export default function CharacterBuilder({
                             <span
                               className={`text-xl font-black tracking-tight transition-colors ${isProficient || isExpert || isHalf ? "text-ink" : "text-ink/40"}`}
                             >
-                              {attr}
+                              {attrName}
                             </span>
                           </div>
                           <span className="text-xl font-black text-ink">
@@ -2187,24 +2260,42 @@ export default function CharacterBuilder({
 
                                   if (
                                     adv.type === "ItemChoice" ||
-                                    (adv.type === "Trait" && resolvedCount > 0)
+                                    (adv.type === "Trait" && (resolvedCount > 0 || (adv.configuration?.choices?.length || 0) > 0))
                                   ) {
-                                    choicesAtThisLevel.push({
-                                      ...baseChoices,
-                                      featureType:
-                                        adv.type === "ItemChoice"
-                                          ? adv.configuration?.choiceType ===
-                                            "feature"
-                                            ? adv.configuration?.pool?.[0]
-                                            : adv.configuration?.featureType
-                                          : adv.configuration?.type || "trait",
-                                      optionGroupId:
-                                        adv.configuration?.optionGroupId ||
-                                        (adv.configuration?.choiceType ===
-                                        "option-group"
-                                          ? adv.configuration?.optionGroupId
-                                          : undefined),
-                                    });
+                                    if (adv.type === "Trait" && adv.configuration?.choices?.length > 0) {
+                                      adv.configuration.choices.forEach((c: any, cIdx: number) => {
+                                        if (c.count > 0 && c.pool?.length > 0) {
+                                          choicesAtThisLevel.push({
+                                            ...baseChoices,
+                                            advId: `${adv._id}-${cIdx}`, // Unique ID for each sub-choice
+                                            name: `${title} (${c.type.charAt(0).toUpperCase() + c.type.slice(1)})`,
+                                            count: c.count,
+                                            featureType: c.type,
+                                            configuration: {
+                                              ...adv.configuration,
+                                              choices: [c] // Pass only this choice to the dialog
+                                            }
+                                          });
+                                        }
+                                      });
+                                    } else if (resolvedCount > 0) {
+                                      choicesAtThisLevel.push({
+                                        ...baseChoices,
+                                        featureType:
+                                          adv.type === "ItemChoice"
+                                            ? adv.configuration?.choiceType ===
+                                              "feature"
+                                              ? adv.configuration?.pool?.[0]
+                                              : adv.configuration?.featureType
+                                            : adv.configuration?.type || "trait",
+                                        optionGroupId:
+                                          adv.configuration?.optionGroupId ||
+                                          (adv.configuration?.choiceType ===
+                                          "option-group"
+                                            ? adv.configuration?.optionGroupId
+                                            : undefined),
+                                      });
+                                    }
                                   } else if (
                                     adv.type === "Subclass" &&
                                     !isSubclass

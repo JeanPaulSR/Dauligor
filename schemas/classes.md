@@ -19,12 +19,17 @@ The core definition of a character class.
   - `weapons`: (array) Static list of identifiers + "Choose X from Set Y" objects.
   - `tools`: (array) Static list of identifiers + "Choose X from Set Y" objects.
   - `skills`: (array) Static list of identifiers + "Choose X from Set Y" objects.
+  - `languages`: (array) Static list of identifiers + "Choose X from Set Y" objects.
+  - `savingThrows`: (array) List of proficient ability scores.
 - `startingEquipment`: (object)
   - `text`: (string) BBCode display text.
   - `defaultData`: (array of objects) Structured item/category IDs for automation.
 - `multiclassing`: (object)
   - `requirements`: (map) e.g., `{"int": 13}`.
   - `proficienciesGained`: (object) Same structure as main proficiencies.
+- `subclassTitle`: (string) e.g., "Primal Path".
+- `subclassFeatureLevels`: (array of numbers) e.g., [3, 6, 10, 14].
+- `asiLevels`: (array of numbers) e.g., [4, 8, 12, 16, 19].
 - `optionalfeatureProgression`: (array of objects)
   - `name`: (string) e.g., "Invocations".
   - `featureType`: (string) ID for filtering choices.
@@ -48,7 +53,7 @@ The core definition of a character class.
 - `tagIds`: (array of strings) References to the `tags` collection for filtering.
 - `advancements`: (array of objects) Structured progression steps.
   - `_id`: (string) Unique identifier.
-  - `type`: (enum) `AbilityScoreImprovement`, `HitPoints`, `ItemChoice`, `ItemGrant`, `ScaleValue`, `Size`, `Trait`.
+  - `type`: (enum) `AbilityScoreImprovement`, `HitPoints`, `ItemChoice`, `ItemGrant`, `ScaleValue`, `Size`, `Trait`, `Subclass`.
   - `level`: (number) 1-20.
   - `title`: (string, optional) Custom label.
   - `configuration`: (object) Settings for the advancement.

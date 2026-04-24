@@ -4,7 +4,7 @@ import {
   List, ListOrdered, Heading1, Heading2, Heading3, Heading4, 
   Quote, Code, Link, Eye, EyeOff, Type, Minus, Hash, 
   EyeOff as Spoiler, MessageSquare as Comment, Subscript, Superscript,
-  Undo, Redo, FileCode, Indent, Outdent
+  Undo, Redo, FileCode, Indent, Outdent, Table as TableIcon
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Editor } from '@tiptap/react';
@@ -62,6 +62,7 @@ export default function MarkdownToolbar({
         }
         case '[hr]': editor.chain().focus().setHorizontalRule().run(); break;
         case '[br]': editor.chain().focus().setHardBreak().run(); break;
+        case '[table]': editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break;
         case 'indent': {
           if (editor?.isActive('bulletList') || editor?.isActive('orderedList')) {
             editor.chain().focus().sinkListItem('listItem').run();
@@ -158,6 +159,7 @@ export default function MarkdownToolbar({
     { icon: ListOrdered, label: 'Ordered List', action: () => insertText('[ol]\n[li]', '[/li]\n[/ol]'), active: editor?.isActive('orderedList') },
     { icon: Indent, label: 'Indent (Tab)', action: () => insertText('[indent]', '[/indent]'), active: false },
     { icon: Outdent, label: 'Outdent (Shift+Tab)', action: () => insertText('', ''), active: false },
+    { icon: TableIcon, label: 'Table', action: () => isWYSIWYG ? insertText('[table]', '') : insertText('\n[table]\n  [tr]\n    [th]Header 1[/th]\n    [th]Header 2[/th]\n  [/tr]\n  [tr]\n    [td]Cell 1[/td]\n    [td]Cell 2[/td]\n  [/tr]\n[/table]\n', ''), active: editor?.isActive('table') },
     { icon: Quote, label: 'Quote', action: () => insertText('[quote]', '[/quote]'), active: editor?.isActive('blockquote') },
     { icon: Code, label: 'Code', action: () => insertText('[code]', '[/code]'), active: editor?.isActive('code') },
     { icon: Link, label: 'Link (Ctrl+K)', action: () => insertText('[url=url]', '[/url]'), active: editor?.isActive('link') },
@@ -171,65 +173,83 @@ export default function MarkdownToolbar({
   ];
 
   return (
-    <div className={`sticky ${stickyOffset} z-20 flex flex-wrap items-center justify-between gap-1 p-1 border-b border-gold/10 bg-card/95 backdrop-blur-sm rounded-t-md shadow-sm`}>
-      <div className="flex flex-wrap items-center gap-0.5">
-        {label && (
-          <div className="px-2 py-1 mr-1 border-r border-gold/10 flex items-center">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gold whitespace-nowrap">{label}</span>
+    <div className={`sticky ${stickyOffset} z-20 border-b border-gold/10 bg-card/95 backdrop-blur-sm rounded-t-md shadow-sm flex flex-col`}>
+      <div className={`flex flex-wrap items-center justify-between gap-1 p-1`}>
+        <div className="flex flex-wrap items-center gap-0.5">
+          {label && (
+            <div className="px-2 py-1 mr-1 border-r border-gold/10 flex items-center">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gold whitespace-nowrap">{label}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-0.5 mr-2 pr-2 border-r border-gold/10">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-gold/60 hover:text-gold"
+              onClick={() => isWYSIWYG ? editor?.chain().focus().undo().run() : document.execCommand('undo')}
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-gold/60 hover:text-gold"
+              onClick={() => isWYSIWYG ? editor?.chain().focus().redo().run() : document.execCommand('redo')}
+              title="Redo (Ctrl+Y)"
+            >
+              <Redo className="w-3.5 h-3.5" />
+            </Button>
           </div>
-        )}
-        <div className="flex items-center gap-0.5 mr-2 pr-2 border-r border-gold/10">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-gold/60 hover:text-gold"
-            onClick={() => isWYSIWYG ? editor?.chain().focus().undo().run() : document.execCommand('undo')}
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-gold/60 hover:text-gold"
-            onClick={() => isWYSIWYG ? editor?.chain().focus().redo().run() : document.execCommand('redo')}
-            title="Redo (Ctrl+Y)"
-          >
-            <Redo className="w-3.5 h-3.5" />
-          </Button>
-        </div>
 
-        {tools.map((tool, i) => (
-          <Button
-            key={i}
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={`h-7 w-7 p-0 transition-colors ${tool.active ? 'text-gold bg-gold/20' : 'text-gold/60 hover:text-gold hover:bg-gold/10'}`}
-            onClick={tool.action}
-            title={tool.label}
-          >
-            <tool.icon className="w-3.5 h-3.5" />
-          </Button>
-        ))}
+          {tools.map((tool, i) => (
+            <Button
+              key={i}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={`h-7 w-7 p-0 transition-colors ${tool.active ? 'text-gold bg-gold/20' : 'text-gold/60 hover:text-gold hover:bg-gold/10'}`}
+              onClick={tool.action}
+              title={tool.label}
+            >
+              <tool.icon className="w-3.5 h-3.5" />
+            </Button>
+          ))}
+        </div>
+        
+        <div className="flex items-center gap-1">
+          {onToggleWYSIWYG && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={`h-7 px-2 text-[10px] font-bold uppercase tracking-widest gap-1.5 transition-colors ${isWYSIWYG ? 'text-gold bg-gold/10' : 'text-gold/60 hover:text-gold'}`}
+              onClick={onToggleWYSIWYG}
+              title={isWYSIWYG ? "Switch to BBCode Source" : "Switch to Visual Editor"}
+            >
+              <FileCode className="w-3 h-3" /> {isWYSIWYG ? "Visual" : "Source"}
+            </Button>
+          )}
+        </div>
       </div>
-      
-      <div className="flex items-center gap-1">
-        {onToggleWYSIWYG && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={`h-7 px-2 text-[10px] font-bold uppercase tracking-widest gap-1.5 transition-colors ${isWYSIWYG ? 'text-gold bg-gold/10' : 'text-gold/60 hover:text-gold'}`}
-            onClick={onToggleWYSIWYG}
-            title={isWYSIWYG ? "Switch to BBCode Source" : "Switch to Visual Editor"}
-          >
-            <FileCode className="w-3 h-3" /> {isWYSIWYG ? "Visual" : "Source"}
-          </Button>
-        )}
-      </div>
+
+      {/* Table tools sub-toolbar */}
+      {isWYSIWYG && editor?.isActive('table') && (
+        <div className="flex flex-wrap items-center gap-1 p-1 px-2 border-t border-gold/10 bg-gold/5 text-xs">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gold/60 mr-2">Table</span>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnBefore().run()}>+ Col Before</Button>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnAfter().run()}>+ Col After</Button>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().deleteColumn().run()}>- Delete Col</Button>
+          <div className="w-px h-4 bg-gold/20 mx-1"></div>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowBefore().run()}>+ Row Before</Button>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowAfter().run()}>+ Row After</Button>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().deleteRow().run()}>- Delete Row</Button>
+          <div className="w-px h-4 bg-gold/20 mx-1"></div>
+          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-red-500/60 hover:text-red-500 hover:bg-red-500/10" onClick={() => editor.chain().focus().deleteTable().run()}>Delete Table</Button>
+        </div>
+      )}
     </div>
   );
 }

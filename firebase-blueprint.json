@@ -211,14 +211,38 @@
                 "optionIds": { "type": "array", "items": { "type": "string" } },
                 "fixedIds": { "type": "array", "items": { "type": "string" } }
               }
+            },
+            "languages": { 
+              "type": "object",
+              "properties": {
+                "choiceCount": { "type": "number" },
+                "optionIds": { "type": "array", "items": { "type": "string" } },
+                "fixedIds": { "type": "array", "items": { "type": "string" } },
+                "categoryIds": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "savingThrows": {
+              "type": "object",
+              "properties": {
+                "choiceCount": { "type": "number" },
+                "optionIds": { "type": "array", "items": { "type": "string" } },
+                "fixedIds": { "type": "array", "items": { "type": "string" } }
+              }
             }
           }
+        },
+        "advancements": { 
+          "type": "array", 
+          "items": { "type": "object" },
+          "description": "Structured progression steps for the class."
         },
         "startingEquipment": { "type": "string" },
         "multiclassing": { "type": "string" },
         "imageUrl": { "type": "string" },
         "identifier": { "type": "string" },
         "subclassTitle": { "type": "string", "description": "Collective name for subclasses (e.g. Primal Path)" },
+        "subclassFeatureLevels": { "type": "array", "items": { "type": "number" }, "description": "Levels subclasses get features" },
+        "asiLevels": { "type": "array", "items": { "type": "number" }, "description": "Levels classes get ASIs" },
         "spellcastingId": { "type": "string" }
       },
       "required": ["name", "sourceId"]
@@ -253,6 +277,11 @@
         "uniqueOptionGroupIds": { "type": "array", "items": { "type": "string" } },
         "uniqueOptionMappings": { "type": "array", "items": { "type": "object" } },
         "excludedOptionIds": { "type": "object" },
+        "advancements": { 
+          "type": "array", 
+          "items": { "type": "object" },
+          "description": "Structured progression steps for the subclass."
+        },
         "updatedAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -271,7 +300,12 @@
         "isSubclassFeature": { "type": "boolean" },
         "quantityColumnId": { "type": "string", "description": "Linked Scaling Column for quantity (e.g. number of uses)" },
         "scalingColumnId": { "type": "string", "description": "Linked Scaling Column for scaling (e.g. damage die)" },
-        "uniqueOptionGroupIds": { "type": "array", "items": { "type": "string" }, "description": "Modular choices attached to this feature" }
+        "uniqueOptionGroupIds": { "type": "array", "items": { "type": "string" }, "description": "Modular choices attached to this feature" },
+        "advancements": { 
+          "type": "array", 
+          "items": { "type": "object" },
+          "description": "Structured progression steps for the feature."
+        }
       },
       "required": ["name", "level", "parentId", "parentType"]
     },

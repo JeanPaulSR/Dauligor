@@ -1,7 +1,7 @@
 import { db } from './firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { saveAs } from 'file-saver';
-import { slugify } from './classExport';
+import { slugify, exportClassSemantic } from './classExport';
 
 /**
  * Interface representing the export format for a Character.
@@ -15,6 +15,7 @@ export interface CharacterExportBundle {
   system: any;
   flags: any;
   items: any[];
+  classes?: any[];
 }
 
 /**
@@ -101,8 +102,17 @@ export async function buildCharacterExport(characterId: string): Promise<Charact
         selectedOptions: charData.selectedOptions || {},
       }
     },
-    items: [] // Items and spells could be populated here later
+    items: [], // Items and spells could be populated here later
+    classes: []
   };
+
+  // If the character has a classId, fetch the semantic class structure
+  if (charData.classId) {
+    const classExport = await exportClassSemantic(charData.classId);
+    if (classExport) {
+      payload.classes!.push(classExport);
+    }
+  }
 
   return payload;
 }

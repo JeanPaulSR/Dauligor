@@ -96,7 +96,19 @@ export default function Sidebar({
     ],
     game: [
       { label: 'Characters', icon: Users, path: '/characters' },
-      { label: 'Compendium', icon: BookOpen, path: '/compendium' },
+      { 
+        label: 'Compendium', 
+        icon: BookOpen, 
+        path: '/compendium',
+        subItems: [
+          { label: 'Classes', path: '/compendium/classes' },
+          { label: 'Subclasses', path: '/compendium/subclasses' },
+          { label: 'Spells', path: '/compendium/spells' },
+          { label: 'Feats', path: '/compendium/feats' },
+          { label: 'Items', path: '/compendium/items' },
+          { label: 'Monsters', path: '/compendium/monsters' },
+        ]
+      },
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },
       { label: 'Sources', icon: Book, path: '/sources' },
       { label: 'Crafting', icon: Hammer, path: '/wiki?category=technology' },
@@ -132,7 +144,7 @@ export default function Sidebar({
     }
 
     return (
-      <li key={item.label}>
+      <li key={item.label} className="w-full">
         <Link 
           to={item.path} 
           onClick={() => onClose?.()}
@@ -145,6 +157,28 @@ export default function Sidebar({
           <item.icon className={`w-4 h-4 lg:w-5 lg:h-5 shrink-0 ${isActive ? 'text-gold' : 'opacity-70 group-hover:opacity-100'}`} />
           <span className="truncate">{item.label}</span>
         </Link>
+        {item.subItems && (
+          <ul className="mt-1 ml-4 border-l border-gold/10 pl-2 space-y-1">
+            {item.subItems.map((subItem: any) => {
+              const isSubActive = location.pathname === subItem.path;
+              return (
+                <li key={subItem.label}>
+                  <Link 
+                    to={subItem.path} 
+                    onClick={() => onClose?.()}
+                    className={`flex items-center gap-2 px-2 py-1.5 text-[10px] lg:text-xs rounded-md transition-all ${
+                      isSubActive 
+                        ? 'bg-gold/10 text-gold font-bold' 
+                        : 'text-ink/60 hover:text-gold hover:bg-gold/5'
+                    }`}
+                  >
+                    <span className="truncate">{subItem.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </li>
     );
   };
@@ -152,18 +186,7 @@ export default function Sidebar({
   const sidebarContent = (
     <div className="flex flex-col h-full min-h-0 bg-card">
       <div className={`p-4 border-b border-gold/10 flex flex-col items-center text-center shrink-0 relative ${isCollapsed && !isOpen ? 'px-2' : ''}`}>
-        {/* Desktop Toggle Tab */}
-        {!isOpen && (
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={onToggleCollapse}
-            className="absolute -right-3 top-4 w-6 h-12 rounded-r-md rounded-l-none bg-card border border-l-0 border-gold/20 text-gold z-10 hidden md:flex items-center justify-center hover:bg-gold/10 shadow-sm"
-            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronRight className="w-3 h-3 rotate-180" />}
-          </Button>
-        )}
+        {/* Removed Desktop Toggle Tab in favor of Navbar menu */}
 
         {campaign?.imageUrl && (!isCollapsed || isOpen) ? (
           <div className="w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24 rounded-full overflow-hidden border-2 border-gold/30 mb-3 transition-all">

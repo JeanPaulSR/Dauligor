@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Plus, Minus, Trash2, Edit2, Zap, Heart, Star, BookOpen, Settings, Sword, Lock, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
@@ -14,7 +15,8 @@ export type AdvancementType =
   | 'ItemGrant'
   | 'ScaleValue'
   | 'Size'
-  | 'Trait';
+  | 'Trait'
+  | 'Subclass';
 
 export interface Advancement {
   _id: string;
@@ -23,6 +25,7 @@ export interface Advancement {
   title: string;
   icon?: string;
   featureId?: string;
+  isBase?: boolean;
   configuration: any;
   value?: any;
   flags?: {
@@ -63,6 +66,7 @@ const ADVANCEMENT_INFO: Record<AdvancementType, { label: string, icon: any, colo
   ScaleValue: { label: 'Scale Value', icon: <BookOpen className="w-4 h-4" />, color: 'text-sky-500' },
   Size: { label: 'Size', icon: <Settings className="w-4 h-4" />, color: 'text-slate-500' },
   Trait: { label: 'Trait (Proficiency)', icon: <Sword className="w-4 h-4" />, color: 'text-orange-500' },
+  Subclass: { label: 'Choose Subclass', icon: <Star className="w-4 h-4" />, color: 'text-purple-500' },
 };
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -348,7 +352,20 @@ export default function AdvancementManager({
 
       if (cols.length > 0) {
         Promise.all(cols.map(c => getDocs(collection(db, c)))).then(snaps => {
-          const items = snaps.flatMap(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
+          let items = snaps.flatMap(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
+          
+          // Deduplicate attributes for saves
+          if (type === 'saves') {
+            const uniqueAttrsMap = new Map();
+            items.forEach((item: any) => {
+              const key = (item.identifier || item.id).toUpperCase();
+              if (!uniqueAttrsMap.has(key) || item.identifier) {
+                uniqueAttrsMap.set(key, item);
+              }
+            });
+            items = Array.from(uniqueAttrsMap.values());
+          }
+
           if (type === 'saves' && items.length === 0) {
             setTraitOptionsMap(prev => ({ ...prev, saves: [
               {id: 'str', name: 'Strength'},
@@ -476,7 +493,10 @@ export default function AdvancementManager({
 
       <div className="grid gap-2">
         {advancements.map((adv, idx) => (
-          <div key={adv._id} className="flex items-center gap-3 p-3 bg-card/40 border border-gold/10 rounded-lg group hover:border-gold/30 hover:bg-card/60 transition-all">
+          <div key={adv._id} className={cn(
+            "flex items-center gap-3 p-3 bg-card/40 border border-gold/10 rounded-lg group hover:border-gold/30 hover:bg-card/60 transition-all",
+            adv.isBase && "opacity-60 saturate-50 bg-gold/[0.02]"
+          )}>
             <div className="w-10 h-10 bg-background rounded border border-gold/10 flex flex-col items-center justify-center shrink-0">
               <span className="text-[10px] font-mono text-gold/60 leading-none">L{adv.level}</span>
               <div className={ADVANCEMENT_INFO[adv.type]?.color || 'text-gold'}>
@@ -488,20 +508,33 @@ export default function AdvancementManager({
                 <span className="text-xs font-black uppercase text-ink/80 tracking-wider truncate">
                   {adv.title || ADVANCEMENT_INFO[adv.type]?.label || adv.type}
                 </span>
+                {adv.isBase && (
+                  <span className="text-[8px] bg-gold/10 text-gold px-1.5 py-0.5 rounded font-black tracking-widest uppercase">Base</span>
+                )}
                 <span className="text-[8px] font-bold text-ink/20 uppercase tracking-widest shrink-0">
                   {adv.type}
                 </span>
               </div>
-              <div className="text-[10px] text-ink/40 font-serif italic truncate">
-                {adv.type === 'ItemGrant' && `Grants items: ${adv.configuration.pool?.length || 0}`}
-                {adv.type === 'ItemChoice' && `Choose ${adv.configuration.count || 1} from ${adv.configuration.pool?.length || 0}`}
-                {adv.type === 'HitPoints' && `Hit Die: d${adv.configuration.hitDie || '?'}`}
-                {adv.type === 'Trait' && `Proficiency: ${TRAIT_TYPE_LABELS[adv.configuration.type] || adv.configuration.type}`}
+              <div className="text-[10px] text-ink/40 font-serif italic flex items-center gap-2">
+                <span className="truncate">
+                  {adv.type === 'ItemGrant' && `Grants items: ${adv.configuration.pool?.length || 0}`}
+                  {adv.type === 'ItemChoice' && `Choose ${adv.configuration.count || 1} from ${adv.configuration.pool?.length || 0}`}
+                  {adv.type === 'HitPoints' && `Hit Die: d${adv.configuration.hitDie || '?'}`}
+                  {adv.type === 'Trait' && `Proficiency: ${TRAIT_TYPE_LABELS[adv.configuration.type] || adv.configuration.type}`}
+                  {adv.type === 'Subclass' && `Subclass selection trigger`}
+                </span>
+                {adv.isBase && (
+                  <span className="text-gold/40 not-italic font-sans font-bold uppercase tracking-tighter text-[9px]">
+                    — Starting Core Advancement
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button variant="ghost" size="sm" onClick={() => handleEdit(idx)} className="h-7 w-7 p-0 text-gold hover:bg-gold/10"><Edit2 className="w-3.5 h-3.5" /></Button>
-              <Button variant="ghost" size="sm" onClick={() => handleDelete(idx)} className="h-7 w-7 p-0 text-blood hover:bg-blood/10"><Trash2 className="w-3.5 h-3.5" /></Button>
+              {!adv.isBase && (
+                <Button variant="ghost" size="sm" onClick={() => handleDelete(idx)} className="h-7 w-7 p-0 text-blood hover:bg-blood/10"><Trash2 className="w-3.5 h-3.5" /></Button>
+              )}
             </div>
           </div>
         ))}
@@ -518,8 +551,9 @@ export default function AdvancementManager({
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-[95vw] lg:max-w-5xl bg-card border-gold/20 p-0 overflow-hidden h-[85vh] flex flex-col">
           <DialogHeader className="px-6 py-4 bg-ink border-b border-gold/10">
-            <DialogTitle className="text-xl font-serif font-black uppercase tracking-tight text-gold">
+            <DialogTitle className="text-xl font-serif font-black uppercase tracking-tight text-gold flex items-center gap-3">
               {editingIndex !== null ? 'Configure Advancement' : 'New Advancement'}
+              {editingAdv.isBase && <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded border border-gold/20 tracking-widest">Base</span>}
             </DialogTitle>
           </DialogHeader>
 
@@ -540,6 +574,7 @@ export default function AdvancementManager({
                     if (val === 'Trait') base.configuration = { type: 'skills', options: [], fixed: [] };
                     if (val === 'ScaleValue') base.configuration = { identifier: '', type: 'number' };
                     if (val === 'Size') base.configuration = { sizes: { med: true }, size: 'med' };
+                    if (val === 'Subclass') base.configuration = {};
                     setEditingAdv(base);
                   }}
                 >
@@ -607,6 +642,35 @@ export default function AdvancementManager({
 
             {/* Configuration */}
             <div className="pt-2 border-t border-gold/10 space-y-4">
+              {/* ── ItemChoice (Choose Items) ── */}
+              {editingAdv.type === 'ItemChoice' && (
+                <div className="space-y-6">
+                  <div className="bg-gold/5 border border-gold/10 rounded-md p-6 flex flex-col items-center justify-center text-center">
+                    <Sword className="w-8 h-8 text-gold/30 mb-4" />
+                    <h4 className="text-sm font-bold text-gold uppercase tracking-widest mb-2">Item Choice Configuration</h4>
+                    <p className="text-xs text-ink/60 max-w-sm leading-relaxed">
+                      Custom item definitions have not been implemented in the application yet. 
+                      For now, this advancement serves as a placeholder for starting gear choices.
+                    </p>
+                    <div className="mt-6 w-full max-w-xs space-y-3">
+                      <div className="space-y-1 text-left">
+                        <label className="text-[10px] uppercase font-black text-ink/60">Number of Choices</label>
+                        <Input 
+                          type="number" 
+                          min="1"
+                          value={editingAdv.configuration?.count || 1}
+                          onChange={e => setEditingAdv({
+                            ...editingAdv,
+                            configuration: { ...editingAdv.configuration, count: parseInt(e.target.value) || 1 }
+                          })}
+                          className="h-9 bg-background/50 border-gold/10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* ── ItemGrant ── */}
               {editingAdv.type === 'ItemGrant' && (
                 <div className="grid xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)] gap-5 items-start">
@@ -1437,10 +1501,10 @@ export default function AdvancementManager({
                         {(editingAdv.configuration?.fixed || []).length === 0 ? (
                           <p className="text-[9px] text-ink/20 italic">None selected — check Guaranteed →</p>
                         ) : (
-                          (editingAdv.configuration?.fixed || []).map((id: string) => {
+                          (editingAdv.configuration?.fixed || []).map((id: string, idx: number) => {
                             const found = (traitOptionsMap[editingAdv.configuration?.type] || []).find((t: any) => t.id === id);
                             return (
-                              <div key={id} className="flex items-center gap-2">
+                              <div key={`${id}-${idx}`} className="flex items-center gap-2">
                                 <span className="text-gold/70 text-xs">→</span>
                                 <span className="text-[10px] text-ink/70">{found?.name || id}</span>
                               </div>
@@ -1458,10 +1522,10 @@ export default function AdvancementManager({
                         {(editingAdv.configuration?.options || []).length === 0 ? (
                           <p className="text-[9px] text-ink/20 italic">None selected — check Choice Pool →</p>
                         ) : (
-                          (editingAdv.configuration?.options || []).map((id: string) => {
+                          (editingAdv.configuration?.options || []).map((id: string, idx: number) => {
                             const found = (traitOptionsMap[editingAdv.configuration?.type] || []).find((t: any) => t.id === id);
                             return (
-                              <div key={id} className="flex items-center gap-2">
+                              <div key={`${id}-${idx}`} className="flex items-center gap-2">
                                 <span className="text-sky-500/70 text-xs">⚙</span>
                                 <span className="text-[10px] text-ink/70">{found?.name || id}</span>
                               </div>

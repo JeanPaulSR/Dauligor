@@ -359,6 +359,21 @@ export async function exportClassSemantic(classId: string) {
     featuresRaw = featuresSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
+  // Fetch Scaling Columns early so we can reference them
+  const scalingSnap = await getDocs(query(collection(db, 'scalingColumns'), where('parentId', '==', classId)));
+  const scalingColumns = scalingSnap.docs.map(d => {
+    const data: any = d.data();
+    const identifier = data.identifier || slugify(data.name);
+    return {
+      ...data,
+      id: d.id,
+      identifier: identifier,
+      sourceId: `scale-${identifier}`,
+      sourceBookId: resolvedClassBookId, // Scaling columns always belong to root class
+      classSourceId: `class-${classData.identifier}`
+    };
+  });
+
   // Collect all unique option group IDs
   const allGroupIds = new Set([
     ...(classData.uniqueOptionGroupIds || []),
@@ -388,6 +403,7 @@ export async function exportClassSemantic(classId: string) {
         sourceId: sourceId,
         sourceBookId: resolvedClassBookId, // We'll update this later if it's tied to a feature
         featureSourceId: undefined, // We'll update this later
+        scalingSourceId: data.scalingId ? scalingColumns.find(sc => sc.id === data.scalingId)?.sourceId : undefined,
         description: "" // We'll update this later
       };
     });
@@ -411,6 +427,7 @@ export async function exportClassSemantic(classId: string) {
       sourceBookId: sourceBookId, 
       parentSourceId: idToSourceIdMap[f.parentId] || f.parentId,
       classSourceId: `class-${classData.identifier}`,
+      featureKind: f.featureKind || (f.parentType === 'subclass' ? 'subclassFeature' : 'classFeature'),
       description: cleanText(f.description),
       uniqueOptionGroupIds: (f.uniqueOptionGroupIds || []).map((id: string) => groupIdToSourceIdMap[id] || id),
       automation: {
@@ -487,21 +504,6 @@ export async function exportClassSemantic(classId: string) {
     };
   });
 
-  // Fetch Scaling Columns
-  const scalingSnap = await getDocs(query(collection(db, 'scalingColumns'), where('parentId', '==', classId)));
-  const scalingColumns = scalingSnap.docs.map(d => {
-    const data: any = d.data();
-    const identifier = data.identifier || slugify(data.name);
-    return {
-      ...data,
-      id: d.id,
-      identifier: identifier,
-      sourceId: `scale-${identifier}`,
-      sourceBookId: resolvedClassBookId, // Scaling columns always belong to root class
-      classSourceId: `class-${classData.identifier}`
-    };
-  });
-
   // classData also needs its uniqueOptionGroupIds updated to semantic IDs
   classData.uniqueOptionGroupIds = (classData.uniqueOptionGroupIds || []).map((id: string) => groupIdToSourceIdMap[id] || id);
 
@@ -520,7 +522,8 @@ export async function exportClassSemantic(classId: string) {
         sourceId: `class-option-${identifier}`,
         sourceBookId: group ? group.sourceBookId : resolvedClassBookId,
         groupSourceId: group ? group.sourceId : data.groupId,
-        description: cleanText(data.description)
+        description: cleanText(data.description),
+        levelPrerequisite: data.levelPrerequisite // Make sure levelPrerequisite is properly included
       };
     });
   }
