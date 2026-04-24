@@ -65,13 +65,285 @@ function resolveLegacyProficiencyIds(legacyValue: string, entries: any[] = []) {
     .map(entry => entry.id);
 }
 
+function normalizeChoiceCount(value: any) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.floor(parsed);
+}
+
+function uniqueNormalizedIds(values: any[] = [], { uppercase = false }: { uppercase?: boolean } = {}) {
+  return Array.from(new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => {
+        const normalized = String(value ?? '').trim();
+        if (!normalized) return '';
+        return uppercase ? normalized.toUpperCase() : normalized;
+      })
+      .filter(Boolean)
+  ));
+}
+
+function sanitizeProficiencySelection(
+  selection: any,
+  {
+    uppercase = false,
+    includeCategories = true
+  }: {
+    uppercase?: boolean;
+    includeCategories?: boolean;
+  } = {}
+) {
+  const fixedIds = uniqueNormalizedIds(selection?.fixedIds || [], { uppercase });
+  const fixedSet = new Set(fixedIds);
+  const optionIds = uniqueNormalizedIds(selection?.optionIds || [], { uppercase }).filter((id) => !fixedSet.has(id));
+  const normalized: any = {
+    choiceCount: normalizeChoiceCount(selection?.choiceCount),
+    optionIds,
+    fixedIds
+  };
+
+  if (includeCategories) {
+    normalized.categoryIds = uniqueNormalizedIds(selection?.categoryIds || []);
+  }
+
+  return normalized;
+}
+
+function sanitizeProficiencyCollection(raw: any = {}) {
+  return {
+    armor: sanitizeProficiencySelection(raw.armor, { includeCategories: true }),
+    weapons: sanitizeProficiencySelection(raw.weapons, { includeCategories: true }),
+    tools: sanitizeProficiencySelection(raw.tools, { includeCategories: true }),
+    skills: sanitizeProficiencySelection(raw.skills, { includeCategories: false }),
+    savingThrows: sanitizeProficiencySelection(raw.savingThrows, { uppercase: true, includeCategories: false }),
+    languages: sanitizeProficiencySelection(raw.languages, { includeCategories: true }),
+    armorDisplayName: typeof raw.armorDisplayName === 'string' ? raw.armorDisplayName : '',
+    weaponsDisplayName: typeof raw.weaponsDisplayName === 'string' ? raw.weaponsDisplayName : '',
+    toolsDisplayName: typeof raw.toolsDisplayName === 'string' ? raw.toolsDisplayName : ''
+  };
+}
+
+function sortAdvancementsByLevelThenType(a: Advancement, b: Advancement) {
+  if (a.level !== b.level) return a.level - b.level;
+  return a.type.localeCompare(b.type);
+}
+
+function normalizeClassSpellcastingForSave(spellcasting: any) {
+  if (!spellcasting || typeof spellcasting !== 'object') {
+    return {
+      hasSpellcasting: false,
+      description: '',
+      level: 1,
+      ability: 'INT',
+      type: 'prepared',
+      progressionId: '',
+      altProgressionId: '',
+      spellsKnownId: '',
+      spellsKnownFormula: ''
+    };
+  }
+
+  const normalized = {
+    ...spellcasting,
+    ability: String(spellcasting.ability || 'INT').toUpperCase(),
+    type: String(spellcasting.type || 'prepared').toLowerCase(),
+    level: Number(spellcasting.level || 1) || 1
+  } as any;
+
+  const hasLinkedScalingIds = Boolean(
+    normalized.progressionId
+    || normalized.altProgressionId
+    || normalized.spellsKnownId
+  );
+
+  delete normalized.manualProgressionId;
+
+  if (hasLinkedScalingIds) {
+    delete normalized.progression;
+  }
+
+  return normalized;
+}
+
+function buildSyncedBaseAdvancements({
+  advancements,
+  hitDie,
+  proficiencies,
+  savingThrows,
+  subclassTitle,
+  subclassFeatureLevels,
+  asiLevels
+}: {
+  advancements: Advancement[];
+  hitDie: number;
+  proficiencies: any;
+  savingThrows: string[];
+  subclassTitle: string;
+  subclassFeatureLevels: number[];
+  asiLevels: number[];
+}) {
+  const existingById = new Map((advancements || []).map((adv) => [adv._id, adv]));
+  const baseItems = existingById.get('base-items');
+  const normalizedSavingThrows = Array.from(new Set(proficiencies.savingThrows?.fixedIds || savingThrows || []));
+
+  const defaults: Advancement[] = [
+    {
+      _id: 'base-hp',
+      type: 'HitPoints',
+      level: 1,
+      title: 'Hit Points',
+      isBase: true,
+      configuration: { hitDie: hitDie || 8 }
+    },
+    {
+      _id: 'base-saves',
+      type: 'Trait',
+      level: 1,
+      title: 'Saving Throw Proficiencies',
+      isBase: true,
+      configuration: {
+        type: 'saves',
+        fixed: normalizedSavingThrows,
+        options: proficiencies.savingThrows?.optionIds || [],
+        choiceCount: proficiencies.savingThrows?.choiceCount || 0,
+        mode: 'default'
+      }
+    },
+    {
+      _id: 'base-armor',
+      type: 'Trait',
+      level: 1,
+      title: 'Armor Proficiencies',
+      isBase: true,
+      configuration: {
+        type: 'armor',
+        fixed: proficiencies.armor?.fixedIds || [],
+        options: proficiencies.armor?.optionIds || [],
+        choiceCount: proficiencies.armor?.choiceCount || 0,
+        categoryIds: proficiencies.armor?.categoryIds || [],
+        mode: 'default'
+      }
+    },
+    {
+      _id: 'base-weapons',
+      type: 'Trait',
+      level: 1,
+      title: 'Weapon Proficiencies',
+      isBase: true,
+      configuration: {
+        type: 'weapons',
+        fixed: proficiencies.weapons?.fixedIds || [],
+        options: proficiencies.weapons?.optionIds || [],
+        choiceCount: proficiencies.weapons?.choiceCount || 0,
+        categoryIds: proficiencies.weapons?.categoryIds || [],
+        mode: 'default'
+      }
+    },
+    {
+      _id: 'base-skills',
+      type: 'Trait',
+      level: 1,
+      title: 'Skill Proficiencies',
+      isBase: true,
+      configuration: {
+        type: 'skills',
+        fixed: proficiencies.skills?.fixedIds || [],
+        options: proficiencies.skills?.optionIds || [],
+        choiceCount: proficiencies.skills?.choiceCount || 0,
+        mode: 'default'
+      }
+    },
+    {
+      _id: 'base-tools',
+      type: 'Trait',
+      level: 1,
+      title: 'Tool Proficiencies',
+      isBase: true,
+      configuration: {
+        type: 'tools',
+        fixed: proficiencies.tools?.fixedIds || [],
+        options: proficiencies.tools?.optionIds || [],
+        choiceCount: proficiencies.tools?.choiceCount || 0,
+        categoryIds: proficiencies.tools?.categoryIds || [],
+        mode: 'default'
+      }
+    },
+    {
+      _id: 'base-languages',
+      type: 'Trait',
+      level: 1,
+      title: 'Languages',
+      isBase: true,
+      configuration: {
+        type: 'languages',
+        fixed: proficiencies.languages?.fixedIds || [],
+        options: proficiencies.languages?.optionIds || [],
+        choiceCount: proficiencies.languages?.choiceCount || 0,
+        categoryIds: proficiencies.languages?.categoryIds || [],
+        mode: 'default'
+      }
+    },
+    {
+      _id: 'base-items',
+      type: 'ItemChoice',
+      level: 1,
+      title: baseItems?.title || 'Starting Equipment Choices',
+      isBase: true,
+      configuration: {
+        choiceType: 'item',
+        pool: Array.isArray(baseItems?.configuration?.pool) ? baseItems.configuration.pool : [],
+        count: Number(baseItems?.configuration?.count || 1) || 1,
+        ...(baseItems?.configuration || {})
+      }
+    },
+    {
+      _id: 'base-subclass',
+      type: 'Subclass',
+      level: subclassFeatureLevels[0] || 3,
+      title: subclassTitle || 'Select Subclass',
+      isBase: true,
+      configuration: {
+        ...(existingById.get('base-subclass')?.configuration || {})
+      }
+    }
+  ];
+
+  asiLevels.forEach((lvl, i) => {
+    defaults.push({
+      _id: `base-asi-${i}`,
+      type: 'AbilityScoreImprovement',
+      level: lvl,
+      title: 'Ability Score Improvement',
+      isBase: true,
+      configuration: { points: 2, featAllowed: true }
+    });
+  });
+
+  const customAdvancements = (advancements || []).filter((adv) => !String(adv._id || '').startsWith('base-'));
+  const syncedBaseAdvancements = defaults.map((baseAdvancement) => {
+    const existing = existingById.get(baseAdvancement._id);
+    if (!existing) return baseAdvancement;
+
+    return {
+      ...existing,
+      ...baseAdvancement,
+      isBase: true,
+      configuration: {
+        ...(existing.configuration || {}),
+        ...(baseAdvancement.configuration || {})
+      }
+    };
+  });
+
+  return [...syncedBaseAdvancements, ...customAdvancements].sort(sortAdvancementsByLevelThenType);
+}
+
 export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(!!id);
   const [sources, setSources] = useState<any[]>([]);
-  const [scalings, setScalings] = useState<any[]>([]);
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [pactScalings, setPactScalings] = useState<any[]>([]);
   const [knownScalings, setKnownScalings] = useState<any[]>([]);
@@ -154,9 +426,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     level: 1,
     ability: 'INT',
     type: 'prepared',
-    progression: 'none',
     progressionId: '',
-    manualProgressionId: '',
     altProgressionId: '',
     spellsKnownId: '',
     spellsKnownFormula: ''
@@ -203,12 +473,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       console.log(`[ClassEditor] Sources snapshot received. Count: ${snap.docs.length}`);
       setSources(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     }, (err) => console.error("[ClassEditor] Sources listener error:", err));
-
-    // Fetch Scalings
-    const unsubscribeScalings = onSnapshot(query(collection(db, 'spellcastingScalings'), orderBy('name')), (snap) => {
-      console.log(`[ClassEditor] Scalings snapshot received. Count: ${snap.docs.length}`);
-      setScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => console.error("[ClassEditor] Scalings listener error:", err));
 
     // Fetch Spellcasting Types
     const unsubscribeSpellcastingTypes = onSnapshot(query(collection(db, 'spellcastingTypes'), orderBy('name')), (snap) => {
@@ -336,7 +600,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             const weapons = rawProf.weapons || {};
             const savingThrowsProf = rawProf.savingThrows || {};
 
-            setProficiencies({
+            setProficiencies(sanitizeProficiencyCollection({
               armor: typeof armor === 'object' && !Array.isArray(armor)
                 ? {
                     choiceCount: armor.choiceCount || 0,
@@ -395,7 +659,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               armorDisplayName: rawProf.armorDisplayName || '',
               weaponsDisplayName: rawProf.weaponsDisplayName || '',
               toolsDisplayName: rawProf.toolsDisplayName || ''
-            });
+            }));
             setStartingEquipment(data.startingEquipment || '');
             setPrimaryAbility((data.primaryAbility || []).map((s: string) => s.toUpperCase()));
             setPrimaryAbilityChoice((data.primaryAbilityChoice || []).map((s: string) => s.toUpperCase()));
@@ -403,7 +667,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             setImageUrl(data.imageUrl || '');
             setMulticlassing(data.multiclassing || '');
             const rawMultiProf = data.multiclassProficiencies || {};
-            setMulticlassProficiencies({
+            setMulticlassProficiencies(sanitizeProficiencyCollection({
               armor: typeof rawMultiProf.armor === 'object' && !Array.isArray(rawMultiProf.armor)
                 ? {
                     choiceCount: rawMultiProf.armor.choiceCount || 0,
@@ -447,23 +711,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               armorDisplayName: rawMultiProf.armorDisplayName || '',
               weaponsDisplayName: rawMultiProf.weaponsDisplayName || '',
               toolsDisplayName: rawMultiProf.toolsDisplayName || ''
-            });
+            }));
 
-            const loadedSpellcasting = data.spellcasting || {
+            const loadedSpellcasting = normalizeClassSpellcastingForSave(data.spellcasting || {
+              hasSpellcasting: false,
               description: '',
               level: 1,
               ability: 'INT',
               type: 'prepared',
-              progression: 'none',
               progressionId: '',
-              manualProgressionId: '',
               altProgressionId: '',
               spellsKnownId: '',
               spellsKnownFormula: ''
-            };
-            if (loadedSpellcasting.ability) {
-              loadedSpellcasting.ability = loadedSpellcasting.ability.toUpperCase();
-            }
+            });
             setSpellcasting(loadedSpellcasting);
             setTagIds(data.tagIds || []);
             setAdvancements(data.advancements || []);
@@ -524,7 +784,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       return () => {
         console.log(`[ClassEditor] Cleaning up all listeners for ID: ${id}`);
         unsubscribeSources();
-        unsubscribeScalings();
+        unsubscribeSpellcastingTypes();
         unsubscribePactScalings();
         unsubscribeKnownScalings();
         unsubscribeSkills();
@@ -546,7 +806,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     return () => {
       console.log(`[ClassEditor] Cleaning up all listeners`);
       unsubscribeSources();
-      unsubscribeScalings();
+      unsubscribeSpellcastingTypes();
       unsubscribePactScalings();
       unsubscribeKnownScalings();
       unsubscribeSkills();
@@ -667,12 +927,41 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       const weaponSelections = (proficiencies.weapons.fixedIds || [])
         .map((id: string) => allWeapons.find((item: any) => item.id === id))
         .filter(Boolean);
+      const toolSelections = (proficiencies.tools.fixedIds || [])
+        .map((id: string) => allTools.find((item: any) => item.id === id))
+        .filter(Boolean);
+      const multiclassArmorSelections = (multiclassProficiencies.armor.fixedIds || [])
+        .map((id: string) => allArmor.find((item: any) => item.id === id))
+        .filter(Boolean);
+      const multiclassWeaponSelections = (multiclassProficiencies.weapons.fixedIds || [])
+        .map((id: string) => allWeapons.find((item: any) => item.id === id))
+        .filter(Boolean);
+      const multiclassToolSelections = (multiclassProficiencies.tools.fixedIds || [])
+        .map((id: string) => allTools.find((item: any) => item.id === id))
+        .filter(Boolean);
 
-      const normalizedProficiencies = {
+      const normalizedProficiencies = sanitizeProficiencyCollection({
         ...proficiencies,
         armorDisplayName: proficiencies.armorDisplayName || armorSelections.map((item: any) => item.name).join(', '),
-        weaponsDisplayName: proficiencies.weaponsDisplayName || weaponSelections.map((item: any) => item.name).join(', ')
-      };
+        weaponsDisplayName: proficiencies.weaponsDisplayName || weaponSelections.map((item: any) => item.name).join(', '),
+        toolsDisplayName: proficiencies.toolsDisplayName || toolSelections.map((item: any) => item.name).join(', ')
+      });
+      const normalizedMulticlassProficiencies = sanitizeProficiencyCollection({
+        ...multiclassProficiencies,
+        armorDisplayName: multiclassProficiencies.armorDisplayName || multiclassArmorSelections.map((item: any) => item.name).join(', '),
+        weaponsDisplayName: multiclassProficiencies.weaponsDisplayName || multiclassWeaponSelections.map((item: any) => item.name).join(', '),
+        toolsDisplayName: multiclassProficiencies.toolsDisplayName || multiclassToolSelections.map((item: any) => item.name).join(', ')
+      });
+      const syncedAdvancements = buildSyncedBaseAdvancements({
+        advancements,
+        hitDie,
+        proficiencies: normalizedProficiencies,
+        savingThrows,
+        subclassTitle,
+        subclassFeatureLevels,
+        asiLevels
+      });
+      const normalizedSpellcasting = normalizeClassSpellcastingForSave(spellcasting);
 
       const classData = {
         name,
@@ -681,21 +970,21 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         lore,
         sourceId,
         hitDie,
-        savingThrows: proficiencies.savingThrows?.fixedIds || [],
+        savingThrows: normalizedProficiencies.savingThrows?.fixedIds || [],
         proficiencies: normalizedProficiencies,
         startingEquipment,
         primaryAbility,
         primaryAbilityChoice,
         wealth,
         multiclassing,
-        multiclassProficiencies,
-        spellcasting,
+        multiclassProficiencies: normalizedMulticlassProficiencies,
+        spellcasting: normalizedSpellcasting,
         excludedOptionIds,
         tagIds,
         subclassTitle,
         subclassFeatureLevels,
         asiLevels,
-        advancements,
+        advancements: syncedAdvancements,
         imageUrl,
         updatedAt: new Date().toISOString()
       };
@@ -709,6 +998,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         });
         navigate(`/compendium/classes/edit/${docRef.id}`);
       }
+      setProficiencies(normalizedProficiencies);
+      setMulticlassProficiencies(normalizedMulticlassProficiencies);
+      setAdvancements(syncedAdvancements);
       toast.success('Class saved successfully!');
     } catch (error) {
       console.error("Error saving class:", error);
@@ -719,171 +1011,26 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   };
 
   const handleInitializeBaseAdvancements = () => {
-    const baseIds = [
-      'base-hp', 'base-saves', 'base-armor', 'base-weapons', 
-      'base-skills', 'base-tools', 'base-languages', 'base-items', 'base-subclass'
-    ];
-    
-    const existingIds = new Set(advancements.map(a => a._id));
-    const nextAdvs = [...advancements];
-    
-    const defaults: Advancement[] = [
-      {
-        _id: 'base-hp',
-        type: 'HitPoints',
-        level: 1,
-        title: 'Hit Points',
-        isBase: true,
-        configuration: { hitDie: hitDie || 8 }
-      },
-      {
-        _id: 'base-saves',
-        type: 'Trait',
-        level: 1,
-        title: 'Saving Throw Proficiencies',
-        isBase: true,
-        configuration: { 
-          type: 'saves', 
-          fixed: Array.from(new Set(proficiencies.savingThrows?.fixedIds || savingThrows || [])), 
-          options: proficiencies.savingThrows?.optionIds || [], 
-          choiceCount: proficiencies.savingThrows?.choiceCount || 0,
-          mode: 'default' 
-        }
-      },
-      {
-        _id: 'base-armor',
-        type: 'Trait',
-        level: 1,
-        title: 'Armor Proficiencies',
-        isBase: true,
-        configuration: { 
-          type: 'armor', 
-          fixed: proficiencies.armor?.fixedIds || [], 
-          options: proficiencies.armor?.optionIds || [], 
-          choiceCount: proficiencies.armor?.choiceCount || 0,
-          categoryIds: proficiencies.armor?.categoryIds || [],
-          mode: 'default' 
-        }
-      },
-      {
-        _id: 'base-weapons',
-        type: 'Trait',
-        level: 1,
-        title: 'Weapon Proficiencies',
-        isBase: true,
-        configuration: { 
-          type: 'weapons', 
-          fixed: proficiencies.weapons?.fixedIds || [], 
-          options: proficiencies.weapons?.optionIds || [], 
-          choiceCount: proficiencies.weapons?.choiceCount || 0,
-          categoryIds: proficiencies.weapons?.categoryIds || [],
-          mode: 'default' 
-        }
-      },
-      {
-        _id: 'base-skills',
-        type: 'Trait',
-        level: 1,
-        title: 'Skill Proficiencies',
-        isBase: true,
-        configuration: { 
-          type: 'skills', 
-          fixed: proficiencies.skills?.fixedIds || [], 
-          options: proficiencies.skills?.optionIds || [], 
-          choiceCount: proficiencies.skills?.choiceCount || 0,
-          mode: 'default' 
-        }
-      },
-      {
-        _id: 'base-tools',
-        type: 'Trait',
-        level: 1,
-        title: 'Tool Proficiencies',
-        isBase: true,
-        configuration: { 
-          type: 'tools', 
-          fixed: proficiencies.tools?.fixedIds || [], 
-          options: proficiencies.tools?.optionIds || [], 
-          choiceCount: proficiencies.tools?.choiceCount || 0,
-          categoryIds: proficiencies.tools?.categoryIds || [],
-          mode: 'default' 
-        }
-      },
-      {
-        _id: 'base-languages',
-        type: 'Trait',
-        level: 1,
-        title: 'Languages',
-        isBase: true,
-        configuration: { 
-          type: 'languages', 
-          fixed: proficiencies.languages?.fixedIds || [], 
-          options: proficiencies.languages?.optionIds || [], 
-          choiceCount: proficiencies.languages?.choiceCount || 0,
-          categoryIds: proficiencies.languages?.categoryIds || [],
-          mode: 'default' 
-        }
-      },
-      {
-        _id: 'base-items',
-        type: 'ItemChoice',
-        level: 1,
-        title: 'Starting Equipment Choices',
-        isBase: true,
-        configuration: { choiceType: 'item', pool: [], count: 1 }
-      },
-      {
-        _id: 'base-subclass',
-        type: 'Subclass',
-        level: subclassFeatureLevels[0] || 3,
-        title: subclassTitle || 'Select Subclass',
-        isBase: true,
-        configuration: {}
-      }
-    ];
-
-    asiLevels.forEach((lvl, i) => {
-      defaults.push({
-        _id: `base-asi-${i}`,
-        type: 'AbilityScoreImprovement',
-        level: lvl,
-        title: 'Ability Score Improvement',
-        isBase: true,
-        configuration: { points: 2, featAllowed: true }
-      });
+    const normalizedProficiencies = sanitizeProficiencyCollection(proficiencies);
+    const syncedAdvancements = buildSyncedBaseAdvancements({
+      advancements,
+      hitDie,
+      proficiencies: normalizedProficiencies,
+      savingThrows,
+      subclassTitle,
+      subclassFeatureLevels,
+      asiLevels
     });
 
-    let added = 0;
-    let updated = 0;
-    
-    defaults.forEach(d => {
-      const existingIdx = nextAdvs.findIndex(a => a._id === d._id);
-      if (existingIdx === -1) {
-        nextAdvs.push(d);
-        added++;
-      } else {
-        // Sync configuration for base advancements
-        nextAdvs[existingIdx] = {
-          ...nextAdvs[existingIdx],
-          configuration: {
-            ...nextAdvs[existingIdx].configuration,
-            ...d.configuration
-          }
-        };
-        updated++;
-      }
-    });
-
-    if (added > 0 || updated > 0) {
-      nextAdvs.sort((a, b) => {
-        if (a.level !== b.level) return a.level - b.level;
-        return a.type.localeCompare(b.type);
-      });
-      setAdvancements(nextAdvs);
-      toast.success(`Advancements synced: ${added} added, ${updated} updated.`);
-    } else {
+    if (JSON.stringify(advancements) === JSON.stringify(syncedAdvancements)) {
       toast.info('All base advancements are already present and up to date');
+      return;
     }
+
+    const added = syncedAdvancements.filter((adv) => adv.isBase && !advancements.some((existing) => existing._id === adv._id)).length;
+    const updated = syncedAdvancements.filter((adv) => adv.isBase && advancements.some((existing) => existing._id === adv._id)).length;
+    setAdvancements(syncedAdvancements);
+    toast.success(`Advancements synced: ${added} added, ${updated} updated.`);
   };
 
   const groupedArmor = (allArmor || []).reduce((acc, item) => {
@@ -913,6 +1060,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     acc[cat].push(item);
     return acc;
   }, {} as Record<string, any[]>);
+  const selectedSpellcastingType = spellcastingTypes.find((type) => type.id === spellcasting.progressionId);
 
   const toggleGroup = (items: any[], type: 'armor' | 'weapons' | 'tools' | 'languages', target: 'fixedIds' | 'optionIds', categoryId?: string) => {
     const currentIds = new Set(proficiencies[type][target] || []);
@@ -2094,11 +2242,21 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
                     >
                       <option value="">None</option>
-                      {spellcastingTypes.map(type => (
-                        <option key={type.id} value={type.id}>{type.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                        {spellcastingTypes.map(type => (
+                          <option key={type.id} value={type.id}>{type.name}</option>
+                        ))}
+                      </select>
+                      {selectedSpellcastingType && (
+                        <p className="text-[9px] text-ink/40 italic">
+                          Foundry: <span className="font-mono text-gold/70">{selectedSpellcastingType.foundryName || 'unset'}</span>
+                          {selectedSpellcastingType.formula ? (
+                            <>
+                              {' '}| Formula: <span className="font-mono text-gold/70">{selectedSpellcastingType.formula}</span>
+                            </>
+                          ) : null}
+                        </p>
+                      )}
+                    </div>
                   <div className="space-y-1">
                     <label className="label-text">Ability</label>
                     <select 
@@ -2144,37 +2302,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 <div className="space-y-4">
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="label-text">Manual Progression Override (1st-9th)</label>
-                      <div className="flex gap-1">
-                        <select 
-                          value={spellcasting.manualProgressionId || ''} 
-                          onChange={e => setSpellcasting({...spellcasting, manualProgressionId: e.target.value})}
-                          className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
-                        >
-                          <option value="">None (Use Formula)</option>
-                          {scalings.map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
-                        <div className="flex gap-1">
-                          {spellcasting.manualProgressionId && (
-                            <Link to={`/compendium/spellcasting-scaling/edit/${spellcasting.manualProgressionId}`}>
-                              <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
-                                <Edit className="w-3 h-3" />
-                              </Button>
-                            </Link>
-                          )}
-                          <Link to="/compendium/spellcasting-scaling/new">
-                            <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
-                              <Plus className="w-3 h-3" />
-                            </Button>
-                          </Link>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="label-text">Alternative Progression (Pact)</label>
+                      <label className="label-text">Alternative Progression (Pact / Focus Slots)</label>
                       <div className="flex gap-1">
                         <select 
                           value={spellcasting.altProgressionId} 
@@ -2201,35 +2329,36 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           </Link>
                         </div>
                       </div>
+                      <p className="text-[9px] text-ink/40 italic">Use this only for separate alternative slot systems such as Pact-style casting.</p>
                     </div>
-                  </div>
 
-                  <div className="space-y-1">
-                    <label className="label-text">Spells Known Scaling (Cantrips/Spells)</label>
-                    <div className="flex gap-1">
-                      <select 
-                        value={spellcasting.spellsKnownId} 
-                        onChange={e => setSpellcasting({...spellcasting, spellsKnownId: e.target.value})}
-                        className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
-                      >
-                        <option value="">None</option>
-                        {knownScalings.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
+                    <div className="space-y-1">
+                      <label className="label-text">Spells Known Scaling (Cantrips / Spells)</label>
                       <div className="flex gap-1">
-                        {spellcasting.spellsKnownId && (
-                          <Link to={`/compendium/spells-known-scaling/edit/${spellcasting.spellsKnownId}`}>
+                        <select 
+                          value={spellcasting.spellsKnownId} 
+                          onChange={e => setSpellcasting({...spellcasting, spellsKnownId: e.target.value})}
+                          className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                        >
+                          <option value="">None</option>
+                          {knownScalings.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        <div className="flex gap-1">
+                          {spellcasting.spellsKnownId && (
+                            <Link to={`/compendium/spells-known-scaling/edit/${spellcasting.spellsKnownId}`}>
+                              <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
+                                <Edit className="w-3 h-3" />
+                              </Button>
+                            </Link>
+                          )}
+                          <Link to="/compendium/spells-known-scaling/new">
                             <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
-                              <Edit className="w-3 h-3" />
+                              <Plus className="w-3 h-3" />
                             </Button>
                           </Link>
-                        )}
-                        <Link to="/compendium/spells-known-scaling/new">
-                          <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
-                            <Plus className="w-3 h-3" />
-                          </Button>
-                        </Link>
+                        </div>
                       </div>
                     </div>
                   </div>

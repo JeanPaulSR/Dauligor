@@ -415,7 +415,7 @@ export function buildClassImportWorkflow(payload, {
   const subclassFeatures = ensureArray(bundle.subclassFeatures).map((item) => normalizeWorldItem(item, bundle.source));
   const optionItems = ensureArray(bundle.optionItems).map((item) => normalizeWorldItem(item, bundle.source));
 
-  const minSubclassLevel = getMinimumSubclassSelectionLevel(classFeatures);
+  const minSubclassLevel = getMinimumSubclassSelectionLevel(classItem.system?.advancement, classFeatures);
   const existingSubclassItem = targetActor
     ? targetActor.items.find((item) =>
       item.type === "subclass"
@@ -740,7 +740,15 @@ function normalizeClassOptionGroups(groups) {
     .filter((group) => group.sourceId);
 }
 
-function getMinimumSubclassSelectionLevel(classFeatures) {
+function getMinimumSubclassSelectionLevel(classAdvancement, classFeatures) {
+  const subclassAdvancementLevel = Object.values(normalizeAdvancementStructure(classAdvancement))
+    .map((entry) => (entry?.type === "Subclass" ? Number(entry?.level ?? 0) : 0))
+    .filter((level) => Number.isFinite(level) && level > 0);
+
+  if (subclassAdvancementLevel.length) {
+    return Math.min(...subclassAdvancementLevel);
+  }
+
   const levels = ensureArray(classFeatures)
     .map((item) => ({
       featureKind: item.flags?.[MODULE_ID]?.featureKind ?? null,
@@ -919,6 +927,10 @@ function createSemanticClassItem(context) {
   const { classData, sourceMeta, classIdentifier, subclasses, uniqueOptionGroups } = context;
   const optionGroupMetadata = buildSemanticOptionGroupMetadata(context);
   const hitDieValue = parseHitDieFaces(classData.hitDie);
+  const rootAdvancement = normalizeSemanticRootAdvancements(classData?.advancements, context, {
+    ownerSourceId: context.classSourceId,
+    defaultLevel: 1
+  });
 
   const item = {
     name: trimString(classData.name) || "Class",
@@ -956,7 +968,9 @@ function createSemanticClassItem(context) {
       },
       wealth: normalizeWealthFormula(classData.wealth ?? ""),
       properties: [],
-      advancement: buildSemanticClassAdvancement(context)
+      advancement: Object.keys(rootAdvancement).length
+        ? rootAdvancement
+        : buildSemanticClassAdvancement(context)
     }
   };
 
@@ -970,6 +984,10 @@ function createSemanticClassItem(context) {
 function createSemanticSubclassItem(subclass, context) {
   const subclassSourceId = resolveSemanticEntitySourceId("subclass", subclass, { sourceBookId: context.sourceBookId });
   if (!subclassSourceId) return null;
+  const rootAdvancement = normalizeSemanticRootAdvancements(subclass?.advancements, context, {
+    ownerSourceId: subclassSourceId,
+    defaultLevel: 1
+  });
 
   const sourceMeta = {
     ...context.sourceMeta,
@@ -999,7 +1017,9 @@ function createSemanticSubclassItem(subclass, context) {
         chat: ""
       },
       source: buildFoundrySourceData(sourceMeta, context.payload?.source ?? null),
-      advancement: buildSemanticSubclassAdvancement(subclass, context)
+      advancement: Object.keys(rootAdvancement).length
+        ? rootAdvancement
+        : buildSemanticSubclassAdvancement(subclass, context)
     }
   };
 }
@@ -1131,6 +1151,96 @@ function normalizeSemanticFeatureAdvancements(feature, context) {
   return entries.length ? normalizeAdvancementStructure(entries) : null;
 }
 
+function normalizeSemanticRootAdvancements(advancements, context, {
+  ownerSourceId = null,
+  defaultLevel = 1
+} = {}) {
+  const advancementEntries = Array.isArray(advancements)
+    ? advancements
+    : (advancements && typeof advancements === "object")
+      ? Object.values(advancements)
+      : [];
+
+  const entries = advancementEntries
+    .map((advancement, index) => normalizeSemanticRootAdvancement(advancement, {
+      context,
+      ownerSourceId,
+      defaultLevel,
+      index
+    }))
+    .filter(Boolean);
+
+  return entries.length ? normalizeAdvancementStructure(entries) : {};
+}
+
+function normalizeSemanticRootAdvancement(advancement, {
+  context,
+  ownerSourceId,
+  defaultLevel = 1,
+  index = 0
+} = {}) {
+  const type = trimString(advancement?.type);
+  if (!type) return null;
+
+  const sourceOwnerId = ownerSourceId ?? "semantic-owner";
+  const sourceAdvancementId = trimString(advancement?._id) || buildAdvancementId(sourceOwnerId, type, `root-advancement-${index + 1}`);
+  const level = Number(advancement?.level ?? defaultLevel ?? 0) || 0;
+  const title = trimString(advancement?.title);
+  const hint = trimString(advancement?.hint);
+  const flags = foundry.utils.deepClone(advancement?.flags ?? {});
+  flags[MODULE_ID] ??= {};
+  flags[MODULE_ID].semanticAdvancementId = sourceAdvancementId;
+  flags[MODULE_ID].sourceAdvancementId = sourceAdvancementId;
+
+  const base = {
+    _id: sourceAdvancementId,
+    type,
+    configuration: {},
+    value: foundry.utils.deepClone(advancement?.value ?? {}),
+    flags,
+    hint
+  };
+  if (level > 0) base.level = level;
+  if (title) base.title = title;
+  if (trimString(advancement?.classRestriction)) base.classRestriction = trimString(advancement.classRestriction);
+
+  if (trimString(advancement?.featureSourceId)) {
+    base.flags[MODULE_ID].featureSourceId = trimString(advancement.featureSourceId);
+  }
+
+  switch (type) {
+    case "AbilityScoreImprovement":
+    case "Size":
+      base.configuration = foundry.utils.deepClone(advancement?.configuration ?? {});
+      return base;
+
+    case "HitPoints":
+      base.configuration = foundry.utils.deepClone(advancement?.configuration ?? {});
+      base.value = foundry.utils.deepClone(advancement?.value ?? {});
+      return base;
+
+    case "Subclass":
+      base.configuration = foundry.utils.deepClone(advancement?.configuration ?? {});
+      base.value = foundry.utils.deepClone(advancement?.value ?? {});
+      return base;
+
+    case "ItemGrant":
+      return normalizeSemanticRootItemGrantAdvancement(base, advancement, context);
+
+    case "ItemChoice":
+      return normalizeSemanticRootItemChoiceAdvancement(base, advancement, context);
+
+    case "ScaleValue":
+      return normalizeSemanticFeatureScaleAdvancement(base, advancement, context);
+
+    case "Trait":
+      return normalizeSemanticRootTraitAdvancement(base, advancement, context);
+
+    default:
+      return null;
+  }
+}
+
 function normalizeSemanticFeatureAdvancement(advancement, { feature, context, index = 0 } = {}) {
   const type = trimString(advancement?.type);
   if (!FEATURE_SUPPORTED_ADVANCEMENT_TYPES.has(type)) return null;
@@ -1179,6 +1289,93 @@ function normalizeSemanticFeatureAdvancement(advancement, { feature, context, in
     default:
       return null;
   }
+}
+
+function normalizeSemanticRootItemGrantAdvancement(base, advancement, context) {
+  const configuration = advancement?.configuration ?? {};
+  const explicitItems = ensureArray(configuration?.items)
+    .map((entry) => ({
+      sourceId: trimString(entry?.sourceId ?? entry?.uuid ?? entry),
+      optional: entry?.optional ?? configuration?.optional ?? false
+    }))
+    .filter((entry) => entry.sourceId);
+  const pooledItems = resolveFeaturePoolSourceIds(configuration?.pool, context)
+    .map((sourceId) => ({
+      sourceId,
+      optional: configuration?.optional ?? false
+    }));
+  const sourceItemMap = new Map();
+  for (const entry of [...explicitItems, ...pooledItems]) {
+    if (!entry.sourceId) continue;
+    if (!sourceItemMap.has(entry.sourceId)) {
+      sourceItemMap.set(entry.sourceId, { ...entry });
+      continue;
+    }
+
+    const existing = sourceItemMap.get(entry.sourceId);
+    existing.optional = existing.optional && entry.optional;
+  }
+  const sourceItems = [...sourceItemMap.values()];
+
+  base.configuration = {
+    items: sourceItems.map((entry) => ({
+      sourceId: entry.sourceId,
+      optional: entry.optional
+    })),
+    optional: configuration?.optional ?? false,
+    spell: normalizeAdvancementSpellConfig(configuration?.spell)
+  };
+
+  if (!base.value || typeof base.value !== "object") base.value = {};
+  base.value.added ??= {};
+  if (sourceItems.length) {
+    base.flags[MODULE_ID].sourceItems = sourceItems.map((entry) => entry.sourceId);
+  }
+
+  return base;
+}
+
+function normalizeSemanticRootItemChoiceAdvancement(base, advancement, context) {
+  const configuration = advancement?.configuration ?? {};
+  const level = Number(base.level ?? 0) || 1;
+  const sourcePool = configuration?.choiceType === "option-group"
+    ? resolveOptionGroupSourceIds(configuration?.optionGroupId, context)
+    : resolveFeaturePoolSourceIds(configuration?.pool, context);
+
+  base.configuration = {
+    allowDrops: configuration?.allowDrops ?? false,
+    choices: normalizeItemChoiceChoices(configuration, level, context),
+    pool: sourcePool.map((sourceId) => ({ sourceId })),
+    restriction: normalizeItemChoiceRestriction(configuration?.restriction),
+    spell: normalizeNullableSpellConfig(configuration?.spell),
+    type: trimString(configuration?.type) || "feat"
+  };
+
+  if (sourcePool.length) {
+    base.flags[MODULE_ID].sourcePool = sourcePool;
+  }
+
+  if (!base.value || typeof base.value !== "object") base.value = {};
+  base.value.added ??= {};
+  base.value.replaced ??= {};
+  return base;
+}
+
+function normalizeSemanticRootTraitAdvancement(base, advancement, context) {
+  const normalized = normalizeSemanticFeatureTraitAdvancement(base, advancement, context);
+  if (!normalized) return null;
+
+  const traitType = trimString(advancement?.configuration?.type);
+  if (traitType === "skills") {
+    normalized.flags[MODULE_ID] ??= {};
+    normalized.flags[MODULE_ID].advancementKind = "skills";
+  }
+  if (traitType === "saves") {
+    normalized.flags[MODULE_ID] ??= {};
+    normalized.flags[MODULE_ID].advancementKind = "savingThrows";
+  }
+
+  return normalized;
 }
 
 function normalizeSemanticFeatureItemGrantAdvancement(base, advancement, context) {

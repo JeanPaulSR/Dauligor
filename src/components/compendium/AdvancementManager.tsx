@@ -422,9 +422,42 @@ export default function AdvancementManager({
     onChange(next);
   };
 
+  const normalizeAdvancementForSave = (value: Advancement): Advancement => {
+    const nextAdvancement = JSON.parse(JSON.stringify(value)) as Advancement;
+    const configuration = { ...(nextAdvancement.configuration || {}) };
+
+    if (nextAdvancement.type === 'Trait') {
+      const currentTraitType = configuration.type || 'skills';
+      configuration.mode = TRAIT_MODE_ENABLED_TYPES.has(currentTraitType)
+        ? (configuration.mode || 'default')
+        : 'default';
+      configuration.allowReplacements = Boolean(configuration.allowReplacements ?? configuration.allowReplacement);
+      delete configuration.allowReplacement;
+
+      if (configuration.choiceSource !== 'scaling') {
+        configuration.choiceSource = 'fixed';
+        delete configuration.scalingColumnId;
+      }
+    }
+
+    if (nextAdvancement.type === 'ItemChoice' || nextAdvancement.type === 'ItemGrant') {
+      if (configuration.countSource !== 'scaling') {
+        configuration.countSource = 'fixed';
+        delete configuration.scalingColumnId;
+      }
+
+      configuration.pool = Array.from(new Set(configuration.pool || []));
+      configuration.optionalPool = Array.from(new Set(configuration.optionalPool || []));
+      configuration.excludedOptionIds = Array.from(new Set(configuration.excludedOptionIds || []));
+    }
+
+    nextAdvancement.configuration = configuration;
+    return nextAdvancement;
+  };
+
   const handleSave = () => {
     const next = [...advancements];
-    const adv = editingAdv as Advancement;
+    const adv = normalizeAdvancementForSave(editingAdv as Advancement);
     if (editingIndex !== null) {
       next[editingIndex] = adv;
     } else {
@@ -1462,13 +1495,13 @@ export default function AdvancementManager({
                       </div>
                       <label className="flex items-start gap-2.5 cursor-pointer group">
                         <div className={`w-4 h-4 mt-0.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                          editingAdv.configuration?.allowReplacement ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
+                          (editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
                         }`}>
-                          {editingAdv.configuration?.allowReplacement && <Check className="w-2.5 h-2.5 text-white" />}
+                          {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && <Check className="w-2.5 h-2.5 text-white" />}
                         </div>
                         <input type="checkbox" className="hidden"
-                          checked={editingAdv.configuration?.allowReplacement || false}
-                          onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, allowReplacement: e.target.checked }})}
+                          checked={(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) || false}
+                          onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, allowReplacements: e.target.checked, allowReplacement: undefined }})}
                         />
                         <div>
                           <span className="text-[10px] uppercase font-bold text-ink/70 block">Allow Replacements</span>

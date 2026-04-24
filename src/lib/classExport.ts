@@ -20,6 +20,11 @@ export interface SourceExportBundle {
   classes: { [slug: string]: any };
 }
 
+function buildSemanticRecordSourceId(prefix: string, record: any, fallbackId: string = '') {
+  const identifier = trimString(record?.identifier) || slugify(trimString(record?.name || fallbackId));
+  return identifier ? `${prefix}-${identifier}` : trimString(fallbackId);
+}
+
 /**
  * Imports a class semantic export bundle into Firestore.
  */
@@ -36,6 +41,8 @@ export async function importClassSemantic(data: any) {
     uniqueOptionGroups = [],
     uniqueOptionItems = [],
     spellcastingScalings = {},
+    spellsKnownScalings = {},
+    alternativeSpellcastingScalings = {},
     source = null
   } = data;
 
@@ -71,6 +78,22 @@ export async function importClassSemantic(data: any) {
   for (const id in spellcastingScalings) {
     const sc = spellcastingScalings[id];
     await setDoc(doc(db, 'spellcastingScalings', id), {
+      ...prepare(sc),
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  for (const id in spellsKnownScalings) {
+    const sc = spellsKnownScalings[id];
+    await setDoc(doc(db, 'spellsKnownScalings', id), {
+      ...prepare(sc),
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  for (const id in alternativeSpellcastingScalings) {
+    const sc = alternativeSpellcastingScalings[id];
+    await setDoc(doc(db, 'pactMagicScalings', id), {
       ...prepare(sc),
       updatedAt: serverTimestamp()
     });
@@ -170,6 +193,554 @@ function cleanText(text: string): string {
   return cleaned.trim();
 }
 
+function trimString(value: any) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function uniqueStrings(values: any[] = []) {
+  return Array.from(new Set(values.map(value => trimString(value)).filter(Boolean)));
+}
+
+function omitKeys<T extends Record<string, any>>(value: T, keys: string[] = []) {
+  const clone: Record<string, any> = { ...value };
+  keys.forEach((key) => {
+    delete clone[key];
+  });
+  return clone as T;
+}
+
+function asArray<T = any>(value: any): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function buildDocMap(snapshot: any) {
+  const mapped: Record<string, any> = {};
+  snapshot.docs.forEach((docSnap: any) => {
+    mapped[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+  });
+  return mapped;
+}
+
+function getSemanticToken(entry: any, {
+  preferFoundry = false,
+  uppercase = false
+}: { preferFoundry?: boolean; uppercase?: boolean } = {}) {
+  const raw = preferFoundry
+    ? (entry?.foundryAlias || entry?.identifier || entry?.name)
+    : (entry?.identifier || entry?.foundryAlias || entry?.name);
+  const fallback = slugify(String(raw || ''));
+  if (!fallback) return '';
+  return uppercase ? fallback.toUpperCase() : fallback.toLowerCase();
+}
+
+function normalizeMappedId(id: string | undefined, map: Record<string, any>, options: { preferFoundry?: boolean; uppercase?: boolean } = {}) {
+  const raw = trimString(id);
+  if (!raw) return '';
+  const entry = map[raw];
+  if (!entry) {
+    return options.uppercase ? raw.toUpperCase() : raw;
+  }
+  return getSemanticToken(entry, options);
+}
+
+function normalizeSpellcastingForExport(spellcasting: any, refs: any = {}, {
+  preserveNativeProgression = false
+}: { preserveNativeProgression?: boolean } = {}) {
+  if (!spellcasting || typeof spellcasting !== 'object') return null;
+
+  const normalized: any = {
+    ...spellcasting,
+    description: cleanText(spellcasting.description || ''),
+    hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
+    level: Number(spellcasting.level || 1) || 1,
+    ability: trimString(spellcasting.ability).toUpperCase() || '',
+    type: trimString(spellcasting.type).toLowerCase() || 'prepared',
+    spellsKnownFormula: trimString(spellcasting.spellsKnownFormula)
+  };
+
+  const progressionTypeId = trimString(spellcasting.progressionId);
+  const progressionType = refs.spellcastingTypesById?.[progressionTypeId];
+  if (progressionTypeId) {
+    normalized.progressionTypeSourceId = buildSemanticRecordSourceId('spellcasting-type', progressionType, progressionTypeId);
+  }
+  if (progressionType?.identifier) normalized.progressionTypeIdentifier = trimString(progressionType.identifier);
+  if (progressionType?.name) normalized.progressionTypeLabel = trimString(progressionType.name);
+  if (progressionType?.formula) normalized.progressionFormula = trimString(progressionType.formula);
+
+  const mappedProgression = trimString(progressionType?.foundryName).toLowerCase();
+  const progression = trimString(spellcasting.progression).toLowerCase();
+  const validNativeProgressions = new Set(['none', 'full', 'half', 'third', 'pact', 'artificer']);
+  const hasLinkedScalingIds = Boolean(
+    progressionTypeId
+    || trimString(spellcasting.altProgressionId)
+    || trimString(spellcasting.spellsKnownId)
+  );
+
+  if (mappedProgression && validNativeProgressions.has(mappedProgression)) {
+    normalized.progression = mappedProgression;
+  } else if (
+    progression
+    && validNativeProgressions.has(progression)
+    && (preserveNativeProgression || !hasLinkedScalingIds)
+  ) {
+    normalized.progression = progression;
+  } else {
+    delete normalized.progression;
+  }
+
+  const alternativeProgressionId = trimString(spellcasting.altProgressionId);
+  const alternativeProgression = refs.pactMagicScalingsById?.[alternativeProgressionId];
+  if (alternativeProgressionId) {
+    normalized.altProgressionSourceId = buildSemanticRecordSourceId('alternative-spellcasting-scaling', alternativeProgression, alternativeProgressionId);
+  }
+
+  const spellsKnownId = trimString(spellcasting.spellsKnownId);
+  const spellsKnownScaling = refs.spellsKnownScalingsById?.[spellsKnownId];
+  if (spellsKnownId) {
+    normalized.spellsKnownSourceId = buildSemanticRecordSourceId('spells-known-scaling', spellsKnownScaling, spellsKnownId);
+  }
+
+  delete normalized.progressionId;
+  delete normalized.manualProgressionId;
+  delete normalized.altProgressionId;
+  delete normalized.spellsKnownId;
+
+  return normalized;
+}
+
+function sanitizeNormalizedProficiencyBlock(block: any) {
+  const fixedIds = uniqueStrings(asArray(block?.fixedIds));
+  const fixedSet = new Set(fixedIds);
+  return {
+    choiceCount: Number(block?.choiceCount || 0) || 0,
+    categoryIds: uniqueStrings(asArray(block?.categoryIds)),
+    optionIds: uniqueStrings(asArray(block?.optionIds)).filter((id) => !fixedSet.has(id)),
+    fixedIds
+  };
+}
+
+function normalizeClassProficiencies(rawProficiencies: any, refs: any) {
+  const raw = rawProficiencies || {};
+
+  return {
+    armor: sanitizeNormalizedProficiencyBlock({
+      choiceCount: Number(raw.armor?.choiceCount || 0) || 0,
+      categoryIds: uniqueStrings(asArray(raw.armor?.categoryIds).map((id: string) => normalizeMappedId(id, refs.armorCategoriesById))),
+      optionIds: uniqueStrings(asArray(raw.armor?.optionIds).map((id: string) => normalizeMappedId(id, refs.armorById, { preferFoundry: true }))),
+      fixedIds: uniqueStrings(asArray(raw.armor?.fixedIds).map((id: string) => normalizeMappedId(id, refs.armorById, { preferFoundry: true })))
+    }),
+    weapons: sanitizeNormalizedProficiencyBlock({
+      choiceCount: Number(raw.weapons?.choiceCount || 0) || 0,
+      categoryIds: uniqueStrings(asArray(raw.weapons?.categoryIds).map((id: string) => normalizeMappedId(id, refs.weaponCategoriesById))),
+      optionIds: uniqueStrings(asArray(raw.weapons?.optionIds).map((id: string) => normalizeMappedId(id, refs.weaponsById, { preferFoundry: true }))),
+      fixedIds: uniqueStrings(asArray(raw.weapons?.fixedIds).map((id: string) => normalizeMappedId(id, refs.weaponsById, { preferFoundry: true })))
+    }),
+    tools: sanitizeNormalizedProficiencyBlock({
+      choiceCount: Number(raw.tools?.choiceCount || 0) || 0,
+      categoryIds: uniqueStrings(asArray(raw.tools?.categoryIds).map((id: string) => normalizeMappedId(id, refs.toolCategoriesById))),
+      optionIds: uniqueStrings(asArray(raw.tools?.optionIds).map((id: string) => normalizeMappedId(id, refs.toolsById, { preferFoundry: true }))),
+      fixedIds: uniqueStrings(asArray(raw.tools?.fixedIds).map((id: string) => normalizeMappedId(id, refs.toolsById, { preferFoundry: true })))
+    }),
+    languages: sanitizeNormalizedProficiencyBlock({
+      choiceCount: Number(raw.languages?.choiceCount || 0) || 0,
+      categoryIds: uniqueStrings(asArray(raw.languages?.categoryIds).map((id: string) => normalizeMappedId(id, refs.languageCategoriesById))),
+      optionIds: uniqueStrings(asArray(raw.languages?.optionIds).map((id: string) => normalizeMappedId(id, refs.languagesById))),
+      fixedIds: uniqueStrings(asArray(raw.languages?.fixedIds).map((id: string) => normalizeMappedId(id, refs.languagesById)))
+    }),
+    skills: sanitizeNormalizedProficiencyBlock({
+      choiceCount: Number(raw.skills?.choiceCount || 0) || 0,
+      optionIds: uniqueStrings(asArray(raw.skills?.optionIds).map((id: string) => normalizeMappedId(id, refs.skillsById, { preferFoundry: true }))),
+      fixedIds: uniqueStrings(asArray(raw.skills?.fixedIds).map((id: string) => normalizeMappedId(id, refs.skillsById, { preferFoundry: true })))
+    }),
+    savingThrows: sanitizeNormalizedProficiencyBlock({
+      choiceCount: Number(raw.savingThrows?.choiceCount || 0) || 0,
+      optionIds: uniqueStrings(asArray(raw.savingThrows?.optionIds).map((id: string) => normalizeMappedId(id, refs.attributesById, { uppercase: true }))),
+      fixedIds: uniqueStrings(asArray(raw.savingThrows?.fixedIds).map((id: string) => normalizeMappedId(id, refs.attributesById, { uppercase: true })))
+    })
+  };
+}
+
+function collectExplicitGrantedFeatureRefs(advancements: any[] = []) {
+  const granted = new Set<string>();
+
+  advancements.forEach((advancement) => {
+    if (trimString(advancement?.type) !== 'ItemGrant') return;
+    if (trimString(advancement?.featureId)) granted.add(trimString(advancement.featureId));
+    if (trimString(advancement?.featureSourceId)) granted.add(trimString(advancement.featureSourceId));
+
+    asArray(advancement?.configuration?.pool).forEach((entry: any) => granted.add(trimString(entry)));
+    asArray(advancement?.configuration?.optionalPool).forEach((entry: any) => granted.add(trimString(entry)));
+    asArray(advancement?.configuration?.items).forEach((entry: any) => {
+      const sourceId = trimString(entry?.sourceId);
+      const uuid = trimString(entry?.uuid);
+      if (sourceId) granted.add(sourceId);
+      if (uuid) granted.add(uuid);
+    });
+  });
+
+  return granted;
+}
+
+function buildInherentFeatureGrantAdvancements(features: any[] = [], existingAdvancements: any[] = [], prefix: string) {
+  const explicitlyGranted = collectExplicitGrantedFeatureRefs(existingAdvancements);
+
+  return features
+    .filter((feature) => !explicitlyGranted.has(feature.id) && !explicitlyGranted.has(feature.sourceId))
+    .map((feature) => ({
+      _id: `${prefix}-${feature.identifier || feature.id}`,
+      type: 'ItemGrant',
+      level: Number(feature.level || 1) || 1,
+      title: feature.name || 'Grant Feature',
+      featureId: feature.id,
+      configuration: {
+        choiceType: 'feature',
+        optional: false,
+        items: [{ uuid: feature.id, optional: false }]
+      }
+    }));
+}
+
+function buildOptionGroupFeatureSourceMap(records: any[] = [], featuresById: Record<string, any>) {
+  const featureSourceByOptionGroup: Record<string, string> = {};
+
+  records.forEach((record) => {
+    asArray(record?.advancements).forEach((advancement) => {
+      const optionGroupId = trimString(advancement?.configuration?.optionGroupId);
+      if (!optionGroupId) return;
+
+      const featureSourceId = trimString(advancement?.featureSourceId)
+        || featuresById[trimString(advancement?.featureId)]?.sourceId
+        || '';
+
+      if (featureSourceId && !featureSourceByOptionGroup[optionGroupId]) {
+        featureSourceByOptionGroup[optionGroupId] = featureSourceId;
+      }
+    });
+  });
+
+  return featureSourceByOptionGroup;
+}
+
+function buildBaseClassAdvancementsForExport({
+  classDataRaw,
+  normalizedProficiencies,
+  hitDie,
+  subclassTitle,
+  subclassFeatureLevels,
+  asiLevels,
+  existingAdvancements
+}: {
+  classDataRaw: any;
+  normalizedProficiencies: any;
+  hitDie: number;
+  subclassTitle: string;
+  subclassFeatureLevels: number[];
+  asiLevels: number[];
+  existingAdvancements: any[];
+}) {
+  const existingById = new Map(asArray(existingAdvancements).map((adv: any) => [adv._id, adv]));
+  const baseItems = existingById.get('base-items');
+  const subclassLevel = Number(subclassFeatureLevels?.[0] || existingById.get('base-subclass')?.level || 3) || 3;
+  const baseAdvancements: any[] = [
+    {
+      _id: 'base-hp',
+      type: 'HitPoints',
+      isBase: true,
+      level: 1,
+      title: 'Hit Points',
+      configuration: { hitDie }
+    },
+    {
+      _id: 'base-saves',
+      type: 'Trait',
+      isBase: true,
+      level: 1,
+      title: 'Saving Throw Proficiencies',
+      configuration: {
+        type: 'saves',
+        mode: 'default',
+        choiceCount: normalizedProficiencies.savingThrows.choiceCount,
+        fixed: normalizedProficiencies.savingThrows.fixedIds,
+        options: normalizedProficiencies.savingThrows.optionIds,
+        categoryIds: []
+      }
+    },
+    {
+      _id: 'base-armor',
+      type: 'Trait',
+      isBase: true,
+      level: 1,
+      title: 'Armor Proficiencies',
+      configuration: {
+        type: 'armor',
+        mode: 'default',
+        choiceCount: normalizedProficiencies.armor.choiceCount,
+        fixed: normalizedProficiencies.armor.fixedIds,
+        options: normalizedProficiencies.armor.optionIds,
+        categoryIds: normalizedProficiencies.armor.categoryIds
+      }
+    },
+    {
+      _id: 'base-weapons',
+      type: 'Trait',
+      isBase: true,
+      level: 1,
+      title: 'Weapon Proficiencies',
+      configuration: {
+        type: 'weapons',
+        mode: 'default',
+        choiceCount: normalizedProficiencies.weapons.choiceCount,
+        fixed: normalizedProficiencies.weapons.fixedIds,
+        options: normalizedProficiencies.weapons.optionIds,
+        categoryIds: normalizedProficiencies.weapons.categoryIds
+      }
+    },
+    {
+      _id: 'base-skills',
+      type: 'Trait',
+      isBase: true,
+      level: 1,
+      title: 'Skill Proficiencies',
+      configuration: {
+        type: 'skills',
+        mode: 'default',
+        choiceCount: normalizedProficiencies.skills.choiceCount,
+        fixed: normalizedProficiencies.skills.fixedIds,
+        options: normalizedProficiencies.skills.optionIds,
+        categoryIds: []
+      }
+    },
+    {
+      _id: 'base-tools',
+      type: 'Trait',
+      isBase: true,
+      level: 1,
+      title: 'Tool Proficiencies',
+      configuration: {
+        type: 'tools',
+        mode: 'default',
+        choiceCount: normalizedProficiencies.tools.choiceCount,
+        fixed: normalizedProficiencies.tools.fixedIds,
+        options: normalizedProficiencies.tools.optionIds,
+        categoryIds: normalizedProficiencies.tools.categoryIds
+      }
+    },
+    {
+      _id: 'base-languages',
+      type: 'Trait',
+      isBase: true,
+      level: 1,
+      title: 'Languages',
+      configuration: {
+        type: 'languages',
+        mode: 'default',
+        choiceCount: normalizedProficiencies.languages.choiceCount,
+        fixed: normalizedProficiencies.languages.fixedIds,
+        options: normalizedProficiencies.languages.optionIds,
+        categoryIds: normalizedProficiencies.languages.categoryIds
+      }
+    },
+    {
+      _id: 'base-items',
+      type: 'ItemChoice',
+      isBase: true,
+      level: 1,
+      title: baseItems?.title || 'Starting Equipment Choices',
+      configuration: {
+        ...(baseItems?.configuration || {}),
+        choiceType: baseItems?.configuration?.choiceType || 'item',
+        pool: asArray(baseItems?.configuration?.pool),
+        count: Number(baseItems?.configuration?.count || 1) || 1
+      }
+    },
+    {
+      _id: 'base-subclass',
+      type: 'Subclass',
+      isBase: true,
+      level: subclassLevel,
+      title: trimString(subclassTitle) || existingById.get('base-subclass')?.title || 'Select Subclass',
+      configuration: {
+        ...(existingById.get('base-subclass')?.configuration || {})
+      }
+    }
+  ];
+
+  (asiLevels || []).forEach((level, index) => {
+    baseAdvancements.push({
+      _id: `base-asi-${index}`,
+      type: 'AbilityScoreImprovement',
+      isBase: true,
+      level,
+      title: 'Ability Score Improvement',
+      configuration: {
+        points: 2,
+        featAllowed: true
+      }
+    });
+  });
+
+  return baseAdvancements;
+}
+
+function collectReferencedOptionGroupIds(...records: any[]) {
+  const ids = new Set<string>();
+
+  const collectFromAdvancements = (advancements: any[] = []) => {
+    advancements.forEach((adv) => {
+      const optionGroupId = trimString(adv?.configuration?.optionGroupId);
+      if (optionGroupId) ids.add(optionGroupId);
+    });
+  };
+
+  records.forEach((record) => {
+    if (!record) return;
+    asArray(record.uniqueOptionGroupIds).forEach((id: string) => {
+      const normalized = trimString(id);
+      if (normalized) ids.add(normalized);
+    });
+    collectFromAdvancements(asArray(record.advancements));
+  });
+
+  return Array.from(ids);
+}
+
+function normalizeTraitEntry(kind: string, value: string, refs: any) {
+  const raw = trimString(value);
+  if (!raw) return '';
+  if (raw.includes(':')) return raw;
+
+  switch (kind) {
+    case 'skills':
+      return normalizeMappedId(raw, refs.skillsById, { preferFoundry: true });
+    case 'saves':
+      return normalizeMappedId(raw, refs.attributesById, { uppercase: true });
+    case 'tools':
+      return normalizeMappedId(raw, refs.toolsById, { preferFoundry: true });
+    case 'armor':
+      return normalizeMappedId(raw, refs.armorById, { preferFoundry: true });
+    case 'weapons':
+      return normalizeMappedId(raw, refs.weaponsById, { preferFoundry: true });
+    case 'languages':
+      return normalizeMappedId(raw, refs.languagesById);
+    default:
+      return raw;
+  }
+}
+
+function normalizeTraitCategory(kind: string, value: string, refs: any) {
+  const raw = trimString(value);
+  if (!raw) return '';
+
+  switch (kind) {
+    case 'tools':
+      return normalizeMappedId(raw, refs.toolCategoriesById);
+    case 'armor':
+      return normalizeMappedId(raw, refs.armorCategoriesById);
+    case 'weapons':
+      return normalizeMappedId(raw, refs.weaponCategoriesById);
+    case 'languages':
+      return normalizeMappedId(raw, refs.languageCategoriesById);
+    default:
+      return raw;
+  }
+}
+
+function normalizeAdvancementForExport(advancement: any, context: any) {
+  if (!advancement || typeof advancement !== 'object') return null;
+
+  const normalized: any = JSON.parse(JSON.stringify(advancement));
+  const configuration = { ...(normalized.configuration || {}) };
+  const type = trimString(normalized.type);
+
+  if (normalized.featureId) {
+    const linkedFeature = context.featuresById[normalized.featureId];
+    if (linkedFeature) {
+      normalized.featureSourceId = linkedFeature.sourceId;
+      normalized.level = Number(linkedFeature.level || normalized.level || 1) || 1;
+      if (!trimString(normalized.title)) normalized.title = linkedFeature.name || normalized.title;
+    }
+    delete normalized.featureId;
+  }
+
+  if (type === 'Trait') {
+    const traitType = trimString(configuration.type || 'skills');
+    normalized.configuration = {
+      ...configuration,
+      mode: trimString(configuration.mode || 'default') || 'default',
+      choiceCount: Number(configuration.choiceCount || 0) || 0,
+      choiceSource: trimString(configuration.choiceSource || ''),
+      allowReplacements: Boolean(configuration.allowReplacements ?? configuration.allowReplacement),
+      fixed: uniqueStrings(asArray(configuration.fixed).map((value: string) => normalizeTraitEntry(traitType, value, context.refs))),
+      options: uniqueStrings(asArray(configuration.options).map((value: string) => normalizeTraitEntry(traitType, value, context.refs))),
+      categoryIds: uniqueStrings(asArray(configuration.categoryIds).map((value: string) => normalizeTraitCategory(traitType, value, context.refs)))
+    };
+
+    if (configuration.scalingColumnId) {
+      const scalingSourceId = context.scalingSourceIdById[configuration.scalingColumnId] || trimString(configuration.scalingColumnId);
+      if (scalingSourceId) normalized.configuration.scalingSourceId = scalingSourceId;
+    }
+
+    delete normalized.configuration.allowReplacement;
+    delete normalized.configuration.scalingColumnId;
+  } else if (type === 'ItemChoice' || type === 'ItemGrant') {
+    normalized.configuration = {
+      ...configuration,
+      choiceType: trimString(configuration.choiceType || (type === 'ItemChoice' ? 'feature' : 'feature')),
+      countSource: trimString(configuration.countSource || 'fixed'),
+      count: Number(configuration.count || 0) || 0,
+      pool: uniqueStrings(asArray(configuration.pool).map((value: string) => context.featureSourceIdById[value] || trimString(value))),
+      optionalPool: uniqueStrings(asArray(configuration.optionalPool).map((value: string) => context.featureSourceIdById[value] || trimString(value))),
+      excludedOptionIds: uniqueStrings(asArray(configuration.excludedOptionIds).map((value: string) => context.optionItemSourceIdById[value] || trimString(value))),
+      optional: Boolean(configuration.optional)
+    };
+
+    if (configuration.optionGroupId) {
+      const optionGroupSourceId = context.optionGroupSourceIdById[configuration.optionGroupId] || trimString(configuration.optionGroupId);
+      if (optionGroupSourceId) normalized.configuration.optionGroupId = optionGroupSourceId;
+    }
+
+    if (configuration.scalingColumnId) {
+      const scalingSourceId = context.scalingSourceIdById[configuration.scalingColumnId] || trimString(configuration.scalingColumnId);
+      if (scalingSourceId) normalized.configuration.scalingColumnId = scalingSourceId;
+    }
+
+    if (Array.isArray(configuration.items)) {
+      normalized.configuration.items = configuration.items.map((entry: any) => {
+        const sourceId = trimString(entry?.sourceId)
+          || context.featureSourceIdById[entry?.uuid]
+          || trimString(entry?.uuid);
+        return sourceId
+          ? { sourceId, optional: Boolean(entry?.optional) }
+          : null;
+      }).filter(Boolean);
+    }
+  } else if (type === 'ScaleValue') {
+    const linkedScale = context.scalingById[configuration.scalingColumnId];
+    normalized.configuration = {
+      ...configuration,
+      identifier: trimString(configuration.identifier) || linkedScale?.identifier || slugify(normalized.title || 'scale'),
+      values: linkedScale?.values || configuration.values || {}
+    };
+    if (linkedScale?.sourceId) {
+      normalized.configuration.scalingColumnId = linkedScale.sourceId;
+      normalized.sourceScaleId = linkedScale.sourceId;
+    } else {
+      delete normalized.configuration.scalingColumnId;
+    }
+    if (!trimString(normalized.title) && linkedScale?.name) normalized.title = linkedScale.name;
+  } else {
+    normalized.configuration = configuration;
+  }
+
+  delete normalized.isBase;
+  return normalized;
+}
+
+function sortAdvancementsByLevelThenType(left: any, right: any) {
+  if (left.level !== right.level) return left.level - right.level;
+  return String(left.type || '').localeCompare(String(right.type || ''));
+}
+
 /**
  * Fetches all data for a single class and formats it for semantic export.
  */
@@ -177,127 +748,61 @@ export async function exportClassSemantic(classId: string) {
   const classDoc = await getDoc(doc(db, 'classes', classId));
   if (!classDoc.exists()) return null;
   const classDataRaw: any = { id: classDoc.id, ...classDoc.data() };
+  const [
+    skillsSnap,
+    toolsSnap,
+    toolCategoriesSnap,
+    armorSnap,
+    armorCategoriesSnap,
+    weaponsSnap,
+    weaponCategoriesSnap,
+    languagesSnap,
+    languageCategoriesSnap,
+    attributesSnap,
+    tagsSnap,
+    spellcastingTypesSnap,
+    pactMagicScalingsSnap,
+    spellsKnownScalingsSnap
+  ] = await Promise.all([
+    getDocs(collection(db, 'skills')),
+    getDocs(collection(db, 'tools')),
+    getDocs(collection(db, 'toolCategories')),
+    getDocs(collection(db, 'armor')),
+    getDocs(collection(db, 'armorCategories')),
+    getDocs(collection(db, 'weapons')),
+    getDocs(collection(db, 'weaponCategories')),
+    getDocs(collection(db, 'languages')),
+    getDocs(collection(db, 'languageCategories')),
+    getDocs(collection(db, 'attributes')),
+    getDocs(collection(db, 'tags')),
+    getDocs(collection(db, 'spellcastingTypes')),
+    getDocs(collection(db, 'pactMagicScalings')),
+    getDocs(collection(db, 'spellsKnownScalings'))
+  ]);
 
-  // Fetch Skills for mapping
-  const skillsSnap = await getDocs(collection(db, 'skills'));
-  const skillMap: { [id: string]: string } = {};
-  skillsSnap.docs.forEach(d => {
-    const data = d.data();
-    skillMap[d.id] = data.foundryAlias || data.identifier || slugify(data.name);
-  });
-
-  // Fetch Tools for mapping
-  const toolsSnap = await getDocs(collection(db, 'tools'));
-  const toolMap: { [id: string]: string } = {};
-  toolsSnap.docs.forEach(d => {
-    const data = d.data();
-    toolMap[d.id] = data.identifier || slugify(data.name);
-  });
-
-  // Fetch Tags for mapping
-  const tagsSnap = await getDocs(collection(db, 'tags'));
-  const tagMap: { [id: string]: string } = {};
-  tagsSnap.docs.forEach(d => {
-    tagMap[d.id] = slugify(d.data().name);
-  });
-
-  // Helper to map array of IDs to semantic strings
-  const mapIds = (ids: string[] | undefined, map: { [id: string]: string }) => {
-    if (!ids) return [];
-    return ids.map(id => map[id] || id);
+  const refs = {
+    skillsById: buildDocMap(skillsSnap),
+    toolsById: buildDocMap(toolsSnap),
+    toolCategoriesById: buildDocMap(toolCategoriesSnap),
+    armorById: buildDocMap(armorSnap),
+    armorCategoriesById: buildDocMap(armorCategoriesSnap),
+    weaponsById: buildDocMap(weaponsSnap),
+    weaponCategoriesById: buildDocMap(weaponCategoriesSnap),
+    languagesById: buildDocMap(languagesSnap),
+    languageCategoriesById: buildDocMap(languageCategoriesSnap),
+    attributesById: buildDocMap(attributesSnap),
+    tagsById: buildDocMap(tagsSnap),
+    spellcastingTypesById: buildDocMap(spellcastingTypesSnap),
+    pactMagicScalingsById: buildDocMap(pactMagicScalingsSnap),
+    spellsKnownScalingsById: buildDocMap(spellsKnownScalingsSnap)
   };
 
-  // 1. Prepare Root Class Object
-  let mappedAdvancements = (classDataRaw.advancements || []).map((adv: any) => {
-    if (adv._id === "implicit-proficiencies") {
-      const configuration = { ...adv.configuration };
-      const choices = (configuration.choices || []).map((choice: any) => {
-        // Find if this is skills or tools
-        let mappedPool = [];
-        if (choice.pool && classDataRaw.proficiencies?.skills?.optionIds?.includes(choice.pool[0])) {
-           mappedPool = mapIds(choice.pool, skillMap).map(s => `skills:${s.substring(0,3)}`);
-        } else if (choice.pool && classDataRaw.proficiencies?.tools?.optionIds?.includes(choice.pool[0])) {
-           mappedPool = mapIds(choice.pool, toolMap).map(t => `tools:${t.replace(/[^a-z0-9]/g,'').substring(0,3)}`);
-        } else {
-           mappedPool = mapIds(choice.pool, skillMap).map(s => `skills:${s.substring(0,3)}`);
-        }
-        return { ...choice, pool: mappedPool };
-      });
-      // Grants are already using the mapped skills/tools in handleSave? Wait, I didn't map them in handleSave, I just added raw IDs!
-      const mappedGrants = [];
-      const rawGrants = configuration.grants || [];
-      rawGrants.forEach((grantId: string) => {
-        if (skillMap[grantId]) {
-          mappedGrants.push(`skills:${skillMap[grantId].substring(0,3)}`);
-        } else if (toolMap[grantId]) {
-          mappedGrants.push(`tools:${toolMap[grantId].replace(/[^a-z0-9]/g,'').substring(0,3)}`);
-        } else if (
-          ["STR","DEX","CON","INT","WIS","CHA"].includes(grantId.toUpperCase()) || 
-          grantId.toLowerCase().startsWith('saves:')
-        ) {
-          mappedGrants.push(grantId.toLowerCase().startsWith('saves:') ? grantId.toLowerCase() : `saves:${grantId.toLowerCase()}`);
-        } else {
-          mappedGrants.push(grantId); 
-        }
-      });
-      return {
-        ...adv,
-        configuration: {
-          ...configuration,
-          choices,
-          grants: mappedGrants
-        }
-      };
-    }
-    return adv;
-  });
-
-  const hasHitPoints = mappedAdvancements.some((a: any) => a.type === 'HitPoints');
-  if (!hasHitPoints && classDataRaw.hitDie) {
-    mappedAdvancements.push({
-      _id: "implicit-hit-points",
-      type: "HitPoints",
-      level: 1,
-      title: "Hit Points",
-      icon: "systems/dnd5e/icons/svg/hit-points.svg",
-      configuration: {
-        hitDie: classDataRaw.hitDie
-      }
-    });
-  }
-
-  const classData = {
-    ...classDataRaw,
-    advancements: mappedAdvancements,
-    id: classDataRaw.id, // App Record ID
-    identifier: classDataRaw.identifier || slugify(classDataRaw.name), // Semantic identity
-    lore: cleanText(classDataRaw.lore),
-    description: cleanText(classDataRaw.description),
-    startingEquipment: cleanText(classDataRaw.startingEquipment),
-    multiclassing: cleanText(classDataRaw.multiclassing),
-    tagIds: mapIds(classDataRaw.tagIds, tagMap),
-    proficiencies: {
-      ...classDataRaw.proficiencies,
-      skills: {
-        choiceCount: classDataRaw.proficiencies?.skills?.choiceCount || 0,
-        options: mapIds(classDataRaw.proficiencies?.skills?.optionIds, skillMap),
-        fixed: mapIds(classDataRaw.proficiencies?.skills?.fixedIds, skillMap),
-      },
-      tools: {
-        choiceCount: classDataRaw.proficiencies?.tools?.choiceCount || 0,
-        options: mapIds(classDataRaw.proficiencies?.tools?.optionIds, toolMap),
-        fixed: mapIds(classDataRaw.proficiencies?.tools?.fixedIds, toolMap),
-      }
-    }
-  };
-
-  // Source mapping logic (SourceId = Book IDs in semantic export)
   const sourceCache: { [id: string]: string } = {};
   const resolveBookId = async (sid: string | undefined) => {
     if (!sid) return undefined;
     if (sourceCache[sid]) return sourceCache[sid];
-    if (sid.startsWith('source-')) return sid; // Already semantic
-    
+    if (sid.startsWith('source-')) return sid;
+
     const sourceSnap = await getDoc(doc(db, 'sources', sid));
     if (sourceSnap.exists()) {
       sourceCache[sid] = getSemanticSourceId(sourceSnap.data(), sid);
@@ -306,261 +811,320 @@ export async function exportClassSemantic(classId: string) {
     return sid;
   };
 
-  const resolvedClassBookId = await resolveBookId(classDataRaw.sourceId) || "";
-  classData.sourceId = resolvedClassBookId;
+  const classIdentifier = classDataRaw.identifier || slugify(classDataRaw.name);
+  const classSourceId = `class-${classIdentifier}`;
+  const resolvedClassBookId = await resolveBookId(classDataRaw.sourceId) || '';
+  const normalizedProficiencies = normalizeClassProficiencies(classDataRaw.proficiencies, refs);
+  const normalizedMulticlassProficiencies = normalizeClassProficiencies(classDataRaw.multiclassProficiencies, refs);
+  const normalizedSavingThrows = uniqueStrings(
+    asArray(classDataRaw.savingThrows?.length ? classDataRaw.savingThrows : normalizedProficiencies.savingThrows.fixedIds)
+      .map((id: string) => normalizeMappedId(id, refs.attributesById, { uppercase: true }))
+  );
+  const tagIds = uniqueStrings(asArray(classDataRaw.tagIds).map((id: string) => getSemanticToken(refs.tagsById[id]) || trimString(id)));
 
-  // Build ID to semantic identity maps
-  const idToSourceIdMap: { [id: string]: string } = {};
-  const idToBookIdMap: { [id: string]: string } = {};
-  
-  idToSourceIdMap[classId] = `class-${classData.identifier}`;
-  idToBookIdMap[classId] = resolvedClassBookId;
-
-  // Handle Spellcasting
-  if (classData.spellcasting) {
-    classData.spellcasting.description = cleanText(classData.spellcasting.description);
-  }
-
-  // Fetch Subclasses
   const subclassesSnap = await getDocs(query(collection(db, 'subclasses'), where('classId', '==', classId)));
-  const subclasses = await Promise.all(subclassesSnap.docs.map(async (d) => {
-    const data: any = d.data();
-    const identifier = data.identifier || slugify(data.name);
-    
-    // Resolve own book or fallback to class
-    const resolvedLocal = await resolveBookId(data.sourceId);
-    const sourceBookId = (resolvedLocal && resolvedLocal.startsWith('source-')) ? resolvedLocal : resolvedClassBookId;
-
-    return {
-      ...data,
-      id: d.id, // Record ID
-      identifier: identifier,
-      sourceId: `subclass-${identifier}`, // Semantic Entity ID
-      sourceBookId: sourceBookId, 
-      classSourceId: `class-${classData.identifier}`,
-      description: cleanText(data.description),
-      lore: cleanText(data.lore),
-      tagIds: mapIds(data.tagIds, tagMap)
-    };
-  }));
-
-  subclasses.forEach(s => {
-    idToSourceIdMap[s.id] = s.sourceId;
-    idToBookIdMap[s.id] = s.sourceBookId;
-  });
-
-  const subclassIds = subclassesSnap.docs.map(s => s.id);
-
-  // Fetch Features (Class + Subclass)
+  const subclassesRaw = subclassesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const subclassIds = subclassesRaw.map((sub: any) => sub.id);
   const allParentIds = [classId, ...subclassIds];
+
   let featuresRaw: any[] = [];
   if (allParentIds.length > 0) {
     const featuresSnap = await getDocs(query(collection(db, 'features'), where('parentId', 'in', allParentIds)));
-    featuresRaw = featuresSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    featuresRaw = featuresSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
 
-  // Fetch Scaling Columns early so we can reference them
-  const scalingSnap = await getDocs(query(collection(db, 'scalingColumns'), where('parentId', '==', classId)));
-  const scalingColumns = scalingSnap.docs.map(d => {
-    const data: any = d.data();
-    const identifier = data.identifier || slugify(data.name);
-    return {
-      ...data,
-      id: d.id,
-      identifier: identifier,
-      sourceId: `scale-${identifier}`,
-      sourceBookId: resolvedClassBookId, // Scaling columns always belong to root class
-      classSourceId: `class-${classData.identifier}`
-    };
-  });
-
-  // Collect all unique option group IDs
-  const allGroupIds = new Set([
-    ...(classData.uniqueOptionGroupIds || []),
-    ...featuresRaw.flatMap(f => f.uniqueOptionGroupIds || [])
-  ]);
-  const groupIds = Array.from(allGroupIds) as string[];
-
-  // Fetch Unique Option Groups FIRST so we can map them in Features
-  let uniqueOptionGroups: any[] = [];
-  const groupIdToSourceIdMap: { [id: string]: string } = {};
-  
-  if (groupIds.length > 0) {
-    const groupsSnap = await getDocs(query(collection(db, 'uniqueOptionGroups'), where(documentId(), 'in', groupIds)));
-    uniqueOptionGroups = groupsSnap.docs.map(d => {
-      const data: any = d.data();
-      const identifier = data.identifier || slugify(data.name || "");
-      const sourceId = `class-option-group-${identifier}`;
-      
-      groupIdToSourceIdMap[d.id] = sourceId;
-      
-      const { maxSelections, ...rest } = data; // Remove stale field
-      
-      return {
-        ...rest,
-        id: d.id,
-        identifier: identifier,
-        sourceId: sourceId,
-        sourceBookId: resolvedClassBookId, // We'll update this later if it's tied to a feature
-        featureSourceId: undefined, // We'll update this later
-        scalingSourceId: data.scalingId ? scalingColumns.find(sc => sc.id === data.scalingId)?.sourceId : undefined,
-        description: "" // We'll update this later
-      };
-    });
+  let scalingColumnsRaw: any[] = [];
+  if (allParentIds.length > 0) {
+    const scalingSnap = await getDocs(query(collection(db, 'scalingColumns'), where('parentId', 'in', allParentIds)));
+    scalingColumnsRaw = scalingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
 
-  const features = await Promise.all(featuresRaw.map(async (f) => {
-    const identifier = f.identifier || slugify(f.name);
-    const parentPrefix = f.parentType === 'subclass' ? 'subclass' : 'class';
-    
-    // Inheritance: Resolve own book, or fallback to parent book
-    const resolvedLocal = await resolveBookId(f.sourceId);
-    const sourceBookId = (resolvedLocal && resolvedLocal.startsWith('source-')) 
-      ? resolvedLocal 
-      : (idToBookIdMap[f.parentId] || resolvedClassBookId);
-
-    return {
-      ...f,
-      id: f.id,
-      identifier: identifier,
-      sourceId: `${parentPrefix}-feature-${identifier}`, // Semantic Entity ID
-      sourceBookId: sourceBookId, 
-      parentSourceId: idToSourceIdMap[f.parentId] || f.parentId,
-      classSourceId: `class-${classData.identifier}`,
-      featureKind: f.featureKind || (f.parentType === 'subclass' ? 'subclassFeature' : 'classFeature'),
-      description: cleanText(f.description),
-      uniqueOptionGroupIds: (f.uniqueOptionGroupIds || []).map((id: string) => groupIdToSourceIdMap[id] || id),
-      automation: {
-        activities: Array.isArray(f.automation?.activities) 
-          ? f.automation.activities 
-          : Object.values(f.automation?.activities || {}),
-        effects: f.automation?.effects || []
-      }
-    };
+  const subclasses = await Promise.all(subclassesRaw.map(async (subclass: any) => {
+    const identifier = subclass.identifier || slugify(subclass.name);
+    const resolvedLocal = await resolveBookId(subclass.sourceId);
+    const sourceBookId = (resolvedLocal && resolvedLocal.startsWith('source-')) ? resolvedLocal : resolvedClassBookId;
+    return omitKeys({
+      ...subclass,
+      id: subclass.id,
+      identifier,
+      sourceId: `subclass-${identifier}`,
+      sourceBookId,
+      classSourceId,
+      classIdentifier,
+      description: cleanText(subclass.description),
+      lore: cleanText(subclass.lore),
+      tagIds: uniqueStrings(asArray(subclass.tagIds).map((id: string) => getSemanticToken(refs.tagsById[id]) || trimString(id))),
+      spellcasting: normalizeSpellcastingForExport(subclass.spellcasting, refs, { preserveNativeProgression: true })
+    }, ['classId', 'excludedOptionIds']);
   }));
 
-  // Generate implicit ItemGrant advancements for class features
-  const classFeaturesByLevel: { [level: number]: string[] } = {};
-  features.filter(f => f.parentType === 'class').forEach(f => {
-    const level = f.level || 1;
-    if (!classFeaturesByLevel[level]) classFeaturesByLevel[level] = [];
-    classFeaturesByLevel[level].push(f.sourceId);
+  const idToSourceIdMap: Record<string, string> = { [classId]: classSourceId };
+  const idToBookIdMap: Record<string, string> = { [classId]: resolvedClassBookId };
+  subclasses.forEach((subclass) => {
+    idToSourceIdMap[subclass.id] = subclass.sourceId;
+    idToBookIdMap[subclass.id] = subclass.sourceBookId;
   });
 
-  for (const levelStr in classFeaturesByLevel) {
-    const level = parseInt(levelStr);
-    const hasItemGrant = classData.advancements.some((a: any) => a.type === 'ItemGrant' && a.level === level);
-    // Even if it has an ItemGrant, we might want to generate our implicit one for features
-    classData.advancements.push({
-      _id: `implicit-class-features-${level}`,
-      type: "ItemGrant",
-      level: level,
-      title: "Class Features",
-      icon: "systems/dnd5e/icons/svg/item-grant.svg",
-      configuration: {
-        items: classFeaturesByLevel[level].map(id => ({ uuid: id })),
-        optional: false,
-        spell: null
-      }
+  const scalingColumns = scalingColumnsRaw.map((column: any) => {
+    const identifier = column.identifier || slugify(column.name);
+    const parentSourceId = idToSourceIdMap[column.parentId] || column.parentId;
+    const parentBookId = idToBookIdMap[column.parentId] || resolvedClassBookId;
+    return omitKeys({
+      ...column,
+      id: column.id,
+      identifier,
+      sourceId: `scale-${identifier}`,
+      sourceBookId: parentBookId,
+      classSourceId,
+      parentSourceId
+    }, ['parentId']);
+  });
+
+  const scalingById = Object.fromEntries(scalingColumns.map((column) => [column.id, column]));
+  const scalingSourceIdById = Object.fromEntries(scalingColumns.map((column) => [column.id, column.sourceId]));
+
+  const referencedGroupIds = collectReferencedOptionGroupIds(classDataRaw, ...subclassesRaw, ...featuresRaw);
+  const allGroupIds = uniqueStrings([
+    ...referencedGroupIds,
+    ...asArray(classDataRaw.uniqueOptionGroupIds),
+    ...featuresRaw.flatMap((feature) => asArray(feature.uniqueOptionGroupIds))
+  ]);
+
+  let uniqueOptionGroups: any[] = [];
+  if (allGroupIds.length > 0) {
+    const groupsSnap = await getDocs(query(collection(db, 'uniqueOptionGroups'), where(documentId(), 'in', allGroupIds)));
+    uniqueOptionGroups = groupsSnap.docs.map((d) => {
+      const data: any = d.data();
+      const identifier = data.identifier || slugify(data.name || '');
+      const scalingSourceId = scalingSourceIdById[data.scalingColumnId] || trimString(data.scalingId);
+      return omitKeys({
+        ...data,
+        id: d.id,
+        identifier,
+        sourceId: `class-option-group-${identifier}`,
+        sourceBookId: resolvedClassBookId,
+        featureSourceId: '',
+        scalingSourceId: scalingSourceId || undefined,
+        description: cleanText(data.description || '')
+      }, ['featureId', 'scalingColumnId']);
     });
   }
 
-  // Generate implicit ItemGrant advancements for subclass features
-  subclasses.forEach(sub => {
-    const subFeaturesByLevel: { [level: number]: string[] } = {};
-    features.filter(f => f.parentId === sub.id).forEach(f => {
-      const level = f.level || 1;
-      if (!subFeaturesByLevel[level]) subFeaturesByLevel[level] = [];
-      subFeaturesByLevel[level].push(f.sourceId);
-    });
+  const optionGroupSourceIdById = Object.fromEntries(uniqueOptionGroups.map((group) => [group.id, group.sourceId]));
 
-    if (!sub.advancements) sub.advancements = [];
+  const features = await Promise.all(featuresRaw.map(async (feature: any) => {
+    const identifier = feature.identifier || slugify(feature.name);
+    const parentPrefix = feature.parentType === 'subclass' ? 'subclass' : 'class';
+    const resolvedLocal = await resolveBookId(feature.sourceId);
+    const sourceBookId = (resolvedLocal && resolvedLocal.startsWith('source-'))
+      ? resolvedLocal
+      : (idToBookIdMap[feature.parentId] || resolvedClassBookId);
 
-    for (const levelStr in subFeaturesByLevel) {
-      const level = parseInt(levelStr);
-      sub.advancements.push({
-        _id: `implicit-subclass-features-${level}`,
-        type: "ItemGrant",
-        level: level,
-        title: "Subclass Features",
-        icon: "systems/dnd5e/icons/svg/item-grant.svg",
-        configuration: {
-          items: subFeaturesByLevel[level].map(id => ({ uuid: id })),
-          optional: false,
-          spell: null
-        }
-      });
-    }
-  });
+    return omitKeys({
+      ...feature,
+      id: feature.id,
+      identifier,
+      sourceId: `${parentPrefix}-feature-${identifier}`,
+      sourceBookId,
+      parentSourceId: idToSourceIdMap[feature.parentId] || feature.parentId,
+      classSourceId,
+      featureKind: feature.featureKind || (feature.parentType === 'subclass' ? 'subclassFeature' : 'classFeature'),
+      description: cleanText(feature.description),
+      tagIds: uniqueStrings(asArray(feature.tagIds).map((id: string) => getSemanticToken(refs.tagsById[id]) || trimString(id))),
+      uniqueOptionGroupIds: uniqueStrings(asArray(feature.uniqueOptionGroupIds).map((groupId: string) => optionGroupSourceIdById[groupId] || trimString(groupId))),
+      quantityColumnSourceId: scalingSourceIdById[feature.quantityColumnId] || trimString(feature.quantityColumnId) || undefined,
+      scalingSourceId: scalingSourceIdById[feature.scalingColumnId] || trimString(feature.scalingColumnId) || undefined,
+      automation: {
+        activities: Array.isArray(feature.automation?.activities)
+          ? feature.automation.activities
+          : Object.values(feature.automation?.activities || {}),
+        effects: feature.automation?.effects || []
+      }
+    }, ['parentId', 'quantityColumnId', 'scalingColumnId']);
+  }));
 
-  // Update Unique Option Groups with associated feature references
-  uniqueOptionGroups = uniqueOptionGroups.map(group => {
-    const associatedFeature = features.find(f => f.id === group.featureId);
+  const featuresById = Object.fromEntries(features.map((feature) => [feature.id, feature]));
+  const featureSourceIdById = Object.fromEntries(features.map((feature) => [feature.id, feature.sourceId]));
+  const optionGroupFeatureSourceById = buildOptionGroupFeatureSourceMap([classDataRaw, ...subclassesRaw], featuresById);
+
+  uniqueOptionGroups = uniqueOptionGroups.map((group) => {
+    const associatedFeature = group.featureId ? featuresById[group.featureId] : null;
+    const derivedFeatureSourceId = associatedFeature?.sourceId
+      || optionGroupFeatureSourceById[group.id]
+      || optionGroupFeatureSourceById[group.sourceId]
+      || '';
     return {
       ...group,
-      sourceBookId: associatedFeature ? associatedFeature.sourceBookId : resolvedClassBookId,
-      featureSourceId: associatedFeature ? associatedFeature.sourceId : undefined,
-      description: associatedFeature ? associatedFeature.description : group.description
+      sourceBookId: associatedFeature?.sourceBookId || group.sourceBookId || resolvedClassBookId,
+      featureSourceId: derivedFeatureSourceId
     };
   });
 
-  // classData also needs its uniqueOptionGroupIds updated to semantic IDs
-  classData.uniqueOptionGroupIds = (classData.uniqueOptionGroupIds || []).map((id: string) => groupIdToSourceIdMap[id] || id);
-
-  // Fetch Unique Options for those groups (Correct collection: uniqueOptionItems)
-  let uniqueOptions: any[] = [];
-  if (groupIds.length > 0) {
-    const optionsSnap = await getDocs(query(collection(db, 'uniqueOptionItems'), where('groupId', 'in', groupIds)));
-    uniqueOptions = optionsSnap.docs.map(d => {
+  let uniqueOptionItems: any[] = [];
+  if (allGroupIds.length > 0) {
+    const optionsSnap = await getDocs(query(collection(db, 'uniqueOptionItems'), where('groupId', 'in', allGroupIds)));
+    uniqueOptionItems = optionsSnap.docs.map((d) => {
       const data: any = d.data();
-      const group = uniqueOptionGroups.find(g => g.id === data.groupId);
-      const identifier = data.identifier || slugify(data.name || "");
-      return {
+      const group = uniqueOptionGroups.find((entry) => entry.id === data.groupId);
+      const identifier = data.identifier || slugify(data.name || '');
+      const linkedFeature = data.featureId ? featuresById[data.featureId] : null;
+      return omitKeys({
         ...data,
         id: d.id,
-        identifier: identifier,
+        identifier,
         sourceId: `class-option-${identifier}`,
-        sourceBookId: group ? group.sourceBookId : resolvedClassBookId,
-        groupSourceId: group ? group.sourceId : data.groupId,
+        sourceBookId: group?.sourceBookId || resolvedClassBookId,
+        groupSourceId: group?.sourceId || trimString(data.groupId),
+        featureSourceId: linkedFeature?.sourceId || group?.featureSourceId || '',
         description: cleanText(data.description),
-        levelPrerequisite: data.levelPrerequisite // Make sure levelPrerequisite is properly included
-      };
+        levelPrerequisite: Number(data.levelPrerequisite || 0) || 0
+      }, ['groupId', 'featureId']);
     });
   }
 
-  // Fetch Spellcasting Scalings
-  const spellcastingIds = [
-    classData.spellcastingId,
-    classData.spellcasting?.progressionId,
-    classData.spellcasting?.spellsKnownId,
-  ].filter(id => id && typeof id === 'string');
-  
-  const spellcastingScalings: { [id: string]: any } = {};
-  if (spellcastingIds.length > 0) {
-    const uniqueIds = Array.from(new Set(spellcastingIds));
-    const scSnap = await getDocs(query(collection(db, 'spellcastingScalings'), where(documentId(), 'in', uniqueIds)));
-    scSnap.docs.forEach(d => {
-      spellcastingScalings[d.id] = { id: d.id, ...d.data() };
-    });
-  }
+  const optionItemSourceIdById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.sourceId]));
 
-  // Fetch Source metadata for the class
+  const advancementContext = {
+    refs,
+    featuresById,
+    featureSourceIdById,
+    scalingById,
+    scalingSourceIdById,
+    optionGroupSourceIdById,
+    optionItemSourceIdById
+  };
+
+  const normalizedFeatures = features.map((feature) => ({
+    ...feature,
+    advancements: asArray(feature.advancements).map((advancement: any) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean)
+  }));
+
+  const baseClassAdvancements = buildBaseClassAdvancementsForExport({
+    classDataRaw,
+    normalizedProficiencies,
+    hitDie: Number(classDataRaw.hitDie || 0) || 8,
+    subclassTitle: classDataRaw.subclassTitle || '',
+    subclassFeatureLevels: asArray(classDataRaw.subclassFeatureLevels).map((level: any) => Number(level)).filter(Boolean),
+    asiLevels: asArray(classDataRaw.asiLevels).map((level: any) => Number(level)).filter(Boolean),
+    existingAdvancements: asArray(classDataRaw.advancements)
+  }).map((advancement) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean);
+  const inherentClassFeatureGrants = buildInherentFeatureGrantAdvancements(
+    normalizedFeatures.filter((feature) => feature.parentSourceId === classSourceId),
+    asArray(classDataRaw.advancements),
+    'inherent-class-feature-grant'
+  ).map((advancement) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean);
+
+  const customClassAdvancements = asArray(classDataRaw.advancements)
+    .filter((advancement: any) => {
+      const id = trimString(advancement?._id);
+      if (!id) return true;
+      if (id === 'base-items') return false;
+      if (id.startsWith('base-')) return false;
+      if (id.startsWith('implicit-class-features-')) return false;
+      return true;
+    })
+    .map((advancement: any) => normalizeAdvancementForExport(advancement, advancementContext))
+    .filter(Boolean);
+
+  const normalizedSubclasses = (subclasses as any[]).map((subclass: any) => {
+    const subclassRaw: any = subclassesRaw.find((entry: any) => entry.id === subclass.id) || {};
+    const inherentSubclassFeatureGrants = buildInherentFeatureGrantAdvancements(
+      normalizedFeatures.filter((feature) => feature.parentSourceId === subclass.sourceId),
+      asArray(subclassRaw.advancements),
+      `inherent-subclass-feature-grant-${subclass.identifier || subclass.id}`
+    ).map((advancement) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean);
+    const customAdvancements = asArray(subclass.advancements)
+      .map((advancement: any) => normalizeAdvancementForExport(advancement, advancementContext))
+      .filter(Boolean);
+
+    return {
+      ...subclass,
+      advancements: [...inherentSubclassFeatureGrants, ...customAdvancements].sort(sortAdvancementsByLevelThenType)
+    };
+  });
+
+  const classSpellcasting = normalizeSpellcastingForExport(classDataRaw.spellcasting, refs, { preserveNativeProgression: false });
+  const usedAlternativeProgressionIds = uniqueStrings([
+    trimString(classDataRaw.spellcasting?.altProgressionId),
+    ...subclassesRaw.map((subclass: any) => trimString(subclass.spellcasting?.altProgressionId))
+  ]);
+  const usedSpellsKnownIds = uniqueStrings([
+    trimString(classDataRaw.spellcasting?.spellsKnownId),
+    ...subclassesRaw.map((subclass: any) => trimString(subclass.spellcasting?.spellsKnownId))
+  ]);
+
+  const alternativeSpellcastingScalings: { [id: string]: any } = {};
+  usedAlternativeProgressionIds.forEach((id) => {
+    const scaling = refs.pactMagicScalingsById[id];
+    if (!scaling) return;
+    const sourceId = buildSemanticRecordSourceId('alternative-spellcasting-scaling', scaling, id);
+    alternativeSpellcastingScalings[sourceId] = {
+      id,
+      sourceId,
+      identifier: trimString(scaling.identifier) || slugify(trimString(scaling.name || id)),
+      name: scaling.name || '',
+      levels: scaling.levels || {},
+      updatedAt: scaling.updatedAt || null,
+      createdAt: scaling.createdAt || null
+    };
+  });
+
+  const spellsKnownScalings: { [id: string]: any } = {};
+  usedSpellsKnownIds.forEach((id) => {
+    const scaling = refs.spellsKnownScalingsById[id];
+    if (!scaling) return;
+    const sourceId = buildSemanticRecordSourceId('spells-known-scaling', scaling, id);
+    spellsKnownScalings[sourceId] = {
+      id,
+      sourceId,
+      identifier: trimString(scaling.identifier) || slugify(trimString(scaling.name || id)),
+      name: scaling.name || '',
+      levels: scaling.levels || {},
+      updatedAt: scaling.updatedAt || null,
+      createdAt: scaling.createdAt || null
+    };
+  });
+
   let source = null;
   if (classDataRaw.sourceId) {
     const sourceSnap = await getDoc(doc(db, 'sources', classDataRaw.sourceId));
-    if (sourceSnap.exists()) {
-      source = { id: sourceSnap.id, ...sourceSnap.data() };
-    }
+    if (sourceSnap.exists()) source = { id: sourceSnap.id, ...sourceSnap.data() };
   }
 
+  const classData = {
+    ...classDataRaw,
+    id: classDataRaw.id,
+    identifier: classIdentifier,
+    sourceId: resolvedClassBookId,
+    classSourceId,
+    sourceBookId: resolvedClassBookId,
+    savingThrows: normalizedSavingThrows,
+    description: cleanText(classDataRaw.description),
+    lore: cleanText(classDataRaw.lore),
+    startingEquipment: cleanText(classDataRaw.startingEquipment),
+    multiclassing: cleanText(classDataRaw.multiclassing),
+    tagIds,
+    proficiencies: normalizedProficiencies,
+    multiclassProficiencies: normalizedMulticlassProficiencies,
+    spellcasting: classSpellcasting,
+    advancements: [...baseClassAdvancements, ...inherentClassFeatureGrants, ...customClassAdvancements].sort(sortAdvancementsByLevelThenType)
+  };
+
+  delete classData.uniqueOptionGroupIds;
+  delete classData.excludedOptionIds;
+  delete classData.subclassTitle;
+  delete classData.asiLevels;
+  delete classData.spellcastingId;
+
   return {
-    class: classData,
-    subclasses,
-    features,
+    class: omitKeys(classData, ['excludedOptionIds', 'uniqueOptionGroupIds', 'subclassTitle', 'asiLevels', 'spellcastingId']),
+    subclasses: normalizedSubclasses,
+    features: normalizedFeatures,
     scalingColumns,
     uniqueOptionGroups,
-    uniqueOptionItems: uniqueOptions, // Renamed for compatibility
-    spellcastingScalings,
+    uniqueOptionItems,
+    spellsKnownScalings,
+    alternativeSpellcastingScalings,
     source
   };
 }

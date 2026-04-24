@@ -269,17 +269,26 @@ export default function SubclassEditor() {
       return;
     }
 
+    const normalizedSpellcasting = spellcasting && typeof spellcasting === 'object'
+      ? {
+          ...spellcasting,
+          ability: String(spellcasting.ability || '').toUpperCase(),
+          type: String(spellcasting.type || 'prepared').toLowerCase(),
+          level: Number(spellcasting.level || 1) || 1
+        }
+      : spellcasting;
+
     const subclassData: any = {
       name,
       identifier: slugify(name),
-      classIdentifier: slugify(parentClass?.name || ''),
+      classIdentifier: parentClass?.identifier || slugify(parentClass?.name || ''),
       classId: parentClass?.id || classId,
       sourceId,
       description,
       lore,
       imageUrl,
       tagIds,
-      spellcasting,
+      spellcasting: normalizedSpellcasting,
       excludedOptionIds,
       advancements,
       updatedAt: serverTimestamp(),

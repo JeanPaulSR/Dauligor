@@ -603,7 +603,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         exportData = data;
         filenameSuffix = "full_export";
       } else if (slice === "skeleton") {
-        exportData = { class: data.class, scalingColumns: data.scalingColumns, source: data.source, spellcastingScalings: data.spellcastingScalings };
+        exportData = {
+          class: data.class,
+          scalingColumns: data.scalingColumns,
+          source: data.source,
+          spellsKnownScalings: data.spellsKnownScalings,
+          alternativeSpellcastingScalings: data.alternativeSpellcastingScalings
+        };
         filenameSuffix = "skeleton";
       } else if (slice === "subclasses") {
         exportData = { subclasses: data.subclasses };

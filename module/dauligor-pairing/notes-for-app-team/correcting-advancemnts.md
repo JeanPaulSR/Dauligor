@@ -159,6 +159,16 @@ Examples:
 - `Metamagic`
 - subclass level features like `Favored by the Gods`
 
+For app authoring, these core class and subclass feature grants do not need to appear as visible editable base rows in the class or subclass editor.
+
+Instead:
+
+- the app should continue treating class/subclass features as inherently known content
+- the export layer should synthesize export-only `ItemGrant` rows for those core features by level
+- explicit `ItemGrant` rows in the editor should be reserved for special cases, not routine feature grants
+
+That keeps the character builder UI cleaner while still giving the Foundry exporter a complete root advancement track.
+
 ### Item Choices
 
 If a feature unlocks a pool of choices:
@@ -170,6 +180,10 @@ If a feature unlocks a pool of choices:
 Example:
 
 - Sorcerer `Metamagic`
+
+If an `ItemChoice` references a unique option group and is attached to a feature, that feature linkage should be treated as authoritative for export.
+
+The export layer should derive `featureSourceId` for the option group and its option items from the attached advancement when the group or item docs do not store their own feature link directly.
 
 ### Subclass Selection
 
@@ -258,6 +272,52 @@ It does mean:
 ## Best Implementation Strategy
 
 The cleanest approach is to add one shared semantic builder in the app.
+
+## Recent Contract Changes
+
+These are now the intended export rules for the class/subclass Foundry pipeline:
+
+- Root `class.advancements` and `subclasses[].advancements` are the authoritative progression model.
+- The export layer no longer adds implicit class/subclass feature `ItemGrant` rows just because features exist at a level.
+- If a feature should be granted automatically, the root class or subclass must author an explicit `ItemGrant`.
+
+That means:
+
+- feature presence alone is no longer enough to imply grant timing
+- class and subclass roots must explicitly grant the features they own
+- missing `ItemGrant` rows will now stay missing in export instead of being silently synthesized
+
+### Spellcasting Progression
+
+Class spellcasting progression should now come from the admin-managed `Foundry Formula Mapping` records in `spellcastingTypes`.
+
+For class export:
+
+- `spellcasting.progressionId` in the app is treated as a spellcasting-type reference, not a slot-scaling override
+- export resolves that into:
+  - native Foundry `spellcasting.progression`
+  - `progressionTypeSourceId`
+  - `progressionTypeIdentifier`
+  - `progressionTypeLabel`
+  - `progressionFormula`
+- class-side `manualProgressionId` is deprecated and should not be authored going forward
+
+Alternative slot systems remain separate:
+
+- `altProgressionId` is for Pact-style or other alternative progressions
+- export normalizes that to `altProgressionSourceId`
+- those referenced records are exported under `alternativeSpellcastingScalings`
+
+Known/cantrip scaling remains separate too:
+
+- `spellsKnownId` is normalized to `spellsKnownSourceId`
+- those referenced records are exported under `spellsKnownScalings`
+
+This keeps three different concepts separate:
+
+- Foundry multiclass/progression type mapping
+- alternative slot progressions
+- spells-known/cantrip progressions
 
 Suggested file:
 
