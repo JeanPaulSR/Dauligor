@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
-import { db, handleFirestoreError } from '../../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { doc, getDoc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, addDoc, deleteDoc, where } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -617,7 +617,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       delete featureData.activities;
 
       if (editingFeature.id) {
-        await updateDoc(doc(db, 'features', editingFeature.id), featureData);
+        await setDoc(doc(db, 'features', editingFeature.id), {
+          ...featureData,
+          createdAt: editingFeature.createdAt || new Date().toISOString()
+        }, { merge: true });
       } else {
         await addDoc(collection(db, 'features'), {
           ...featureData,
@@ -628,6 +631,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       setEditingFeature(null);
     } catch (error) {
       console.error("Error saving feature:", error);
+      toast.error('Error saving feature');
+      handleFirestoreError(error, editingFeature?.id ? OperationType.UPDATE : OperationType.CREATE, null);
     }
   };
 
@@ -3621,7 +3626,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 p-6">
+              <ScrollArea className="flex-1 p-6 min-h-0">
                 {featureTab === 'description' && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -3641,6 +3646,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       value={editingFeature.description || ''} 
                       onChange={(val) => setEditingFeature({...editingFeature, description: val})}
                       minHeight="400px"
+                      maxHeight="50vh"
                       label="Description"
                     />
                   </div>

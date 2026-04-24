@@ -485,13 +485,12 @@ export function ClassList({
   const getPreviewFeaturesForLevel = (level: number) => {
     let levelFeatures = [...previewFeatures.filter(f => f.level === level)];
 
-    // Add root advancements for this level (that aren't already linked to one of the features we just listed)
-    const rootAdvs = (selectedClass?.advancements || []).filter((a: any) => a.level === level);
+    // Add root advancements for this level (only Ability Score Improvements)
+    const rootAdvs = (selectedClass?.advancements || []).filter((a: any) => a.level === level && a.type === 'AbilityScoreImprovement');
     rootAdvs.forEach((adv: any) => {
-      // Avoid duplication if the advancement's name is basically the same as a feature's name
-      if (!levelFeatures.some(f => f.name === (adv.title || adv.configuration?.title || adv.type))) {
+      if (!levelFeatures.some(f => f.name === 'Ability Score Improvement')) {
          levelFeatures.push({ 
-           name: adv.title || adv.configuration?.title || adv.type, 
+           name: 'Ability Score Improvement', 
            level: adv.level,
            isAdvancement: true 
          } as any);
@@ -923,6 +922,7 @@ export function ClassList({
                                   hideChoices={true}
                                   rootAdvancements={selectedClass.advancements || []}
                                   hideAdvancementTypes={true}
+                                  hideAdvancements={true}
                                 />
                               </div>
                             )}

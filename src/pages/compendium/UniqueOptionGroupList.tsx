@@ -23,7 +23,7 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
   }, []);
 
   const filteredGroups = groups.filter(g => 
-    g.name.toLowerCase().includes(search.toLowerCase())
+    (g.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -61,7 +61,7 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
           >
             <div className="flex items-center justify-between">
               <h3 className="font-serif font-bold text-lg text-ink group-hover:text-gold transition-colors">
-                {group.name}
+                {group.name || 'Unnamed Group'}
               </h3>
               <ChevronRight className="w-4 h-4 text-gold/30 group-hover:text-gold transition-all" />
             </div>

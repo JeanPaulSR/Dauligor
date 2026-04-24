@@ -517,8 +517,12 @@ export default function AdvancementManager({
               </div>
               <div className="text-[10px] text-ink/40 font-serif italic flex items-center gap-2">
                 <span className="truncate">
-                  {adv.type === 'ItemGrant' && `Grants items: ${adv.configuration.pool?.length || 0}`}
-                  {adv.type === 'ItemChoice' && `Choose ${adv.configuration.count || 1} from ${adv.configuration.pool?.length || 0}`}
+                  {adv.type === 'ItemGrant' && (adv.configuration?.choiceType === 'option-group'
+                    ? `Grants items from Option Group`
+                    : `Grants items: ${adv.configuration?.pool?.length || 0}`)}
+                  {adv.type === 'ItemChoice' && (adv.configuration?.choiceType === 'option-group' 
+                    ? `Choose ${adv.configuration?.count || 1} from Option Group` 
+                    : `Choose ${adv.configuration?.count || 1} from ${adv.configuration?.pool?.length || 0}`)}
                   {adv.type === 'HitPoints' && `Hit Die: d${adv.configuration.hitDie || '?'}`}
                   {adv.type === 'Trait' && `Proficiency: ${TRAIT_TYPE_LABELS[adv.configuration.type] || adv.configuration.type}`}
                   {adv.type === 'Subclass' && `Subclass selection trigger`}
@@ -596,9 +600,10 @@ export default function AdvancementManager({
                   type="number"
                   min="1"
                   max="20"
-                  value={editingAdv.level || 1}
+                  value={editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId) ? availableFeatures.find(f => f.id === editingAdv.featureId)?.level : (editingAdv.level || 1)}
                   onChange={e => setEditingAdv({...editingAdv, level: parseInt(e.target.value)})}
-                  className="h-9 bg-background/50 border-gold/10"
+                  disabled={!!(editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId))}
+                  className="h-9 bg-background/50 border-gold/10 disabled:opacity-50"
                 />
               </div>
             </div>
@@ -619,7 +624,15 @@ export default function AdvancementManager({
                   <label className="text-[10px] uppercase font-black text-ink/60">Attached to Feature</label>
                   <Select
                     value={(editingAdv.featureId ?? undefined) || 'none'}
-                    onValueChange={(val) => setEditingAdv({...editingAdv, featureId: (!val || val === 'none') ? undefined : val})}
+                    onValueChange={(val) => {
+                      const newFeatureId = (!val || val === 'none') ? undefined : val;
+                      const linkedFeature = newFeatureId ? availableFeatures.find(f => f.id === newFeatureId) : undefined;
+                      setEditingAdv({
+                        ...editingAdv, 
+                        featureId: newFeatureId,
+                        level: linkedFeature ? linkedFeature.level : editingAdv.level
+                      });
+                    }}
                   >
                     <SelectTrigger className="h-9 bg-background/50 border-gold/10">
                       <SelectValue>
@@ -642,35 +655,6 @@ export default function AdvancementManager({
 
             {/* Configuration */}
             <div className="pt-2 border-t border-gold/10 space-y-4">
-              {/* ── ItemChoice (Choose Items) ── */}
-              {editingAdv.type === 'ItemChoice' && (
-                <div className="space-y-6">
-                  <div className="bg-gold/5 border border-gold/10 rounded-md p-6 flex flex-col items-center justify-center text-center">
-                    <Sword className="w-8 h-8 text-gold/30 mb-4" />
-                    <h4 className="text-sm font-bold text-gold uppercase tracking-widest mb-2">Item Choice Configuration</h4>
-                    <p className="text-xs text-ink/60 max-w-sm leading-relaxed">
-                      Custom item definitions have not been implemented in the application yet. 
-                      For now, this advancement serves as a placeholder for starting gear choices.
-                    </p>
-                    <div className="mt-6 w-full max-w-xs space-y-3">
-                      <div className="space-y-1 text-left">
-                        <label className="text-[10px] uppercase font-black text-ink/60">Number of Choices</label>
-                        <Input 
-                          type="number" 
-                          min="1"
-                          value={editingAdv.configuration?.count || 1}
-                          onChange={e => setEditingAdv({
-                            ...editingAdv,
-                            configuration: { ...editingAdv.configuration, count: parseInt(e.target.value) || 1 }
-                          })}
-                          className="h-9 bg-background/50 border-gold/10"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* ── ItemGrant ── */}
               {editingAdv.type === 'ItemGrant' && (
                 <div className="grid xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)] gap-5 items-start">

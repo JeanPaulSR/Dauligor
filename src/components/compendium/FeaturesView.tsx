@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, ChevronLeft } from 'lucide-react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import ModularChoiceView, { ModularChoiceItem } from './ModularChoiceView';
 import { cn } from '../../lib/utils';
@@ -29,6 +29,7 @@ interface FeaturesViewProps {
   hideChoices?: boolean;
   rootAdvancements?: any[];
   hideAdvancementTypes?: boolean;
+  hideAdvancements?: boolean;
 }
 
 /**
@@ -49,8 +50,11 @@ export default function FeaturesView({
   maxHeight = "500px",
   hideChoices = false,
   rootAdvancements = [],
-  hideAdvancementTypes = false
+  hideAdvancementTypes = false,
+  hideAdvancements = false
 }: FeaturesViewProps) {
+  const [expandedAdvancements, setExpandedAdvancements] = React.useState<Record<string, boolean>>({});
+
   const selectedItem = items.find(i => i.id === selectedId) || items[0];
   const effectiveSelectedId = selectedItem?.id;
 
@@ -73,34 +77,6 @@ export default function FeaturesView({
       onSelect(items[0].id);
     }
   }, [selectedId, items, onSelect]);
-
-  const featureChoiceGroups = React.useMemo(() => {
-    // 1. Groups explicitly listed on the feature
-    const explicitGroupIds = selectedItem?.uniqueOptionGroupIds || [];
-    
-    // 2. Groups mapped to this feature in the class configuration
-    const mappedGroupIds = uniqueOptionMappings
-      .filter(m => m.featureId === effectiveSelectedId)
-      .map(m => m.groupId);
-    
-    // 3. Combined unique list
-    const allRelevantGroupIds = Array.from(new Set([...explicitGroupIds, ...mappedGroupIds]));
-
-    return allRelevantGroupIds.map(groupId => {
-      const group = optionGroups.find(g => g.id === groupId);
-      if (!group) return null;
-
-      const groupItems = optionItems.filter(item => 
-        item.groupId === group.id && 
-        (!item.classIds || item.classIds.length === 0 || item.classIds.includes(classId))
-      );
-      
-      if (groupItems.length === 0) return null;
-      return { group, items: groupItems };
-    }).filter(Boolean);
-  }, [selectedItem, uniqueOptionMappings, optionGroups, optionItems, classId, effectiveSelectedId]);
-
-  const hasChoices = featureChoiceGroups.length > 0;
 
   return (
     <div className={cn(
@@ -143,47 +119,86 @@ export default function FeaturesView({
               <BBCodeRenderer content={selectedItem.description} />
             </div>
 
-            {linkedAdvancements.length > 0 && (
-              <div className="space-y-3 pt-6 border-t border-gold/10">
-                <h5 className="text-[10px] font-black uppercase text-gold/60 tracking-widest mb-2">Advancements</h5>
-                <div className="grid grid-cols-1 gap-2">
-                  {linkedAdvancements.map((adv, idx) => (
-                    <div key={idx} className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{adv.title || adv.configuration?.title || 'Advancement'}</span>
-                        {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>}
-                      </div>
-                      {adv.type === 'ItemGrant' && adv.configuration?.pool && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {adv.configuration.pool.map((item: string, i: number) => (
-                            <span key={i} className="px-1.5 py-0.5 bg-background/50 border border-gold/10 rounded text-[9px] text-ink/70">
-                              {item}
-                            </span>
-                          ))}
+            {!hideAdvancements && linkedAdvancements.length > 0 && (
+              <div className="space-y-4 pt-6 mt-6 border-t border-gold/10 block not-prose">
+                {linkedAdvancements.map((adv, idx) => {
+                  const isExpanded = expandedAdvancements[adv._id || idx] || false;
+                  const advTitle = adv.title || adv.configuration?.title || adv.type;
+                  const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
+                  const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') && 
+                                     (adv.configuration?.pool?.length > 0 || isOptionGroup);
+
+                  return (
+                    <div key={idx} className="mt-4 space-y-4">
+                      {hasChoices ? (
+                        <>
+                          <button 
+                            onClick={() => setExpandedAdvancements(prev => ({ ...prev, [adv._id || idx]: !isExpanded }))}
+                            className="flex items-center gap-3 group w-full text-left"
+                          >
+                            <div className="flex items-center gap-2 pr-3 shrink-0">
+                              <BookOpen className="w-4 h-4 text-gold" />
+                              <span className="text-xs font-bold uppercase tracking-widest text-gold">{advTitle}</span>
+                            </div>
+                            <div className="h-px bg-gold/10 flex-grow" />
+                            <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                              <ChevronLeft className="w-4 h-4 text-gold -rotate-90" />
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded p-4">
+                              <div className="flex items-center justify-between mb-4">
+                                <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
+                                {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>}
+                              </div>
+                              
+                              {isOptionGroup && !hideChoices ? (() => {
+                                const groupId = adv.configuration.optionGroupId;
+                                const exclusions = adv.configuration?.excludedOptionIds || [];
+                                const groupItems = optionItems.filter(item => 
+                                  item.groupId === groupId && 
+                                  (!item.classIds || item.classIds.length === 0 || item.classIds.includes(classId)) &&
+                                  !exclusions.includes(item.id)
+                                );
+                                if (groupItems.length === 0) {
+                                  return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
+                                }
+                                return (
+                                  <ModularChoiceView 
+                                    items={groupItems} 
+                                    groupId={groupId} 
+                                    selectedId={selectedOptions[groupId] || groupItems[0]?.id}
+                                    onSelect={(itemId) => onSelectOption(groupId, itemId)}
+                                    maxHeight="350px"
+                                  />
+                                );
+                              })() : (
+                                <div className="flex flex-wrap gap-2">
+                                  {adv.configuration?.pool?.map((item: string, i: number) => (
+                                    <span key={i} className="px-2 py-1 bg-background/50 border border-gold/10 rounded text-[11px] font-medium text-ink/80">
+                                      {item}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
+                            {!hideAdvancementTypes && <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>}
+                          </div>
+                          {adv.type === 'Trait' && (
+                            <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
+                          )}
                         </div>
                       )}
-                      {adv.type === 'Trait' && (
-                        <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
-                      )}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {hasChoices && !hideChoices && (
-              <div className="animate-in fade-in slide-in-from-top-2 pt-6 border-t border-gold/10">
-                {featureChoiceGroups.map(({ group, items }) => (
-                  <div key={group.id}>
-                    <ModularChoiceView 
-                      items={items} 
-                      groupId={group.id} 
-                      selectedId={selectedOptions[group.id] || items[0]?.id}
-                      onSelect={(itemId) => onSelectOption(group.id, itemId)}
-                      maxHeight="350px"
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

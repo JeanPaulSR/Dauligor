@@ -326,8 +326,21 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     (classData?.uniqueOptionMappings || []).forEach((m: any) => {
       if (m.groupId) ids.add(m.groupId);
     });
+    
+    // Also include option groups from advancements
+    const allAdvs = [
+      ...(classData?.advancements || []),
+      ...(selectedSubclass?.advancements || [])
+    ];
+    
+    allAdvs.forEach((adv: any) => {
+      if (adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId) {
+        ids.add(adv.configuration.optionGroupId);
+      }
+    });
+    
     return Array.from(ids);
-  }, [classData?.uniqueOptionMappings]);
+  }, [classData?.uniqueOptionMappings, classData?.advancements, selectedSubclass?.advancements]);
 
   useEffect(() => {
     if (!id || allGroupIds.length === 0) {
@@ -339,28 +352,50 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     console.log(`[ClassView] Setting up unique options listeners for:`, allGroupIds);
     
     // Firestore 'in' query limit is 10 items.
-    const cappedIds = allGroupIds.slice(0, 10);
+    const chunkArray = (arr: any[], size: number) => {
+      return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
+        arr.slice(i * size, i * size + size)
+      );
+    };
 
-    const groupsQuery = query(
-      collection(db, 'uniqueOptionGroups'),
-      where('__name__', 'in', cappedIds)
-    );
-    const unsubscribeGroups = onSnapshot(groupsQuery, (snapshot) => {
-      setOptionGroups(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const chunks = chunkArray(allGroupIds, 10);
+    let unsubGroups: (() => void)[] = [];
+    let unsubItems: (() => void)[] = [];
+    
+    let allGroupsMap = new Map();
+    let allItemsMap = new Map();
 
-    const itemsQuery = query(
-      collection(db, 'uniqueOptionItems'),
-      where('groupId', 'in', cappedIds),
-      orderBy('name', 'asc')
-    );
-    const unsubscribeItems = onSnapshot(itemsQuery, (snapshot) => {
-      setOptionItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    chunks.forEach((chunkIds, index) => {
+      const groupsQuery = query(
+        collection(db, 'uniqueOptionGroups'),
+        where('__name__', 'in', chunkIds)
+      );
+      const u1 = onSnapshot(groupsQuery, (snapshot) => {
+        snapshot.docs.forEach(doc => {
+          allGroupsMap.set(doc.id, { id: doc.id, ...doc.data() });
+        });
+        setOptionGroups(Array.from(allGroupsMap.values()));
+      });
+      unsubGroups.push(u1);
+
+      const itemsQuery = query(
+        collection(db, 'uniqueOptionItems'),
+        where('groupId', 'in', chunkIds)
+        // Note: orderBy cannot be used safely with chunked maps without client-side sort
+      );
+      const u2 = onSnapshot(itemsQuery, (snapshot) => {
+        snapshot.docs.forEach(doc => {
+          allItemsMap.set(doc.id, { id: doc.id, ...doc.data() });
+        });
+        const sortedItems = Array.from(allItemsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+        setOptionItems(sortedItems);
+      });
+      unsubItems.push(u2);
     });
 
     return () => {
-      unsubscribeGroups();
-      unsubscribeItems();
+      unsubGroups.forEach(u => u());
+      unsubItems.forEach(u => u());
     };
   }, [id, allGroupIds]);
 
@@ -490,6 +525,19 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     
     // Start with class features
     let levelFeatures = [...features.filter(f => f.level === level)];
+
+    // Add root advancements for this level (only Ability Score Improvements)
+    const asiAdvs = (classData.advancements || []).filter((a: any) => a.level === level && a.type === 'AbilityScoreImprovement');
+    asiAdvs.forEach((adv: any) => {
+      if (!levelFeatures.some(f => f.name === 'Ability Score Improvement')) {
+         levelFeatures.push({ 
+           id: `asi-${level}`,
+           name: 'Ability Score Improvement', 
+           level: adv.level,
+           isAdvancement: true 
+         } as any);
+      }
+    });
 
     // Add subclass features from subclass progression
     const subclassLevels = classData.subclassFeatureLevels || [];
@@ -850,93 +898,129 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                     </div>
                     <BBCodeRenderer content={feature.description} />
 
-                    {/* Show Column Links */}
+                    {/* Show linked advancements */}
                     {(() => {
-                      const mappings = (classData.uniqueOptionMappings || []).filter((m: any) => m.featureId === feature.id);
-                      if (mappings.length === 0) return null;
+                      const allAdvs = [
+                        ...(classData.advancements || []),
+                        ...(selectedSubclass?.advancements || [])
+                      ];
+                      const featureAdvs = allAdvs.filter((a: any) => a.featureId === feature.id && a.type !== 'ScaleValue' && a.type !== 'Trait');
+                      if (featureAdvs.length === 0) return null;
                       
                       return (
-                        <div className="space-y-2 pt-2">
-                          {mappings.map((mapping: any, idx: number) => (
-                            <div key={idx} className="flex flex-wrap gap-4 p-3 bg-gold/5 border border-gold/10 rounded-md">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Group:</span>
-                                <span className="text-xs font-bold text-gold">
-                                  {optionGroups.find(g => g.id === mapping.groupId)?.name || 'Unknown Group'}
-                                </span>
+                        <div className="space-y-4 pt-6 border-t border-gold/10">
+                          {featureAdvs.map((adv: any, idx: number) => {
+                            const isExpanded = expandedGroups[adv._id] || false;
+                            const advTitle = adv.title || adv.configuration?.title || adv.type;
+                            const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
+                            const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') && 
+                                               (adv.configuration?.pool?.length > 0 || isOptionGroup);
+
+                            return (
+                              <div key={idx} className="mt-4 space-y-4">
+                                {hasChoices ? (
+                                  <>
+                                    <button 
+                                      onClick={() => setExpandedGroups(prev => ({ ...prev, [adv._id]: !isExpanded }))}
+                                      className={`flex items-center justify-between group w-full text-left bg-gold/5 hover:bg-gold/10 border border-gold/20 p-3 transition-colors ${isExpanded ? 'rounded-t border-b-0' : 'rounded'}`}
+                                    >
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        <BookOpen className="w-4 h-4 text-gold group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.5)] transition-all" />
+                                        <span className="text-xs font-bold uppercase tracking-widest text-gold group-hover:text-white transition-colors">{advTitle}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-[9px] font-medium text-gold/50 uppercase">{adv.type}</span>
+                                        <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                                          <ChevronLeft className="w-4 h-4 text-gold -rotate-90 group-hover:text-white transition-colors" />
+                                        </div>
+                                      </div>
+                                    </button>
+
+                                    {isExpanded && (
+                                      <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded-b p-4">
+                                        {isOptionGroup ? (() => {
+                                          const groupId = adv.configuration.optionGroupId;
+                                          const exclusions = adv.configuration?.excludedOptionIds || [];
+                                          const groupItems = optionItems.filter(item => 
+                                            item.groupId === groupId && 
+                                            (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
+                                            !(classData?.excludedOptionIds?.[groupId] || []).includes(item.id) &&
+                                            !exclusions.includes(item.id)
+                                          );
+                                          console.log("Rendering advancement option group", {
+                                            adv,
+                                            groupId,
+                                            exclusions,
+                                            groupItems: groupItems.length,
+                                            totalOptionItems: optionItems.length,
+                                            allGroupIds
+                                          });
+                                          if (groupItems.length === 0) {
+                                            return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
+                                          }
+                                          return (
+                                            <ModularChoiceView 
+                                              items={groupItems} 
+                                              groupId={adv._id || groupId} 
+                                              selectedId={selectedOptionItems[adv._id || groupId] || groupItems[0]?.id}
+                                              onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || groupId]: itemId }))}
+                                              sidebarWidth="240px"
+                                              maxHeight="350px"
+                                            />
+                                          );
+                                        })() : (() => {
+                                          const poolIds = adv.configuration?.pool || [];
+                                          if (poolIds.length === 0) {
+                                            return <p className="text-xs text-ink/40 italic">No options available.</p>;
+                                          }
+                                          const poolItems = poolIds
+                                            .map((itemId: string) => allFeaturesWithSpellcasting.find(f => f.id === itemId))
+                                            .filter(Boolean)
+                                            .map((feature: any) => ({
+                                              id: feature.id,
+                                              name: feature.name,
+                                              description: feature.description,
+                                              levelPrerequisite: feature.level,
+                                              featureId: feature.id
+                                            }));
+
+                                          if (poolItems.length === 0) {
+                                            return <p className="text-xs text-ink/40 italic">Features could not be found.</p>;
+                                          }
+
+                                          return (
+                                            <ModularChoiceView 
+                                              items={poolItems} 
+                                              groupId={adv._id || 'pool'} 
+                                              selectedId={selectedOptionItems[adv._id || 'pool'] || poolItems[0]?.id}
+                                              onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || 'pool']: itemId }))}
+                                              sidebarWidth="240px"
+                                              maxHeight="350px"
+                                            />
+                                          );
+                                        })()}
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
+                                      <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>
+                                    </div>
+                                    {adv.type === 'Trait' && (
+                                      <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                              {mapping.quantityColumnId && (
-                                <div className="flex items-center gap-2 border-l border-gold/10 pl-4">
-                                  <span className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Quantity:</span>
-                                  <span className="text-xs font-mono text-gold font-bold">
-                                    {allScalingColumns.find(col => col.id === mapping.quantityColumnId)?.name || 'Unknown Column'}
-                                  </span>
-                                </div>
-                              )}
-                              {mapping.scalingColumnId && (
-                                <div className="flex items-center gap-2 border-l border-gold/10 pl-4">
-                                  <span className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Scaling:</span>
-                                  <span className="text-xs font-mono text-gold font-bold">
-                                    {allScalingColumns.find(col => col.id === mapping.scalingColumnId)?.name || 'Unknown Column'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       );
                     })()}
 
-                    {/* Show linked unique options if any */}
-                    {(() => {
-                      const explicitGroupIds = feature.uniqueOptionGroupIds || [];
-                      const mappedGroupIds = linkedMappings.map(m => m.groupId);
-                      const allGroupIds = Array.from(new Set([...explicitGroupIds, ...mappedGroupIds]));
 
-                      return allGroupIds.map(groupId => {
-                        const group = optionGroups.find(g => g.id === groupId);
-                        if (!group) return null;
-
-                        const groupItems = optionItems.filter(item => 
-                          item.groupId === group.id && 
-                          (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
-                          !(classData?.excludedOptionIds?.[group.id] || []).includes(item.id)
-                        );
-                        if (groupItems.length === 0) return null;
-
-                        const isExpanded = expandedGroups[group.id] || false;
-
-                        return (
-                          <div key={group.id} className="mt-8 space-y-4">
-                            <button 
-                              onClick={() => setExpandedGroups(prev => ({ ...prev, [group.id]: !isExpanded }))}
-                              className="flex items-center gap-3 group w-full text-left"
-                            >
-                              <div className="flex items-center gap-2 pr-3 shrink-0">
-                                <BookOpen className="w-4 h-4 text-gold" />
-                                <span className="text-xs font-bold uppercase tracking-widest text-gold">{group.name}</span>
-                              </div>
-                              <div className="h-px bg-gold/10 flex-grow" />
-                              <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
-                                <ChevronLeft className="w-4 h-4 text-gold -rotate-90" />
-                              </div>
-                            </button>
-
-                            {isExpanded && (
-                              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                <ModularChoiceView 
-                                  items={groupItems} 
-                                  groupId={group.id} 
-                                  selectedId={selectedOptionItems[group.id] || groupItems[0]?.id}
-                                  onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [group.id]: itemId }))}
-                                  sidebarWidth="240px"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      });
-                    })()}
                   </div>
                 );
               })}
