@@ -132,6 +132,7 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
   if (!spellcasting || typeof spellcasting !== 'object') {
     return {
       hasSpellcasting: false,
+      isRitualCaster: false,
       description: '',
       level: 1,
       ability: 'INT',
@@ -145,6 +146,7 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
 
   const normalized = {
     ...spellcasting,
+    isRitualCaster: Boolean(spellcasting.isRitualCaster),
     ability: String(spellcasting.ability || 'INT').toUpperCase(),
     type: String(spellcasting.type || 'prepared').toLowerCase(),
     level: Number(spellcasting.level || 1) || 1
@@ -422,6 +424,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [primaryAbilityChoice, setPrimaryAbilityChoice] = useState<string[]>([]);
   const [spellcasting, setSpellcasting] = useState({
     hasSpellcasting: false,
+    isRitualCaster: false,
     description: '',
     level: 1,
     ability: 'INT',
@@ -1041,7 +1044,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   }, {} as Record<string, any[]>);
 
   const groupedWeapons = (allWeapons || []).reduce((acc, item) => {
-    const cat = allWeaponCategories.find(c => c.id === item.categoryId)?.name || item.category || 'Other';
+    let cat = allWeaponCategories.find(c => c.id === item.categoryId)?.name || item.category || 'Other';
+    if (item.weaponType) {
+      cat = cat.replace(/ Weapons?/i, '');
+      cat += ` ${item.weaponType}`;
+    }
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(item);
     return acc;
@@ -1115,7 +1122,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
       <div className="section-header">
         <div className="flex items-center gap-4">
-          <Link to="/compendium/classes">
+          <Link to={id ? `/compendium/classes/view/${id}` : '/compendium/classes'}>
             <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
               <ChevronLeft className="w-4 h-4" /> Back
             </Button>
@@ -2225,6 +2232,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             {spellcasting.hasSpellcasting && (
               <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="grid sm:grid-cols-4 gap-4">
+                  <div className="flex items-center gap-2 col-span-full mb-[-12px]">
+                    <div className="flex items-center gap-2 cursor-pointer group p-2 -ml-2 rounded hover:bg-gold/5" onClick={() => setSpellcasting({...spellcasting, isRitualCaster: !spellcasting.isRitualCaster})}>
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.isRitualCaster ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                        {spellcasting.isRitualCaster && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-gold select-none">Ritual Caster</span>
+                    </div>
+                  </div>
                   <div className="space-y-1">
                     <label className="label-text">Level Obtained</label>
                     <Input 
@@ -3672,21 +3687,27 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-[9px] uppercase font-black tracking-widest text-gold/50">Breakpoints</p>
-                    {getScalingBreakpoints(col.values || {}).length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {getScalingBreakpoints(col.values || {}).map(([level, value]) => (
-                          <div key={level} className="rounded border border-gold/10 bg-background/60 px-2 py-1 min-w-[3.5rem]">
-                            <p className="text-[8px] text-ink/30 font-mono">L{level}</p>
-                            <p className="text-[10px] font-black text-ink">{String(value)}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-ink/30 italic">No saved matrix values yet.</p>
-                    )}
-                  </div>
+                  <details className="group/details">
+                    <summary className="text-[9px] uppercase font-black tracking-widest text-gold/50 cursor-pointer select-none flex items-center justify-between hover:text-gold transition-colors [&::-webkit-details-marker]:hidden">
+                      Breakpoints
+                      <ChevronDown className="w-3 h-3 transition-transform group-open/details:rotate-180" />
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {getScalingBreakpoints(col.values || {}).length > 0 ? (
+                        <div className="flex flex-col gap-1 w-full">
+                          {getScalingBreakpoints(col.values || {}).map(([level, value]) => (
+                            <div key={level} className="flex items-center gap-3 rounded border border-gold/10 bg-background/60 px-3 py-1.5 w-full">
+                              <span className="text-[9px] font-black tracking-widest text-gold whitespace-nowrap min-w-[2.5rem]">Lvl {level}</span>
+                              <div className="h-px bg-gold/10 flex-1" />
+                              <span className="text-[11px] font-black text-ink">{String(value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-ink/30 italic">No saved matrix values yet.</p>
+                      )}
+                    </div>
+                  </details>
 
                   <div className="pt-1">
                     <Link to={`/compendium/scaling/edit/${col.id}?parentId=${id}&parentType=class`}>
@@ -3718,25 +3739,30 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <div className="w-32 h-32 bg-background rounded-lg border border-gold/20 flex flex-col items-center justify-center shrink-0">
                     <div className="label-text opacity-40">Icon</div>
                   </div>
-                  <div className="flex-1 space-y-2 pt-2">
-                    <Input 
+                  <div className="flex-1 space-y-2 pt-2 flex flex-col items-center">
+                    <input 
                       value={editingFeature.name || ''} 
                       onChange={e => setEditingFeature({...editingFeature, name: e.target.value})}
-                      className="h-14 font-serif text-4xl text-center bg-transparent border-none focus-visible:ring-1 focus-visible:ring-gold/50"
+                      className="w-full h-16 font-serif text-4xl tracking-tight text-center bg-transparent border border-transparent hover:border-gold/20 focus:border-gold/50 focus:bg-background/50 rounded outline-none text-gold transition-colors"
                       placeholder="Feature Name"
                       required
                     />
-                    <Input 
-                      value={editingFeature.configuration?.requiredLevel ? `Level ${editingFeature.configuration.requiredLevel}` : ''}
-                      readOnly
-                      placeholder="Requirements"
-                      className="h-8 bg-transparent border-none text-center text-xs text-ink/60"
-                    />
+                    <div className="flex justify-center transition-all">
+                      <span className="text-xs text-ink/60 my-auto mr-1 select-none pointer-events-none">Level</span>
+                      <input 
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={editingFeature.level || 1}
+                        onChange={e => setEditingFeature({...editingFeature, level: parseInt(e.target.value) || 1, configuration: { ...editingFeature.configuration, requiredLevel: parseInt(e.target.value) || 1 }})}
+                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 focus:ring-1 focus:ring-gold/50 hover:bg-gold/5 outline-none transition-colors" 
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex mt-6 relative">
-                  <div className="absolute left-[50%] ml-[-12px] bottom-[-10px] w-6 h-6 bg-card flex items-center justify-center text-gold/40 text-sm rounded-full z-10 border border-gold/10">
+                <div className="flex mt-6 relative pb-4">
+                  <div className="absolute left-[50%] ml-[-12px] bottom-[-16px] w-6 h-6 bg-card flex items-center justify-center text-gold/40 text-sm rounded-full z-10 border border-gold/10">
                     <Zap className="w-3 h-3" />
                   </div>
                   <Tabs value={featureTab} onValueChange={setFeatureTab} className="w-full bg-transparent border-none">
@@ -3755,27 +3781,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 p-6 min-h-0">
+              <div className="flex-1 overflow-y-auto p-6 min-h-0 bg-background/50">
                 {featureTab === 'description' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase text-ink/60 font-bold">Level</label>
-                        <Input 
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={editingFeature.level || 1} 
-                          onChange={e => setEditingFeature({...editingFeature, level: parseInt(e.target.value)})}
-                          className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
-                        />
-                      </div>
-                    </div>
                     <MarkdownEditor 
                       value={editingFeature.description || ''} 
                       onChange={(val) => setEditingFeature({...editingFeature, description: val})}
                       minHeight="400px"
-                      maxHeight="50vh"
+                      maxHeight="500px"
                       label="Description"
                     />
                   </div>
@@ -3992,7 +4005,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     />
                   </div>
                 )}
-              </ScrollArea>
+              </div>
 
               <div className="p-4 border-t border-gold/10 bg-background flex justify-end shrink-0 gap-3">
                  <Button type="button" variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="label-text opacity-70 hover:opacity-100">Cancel</Button>

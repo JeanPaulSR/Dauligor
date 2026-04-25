@@ -161,13 +161,17 @@ export default function MarkdownEditor({
       if (isWYSIWYG) {
         const html = editor.getHTML();
         const bbcode = htmlToBbcode(html);
-        // Only trigger onChange if the content actually changed to avoid render loops
         if (bbcode !== value) {
-          // Defer the update to avoid "Cannot update a component while rendering"
           setTimeout(() => {
             onChange(bbcode);
           }, 0);
         }
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      // Force a slight state change to ensure toolbar re-evaluates isActive
+      if (isWYSIWYG) {
+        setHasManuallyResized(prev => prev); // dummy update
       }
     },
     editorProps: {
@@ -277,17 +281,11 @@ export default function MarkdownEditor({
         {isWYSIWYG ? (
           <div 
             ref={contentRef}
-            className="p-4 prose prose-sm max-w-none flex-grow overflow-auto cursor-text flex flex-col" 
-            onClick={(e) => {
-              // If clicking the container but not the editor itself, focus the end
-              if (e.target === e.currentTarget) {
-                editor?.commands.focus('end');
-              }
-            }}
+            className="prose prose-sm max-w-none flex-grow overflow-auto cursor-text flex flex-col" 
           >
             <EditorContent 
               editor={editor} 
-              className="flex-grow flex flex-col [&>.tiptap]:flex-grow [&>.tiptap]:outline-none" 
+              className="flex-grow flex flex-col [&>.tiptap]:flex-grow [&>.tiptap]:outline-none [&>.tiptap]:p-4" 
             />
           </div>
         ) : (

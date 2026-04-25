@@ -180,13 +180,13 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Left Column: Form */}
         <div className="space-y-6">
-          <Card className="border-gold/20 bg-card/50 sticky top-24 h-[calc(100vh-8rem)] flex flex-col">
-            <CardContent className="p-6 flex flex-col h-full overflow-hidden">
+          <Card className="border-gold/20 bg-card/50 sticky top-24 flex flex-col">
+            <CardContent className="p-6 flex flex-col">
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2 flex-shrink-0">
                 {editingWeapon ? 'Edit Weapon' : 'New Weapon'}
               </h2>
-              <form onSubmit={handleSave} className="flex flex-col h-full overflow-hidden mt-4">
-                <div className="flex-grow overflow-y-auto custom-scrollbar space-y-4 pr-2">
+              <form onSubmit={handleSave} className="flex flex-col mt-4 gap-4">
+                <div className="space-y-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Weapon Name</label>
                     <Input 

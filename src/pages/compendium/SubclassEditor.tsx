@@ -27,7 +27,9 @@ import {
   Search,
   Check,
   Info,
-  Zap
+  Zap,
+  AlertTriangle,
+  ChevronDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -57,6 +59,18 @@ const FEATURE_TYPES = [
   { id: 'vehicle', name: 'Vehicle Feature' }
 ];
 
+function getScalingBreakpoints(values: Record<string, any> = {}) {
+  let lastValue: string | undefined;
+  return Object.entries(values)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .filter(([, value]) => {
+      const normalized = String(value ?? '');
+      if (!normalized || normalized === lastValue) return false;
+      lastValue = normalized;
+      return true;
+    });
+}
+
 export default function SubclassEditor() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -82,7 +96,8 @@ export default function SubclassEditor() {
     progressionId: '',
     altProgressionId: '',
     spellsKnownId: '',
-    spellsKnownFormula: ''
+    spellsKnownFormula: '',
+    isRitualCaster: false
   });
 
   // Unique Options
@@ -107,6 +122,7 @@ export default function SubclassEditor() {
 
   // UI State
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('basic');
   const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
   const [editingFeature, setEditingFeature] = useState<any>(null);
   const [featureTab, setFeatureTab] = useState('description');
@@ -187,7 +203,8 @@ export default function SubclassEditor() {
             progressionId: '',
             altProgressionId: '',
             spellsKnownId: '',
-            spellsKnownFormula: ''
+            spellsKnownFormula: '',
+            isRitualCaster: false
           });
           setExcludedOptionIds(data.excludedOptionIds || {});
 
@@ -413,10 +430,23 @@ export default function SubclassEditor() {
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Basic Info */}
-          <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
+      <div className="grid lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="w-full h-auto flex flex-col gap-1 bg-transparent border-none p-0 mb-6">
+              <div className="w-full grid grid-cols-2 xl:grid-cols-6 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
+                <TabsTrigger value="basic">Basic Info</TabsTrigger>
+                <TabsTrigger value="features" disabled={!id}>Features</TabsTrigger>
+                <TabsTrigger value="spellcasting">Spellcasting</TabsTrigger>
+                <TabsTrigger value="progression">Progression</TabsTrigger>
+                <TabsTrigger value="tags">Tags</TabsTrigger>
+                <TabsTrigger value="danger" disabled={!id}>Danger Zone</TabsTrigger>
+              </div>
+            </TabsList>
+
+            <TabsContent value="basic" className="space-y-6 mt-0">
+              {/* Basic Info */}
+              <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
             <h2 className="label-text text-gold border-b border-gold/10 pb-2">Basic Information</h2>
             <div className="flex flex-col md:flex-row gap-6">
               <div className="w-full md:w-1/3">
@@ -471,7 +501,9 @@ export default function SubclassEditor() {
               />
             </div>
           </div>
+            </TabsContent>
 
+            <TabsContent value="spellcasting" className="space-y-6 mt-0">
           {/* Spellcasting */}
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
             <div className="section-header">
@@ -538,6 +570,14 @@ export default function SubclassEditor() {
                       <option value="known">Known</option>
                     </select>
                   </div>
+                  <div className="flex items-center gap-2 pt-6">
+                    <div className="flex items-center gap-2 cursor-pointer group hover:bg-gold/5 p-1 -ml-1 rounded transition-colors" onClick={() => setSpellcasting({...spellcasting, isRitualCaster: !spellcasting.isRitualCaster})}>
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${spellcasting.isRitualCaster ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                        {spellcasting.isRitualCaster && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-gold select-none">Ritual Caster</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -596,7 +636,9 @@ export default function SubclassEditor() {
               </div>
             )}
           </div>
+            </TabsContent>
 
+            <TabsContent value="progression" className="space-y-6 mt-0">
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
             <div className="section-header">
               <h2 className="label-text text-gold">Subclass Progression & Advancements</h2>
@@ -615,135 +657,172 @@ export default function SubclassEditor() {
               />
             </div>
           </div>
+            </TabsContent>
 
+            <TabsContent value="features" className="space-y-6 mt-0">
           {/* Features */}
           {id && (
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
               <div className="section-header">
                 <h2 className="label-text text-gold">Subclass Features</h2>
-                <Button 
-                  size="sm"
-                  onClick={() => {
-                    setEditingFeature({ 
-                      name: '', 
-                      description: '', 
-                      level: 1, 
-                      isSubclassFeature: false,
-                      quantityColumnId: '',
-                      scalingColumnId: '',
-                      uniqueOptionGroupIds: [],
-                      activitiesStr: '{}',
-                      effectsStr: '[]',
-                      advancements: []
-                    });
-                    setIsFeatureModalOpen(true);
-                  }}
-                  className="h-6 gap-1 btn-gold"
-                >
-                  <Plus className="w-3 h-3" /> Add Feature
-                </Button>
               </div>
 
               <div className="space-y-6">
                 {/* Group features by level, showing parent placeholders */}
-                {Array.from(new Set([
-                  ...parentFeatures.map(f => f.level),
-                  ...features.map(f => f.level)
-                ])).sort((a, b) => a - b).map(level => {
-                  const levelParentFeatures = parentFeatures.filter(f => f.level === level);
-                  const levelSubclassFeatures = features.filter(f => f.level === level);
+                {(() => {
+                  const validLevels = Array.from(new Set([
+                    ...(parentClass?.subclassFeatureLevels || []),
+                    ...parentFeatures.map(f => f.level)
+                  ])).sort((a, b) => a - b);
+                  
+                  const deprecatedFeatures = features.filter(f => !validLevels.includes(f.level));
 
                   return (
-                    <div key={level} className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-gold/60">Level {level}</span>
-                        <div className="h-px flex-1 bg-gold/10" />
-                        {levelParentFeatures.map(pf => (
-                          <span key={pf.id} className="text-[10px] font-bold text-gold uppercase tracking-wider bg-gold/5 px-2 py-0.5 rounded border border-gold/10">
-                            {pf.name}
-                          </span>
-                        ))}
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => {
-                            setEditingFeature({ 
-                              id: doc(collection(db, 'features')).id,
-                              name: '', 
-                              description: '', 
-                              level: level, 
-                              isSubclassFeature: false,
-                              type: 'class',
-                              configuration: {
-                                requiredLevel: level,
-                                requiredIds: [],
-                                repeatable: false
-                              },
-                              properties: ['passive'],
-                              usage: {
-                                spent: 0,
-                                max: ''
-                              },
-                              quantityColumnId: '',
-                              scalingColumnId: '',
-                              uniqueOptionGroupIds: [],
-                              activities: {},
-                              effectsStr: '[]'
-                            });
-                            setIsFeatureModalOpen(true);
-                          }}
-                          className="h-5 w-5 p-0 text-gold hover:bg-gold/10"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                      </div>
-                      
-                      <div className="pl-4 divide-y divide-gold/5">
-                        {levelSubclassFeatures.map((feature) => (
-                          <div key={feature.id} className="py-2 flex items-center justify-between group">
-                            <span className="text-sm font-bold text-ink">{feature.name}</span>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="sm" onClick={() => { 
-                                setEditingFeature({
-                                  ...feature,
-                                  type: feature.type || 'class',
-                                  configuration: feature.configuration || {
-                                    requiredLevel: feature.level || 1,
-                                    requiredIds: [],
-                                    repeatable: false
-                                  },
-                                  properties: feature.properties || ['passive'],
-                                  usage: feature.usage || {
-                                    spent: 0,
-                                    max: ''
-                                  },
-                                  activities: feature.automation?.activities || {},
-                                  effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
-                                  advancements: feature.advancements || []
-                                }); 
-                                setIsFeatureModalOpen(true); 
-                              }} className="h-6 w-6 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteFeature(feature.id)} className="h-6 w-6 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
+                    <>
+                      {validLevels.map(level => {
+                        const levelParentFeatures = parentFeatures.filter(f => f.level === level);
+                        const levelSubclassFeatures = features.filter(f => f.level === level);
+
+                        return (
+                          <div key={level} className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-gold/60">Level {level}</span>
+                              <div className="h-px flex-1 bg-gold/10" />
+                              {levelParentFeatures.map(pf => (
+                                <span key={pf.id} className="text-[10px] font-bold text-gold uppercase tracking-wider bg-gold/5 px-2 py-0.5 rounded border border-gold/10">
+                                  {pf.name}
+                                </span>
+                              ))}
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => {
+                                  setEditingFeature({ 
+                                    id: doc(collection(db, 'features')).id,
+                                    name: '', 
+                                    description: '', 
+                                    level: level, 
+                                    isSubclassFeature: false,
+                                    type: 'class',
+                                    configuration: {
+                                      requiredLevel: level,
+                                      requiredIds: [],
+                                      repeatable: false
+                                    },
+                                    properties: ['passive'],
+                                    usage: {
+                                      spent: 0,
+                                      max: ''
+                                    },
+                                    quantityColumnId: '',
+                                    scalingColumnId: '',
+                                    uniqueOptionGroupIds: [],
+                                    activities: {},
+                                    effectsStr: '[]'
+                                  });
+                                  setIsFeatureModalOpen(true);
+                                }}
+                                className="h-6 px-2 text-gold hover:bg-gold/10 gap-1 border border-gold/20 bg-gold/5"
+                              >
+                                <Plus className="w-3 h-3" /> Add Feature
+                              </Button>
+                            </div>
+                            
+                            <div className="pl-4 divide-y divide-gold/5">
+                              {levelSubclassFeatures.map((feature) => (
+                                <div key={feature.id} className="py-2 flex items-center justify-between group">
+                                  <span className="text-sm font-bold text-ink">{feature.name}</span>
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button variant="ghost" size="sm" onClick={() => { 
+                                      setEditingFeature({
+                                        ...feature,
+                                        type: feature.type || 'class',
+                                        configuration: feature.configuration || {
+                                          requiredLevel: feature.level || 1,
+                                          requiredIds: [],
+                                          repeatable: false
+                                        },
+                                        properties: feature.properties || ['passive'],
+                                        usage: feature.usage || {
+                                          spent: 0,
+                                          max: ''
+                                        },
+                                        activities: feature.automation?.activities || {},
+                                        effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
+                                        advancements: feature.advancements || []
+                                      }); 
+                                      setIsFeatureModalOpen(true); 
+                                    }} className="h-6 w-6 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
+                                    <Button variant="ghost" size="sm" onClick={() => handleDeleteFeature(feature.id)} className="h-6 w-6 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
+                                  </div>
+                                </div>
+                              ))}
+                              {levelSubclassFeatures.length === 0 && (
+                                <p className="py-2 text-[10px] muted-text italic">No features defined for this level.</p>
+                              )}
                             </div>
                           </div>
-                        ))}
-                        {levelSubclassFeatures.length === 0 && (
-                          <p className="py-2 text-[10px] muted-text italic">No features defined for this level.</p>
-                        )}
-                      </div>
-                    </div>
+                        );
+                      })}
+
+                      {deprecatedFeatures.length > 0 && (
+                        <div className="mt-8 pt-6 border-t border-blood/20 space-y-4">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-blood" />
+                            <h3 className="label-text text-blood">Deprecated Features</h3>
+                          </div>
+                          <p className="text-xs text-ink/60">
+                            The parent class subclass feature progression has changed. Please reassign the levels for these features.
+                          </p>
+                          <div className="pl-4 divide-y divide-blood/10 border-l border-blood/20">
+                            {deprecatedFeatures.map(feature => (
+                              <div key={feature.id} className="py-2 flex items-center justify-between group">
+                                <div>
+                                  <span className="text-sm font-bold text-ink">{feature.name}</span>
+                                  <span className="ml-2 text-[10px] text-ink/40 font-mono uppercase tracking-wider">(Currently Level {feature.level})</span>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="sm" onClick={() => { 
+                                    setEditingFeature({
+                                      ...feature,
+                                      type: feature.type || 'class',
+                                      configuration: feature.configuration || {
+                                        requiredLevel: feature.level || 1,
+                                        requiredIds: [],
+                                        repeatable: false
+                                      },
+                                      properties: feature.properties || ['passive'],
+                                      usage: feature.usage || {
+                                        spent: 0,
+                                        max: ''
+                                      },
+                                      activities: feature.automation?.activities || {},
+                                      effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
+                                      advancements: feature.advancements || []
+                                    }); 
+                                    setIsFeatureModalOpen(true); 
+                                  }} className="h-6 w-6 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
+                                  <Button variant="ghost" size="sm" onClick={() => handleDeleteFeature(feature.id)} className="h-6 w-6 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {validLevels.length === 0 && features.length === 0 && (
+                        <p className="py-4 text-center muted-text italic">No features added.</p>
+                      )}
+                    </>
                   );
-                })}
-                {parentFeatures.length === 0 && features.length === 0 && (
-                  <p className="py-4 text-center muted-text italic">No features added.</p>
-                )}
+                })()}
               </div>
             </div>
           )}
 
-        </div>
+            </TabsContent>
 
-        <div className="space-y-6">
+            <TabsContent value="tags" className="space-y-6 mt-0">
           {/* Tags */}
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
             <div className="section-header">
@@ -792,32 +871,9 @@ export default function SubclassEditor() {
             </div>
           </div>
 
-          {id && (
-            <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-              <h2 className="label-text text-gold border-b border-gold/10 pb-2">Table Columns</h2>
-              <div className="space-y-1">
-                {scalingColumns.map(col => (
-                  <div key={col.id} className="flex items-center justify-between p-2 bg-gold/5 border border-gold/10 rounded group">
-                    <span className="text-xs font-bold text-ink">{col.name}</span>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link to={`/compendium/scaling/edit/${col.id}?parentId=${id}&parentType=subclass`}>
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
-                      </Link>
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteScaling(col.id)} className="h-6 w-6 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-2">
-                <Link to={`/compendium/scaling/new?parentId=${id}&parentType=subclass`}>
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 border-gold/10 hover:bg-gold/5 text-xs uppercase text-gold">
-                    <Plus className="w-3 h-3 text-gold" /> Add Column
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          )}
+          </TabsContent>
 
+          <TabsContent value="danger" className="space-y-6 mt-0">
           <div className="p-4 border border-blood/20 bg-blood/5 space-y-4">
             <h2 className="label-text text-blood border-b border-blood/10 pb-2">Danger Zone</h2>
             <Button 
@@ -839,6 +895,75 @@ export default function SubclassEditor() {
               <Trash2 className="w-3 h-3" /> Delete Subclass
             </Button>
           </div>
+          </TabsContent>
+          </Tabs>
+        </div>
+
+        <div className="lg:col-span-1 space-y-6">
+          {id && (
+            <div className="p-4 border border-gold/20 bg-card/50 space-y-4 rounded-xl">
+              <div className="section-header">
+                <h2 className="label-text text-gold uppercase tracking-tighter">Table Columns</h2>
+                <Link to={`/compendium/scaling/new?parentId=${id}&parentType=subclass`}>
+                  <Button size="sm" className="h-6 btn-gold">
+                    <Plus className="w-3 h-3 mr-1" /> Add
+                  </Button>
+                </Link>
+              </div>
+              <div className="space-y-4">
+                {scalingColumns.map(col => (
+                  <div key={col.id} className="p-3 bg-gold/5 border border-gold/10 rounded space-y-2 group relative">
+                    <div className="flex items-center justify-between">
+                      <Input 
+                        value={col.name} 
+                        onChange={e => updateDoc(doc(db, "scalingColumns", col.id), { name: e.target.value })}
+                        className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
+                      />
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Link to={`/compendium/scaling/edit/${col.id}?parentId=${id}&parentType=subclass`}>
+                          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
+                        </Link>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteScaling(col.id)} className="h-5 w-5 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
+                      </div>
+                    </div>
+
+                    <details className="group/details">
+                      <summary className="text-[9px] uppercase font-black tracking-widest text-gold/50 cursor-pointer select-none flex items-center justify-between hover:text-gold transition-colors [&::-webkit-details-marker]:hidden">
+                        Breakpoints
+                        <ChevronDown className="w-3 h-3 transition-transform group-open/details:rotate-180" />
+                      </summary>
+                      <div className="mt-2 space-y-2">
+                        {getScalingBreakpoints(col.values || {}).length > 0 ? (
+                          <div className="flex flex-col gap-1 w-full">
+                            {getScalingBreakpoints(col.values || {}).map(([level, value]) => (
+                              <div key={level} className="flex items-center gap-3 rounded border border-gold/10 bg-background/60 px-3 py-1.5 w-full">
+                                <span className="text-[9px] font-black tracking-widest text-gold whitespace-nowrap min-w-[2.5rem]">Lvl {level}</span>
+                                <div className="h-px bg-gold/10 flex-1" />
+                                <span className="text-[11px] font-black text-ink">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-ink/30 italic">No saved matrix values yet.</p>
+                        )}
+                      </div>
+                    </details>
+
+                    <div className="pt-1">
+                      <Link to={`/compendium/scaling/edit/${col.id}?parentId=${id}&parentType=subclass`}>
+                        <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] font-bold uppercase tracking-widest text-gold/60 hover:text-gold hover:bg-gold/5 border border-gold/10">
+                          Open Full Matrix Editor
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+                {scalingColumns.length === 0 && (
+                  <p className="text-[10px] text-ink/30 text-center italic py-4">No scaling columns defined.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -855,25 +980,30 @@ export default function SubclassEditor() {
                   <div className="w-32 h-32 bg-background rounded-lg border border-gold/20 flex flex-col items-center justify-center shrink-0">
                     <div className="label-text opacity-40">Icon</div>
                   </div>
-                  <div className="flex-1 space-y-2 pt-2">
-                    <Input 
+                  <div className="flex-1 space-y-2 pt-2 flex flex-col items-center">
+                    <input 
                       value={editingFeature.name || ''} 
                       onChange={e => setEditingFeature({...editingFeature, name: e.target.value})}
-                      className="h-14 font-serif text-4xl text-center bg-transparent border-none focus-visible:ring-1 focus-visible:ring-gold/50"
+                      className="w-full h-16 font-serif text-4xl tracking-tight text-center bg-transparent border border-transparent hover:border-gold/20 focus:border-gold/50 focus:bg-background/50 rounded outline-none text-gold transition-colors"
                       placeholder="Feature Name"
                       required
                     />
-                    <Input 
-                      value={editingFeature.configuration?.requiredLevel ? `Level ${editingFeature.configuration.requiredLevel}` : ''}
-                      readOnly
-                      placeholder="Requirements"
-                      className="h-8 bg-transparent border-none text-center text-xs text-ink/60"
-                    />
+                    <div className="flex justify-center transition-all">
+                      <span className="text-xs text-ink/60 my-auto mr-1 select-none pointer-events-none">Level</span>
+                      <input 
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={editingFeature.level || 1}
+                        readOnly
+                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 outline-none pointer-events-none select-none opacity-80" 
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex mt-6 relative">
-                  <div className="absolute left-[50%] ml-[-12px] bottom-[-10px] w-6 h-6 bg-card flex items-center justify-center text-gold/40 text-sm rounded-full z-10 border border-gold/10">
+                <div className="flex mt-6 relative pb-4">
+                  <div className="absolute left-[50%] ml-[-12px] bottom-[-16px] w-6 h-6 bg-card flex items-center justify-center text-gold/40 text-sm rounded-full z-10 border border-gold/10">
                     <Zap className="w-3 h-3" />
                   </div>
                   <Tabs value={featureTab} onValueChange={setFeatureTab} className="w-full bg-transparent border-none">
@@ -892,23 +1022,9 @@ export default function SubclassEditor() {
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 p-6">
+              <div className="flex-1 overflow-y-auto p-6 min-h-0 bg-background/50">
                 {featureTab === 'description' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase text-ink/60 font-bold">Level</label>
-                        <Input 
-                          type="number"
-                          min="1"
-                          max="20"
-                          value={editingFeature.level || 1} 
-                          onChange={e => setEditingFeature({...editingFeature, level: parseInt(e.target.value)})}
-                          className="h-10 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                          required
-                        />
-                      </div>
-                    </div>
                     <MarkdownEditor 
                       value={editingFeature.description || ''} 
                       onChange={(val) => setEditingFeature({...editingFeature, description: val})}
@@ -938,16 +1054,13 @@ export default function SubclassEditor() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-1 opacity-80">
                           <label className="text-[10px] uppercase text-ink/60 font-bold">Required Level</label>
                           <Input 
                             type="number"
                             value={editingFeature.configuration?.requiredLevel || editingFeature.level || 1}
-                            onChange={e => setEditingFeature({
-                              ...editingFeature, 
-                              configuration: { ...editingFeature.configuration, requiredLevel: parseInt(e.target.value) }
-                            })}
-                            className="h-10 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                            readOnly
+                            className="h-10 text-sm bg-background/20 border-gold/5 pointer-events-none select-none text-ink/50"
                           />
                         </div>
                       </div>
@@ -1148,7 +1261,7 @@ export default function SubclassEditor() {
                     </div>
                   </div>
                 )}
-              </ScrollArea>
+              </div>
             </>
           )}
 

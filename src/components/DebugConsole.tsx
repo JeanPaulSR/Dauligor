@@ -30,7 +30,9 @@ export default function DebugConsole() {
         message,
         data: args.length > 1 ? args.slice(1) : undefined
       };
-      setLogs(prev => [newEntry, ...prev].slice(0, 50));
+      setTimeout(() => {
+        setLogs(prev => [newEntry, ...prev].slice(0, 50));
+      }, 0);
     };
 
     console.log = (...args) => {

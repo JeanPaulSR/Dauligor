@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
-import { Plus, Minus, Trash2, Edit2, Zap, Heart, Star, BookOpen, Settings, Sword, Lock, Check } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { Plus, Minus, Trash2, Edit2, Zap, Heart, Star, BookOpen, Settings, Sword, Lock, Check, Eye, EyeOff, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogClose } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { db } from '../../lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
@@ -102,7 +104,7 @@ const ABILITY_LABELS: Record<(typeof ABILITY_ORDER)[number], string> = {
 };
 
 const TRAIT_MODE_ENABLED_TYPES = new Set(['skills', 'saves', 'tools']);
-const GROUPED_TRAIT_TYPES = new Set(['armor', 'weapons', 'languages']);
+const GROUPED_TRAIT_TYPES = new Set(['armor', 'weapons', 'languages', 'tools']);
 
 function getScalingBreakpoints(values: Record<string, any> = {}) {
   let lastValue: string | undefined;
@@ -116,9 +118,25 @@ function getScalingBreakpoints(values: Record<string, any> = {}) {
     });
 }
 
-function getGroupedTraitEntries(items: any[] = []) {
-  return items.reduce((groups, item) => {
-    const key = String(item.category || 'Uncategorized');
+function getGroupedTraitEntries(items: any[] = [], type: string = 'skills') {
+  const sorted = [...items].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  
+  if (type === 'saves') {
+    sorted.sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 999;
+      const orderB = typeof b.order === 'number' ? b.order : 999;
+      return orderA - orderB;
+    });
+  }
+
+  return sorted.reduce((groups, item) => {
+    let key = String(item.category || 'Uncategorized');
+    
+    if (type === 'weapons' && item.weaponType) {
+       key = key.replace(/ Weapons?/i, '');
+       key += ` ${item.weaponType}`;
+    }
+
     if (!groups[key]) groups[key] = [];
     groups[key].push(item);
     return groups;
@@ -134,14 +152,45 @@ function PreviewPanel({
   subtitle?: string;
   children: React.ReactNode;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <div className="border border-gold/10 rounded-md bg-background/40 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gold/10 bg-gold/5">
-        <p className="text-[9px] uppercase font-black tracking-widest text-gold/60">{title}</p>
-        {subtitle && <p className="mt-1 text-[10px] text-ink/45">{subtitle}</p>}
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
+    <>
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className="w-full flex items-center justify-between bg-background/20 border border-gold/10 hover:bg-gold/5 h-auto py-3 px-4 rounded-md transition-colors text-left focus:outline-none focus:ring-2 focus:ring-gold/50 cursor-pointer"
+      >
+        <span className="text-[10px] uppercase font-black tracking-widest text-gold/60">{title}</span>
+        <Eye className="w-3.5 h-3.5 text-gold/60 shrink-0" />
+      </button>
+
+      {isOpen && createPortal(
+        <div className="fixed inset-0 z-[200] isolate flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10" 
+            onClick={() => setIsOpen(false)} 
+            aria-hidden="true"
+          />
+          <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col gap-0 rounded-xl bg-card p-4 text-ink shadow-2xl ring-1 ring-gold/20 outline-none animate-in fade-in-0 zoom-in-95 duration-100">
+            <div className="flex justify-between items-start mb-4 gap-4">
+              <div className="shrink-0">
+                <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">{title}</h4>
+                {subtitle && <p className="text-[10px] text-ink/60 mt-1">{subtitle}</p>}
+              </div>
+              <button 
+                onClick={() => setIsOpen(false)}
+                className="rounded-sm opacity-70 hover:opacity-100 transition-opacity p-1 bg-background/50 hover:bg-background border border-gold/10 shrink-0 cursor-pointer text-gold"
+              >
+                 <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto max-h-[65vh] pl-1 pr-3 -mr-3 pb-2">{children}</div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 
@@ -195,7 +244,7 @@ export default function AdvancementManager({
     : 'manual';
   const traitType = editingAdv.configuration?.type || 'skills';
   const traitOptions = traitOptionsMap[traitType] || [];
-  const groupedTraitEntries: Record<string, any[]> = getGroupedTraitEntries(traitOptions);
+  const groupedTraitEntries: Record<string, any[]> = getGroupedTraitEntries(traitOptions, traitType);
   const averageHitPointsAtLevel = (level: number) => {
     const die = Number(editingAdv.configuration?.hitDie || resolvedDefaultHitDie);
     const averagePerLevel = Math.floor(die / 2) + 1;
@@ -250,13 +299,14 @@ export default function AdvancementManager({
     });
   };
 
-  const setTraitConfigurationLists = (nextFixed: string[], nextOptions: string[]) => {
+  const setTraitConfigurationLists = (nextFixed: string[], nextOptions: string[], nextReplacements?: string[]) => {
     setEditingAdv({
       ...editingAdv,
       configuration: {
         ...editingAdv.configuration,
         fixed: Array.from(new Set(nextFixed)),
-        options: Array.from(new Set(nextOptions))
+        options: Array.from(new Set(nextOptions)),
+        replacements: Array.from(new Set(nextReplacements || editingAdv.configuration?.replacements || []))
       }
     });
   };
@@ -285,10 +335,22 @@ export default function AdvancementManager({
     setTraitConfigurationLists(Array.from(fixed), Array.from(options));
   };
 
-  const toggleTraitCategory = (category: string, target: 'fixed' | 'options', isChecked: boolean) => {
+  const toggleTraitReplacement = (traitId: string, isChecked: boolean) => {
+    const replacements = new Set<string>(editingAdv.configuration?.replacements || []);
+    if (isChecked) replacements.add(traitId);
+    else replacements.delete(traitId);
+    setTraitConfigurationLists(
+      editingAdv.configuration?.fixed || [],
+      editingAdv.configuration?.options || [],
+      Array.from(replacements)
+    );
+  };
+
+  const toggleTraitCategory = (category: string, target: 'fixed' | 'options' | 'replacements', isChecked: boolean) => {
     const categoryItems = groupedTraitEntries[category] || [];
     const fixed = new Set<string>(editingAdv.configuration?.fixed || []);
     const options = new Set<string>(editingAdv.configuration?.options || []);
+    const replacements = new Set<string>(editingAdv.configuration?.replacements || []);
     categoryItems.forEach((item: any) => {
       if (target === 'fixed') {
         if (isChecked) {
@@ -297,16 +359,19 @@ export default function AdvancementManager({
         } else {
           fixed.delete(item.id);
         }
-      } else {
+      } else if (target === 'options') {
         if (isChecked) {
           options.add(item.id);
           fixed.delete(item.id);
         } else {
           options.delete(item.id);
         }
+      } else if (target === 'replacements') {
+        if (isChecked) replacements.add(item.id);
+        else replacements.delete(item.id);
       }
     });
-    setTraitConfigurationLists(Array.from(fixed), Array.from(options));
+    setTraitConfigurationLists(Array.from(fixed), Array.from(options), Array.from(replacements));
     if (target === 'fixed' && isChecked) {
       setCollapsedTraitCategories(prev => ({ ...prev, [`${traitType}:${category}`]: true }));
     }
@@ -341,18 +406,41 @@ export default function AdvancementManager({
       if (traitOptionsMap[type]) return;
 
       let cols: string[] = [];
+      let catCol = '';
       if (type === 'skills') cols = ['skills'];
-      else if (type === 'armor') cols = ['armor'];
-      else if (type === 'weapons') cols = ['weapons'];
-      else if (type === 'tools') cols = ['tools'];
-      else if (type === 'languages') cols = ['languages'];
+      else if (type === 'armor') { cols = ['armor']; catCol = 'armorCategories'; }
+      else if (type === 'weapons') { cols = ['weapons']; catCol = 'weaponCategories'; }
+      else if (type === 'tools') { cols = ['tools']; catCol = 'toolCategories'; }
+      else if (type === 'languages') { cols = ['languages']; catCol = 'languageCategories'; }
       else if (type === 'di' || type === 'dr' || type === 'dv') cols = ['damageTypes'];
       else if (type === 'ci') cols = ['conditions'];
       else if (type === 'saves') cols = ['attributes'];
 
       if (cols.length > 0) {
-        Promise.all(cols.map(c => getDocs(collection(db, c)))).then(snaps => {
-          let items = snaps.flatMap(s => s.docs.map(d => ({ id: d.id, ...d.data() })));
+        const promises = cols.map(c => getDocs(collection(db, c)));
+        if (catCol) {
+          promises.push(getDocs(collection(db, catCol)));
+        }
+
+        Promise.all(promises).then(snaps => {
+          const itemsSnaps = snaps.slice(0, cols.length);
+          const catSnap = catCol ? snaps[snaps.length - 1] : null;
+
+          const catMap = new Map<string, string>();
+          if (catSnap) {
+            catSnap.docs.forEach((d: any) => {
+              catMap.set(d.id, d.data().name);
+            });
+          }
+
+          let items = itemsSnaps.flatMap(s => s.docs.map((d: any) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...data,
+              category: (data.categoryId && catMap.has(data.categoryId)) ? catMap.get(data.categoryId) : (data.category || 'Other')
+            };
+          }));
           
           // Deduplicate attributes for saves
           if (type === 'saves') {
@@ -377,6 +465,16 @@ export default function AdvancementManager({
             ]}));
             return;
           }
+          
+          items.sort((a, b) => {
+            if (type === 'saves') {
+              const orderA = typeof a.order === 'number' ? a.order : 999;
+              const orderB = typeof b.order === 'number' ? b.order : 999;
+              if (orderA !== orderB) return orderA - orderB;
+            }
+            return (a.name || a.id).localeCompare(b.name || b.id);
+          });
+          
           setTraitOptionsMap(prev => ({ ...prev, [type]: items }));
         }).catch(console.error);
       }
@@ -594,204 +692,318 @@ export default function AdvancementManager({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 dialog-body">
+          <div className="flex-1 min-h-0 dialog-body space-y-6">
 
-            {/* Row 1: Type (wide) + Level */}
-            <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)] gap-4">
-              <div className="space-y-1.5">
-                <label className="field-label">Advancement Type</label>
-                <Select
-                  value={editingAdv.type}
-                  onValueChange={(val: AdvancementType | null) => {
-                    if (!val) return;
-                    const base: Partial<Advancement> = { ...editingAdv, type: val };
-                    if (val === 'ItemGrant') base.configuration = { pool: [], optional: false, optionalPool: [], excludedOptionIds: [] };
-                    if (val === 'ItemChoice') base.configuration = { pool: [], count: 1, excludedOptionIds: [] };
-                    if (val === 'HitPoints') base.configuration = { hitDie: resolvedDefaultHitDie };
-                    if (val === 'Trait') base.configuration = { type: 'skills', options: [], fixed: [] };
-                    if (val === 'ScaleValue') base.configuration = { identifier: '', type: 'number' };
-                    if (val === 'Size') base.configuration = { sizes: { med: true }, size: 'med' };
-                    if (val === 'Subclass') base.configuration = {};
-                    setEditingAdv(base);
-                  }}
-                >
-                  <SelectTrigger className="h-9 bg-background/50 border-gold/10">
-                    <SelectValue>
-                      {editingAdv.type ? (ADVANCEMENT_INFO[editingAdv.type]?.label || editingAdv.type) : 'Select type...'}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ADVANCEMENT_INFO).map(([key, info]) => (
-                      <SelectItem key={key} value={key}>{info.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <fieldset className="config-fieldset">
+              <legend className="section-label px-2">Core Settings</legend>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className={`space-y-1.5 ${isInsideFeature ? 'md:col-span-2' : ''}`}>
+                  <label className="field-label">Title</label>
+                  <Input
+                    value={editingAdv.title || ''}
+                    onChange={e => setEditingAdv({...editingAdv, title: e.target.value})}
+                    placeholder="Leave blank for default"
+                    className="h-9 bg-background/50 border-gold/10 placeholder:text-ink/20"
+                  />
+                </div>
+                {!isInsideFeature && (
+                  <div className="space-y-1.5">
+                    <label className="field-label">Gained at Level</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId) ? availableFeatures.find(f => f.id === editingAdv.featureId)?.level : (editingAdv.level || 1)}
+                      onChange={e => setEditingAdv({...editingAdv, level: parseInt(e.target.value)})}
+                      disabled={!!(editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId))}
+                      className="h-9 bg-background/50 border-gold/10 disabled:opacity-50"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="space-y-1.5">
-                <label className="field-label">Gained at Level</label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId) ? availableFeatures.find(f => f.id === editingAdv.featureId)?.level : (editingAdv.level || 1)}
-                  onChange={e => setEditingAdv({...editingAdv, level: parseInt(e.target.value)})}
-                  disabled={!!(editingAdv.featureId && availableFeatures.find(f => f.id === editingAdv.featureId))}
-                  className="h-9 bg-background/50 border-gold/10 disabled:opacity-50"
-                />
-              </div>
-            </div>
 
-            {/* Row 2: Title + Attached Feature */}
-            <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)] gap-4">
-              <div className={`space-y-1.5 ${isInsideFeature ? 'md:col-span-2' : ''}`}>
-                <label className="field-label">Title</label>
-                <Input
-                  value={editingAdv.title || ''}
-                  onChange={e => setEditingAdv({...editingAdv, title: e.target.value})}
-                  placeholder="Leave blank for default"
-                  className="h-9 bg-background/50 border-gold/10 placeholder:text-ink/20"
-                />
-              </div>
-              {!isInsideFeature && (
+              <div className="grid md:grid-cols-2 gap-4 pt-1">
                 <div className="space-y-1.5">
-                  <label className="field-label">Attached to Feature</label>
+                  <label className="field-label">Advancement Type</label>
                   <Select
-                    value={(editingAdv.featureId ?? undefined) || 'none'}
-                    onValueChange={(val) => {
-                      const newFeatureId = (!val || val === 'none') ? undefined : val;
-                      const linkedFeature = newFeatureId ? availableFeatures.find(f => f.id === newFeatureId) : undefined;
-                      setEditingAdv({
-                        ...editingAdv, 
-                        featureId: newFeatureId,
-                        level: linkedFeature ? linkedFeature.level : editingAdv.level
-                      });
+                    value={editingAdv.type}
+                    onValueChange={(val: AdvancementType | null) => {
+                      if (!val) return;
+                      const base: Partial<Advancement> = { ...editingAdv, type: val };
+                      if (val === 'ItemGrant') base.configuration = { pool: [], optional: false, optionalPool: [], excludedOptionIds: [], choiceType: 'option-group' };
+                      if (val === 'ItemChoice') base.configuration = { pool: [], count: 1, excludedOptionIds: [], choiceType: 'option-group' };
+                      if (val === 'HitPoints') base.configuration = { hitDie: resolvedDefaultHitDie };
+                      if (val === 'Trait') base.configuration = { type: 'skills', options: [], fixed: [] };
+                      if (val === 'ScaleValue') base.configuration = { identifier: '', type: 'number' };
+                      if (val === 'Size') base.configuration = { sizes: { med: true }, size: 'med' };
+                      if (val === 'Subclass') base.configuration = {};
+                      setEditingAdv(base);
                     }}
                   >
-                    <SelectTrigger className="h-9 bg-background/50 border-gold/10">
+                    <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
                       <SelectValue>
-                        {editingAdv.featureId && editingAdv.featureId !== 'none'
-                          ? (availableFeatures.find(f => f.id === editingAdv.featureId)?.name || 'Unknown Feature')
-                          : 'Standalone Advancement'}
+                        {editingAdv.type ? (ADVANCEMENT_INFO[editingAdv.type]?.label || editingAdv.type) : 'Select type...'}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Standalone Advancement</SelectItem>
-                      {availableFeatures.map(f => (
-                        <SelectItem key={f.id} value={f.id}>{f.name} (Lvl {f.level})</SelectItem>
+                      {Object.entries(ADVANCEMENT_INFO).filter(([key]) => key !== 'Subclass').map(([key, info]) => (
+                        <SelectItem key={key} value={key}>{info.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[9px] text-ink/40 italic">Associates this advancement with a specific feature's UI block.</p>
                 </div>
-              )}
-            </div>
+                {!isInsideFeature && (
+                  <div className="space-y-1.5">
+                    <label className="field-label">Attached to Feature</label>
+                    <Select
+                      value={(editingAdv.featureId ?? undefined) || 'none'}
+                      onValueChange={(val) => {
+                        const newFeatureId = (!val || val === 'none') ? undefined : val;
+                        const linkedFeature = newFeatureId ? availableFeatures.find(f => f.id === newFeatureId) : undefined;
+                        setEditingAdv({
+                          ...editingAdv, 
+                          featureId: newFeatureId,
+                          level: linkedFeature ? linkedFeature.level : editingAdv.level
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                        <SelectValue>
+                          {editingAdv.featureId && editingAdv.featureId !== 'none'
+                            ? (availableFeatures.find(f => f.id === editingAdv.featureId)?.name || 'Unknown Feature')
+                            : 'Standalone Advancement'}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Standalone Advancement</SelectItem>
+                        {availableFeatures.map(f => (
+                          <SelectItem key={f.id} value={f.id}>{f.name} (Lvl {f.level})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </fieldset>
 
             {/* Configuration */}
-            <div className="pt-2 border-t border-gold/10 space-y-4">
+            <div className="space-y-4">
               {/* ── ItemGrant ── */}
               {editingAdv.type === 'ItemGrant' && (
-                <div className="grid xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)] gap-5 items-start">
+                <div className="grid xl:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] gap-5 items-start">
+                  
+                  {/* Left Column: Settings & Preview */}
                   <div className="space-y-4">
-                    <p className="text-[10px] text-ink/40">Grants specific items automatically when the level is reached.</p>
-
-                    <label className="flex items-center gap-2 cursor-pointer group w-fit">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${editingAdv.configuration?.optional ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'}`}>
-                        {editingAdv.configuration?.optional && <Check className="w-2.5 h-2.5 text-white" />}
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="hidden"
-                        checked={editingAdv.configuration?.optional || false}
-                        onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optional: e.target.checked }})}
-                      />
-                      <span className="text-[10px] uppercase font-bold text-ink/60">Optional (players may opt out)</span>
-                    </label>
-
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="field-label">Item Type</label>
-                        <Select
-                          value={editingAdv.configuration?.choiceType || 'feature'}
-                          onValueChange={val => setEditingAdv({
-                            ...editingAdv,
-                            configuration: {
-                              ...editingAdv.configuration,
-                              choiceType: val,
-                              pool: [],
-                              optionalPool: [],
-                              optionGroupId: undefined,
-                              excludedOptionIds: []
-                            }
-                          })}
-                        >
-                          <SelectTrigger className="h-9 bg-background/50 border-gold/10">
-                            <SelectValue>
-                              {ITEM_TYPE_LABELS[editingAdv.configuration?.choiceType || 'feature'] || editingAdv.configuration?.choiceType}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="any">Anything</SelectItem>
-                            <SelectItem value="feature">Feature</SelectItem>
-                            <SelectItem value="option-group">Unique Option Group</SelectItem>
-                            <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
-                            <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="field-label">
-                          {editingAdv.configuration?.choiceType === 'option-group' ? 'Target Option Group' : 'Grant Source'}
-                        </label>
-                        {editingAdv.configuration?.choiceType === 'option-group' ? (
-                          <Select
-                            value={editingAdv.configuration?.optionGroupId || ''}
-                            onValueChange={val => setEditingAdv({
-                              ...editingAdv,
-                              configuration: {
-                                ...editingAdv.configuration,
-                                optionGroupId: val,
-                                excludedOptionIds: []
-                              }
-                            })}
-                          >
-                            <SelectTrigger className="h-9 bg-background/50 border-gold/10">
-                              <SelectValue>
-                                {editingAdv.configuration?.optionGroupId
-                                  ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
-                                  : 'Select a group...'}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableOptionGroups.map(g => (
-                                <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <div className="h-9 rounded-md border border-gold/10 bg-background/35 px-3 flex items-center text-[10px] text-ink/40">
-                            Select the features this advancement should grant.
+                    <fieldset className="config-fieldset bg-background/20">
+                      <legend className="section-label text-gold/60 px-1">Grant Settings</legend>
+                      <div className="space-y-4">
+                        <label className="flex items-center gap-2 cursor-pointer group w-fit">
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${editingAdv.configuration?.optional ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'}`}>
+                            {editingAdv.configuration?.optional && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
-                        )}
-                      </div>
-                    </div>
+                          <input
+                            type="checkbox"
+                            className="hidden"
+                            checked={editingAdv.configuration?.optional || false}
+                            onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optional: e.target.checked }})}
+                          />
+                          <span className="text-[10px] uppercase font-bold text-ink/60">Optional (players may opt out)</span>
+                        </label>
 
-                    <div className="space-y-2">
-                      <label className="text-[9px] uppercase font-bold text-ink/60">
+                        <div className="grid sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="field-label">Item Type</label>
+                            <Select
+                              value={editingAdv.configuration?.choiceType || 'feature'}
+                              onValueChange={val => setEditingAdv({
+                                ...editingAdv,
+                                configuration: {
+                                  ...editingAdv.configuration,
+                                  choiceType: val,
+                                  pool: [],
+                                  optionalPool: [],
+                                  optionGroupId: undefined,
+                                  excludedOptionIds: []
+                                }
+                              })}
+                            >
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                <SelectValue>
+                                  {ITEM_TYPE_LABELS[editingAdv.configuration?.choiceType || 'feature'] || editingAdv.configuration?.choiceType}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="any">Anything</SelectItem>
+                                <SelectItem value="feature">Feature</SelectItem>
+                                <SelectItem value="option-group">Unique Option Group</SelectItem>
+                                <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
+                                <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="field-label">
+                              {editingAdv.configuration?.choiceType === 'option-group' ? 'Target Option Group' : 'Grant Source'}
+                            </label>
+                            {editingAdv.configuration?.choiceType === 'option-group' ? (
+                              <Select
+                                value={editingAdv.configuration?.optionGroupId || ''}
+                                onValueChange={val => setEditingAdv({
+                                  ...editingAdv,
+                                  configuration: {
+                                    ...editingAdv.configuration,
+                                    optionGroupId: val,
+                                    excludedOptionIds: []
+                                  }
+                                })}
+                              >
+                                <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                  <SelectValue>
+                                    {editingAdv.configuration?.optionGroupId
+                                      ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
+                                      : 'Select a group...'}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableOptionGroups.map(g => (
+                                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="h-9 rounded-md border border-gold/10 bg-background/35 px-3 flex items-center text-[10px] text-ink/40">
+                                Specific Features
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </fieldset>
+
+                    <PreviewPanel
+                      title="Items Preview"
+                      subtitle={editingAdv.configuration?.choiceType === 'option-group'
+                        ? 'Included group items are listed here. Excluded items stay available in the group but will not be exported with this advancement.'
+                        : 'Use this panel to confirm the features granted by this advancement.'}
+                    >
+                      {editingAdv.configuration?.choiceType === 'option-group' ? (
+                        selectedOptionGroup ? (
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-bold text-ink">{selectedOptionGroup.name}</p>
+                                {selectedOptionGroup.description && (
+                                  <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
+                                )}
+                              </div>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
+                                {includedOptionItems.length}/{selectedOptionItems.length} included
+                              </span>
+                            </div>
+                            <div className="border border-gold/10 rounded-md overflow-hidden">
+                              <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
+                              </div>
+                              <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                                {includedOptionItems.map((item: any) => (
+                                  <div key={item.id} className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
+                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">
+                                      {editingAdv.configuration?.optional && optionalPoolIds.has(item.id) ? 'Yes' : 'No'}
+                                    </span>
+                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
+                                    <div>
+                                      <p className="text-xs font-bold text-ink">{item.name}</p>
+                                      {(item.featureId || item.sourceId) && (
+                                        <p className="mt-1 text-[9px] text-ink/40">
+                                          {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                                {includedOptionItems.length === 0 && (
+                                  <p className="px-3 py-4 text-[10px] italic text-ink/35">All items in this option group are currently excluded.</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview what this advancement will grant.</p>
+                        )
+                      ) : selectedPoolFeatures.length > 0 ? (
+                        <div className="border border-gold/10 rounded-md overflow-hidden">
+                          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
+                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
+                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
+                          </div>
+                          <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                            {selectedPoolFeatures.map((feature: any) => (
+                              <div key={feature.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
+                                <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">
+                                  {editingAdv.configuration?.optional && optionalPoolIds.has(feature.id) ? 'Yes' : 'No'}
+                                </span>
+                                <div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-ink">{feature.name}</span>
+                                    <span className="text-[9px] text-gold/60 uppercase tracking-widest">Lvl {feature.level}</span>
+                                  </div>
+                                  {feature.description && (
+                                    <p className="mt-1 text-[9px] text-ink/40 line-clamp-2">{feature.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] italic text-ink/35">Select one or more features to preview what this advancement will grant.</p>
+                      )}
+                    </PreviewPanel>
+                  </div>
+
+                  {/* Right Column: Pool selection */}
+                  <div className="space-y-4">
+                    <fieldset className="config-fieldset bg-background/20 h-full">
+                      <legend className="section-label text-gold/60 px-1">
                         {editingAdv.configuration?.choiceType === 'option-group' ? 'Included Group Items' : 'Items to Grant'}
-                      </label>
+                      </legend>
                       <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
                         {editingAdv.configuration?.choiceType === 'option-group' ? (
                           <>
-                            <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
+                            {selectedOptionGroup && selectedOptionItems.length > 0 && (
+                              <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10">
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                  let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
+                                  selectedOptionItems.forEach(item => excluded.delete(item.id));
+                                  setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
+                                }}>Select All</Button>
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                  let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
+                                  selectedOptionItems.forEach(item => excluded.add(item.id));
+                                  setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
+                                }}>Deselect All</Button>
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                  let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
+                                  selectedOptionItems.forEach(item => {
+                                    if ((item.levelPrerequisite || 0) > 0) excluded.add(item.id);
+                                  });
+                                  setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
+                                }}>Exclude Options with Level Prerequisites</Button>
+                              </div>
+                            )}
+                            <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/10">
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Include</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
                             </div>
-                            <div className="divide-y divide-gold/5 h-[22rem] overflow-y-auto">
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
                               {selectedOptionGroup ? selectedOptionItems.map((item: any) => {
                                 const isIncluded = !excludedOptionIds.has(item.id);
                                 return (
-                                  <div key={item.id} className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start hover:bg-gold/5">
+                                  <div key={item.id} className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
                                     <label className="flex items-center gap-2 cursor-pointer">
                                       <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isIncluded ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
                                         {isIncluded && <Check className="w-2.5 h-2.5 text-white" />}
@@ -800,7 +1012,18 @@ export default function AdvancementManager({
                                         type="checkbox"
                                         className="hidden"
                                         checked={isIncluded}
-                                        onChange={e => toggleExcludedOption(item.id, e.target.checked)}
+                                        onChange={e => {
+                                          const nextExcluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
+                                          const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
+                                          if (e.target.checked) {
+                                              nextExcluded.delete(item.id);
+                                          } else {
+                                              nextExcluded.add(item.id);
+                                              const o = optionalPool.indexOf(item.id);
+                                              if (o !== -1) optionalPool.splice(o, 1);
+                                          }
+                                          setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(nextExcluded), optionalPool }});
+                                        }}
                                       />
                                     </label>
                                     <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
@@ -812,6 +1035,23 @@ export default function AdvancementManager({
                                         </p>
                                       )}
                                     </div>
+                                    <label className="flex justify-center cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                        disabled={!isIncluded || !editingAdv.configuration?.optional}
+                                        checked={(editingAdv.configuration?.optionalPool || []).includes(item.id)}
+                                        onChange={e => {
+                                          const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
+                                          if (e.target.checked) optionalPool.push(item.id);
+                                          else {
+                                            const i = optionalPool.indexOf(item.id);
+                                            if (i !== -1) optionalPool.splice(i, 1);
+                                          }
+                                          setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionalPool }});
+                                        }}
+                                      />
+                                    </label>
                                   </div>
                                 );
                               }) : (
@@ -828,7 +1068,7 @@ export default function AdvancementManager({
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
                             </div>
-                            <div className="divide-y divide-gold/5 h-[22rem] overflow-y-auto">
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
                               {availableFeatures.map(f => (
                                 <div key={f.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
                                   <label className="flex items-center gap-2 cursor-pointer min-w-0">
@@ -843,12 +1083,15 @@ export default function AdvancementManager({
                                       checked={(editingAdv.configuration?.pool || []).includes(f.id)}
                                       onChange={e => {
                                         const pool = [...(editingAdv.configuration?.pool || [])];
+                                        const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
                                         if (e.target.checked) pool.push(f.id);
                                         else {
                                           const i = pool.indexOf(f.id);
                                           if (i !== -1) pool.splice(i, 1);
+                                          const o = optionalPool.indexOf(f.id);
+                                          if (o !== -1) optionalPool.splice(o, 1);
                                         }
-                                        setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool }});
+                                        setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool, optionalPool }});
                                       }}
                                     />
                                     <span className="min-w-0 text-xs font-bold text-ink truncate">{f.name} <span className="text-ink/40 font-normal">(Lvl {f.level})</span></span>
@@ -877,96 +1120,20 @@ export default function AdvancementManager({
                           </>
                         )}
                       </div>
-                    </div>
+                    </fieldset>
                   </div>
-
-                  <PreviewPanel
-                    title="Items"
-                    subtitle={editingAdv.configuration?.choiceType === 'option-group'
-                      ? 'Included group items are listed here. Excluded items stay available in the group but will not be exported with this advancement.'
-                      : 'Use this panel to confirm the features granted by this advancement.'}
-                  >
-                    {editingAdv.configuration?.choiceType === 'option-group' ? (
-                      selectedOptionGroup ? (
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-bold text-ink">{selectedOptionGroup.name}</p>
-                              {selectedOptionGroup.description && (
-                                <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
-                              )}
-                            </div>
-                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
-                              {includedOptionItems.length}/{selectedOptionItems.length} included
-                            </span>
-                          </div>
-                          <div className="border border-gold/10 rounded-md overflow-hidden">
-                            <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
-                            </div>
-                            <div className="divide-y divide-gold/5">
-                              {includedOptionItems.map((item: any) => (
-                                <div key={item.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
-                                  <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
-                                  <div>
-                                    <p className="text-xs font-bold text-ink">{item.name}</p>
-                                    {(item.featureId || item.sourceId) && (
-                                      <p className="mt-1 text-[9px] text-ink/40">
-                                        {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                              {includedOptionItems.length === 0 && (
-                                <p className="px-3 py-4 text-[10px] italic text-ink/35">All items in this option group are currently excluded.</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview what this advancement will grant.</p>
-                      )
-                    ) : selectedPoolFeatures.length > 0 ? (
-                      <div className="border border-gold/10 rounded-md overflow-hidden">
-                        <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                          <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
-                          <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
-                        </div>
-                        <div className="divide-y divide-gold/5">
-                          {selectedPoolFeatures.map((feature: any) => (
-                            <div key={feature.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
-                              <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">
-                                {editingAdv.configuration?.optional && optionalPoolIds.has(feature.id) ? 'Yes' : 'No'}
-                              </span>
-                              <div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-xs font-bold text-ink">{feature.name}</span>
-                                  <span className="text-[9px] text-gold/60 uppercase tracking-widest">Lvl {feature.level}</span>
-                                </div>
-                                {feature.description && (
-                                  <p className="mt-1 text-[9px] text-ink/40 line-clamp-2">{feature.description}</p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[10px] italic text-ink/35">Select one or more features to preview what this advancement will grant.</p>
-                    )}
-                  </PreviewPanel>
                 </div>
               )}
 
               {/* ── ItemChoice ── */}
               {editingAdv.type === 'ItemChoice' && (
-                <div className="grid xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)] gap-5 items-start">
+                <div className="grid xl:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] gap-5 items-start">
+                  
+                  {/* Left Column: Number of Choices & Selection Rule */}
                   <div className="space-y-4">
-                    <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.9fr)] gap-4 items-start">
-                      <div className="space-y-1.5">
-                        <label className="field-label">Number of Choices</label>
+                    <fieldset className="config-fieldset bg-background/20">
+                      <legend className="section-label text-gold/60 px-1">Number of Choices</legend>
+                      <div className="space-y-3">
                         <Select
                           value={choiceCountMode}
                           onValueChange={val => {
@@ -994,7 +1161,7 @@ export default function AdvancementManager({
                             });
                           }}
                         >
-                          <SelectTrigger className="h-9 bg-background/50 border-gold/10">
+                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
                             <SelectValue>
                               {choiceCountMode === 'manual'
                                 ? 'Manual'
@@ -1009,121 +1176,224 @@ export default function AdvancementManager({
                           </SelectContent>
                         </Select>
                         {choiceCountMode === 'manual' && (
-                          <Input
-                            type="number"
-                            min="1"
-                            value={editingAdv.configuration?.count || 1}
-                            onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, count: parseInt(e.target.value) || 1 }})}
-                            className="h-9 bg-background/50 border-gold/10"
-                          />
+                          <div className="space-y-1.5">
+                            <label className="field-label">Count</label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={editingAdv.configuration?.count || 1}
+                              onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, count: parseInt(e.target.value) || 1 }})}
+                              className="w-full h-9 bg-background/50 border-gold/10"
+                            />
+                          </div>
                         )}
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="field-label">Item Type</label>
-                        <Select
-                          value={editingAdv.configuration?.choiceType || 'feature'}
-                          onValueChange={val => setEditingAdv({
-                            ...editingAdv,
-                            configuration: {
-                              ...editingAdv.configuration,
-                              choiceType: val,
-                              pool: [],
-                              optionGroupId: undefined,
-                              excludedOptionIds: []
-                            }
-                          })}
-                        >
-                          <SelectTrigger className="h-9 bg-background/50 border-gold/10">
-                            <SelectValue>
-                              {ITEM_TYPE_LABELS[editingAdv.configuration?.choiceType || 'feature'] || editingAdv.configuration?.choiceType}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="any">Anything</SelectItem>
-                            <SelectItem value="feature">Feature</SelectItem>
-                            <SelectItem value="option-group">Unique Option Group</SelectItem>
-                            <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
-                            <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <PreviewPanel
-                        title="Selection Rule"
-                        subtitle={choiceCountMode === 'manual'
-                          ? 'Use a fixed manual choice count for this advancement.'
-                          : 'Choice counts are read from the selected class column breakpoints.'}
-                      >
-                        {choiceCountMode === 'manual' ? (
-                          <div className="space-y-2">
-                            <p className="text-[10px] uppercase font-black tracking-widest text-gold/60">Manual Count</p>
-                            <p className="text-2xl font-serif font-black text-ink">{editingAdv.configuration?.count || 1}</p>
+                    </fieldset>
+
+                    <PreviewPanel
+                      title="Selection Rule"
+                      subtitle={choiceCountMode === 'manual'
+                        ? 'Use a fixed manual choice count for this advancement.'
+                        : 'Choice counts are read from the selected class column breakpoints.'}
+                    >
+                      {choiceCountMode === 'manual' ? (
+                        <div className="space-y-2">
+                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/60">Manual Count</p>
+                          <p className="text-2xl font-serif font-black text-ink">{editingAdv.configuration?.count || 1}</p>
+                        </div>
+                      ) : selectedScalingColumn ? (
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm font-bold text-ink">{selectedScalingColumn.name}</p>
+                            <p className="mt-1 text-[10px] text-ink/45">
+                              Only saved value changes are shown here so the choice pool keeps its space.
+                            </p>
                           </div>
-                        ) : selectedScalingColumn ? (
-                          <div className="space-y-3">
-                            <div>
-                              <p className="text-sm font-bold text-ink">{selectedScalingColumn.name}</p>
-                              <p className="mt-1 text-[10px] text-ink/45">
-                                Only saved value changes are shown here so the choice pool keeps its space.
-                              </p>
+                          {scalingBreakpointRows.length > 0 ? (
+                            <div className="flex flex-col gap-1.5 w-full">
+                              {scalingBreakpointRows.map(([level, value]) => (
+                                <div key={level} className="flex items-center gap-3 rounded-md border border-gold/10 bg-background/55 px-3 py-1.5 w-full">
+                                  <span className="text-[10px] uppercase font-black tracking-widest text-gold/60 min-w-[2.5rem] whitespace-nowrap">Lvl {level}</span>
+                                  <div className="h-px bg-gold/10 flex-1" />
+                                  <span className="text-sm font-black text-ink">{String(value)}</span>
+                                </div>
+                              ))}
                             </div>
-                            {scalingBreakpointRows.length > 0 ? (
-                              <div className="flex flex-wrap gap-2">
-                                {scalingBreakpointRows.map(([level, value]) => (
-                                  <div key={level} className="rounded-md border border-gold/10 bg-background/55 px-2.5 py-2 min-w-[4.5rem]">
-                                    <p className="text-[9px] uppercase font-black tracking-widest text-gold/60">L{level}</p>
-                                    <p className="mt-1 text-sm font-black text-ink">{String(value)}</p>
-                                  </div>
-                                ))}
+                          ) : (
+                            <p className="text-[10px] italic text-ink/35">This class column does not have any saved breakpoints yet.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] italic text-ink/35">Choose a class column to preview the choice count progression.</p>
+                      )}
+                    </PreviewPanel>
+
+                    <PreviewPanel
+                      title="Choice Preview"
+                      subtitle={editingAdv.configuration?.choiceType === 'option-group'
+                        ? 'Included options are listed here after exclusions are applied.'
+                        : 'Use this panel to confirm the features available to choose from.'}
+                    >
+                      <div className="space-y-4">
+                        {editingAdv.configuration?.choiceType === 'option-group' ? (
+                          selectedOptionGroup ? (
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-ink">{selectedOptionGroup.name}</p>
+                                  {selectedOptionGroup.description && (
+                                    <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
+                                  )}
+                                </div>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
+                                  {includedOptionItems.length}/{selectedOptionItems.length} usable
+                                </span>
                               </div>
-                            ) : (
-                              <p className="text-[10px] italic text-ink/35">This class column does not have any saved breakpoints yet.</p>
-                            )}
+                              <div className="border border-gold/10 rounded-md overflow-hidden">
+                                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
+                                </div>
+                                <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                                  {includedOptionItems.map((item: any) => (
+                                    <div key={item.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
+                                      <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
+                                      <div>
+                                        <p className="text-xs font-bold text-ink">{item.name}</p>
+                                        {(item.featureId || item.sourceId) && (
+                                          <p className="mt-1 text-[9px] text-ink/40">
+                                            {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {includedOptionItems.length === 0 && (
+                                    <p className="px-3 py-4 text-[10px] italic text-ink/35">All options in this group are currently excluded.</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview the usable options.</p>
+                          )
+                        ) : selectedPoolFeatures.length > 0 ? (
+                          <div className="border border-gold/10 rounded-md overflow-hidden">
+                            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-background/60 border-b border-gold/10">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Level</span>
+                            </div>
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                              {selectedPoolFeatures.map((feature: any) => (
+                                <div key={feature.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-start">
+                                  <span className="text-xs font-bold text-ink">{feature.name}</span>
+                                  <span className="text-right text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {feature.level}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ) : (
-                          <p className="text-[10px] italic text-ink/35">Choose a class column to preview the choice count progression.</p>
+                          <p className="text-[10px] italic text-ink/35">Select features or a unique option group to preview the choice pool.</p>
                         )}
-                      </PreviewPanel>
-                    </div>
+                      </div>
+                    </PreviewPanel>
+                  </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[9px] uppercase font-bold text-ink/60">
-                        {editingAdv.configuration?.choiceType === 'option-group' ? 'Choice Pool (Unique Options)' : 'Choice Pool (Features)'}
-                      </label>
-                      {editingAdv.configuration?.choiceType === 'option-group' && (
-                        <Select
-                          value={editingAdv.configuration?.optionGroupId || ''}
-                          onValueChange={val => setEditingAdv({
-                            ...editingAdv,
-                            configuration: {
-                              ...editingAdv.configuration,
-                              optionGroupId: val,
-                              excludedOptionIds: []
-                            }
-                          })}
-                        >
-                          <SelectTrigger className="h-9 bg-background/50 border-gold/10">
-                            <SelectValue>
-                              {editingAdv.configuration?.optionGroupId
-                                ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
-                                : 'Select a group...'}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableOptionGroups.map(g => (
-                              <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
+                  {/* Right Column: Item Type, Pool, Preview */}
+                  <div className="space-y-4">
+                    <fieldset className="config-fieldset bg-background/20 h-full">
+                      <legend className="section-label text-gold/60 px-1">Choice Pool Settings</legend>
+                      <div className="grid sm:grid-cols-2 gap-4 mb-3">
+                        <div className="space-y-1.5">
+                          <label className="field-label">Item Type</label>
+                          <Select
+                            value={editingAdv.configuration?.choiceType || 'option-group'}
+                            onValueChange={val => setEditingAdv({
+                              ...editingAdv,
+                              configuration: {
+                                ...editingAdv.configuration,
+                                choiceType: val,
+                                pool: [],
+                                optionGroupId: undefined,
+                                excludedOptionIds: []
+                              }
+                            })}
+                          >
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectValue>
+                                {ITEM_TYPE_LABELS[editingAdv.configuration?.choiceType || 'option-group'] || editingAdv.configuration?.choiceType}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="any">Anything</SelectItem>
+                              <SelectItem value="feature">Feature</SelectItem>
+                              <SelectItem value="option-group">Unique Option Group</SelectItem>
+                              <SelectItem value="spell" disabled>Spell (Placeholder)</SelectItem>
+                              <SelectItem value="item" disabled>Item (Placeholder)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {editingAdv.configuration?.choiceType === 'option-group' && (
+                          <div className="space-y-1.5">
+                            <label className="field-label">Option Group</label>
+                            <Select
+                              value={editingAdv.configuration?.optionGroupId || ''}
+                              onValueChange={val => setEditingAdv({
+                                ...editingAdv,
+                                configuration: {
+                                  ...editingAdv.configuration,
+                                  optionGroupId: val,
+                                  excludedOptionIds: []
+                                }
+                              })}
+                            >
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                <SelectValue>
+                                  {editingAdv.configuration?.optionGroupId
+                                    ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
+                                    : 'Select a group...'}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableOptionGroups.map(g => (
+                                  <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
                         {editingAdv.configuration?.choiceType === 'option-group' ? (
                           <>
+                            {selectedOptionGroup && selectedOptionItems.length > 0 && (
+                              <div className="flex flex-wrap gap-2 px-3 py-2 bg-gold/5 border-b border-gold/10">
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                  let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
+                                  selectedOptionItems.forEach(item => excluded.delete(item.id));
+                                  setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
+                                }}>Select All</Button>
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                  let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
+                                  selectedOptionItems.forEach(item => excluded.add(item.id));
+                                  setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
+                                }}>Deselect All</Button>
+                                <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] text-ink/60 border-gold/20 hover:bg-gold/10 hover:text-ink/80" onClick={() => {
+                                  let excluded = new Set(editingAdv.configuration?.excludedOptionIds || []);
+                                  selectedOptionItems.forEach(item => {
+                                    if ((item.levelPrerequisite || 0) > 0) excluded.add(item.id);
+                                  });
+                                  setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, excludedOptionIds: Array.from(excluded) }});
+                                }}>Exclude Options with Level Prerequisites</Button>
+                              </div>
+                            )}
                             <div className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Use</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
                             </div>
-                            <div className="divide-y divide-gold/5 h-[22rem] overflow-y-auto">
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
                               {selectedOptionGroup ? selectedOptionItems.map((item: any) => {
                                 const isIncluded = !excludedOptionIds.has(item.id);
                                 return (
@@ -1163,7 +1433,7 @@ export default function AdvancementManager({
                             <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
                             </div>
-                            <div className="divide-y divide-gold/5 h-[22rem] overflow-y-auto">
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
                               {availableFeatures.map(f => (
                                 <label key={f.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gold/5 group transition-colors">
                                   <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
@@ -1193,78 +1463,9 @@ export default function AdvancementManager({
                           </>
                         )}
                       </div>
-                    </div>
-                  </div>
+                    </fieldset>
 
-                  <PreviewPanel
-                    title="Choice Preview"
-                    subtitle={editingAdv.configuration?.choiceType === 'option-group'
-                      ? 'Included options are listed here after exclusions are applied.'
-                      : 'Use this panel to confirm the features available to choose from.'}
-                  >
-                    <div className="space-y-4">
-                      {editingAdv.configuration?.choiceType === 'option-group' ? (
-                        selectedOptionGroup ? (
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-bold text-ink">{selectedOptionGroup.name}</p>
-                                {selectedOptionGroup.description && (
-                                  <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
-                                )}
-                              </div>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
-                                {includedOptionItems.length}/{selectedOptionItems.length} usable
-                              </span>
-                            </div>
-                            <div className="border border-gold/10 rounded-md overflow-hidden">
-                              <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
-                              </div>
-                              <div className="divide-y divide-gold/5">
-                                {includedOptionItems.map((item: any) => (
-                                  <div key={item.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
-                                    <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
-                                    <div>
-                                      <p className="text-xs font-bold text-ink">{item.name}</p>
-                                      {(item.featureId || item.sourceId) && (
-                                        <p className="mt-1 text-[9px] text-ink/40">
-                                          {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                                {includedOptionItems.length === 0 && (
-                                  <p className="px-3 py-4 text-[10px] italic text-ink/35">All options in this group are currently excluded.</p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview the usable options.</p>
-                        )
-                      ) : selectedPoolFeatures.length > 0 ? (
-                        <div className="border border-gold/10 rounded-md overflow-hidden">
-                          <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-background/60 border-b border-gold/10">
-                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
-                            <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Level</span>
-                          </div>
-                          <div className="divide-y divide-gold/5">
-                            {selectedPoolFeatures.map((feature: any) => (
-                              <div key={feature.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-start">
-                                <span className="text-xs font-bold text-ink">{feature.name}</span>
-                                <span className="text-right text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {feature.level}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] italic text-ink/35">Select features or a unique option group to preview the choice pool.</p>
-                      )}
-                    </div>
-                  </PreviewPanel>
+                  </div>
                 </div>
               )}
 
@@ -1279,7 +1480,7 @@ export default function AdvancementManager({
                         value={String(editingAdv.configuration?.hitDie || resolvedDefaultHitDie)}
                         onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, hitDie: parseInt(val ?? String(resolvedDefaultHitDie)) }})}
                       >
-                        <SelectTrigger className="h-9 bg-background/50 border-gold/10">
+                        <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
                           <SelectValue>{`d${editingAdv.configuration?.hitDie || resolvedDefaultHitDie}`}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
@@ -1302,10 +1503,11 @@ export default function AdvancementManager({
                     </div>
                   </fieldset>
 
-                  <PreviewPanel
-                    title="Hit Point Preview"
-                    subtitle="Foundry treats this as a class-level hit die definition, so matching the class default will usually produce the cleanest export."
-                  >
+                  <div className="bg-background/20 border border-gold/10 p-4 rounded-md">
+                    <div className="mb-3">
+                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">Hit Point Preview</h4>
+                      <p className="text-[10px] text-ink/60 mt-1">Foundry treats this as a class-level hit die definition, so matching the class default will usually produce the cleanest export.</p>
+                    </div>
                     <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
                       <div className="rounded-md border border-gold/10 bg-background/55 px-3 py-3">
                         <p className="text-[9px] uppercase font-black tracking-widest text-gold/60">Selected Die</p>
@@ -1339,7 +1541,7 @@ export default function AdvancementManager({
                         ? 'This matches the current class hit die.'
                         : 'This differs from the current class hit die and will read like a manual override.'}
                     </p>
-                  </PreviewPanel>
+                  </div>
                 </div>
               )}
 
@@ -1352,7 +1554,7 @@ export default function AdvancementManager({
                       value={editingAdv.configuration?.scalingColumnId || ''}
                       onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, scalingColumnId: val }})}
                     >
-                      <SelectTrigger className="h-9 bg-background/50 border-gold/10">
+                      <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
                         <SelectValue>
                           {selectedScalingColumn?.name || 'Select Column...'}
                         </SelectValue>
@@ -1365,10 +1567,11 @@ export default function AdvancementManager({
                     </Select>
                   </div>
 
-                  <PreviewPanel
-                    title="Scale Preview"
-                    subtitle="Selected scale values appear here so you can verify the progression before saving."
-                  >
+                  <div className="bg-background/20 border border-gold/10 p-4 rounded-md h-full">
+                    <div className="mb-3">
+                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">Scale Preview</h4>
+                      <p className="text-[10px] text-ink/60 mt-1">Selected scale values appear here so you can verify the progression before saving.</p>
+                    </div>
                     {selectedScalingColumn ? (
                       <div className="space-y-3">
                         <div>
@@ -1382,7 +1585,7 @@ export default function AdvancementManager({
                             <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
                             <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Value</span>
                           </div>
-                          <div className="divide-y divide-gold/5">
+                          <div className="divide-y divide-gold/5 overflow-y-auto max-h-[300px]">
                             {Object.entries(selectedScalingColumn.values || {})
                               .sort(([a], [b]) => Number(a) - Number(b))
                               .map(([level, value]) => (
@@ -1400,7 +1603,7 @@ export default function AdvancementManager({
                     ) : (
                       <p className="text-[10px] italic text-ink/35">Choose a scaling column to preview its progression values.</p>
                     )}
-                  </PreviewPanel>
+                  </div>
                 </div>
               )}
 
@@ -1433,10 +1636,11 @@ export default function AdvancementManager({
                     </p>
                   </fieldset>
 
-                  <PreviewPanel
-                    title="Size Preview"
-                    subtitle="These are the sizes that will be available when this advancement is resolved."
-                  >
+                  <div className="bg-background/20 border border-gold/10 p-4 rounded-md h-full">
+                    <div className="mb-3">
+                      <h4 className="text-sm uppercase font-black tracking-widest text-gold/80">Size Preview</h4>
+                      <p className="text-[10px] text-ink/60 mt-1">These are the sizes that will be available when this advancement is resolved.</p>
+                    </div>
                     {selectedSizeIds.length > 0 ? (
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-2">
@@ -1453,7 +1657,7 @@ export default function AdvancementManager({
                     ) : (
                       <p className="text-[10px] italic text-ink/35">Select at least one size for this advancement.</p>
                     )}
-                  </PreviewPanel>
+                  </div>
                 </div>
               )}
 
@@ -1474,7 +1678,7 @@ export default function AdvancementManager({
                             value={editingAdv.configuration?.mode || 'default'}
                             onValueChange={setTraitMode}
                           >
-                            <SelectTrigger className="h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
                               <SelectValue>
                                 {TRAIT_MODE_LABELS[editingAdv.configuration?.mode || 'default'] || editingAdv.configuration?.mode}
                               </SelectValue>
@@ -1570,7 +1774,7 @@ export default function AdvancementManager({
                             value={editingAdv.configuration?.scalingColumnId || ''}
                             onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, scalingColumnId: val }})}
                           >
-                            <SelectTrigger className="h-9 bg-background/50 border-gold/10">
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
                               <SelectValue>
                                 {availableScalingColumns.find(c => c.id === editingAdv.configuration?.scalingColumnId)?.name || 'Select Column...'}
                               </SelectValue>
@@ -1585,7 +1789,7 @@ export default function AdvancementManager({
                           <Input type="number" min="0"
                             value={editingAdv.configuration?.choiceCount || 0}
                             onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, choiceCount: parseInt(e.target.value) }})}
-                            className="h-9 bg-background/50 border-gold/10"
+                            className="w-full h-9 bg-background/50 border-gold/10"
                           />
                         )}
                       </div>
@@ -1611,7 +1815,7 @@ export default function AdvancementManager({
                           }
                         })}
                       >
-                        <SelectTrigger className="h-9 bg-background/50 border-gold/10">
+                        <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
                           <SelectValue>
                             {TRAIT_TYPE_LABELS[editingAdv.configuration?.type || 'skills'] || editingAdv.configuration?.type}
                           </SelectValue>
@@ -1631,10 +1835,13 @@ export default function AdvancementManager({
                       </Select>
                     </div>
                     <div className="border border-gold/10 rounded-md overflow-hidden">
-                      <div className="grid grid-cols-[1fr_5rem_5rem] bg-gold/5 border-b border-gold/10 px-3 py-2">
-                        <span className="text-[9px] uppercase font-black text-ink/40 tracking-widest">Trait</span>
-                        <span className="section-label text-gold/60 text-center">Guaranteed</span>
-                        <span className="text-[9px] uppercase font-black text-sky-500/60 tracking-widest text-center">Choice Pool</span>
+                      <div className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} bg-gold/5 border-b border-gold/10 px-3 py-2`}>
+                        <span className="text-[9px] uppercase font-black text-ink/40 tracking-widest leading-none flex items-center">Trait</span>
+                        <span className="text-[9px] uppercase font-black text-gold/60 tracking-widest text-center leading-none flex items-center justify-center">Guaranteed</span>
+                        <span className="text-[9px] uppercase font-black text-sky-500/60 tracking-widest text-center leading-none flex items-center justify-center">Choice Pool</span>
+                        {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
+                          <span className="text-[9px] uppercase font-black text-purple-500/60 tracking-widest text-center leading-none flex items-center justify-center">Replace</span>
+                        )}
                       </div>
                       <div className="divide-y divide-gold/5 max-h-96 overflow-y-auto">
                         {GROUPED_TRAIT_TYPES.has(traitType) ? (
@@ -1644,12 +1851,13 @@ export default function AdvancementManager({
                             const itemIds = items.map((item: any) => item.id);
                             const allFixed = itemIds.length > 0 && itemIds.every((id: string) => (editingAdv.configuration?.fixed || []).includes(id));
                             const allOptions = itemIds.length > 0 && itemIds.every((id: string) => (editingAdv.configuration?.options || []).includes(id));
+                            const allReplacements = itemIds.length > 0 && itemIds.every((id: string) => (editingAdv.configuration?.replacements || []).includes(id));
                             const collapseKey = `${traitType}:${category}`;
                             const isCollapsed = collapsedTraitCategories[collapseKey] ?? allFixed;
 
                             return (
                               <div key={category} className="divide-y divide-gold/5">
-                                <div className="grid grid-cols-[1fr_5rem_5rem] px-3 py-2 bg-background/50 items-center">
+                                <div className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 bg-background/50 items-center`}>
                                   <button
                                     type="button"
                                     onClick={() => setCollapsedTraitCategories(prev => ({ ...prev, [collapseKey]: !isCollapsed }))}
@@ -1689,12 +1897,30 @@ export default function AdvancementManager({
                                       />
                                     </label>
                                   </div>
+                                  {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
+                                    <div className="flex justify-center">
+                                      <label className="cursor-pointer">
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                                          allReplacements ? 'bg-purple-500 border-purple-500' : 'border-gold/30 hover:border-purple-400/50'
+                                        }`}>
+                                          {allReplacements && <Check className="w-2.5 h-2.5 text-white" />}
+                                        </div>
+                                        <input
+                                          type="checkbox"
+                                          className="hidden"
+                                          checked={allReplacements}
+                                          onChange={e => toggleTraitCategory(category, 'replacements', e.target.checked)}
+                                        />
+                                      </label>
+                                    </div>
+                                  )}
                                 </div>
                                 {!isCollapsed && items.map((t: any) => {
                                   const isFixed = (editingAdv.configuration?.fixed || []).includes(t.id);
                                   const isOption = (editingAdv.configuration?.options || []).includes(t.id);
+                                  const isReplacement = (editingAdv.configuration?.replacements || []).includes(t.id);
                                   return (
-                                    <div key={t.id} className="grid grid-cols-[1fr_5rem_5rem] px-3 py-2 hover:bg-gold/5 transition-colors items-center group">
+                                    <div key={t.id} className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
                                       <span className="text-xs text-ink/80 truncate pl-5">{t.name}</span>
                                       <div className="flex justify-center">
                                         <label className="cursor-pointer">
@@ -1720,6 +1946,20 @@ export default function AdvancementManager({
                                           />
                                         </label>
                                       </div>
+                                      {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
+                                        <div className="flex justify-center">
+                                          <label className="cursor-pointer">
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                                              isReplacement ? 'bg-purple-500 border-purple-500' : 'border-gold/30 group-hover:border-purple-400/50'
+                                            }`}>
+                                              {isReplacement && <Check className="w-2.5 h-2.5 text-white" />}
+                                            </div>
+                                            <input type="checkbox" className="hidden" checked={isReplacement}
+                                              onChange={e => toggleTraitReplacement(t.id, e.target.checked)}
+                                            />
+                                          </label>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -1729,8 +1969,9 @@ export default function AdvancementManager({
                         ) : traitOptions.map((t: any) => {
                           const isFixed = (editingAdv.configuration?.fixed || []).includes(t.id);
                           const isOption = (editingAdv.configuration?.options || []).includes(t.id);
+                          const isReplacement = (editingAdv.configuration?.replacements || []).includes(t.id);
                           return (
-                            <div key={t.id} className="grid grid-cols-[1fr_5rem_5rem] px-3 py-2 hover:bg-gold/5 transition-colors items-center group">
+                            <div key={t.id} className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
                               <span className="text-xs text-ink/80 truncate">{t.name}</span>
                               <div className="flex justify-center">
                                 <label className="cursor-pointer">
@@ -1756,6 +1997,20 @@ export default function AdvancementManager({
                                   />
                                 </label>
                               </div>
+                              {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
+                                <div className="flex justify-center">
+                                  <label className="cursor-pointer">
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                                      isReplacement ? 'bg-purple-500 border-purple-500' : 'border-gold/30 group-hover:border-purple-400/50'
+                                    }`}>
+                                      {isReplacement && <Check className="w-2.5 h-2.5 text-white" />}
+                                    </div>
+                                    <input type="checkbox" className="hidden" checked={isReplacement}
+                                      onChange={e => toggleTraitReplacement(t.id, e.target.checked)}
+                                    />
+                                  </label>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1780,7 +2035,7 @@ export default function AdvancementManager({
                         <Input type="number" min="0"
                           value={editingAdv.configuration?.cap ?? 2}
                           onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, cap: parseInt(e.target.value) || 0 }})}
-                          className="h-9 bg-background/50 border-gold/10"
+                          className="w-full h-9 bg-background/50 border-gold/10"
                         />
                       </div>
                       <div className="space-y-1.5">
@@ -1788,7 +2043,7 @@ export default function AdvancementManager({
                         <Input type="number" min="0"
                           value={editingAdv.configuration?.max ?? ''}
                           onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, max: e.target.value === '' ? '' : (parseInt(e.target.value) || 0) }})}
-                          className="h-9 bg-background/50 border-gold/10"
+                          className="w-full h-9 bg-background/50 border-gold/10"
                         />
                       </div>
                     </fieldset>

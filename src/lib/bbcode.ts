@@ -58,8 +58,26 @@ export function bbcodeToHtml(text: string): string {
   // Tables
   html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, '<div class="overflow-x-auto"><table class="w-full border-collapse border border-gold/20 my-4 table-auto">$1</table></div>');
   html = html.replace(/\[tr\]([\s\S]*?)\[\/tr\]/gi, '<tr class="border-b border-gold/10 hover:bg-gold/5">$1</tr>');
-  html = html.replace(/\[th\]([\s\S]*?)\[\/th\]/gi, '<th class="p-2 text-left font-bold text-gold border border-gold/20 bg-gold/5">$1</th>');
-  html = html.replace(/\[td\]([\s\S]*?)\[\/td\]/gi, '<td class="p-2 border border-gold/10">$1</td>');
+  html = html.replace(/\[th(?:\s+([^\]]+))?\]([\s\S]*?)\[\/th\]/gi, (match, attrs, content) => {
+    let htmlAttrs = 'class="p-2 text-left font-bold text-gold border border-gold/20 bg-gold/5"';
+    if (attrs) {
+      const colspan = attrs.match(/colspan=?["']?(\d+)["']?/i);
+      if (colspan) htmlAttrs += ` colspan="${colspan[1]}"`;
+      const rowspan = attrs.match(/rowspan=?["']?(\d+)["']?/i);
+      if (rowspan) htmlAttrs += ` rowspan="${rowspan[1]}"`;
+    }
+    return `<th ${htmlAttrs}>${content}</th>`;
+  });
+  html = html.replace(/\[td(?:\s+([^\]]+))?\]([\s\S]*?)\[\/td\]/gi, (match, attrs, content) => {
+    let htmlAttrs = 'class="p-2 border border-gold/10"';
+    if (attrs) {
+      const colspan = attrs.match(/colspan=?["']?(\d+)["']?/i);
+      if (colspan) htmlAttrs += ` colspan="${colspan[1]}"`;
+      const rowspan = attrs.match(/rowspan=?["']?(\d+)["']?/i);
+      if (rowspan) htmlAttrs += ` rowspan="${rowspan[1]}"`;
+    }
+    return `<td ${htmlAttrs}>${content}</td>`;
+  });
 
   // Custom World Anvil-like tags
   html = html.replace(/\[spoiler\]([\s\S]*?)\[\/spoiler\]/gi, '<span class="spoiler" title="Click to reveal">$1</span>');
@@ -120,13 +138,20 @@ export function htmlToBbcode(html: string): string {
   bbcode = bbcode.replace(/<(?:div|p|h[1-4])[^>]*style="[^"]*text-align:\s*justify;?[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p|h[1-4])>/gi, '[justify]$1[/justify]');
   bbcode = bbcode.replace(/<div[^>]*style="[^"]*padding-left:\s*2rem;?[^"]*"[^>]*>([\s\S]*?)<\/div>/gi, '[indent]$1[/indent]');
   
+  // Clean up p tags inside list items to avoid double newlines
+  bbcode = bbcode.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (match, content) => {
+    let inner = content.replace(/<\/?p[^>]*>/gi, '');
+    inner = inner.replace(/<br\s*\/?>\s*$/i, ''); // Strip trailing <br> before </li>
+    return '<li>' + inner + '</li>';
+  });
+
   // Lists (Handle nesting by replacing innermost tags first, multiple times)
   for (let i = 0; i < 6; i++) {
     bbcode = bbcode.replace(/<li>((?:(?!<li>|<\/li>)[\s\S])*)<\/li>/gi, '[li]$1[/li]');
     bbcode = bbcode.replace(/<ul>((?:(?!<ul>|<\/ul>)[\s\S])*)<\/ul>/gi, '[ul]$1[/ul]');
     bbcode = bbcode.replace(/<ol>((?:(?!<ol>|<\/ol>)[\s\S])*)<\/ol>/gi, '[ol]$1[/ol]');
   }
-  
+
   // Special
   bbcode = bbcode.replace(/<blockquote>([\s\S]*?)<\/blockquote>/gi, '[quote]$1[/quote]');
   bbcode = bbcode.replace(/<div[^>]*class="indent-block"[^>]*>([\s\S]*?)<\/div>/gi, '[indent]$1[/indent]');
@@ -150,14 +175,28 @@ export function htmlToBbcode(html: string): string {
   // Tables
   bbcode = bbcode.replace(/<div class="overflow-x-auto">\s*<table[^>]*>([\s\S]*?)<\/table>\s*<\/div>/gi, '[table]$1[/table]');
   bbcode = bbcode.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, '[table]$1[/table]');
-  bbcode = bbcode.replace(/<\/?tbody[^>]*>/gi, '');
+  bbcode = bbcode.replace(/<\/?(?:tbody|thead|tfoot|colgroup|col)[^>]*>/gi, '');
   bbcode = bbcode.replace(/<tr[^>]*>([\s\S]*?)<\/tr>/gi, '[tr]$1[/tr]');
-  bbcode = bbcode.replace(/<th[^>]*>([\s\S]*?)<\/th>/gi, '[th]$1[/th]');
-  bbcode = bbcode.replace(/<td[^>]*>([\s\S]*?)<\/td>/gi, '[td]$1[/td]');
+  bbcode = bbcode.replace(/<th([^>]*)>([\s\S]*?)<\/th>/gi, (match, attrs, content) => {
+    let bbAttrs = '';
+    const colspan = attrs.match(/colspan=["']?(\d+)["']?/i);
+    if (colspan) bbAttrs += ` colspan=${colspan[1]}`;
+    const rowspan = attrs.match(/rowspan=["']?(\d+)["']?/i);
+    if (rowspan) bbAttrs += ` rowspan=${rowspan[1]}`;
+    return `[th${bbAttrs}]${content}[/th]`;
+  });
+  bbcode = bbcode.replace(/<td([^>]*)>([\s\S]*?)<\/td>/gi, (match, attrs, content) => {
+    let bbAttrs = '';
+    const colspan = attrs.match(/colspan=["']?(\d+)["']?/i);
+    if (colspan) bbAttrs += ` colspan=${colspan[1]}`;
+    const rowspan = attrs.match(/rowspan=["']?(\d+)["']?/i);
+    if (rowspan) bbAttrs += ` rowspan=${rowspan[1]}`;
+    return `[td${bbAttrs}]${content}[/td]`;
+  });
 
   // Clean up p tags and other common HTML wrappers from TipTap
   // Convert paragraphs to double newlines for Source mode readability
-  bbcode = bbcode.replace(/<p>([\s\S]*?)<\/p>/gi, '$1\n\n');
+  bbcode = bbcode.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n\n');
   
   // Final cleanup of multiple newlines
   bbcode = bbcode.replace(/\n\n\n+/g, '\n\n');

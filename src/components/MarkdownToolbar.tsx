@@ -32,7 +32,21 @@ export default function MarkdownToolbar({
   stickyOffset = "top-16",
   label
 }: MarkdownToolbarProps) {
+  const [isTableToolsCollapsed, setIsTableToolsCollapsed] = React.useState(false);
   
+  let hasTable = false;
+  if (editor && isWYSIWYG) {
+    hasTable = editor.isActive('table');
+    // Fast scan for tables if not currently active
+    if (!hasTable) {
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === 'table') {
+          hasTable = true;
+        }
+      });
+    }
+  }
+
   const insertText = (before: string, after: string = '') => {
     if (isWYSIWYG && editor) {
       // Handle TipTap commands
@@ -173,7 +187,7 @@ export default function MarkdownToolbar({
   ];
 
   return (
-    <div className={`sticky ${stickyOffset} z-20 border-b border-gold/10 bg-card/95 backdrop-blur-sm rounded-t-md shadow-sm flex flex-col`}>
+    <div className={`shrink-0 z-20 border-b border-gold/10 bg-card/95 rounded-t-md flex flex-col`}>
       <div className={`flex flex-wrap items-center justify-between gap-1 p-1`}>
         <div className="flex flex-wrap items-center gap-0.5">
           {label && (
@@ -236,18 +250,43 @@ export default function MarkdownToolbar({
       </div>
 
       {/* Table tools sub-toolbar */}
-      {isWYSIWYG && editor?.isActive('table') && (
-        <div className="flex flex-wrap items-center gap-1 p-1 px-2 border-t border-gold/10 bg-gold/5 text-xs">
-          <span className="label-text text-gold/60 mr-2">Table</span>
-          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnBefore().run()}>+ Col Before</Button>
-          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnAfter().run()}>+ Col After</Button>
-          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().deleteColumn().run()}>- Delete Col</Button>
-          <div className="w-px h-4 bg-gold/20 mx-1"></div>
-          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowBefore().run()}>+ Row Before</Button>
-          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowAfter().run()}>+ Row After</Button>
-          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().deleteRow().run()}>- Delete Row</Button>
-          <div className="w-px h-4 bg-gold/20 mx-1"></div>
-          <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-red-500/60 hover:text-red-500 hover:bg-red-500/10" onClick={() => editor.chain().focus().deleteTable().run()}>Delete Table</Button>
+      {isWYSIWYG && hasTable && (
+        <div 
+          className="flex items-center gap-1 p-1 px-2 border-t border-gold/10 bg-gold/5 text-xs overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          onWheel={(e) => {
+            if (e.deltaY !== 0) {
+              e.currentTarget.scrollLeft += e.deltaY;
+              e.preventDefault();
+            }
+          }}
+        >
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="sm" 
+            className={`h-6 px-1 py-0 hover:text-gold hover:bg-gold/10 flex items-center gap-1 ${isTableToolsCollapsed ? 'text-gold' : 'text-gold/60'}`}
+            onClick={() => setIsTableToolsCollapsed(!isTableToolsCollapsed)}
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+            <span className="label-text">Table Tools</span>
+          </Button>
+          {!isTableToolsCollapsed && (
+            <>
+              <div className="w-px h-4 bg-gold/20 mx-1"></div>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnBefore().run()}>+ Col Before</Button>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnAfter().run()}>+ Col After</Button>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().deleteColumn().run()}>- Delete Col</Button>
+              <div className="w-px h-4 bg-gold/20 mx-1"></div>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowBefore().run()}>+ Row Before</Button>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addRowAfter().run()}>+ Row After</Button>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().deleteRow().run()}>- Delete Row</Button>
+              <div className="w-px h-4 bg-gold/20 mx-1"></div>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().mergeCells().run()}>Merge Cells</Button>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().splitCell().run()}>Split Cell</Button>
+              <div className="w-px h-4 bg-gold/20 mx-1"></div>
+              <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-red-500/60 hover:text-red-500 hover:bg-red-500/10" onClick={() => editor.chain().focus().deleteTable().run()}>Delete Table</Button>
+            </>
+          )}
         </div>
       )}
     </div>

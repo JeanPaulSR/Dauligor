@@ -24,6 +24,7 @@ import {
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import Markdown from 'react-markdown';
 import ModularChoiceView from '../../components/compendium/ModularChoiceView';
+import { motion } from 'motion/react';
 
 import { 
   DropdownMenu, 
@@ -70,6 +71,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [subclassAltSpellcasting, setSubclassAltSpellcasting] = useState<any>(null);
   const [subclassSpellsKnown, setSubclassSpellsKnown] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(true);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedOptionItems, setSelectedOptionItems] = useState<Record<string, string>>({});
@@ -266,11 +268,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         console.error("[ClassView] Error in class snapshot processing:", error);
       } finally {
         setLoading(false);
+        setTimeout(() => setTableLoading(false), 300);
         console.log(`[ClassView] Main class loading complete. Total time: ${(performance.now() - startTime).toFixed(2)}ms`);
       }
     }, (err) => {
       console.error("[ClassView] Class snapshot error:", err);
       setLoading(false);
+      setTimeout(() => setTableLoading(false), 300);
     });
 
     // Fetch Features
@@ -735,10 +739,21 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             <div className="h-px bg-gold/10 w-full" />
           </div>
           
-          <div className="overflow-x-auto border border-gold/20 bg-card/50 backdrop-blur-sm">
-            <table className="w-full text-left border-collapse min-w-[800px] text-sm">
-              <thead>
-                <tr className="border-b border-gold/20 bg-gold/5">
+          {tableLoading ? (
+            <div className="h-64 flex flex-col items-center justify-center border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg space-y-4">
+              <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+              <span className="text-[10px] uppercase font-bold tracking-widest text-gold/60">Loading class table...</span>
+            </div>
+          ) : (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-x-auto border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg"
+            >
+              <table className="w-full text-left border-collapse min-w-[800px] text-sm">
+                <thead>
+                  <tr className="border-b border-gold/20 bg-gold/5">
                   <th className="p-1.5 label-text italic text-gold text-center w-10 border-r border-gold/10">Level</th>
                   <th className="p-1.5 label-text italic text-gold text-center w-14 border-r border-gold/10">Proficiency Bonus</th>
                   <th className="p-1.5 label-text italic text-gold border-r border-gold/10">Features</th>
@@ -847,7 +862,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                 })}
               </tbody>
             </table>
-          </div>
+          </motion.div>
+          )}
         </div>
 
         {/* Bottom Section - Split Layout */}
@@ -1314,18 +1330,30 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                   </div>
                 </div>
 
-                {classData.spellcasting?.hasSpellcasting && (
+                {(classData.spellcasting?.hasSpellcasting || classData.spellcasting?.isRitualCaster) && (
                   <div className="space-y-1">
                     <p className="uppercase font-bold tracking-widest text-ink/40">Spellcasting</p>
-                    <p className="text-ink/80"><strong>Ability:</strong> {(() => {
-                      const id = (classData.spellcasting.ability || '').toUpperCase();
-                      const attr = allAttributes.find(a => ((a.identifier || a.id).toUpperCase() === id));
-                      return attr ? attr.name : id;
-                    })()}</p>
-                    <p className="text-ink/80"><strong>Type:</strong> {classData.spellcasting.type ? classData.spellcasting.type.charAt(0).toUpperCase() + classData.spellcasting.type.slice(1) : ''}</p>
-                    <p className="text-ink/80"><strong>Level Gained:</strong> {classData.spellcasting.level}</p>
-                    {classData.spellcasting.spellsKnownFormula && (
-                      <p className="text-ink/80"><strong>Spells Known:</strong> {classData.spellcasting.spellsKnownFormula}</p>
+                    {classData.spellcasting?.hasSpellcasting && (
+                      <>
+                        <p className="text-ink/80"><strong>Ability:</strong> {(() => {
+                          const id = (classData.spellcasting.ability || '').toUpperCase();
+                          const attr = allAttributes.find(a => ((a.identifier || a.id).toUpperCase() === id));
+                          return attr ? attr.name : id;
+                        })()}</p>
+                        <p className="text-ink/80"><strong>Type:</strong> {classData.spellcasting.type ? classData.spellcasting.type.charAt(0).toUpperCase() + classData.spellcasting.type.slice(1) : ''}</p>
+                        <p className="text-ink/80"><strong>Level Gained:</strong> {classData.spellcasting.level}</p>
+                        {classData.spellcasting.spellsKnownFormula && (
+                          <p className="text-ink/80"><strong>Spells Known:</strong> {classData.spellcasting.spellsKnownFormula}</p>
+                        )}
+                      </>
+                    )}
+                    {classData.spellcasting?.isRitualCaster && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all bg-gold border-gold`}>
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Ritual Caster</span>
+                      </div>
                     )}
                   </div>
                 )}

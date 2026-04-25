@@ -27,6 +27,7 @@ import {
 import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import { cn } from '../../lib/utils';
 import { deleteDoc } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import ModularChoiceView from '../../components/compendium/ModularChoiceView';
@@ -764,8 +765,19 @@ export function ClassList({
               <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/10">
                 <div className="space-y-10">
                   {/* Class Table */}
-                  <div className="border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                  {previewLoading ? (
+                    <div className="h-64 flex flex-col items-center justify-center border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg space-y-4">
+                      <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-gold/60">Loading class table...</span>
+                    </div>
+                  ) : (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg overflow-x-auto"
+                    >
+                      <table className="w-full text-left border-collapse">
                       <thead className="sticky top-0 bg-card z-10 shadow-md">
                         <tr className="border-b border-gold/20 bg-gold/5">
                           <th className="p-1 px-2 label-text italic text-gold text-center w-8 border-r border-gold/10 text-[10px]">Level</th>
@@ -866,8 +878,9 @@ export function ClassList({
                           );
                         })}
                       </tbody>
-                    </table>
-                  </div>
+                      </table>
+                    </motion.div>
+                  )}
 
                   <div className="grid md:grid-cols-[1fr_250px] gap-8">
                     {/* Left Column: Core Features and Lore */}

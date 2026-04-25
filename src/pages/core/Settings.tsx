@@ -160,7 +160,7 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="h1-title">Archive Settings</h1>
+          <h1 className="h1-title">Settings</h1>
         </div>
         <div className="flex flex-col items-start md:items-end gap-1">
           <span className="label-text text-ink/40">Current Role</span>
@@ -205,7 +205,6 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                   <CardTitle className="h2-title flex items-center gap-3">
                     <UserCircle className="text-gold w-8 h-8" /> Public Profile
                   </CardTitle>
-                  <CardDescription className="description-text text-ink/60">How you are known within the halls of the archive.</CardDescription>
                 </CardHeader>
                 <CardContent className="pt-8">
                   <form onSubmit={handleUpdateProfile} className="space-y-8">
@@ -343,21 +342,21 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                         active={theme === 'parchment'} 
                         onClick={() => handleThemeChange('parchment')}
                         label="Parchment" 
-                        description="The classic, immersive archive look."
+                        description=""
                         className="bg-[#f5f5f0] border-gold/20 text-[#1a1a1a]" 
                       />
                       <ThemeOption 
                         active={theme === 'light'} 
                         onClick={() => handleThemeChange('light')}
                         label="Light" 
-                        description="A clean, modern reading experience."
+                        description=""
                         className="bg-[#ffffff] border-black/10 text-[#1a1a1a]" 
                       />
                       <ThemeOption 
                         active={theme === 'dark'} 
                         onClick={() => handleThemeChange('dark')}
                         label="Dark" 
-                        description="For late-night research in the vaults."
+                        description=""
                         className="bg-[#1a1a1e] border-white/10 text-[#e2e2e8]" 
                       />
                     </div>
@@ -365,20 +364,37 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
 
                   <div className="space-y-6">
                     <h3 className="label-text text-ink/60">Highlight Color</h3>
-                    <div className="flex flex-wrap gap-4">
+                    <div className="flex flex-wrap gap-4 items-center">
                       {['#c5a059', '#3b82f6', '#8b0000', '#10b981', '#8b5cf6', '#f59e0b'].map(color => (
                         <button
+                          type="button"
                           key={color}
                           onClick={() => handleAccentChange(color)}
                           className={`w-12 h-12 rounded-full border-4 transition-all ${accentColor === color ? 'border-ink scale-110 shadow-lg' : 'border-transparent hover:scale-105'}`}
                           style={{ backgroundColor: color }}
                         />
                       ))}
+                      <div className="relative w-12 h-12">
+                        <input
+                          type="color"
+                          value={accentColor}
+                          onChange={(e) => handleAccentChange(e.target.value)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <div 
+                          className="w-12 h-12 rounded-full border-4 border-ink/20 flex items-center justify-center transition-all hover:scale-105 pointer-events-none shadow-sm bg-gradient-to-br from-red-500 via-green-500 to-blue-500"
+                        >
+                          <div 
+                            className="w-8 h-8 rounded-full border-2 border-white/50" 
+                            style={{ backgroundColor: accentColor }} 
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                   
                   <div className="mt-12 p-6 bg-gold/5 rounded-2xl border border-dashed border-gold/30 text-center">
-                    <p className="description-text text-sm text-ink/60">"Your preferences will be remembered across all your devices."</p>
+                    <p className="description-text text-sm text-ink/60">Your preferences will be remembered across all your devices.</p>
                     <Button onClick={handleUpdateProfile} disabled={loading} className="mt-4 bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20">
                       Save All Preferences
                     </Button>
@@ -522,7 +538,7 @@ function ThemeOption({ label, description, className, active, onClick }: { label
       }`}
     >
       <p className="font-serif text-2xl font-bold mb-2">{label}</p>
-      <p className="text-xs opacity-70 leading-relaxed">{description}</p>
+      {description && <p className="text-xs opacity-70 leading-relaxed">{description}</p>}
       {active && (
         <div className="absolute top-4 right-4 bg-gold text-white p-1 rounded-full">
           <CheckCircle2 className="w-4 h-4" />
