@@ -72,6 +72,13 @@ The most important rule is:
 - the app owns semantic meaning
 - the module owns Foundry-specific translation and persistence
 
+Current working interpretation:
+
+- the app exports root class and subclass `advancements`
+- the exporter synthesizes inherent `ItemGrant` rows for ordinary class and subclass features
+- the module reads those root advancement rows directly
+- actor import applies resulting trait changes back onto the actor root so proficiencies and saves actually appear on the sheet
+
 ## Two Import Targets
 
 ### 1. World import
@@ -101,7 +108,33 @@ Expected result:
 - save advancement state on the embedded class item
 - update actor HP and proficiencies from advancement results
 
+With the current importer, that actor-side update now explicitly includes:
+
+- skill selections written onto the class `Trait` advancement and then applied to `actor.system.skills`
+- saving throw trait grants applied to `actor.system.abilities.*.proficient`
+- tool, armor, weapon, and language trait grants applied to the actor root trait fields
+
 This is the mode the Dauligor character creator should care about most.
+
+## Current Working Advancement Contract
+
+For new Dauligor class exports, the intended contract is now:
+
+- root `class.advancements` are authoritative
+- root `subclass.advancements` are authoritative
+- ordinary class/subclass feature grants are exported as inherent root `ItemGrant` rows
+- feature items still hold content like description, uses, activities, and effects
+- older inferred progression paths exist only as fallback compatibility behavior
+
+In practice, a class like Sorcerer should now import with root rows for:
+
+- `HitPoints`
+- saving throw and proficiency `Trait` rows
+- `Subclass`
+- `ScaleValue`
+- `ItemChoice`
+- `AbilityScoreImprovement`
+- inherent feature `ItemGrant`
 
 ## Identity Model
 

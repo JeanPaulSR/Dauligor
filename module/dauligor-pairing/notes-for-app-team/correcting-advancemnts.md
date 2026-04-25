@@ -9,6 +9,12 @@ The short version is:
 - scaling columns and modular choice data should support progression
 - the export layer should synthesize final class/subclass advancement rows from those sources
 
+Current status:
+
+- this is now the active app/export contract
+- the module importer now reads root class/subclass advancements directly
+- actor import now applies imported `Trait` advancements back onto the actor root
+
 ## The Main Problem
 
 Right now, advancement authoring is centered on individual features instead of the class or subclass root.
@@ -169,6 +175,8 @@ Instead:
 
 That keeps the character builder UI cleaner while still giving the Foundry exporter a complete root advancement track.
 
+This is now the expected working path for routine class and subclass features.
+
 ### Item Choices
 
 If a feature unlocks a pool of choices:
@@ -242,6 +250,10 @@ The generator should output things like:
 - one or more `ItemGrant`
 - one or more `ItemChoice`
 
+Current implementation note:
+
+- inherent class feature `ItemGrant` rows are now generated during export even when they are not shown as visible editable rows in the class editor
+
 ### Subclass Root Generated Advancements
 
 Generate from:
@@ -257,7 +269,19 @@ The generator should output things like:
 - subclass `Trait`
 - subclass `ScaleValue`
 
-## What Should Probably Be Deprecated
+Current implementation note:
+
+- inherent subclass feature `ItemGrant` rows are now generated during export even when they are not shown as visible editable rows in the subclass editor
+
+## What Is Deprecated Or Fallback Only
+
+The following should now be treated as deprecated or compatibility-only for class progression:
+
+- using feature-owned advancements as the primary class/subclass progression model
+- relying on implicit feature-grant inference instead of exported root `ItemGrant` rows
+- expecting the module to reconstruct the full advancement track from older bridge fields when root `advancements` are present
+
+Feature-owned advancements can still exist for feature-local behavior where appropriate, but they should not be the main class/subclass progression source.
 
 For the class/subclass Foundry pipeline, `feature.advancements` should no longer be the main place where progression is authored.
 

@@ -331,6 +331,10 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
       targetLevel: classLevel
     });
   }
+  const appliedClassTraits = await applyActorTraitAdvancements(targetActor, syncedClassDoc ?? actorClassDoc);
+  const appliedSubclassTraits = syncedSubclassDoc
+    ? await applyActorTraitAdvancements(targetActor, syncedSubclassDoc)
+    : 0;
   const appliedSkillChoices = await applyActorSkillSelections(targetActor, workflow.selection.skillSelections);
   const appliedHpIncrease = await applyActorHitPointIncrease(targetActor, syncedClassDoc ?? actorClassDoc, {
     existingClassLevel: workflow.existingClassLevel,
@@ -358,6 +362,8 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     + ` with ${importedFeatures.length} class feature item(s), ${importedSubclassFeatures.length} subclass feature item(s),`
     + ` and ${importedOptionItems.length} selected option item(s).`
     + `${appliedHpIncrease ? ` Applied ${appliedHpIncrease} hit point(s).` : ""}`
+    + `${appliedClassTraits ? ` Applied ${appliedClassTraits} class trait advancement change(s).` : ""}`
+    + `${appliedSubclassTraits ? ` Applied ${appliedSubclassTraits} subclass trait advancement change(s).` : ""}`
     + `${appliedSkillChoices ? ` Applied ${appliedSkillChoices} skill proficiency selection(s).` : ""}`
     + `${removedFeatures ? ` Removed ${removedFeatures} class feature item(s).` : ""}`
     + `${removedSubclassFeatures ? ` Removed ${removedSubclassFeatures} subclass feature item(s).` : ""}`
@@ -374,6 +380,8 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     subclassDoc: syncedSubclassDoc ?? subclassDoc,
     classLevel,
     importedFeatures,
+    appliedClassTraits,
+    appliedSubclassTraits,
     appliedSkillChoices,
     importedSubclassFeatures,
     importedOptionItems,
@@ -656,8 +664,8 @@ function getInitialSkillSelections({ classData = null, requestedSelections = {},
 
 function buildSkillChoiceConfig(classData) {
   const skills = classData?.proficiencies?.skills ?? classData?.skills ?? {};
-  const fixed = [...new Set(ensureArray(skills.fixed).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))];
-  const options = [...new Set(ensureArray(skills.options).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))];
+  const fixed = [...new Set(ensureArray(skills.fixed ?? skills.fixedIds).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))];
+  const options = [...new Set(ensureArray(skills.options ?? skills.optionIds).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))];
   const allOptions = [...new Set([...fixed, ...options])];
   const availableSet = new Set(allOptions);
 
@@ -3041,6 +3049,82 @@ async function syncActorClassAdvancements(actor, actorClassItem, sourceAdvanceme
   });
   await linkActorGrantedFeaturesToAdvancements(targetActor, syncedClassItem, { classSourceId });
   return syncedClassItem;
+}
+
+async function applyActorTraitAdvancements(actor, item) {
+  const targetActor = resolveTargetActor(actor);
+  if (!targetActor || !item) return 0;
+
+  const updates = {};
+  let changed = 0;
+
+  for (const advancementEntry of Object.values(normalizeAdvancementStructure(item.system?.advancement))) {
+    if (!advancementEntry || advancementEntry.type !== "Trait") continue;
+
+    const chosen = new Set([
+      ...ensureArray(advancementEntry?.configuration?.grants),
+      ...ensureArray(advancementEntry?.value?.chosen)
+    ].map((entry) => trimString(entry)).filter(Boolean));
+
+    for (const key of chosen) {
+      changed += applyTraitKeyToActorUpdate(updates, targetActor, key, advancementEntry?.configuration?.mode);
+    }
+  }
+
+  if (!changed) return 0;
+  await targetActor.update(updates);
+  return changed;
+}
+
+function applyTraitKeyToActorUpdate(updates, actor, key, mode = "default") {
+  const normalizedKey = trimString(key);
+  if (!normalizedKey) return 0;
+
+  const segments = normalizedKey.split(":");
+  const trait = segments.shift();
+  const value = segments.pop();
+  if (!trait || !value) return 0;
+
+  if (trait === "skills" || trait === "saves" || trait === "tool") {
+    const keyPath = trait === "skills"
+      ? `system.skills.${value}.value`
+      : trait === "saves"
+        ? `system.abilities.${value}.proficient`
+        : `system.tools.${value}.value`;
+    const existingValue = Number(updates[keyPath] ?? foundry.utils.getProperty(actor, keyPath) ?? 0) || 0;
+    let nextValue = existingValue;
+
+    if (mode === "expertise" || mode === "forcedExpertise") nextValue = 2;
+    else if (mode === "upgrade") nextValue = existingValue === 0 ? 1 : 2;
+    else nextValue = Math.max(existingValue, 1);
+
+    if (nextValue !== existingValue) updates[keyPath] = nextValue;
+
+    if (trait === "tool") {
+      const abilityPath = `system.tools.${value}.ability`;
+      const existingAbility = updates[abilityPath] ?? foundry.utils.getProperty(actor, abilityPath);
+      const defaultAbility = CONFIG.DND5E?.tools?.[value]?.ability;
+      if (!existingAbility && defaultAbility) updates[abilityPath] = defaultAbility;
+    }
+
+    return 1;
+  }
+
+  const listPath = trait === "weapon"
+    ? "system.traits.weaponProf.value"
+    : trait === "armor"
+      ? "system.traits.armorProf.value"
+      : trait === "languages"
+        ? "system.traits.languages.value"
+        : null;
+  if (!listPath) return 0;
+
+  const existingValues = updates[listPath] ?? foundry.utils.getProperty(actor, listPath) ?? [];
+  const nextSet = new Set(Array.isArray(existingValues) ? existingValues : Array.from(existingValues));
+  const before = nextSet.size;
+  nextSet.add(value);
+  if (nextSet.size !== before) updates[listPath] = Array.from(nextSet);
+  return 1;
 }
 
 function buildEmbeddedActorAdvancementStructure(sourceAdvancement, { actor, classSourceId = null, targetLevel = 1 } = {}) {

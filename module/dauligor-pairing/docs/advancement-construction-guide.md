@@ -27,6 +27,7 @@ This guide covers:
 - where advancements belong for classes, subclasses, and class features
 - how actor-specific advancement state should be persisted
 - what the app should express semantically versus what the Foundry module should synthesize
+- the current class/subclass contract now used by Dauligor export and import
 
 This guide does not finalize:
 
@@ -76,6 +77,16 @@ The class or subclass item should own the advancement rows that decide:
 - how HP was gained by level
 - when a subclass is selected
 
+In the current Dauligor pipeline, this is no longer just a recommendation.
+
+The working contract is:
+
+- the app exports root `class.advancements`
+- the app exports root `subclass.advancements`
+- the exporter synthesizes inherent class/subclass `ItemGrant` rows for core features by level
+- the module imports those root advancement rows directly
+- actor import applies the resulting `Trait` advancements back onto the actor root for saves, skills, tools, armor, weapons, and languages
+
 ## Where Advancements Belong
 
 ### Advancements belong on the class item when:
@@ -95,6 +106,12 @@ Examples:
 - Sorcerer feature grants like Spellcasting, Font of Magic, or Metamagic
 - Sorcerer subclass selection
 
+Important current rule:
+
+- routine core class feature grants should not need to be hand-authored as visible editor rows
+- the exporter should synthesize those `ItemGrant` rows from the class feature list
+- explicit editor-authored `ItemGrant` rows are for special cases, not the ordinary base class feature track
+
 ### Advancements belong on the subclass item when:
 
 - the progression is specific to one subclass
@@ -105,6 +122,11 @@ Examples:
 
 - Divine Soul feature grants at levels 1, 6, 14, and 18
 - subclass-only scale tracks if one exists
+
+The same export rule applies here:
+
+- routine subclass feature grants should be synthesized into root subclass `ItemGrant` rows during export
+- they do not need to appear as noisy always-present rows in the subclass editor UI
 
 ### Advancements usually do not belong on the feature item when:
 
@@ -172,6 +194,16 @@ Some advancement families also use:
 
 - `classRestriction`
 - `icon`
+
+For Dauligor class exports, the most important currently working root families are:
+
+- `HitPoints`
+- `Trait`
+- `ScaleValue`
+- `ItemGrant`
+- `ItemChoice`
+- `Subclass`
+- `AbilityScoreImprovement`
 
 ## What Each Top-Level Field Means
 
