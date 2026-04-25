@@ -136,13 +136,13 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
 
       {/* Standard Spell Slots */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+        <div className="section-header">
           <div className="flex items-center gap-2">
             <Wand2 className="w-4 h-4 text-gold" />
             <h3 className="text-sm font-bold uppercase tracking-widest text-ink/80">Standard Spell slot Progressions</h3>
           </div>
           <Link to="/compendium/spellcasting-scaling/new">
-            <Button size="sm" className="h-7 text-[10px] bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1 uppercase tracking-widest font-bold">
+            <Button size="sm" className="h-7 gap-1 btn-gold">
               <Plus className="w-3 h-3" /> New Standard
             </Button>
           </Link>
@@ -162,7 +162,7 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
                     variant="ghost" 
                     size="sm" 
                     onClick={() => handleDelete(s.id, 'spellcastingScalings')}
-                    className="h-7 w-7 p-0 text-blood hover:bg-blood/10"
+                    className="h-7 w-7 p-0 btn-danger"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
@@ -181,13 +181,13 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
 
       {/* Pact Magic */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+        <div className="section-header">
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-gold" />
             <h3 className="text-sm font-bold uppercase tracking-widest text-ink/80">Alternative (Pact) Progressions</h3>
           </div>
           <Link to="/compendium/pact-scaling/new">
-            <Button size="sm" className="h-7 text-[10px] bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1 uppercase tracking-widest font-bold">
+            <Button size="sm" className="h-7 gap-1 btn-gold">
               <Plus className="w-3 h-3" /> New Alternative
             </Button>
           </Link>
@@ -207,7 +207,7 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
                     variant="ghost" 
                     size="sm" 
                     onClick={() => handleDelete(s.id, 'pactMagicScalings')}
-                    className="h-7 w-7 p-0 text-blood hover:bg-blood/10"
+                    className="h-7 w-7 p-0 btn-danger"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
@@ -226,13 +226,13 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
 
       {/* Spells Known */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+        <div className="section-header">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-gold" />
             <h3 className="text-sm font-bold uppercase tracking-widest text-ink/80">Spells Known & Cantrips</h3>
           </div>
           <Link to="/compendium/spells-known-scaling/new">
-            <Button size="sm" className="h-7 text-[10px] bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1 uppercase tracking-widest font-bold">
+            <Button size="sm" className="h-7 gap-1 btn-gold">
               <Plus className="w-3 h-3" /> New Known Scaling
             </Button>
           </Link>
@@ -252,7 +252,7 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
                     variant="ghost" 
                     size="sm" 
                     onClick={() => handleDelete(s.id, 'spellsKnownScalings')}
-                    className="h-7 w-7 p-0 text-blood hover:bg-blood/10"
+                    className="h-7 w-7 p-0 btn-danger"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>

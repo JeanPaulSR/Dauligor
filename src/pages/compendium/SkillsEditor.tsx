@@ -245,7 +245,7 @@ export default function SkillsEditor({ userProfile, hideHeader }: { userProfile:
                   {editingSkill && (
                     <Button type="button" variant="ghost" size="sm" onClick={resetForm}>Cancel</Button>
                   )}
-                  <Button type="submit" size="sm" className="bg-gold hover:bg-gold/90 text-white">
+                  <Button type="submit" size="sm" className="btn-gold-solid">
                     {editingSkill ? 'Update Skill' : 'Create Skill'}
                   </Button>
                 </div>

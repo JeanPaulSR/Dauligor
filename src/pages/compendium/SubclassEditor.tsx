@@ -474,7 +474,7 @@ export default function SubclassEditor() {
 
           {/* Spellcasting */}
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold">Spellcasting</h2>
               <div className="flex items-center gap-2">
                 <input 
@@ -598,7 +598,7 @@ export default function SubclassEditor() {
           </div>
 
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold">Subclass Progression & Advancements</h2>
               <Zap className="w-4 h-4 text-gold/40" />
             </div>
@@ -619,7 +619,7 @@ export default function SubclassEditor() {
           {/* Features */}
           {id && (
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-              <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+              <div className="section-header">
                 <h2 className="label-text text-gold">Subclass Features</h2>
                 <Button 
                   size="sm"
@@ -638,7 +638,7 @@ export default function SubclassEditor() {
                     });
                     setIsFeatureModalOpen(true);
                   }}
-                  className="h-6 text-xs bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1"
+                  className="h-6 gap-1 btn-gold"
                 >
                   <Plus className="w-3 h-3" /> Add Feature
                 </Button>
@@ -746,10 +746,10 @@ export default function SubclassEditor() {
         <div className="space-y-6">
           {/* Tags */}
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold">Tags</h2>
               <Link to="/compendium/tags">
-                <Button size="sm" className="h-6 text-xs bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1">
+                <Button size="sm" className="h-6 gap-1 btn-gold">
                   <Plus className="w-3 h-3" /> Manage
                 </Button>
               </Link>
@@ -823,7 +823,7 @@ export default function SubclassEditor() {
             <Button 
               variant="ghost" 
               size="sm"
-              className="w-full text-blood hover:bg-blood/10 border border-blood/20 gap-2 text-xs uppercase"
+              className="w-full btn-danger border border-blood/20 gap-2 text-xs uppercase"
               onClick={async () => {
                 if (id && confirm('Are you sure you want to delete this subclass? This cannot be undone.')) {
                   try {
@@ -847,7 +847,7 @@ export default function SubclassEditor() {
         setIsFeatureModalOpen(open);
         if (open) setFeatureTab('description');
       }}>
-        <DialogContent className="max-w-[95vw] lg:max-w-6xl bg-card border-gold/20 p-0 overflow-hidden flex flex-col h-[90vh]">
+        <DialogContent className="dialog-content max-w-[95vw] lg:max-w-6xl flex flex-col h-[90vh]">
           {editingFeature && (
             <>
               <div className="p-6 pb-0 shrink-0 border-b border-gold/10">
@@ -1074,7 +1074,7 @@ export default function SubclassEditor() {
                 {featureTab === 'advancement' && (
                   <div className="pt-4 space-y-8">
                     <div className="space-y-4">
-                       <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+                       <div className="section-header">
                           <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Linked Advancements</h4>
                           <p className="text-[10px] text-ink/40">Link this feature to progression rules defined on the subclass.</p>
                        </div>
@@ -1152,7 +1152,7 @@ export default function SubclassEditor() {
             </>
           )}
 
-          <div className="shrink-0 flex items-center justify-end gap-3 p-4 bg-background border-t border-gold/10 pt-4">
+          <div className="dialog-footer shrink-0 flex items-center justify-end gap-3">
             <Button type="button" variant="ghost" onClick={() => setIsFeatureModalOpen(false)} className="label-text opacity-70 hover:opacity-100 h-8">
               Cancel
             </Button>

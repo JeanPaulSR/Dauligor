@@ -170,7 +170,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                         <Badge variant="outline" className="text-gold border-gold/20 font-mono">{era.order}</Badge>
                         <span className="font-serif font-bold">{era.name}</span>
                       </div>
-                      <Button variant="ghost" size="icon" className="text-blood hover:bg-blood/10 h-8 w-8" onClick={() => handleDeleteEra(era.id)}>
+                      <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteEra(era.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
@@ -182,7 +182,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger render={
-            <Button className="bg-gold hover:bg-gold/90 text-white gap-2">
+            <Button className="btn-gold-solid gap-2">
               <Plus className="w-4 h-4" /> New Campaign
             </Button>
           } />
@@ -234,7 +234,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                   <div className="bg-gold/10 p-2 rounded-lg">
                     <LayoutGrid className="w-5 h-5 text-gold" />
                   </div>
-                  <Button variant="ghost" size="icon" className="text-blood hover:bg-blood/10 h-8 w-8" onClick={() => handleDeleteCampaign(campaign.id)}>
+                  <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteCampaign(campaign.id)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>

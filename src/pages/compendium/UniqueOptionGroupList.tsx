@@ -28,14 +28,14 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center justify-between border-b border-gold/10 pb-4">
+      <div className="section-header">
         <div className="flex items-center gap-4">
           <BookOpen className="w-6 h-6 text-gold" />
           <h1 className="text-2xl font-serif font-bold text-ink uppercase tracking-tight">Unique Option Groups</h1>
         </div>
         {isAdmin && (
           <Link to="/compendium/unique-options/new">
-            <Button size="sm" className="bg-gold hover:bg-gold/90 text-white gap-2">
+            <Button size="sm" className="btn-gold-solid gap-2">
               <Plus className="w-4 h-4" /> New Group
             </Button>
           </Link>

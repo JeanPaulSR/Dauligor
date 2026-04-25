@@ -315,7 +315,7 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                     </div>
 
                     <div className="flex justify-end pt-4">
-                      <Button type="submit" disabled={loading} className="bg-gold hover:bg-gold/90 text-white gap-2 px-8 h-12 shadow-lg shadow-gold/20">
+                      <Button type="submit" disabled={loading} className="btn-gold-solid gap-2 px-8 h-12 shadow-lg shadow-gold/20">
                         <Save className="w-4 h-4" /> Save
                       </Button>
                     </div>
@@ -444,7 +444,7 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                       />
                     </div>
                     <div className="flex justify-end">
-                      <Button type="submit" disabled={loading} className="bg-gold hover:bg-gold/90 text-white gap-2 px-8 h-12">
+                      <Button type="submit" disabled={loading} className="btn-gold-solid gap-2 px-8 h-12">
                         Save Recovery Email
                       </Button>
                     </div>
@@ -465,7 +465,7 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                       <p className="font-bold text-blood">Delete Profile</p>
                       <p className="text-xs text-ink/60">This will remove your profile data from the archive. Your login will remain active until a GM removes it.</p>
                     </div>
-                    <Button variant="ghost" className="text-blood hover:bg-blood/10 border border-blood/20 w-full sm:w-auto">
+                    <Button variant="ghost" className="btn-danger border border-blood/20 w-full sm:w-auto">
                       Delete Profile
                     </Button>
                   </div>

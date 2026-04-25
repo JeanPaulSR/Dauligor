@@ -1473,7 +1473,7 @@ export default function CharacterBuilder({
 
                 {/* SAVING THROWS */}
                 <div className="border border-gold/20 p-4 sm:p-6 rounded-lg bg-card/40 shadow-sm group">
-                  <div className="flex items-center justify-between border-b border-gold/10 pb-2 mb-4 sm:mb-6">
+                  <div className="section-header mb-4 sm:mb-6">
                     <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 flex items-center gap-2 tracking-tight">
                       <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
                       Saving Throws
@@ -1607,7 +1607,7 @@ export default function CharacterBuilder({
                 {/* SKILLS & TOOLS COLUMN */}
                 <div className="space-y-6">
                   <div className="p-4 border border-gold/20 bg-card/50 flex flex-col">
-                    <div className="flex items-center justify-between border-b border-gold/10 pb-2 mb-4">
+                    <div className="section-header mb-4">
                       <h3 className="label-text flex items-center gap-2">
                         <Package className="w-3 h-3 text-gold" />
                         Skills
@@ -1820,7 +1820,7 @@ export default function CharacterBuilder({
                     {/* SENSES & DEFENSES */}
                     <div className="space-y-6">
                       <div className="p-4 border border-gold/20 bg-card/50 space-y-3 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-gold/10 pb-2 mb-2">
+                        <div className="section-header mb-2">
                           <span className="label-text flex items-center gap-2">
                             <Zap className="w-3 h-3" />
                             Passive Traits
@@ -2969,7 +2969,7 @@ export default function CharacterBuilder({
 
                           <div className="flex justify-center pt-4 pb-12">
                             <Button
-                              className="bg-gold hover:bg-gold/90 text-white font-bold uppercase tracking-widest px-6 py-2 shadow-sm transition-all active:translate-y-1 text-xs"
+                              className="btn-gold-solid font-bold uppercase tracking-widest px-6 py-2 shadow-sm transition-all active:translate-y-1 text-xs"
                               onClick={() => {
                                 setCharacter((prev: any) => {
                                   const newProg =

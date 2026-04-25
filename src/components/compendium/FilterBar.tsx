@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Filter, X, Check } from 'lucide-react';
+import { Search, Filter, X } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -41,7 +41,7 @@ export function FilterBar({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
           <Input 
             placeholder="Search..." 
-            className="pl-8 h-8 bg-background/50 border-gold/10 focus:border-gold"
+            className="field-input pl-8 h-8 focus:border-gold"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -90,20 +90,20 @@ export function FilterBar({
                       <div className="flex items-center gap-6">
                         <span className="h3-title uppercase text-ink">{group.name}</span>
                         <div className="flex items-center gap-4">
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             variant="outline"
                             onClick={() => cycleGroupMode(group.id)}
-                            className="h-6 px-3 border-gold/20 text-gold text-[9px] font-bold uppercase tracking-widest hover:bg-gold/5"
+                            className="h-6 px-3 btn-gold text-[9px]"
                           >
                             {mode}
                           </Button>
                           <div className="flex items-center gap-2">
                             <span className="label-text text-blood/60">Exclusion Logic</span>
-                            <Button 
-                              size="sm" 
+                            <Button
+                              size="sm"
                               onClick={() => cycleExclusionMode(group.id)}
-                              className="h-6 px-3 bg-blood text-white text-[9px] font-bold uppercase tracking-widest hover:bg-blood/90"
+                              className="h-6 px-3 btn-danger"
                             >
                               {exMode}
                             </Button>
@@ -111,7 +111,7 @@ export function FilterBar({
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button 
+                        <button
                           onClick={() => {
                             const newStates: Record<string, number> = { ...tagStates };
                             groupTags.forEach(t => newStates[t.id] = 1);
@@ -122,7 +122,7 @@ export function FilterBar({
                           Include All
                         </button>
                         <span className="text-gold/20">|</span>
-                        <button 
+                        <button
                           onClick={() => {
                             const newStates: Record<string, number> = { ...tagStates };
                             groupTags.forEach(t => delete newStates[t.id]);
@@ -142,12 +142,10 @@ export function FilterBar({
                             key={tag.id}
                             onClick={() => cycleTagState(tag.id)}
                             className={cn(
-                              "px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2",
-                              state === 1 ? "bg-gold text-white border-gold shadow-lg shadow-gold/20" : state === 2 ? "bg-blood text-white border-blood shadow-lg shadow-blood/20" : "bg-card text-ink/60 border-gold/20 hover:border-gold/40 hover:text-gold"
+                              "filter-tag",
+                              state === 1 ? "btn-gold-solid border-gold shadow-lg shadow-gold/20" : state === 2 ? "btn-danger border-blood" : "btn-gold"
                             )}
                           >
-                            {state === 1 && <Check className="w-3 h-3" />}
-                            {state === 2 && <X className="w-3 h-3" />}
                             {tag.name}
                           </button>
                         );
@@ -167,7 +165,7 @@ export function FilterBar({
               >
                 Reset All Filters
               </Button>
-              <Button onClick={() => setIsFilterOpen(false)} className="bg-gold hover:bg-gold/90 text-white px-10 h-10 uppercase tracking-widest font-bold shadow-lg shadow-gold/20">
+              <Button onClick={() => setIsFilterOpen(false)} className="btn-gold-solid px-10 h-10 shadow-lg shadow-gold/20">
                 Apply & Close
               </Button>
             </div>

@@ -143,7 +143,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-6 w-6 text-blood/40 hover:text-blood hover:bg-blood/10" 
+              className="h-6 w-6 btn-danger text-blood/40 hover:text-blood"
               onClick={(e) => {
                 e.stopPropagation();
                 handleDelete(page.id);
@@ -203,7 +203,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
         {isStaff && (
           <div className="pt-6 border-t border-gold/10">
             <Link to="/wiki/new" className="block">
-              <Button className="w-full bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
+              <Button className="w-full btn-gold-solid gap-2 shadow-lg shadow-gold/20">
                 <Plus className="w-4 h-4" /> New Entry
               </Button>
             </Link>
@@ -374,7 +374,7 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
                                 <Button 
                                   variant="ghost" 
                                   size="icon" 
-                                  className="h-6 w-6 text-blood/40 hover:text-blood hover:bg-blood/10 opacity-0 group-hover:opacity-100 transition-opacity ml-2" 
+                                  className="h-6 w-6 btn-danger text-blood/40 hover:text-blood opacity-0 group-hover:opacity-100 transition-opacity ml-2" 
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();

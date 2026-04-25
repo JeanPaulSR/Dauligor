@@ -53,7 +53,7 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center justify-between border-b border-gold/10 pb-4">
+      <div className="section-header">
         <div className="flex items-center gap-4">
           <User className="w-8 h-8 text-gold" />
           <div>
@@ -62,7 +62,7 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
           </div>
         </div>
         <Dialog>
-          <DialogTrigger render={<Button className="bg-gold hover:bg-gold/90 text-white gap-2 font-bold uppercase tracking-widest text-xs h-10 px-6 ring-offset-background">
+          <DialogTrigger render={<Button className="btn-gold-solid gap-2 font-bold uppercase tracking-widest text-xs h-10 px-6 ring-offset-background">
             <Plus className="w-4 h-4" /> Create Character
           </Button>} />
           <DialogContent className="sm:max-w-5xl bg-background border-gold/30 p-0 shadow-2xl overflow-hidden rounded-xl">

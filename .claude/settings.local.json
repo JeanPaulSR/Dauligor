@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"border border-gold/10 rounded-md\" e:\\\\\\\\DnD\\\\\\\\Professional\\\\\\\\Dev\\\\\\\\Dauligor\\\\\\\\src\\\\\\\\components\\\\\\\\compendium\\\\\\\\AdvancementManager.tsx)",
+      "Bash(grep -n \"border border-gold/10 rounded-lg\\\\|bg-card/40.*border\" e:\\\\\\\\DnD\\\\\\\\Professional\\\\\\\\Dev\\\\\\\\Dauligor\\\\\\\\src\\\\\\\\pages\\\\\\\\compendium\\\\\\\\SubclassEditor.tsx)",
+      "Bash(grep -n \"divide-y divide-gold/5\\\\|border border-gold/10 rounded\" e:\\\\\\\\DnD\\\\\\\\Professional\\\\\\\\Dev\\\\\\\\Dauligor\\\\\\\\src\\\\\\\\pages\\\\\\\\admin\\\\\\\\SpellcastingAdvancementManager.tsx)"
+    ]
+  }
+}

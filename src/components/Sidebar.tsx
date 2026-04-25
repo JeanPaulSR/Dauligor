@@ -213,7 +213,7 @@ export default function Sidebar({
             </h2>
             <div className="flex items-center justify-center gap-1.5">
               <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/30'}`} />
-              <span className={`text-[9px] uppercase font-bold tracking-widest ${isStaff ? 'text-gold' : 'text-ink/40'}`}>
+              <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/40'}`}>
                 {(userProfile?.role || 'User').replace('-', ' ')}
               </span>
             </div>
@@ -225,7 +225,7 @@ export default function Sidebar({
         <div className={`p-2 lg:p-3 space-y-6 ${isCollapsed && !isOpen ? 'px-1' : ''}`}>
           {userProfile && recentArticles.length > 0 && (!isCollapsed || isOpen) && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-gold font-bold uppercase tracking-widest text-[9px] lg:text-[10px] mb-2 px-2">
+              <div className="flex items-center gap-2 nav-label text-gold mb-2 px-2">
                 <Bookmark className="w-3 h-3" />
                 <span>Recent</span>
               </div>
@@ -250,7 +250,7 @@ export default function Sidebar({
               {(!isCollapsed || isOpen) ? (
                 <button 
                   onClick={() => toggleSection(sectionKey)}
-                  className="w-full flex items-center justify-between text-gold font-bold uppercase tracking-widest text-[9px] lg:text-[10px] p-2 hover:bg-gold/5 rounded transition-colors"
+                  className="nav-section-btn nav-label text-gold"
                 >
                   <span>{sectionKey}</span>
                   {expandedSections[sectionKey] ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}

@@ -190,7 +190,7 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
         {/* Left Col: Tag Group Metadata */}
         <div className="md:col-span-1 space-y-4">
           <Card className="border-gold/20 bg-card p-4 space-y-4">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold">Group Settings</h2>
               <Button variant="ghost" size="sm" onClick={() => setIsEditingGroup(!isEditingGroup)} className="h-6 px-2 text-[10px] text-ink/40 hover:text-gold">
                 {isEditingGroup ? 'Cancel' : 'Edit'}
@@ -254,11 +254,11 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                         placeholder="e.g. custom..." 
                         className="h-7 text-xs bg-background/50 border-gold/20"
                       />
-                      <Button type="submit" size="sm" className="h-7 px-2 bg-gold hover:bg-gold/90 text-[10px] text-white">Add</Button>
+                      <Button type="submit" size="sm" className="h-7 px-2 btn-gold-solid text-[10px]">Add</Button>
                     </form>
                   </div>
                 </div>
-                <Button onClick={handleSaveGroupInfo} className="w-full h-8 bg-gold hover:bg-gold/90 text-white text-xs">
+                <Button onClick={handleSaveGroupInfo} className="w-full h-8 btn-gold-solid text-xs">
                   Save Changes
                 </Button>
               </div>
@@ -302,7 +302,7 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                           className="h-7 text-sm font-bold w-full bg-background border-gold/30"
                           onKeyDown={e => { if (e.key === 'Enter') handleUpdateTag(tag.id); if (e.key === 'Escape') setEditingTagId(null); }}
                         />
-                        <Button size="sm" onClick={() => handleUpdateTag(tag.id)} className="h-7 w-7 p-0 bg-gold hover:bg-gold/90 text-white shrink-0"><Check className="w-4 h-4" /></Button>
+                        <Button size="sm" onClick={() => handleUpdateTag(tag.id)} className="h-7 w-7 p-0 btn-gold-solid shrink-0"><Check className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="sm" onClick={() => setEditingTagId(null)} className="h-7 w-7 p-0 text-ink/40 shrink-0"><X className="w-4 h-4" /></Button>
                       </div>
                     ) : (
@@ -327,7 +327,7 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                   placeholder="New tag name..." 
                   className="flex-1 bg-card border-gold/20 focus:border-gold"
                 />
-                <Button type="submit" disabled={!newTagName.trim()} className="bg-gold hover:bg-gold/90 text-white gap-2">
+                <Button type="submit" disabled={!newTagName.trim()} className="btn-gold-solid gap-2">
                   <Plus className="w-4 h-4" /> Add Tag
                 </Button>
               </form>

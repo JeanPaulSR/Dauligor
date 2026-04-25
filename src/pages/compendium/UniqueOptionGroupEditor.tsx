@@ -215,7 +215,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center justify-between border-b border-gold/10 pb-4">
+      <div className="section-header">
         <div className="flex items-center gap-4">
           <Link to="/compendium/unique-options">
             <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
@@ -228,11 +228,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         </div>
         <div className="flex items-center gap-2">
           {id && (
-            <Button onClick={handleDeleteGroup} disabled={loading} size="sm" variant="outline" className="border-blood/30 text-blood hover:bg-blood/10 gap-2">
+            <Button onClick={handleDeleteGroup} disabled={loading} size="sm" variant="outline" className="border-blood/30 btn-danger gap-2">
               <Trash2 className="w-4 h-4" /> Delete Group
             </Button>
           )}
-          <Button onClick={handleSaveGroup} disabled={loading} size="sm" className="bg-gold hover:bg-gold/90 text-white gap-2">
+          <Button onClick={handleSaveGroup} disabled={loading} size="sm" className="btn-gold-solid gap-2">
             <Save className="w-4 h-4" /> {id ? 'Save Changes' : 'Create Group'}
           </Button>
         </div>
@@ -399,7 +399,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                     type="submit" 
                     size="sm" 
                     disabled={!editingItem?.name}
-                    className="bg-gold hover:bg-gold/90 text-white"
+                    className="btn-gold-solid"
                   >
                     {editingItem?.id ? 'Update Option' : 'Add Option'}
                   </Button>
@@ -411,7 +411,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           {/* Individual Options */}
           {id && (
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-              <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+              <div className="section-header">
                 <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Individual Options</h2>
               </div>
               

@@ -90,12 +90,12 @@ export default function ProficienciesEditor({
     <div className="space-y-8">
       {/* Saving Throws Section */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-gold/5 pb-2">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-ink/60 flex items-center gap-2">
+        <div className="section-header">
+          <h3 className="field-label flex items-center gap-2">
             <Shield className="w-3.5 h-3.5 text-gold/40" /> Saving Throws
           </h3>
           <div className="flex items-center gap-2">
-            <label className="text-[10px] font-bold uppercase text-ink/40">Choices:</label>
+            <label className="field-label opacity-70">Choices:</label>
             <Input 
               type="number"
               value={proficiencies.savingThrows?.choiceCount || 0}
@@ -110,7 +110,7 @@ export default function ProficienciesEditor({
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Choice Options</label>
+            <label className="section-label text-gold/60">Choice Options</label>
             <div className="flex flex-wrap gap-2">
               {allAttributes.map(attr => {
                 const iden = (attr.identifier || attr.id).toUpperCase();
@@ -145,7 +145,7 @@ export default function ProficienciesEditor({
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Given (Fixed)</label>
+            <label className="section-label text-gold/60">Given (Fixed)</label>
             <div className="flex flex-wrap gap-2">
               {allAttributes.map(attr => {
                 const iden = (attr.identifier || attr.id).toUpperCase();

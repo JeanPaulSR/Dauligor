@@ -250,7 +250,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                 <Edit className="w-4 h-4 mr-2" /> Edit Article
               </Button>
               {(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') && (
-                <Button variant="ghost" size="icon" className="text-blood hover:bg-blood/10" onClick={handleDelete}>
+                <Button variant="ghost" size="icon" className="btn-danger" onClick={handleDelete}>
                   <Trash2 className="w-4 h-4" />
                 </Button>
               )}

@@ -179,7 +179,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
                   rel="noopener noreferrer"
                   className="w-full"
                 >
-                  <Button className="w-full bg-gold hover:bg-gold/90 text-white gap-2">
+                  <Button className="w-full btn-gold-solid gap-2">
                     <ExternalLink className="w-4 h-4" /> Visit Webpage
                   </Button>
                 </a>

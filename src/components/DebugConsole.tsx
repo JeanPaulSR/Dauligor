@@ -75,7 +75,7 @@ export default function DebugConsole() {
       <div className="flex items-center justify-between px-4 h-10 border-b border-gold/10 bg-gold/5">
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-gold" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-gold">Archive Debug Console</span>
+          <span className="label-text">Archive Debug Console</span>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" onClick={() => setLogs([])} className="h-6 w-6 p-0 text-gold/40 hover:text-gold">

@@ -259,7 +259,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         <div className="flex items-center gap-4">
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger render={
-              <Button className="bg-gold hover:bg-gold/90 text-white gap-2">
+              <Button className="btn-gold-solid gap-2">
                 <UserPlus className="w-4 h-4" /> Create User
               </Button>
             } />
@@ -427,7 +427,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                           Send Recovery Email
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="text-blood hover:bg-blood/10" onClick={() => handleDeleteUser(u.id)}>
+                      <Button variant="ghost" size="icon" className="btn-danger" onClick={() => handleDeleteUser(u.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>

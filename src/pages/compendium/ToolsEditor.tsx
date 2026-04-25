@@ -292,7 +292,7 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                   {editingTool && (
                     <Button type="button" variant="ghost" size="sm" onClick={resetForm}>Cancel</Button>
                   )}
-                  <Button type="submit" size="sm" className="bg-gold hover:bg-gold/90 text-white">
+                  <Button type="submit" size="sm" className="btn-gold-solid">
                     {editingTool ? 'Update Tool' : 'Create Tool'}
                   </Button>
                 </div>

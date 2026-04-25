@@ -586,7 +586,7 @@ export function ClassList({
                 <Upload className="w-4 h-4" /> Import Class
               </Button>
               <Link to="/compendium/classes/new">
-                <Button className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
+                <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/20">
                   <Plus className="w-4 h-4" /> New Class
                 </Button>
               </Link>
@@ -670,7 +670,7 @@ export function ClassList({
                   <Shield className="w-16 h-16 text-gold/10" />
                 </div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity" />
+              <div className={`absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none transition-opacity ${cls.imageUrl ? 'opacity-80 group-hover:opacity-100' : 'opacity-20 group-hover:opacity-30'}`} />
               
               <div className="relative z-10 p-4 pt-6 text-center">
                 <h3 className="h3-title text-gold group-hover:text-white transition-colors block drop-shadow-md text-2xl group-hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]">
@@ -681,7 +681,7 @@ export function ClassList({
                 </p>
               </div>
 
-              <div className="mt-auto relative z-10 p-4 border-t border-gold/20 bg-black/40 backdrop-blur-md h-[45%] flex flex-col items-center text-center group-hover:bg-black/60 group-hover:-translate-y-2 transition-all duration-300">
+              <div className="mt-auto relative z-10 p-4 border-t border-gold/20 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center group-hover:bg-black/30 group-hover:-translate-y-2 transition-all duration-300">
                 <div className="text-white/80 text-xs italic line-clamp-4 overflow-hidden w-full font-serif leading-relaxed">
                   <Markdown>{cls.description || "No preview description available."}</Markdown>
                 </div>
@@ -724,7 +724,7 @@ export function ClassList({
           {selectedClass && (
             <>
               {/* Header */}
-              <div className="relative overflow-hidden bg-black flex-shrink-0">
+              <div className="relative overflow-hidden bg-black/10 flex-shrink-0">
                 {selectedClass.imageUrl && (
                   <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${selectedClass.imageUrl})` }} />
                 )}
@@ -744,13 +744,13 @@ export function ClassList({
                            <Button size="sm" variant="outline" className="border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8" onClick={() => setSelectedClass(null)}>
                              Cancel
                            </Button>
-                           <Button size="sm" onClick={() => onSelectClass && onSelectClass(selectedClass)} className="bg-gold hover:bg-gold/90 text-white shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
+                           <Button size="sm" onClick={() => onSelectClass && onSelectClass(selectedClass)} className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
                              Select Class
                            </Button>
                         </div>
                       ) : (
                         <Link to={`/compendium/classes/view/${selectedClass.id}`}>
-                          <Button size="sm" className="bg-gold hover:bg-gold/90 text-white shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
+                          <Button size="sm" className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
                             View Class Page
                           </Button>
                         </Link>

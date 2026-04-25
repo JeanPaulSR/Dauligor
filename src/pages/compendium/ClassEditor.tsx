@@ -1113,7 +1113,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center justify-between border-b border-gold/10 pb-4">
+      <div className="section-header">
         <div className="flex items-center gap-4">
           <Link to="/compendium/classes">
             <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
@@ -1124,7 +1124,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             {id ? `Edit ${name || 'Class'}` : 'New Class'}
           </h1>
         </div>
-        <Button onClick={handleSave} disabled={loading} size="sm" className="bg-gold hover:bg-gold/90 text-white gap-2">
+        <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
           <Save className="w-4 h-4" /> Save Class
         </Button>
       </div>
@@ -1240,12 +1240,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             {id && (
             <TabsContent value="subclasses" className="space-y-6 mt-0">
               <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-              <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+              <div className="section-header">
                 <h2 className="label-text text-gold">Subclasses</h2>
                 <Link to={`/compendium/subclasses/new?classId=${id}`}>
                   <Button 
                     size="sm"
-                    className="h-6 text-xs bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1"
+                    className="h-6 gap-1 btn-gold"
                   >
                     <Plus className="w-3 h-3" /> Add Subclass
                   </Button>
@@ -1255,7 +1255,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               {/* Subclass Feature Progression */}
               <div className="space-y-4 bg-gold/5 p-3 border border-gold/10 rounded">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+                  <div className="section-header">
                     <div className="space-y-1 flex-1">
                       <label className="label-text text-[10px] text-gold/60">Subclass Title (e.g. Sorcerous Origin)</label>
                       <Input 
@@ -1313,7 +1313,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           {/* Proficiencies */}
           <TabsContent value="proficiencies" className="space-y-6 mt-0">
             <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold">Proficiencies</h2>
               <Shield className="w-4 h-4 text-gold/40" />
             </div>
@@ -2203,7 +2203,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           {/* Spellcasting */}
           <TabsContent value="spellcasting" className="space-y-6 mt-0">
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <div className="flex items-center gap-3">
                 <h2 className="label-text text-gold">Spellcasting</h2>
                 <label className="flex items-center gap-2 cursor-pointer group">
@@ -2414,7 +2414,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           {/* Features */}
           {id && (
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-              <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+              <div className="section-header">
                 <h2 className="label-text text-gold">Class Features</h2>
                 <Button 
                   size="sm"
@@ -2445,7 +2445,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     });
                     setIsFeatureModalOpen(true);
                   }}
-                  className="h-6 text-xs bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1"
+                  className="h-6 gap-1 btn-gold"
                 >
                   <Plus className="w-3 h-3" /> Add Feature
                 </Button>
@@ -2620,7 +2620,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           {/* Multiclass Proficiencies */}
           <TabsContent value="multiclass-proficiencies" className="space-y-6 mt-0">
             <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold">Multiclass Proficiencies</h2>
               <Shield className="w-4 h-4 text-gold/40" />
             </div>
@@ -3510,12 +3510,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           {/* Tags */}
           <TabsContent value="tags" className="space-y-6 mt-0">
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold">Tags & Categorization</h2>
               <Link to="/compendium/tags">
                 <Button 
                   size="sm"
-                  className="h-6 text-xs bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20 gap-1"
+                  className="h-6 gap-1 btn-gold"
                 >
                   <Plus className="w-3 h-3" /> Manage Tags
                 </Button>
@@ -3567,7 +3567,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           {/* Progression & Advancements */}
           <TabsContent value="progression" className="space-y-6 mt-0">
             <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <div className="flex items-center gap-2">
                 <h2 className="label-text text-gold">Class Progression & Advancements</h2>
                 <Zap className="w-4 h-4 text-gold/40" />
@@ -3634,12 +3634,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         {/* Sidebar */}
         <div className="xl:col-span-1 space-y-6">
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4 rounded-xl">
-            <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+            <div className="section-header">
               <h2 className="label-text text-gold uppercase tracking-tighter">Class Columns</h2>
               <Link to={`/compendium/scaling/new?parentId=${id}&parentType=class`}>
                 <Button 
                   size="sm" 
-                  className="h-6 text-[10px] bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20"
+                  className="h-6 btn-gold"
                 >
                   <Plus className="w-3 h-3 mr-1" /> Add
                 </Button>
@@ -3710,7 +3710,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         setIsFeatureModalOpen(open);
         if (open) setFeatureTab('description');
       }}>
-        <DialogContent className="max-w-[95vw] lg:max-w-6xl bg-card border-gold/20 p-0 overflow-hidden flex flex-col h-[90vh]">
+        <DialogContent className="dialog-content max-w-[95vw] lg:max-w-6xl flex flex-col h-[90vh]">
           {editingFeature && (
             <>
               <div className="p-6 pb-0 shrink-0 border-b border-gold/10">
@@ -3964,7 +3964,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
                 {featureTab === 'advancement' && (
                   <div className="pt-4 space-y-4">
-                    <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+                    <div className="section-header">
                        <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Linked Advancements</h4>
                        <p className="text-[10px] text-ink/40">Link this feature to progression rules defined on the class.</p>
                     </div>
@@ -4082,7 +4082,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           </div>
           
           <DialogFooter>
-            <Button onClick={() => setManagingGroupId(null)} className="bg-gold hover:bg-gold/90 text-white">
+            <Button onClick={() => setManagingGroupId(null)} className="btn-gold-solid">
               Done
             </Button>
           </DialogFooter>

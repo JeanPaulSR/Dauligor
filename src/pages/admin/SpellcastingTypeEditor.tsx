@@ -116,7 +116,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
 
         <form onSubmit={handleSave} className="space-y-4 bg-card/50 p-6 rounded-lg border border-gold/10">
           <div className="space-y-2">
-            <label className="text-[10px] uppercase font-black text-ink/60">Display Name</label>
+            <label className="field-label">Display Name</label>
             <Input 
               value={name}
               onChange={e => setName(e.target.value)}
@@ -127,7 +127,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] uppercase font-black text-ink/60">Identifier</label>
+            <label className="field-label">Identifier</label>
             <Input 
               value={identifier}
               onChange={e => setIdentifier(e.target.value)}
@@ -137,7 +137,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] uppercase font-black text-ink/60">Foundry Flat Name</label>
+            <label className="field-label">Foundry Flat Name</label>
             <Input 
               value={foundryName}
               onChange={e => setFoundryName(e.target.value)}
@@ -147,7 +147,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] uppercase font-black text-ink/60">Scaling Formula</label>
+            <label className="field-label">Scaling Formula</label>
             <Input 
               value={formula}
               onChange={e => setFormula(e.target.value)}
@@ -187,7 +187,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="h3-title text-ink font-bold truncate">{item.name}</h3>
                     {isAdmin && (
-                      <Button variant="ghost" size="sm" onClick={(e) => handleDelete(e, item.id)} className="h-6 w-6 p-0 text-blood hover:bg-blood/10 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <Button variant="ghost" size="sm" onClick={(e) => handleDelete(e, item.id)} className="h-6 w-6 p-0 btn-danger opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                         <Trash2 className="w-3 h-3" />
                       </Button>
                     )}

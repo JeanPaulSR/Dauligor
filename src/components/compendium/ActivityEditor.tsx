@@ -107,14 +107,14 @@ export default function ActivityEditor({ activities, onChange }: ActivityEditorP
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between border-b border-gold/10 pb-2">
-        <h4 className="text-[11px] uppercase text-gold font-bold tracking-widest">Activities</h4>
-        <Button 
-          type="button" 
-          variant="outline" 
-          size="sm" 
+      <div className="section-header">
+        <h4 className="section-label text-gold">Activities</h4>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => setIsSelectorOpen(true)}
-          className="h-7 px-2 border-gold/20 text-gold hover:bg-gold/10 gap-1.5 bg-gold/5"
+          className="h-7 px-2 gap-1.5 btn-gold"
         >
           <Plus className="w-3 h-3" /> Add Activity
         </Button>
@@ -188,7 +188,7 @@ export default function ActivityEditor({ activities, onChange }: ActivityEditorP
                 <div className="p-3 bg-background rounded border border-gold/10 text-gold group-hover:scale-110 transition-transform">
                   <Icon className="w-6 h-6" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-ink/60 group-hover:text-gold">{label}</span>
+                <span className="field-label group-hover:text-gold">{label}</span>
               </button>
             ))}
           </div>
@@ -196,7 +196,7 @@ export default function ActivityEditor({ activities, onChange }: ActivityEditorP
       </Dialog>
 
       <Dialog open={!!editingId} onOpenChange={(open) => !open && setEditingId(null)}>
-        <DialogContent className="max-w-[95vw] lg:max-w-4xl bg-card border-gold/20 p-0 overflow-hidden flex flex-col h-[90vh]">
+        <DialogContent className="dialog-content max-w-[95vw] lg:max-w-4xl flex flex-col h-[90vh]">
           {editingActivity && (
             <>
               <DialogHeader className="p-6 pb-2 shrink-0 border-b border-gold/10">
@@ -1162,10 +1162,10 @@ export default function ActivityEditor({ activities, onChange }: ActivityEditorP
                 </div>
               </ScrollArea>
 
-              <div className="p-4 border-t border-gold/10 bg-background/40 flex justify-end shrink-0">
-                 <Button 
+              <div className="dialog-footer flex justify-end shrink-0">
+                 <Button
                   onClick={() => setEditingId(null)}
-                  className="bg-gold hover:bg-gold/90 text-white gap-2 px-12 h-10 font-black uppercase tracking-widest text-[10px]"
+                  className="btn-gold-solid gap-2 px-12 h-10"
                  >
                    Done
                  </Button>

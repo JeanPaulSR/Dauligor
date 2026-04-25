@@ -152,7 +152,7 @@ export default function Navbar({
                     </Button>
                   } />
                   <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gold/60">Switch Campaign</div>
+                    <div className="px-2 py-1.5 section-label text-gold/60">Switch Campaign</div>
                     {campaigns.map((campaign) => (
                       <DropdownMenuItem 
                         key={campaign.id} 

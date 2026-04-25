@@ -138,24 +138,16 @@ export default function MarkdownEditor({
       Superscript,
       Table.configure({
         resizable: true,
-        HTMLAttributes: {
-          class: 'w-full border-collapse border border-gold/20 my-4 table-auto',
-        },
+        HTMLAttributes: { class: 'editor-table' },
       }),
       TableRow.configure({
-        HTMLAttributes: {
-          class: 'border-b border-gold/10 hover:bg-gold/5',
-        },
+        HTMLAttributes: { class: 'editor-table-row' },
       }),
       TableHeader.configure({
-        HTMLAttributes: {
-          class: 'p-2 text-left font-bold text-gold border border-gold/20 bg-gold/5',
-        },
+        HTMLAttributes: { class: 'editor-table-th' },
       }),
       TableCell.configure({
-        HTMLAttributes: {
-          class: 'p-2 border border-gold/10',
-        },
+        HTMLAttributes: { class: 'editor-table-td' },
       }),
       TextAlign.configure({
         types: ['heading', 'paragraph'],

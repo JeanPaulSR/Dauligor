@@ -89,7 +89,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
             </Button>
             <Button 
               onClick={resetFirestore}
-              className="bg-gold hover:bg-gold/90 text-white gap-2"
+              className="btn-gold-solid gap-2"
             >
               <RefreshCw className="w-4 h-4" /> Clear Cache & Hard Reset
             </Button>
@@ -130,7 +130,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
               </Button>
               
               <Link to="/sources/new">
-                <Button className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
+                <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/20">
                   <Plus className="w-4 h-4" /> New Source
                 </Button>
               </Link>

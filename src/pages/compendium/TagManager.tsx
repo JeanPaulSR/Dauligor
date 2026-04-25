@@ -206,7 +206,7 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search tags..."
-              className="pl-9 h-9 w-64 bg-card/50 border-gold/20 focus:border-gold"
+              className="pl-9 field-input w-64 focus:border-gold"
             />
           </div>
         </div>
@@ -277,7 +277,7 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
                         }
                       }}
                     />
-                    <Button type="button" size="sm" onClick={handleAddClassification} className="bg-gold hover:bg-gold/90 text-white h-8">Add</Button>
+                    <Button type="button" size="sm" onClick={handleAddClassification} className="btn-gold-solid h-8">Add</Button>
                   </div>
                 </div>
               </div>
@@ -298,7 +298,7 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
                     Cancel
                   </Button>
                 )}
-                <Button type="submit" className="flex-1 bg-gold hover:bg-gold/90 text-white shadow-md shadow-gold/20">
+                <Button type="submit" className="flex-1 btn-gold-solid shadow-md shadow-gold/20">
                   {editingGroup ? 'Apply Changes' : 'Save Group'}
                 </Button>
               </div>

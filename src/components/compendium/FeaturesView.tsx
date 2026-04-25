@@ -79,21 +79,18 @@ export default function FeaturesView({
   }, [selectedId, items, onSelect]);
 
   return (
-    <div className={cn(
-      "flex border border-gold/20 bg-background/20 rounded-sm overflow-hidden",
-      className
-    )} style={{ minHeight: maxHeight }}>
+    <div className={cn("browser-panel", className)} style={{ minHeight: maxHeight }}>
       {/* Sidebar: Feature Names */}
-      <div className="w-[200px] border-r border-gold/20 bg-gold/5 flex flex-col shrink-0">
+      <div className="w-[200px] browser-sidebar">
         <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gold/20" style={{ maxHeight }}>
           {items.map(item => (
             <button
               key={item.id}
               onClick={() => onSelect(item.id)}
               className={cn(
-                "w-full text-left p-3 text-xs transition-all border-b border-gold/5 hover:bg-gold/10",
-                effectiveSelectedId === item.id 
-                  ? 'bg-gold/20 border-r-4 border-r-gold text-gold font-bold shadow-inner' 
+                "browser-row",
+                effectiveSelectedId === item.id
+                  ? 'bg-gold/20 border-r-4 border-r-gold text-gold font-bold shadow-inner'
                   : 'text-ink/70'
               )}
             >
@@ -107,7 +104,7 @@ export default function FeaturesView({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 p-6 bg-background/10 overflow-y-auto" style={{ maxHeight }}>
+      <div className="browser-content" style={{ maxHeight }}>
         {selectedItem ? (
           <div className="space-y-6 animate-in fade-in duration-300">
             <div className="flex items-baseline justify-between border-b border-gold/10 pb-4">

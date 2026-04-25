@@ -275,7 +275,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
             <Button 
               type="submit" 
               disabled={saving}
-              className="w-full bg-gold hover:bg-gold/90 text-white gap-2 py-6 text-lg shadow-xl shadow-gold/20"
+              className="w-full btn-gold-solid gap-2 py-6 text-lg shadow-xl shadow-gold/20"
             >
               <Save className="w-5 h-5" /> {saving ? 'Saving...' : 'Save Source'}
             </Button>

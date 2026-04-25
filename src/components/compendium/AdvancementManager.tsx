@@ -517,9 +517,9 @@ export default function AdvancementManager({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+      <div className="section-header">
         <h3 className="label-text text-gold">Advancements</h3>
-        <Button size="sm" onClick={handleAdd} className="h-7 text-[10px] uppercase font-black tracking-widest gap-2 bg-gold/10 text-gold hover:bg-gold/20 border border-gold/20">
+        <Button size="sm" onClick={handleAdd} className="h-7 gap-2 btn-gold">
           <Plus className="w-3.5 h-3.5" /> Add Row
         </Button>
       </div>
@@ -570,14 +570,14 @@ export default function AdvancementManager({
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button variant="ghost" size="sm" onClick={() => handleEdit(idx)} className="h-7 w-7 p-0 text-gold hover:bg-gold/10"><Edit2 className="w-3.5 h-3.5" /></Button>
               {!adv.isBase && (
-                <Button variant="ghost" size="sm" onClick={() => handleDelete(idx)} className="h-7 w-7 p-0 text-blood hover:bg-blood/10"><Trash2 className="w-3.5 h-3.5" /></Button>
+                <Button variant="ghost" size="sm" onClick={() => handleDelete(idx)} className="h-7 w-7 p-0 btn-danger"><Trash2 className="w-3.5 h-3.5" /></Button>
               )}
             </div>
           </div>
         ))}
 
         {advancements.length === 0 && (
-          <div className="py-12 border border-dashed border-gold/20 rounded-xl flex flex-col items-center justify-center text-center bg-gold/5">
+          <div className="empty-state">
             <Zap className="w-8 h-8 text-gold/20 mb-3" />
             <p className="text-ink/40 font-serif italic text-sm">No advancements defined yet.</p>
             <p className="text-[9px] uppercase font-black text-gold/40 mt-1 tracking-widest">Own the progression path for this class</p>
@@ -586,20 +586,20 @@ export default function AdvancementManager({
       </div>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="w-[95vw] max-w-[95vw] sm:max-w-[95vw] lg:max-w-5xl bg-card border-gold/20 p-0 overflow-hidden h-[85vh] flex flex-col">
-          <DialogHeader className="px-6 py-4 bg-ink border-b border-gold/10">
-            <DialogTitle className="text-xl font-serif font-black uppercase tracking-tight text-gold flex items-center gap-3">
+        <DialogContent className="dialog-content w-[95vw] max-w-[95vw] sm:max-w-[95vw] lg:max-w-5xl h-[85vh] flex flex-col">
+          <DialogHeader className="dialog-header">
+            <DialogTitle className="dialog-title flex items-center gap-3">
               {editingIndex !== null ? 'Configure Advancement' : 'New Advancement'}
               {editingAdv.isBase && <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded border border-gold/20 tracking-widest">Base</span>}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 min-h-0 p-6 space-y-4 overflow-y-auto">
+          <div className="flex-1 min-h-0 dialog-body">
 
             {/* Row 1: Type (wide) + Level */}
             <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)] gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-black text-ink/60">Advancement Type</label>
+                <label className="field-label">Advancement Type</label>
                 <Select
                   value={editingAdv.type}
                   onValueChange={(val: AdvancementType | null) => {
@@ -628,7 +628,7 @@ export default function AdvancementManager({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-black text-ink/60">Gained at Level</label>
+                <label className="field-label">Gained at Level</label>
                 <Input
                   type="number"
                   min="1"
@@ -644,7 +644,7 @@ export default function AdvancementManager({
             {/* Row 2: Title + Attached Feature */}
             <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)] gap-4">
               <div className={`space-y-1.5 ${isInsideFeature ? 'md:col-span-2' : ''}`}>
-                <label className="text-[10px] uppercase font-black text-ink/60">Title</label>
+                <label className="field-label">Title</label>
                 <Input
                   value={editingAdv.title || ''}
                   onChange={e => setEditingAdv({...editingAdv, title: e.target.value})}
@@ -654,7 +654,7 @@ export default function AdvancementManager({
               </div>
               {!isInsideFeature && (
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase font-black text-ink/60">Attached to Feature</label>
+                  <label className="field-label">Attached to Feature</label>
                   <Select
                     value={(editingAdv.featureId ?? undefined) || 'none'}
                     onValueChange={(val) => {
@@ -709,7 +709,7 @@ export default function AdvancementManager({
 
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-ink/60">Item Type</label>
+                        <label className="field-label">Item Type</label>
                         <Select
                           value={editingAdv.configuration?.choiceType || 'feature'}
                           onValueChange={val => setEditingAdv({
@@ -739,7 +739,7 @@ export default function AdvancementManager({
                         </Select>
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-ink/60">
+                        <label className="field-label">
                           {editingAdv.configuration?.choiceType === 'option-group' ? 'Target Option Group' : 'Grant Source'}
                         </label>
                         {editingAdv.configuration?.choiceType === 'option-group' ? (
@@ -966,7 +966,7 @@ export default function AdvancementManager({
                   <div className="space-y-4">
                     <div className="grid xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.9fr)] gap-4 items-start">
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-ink/60">Number of Choices</label>
+                        <label className="field-label">Number of Choices</label>
                         <Select
                           value={choiceCountMode}
                           onValueChange={val => {
@@ -1019,7 +1019,7 @@ export default function AdvancementManager({
                         )}
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-ink/60">Item Type</label>
+                        <label className="field-label">Item Type</label>
                         <Select
                           value={editingAdv.configuration?.choiceType || 'feature'}
                           onValueChange={val => setEditingAdv({
@@ -1271,10 +1271,10 @@ export default function AdvancementManager({
               {/* ── HitPoints ── */}
               {editingAdv.type === 'HitPoints' && (
                 <div className="grid xl:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)] gap-5 items-start">
-                  <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4 space-y-3 bg-background/20">
-                    <legend className="text-[9px] uppercase font-black text-gold/60 tracking-widest px-1">Hit Point Details</legend>
+                  <fieldset className="config-fieldset bg-background/20">
+                    <legend className="section-label text-gold/60 px-1">Hit Point Details</legend>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase font-black text-ink/60">Hit Die</label>
+                      <label className="field-label">Hit Die</label>
                       <Select
                         value={String(editingAdv.configuration?.hitDie || resolvedDefaultHitDie)}
                         onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, hitDie: parseInt(val ?? String(resolvedDefaultHitDie)) }})}
@@ -1347,7 +1347,7 @@ export default function AdvancementManager({
               {editingAdv.type === 'ScaleValue' && (
                 <div className="grid xl:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)] gap-5 items-start">
                   <div className="space-y-1.5 max-w-xs">
-                    <label className="text-[10px] uppercase font-black text-ink/60">Class Scaling Column</label>
+                    <label className="field-label">Class Scaling Column</label>
                     <Select
                       value={editingAdv.configuration?.scalingColumnId || ''}
                       onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, scalingColumnId: val }})}
@@ -1407,8 +1407,8 @@ export default function AdvancementManager({
               {/* ── Size ── */}
               {editingAdv.type === 'Size' && (
                 <div className="grid xl:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)] gap-5 items-start">
-                  <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4 space-y-3 bg-background/20">
-                    <legend className="text-[9px] uppercase font-black text-gold/60 tracking-widest px-1">Allowed Sizes</legend>
+                  <fieldset className="config-fieldset bg-background/20">
+                    <legend className="section-label text-gold/60 px-1">Allowed Sizes</legend>
                     <div className="grid sm:grid-cols-2 gap-2">
                       {Object.entries(SIZE_LABELS).map(([sizeId, label]) => {
                         const isSelected = selectedSizeIds.includes(sizeId);
@@ -1465,10 +1465,10 @@ export default function AdvancementManager({
                   <div className="space-y-3">
 
                     {/* Details */}
-                    <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4 space-y-3">
-                      <legend className="text-[9px] uppercase font-black text-gold/60 tracking-widest px-1">Trait Details</legend>
+                    <fieldset className="config-fieldset">
+                      <legend className="section-label text-gold/60 px-1">Trait Details</legend>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-ink/60">Mode</label>
+                        <label className="field-label">Mode</label>
                         {TRAIT_MODE_ENABLED_TYPES.has(traitType) ? (
                           <Select
                             value={editingAdv.configuration?.mode || 'default'}
@@ -1511,8 +1511,8 @@ export default function AdvancementManager({
                     </fieldset>
 
                     {/* Guaranteed */}
-                    <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4 space-y-2 bg-background/25">
-                      <legend className="text-[9px] uppercase font-black text-gold/60 tracking-widest px-1">Guaranteed</legend>
+                    <fieldset className="config-fieldset space-y-2 bg-background/25">
+                      <legend className="section-label text-gold/60 px-1">Guaranteed</legend>
                       <p className="text-[9px] text-ink/40 italic">The following traits will be granted to the character as long as they don't already possess that trait.</p>
                       <div className="space-y-1 min-h-[1.5rem]">
                         {(editingAdv.configuration?.fixed || []).length === 0 ? (
@@ -1532,8 +1532,8 @@ export default function AdvancementManager({
                     </fieldset>
 
                     {/* Choices */}
-                    <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4 space-y-2 bg-background/25">
-                      <legend className="text-[9px] uppercase font-black text-sky-500/60 tracking-widest px-1">Choices</legend>
+                    <fieldset className="config-fieldset space-y-2 bg-background/25">
+                      <legend className="section-label text-sky-500/60 px-1">Choices</legend>
                       <p className="text-[9px] text-ink/40 italic">The following traits will be presented as a choice to the player.</p>
                       <div className="space-y-1 min-h-[1.5rem] mb-2">
                         {(editingAdv.configuration?.options || []).length === 0 ? (
@@ -1552,7 +1552,7 @@ export default function AdvancementManager({
                       </div>
                       <div className="pt-2 border-t border-gold/10 space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <label className="text-[10px] uppercase font-black text-ink/60">Number to Choose</label>
+                          <label className="field-label">Number to Choose</label>
                           <button
                             onClick={() => {
                               const config = { ...editingAdv.configuration };
@@ -1594,10 +1594,10 @@ export default function AdvancementManager({
                   </div>
 
                   {/* Right column: Trait Pool */}
-                  <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4 space-y-3 bg-background/25">
-                    <legend className="text-[9px] uppercase font-black text-gold/60 tracking-widest px-1">Traits</legend>
+                  <fieldset className="config-fieldset bg-background/25">
+                    <legend className="section-label text-gold/60 px-1">Traits</legend>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] uppercase font-black text-ink/60">Trait Type</label>
+                      <label className="field-label">Trait Type</label>
                       <Select
                         value={editingAdv.configuration?.type || 'skills'}
                         onValueChange={val => setEditingAdv({
@@ -1633,7 +1633,7 @@ export default function AdvancementManager({
                     <div className="border border-gold/10 rounded-md overflow-hidden">
                       <div className="grid grid-cols-[1fr_5rem_5rem] bg-gold/5 border-b border-gold/10 px-3 py-2">
                         <span className="text-[9px] uppercase font-black text-ink/40 tracking-widest">Trait</span>
-                        <span className="text-[9px] uppercase font-black text-gold/60 tracking-widest text-center">Guaranteed</span>
+                        <span className="section-label text-gold/60 text-center">Guaranteed</span>
                         <span className="text-[9px] uppercase font-black text-sky-500/60 tracking-widest text-center">Choice Pool</span>
                       </div>
                       <div className="divide-y divide-gold/5 max-h-96 overflow-y-auto">
@@ -1774,9 +1774,9 @@ export default function AdvancementManager({
                 <div className="grid xl:grid-cols-[260px_minmax(0,1fr)] gap-4 items-start">
                   <div className="space-y-3">
                     <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-3 space-y-3">
-                      <legend className="text-[9px] uppercase font-black text-gold/60 tracking-widest px-1">Improvement Details</legend>
+                      <legend className="section-label text-gold/60 px-1">Improvement Details</legend>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-ink/60">Point Cap</label>
+                        <label className="field-label">Point Cap</label>
                         <Input type="number" min="0"
                           value={editingAdv.configuration?.cap ?? 2}
                           onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, cap: parseInt(e.target.value) || 0 }})}
@@ -1784,7 +1784,7 @@ export default function AdvancementManager({
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black text-ink/60">Maximum</label>
+                        <label className="field-label">Maximum</label>
                         <Input type="number" min="0"
                           value={editingAdv.configuration?.max ?? ''}
                           onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, max: e.target.value === '' ? '' : (parseInt(e.target.value) || 0) }})}
@@ -1866,9 +1866,9 @@ export default function AdvancementManager({
             </div>
           </div>
 
-          <DialogFooter className="p-4 bg-background border-t border-gold/10">
+          <DialogFooter className="dialog-footer">
             <Button variant="ghost" onClick={() => setIsModalOpen(false)} className="label-text opacity-70">Cancel</Button>
-            <Button onClick={handleSave} className="bg-gold text-white hover:bg-gold/90 font-black uppercase tracking-widest px-8 label-text">
+            <Button onClick={handleSave} className="btn-gold-solid px-8 label-text">
               Save Advancement
             </Button>
           </DialogFooter>

@@ -104,7 +104,7 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center justify-between border-b border-gold/10 pb-4">
+      <div className="section-header">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" /> Back
@@ -113,7 +113,7 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
             {id ? `Edit ${name || 'Scaling'}` : 'New Scaling Column'}
           </h1>
         </div>
-        <Button onClick={handleSave} disabled={loading} size="sm" className="bg-gold hover:bg-gold/90 text-white gap-2">
+        <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
           <Save className="w-4 h-4" /> Save Scaling
         </Button>
       </div>
@@ -132,7 +132,7 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-gold/10 pb-2">
+          <div className="section-header">
             <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Level Progression</label>
             <span className="text-[9px] text-ink/30 italic uppercase">Values persist until the next defined level</span>
           </div>
@@ -170,7 +170,7 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
           <Button 
             variant="ghost" 
             size="sm"
-            className="w-full text-blood hover:bg-blood/10 border border-blood/20 gap-2 text-[10px] uppercase"
+            className="w-full btn-danger border border-blood/20 gap-2 text-[10px] uppercase"
             onClick={async () => {
               if (confirm('Delete this scaling column?')) {
                 try {

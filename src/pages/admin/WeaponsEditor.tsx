@@ -332,7 +332,7 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                   {editingWeapon && (
                     <Button type="button" variant="ghost" size="sm" onClick={resetForm}>Cancel</Button>
                   )}
-                  <Button type="submit" size="sm" className="bg-gold hover:bg-gold/90 text-white">
+                  <Button type="submit" size="sm" className="btn-gold-solid">
                     {editingWeapon ? 'Update Weapon' : 'Create Weapon'}
                   </Button>
                 </div>

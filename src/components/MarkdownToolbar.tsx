@@ -178,7 +178,7 @@ export default function MarkdownToolbar({
         <div className="flex flex-wrap items-center gap-0.5">
           {label && (
             <div className="px-2 py-1 mr-1 border-r border-gold/10 flex items-center">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gold whitespace-nowrap">{label}</span>
+              <span className="label-text whitespace-nowrap">{label}</span>
             </div>
           )}
           <div className="flex items-center gap-0.5 mr-2 pr-2 border-r border-gold/10">
@@ -225,7 +225,7 @@ export default function MarkdownToolbar({
               type="button"
               variant="ghost"
               size="sm"
-              className={`h-7 px-2 text-[10px] font-bold uppercase tracking-widest gap-1.5 transition-colors ${isWYSIWYG ? 'text-gold bg-gold/10' : 'text-gold/60 hover:text-gold'}`}
+              className={`h-7 px-2 label-text gap-1.5 transition-colors ${isWYSIWYG ? 'text-gold bg-gold/10' : 'text-gold/60 hover:text-gold'}`}
               onClick={onToggleWYSIWYG}
               title={isWYSIWYG ? "Switch to BBCode Source" : "Switch to Visual Editor"}
             >
@@ -238,7 +238,7 @@ export default function MarkdownToolbar({
       {/* Table tools sub-toolbar */}
       {isWYSIWYG && editor?.isActive('table') && (
         <div className="flex flex-wrap items-center gap-1 p-1 px-2 border-t border-gold/10 bg-gold/5 text-xs">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-gold/60 mr-2">Table</span>
+          <span className="label-text text-gold/60 mr-2">Table</span>
           <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnBefore().run()}>+ Col Before</Button>
           <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().addColumnAfter().run()}>+ Col After</Button>
           <Button type="button" variant="ghost" size="sm" className="h-6 px-2 py-0 text-gold/60 hover:text-gold hover:bg-gold/10" onClick={() => editor.chain().focus().deleteColumn().run()}>- Delete Col</Button>
