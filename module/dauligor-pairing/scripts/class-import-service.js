@@ -519,7 +519,7 @@ export function buildClassImportWorkflow(payload, {
     minimumLevel: Math.max(existingClassLevel, 1),
     targetLevel: normalizedTargetLevel
   });
-  const spellcastingRows = buildSpellcastingProgressionRows(supportedPayload, semanticClassData);
+  const spellcastingRows = buildCurrentSpellcastingProgressionRows(supportedPayload, semanticClassData);
 
   log("Class import workflow skill trace", {
     entrySourceId: entry?.sourceId ?? null,
@@ -825,8 +825,7 @@ function buildClassLevelRows({
 }
 
 function buildSpellcastingProgressionRows(payload, classData) {
-  const spellcastingId = classData?.spellcastingId ?? classData?.spellcasting?.progressionId ?? null;
-  const levels = payload?.spellcastingScalings?.[spellcastingId]?.levels ?? null;
+  const levels = getSpellsKnownScalingLevels(payload, classData);
   if (!levels || typeof levels !== "object") return [];
 
   return Object.entries(levels)
@@ -847,6 +846,56 @@ function buildSpellcastingProgressionRows(payload, classData) {
     })
     .filter(Boolean)
     .sort((left, right) => left.level - right.level);
+}
+
+function buildCurrentSpellcastingProgressionRows(payload, classData) {
+  const knownLevels = getSpellsKnownScalingLevels(payload, classData);
+  const alternativeLevels = getAlternativeSpellcastingLevels(payload, classData);
+  const levelSet = new Set([
+    ...Object.keys(knownLevels),
+    ...Object.keys(alternativeLevels)
+  ]);
+  if (!levelSet.size) return [];
+
+  return [...levelSet]
+    .map((level) => Number(level))
+    .filter((level) => Number.isFinite(level) && level > 0)
+    .sort((left, right) => left - right)
+    .map((level) => {
+      const knownData = knownLevels[String(level)] ?? {};
+      const alternativeData = alternativeLevels[String(level)] ?? {};
+      const slotCount = Number(alternativeData?.slotCount ?? 0) || 0;
+      const slotLevel = Number(alternativeData?.slotLevel ?? 0) || 0;
+
+      return {
+        level,
+        cantrips: knownData?.cantrips ?? "-",
+        spells: knownData?.spellsKnown ?? "-",
+        slots: slotCount > 0 && slotLevel > 0 ? `${slotLevel}:${slotCount}` : "-"
+      };
+    });
+}
+
+function getSpellsKnownScalingLevels(payload, classData) {
+  const sourceId = trimString(
+    classData?.spellcasting?.spellsKnownSourceId
+    ?? classData?.spellsKnownSourceId
+  );
+  const levels = sourceId
+    ? payload?.spellsKnownScalings?.[sourceId]?.levels
+    : null;
+  return levels && typeof levels === "object" ? levels : {};
+}
+
+function getAlternativeSpellcastingLevels(payload, classData) {
+  const sourceId = trimString(
+    classData?.spellcasting?.altProgressionSourceId
+    ?? classData?.altProgressionSourceId
+  );
+  const levels = sourceId
+    ? payload?.alternativeSpellcastingScalings?.[sourceId]?.levels
+    : null;
+  return levels && typeof levels === "object" ? levels : {};
 }
 
 function isSemanticClassExport(payload) {
@@ -985,6 +1034,8 @@ function createSemanticClassItem(context) {
   if (!uniqueOptionGroups.length) {
     delete item.flags[MODULE_ID].optionGroups;
   }
+  const spellcastingMeta = normalizeSpellcastingModuleFlags(classData.spellcasting);
+  if (spellcastingMeta) item.flags[MODULE_ID].spellcasting = spellcastingMeta;
 
   return item;
 }
@@ -1003,7 +1054,7 @@ function createSemanticSubclassItem(subclass, context) {
     id: trimString(subclass?.id) || subclassSourceId
   };
 
-  return {
+  const item = {
     name: trimString(subclass.name) || "Subclass",
     type: "subclass",
     img: normalizeImagePath(subclass.imageUrl, DEFAULT_SUBCLASS_ICON),
@@ -1030,6 +1081,9 @@ function createSemanticSubclassItem(subclass, context) {
         : buildSemanticSubclassAdvancement(subclass, context)
     }
   };
+  const spellcastingMeta = normalizeSpellcastingModuleFlags(subclass?.spellcasting);
+  if (spellcastingMeta) item.flags[MODULE_ID].spellcasting = spellcastingMeta;
+  return item;
 }
 
 function createSemanticFeatureItem(feature, context, { sourceType = "classFeature" } = {}) {
@@ -1778,7 +1832,7 @@ function normalizeSemanticConsumption(consumption) {
       allowed: consumption?.scaling?.allowed ?? false,
       max: normalizeOptionalString(consumption?.scaling?.max)
     },
-    spellSlot: consumption?.spellSlot ?? false,
+    spellSlot: consumption?.spellSlot ?? true,
     targets: ensureArray(consumption?.targets).map((target) => ({
       type: trimString(target?.type),
       value: normalizeOptionalString(target?.value),
@@ -1843,7 +1897,7 @@ function normalizeSemanticTarget(target) {
       special: trimString(target?.affects?.special)
     },
     override: target?.override ?? false,
-    prompt: target?.prompt ?? false
+    prompt: target?.prompt ?? true
   };
 }
 
@@ -2197,9 +2251,9 @@ function buildScaleValueAdvancements(context) {
   const advancements = [];
   const classSourceId = context.classSourceId ?? buildSemanticSourceId("class", context.classData);
 
-  const spellcastingLevels = context.payload?.spellcastingScalings?.[context.classData?.spellcastingId]?.levels ?? null;
-  if (spellcastingLevels && typeof spellcastingLevels === "object") {
-    const cantripValues = extractSpellcastingScaleValues(spellcastingLevels, "cantrips");
+  const spellsKnownLevels = getSpellsKnownScalingLevels(context.payload, context.classData);
+  if (spellsKnownLevels && typeof spellsKnownLevels === "object" && Object.keys(spellsKnownLevels).length) {
+    const cantripValues = extractSpellcastingScaleValues(spellsKnownLevels, "cantrips");
     if (Object.keys(cantripValues).length) {
       advancements.push(createScaleValueAdvancement({
         ownerSourceId: classSourceId,
@@ -2210,7 +2264,7 @@ function buildScaleValueAdvancements(context) {
       }));
     }
 
-    const spellValues = extractSpellcastingScaleValues(spellcastingLevels, "spells");
+    const spellValues = extractSpellcastingScaleValues(spellsKnownLevels, "spellsKnown");
     if (Object.keys(spellValues).length) {
       advancements.push(createScaleValueAdvancement({
         ownerSourceId: classSourceId,
@@ -3830,6 +3884,32 @@ function buildFoundrySpellcastingData(spellcasting) {
       mode: normalizeSpellPreparationMode(spellcasting?.type)
     }
   };
+}
+
+function normalizeSpellcastingModuleFlags(spellcasting) {
+  if (!spellcasting || typeof spellcasting !== "object") return null;
+
+  const metadata = {};
+  if (spellcasting.isRitualCaster != null) {
+    metadata.isRitualCaster = Boolean(spellcasting.isRitualCaster);
+  }
+
+  const progressionTypeSourceId = trimString(spellcasting.progressionTypeSourceId);
+  if (progressionTypeSourceId) metadata.progressionTypeSourceId = progressionTypeSourceId;
+
+  const progressionTypeIdentifier = trimString(spellcasting.progressionTypeIdentifier);
+  if (progressionTypeIdentifier) metadata.progressionTypeIdentifier = progressionTypeIdentifier;
+
+  const progressionFormula = trimString(spellcasting.progressionFormula);
+  if (progressionFormula) metadata.progressionFormula = progressionFormula;
+
+  const spellsKnownSourceId = trimString(spellcasting.spellsKnownSourceId);
+  if (spellsKnownSourceId) metadata.spellsKnownSourceId = spellsKnownSourceId;
+
+  const altProgressionSourceId = trimString(spellcasting.altProgressionSourceId);
+  if (altProgressionSourceId) metadata.altProgressionSourceId = altProgressionSourceId;
+
+  return Object.keys(metadata).length ? metadata : null;
 }
 
 function normalizeSpellPreparationMode(type) {

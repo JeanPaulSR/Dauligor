@@ -15,7 +15,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
-import { db } from '../../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { 
@@ -349,6 +349,10 @@ export default function SubclassEditor() {
 
       const featureData: any = {
         ...editingFeature,
+        parentId: id,
+        parentType: 'subclass',
+        level: Number(editingFeature.level || editingFeature.configuration?.requiredLevel || 1),
+        name: String(editingFeature.name || '').trim(),
         quantityColumnId: editingFeature.quantityColumnId || '',
         scalingColumnId: editingFeature.scalingColumnId || '',
         automation: {
@@ -365,7 +369,10 @@ export default function SubclassEditor() {
       delete featureData.activities;
 
       if (editingFeature.id) {
-        await updateDoc(doc(db, 'features', editingFeature.id), featureData);
+        await setDoc(doc(db, 'features', editingFeature.id), {
+          ...featureData,
+          createdAt: editingFeature.createdAt || serverTimestamp()
+        }, { merge: true });
         toast.success("Feature updated");
       } else {
         const newRef = doc(collection(db, 'features'));
@@ -379,7 +386,9 @@ export default function SubclassEditor() {
       }
       setIsFeatureModalOpen(false);
     } catch (error) {
+      console.error("Error saving subclass feature:", error);
       toast.error("Failed to save feature");
+      handleFirestoreError(error, editingFeature?.id ? OperationType.UPDATE : OperationType.CREATE, `features/${editingFeature?.id || '(new)'}`);
     }
   };
 

@@ -210,6 +210,42 @@ service cloud.firestore {
              data.sourceId is string;
     }
 
+    function isValidFeat(data) {
+      return data.keys().hasAll(['name', 'sourceId']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.sourceId is string &&
+             (!('identifier' in data) || data.identifier is string) &&
+             (!('description' in data) || data.description is string) &&
+             (!('imageUrl' in data) || data.imageUrl is string) &&
+             (!('featType' in data) || data.featType is string) &&
+             (!('requirements' in data) || data.requirements is string) &&
+             (!('sourceType' in data) || data.sourceType is string) &&
+             (!('repeatable' in data) || data.repeatable is bool) &&
+             (!('automation' in data) || data.automation is map) &&
+             (!('uses' in data) || data.uses is map);
+    }
+
+    function isValidItemRecord(data) {
+      return data.keys().hasAll(['name', 'sourceId', 'type']) &&
+             data.name is string && data.name.size() < 200 &&
+             data.sourceId is string &&
+             data.type is string &&
+             (!('identifier' in data) || data.identifier is string) &&
+             (!('description' in data) || data.description is string) &&
+             (!('imageUrl' in data) || data.imageUrl is string) &&
+             (!('itemType' in data) || data.itemType is string) &&
+             (!('rarity' in data) || data.rarity is string) &&
+             (!('quantity' in data) || data.quantity is number) &&
+             (!('weight' in data) || data.weight is string) &&
+             (!('priceValue' in data) || data.priceValue is string) &&
+             (!('priceDenomination' in data) || data.priceDenomination is string) &&
+             (!('attunement' in data) || data.attunement is bool) &&
+             (!('equipped' in data) || data.equipped is bool) &&
+             (!('identified' in data) || data.identified is bool) &&
+             (!('magical' in data) || data.magical is bool) &&
+             (!('automation' in data) || data.automation is map);
+    }
+
     function isValidUniqueOption(data) {
       return data.keys().hasAll(['name', 'uniqueType', 'classId', 'sourceId']) &&
              data.name is string && data.name.size() < 200 &&
@@ -443,6 +479,18 @@ service cloud.firestore {
     match /spells/{spellId} {
       allow read: if true;
       allow create, update: if isAdmin() && isValidSpell(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /feats/{featId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidFeat(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /items/{itemId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidItemRecord(request.resource.data);
       allow delete: if isAdmin();
     }
 

@@ -42,9 +42,10 @@ import {
 } from "../../components/ui/dialog";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { FilterBar } from '../../components/compendium/FilterBar';
-import { 
+import {
   importClassSemantic
 } from '../../lib/classExport';
+import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { toast } from 'sonner';
 
 export function ClassList({ 
@@ -280,7 +281,7 @@ export function ClassList({
         
         if (includedInGroup.length === 0 && excludedInGroup.length === 0) return null;
 
-        const classTagsInGroup = classTagIds.filter(tid => groupTags.some(gt => gt.id === tid));
+        const classTagsInGroup = classTagIds.filter((tid: string) => groupTags.some(gt => gt.id === tid));
 
         // Inclusion check
         let inclusionMatch = true;
@@ -408,7 +409,12 @@ export function ClassList({
       // We'll use a promise-based approach for non-snapshot data to coordinate loading
       const loadingPromises: Promise<any>[] = [];
 
-      if (selectedClass.spellcasting) {
+      // Always reset first so stale data from the previous class never bleeds through
+      setPreviewSpellcasting(null);
+      setPreviewAltSpellcasting(null);
+      setPreviewSpellsKnown(null);
+
+      if (selectedClass.spellcasting?.hasSpellcasting) {
         const sc = selectedClass.spellcasting;
         if (sc.manualProgressionId) {
           loadingPromises.push(getDoc(doc(db, 'spellcastingScalings', sc.manualProgressionId)).then(s => setPreviewSpellcasting(s.exists() ? s.data() : null)));
@@ -430,10 +436,6 @@ export function ClassList({
         if (sc.spellsKnownId) {
           loadingPromises.push(getDoc(doc(db, 'spellsKnownScalings', sc.spellsKnownId)).then(s => setPreviewSpellsKnown(s.exists() ? s.data() : null)));
         }
-      } else {
-        setPreviewSpellcasting(null);
-        setPreviewAltSpellcasting(null);
-        setPreviewSpellsKnown(null);
       }
 
       const unsubFeatures = onSnapshot(featuresQ, (snap) => {
@@ -665,7 +667,14 @@ export function ClassList({
               className="group relative aspect-[4/3] sm:aspect-square md:aspect-[4/5] bg-card border border-gold/20 hover:border-gold hover:shadow-lg hover:shadow-gold/10 hover:-translate-y-1 transition-all overflow-hidden cursor-pointer flex flex-col rounded-xl"
             >
               {cls.imageUrl ? (
-                <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: `url(${cls.imageUrl})` }} />
+                <img
+                  src={cls.cardImageUrl || cls.imageUrl}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                  style={ClassImageStyle({ display: cls.cardDisplay || cls.imageDisplay || DEFAULT_DISPLAY })}
+                  referrerPolicy="no-referrer"
+                  draggable={false}
+                  alt=""
+                />
               ) : (
                 <div className="absolute inset-0 bg-ink/5 flex items-center justify-center">
                   <Shield className="w-16 h-16 text-gold/10" />
@@ -674,17 +683,23 @@ export function ClassList({
               <div className={`absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none transition-opacity ${cls.imageUrl ? 'opacity-80 group-hover:opacity-100' : 'opacity-20 group-hover:opacity-30'}`} />
               
               <div className="relative z-10 p-4 pt-6 text-center">
-                <h3 className="h3-title text-gold group-hover:text-white transition-colors block drop-shadow-md text-2xl group-hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]">
+                <h3
+                  className="h3-title text-gold group-hover:text-white transition-colors block text-3xl group-hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]"
+                  style={{ textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000' }}
+                >
                   {cls.name}
                 </h3>
-                <p className="label-text text-gold/80 block drop-shadow-sm mt-1">
-                  {sources[cls.sourceId]?.name || 'Unknown Source'}
+                <p
+                  className="label-text text-gold/80 block mt-1 text-sm"
+                  style={{ textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000' }}
+                >
+                  {sources[cls.sourceId]?.abbreviation || sources[cls.sourceId]?.name || 'Unknown'}
                 </p>
               </div>
 
               <div className="mt-auto relative z-10 p-4 border-t border-gold/20 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center group-hover:bg-black/30 group-hover:-translate-y-2 transition-all duration-300">
                 <div className="text-white/80 text-xs italic line-clamp-4 overflow-hidden w-full font-serif leading-relaxed">
-                  <Markdown>{cls.description || "No preview description available."}</Markdown>
+                  <Markdown>{cls.preview || cls.description || "No preview description available."}</Markdown>
                 </div>
               </div>
 
@@ -721,14 +736,29 @@ export function ClassList({
 
       {/* Class Preview Dialog */}
       <Dialog open={!!selectedClass} onOpenChange={(open) => !open && setSelectedClass(null)}>
-        <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[90vh] bg-card border-gold p-0 flex flex-col shadow-2xl shadow-gold/20">
+        <DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[90vh] bg-card border-gold p-0 flex flex-col shadow-2xl shadow-gold/20 overflow-hidden">
           {selectedClass && (
             <>
+              {/* Background image — fills top half of the dialog, mask-fades to transparent */}
+              {selectedClass.imageUrl && (
+                <div className="absolute inset-x-0 top-0 h-1/2 pointer-events-none z-0">
+                  <img
+                    src={selectedClass.previewImageUrl || selectedClass.imageUrl}
+                    className="absolute inset-0 w-full h-full object-cover opacity-30"
+                    style={{
+                      ...ClassImageStyle({ display: selectedClass.previewDisplay || selectedClass.imageDisplay || DEFAULT_DISPLAY }),
+                      maskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
+                      WebkitMaskImage: 'linear-gradient(to bottom, black 40%, transparent 100%)',
+                    }}
+                    referrerPolicy="no-referrer"
+                    draggable={false}
+                    alt=""
+                  />
+                </div>
+              )}
+
               {/* Header */}
-              <div className="relative overflow-hidden bg-black/10 flex-shrink-0">
-                {selectedClass.imageUrl && (
-                  <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${selectedClass.imageUrl})` }} />
-                )}
+              <div className="relative bg-black/10 flex-shrink-0 z-10">
                 <div className="absolute inset-0 bg-gradient-to-t from-background to-background/20 pointer-events-none" />
                 <div className="relative p-6 px-8 flex items-center justify-between z-10">
                   <div>
@@ -762,7 +792,7 @@ export function ClassList({
               </div>
               
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/10">
+              <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/10 relative z-10">
                 <div className="space-y-10">
                   {/* Class Table */}
                   {previewLoading ? (
@@ -888,7 +918,7 @@ export function ClassList({
                       {/* Description Preview */}
                       {selectedClass.description && (
                         <div className="space-y-2">
-                          <h3 className="h3-title text-gold border-b border-gold/10 pb-1 w-full">Description</h3>
+                          <h3 className="h3-title text-gold border-b border-gold/10 pb-1 w-full">Class Description</h3>
                           <BBCodeRenderer content={selectedClass.description} className="body-text" />
                         </div>
                       )}

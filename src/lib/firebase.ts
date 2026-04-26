@@ -31,6 +31,7 @@ import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
+const isLocalhost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
 // Switching to memory cache to resolve persistence-related "Unexpected state" errors 
 // which occur during rapid tab switching in the admin panel. 
@@ -42,8 +43,11 @@ export const db = initializeFirestore(app, {
       cacheSizeBytes: CACHE_SIZE_UNLIMITED
     })
   }),
-  // Force long polling to avoid gRPC stream issues in the preview environment
-  experimentalForceLongPolling: true
+  // Localhost tends to play better with Firestore's default transport selection,
+  // while preview environments still benefit from long polling.
+  ...(isLocalhost
+    ? { experimentalAutoDetectLongPolling: true }
+    : { experimentalForceLongPolling: true })
 }, firebaseConfig.firestoreDatabaseId);
 
 export const auth = getAuth(app);

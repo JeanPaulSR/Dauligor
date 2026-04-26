@@ -14,7 +14,8 @@ The current generalized class normalizer accepts a payload shaped like:
   "subclasses": [],
   "features": [],
   "scalingColumns": [],
-  "spellcastingScalings": {},
+  "spellsKnownScalings": {},
+  "alternativeSpellcastingScalings": {},
   "uniqueOptionGroups": [],
   "uniqueOptionItems": [],
   "source": null,
@@ -157,15 +158,30 @@ These become `ScaleValue` advancements on the normalized Foundry class item.
 
 ### `spellcastingScalings`
 
+Deprecated:
+
+- `spellcastingScalings` is now an older bridge shape and should not be the target for new exports
+
+### `spellsKnownScalings`
+
 The parser currently reads:
 
 - `levels[*].cantrips`
-- `levels[*].spells`
+- `levels[*].spellsKnown`
 
 Those become normalized `ScaleValue` advancements such as:
 
 - `Cantrips Known`
 - `Spells Known`
+
+### `alternativeSpellcastingScalings`
+
+The parser currently reads:
+
+- `levels[*].slotCount`
+- `levels[*].slotLevel`
+
+These currently feed the importer’s spellcasting progression summary and preserve alternative slot progression metadata for module-side handling.
 
 ### `uniqueOptionGroups`
 
@@ -211,9 +227,18 @@ The semantic class parser currently automates:
 - hit point advancement
 - saving throw advancement
 - class scale values
-- spellcasting-derived cantrip/spell known scales
+- spellcasting-derived cantrip/spell known scales from `spellsKnownScalings`
 - class feature grants
 - subclass feature grants on generated subclass items
+
+The parser also preserves semantic spellcasting metadata on imported class or subclass flags, including:
+
+- `isRitualCaster`
+- `progressionTypeSourceId`
+- `progressionTypeIdentifier`
+- `progressionFormula`
+- `spellsKnownSourceId`
+- `altProgressionSourceId`
 
 It does not yet fully automate:
 

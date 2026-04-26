@@ -9,11 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { 
   Sword, 
-  Shield, 
-  BookOpen, 
-  ChevronLeft, 
-  Edit, 
-  Scroll, 
+  Shield,
+  BookOpen,
+  ChevronLeft,
+  ChevronDown,
+  Edit,
+  Scroll,
   Wand2,
   Heart,
   Dna,
@@ -32,10 +33,11 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from '../../components/ui/dropdown-menu';
-import { 
-  exportClassSemantic, 
+import {
+  exportClassSemantic,
   slugify
 } from '../../lib/classExport';
+import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { toast } from 'sonner';
 
 export default function ClassView({ userProfile }: { userProfile: any }) {
@@ -75,6 +77,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedOptionItems, setSelectedOptionItems] = useState<Record<string, string>>({});
+  const [featureFilter, setFeatureFilter] = useState<'all' | 'class' | 'subclass'>('all');
+  const [collapsedFeatures, setCollapsedFeatures] = useState<Record<string, boolean>>({});
 
   const isAdmin = userProfile?.role === 'admin';
 
@@ -690,10 +694,11 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         <div className="flex flex-col md:flex-row gap-8 border-b border-gold/10 pb-8">
           {classData.imageUrl && (
             <div className="w-full md:w-64 h-64 shrink-0 rounded-lg overflow-hidden border border-gold/20 shadow-lg">
-              <img 
-                src={classData.imageUrl} 
-                alt={classData.name} 
+              <img
+                src={classData.imageUrl}
+                alt={classData.name}
                 className="w-full h-full object-cover"
+                style={ClassImageStyle({ display: classData.imageDisplay || DEFAULT_DISPLAY })}
                 referrerPolicy="no-referrer"
               />
             </div>
@@ -728,7 +733,9 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               })}
             </div>
 
-            <BBCodeRenderer content={classData.description} className="max-w-4xl body-text h3-title" />
+            {(classData.preview || classData.description) && (
+              <BBCodeRenderer content={classData.preview || classData.description} className="max-w-4xl body-text h3-title" />
+            )}
           </div>
         </div>
 
@@ -868,197 +875,317 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
         {/* Bottom Section - Split Layout */}
         <div className="grid lg:grid-cols-4 gap-12 pt-8">
-          {/* Features Detail - Left (Large) */}
-          <div className="lg:col-span-3 space-y-12">
-            {selectedSubclass && (
-              <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6 p-6 border border-gold/30 bg-gold/5 rounded-lg relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-2">
-                  <Badge variant="outline" className="border-gold/20 text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
-                    Subclass Active
-                  </Badge>
-                </div>
-                
-                <div className="flex flex-col md:flex-row gap-6">
-                  {selectedSubclass.imageUrl && (
-                    <div className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/20 shadow-md">
-                      <img 
-                        src={selectedSubclass.imageUrl} 
-                        alt={selectedSubclass.name} 
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                  )}
-                  <div className="flex-1 space-y-4">
-                    <h2 className="h2-title text-gold uppercase underline decoration-gold/20 underline-offset-8">
-                      {selectedSubclass.name}
-                    </h2>
-                    <BBCodeRenderer content={selectedSubclass.description} className="text-lg italic leading-relaxed opacity-90 font-sans" />
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* Features / Tabs - Left (Large) */}
+          <div className="lg:col-span-3">
+            <Tabs defaultValue="features">
+              {/* ── Custom chevron tab bar ─────────────────────────── */}
+              <TabsList className="flex w-full bg-transparent rounded-none p-0 h-auto gap-0 mb-8 overflow-visible border-b border-gold/20">
+                {(() => {
+                  const tabs = [
+                    { value: 'features', label: 'Class Features' },
+                    ...(classData.spellcasting?.hasSpellcasting
+                      ? [{ value: 'spells', label: 'Spell List' }]
+                      : []),
+                    { value: 'info', label: 'Class Information' },
+                    { value: 'flavor', label: 'Flavor Suggestions' },
+                  ];
+                  return tabs.map((tab, i) => (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      style={{
+                        clipPath: i === 0
+                          ? 'polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)'
+                          : 'polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)',
+                      }}
+                      className={`
+                        relative flex-none rounded-none border-none h-auto
+                        min-w-[160px] py-3 px-8 text-[10px] font-black uppercase tracking-[0.12em] text-center whitespace-nowrap
+                        transition-colors duration-150
+                        bg-gold/10 text-gold/50 hover:bg-gold/20 hover:text-gold/70
+                        data-active:bg-gold data-active:text-black data-active:z-10
+                        focus-visible:outline-none focus-visible:ring-0
+                        ${i > 0 ? '-ml-3' : ''}
+                      `}
+                    >
+                      {tab.label}
+                    </TabsTrigger>
+                  ));
+                })()}
+              </TabsList>
 
-            <div className="flex items-center gap-4">
-              <h2 className="font-bold uppercase tracking-[0.2em] text-gold shrink-0">Class Features</h2>
-              <div className="h-px bg-gold/10 w-full" />
-            </div>
-            
-            <div className="space-y-10">
-              {allFeaturesWithSpellcasting.map((feature) => {
-                const linkedMappings = (classData.uniqueOptionMappings || []).filter(m => m.featureId === feature.id);
-                
-                return (
-                  <div key={feature.id} className="space-y-3">
-                    <div className="flex items-baseline justify-between border-b border-gold/10 pb-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="h3-title text-gold uppercase">{feature.name}</h3>
+              {/* ── Features Tab ─────────────────────────────────────── */}
+              <TabsContent value="features" className="space-y-8">
+                {selectedSubclass && (
+                  <div className="animate-in fade-in slide-in-from-top-4 duration-500 space-y-6 p-6 border border-gold/30 bg-gold/5 rounded-lg relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2">
+                      <Badge variant="outline" className="border-gold/20 text-gold bg-gold/5 uppercase tracking-widest text-[10px]">
+                        Subclass Active
+                      </Badge>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-6">
+                      {selectedSubclass.imageUrl && (
+                        <div className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/20 shadow-md">
+                          <img
+                            src={selectedSubclass.imageUrl}
+                            alt={selectedSubclass.name}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-4">
+                        <h2 className="h2-title text-gold uppercase underline decoration-gold/20 underline-offset-8">
+                          {selectedSubclass.name}
+                        </h2>
+                        <BBCodeRenderer content={selectedSubclass.description} className="text-lg italic leading-relaxed opacity-90 font-sans" />
                       </div>
-                      <span className="label-text text-ink/40">
-                        Level {feature.level}
-                      </span>
                     </div>
-                    <BBCodeRenderer content={feature.description} />
+                  </div>
+                )}
 
-                    {/* Show linked advancements */}
-                    {(() => {
-                      const allAdvs = [
-                        ...(classData.advancements || []),
-                        ...(selectedSubclass?.advancements || [])
-                      ];
-                      const featureAdvs = allAdvs.filter((a: any) => a.featureId === feature.id && a.type !== 'ScaleValue' && a.type !== 'Trait');
-                      if (featureAdvs.length === 0) return null;
-                      
+                {/* Filter toggle — only when a subclass is active */}
+                {selectedSubclass && (
+                  <div className="flex items-center gap-2">
+                    {(['all', 'class', 'subclass'] as const).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setFeatureFilter(f)}
+                        className={`px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded transition-colors ${
+                          featureFilter === f
+                            ? 'bg-gold/20 text-gold border border-gold/40'
+                            : 'text-ink/40 border border-gold/10 hover:border-gold/30 hover:text-gold/60'
+                        }`}
+                      >
+                        {f === 'all' ? 'All Features' : f === 'class' ? 'Class Only' : 'Subclass Only'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {allFeaturesWithSpellcasting
+                    .filter((feature) => {
+                      if (featureFilter === 'class') return !feature.isFromSubclass;
+                      if (featureFilter === 'subclass') return !!feature.isFromSubclass;
+                      return true;
+                    })
+                    .map((feature) => {
+                      const linkedMappings = (classData.uniqueOptionMappings || []).filter((m: any) => m.featureId === feature.id);
+                      const isCollapsed = collapsedFeatures[feature.id] ?? false;
+                      const isSubclass = !!feature.isFromSubclass;
+
                       return (
-                        <div className="space-y-4 pt-6 border-t border-gold/10">
-                          {featureAdvs.map((adv: any, idx: number) => {
-                            const isExpanded = expandedGroups[adv._id] || false;
-                            const advTitle = adv.title || adv.configuration?.title || adv.type;
-                            const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
-                            const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') && 
-                                               (adv.configuration?.pool?.length > 0 || isOptionGroup);
+                        <div
+                          key={feature.id}
+                          className={`rounded-lg border transition-colors ${
+                            isSubclass
+                              ? 'border-amber-500/30 bg-amber-500/5'
+                              : 'border-gold/10 bg-transparent'
+                          }`}
+                        >
+                          {/* Feature header — always visible, click to collapse */}
+                          <button
+                            type="button"
+                            onClick={() => setCollapsedFeatures(prev => ({ ...prev, [feature.id]: !isCollapsed }))}
+                            className="w-full flex items-baseline justify-between px-4 pt-3 pb-3 text-left group"
+                          >
+                            <div className="flex items-center gap-3">
+                              {isSubclass && (
+                                <span className="text-[8px] font-black uppercase tracking-widest text-amber-400/80 border border-amber-500/30 px-1.5 py-0.5 rounded shrink-0">
+                                  Subclass
+                                </span>
+                              )}
+                              <h3 className="h3-title text-gold uppercase group-hover:text-white transition-colors">{feature.name}</h3>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="label-text text-ink/40">Level {feature.level}</span>
+                              <ChevronDown
+                                className={`w-4 h-4 text-gold/40 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-180'}`}
+                              />
+                            </div>
+                          </button>
 
-                            return (
-                              <div key={idx} className="mt-4 space-y-4">
-                                {hasChoices ? (
-                                  <>
-                                    <button 
-                                      onClick={() => setExpandedGroups(prev => ({ ...prev, [adv._id]: !isExpanded }))}
-                                      className={`flex items-center justify-between group w-full text-left bg-gold/5 hover:bg-gold/10 border border-gold/20 p-3 transition-colors ${isExpanded ? 'rounded-t border-b-0' : 'rounded'}`}
-                                    >
-                                      <div className="flex items-center gap-2 shrink-0">
-                                        <BookOpen className="w-4 h-4 text-gold group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.5)] transition-all" />
-                                        <span className="text-xs font-bold uppercase tracking-widest text-gold group-hover:text-white transition-colors">{advTitle}</span>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                        <span className="text-[9px] font-medium text-gold/50 uppercase">{adv.type}</span>
-                                        <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
-                                          <ChevronLeft className="w-4 h-4 text-gold -rotate-90 group-hover:text-white transition-colors" />
+                          {/* Feature body — collapsible */}
+                          {!isCollapsed && (
+                            <div className="px-4 pb-4 space-y-4">
+                              <BBCodeRenderer content={feature.description} />
+
+                              {/* Linked advancements */}
+                              {(() => {
+                                const allAdvs = [
+                                  ...(classData.advancements || []),
+                                  ...(selectedSubclass?.advancements || [])
+                                ];
+                                const featureAdvs = allAdvs.filter((a: any) => a.featureId === feature.id && a.type !== 'ScaleValue' && a.type !== 'Trait');
+                                if (featureAdvs.length === 0) return null;
+
+                                return (
+                                  <div className="space-y-4 pt-4 border-t border-gold/10">
+                                    {featureAdvs.map((adv: any, idx: number) => {
+                                      const isExpanded = expandedGroups[adv._id] || false;
+                                      const advTitle = adv.title || adv.configuration?.title || adv.type;
+                                      const isOptionGroup = adv.configuration?.choiceType === 'option-group' && adv.configuration?.optionGroupId;
+                                      const hasChoices = (adv.type === 'ItemGrant' || adv.type === 'ItemChoice') &&
+                                                         (adv.configuration?.pool?.length > 0 || isOptionGroup);
+
+                                      return (
+                                        <div key={idx} className="mt-4 space-y-4">
+                                          {hasChoices ? (
+                                            <>
+                                              <button
+                                                onClick={() => setExpandedGroups(prev => ({ ...prev, [adv._id]: !isExpanded }))}
+                                                className={`flex items-center justify-between group w-full text-left bg-gold/5 hover:bg-gold/10 border border-gold/20 p-3 transition-colors ${isExpanded ? 'rounded-t border-b-0' : 'rounded'}`}
+                                              >
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                  <BookOpen className="w-4 h-4 text-gold group-hover:drop-shadow-[0_0_8px_rgba(255,215,0,0.5)] transition-all" />
+                                                  <span className="text-xs font-bold uppercase tracking-widest text-gold group-hover:text-white transition-colors">{advTitle}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                  <span className="text-[9px] font-medium text-gold/50 uppercase">{adv.type}</span>
+                                                  <div className={`transform transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+                                                    <ChevronLeft className="w-4 h-4 text-gold -rotate-90 group-hover:text-white transition-colors" />
+                                                  </div>
+                                                </div>
+                                              </button>
+
+                                              {isExpanded && (
+                                                <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded-b p-4">
+                                                  {isOptionGroup ? (() => {
+                                                    const groupId = adv.configuration.optionGroupId;
+                                                    const exclusions = adv.configuration?.excludedOptionIds || [];
+                                                    const groupItems = optionItems.filter((item: any) =>
+                                                      item.groupId === groupId &&
+                                                      (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
+                                                      !(classData?.excludedOptionIds?.[groupId] || []).includes(item.id) &&
+                                                      !exclusions.includes(item.id)
+                                                    );
+                                                    console.log("Rendering advancement option group", {
+                                                      adv, groupId, exclusions,
+                                                      groupItems: groupItems.length,
+                                                      totalOptionItems: optionItems.length,
+                                                      allGroupIds
+                                                    });
+                                                    if (groupItems.length === 0) {
+                                                      return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
+                                                    }
+                                                    return (
+                                                      <ModularChoiceView
+                                                        items={groupItems}
+                                                        groupId={adv._id || groupId}
+                                                        selectedId={selectedOptionItems[adv._id || groupId] || groupItems[0]?.id}
+                                                        onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || groupId]: itemId }))}
+                                                        sidebarWidth="240px"
+                                                        maxHeight="350px"
+                                                      />
+                                                    );
+                                                  })() : (() => {
+                                                    const poolIds = adv.configuration?.pool || [];
+                                                    if (poolIds.length === 0) {
+                                                      return <p className="text-xs text-ink/40 italic">No options available.</p>;
+                                                    }
+                                                    const poolItems = poolIds
+                                                      .map((itemId: string) => allFeaturesWithSpellcasting.find((f: any) => f.id === itemId))
+                                                      .filter(Boolean)
+                                                      .map((f: any) => ({
+                                                        id: f.id,
+                                                        name: f.name,
+                                                        description: f.description,
+                                                        levelPrerequisite: f.level,
+                                                        featureId: f.id
+                                                      }));
+
+                                                    if (poolItems.length === 0) {
+                                                      return <p className="text-xs text-ink/40 italic">Features could not be found.</p>;
+                                                    }
+                                                    return (
+                                                      <ModularChoiceView
+                                                        items={poolItems}
+                                                        groupId={adv._id || 'pool'}
+                                                        selectedId={selectedOptionItems[adv._id || 'pool'] || poolItems[0]?.id}
+                                                        onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || 'pool']: itemId }))}
+                                                        sidebarWidth="240px"
+                                                        maxHeight="350px"
+                                                      />
+                                                    );
+                                                  })()}
+                                                </div>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
+                                              <div className="flex items-center justify-between">
+                                                <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
+                                                <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>
+                                              </div>
+                                              {adv.type === 'Trait' && (
+                                                <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
-                                      </div>
-                                    </button>
-
-                                    {isExpanded && (
-                                      <div className="animate-in fade-in slide-in-from-top-2 duration-300 bg-gold/5 border border-gold/20 rounded-b p-4">
-                                        {isOptionGroup ? (() => {
-                                          const groupId = adv.configuration.optionGroupId;
-                                          const exclusions = adv.configuration?.excludedOptionIds || [];
-                                          const groupItems = optionItems.filter(item => 
-                                            item.groupId === groupId && 
-                                            (!item.classIds || item.classIds.length === 0 || item.classIds.includes(id)) &&
-                                            !(classData?.excludedOptionIds?.[groupId] || []).includes(item.id) &&
-                                            !exclusions.includes(item.id)
-                                          );
-                                          console.log("Rendering advancement option group", {
-                                            adv,
-                                            groupId,
-                                            exclusions,
-                                            groupItems: groupItems.length,
-                                            totalOptionItems: optionItems.length,
-                                            allGroupIds
-                                          });
-                                          if (groupItems.length === 0) {
-                                            return <p className="text-xs text-ink/40 italic">No options available for this group.</p>;
-                                          }
-                                          return (
-                                            <ModularChoiceView 
-                                              items={groupItems} 
-                                              groupId={adv._id || groupId} 
-                                              selectedId={selectedOptionItems[adv._id || groupId] || groupItems[0]?.id}
-                                              onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || groupId]: itemId }))}
-                                              sidebarWidth="240px"
-                                              maxHeight="350px"
-                                            />
-                                          );
-                                        })() : (() => {
-                                          const poolIds = adv.configuration?.pool || [];
-                                          if (poolIds.length === 0) {
-                                            return <p className="text-xs text-ink/40 italic">No options available.</p>;
-                                          }
-                                          const poolItems = poolIds
-                                            .map((itemId: string) => allFeaturesWithSpellcasting.find(f => f.id === itemId))
-                                            .filter(Boolean)
-                                            .map((feature: any) => ({
-                                              id: feature.id,
-                                              name: feature.name,
-                                              description: feature.description,
-                                              levelPrerequisite: feature.level,
-                                              featureId: feature.id
-                                            }));
-
-                                          if (poolItems.length === 0) {
-                                            return <p className="text-xs text-ink/40 italic">Features could not be found.</p>;
-                                          }
-
-                                          return (
-                                            <ModularChoiceView 
-                                              items={poolItems} 
-                                              groupId={adv._id || 'pool'} 
-                                              selectedId={selectedOptionItems[adv._id || 'pool'] || poolItems[0]?.id}
-                                              onSelect={(itemId) => setSelectedOptionItems(prev => ({ ...prev, [adv._id || 'pool']: itemId }))}
-                                              sidebarWidth="240px"
-                                              maxHeight="350px"
-                                            />
-                                          );
-                                        })()}
-                                      </div>
-                                    )}
-                                  </>
-                                ) : (
-                                  <div className="bg-gold/5 border border-gold/20 rounded p-3 flex flex-col gap-1">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-[11px] font-bold text-ink uppercase tracking-tight">{advTitle}</span>
-                                      <span className="text-[9px] font-medium text-gold/60 uppercase">{adv.type}</span>
-                                    </div>
-                                    {adv.type === 'Trait' && (
-                                      <p className="text-[10px] text-ink/60 italic">Gains proficiency in {adv.configuration?.type || 'Trait'}</p>
-                                    )}
+                                      );
+                                    })}
                                   </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                                );
+                              })()}
+                            </div>
+                          )}
                         </div>
                       );
-                    })()}
-
-
-                  </div>
-                );
-              })}
-            </div>
-            
-            {classData.lore && (
-              <div className="pt-12 space-y-4 animate-in fade-in duration-500">
-                <div className="flex items-center gap-4">
-                  <h2 className="font-bold uppercase tracking-[0.2em] text-gold shrink-0">
-                    Class Lore
-                  </h2>
-                  <div className="h-px bg-gold/10 w-full" />
+                    })}
                 </div>
-                <BBCodeRenderer content={classData.lore} className="body-text" />
-              </div>
-            )}
+              </TabsContent>
+
+              {/* ── Spell List Tab ────────────────────────────────────── */}
+              {classData.spellcasting?.hasSpellcasting && (
+                <TabsContent value="spells">
+                  <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/20 rounded-lg">
+                    <p className="font-bold uppercase tracking-widest text-gold/40 text-sm">Under Construction</p>
+                    <p className="text-ink/40 text-xs max-w-xs">Spell list display is not yet implemented.</p>
+                  </div>
+                </TabsContent>
+              )}
+
+              {/* ── Info Tab ─────────────────────────────────────────── */}
+              <TabsContent value="info" className="space-y-10">
+                {classData.description ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <h2 className="font-bold uppercase tracking-[0.2em] text-gold shrink-0">Class Description</h2>
+                      <div className="h-px bg-gold/10 w-full" />
+                    </div>
+                    <BBCodeRenderer content={classData.description} className="body-text" />
+                  </div>
+                ) : (
+                  <p className="text-ink/40 italic text-sm">No class description has been written yet.</p>
+                )}
+
+                {classData.lore && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <h2 className="font-bold uppercase tracking-[0.2em] text-gold shrink-0">Class Lore</h2>
+                      <div className="h-px bg-gold/10 w-full" />
+                    </div>
+                    <BBCodeRenderer content={classData.lore} className="body-text" />
+                  </div>
+                )}
+
+                {!classData.description && !classData.lore && (
+                  <p className="text-ink/40 italic text-sm">No lore has been written yet.</p>
+                )}
+              </TabsContent>
+
+              {/* ── Flavor Tab ───────────────────────────────────────── */}
+              <TabsContent value="flavor">
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/20 rounded-lg">
+                  <p className="font-bold uppercase tracking-widest text-gold/40 text-sm">Under Construction</p>
+                  <p className="text-ink/40 text-xs max-w-xs">Flavor recommendations and roleplaying guidance will appear here.</p>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Sidebar - Right (Small) */}

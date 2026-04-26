@@ -5,6 +5,35 @@ import { Button } from './button';
 import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
+async function convertToWebP(file: File, quality = 0.85): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas unavailable')); return; }
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { reject(new Error('WebP conversion failed')); return; }
+          const baseName = file.name.replace(/\.[^.]+$/, '');
+          resolve(new File([blob], `${baseName}.webp`, { type: 'image/webp' }));
+        },
+        'image/webp',
+        quality
+      );
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.src = url;
+  });
+}
+
 interface ImageUploadProps {
   onUpload: (url: string) => void;
   storagePath: string; // e.g., 'images/lore/${id}/'
@@ -22,12 +51,7 @@ export function ImageUpload({ onUpload, storagePath, currentImageUrl, className 
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setError('Please select a valid image file within 5MB.');
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File size must be less than 5MB.');
+      setError('Please select a valid image file.');
       return;
     }
 
@@ -36,12 +60,19 @@ export function ImageUpload({ onUpload, storagePath, currentImageUrl, className 
     setProgress(0);
 
     try {
-      const extension = file.name.split('.').pop() || 'jpg';
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${extension}`;
+      const converted = await convertToWebP(file);
+
+      if (converted.size > 5 * 1024 * 1024) {
+        setError('Image is too large even after compression. Please use a smaller file.');
+        setUploading(false);
+        return;
+      }
+
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
       const filePath = `${storagePath.endsWith('/') ? storagePath : storagePath + '/'}${fileName}`;
       const storageRef = ref(storage, filePath);
 
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, converted);
 
       uploadTask.on(
         'state_changed',
@@ -128,7 +159,7 @@ export function ImageUpload({ onUpload, storagePath, currentImageUrl, className 
                 Drag and drop an image, or click to browse
               </p>
               <p className="text-xs text-ink/50 mt-1">
-                PNG, JPG, WEBP up to 5MB
+                PNG, JPG, WEBP — auto-converted to WebP
               </p>
             </div>
             <Button 

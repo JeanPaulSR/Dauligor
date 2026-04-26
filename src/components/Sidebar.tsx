@@ -5,10 +5,10 @@ import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from '
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { 
-  BookOpen, Map as MapIcon, Users, Bookmark, History, Calendar, 
-  Clock, Book, Shield, Dna, Bug, Scroll, Sword, Wand2, 
+  BookOpen, Map as MapIcon, Users, Bookmark, History, Calendar,
+  Clock, Book, Shield, Dna, Bug, Scroll, Sword, Wand2,
   Hammer, Bed, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen,
-  Plus
+  Plus, Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -38,6 +38,7 @@ export default function Sidebar({
   const location = useLocation();
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
+  const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
     const fetchCampaign = async () => {
@@ -103,10 +104,11 @@ export default function Sidebar({
         subItems: [
           { label: 'Classes', path: '/compendium/classes' },
           { label: 'Subclasses', path: '/compendium/subclasses' },
-          { label: 'Spells', path: '/compendium/spells' },
-          { label: 'Feats', path: '/compendium/feats' },
-          { label: 'Items', path: '/compendium/items' },
-          { label: 'Monsters', path: '/compendium/monsters' },
+          ...(isAdmin ? [
+            { label: 'Spells', path: '/compendium/spells' },
+            { label: 'Feats', path: '/compendium/feats' },
+            { label: 'Items', path: '/compendium/items' },
+          ] : []),
         ]
       },
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },
@@ -277,7 +279,36 @@ export default function Sidebar({
       </ScrollArea>
 
       {isStaff && (
-        <div className={`p-4 border-t border-gold/10 shrink-0 ${isCollapsed && !isOpen ? 'p-2' : ''}`}>
+        <div className={`p-4 border-t border-gold/10 shrink-0 space-y-2 ${isCollapsed && !isOpen ? 'p-2' : ''}`}>
+          {/* Image Manager */}
+          <Link to="/admin/images" onClick={() => onClose?.()}>
+            {(!isCollapsed || isOpen) ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className={`w-full justify-start gap-2 text-xs text-ink/60 hover:text-gold hover:bg-gold/5 ${
+                  location.pathname === '/admin/images' ? 'text-gold bg-gold/10' : ''
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5 shrink-0" /> Image Manager
+              </Button>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger render={
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="w-10 h-10 mx-auto text-ink/60 hover:text-gold hover:bg-gold/5"
+                  >
+                    <ImageIcon className="w-5 h-5" />
+                  </Button>
+                } />
+                <TooltipContent side="right">Image Manager</TooltipContent>
+              </Tooltip>
+            )}
+          </Link>
+
+          {/* New Entry */}
           <Link to="/wiki/new" onClick={() => onClose?.()} className="block">
             {(!isCollapsed || isOpen) ? (
               <Button size="sm" className="w-full bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20 text-xs lg:text-sm">

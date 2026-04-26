@@ -16,6 +16,8 @@ import Map from './pages/core/Map';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminCampaigns from './pages/admin/AdminCampaigns';
 import AdminProficiencies from './pages/admin/AdminProficiencies';
+import ImageManager from './pages/admin/ImageManager';
+import ImageViewer from './pages/admin/ImageViewer';
 import Settings from './pages/core/Settings';
 import Profile from './pages/core/Profile';
 import Construction from './pages/core/Construction';
@@ -37,6 +39,9 @@ import TagManager from './pages/compendium/TagManager';
 import TagGroupEditor from './pages/compendium/TagGroupEditor';
 import SkillsEditor from './pages/compendium/SkillsEditor';
 import ToolsEditor from './pages/compendium/ToolsEditor';
+import SpellsEditor from './pages/compendium/SpellsEditor';
+import FeatsEditor from './pages/compendium/FeatsEditor';
+import ItemsEditor from './pages/compendium/ItemsEditor';
 import CharacterList from './pages/characters/CharacterList';
 import CharacterBuilder from './pages/characters/CharacterBuilder';
 import { TooltipProvider } from './components/ui/tooltip';
@@ -219,6 +224,9 @@ export default function App() {
                   <Route path="/compendium/classes/edit/:id" element={<ClassEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/subclasses/new" element={<SubclassEditor />} />
                   <Route path="/compendium/subclasses/edit/:id" element={<SubclassEditor />} />
+                  <Route path="/compendium/spells" element={<SpellsEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/feats" element={<FeatsEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/items" element={<ItemsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/new" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/edit/:id" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spellcasting-scaling/new" element={<SpellcastingScalingEditor userProfile={effectiveProfile} />} />
@@ -238,6 +246,8 @@ export default function App() {
                   <Route path="/admin/users" element={<AdminUsers userProfile={effectiveProfile} />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
                   <Route path="/admin/proficiencies" element={<AdminProficiencies userProfile={effectiveProfile} />} />
+                  <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />
+                  <Route path="/images/view" element={<ImageViewer userProfile={effectiveProfile} />} />
                   <Route path="/settings" element={<Settings user={user} userProfile={userProfile} />} />
                   <Route path="/profile/:username" element={<Profile viewerProfile={effectiveProfile} />} />
                   <Route path="/construction" element={<Construction />} />

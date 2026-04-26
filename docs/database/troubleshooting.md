@@ -38,3 +38,16 @@ When remixing the project or moving to a new chat, you MUST run the **`set_up_fi
 - **Sidebar Stickiness**: If the sidebar fails to collapse/expand, check the `previewMode` state in `App.tsx` and ensure the `Sidebar` is receiving the correct `isCollapsed` prop.
 - **BBCode Not Rendering**: Ensure the tag logic in `src/lib/bbcode.ts` is correctly mapped in the `BBCodeRenderer.tsx` component.
 - **TipTap Height**: If the editor grows indefinitely, check the `.prose` height overrides in `src/index.css`.
+
+---
+
+## 5. New Backend Route Returns 404 In Local Dev
+
+**Symptoms**: A newly added `/api/...` endpoint returns `404`, while the frontend change that calls it is visible in the browser.
+**Cause**: The frontend is hot-reloading, but `server.ts` is a separate Node process. If that process was started before the route existed, it will keep serving the old backend until restarted.
+**Fix**:
+1. Stop the local dev server.
+2. Start it again with `npm run dev`.
+3. The dev script now uses `tsx watch server.ts`, so future backend edits should reload automatically.
+
+This matters for trusted admin actions like temporary password generation, because those routes live in `server.ts`, not in the React app.

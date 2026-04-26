@@ -125,13 +125,20 @@ Minimum structural shape:
   "subclasses": [],
   "features": [],
   "scalingColumns": [],
-  "spellcastingScalings": {},
+  "spellsKnownScalings": {},
+  "alternativeSpellcastingScalings": {},
   "uniqueOptionGroups": [],
   "uniqueOptionItems": []
 }
 ```
 
 Use this payload when the app wants one rich class export instead of a pre-normalized bundle.
+
+Notes:
+
+- `spellcastingScalings` is an older bridge field and should not be used for new exports
+- `spellsKnownScalings` is the current semantic source for cantrips/spells known progressions
+- `alternativeSpellcastingScalings` is the current semantic source for pact-style or other alternate slot progressions
 
 For the exact field behavior, read:
 

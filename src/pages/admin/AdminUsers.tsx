@@ -8,8 +8,8 @@ import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { Plus, UserPlus, Trash2, Shield, User, LayoutGrid, Check } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
+import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy } from 'lucide-react';
 
 export default function AdminUsers({ userProfile }: { userProfile: any }) {
   const [users, setUsers] = useState<any[]>([]);
@@ -17,9 +17,16 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [roleDialogOpen, setRoleDialogOpen] = useState<{ isOpen: boolean, userId: string, currentRole: string }>({ isOpen: false, userId: '', currentRole: '' });
   const [campaignDialogOpen, setCampaignDialogOpen] = useState<{ isOpen: boolean, userId: string, currentIds: string[] }>({ isOpen: false, userId: '', currentIds: [] });
+  const [temporaryPasswordDialog, setTemporaryPasswordDialog] = useState<{ isOpen: boolean, displayName: string, password: string, generatedAt: string }>({
+    isOpen: false,
+    displayName: '',
+    password: '',
+    generatedAt: '',
+  });
   const [campaignSearch, setCampaignSearch] = useState('');
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', role: 'user', campaignIds: [] as string[] });
   const [loading, setLoading] = useState(false);
+  const [passwordResetUserId, setPasswordResetUserId] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -145,6 +152,56 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     } catch (err: any) {
       console.error('Failed to send recovery email:', err);
       toast.error(err.message || 'Failed to send recovery email');
+    }
+  };
+
+  const handleGenerateTemporaryPassword = async (userRecord: any) => {
+    if (!auth.currentUser) {
+      toast.error('You must be signed in to generate a temporary password.');
+      return;
+    }
+
+    setPasswordResetUserId(userRecord.id);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const response = await fetch(`/api/admin/users/${userRecord.id}/temporary-password`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Temporary-password endpoint not found. Restart the dev server so the updated backend route is loaded.');
+        }
+        throw new Error(result.error || 'Failed to generate a temporary password.');
+      }
+
+      setTemporaryPasswordDialog({
+        isOpen: true,
+        displayName: userRecord.displayName || userRecord.username || 'User',
+        password: result.temporaryPassword,
+        generatedAt: result.generatedAt || new Date().toISOString(),
+      });
+      toast.success(`Temporary password generated for ${userRecord.displayName || userRecord.username}.`);
+    } catch (err: any) {
+      console.error('Failed to generate temporary password:', err);
+      toast.error(err.message || 'Failed to generate temporary password.');
+    } finally {
+      setPasswordResetUserId('');
+    }
+  };
+
+  const handleCopyTemporaryPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(temporaryPasswordDialog.password);
+      toast.success('Temporary password copied.');
+    } catch (err: any) {
+      console.error('Failed to copy temporary password:', err);
+      toast.error('Failed to copy temporary password.');
     }
   };
 
@@ -417,6 +474,18 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      {userProfile?.role === 'admin' && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => handleGenerateTemporaryPassword(u)}
+                          disabled={passwordResetUserId === u.id}
+                          className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10"
+                        >
+                          <KeyRound className="w-3 h-3 mr-1" />
+                          {passwordResetUserId === u.id ? 'Generating...' : 'Temp Password'}
+                        </Button>
+                      )}
                       {userProfile?.role === 'admin' && u.recoveryEmail && (
                         <Button 
                           variant="ghost" 
@@ -540,6 +609,37 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={temporaryPasswordDialog.isOpen}
+        onOpenChange={(open) => setTemporaryPasswordDialog(prev => ({ ...prev, isOpen: open }))}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl">Temporary Password</DialogTitle>
+            <DialogDescription>
+              Share this with {temporaryPasswordDialog.displayName}. It is only shown here once, so copy it before closing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border border-gold/20 bg-gold/5 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/70">Generated Password</p>
+              <p className="mt-2 break-all font-mono text-lg font-bold text-ink">{temporaryPasswordDialog.password}</p>
+            </div>
+            <p className="text-xs text-ink/50">
+              Generated at {temporaryPasswordDialog.generatedAt ? new Date(temporaryPasswordDialog.generatedAt).toLocaleString() : 'just now'}.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCopyTemporaryPassword} className="gap-2">
+              <Copy className="w-4 h-4" /> Copy Password
+            </Button>
+            <Button onClick={() => setTemporaryPasswordDialog(prev => ({ ...prev, isOpen: false }))} className="bg-gold text-white">
+              Done
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

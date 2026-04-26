@@ -9,7 +9,8 @@ import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { Sword, Save, Plus, Trash2, ChevronLeft, Shield, Scroll, Wand2, Heart, Hammer, BookOpen, Tag, Edit, Check, Image as ImageIcon, Zap, ListChecks, ChevronDown, ChevronRight, MessageCircle } from 'lucide-react';
+import { ClassImageEditor, type ImageDisplay, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
+import { Sword, Save, Plus, Trash2, ChevronLeft, Shield, Scroll, Wand2, Heart, Hammer, BookOpen, Tag, Edit, Check, Image as ImageIcon, Zap, ListChecks, ChevronDown, ChevronRight, MessageCircle, Sliders } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../../components/ui/dialog';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -361,6 +362,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [allAttributes, setAllAttributes] = useState<any[]>([]);
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [name, setName] = useState('');
+  const [preview, setPreview] = useState('');
   const [description, setDescription] = useState('');
   const [lore, setLore] = useState('');
   const [sourceId, setSourceId] = useState('');
@@ -408,6 +410,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [startingEquipment, setStartingEquipment] = useState('');
   const [wealth, setWealth] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imageDisplay, setImageDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
+  const [cardImageUrl, setCardImageUrl] = useState('');
+  const [cardDisplay, setCardDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
+  const [previewDisplay, setPreviewDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [multiclassing, setMulticlassing] = useState('');
   const [multiclassProficiencies, setMulticlassProficiencies] = useState({
     armor: { choiceCount: 0, optionIds: [], fixedIds: [], categoryIds: [] },
@@ -590,6 +598,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             const data = docSnap.data();
             console.log(`[ClassEditor] Class data loaded: ${data.name}`);
             setName(data.name || '');
+            setPreview(data.preview || '');
             setDescription(data.description || '');
             setLore(data.lore || '');
             setSourceId(data.sourceId || '');
@@ -668,6 +677,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             setPrimaryAbilityChoice((data.primaryAbilityChoice || []).map((s: string) => s.toUpperCase()));
             setWealth(data.wealth || '');
             setImageUrl(data.imageUrl || '');
+            // Migrate old imageFocalPoint → imageDisplay if needed
+            setImageDisplay(data.imageDisplay || (data.imageFocalPoint ? { ...data.imageFocalPoint, scale: 1 } : DEFAULT_DISPLAY));
+            setCardImageUrl(data.cardImageUrl || '');
+            setCardDisplay(data.cardDisplay || (data.cardFocalPoint ? { ...data.cardFocalPoint, scale: 1 } : DEFAULT_DISPLAY));
+            setPreviewImageUrl(data.previewImageUrl || '');
+            setPreviewDisplay(data.previewDisplay || (data.previewFocalPoint ? { ...data.previewFocalPoint, scale: 1 } : DEFAULT_DISPLAY));
             setMulticlassing(data.multiclassing || '');
             const rawMultiProf = data.multiclassProficiencies || {};
             setMulticlassProficiencies(sanitizeProficiencyCollection({
@@ -969,6 +984,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       const classData = {
         name,
         identifier: slugify(name),
+        preview,
         description,
         lore,
         sourceId,
@@ -989,6 +1005,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         asiLevels,
         advancements: syncedAdvancements,
         imageUrl,
+        imageDisplay,
+        cardImageUrl,
+        cardDisplay,
+        previewImageUrl,
+        previewDisplay,
         updatedAt: new Date().toISOString()
       };
 
@@ -1162,14 +1183,55 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
             <h2 className="label-text text-gold border-b border-gold/10 pb-2">Basic Information</h2>
             <div className="flex flex-col md:flex-row gap-6">
-              <div className="w-full md:w-1/3">
-                <label className="label-text mb-2 block text-xs uppercase tracking-widest text-gold/60">Class Icon / Artwork</label>
-                <ImageUpload 
+              {/* Left: image upload + Edit Display button */}
+              <div className="w-full md:w-1/3 space-y-2">
+                <label className="label-text text-gold/60">Class Icon / Artwork</label>
+                <ImageUpload
                   currentImageUrl={imageUrl}
                   storagePath={`images/classes/${id || 'new'}/`}
                   onUpload={setImageUrl}
                 />
+                {imageUrl && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full btn-gold gap-2"
+                    onClick={() => setImageDialogOpen(true)}
+                  >
+                    <Sliders className="w-3 h-3" /> Edit Display
+                  </Button>
+                )}
               </div>
+
+              {/* Edit Display Dialog */}
+              <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+                <DialogContent className="dialog-content sm:max-w-5xl w-[95vw]">
+                  <DialogHeader className="dialog-header">
+                    <DialogTitle className="dialog-title">Edit Image Display</DialogTitle>
+                  </DialogHeader>
+                  <div className="dialog-body max-h-[80vh]">
+                    <ClassImageEditor
+                      imageUrl={imageUrl}
+                      imageDisplay={imageDisplay}
+                      onImageDisplayChange={setImageDisplay}
+                      cardImageUrl={cardImageUrl}
+                      onCardImageUrlChange={setCardImageUrl}
+                      cardDisplay={cardDisplay}
+                      onCardDisplayChange={setCardDisplay}
+                      previewImageUrl={previewImageUrl}
+                      onPreviewImageUrlChange={setPreviewImageUrl}
+                      previewDisplay={previewDisplay}
+                      onPreviewDisplayChange={setPreviewDisplay}
+                      storagePath={`images/classes/${id || 'new'}/`}
+                    />
+                  </div>
+                  <DialogFooter className="dialog-footer">
+                    <Button onClick={() => setImageDialogOpen(false)} className="btn-gold-solid px-8 label-text">Done</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Right: fields */}
               <div className="flex-1 grid sm:grid-cols-2 gap-4 h-fit">
                 <div className="space-y-1">
                   <label className="label-text">Class Name</label>
@@ -1225,19 +1287,26 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               </div>
             </div>
             <div className="space-y-4">
-              <MarkdownEditor 
-                value={description} 
-                onChange={setDescription}
-                placeholder="A brief thematic overview for the grid view..."
-                minHeight="80px"
-                label="Description (Short Preview)"
+              <MarkdownEditor
+                value={preview}
+                onChange={setPreview}
+                placeholder="A short flavourful teaser shown on the class card and at the top of the class page..."
+                minHeight="60px"
+                label="Class Preview"
               />
-              <MarkdownEditor 
-                value={lore} 
+              <MarkdownEditor
+                value={description}
+                onChange={setDescription}
+                placeholder="A detailed explanation of how the class plays and what it does..."
+                minHeight="100px"
+                label="Class Description"
+              />
+              <MarkdownEditor
+                value={lore}
                 onChange={setLore}
-                placeholder="Detailed lore and setting info..."
-                minHeight="120px"
-                label="Lore (Setting Details)"
+                placeholder="How this class fits into the setting's lore..."
+                minHeight="100px"
+                label="Class Lore"
               />
             </div>
           </div>

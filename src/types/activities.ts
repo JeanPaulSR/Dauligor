@@ -171,8 +171,17 @@ export interface SemanticActivity {
     tempHP?: string;
   };
   transform?: {
-    profiles: any[];
-    settings: any;
+    profiles: {
+      _id: string;
+      cr?: string;
+      level: { min: number; max: number };
+      movement?: string[];
+      name: string;
+      sizes?: string[];
+      types?: string[];
+      uuid: string | null;
+    }[];
+    settings: Record<string, unknown> | null;
     customize?: boolean;
     mode?: string;
     preset?: string;

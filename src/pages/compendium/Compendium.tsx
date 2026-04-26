@@ -23,7 +23,9 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
         { name: 'Classes', icon: Sword, path: '/compendium/classes', description: 'Core character classes and their progressions.' },
         { name: 'Subclasses', icon: Shield, path: '/compendium/subclasses', description: 'Specializations for each class.' },
         { name: 'Races', icon: Dna, path: '/compendium/races', description: 'Species and lineages of the world.' },
-        { name: 'Feats', icon: Scroll, path: '/compendium/feats', description: 'Special talents and abilities.' },
+        ...(userProfile?.role === 'admin' ? [
+          { name: 'Feats', icon: Scroll, path: '/compendium/feats', description: 'Admin-only development manager for feat-style items.' },
+        ] : []),
         { name: 'Modular Options', icon: Scroll, path: '/compendium/unique-options', description: 'Customizable options like Invocations or Metamagic.' },
         { name: 'Backgrounds', icon: Users, path: '/compendium/backgrounds', description: 'Origins and life before adventuring.' },
       ]
@@ -31,8 +33,10 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
     {
       title: 'Magic & Equipment',
       items: [
-        { name: 'Spells', icon: Wand2, path: '/compendium/spells', description: 'The complete archive of magical arts.' },
-        { name: 'Items', icon: Hammer, path: '/compendium/items', description: 'Weapons, armor, and wondrous artifacts.' },
+        ...(userProfile?.role === 'admin' ? [
+          { name: 'Spells', icon: Wand2, path: '/compendium/spells', description: 'Admin-only development manager for Foundry-facing spells.' },
+          { name: 'Items', icon: Hammer, path: '/compendium/items', description: 'Admin-only development manager for non-spell items.' },
+        ] : []),
       ]
     },
     {
@@ -48,7 +52,7 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
         { name: 'Tag Management', icon: TagsIcon, path: '/compendium/tags', description: 'Organize and categorize compendium entries with custom tags.' },
       ]
     }] : [])
-  ];
+  ].filter(category => category.items.length > 0);
 
   return (
     <div className="max-w-6xl mx-auto space-y-12 pb-20">
