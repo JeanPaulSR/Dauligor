@@ -989,8 +989,15 @@ export default function SubclassEditor() {
             <>
               <div className="p-6 pb-0 shrink-0 border-b border-gold/10">
                 <div className="flex gap-6 items-start">
-                  <div className="w-32 h-32 bg-background rounded-lg border border-gold/20 flex flex-col items-center justify-center shrink-0">
-                    <div className="label-text opacity-40">Icon</div>
+                  <div className="w-32 h-32 shrink-0">
+                    <ImageUpload
+                      storagePath="icons/features/"
+                      imageType="icon"
+                      compact
+                      currentImageUrl={editingFeature.iconUrl || ''}
+                      onUpload={(url) => setEditingFeature({ ...editingFeature, iconUrl: url })}
+                      className="w-full h-full"
+                    />
                   </div>
                   <div className="flex-1 space-y-2 pt-2 flex flex-col items-center">
                     <input 

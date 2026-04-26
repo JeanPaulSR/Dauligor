@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import {
-  collection, doc, setDoc, getDoc, deleteDoc,
+  collection, doc, setDoc, getDoc, deleteDoc, updateDoc,
   query, where, getDocs, serverTimestamp,
 } from 'firebase/firestore';
 
@@ -37,6 +37,7 @@ export interface ImageReference {
 const SCAN_TARGETS: { col: string; fields: string[]; nameField: string }[] = [
   { col: 'classes',      fields: ['imageUrl', 'cardImageUrl', 'previewImageUrl'], nameField: 'name' },
   { col: 'subclasses',   fields: ['imageUrl'],                                   nameField: 'name' },
+  { col: 'features',     fields: ['iconUrl'],                                    nameField: 'name' },
   { col: 'characters',   fields: ['imageUrl'],                                   nameField: 'name' },
   { col: 'sources',      fields: ['imageUrl'],                                   nameField: 'name' },
   { col: 'users',        fields: ['avatarUrl'],                                  nameField: 'displayName' },
@@ -113,6 +114,35 @@ export async function scanForReferences(url: string): Promise<ImageReference[]> 
   return results;
 }
 
+// ── reference updater ─────────────────────────────────────────────────────────
+// Replaces every occurrence of oldUrl with newUrl across all scan targets.
+// Returns the number of document fields updated.
+
+export async function updateImageReferences(oldUrl: string, newUrl: string): Promise<number> {
+  let count = 0;
+
+  await Promise.all(
+    SCAN_TARGETS.flatMap(({ col, fields }) =>
+      fields.map(async (field) => {
+        try {
+          const q = query(collection(db, col), where(field, '==', oldUrl));
+          const snap = await getDocs(q);
+          await Promise.all(
+            snap.docs.map(async (d) => {
+              await updateDoc(doc(db, col, d.id), { [field]: newUrl });
+              count++;
+            }),
+          );
+        } catch {
+          // Skip collections with restricted access
+        }
+      }),
+    ),
+  );
+
+  return count;
+}
+
 // ── URL → storage path ────────────────────────────────────────────────────────
 // Extracts the internal storage path from a Firebase download URL so we can
 // look up metadata even if only the URL is known.
@@ -120,9 +150,15 @@ export async function scanForReferences(url: string): Promise<ImageReference[]> 
 export function extractStoragePath(downloadUrl: string): string | null {
   try {
     const u = new URL(downloadUrl);
-    const match = u.pathname.match(/\/o\/(.+)$/);
-    if (!match) return null;
-    return decodeURIComponent(match[1]);
+    // Firebase Storage URLs encode the path after /o/
+    if (u.hostname.includes('firebasestorage.googleapis.com')) {
+      const match = u.pathname.match(/\/o\/(.+)$/);
+      if (!match) return null;
+      return decodeURIComponent(match[1]);
+    }
+    // R2 public URLs — the key is the pathname without the leading slash
+    const key = u.pathname.replace(/^\//, '');
+    return key || null;
   } catch {
     return null;
   }
