@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Checkbox } from '../../components/ui/checkbox';
+import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import { 
   collection, 
   doc, 
@@ -330,6 +331,8 @@ export default function SubclassEditor() {
       toast.error("Failed to save subclass");
     }
   };
+
+  useKeyboardSave(() => { handleSave(); });
 
   const handleSaveFeature = async (e: React.FormEvent) => {
     e.preventDefault();

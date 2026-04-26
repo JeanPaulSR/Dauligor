@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { doc, getDoc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, addDoc, deleteDoc, where } from 'firebase/firestore';
@@ -475,6 +477,34 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const spellcastingRef = useRef<HTMLTextAreaElement>(null);
   const featureDescRef = useRef<HTMLTextAreaElement>(null);
 
+  const getCurrentStateHash = useCallback(() => {
+    return JSON.stringify({
+      name, preview, description, lore, sourceId, hitDie, savingThrows, proficiencies, multiclassProficiencies,
+      primaryAbility, primaryAbilityChoice, tagIds, subclassFeatureLevels, asiLevels,
+      advancements, imageUrl, imageDisplay, cardImageUrl, cardDisplay, previewImageUrl, previewDisplay, spellcasting, startingEquipment, wealth, multiclassing, excludedOptionIds, subclassTitle
+    });
+  }, [name, preview, description, lore, sourceId, hitDie, savingThrows, proficiencies, multiclassProficiencies, primaryAbility, primaryAbilityChoice, tagIds, subclassFeatureLevels, asiLevels, advancements, imageUrl, imageDisplay, cardImageUrl, cardDisplay, previewImageUrl, previewDisplay, spellcasting, startingEquipment, wealth, multiclassing, excludedOptionIds, subclassTitle]);
+
+  const [initialDataHash, setInitialDataHash] = useState<string>('');
+  const [lastSavedTick, setLastSavedTick] = useState<number>(0);
+
+  const isDirty = useMemo(() => {
+    if (!initialDataHash) return false;
+    return initialDataHash !== getCurrentStateHash();
+  }, [initialDataHash, getCurrentStateHash]);
+
+  useUnsavedChangesWarning(isDirty);
+  useKeyboardSave(() => { handleSave(); });
+
+  useEffect(() => {
+    if (!initialLoading && !initialDataHash) {
+      setInitialDataHash(getCurrentStateHash());
+    } else if (lastSavedTick > 0) {
+      setInitialDataHash(getCurrentStateHash());
+      setLastSavedTick(0);
+    }
+  }, [initialLoading, initialDataHash, getCurrentStateHash, lastSavedTick]);
+
   useEffect(() => {
     console.log(`[ClassEditor] Initializing global listeners`);
     const globalStartTime = performance.now();
@@ -934,8 +964,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
     setLoading(true);
 
     try {
@@ -1026,6 +1058,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       setMulticlassProficiencies(normalizedMulticlassProficiencies);
       setAdvancements(syncedAdvancements);
       toast.success('Class saved successfully!');
+      setLastSavedTick(Date.now());
     } catch (error) {
       console.error("Error saving class:", error);
       toast.error('Failed to save class.');
@@ -3699,7 +3732,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       try {
                         await deleteDoc(doc(db, 'classes', id));
                         toast.success('Class deleted');
-                        navigate('/compendium/classes');
+                        setInitialDataHash(getCurrentStateHash()); // Prevent dirty check
+                        setTimeout(() => navigate('/compendium/classes'), 0);
                       } catch (error) {
                         toast.error('Failed to delete class');
                       }

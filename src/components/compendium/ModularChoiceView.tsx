@@ -72,6 +72,15 @@ export default function ModularChoiceView({
   // Clean group names (redundancy check if passed in name) - though usually name is handled outside
   const cleanName = (name: string) => name.replace(/\s*(Choice|Modular Choice Group)$/i, '');
 
+  const sortedItems = [...items].sort((a, b) => {
+    const levelA = a.levelPrerequisite || 0;
+    const levelB = b.levelPrerequisite || 0;
+    if (levelA !== levelB) {
+      return levelA - levelB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
   return (
     <div className={cn("browser-panel", className)} style={{ minHeight: maxHeight }}>
       {/* Sidebar: Names List */}
@@ -79,8 +88,8 @@ export default function ModularChoiceView({
         className="browser-sidebar"
         style={{ width: sidebarWidth }}
       >
-        <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gold/20" style={{ maxHeight }}>
-          {items.map(item => (
+        <div className="flex-grow overflow-y-auto custom-scrollbar" style={{ maxHeight }}>
+          {sortedItems.map(item => (
             <button
               key={item.id}
               onClick={() => onSelect(item.id)}
@@ -103,7 +112,7 @@ export default function ModularChoiceView({
       </div>
 
       {/* Content: Selected Item Details */}
-      <div className="browser-content" style={{ maxHeight }}>
+      <div className="browser-content custom-scrollbar" style={{ maxHeight }}>
         {selectedItem ? (
           <div className="space-y-4 animate-in fade-in duration-300">
             <div className="flex items-baseline justify-between border-b border-gold/10 pb-2">

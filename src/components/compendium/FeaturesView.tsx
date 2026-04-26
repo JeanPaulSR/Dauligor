@@ -78,12 +78,21 @@ export default function FeaturesView({
     }
   }, [selectedId, items, onSelect]);
 
+  const sortedItems = [...items].sort((a, b) => {
+    const levelA = a.level || 0;
+    const levelB = b.level || 0;
+    if (levelA !== levelB) {
+      return levelA - levelB;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
   return (
     <div className={cn("browser-panel", className)} style={{ minHeight: maxHeight }}>
       {/* Sidebar: Feature Names */}
       <div className="w-[200px] browser-sidebar">
-        <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gold/20" style={{ maxHeight }}>
-          {items.map(item => (
+        <div className="flex-grow overflow-y-auto custom-scrollbar" style={{ maxHeight }}>
+          {sortedItems.map(item => (
             <button
               key={item.id}
               onClick={() => onSelect(item.id)}
@@ -104,7 +113,7 @@ export default function FeaturesView({
       </div>
 
       {/* Content Area */}
-      <div className="browser-content" style={{ maxHeight }}>
+      <div className="browser-content custom-scrollbar" style={{ maxHeight }}>
         {selectedItem ? (
           <div className="space-y-6 animate-in fade-in duration-300">
             <div className="flex items-baseline justify-between border-b border-gold/10 pb-4">

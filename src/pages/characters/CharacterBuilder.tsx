@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useKeyboardSave } from "../../hooks/useKeyboardSave";
 import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
 import {
   doc,
@@ -992,6 +993,8 @@ export default function CharacterBuilder({
       setSaving(false);
     }
   };
+
+  useKeyboardSave(() => { handleSave(); });
 
   const handleInfoChange = (field: string, value: string) => {
     setCharacter((prev: any) => ({

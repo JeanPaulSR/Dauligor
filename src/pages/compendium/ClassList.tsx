@@ -108,7 +108,6 @@ export function ClassList({
   const [previewOptionItems, setPreviewOptionItems] = useState<any[]>([]);
   const [previewExpandedGroups, setPreviewExpandedGroups] = useState<Record<string, boolean>>({});
   const [previewSelectedOptions, setPreviewSelectedOptions] = useState<Record<string, string>>({});
-  const [isCoreFeaturesExpanded, setIsCoreFeaturesExpanded] = useState(false);
   const [selectedPreviewFeatureId, setSelectedPreviewFeatureId] = useState<string | null>(null);
 
   const isAdmin = userProfile?.role === 'admin' && !selectionMode;
@@ -792,7 +791,7 @@ export function ClassList({
               </div>
               
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/10 relative z-10">
+              <div className="flex-1 overflow-y-auto min-h-0 p-6 px-8 border-t border-gold/10 relative z-10 custom-scrollbar">
                 <div className="space-y-10">
                   {/* Class Table */}
                   {previewLoading ? (
@@ -805,7 +804,7 @@ export function ClassList({
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3 }}
-                      className="border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg overflow-x-auto"
+                      className="border border-gold/20 bg-card/50 backdrop-blur-sm rounded-lg overflow-x-auto custom-scrollbar"
                     >
                       <table className="w-full text-left border-collapse">
                       <thead className="sticky top-0 bg-card z-10 shadow-md">
@@ -925,50 +924,26 @@ export function ClassList({
 
                       {/* Core Features Preview */}
                       <div className="space-y-4">
-                        <div className="flex items-center gap-4">
-                          <h2 className="label-text text-gold shrink-0 uppercase tracking-widest font-bold">Core Features</h2>
-                          <div className="h-px bg-gold/10 w-full" />
-                        </div>
+                        <h3 className="h3-title text-gold border-b border-gold/10 pb-1 w-full">Core Features</h3>
                         {previewLoading ? (
                           <div className="animate-pulse h-10 bg-gold/5 border border-gold/10 rounded" />
                         ) : previewFeatures.length > 0 ? (
-                          <div className="border border-gold/20 bg-background/30 rounded overflow-hidden">
-                            <button 
-                              onClick={() => setIsCoreFeaturesExpanded(!isCoreFeaturesExpanded)}
-                              className="w-full flex items-center justify-between p-3 hover:bg-gold/5 transition-colors group"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="p-1.5 bg-gold/10 rounded group-hover:bg-gold/20 transition-colors">
-                                  <Scroll className="w-4 h-4 text-gold" />
-                                </div>
-                                <div className="text-left">
-                                  <h4 className="label-text text-gold">Core Features</h4>
-                                  <p className="text-[10px] text-ink/40 italic font-normal">All class level features</p>
-                                </div>
-                              </div>
-                              <div className={`transform transition-transform duration-300 ${isCoreFeaturesExpanded ? 'rotate-180' : ''}`}>
-                                <ChevronLeft className="w-4 h-4 text-gold -rotate-90" />
-                              </div>
-                            </button>
-                            {isCoreFeaturesExpanded && (
-                              <div className="p-4 border-t border-gold/10 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <FeaturesView 
-                                  items={previewFeatures.filter(f => !f.isSubclassFeature || f.level === minSubclassFeatureLevel)} 
-                                  selectedId={selectedPreviewFeatureId} 
-                                  onSelect={setSelectedPreviewFeatureId}
-                                  optionGroups={previewOptionGroups}
-                                  optionItems={previewOptionItems}
-                                  selectedOptions={previewSelectedOptions}
-                                  onSelectOption={(groupId, itemId) => setPreviewSelectedOptions(prev => ({ ...prev, [groupId]: itemId }))}
-                                  classId={selectedClass.id}
-                                  uniqueOptionMappings={selectedClass.uniqueOptionMappings}
-                                  hideChoices={true}
-                                  rootAdvancements={selectedClass.advancements || []}
-                                  hideAdvancementTypes={true}
-                                  hideAdvancements={true}
-                                />
-                              </div>
-                            )}
+                          <div>
+                            <FeaturesView 
+                              items={previewFeatures.filter(f => !f.isSubclassFeature || f.level === minSubclassFeatureLevel)} 
+                              selectedId={selectedPreviewFeatureId} 
+                              onSelect={setSelectedPreviewFeatureId}
+                              optionGroups={previewOptionGroups}
+                              optionItems={previewOptionItems}
+                              selectedOptions={previewSelectedOptions}
+                              onSelectOption={(groupId, itemId) => setPreviewSelectedOptions(prev => ({ ...prev, [groupId]: itemId }))}
+                              classId={selectedClass.id}
+                              uniqueOptionMappings={selectedClass.uniqueOptionMappings}
+                              hideChoices={true}
+                              rootAdvancements={selectedClass.advancements || []}
+                              hideAdvancementTypes={true}
+                              hideAdvancements={true}
+                            />
                           </div>
                         ) : (
                           <p className="text-sm text-ink/40 italic">No features defined yet.</p>

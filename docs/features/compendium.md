@@ -90,3 +90,8 @@ The compendium allows importing semantic bundles exported from the application t
 - **Data Sanitization**:
   - Metadata and internal Firestore fields (like `id` within the data object) are stripped.
   - JSON-serialized timestamps are replaced with valid Firestore `serverTimestamp()`.
+
+## 9. Editor Ergonomics
+
+- **Keyboard Shortcuts**: Editors (e.g. `ClassEditor.tsx`, `SubclassEditor.tsx`, `CharacterBuilder.tsx`) support `Ctrl + S` and `Cmd + S` to save progress without clicking the Save button.
+- **Unsaved Changes**: The `useUnsavedChangesWarning` hook ensures users are warned if they attempt to navigate away via internal links or closing the tab while they have unsaved changes.
