@@ -13,7 +13,7 @@ import {
   handleR2MoveFolder,
   handleR2Rename,
   handleR2Upload,
-} from "./api/_lib/r2-proxy";
+} from "./api/_lib/r2-proxy.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

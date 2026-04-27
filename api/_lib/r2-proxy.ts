@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import { HttpError, getCredentialErrorMessage, requireImageManagerAccess } from "./firebase-admin";
+import { HttpError, getCredentialErrorMessage, requireImageManagerAccess } from "./firebase-admin.js";
 
 type NodeLikeRequest = IncomingMessage & {
   body?: unknown;
