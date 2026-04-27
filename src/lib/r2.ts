@@ -1,5 +1,4 @@
-const WORKER_URL = import.meta.env.VITE_R2_WORKER_URL as string;
-const API_SECRET = import.meta.env.VITE_R2_API_SECRET as string;
+import { auth } from "./firebase";
 
 export interface R2Object {
   key: string;
@@ -13,19 +12,47 @@ export interface R2ListResult {
   delimitedPrefixes: string[];
 }
 
+async function getAuthHeaders() {
+  if (!auth.currentUser) {
+    throw new Error("You must be signed in to manage images.");
+  }
+
+  const idToken = await auth.currentUser.getIdToken();
+  return {
+    Authorization: `Bearer ${idToken}`,
+  };
+}
+
+async function parseApiResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  if (response.ok) {
+    return response.json() as Promise<T>;
+  }
+
+  const errorPayload = await response.json().catch(() => ({}));
+  throw new Error(errorPayload.error || `${fallbackMessage}: ${response.status}`);
+}
+
 export function r2Upload(
   file: File,
   key: string,
   onProgress?: (pct: number) => void,
 ): Promise<{ url: string; key: string }> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('key', key);
 
+    let authHeaders: Record<string, string>;
+    try {
+      authHeaders = await getAuthHeaders();
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${WORKER_URL}/upload`);
-    xhr.setRequestHeader('Authorization', `Bearer ${API_SECRET}`);
+    xhr.open('POST', `/api/r2/upload`);
+    xhr.setRequestHeader('Authorization', authHeaders.Authorization);
 
     if (onProgress) {
       xhr.upload.onprogress = (e) => {
@@ -38,7 +65,12 @@ export function r2Upload(
         try { resolve(JSON.parse(xhr.responseText)); }
         catch { reject(new Error('Invalid response from storage worker')); }
       } else {
-        reject(new Error(`Upload failed: ${xhr.status}`));
+        try {
+          const payload = JSON.parse(xhr.responseText);
+          reject(new Error(payload.error || `Upload failed: ${xhr.status}`));
+        } catch {
+          reject(new Error(`Upload failed: ${xhr.status}`));
+        }
       }
     };
 
@@ -48,21 +80,22 @@ export function r2Upload(
 }
 
 export async function r2List(prefix: string, delimiter = '/'): Promise<R2ListResult> {
+  const authHeaders = await getAuthHeaders();
   const params = new URLSearchParams({ prefix, delimiter });
-  const res = await fetch(`${WORKER_URL}/list?${params}`, {
-    headers: { Authorization: `Bearer ${API_SECRET}` },
+  const res = await fetch(`/api/r2/list?${params}`, {
+    headers: authHeaders,
   });
-  if (!res.ok) throw new Error(`Failed to list storage: ${res.status}`);
-  return res.json();
+  return parseApiResponse<R2ListResult>(res, 'Failed to list storage');
 }
 
 export async function r2Delete(key: string): Promise<void> {
+  const authHeaders = await getAuthHeaders();
   const params = new URLSearchParams({ key });
-  const res = await fetch(`${WORKER_URL}/delete?${params}`, {
+  const res = await fetch(`/api/r2/delete?${params}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${API_SECRET}` },
+    headers: authHeaders,
   });
-  if (!res.ok) throw new Error(`Failed to delete from storage: ${res.status}`);
+  await parseApiResponse<{ success: boolean }>(res, 'Failed to delete from storage');
 }
 
 export async function r2MoveFolder(
@@ -70,16 +103,16 @@ export async function r2MoveFolder(
   newPrefix: string,
   onProgress?: (moved: number) => void,
 ): Promise<{ count: number }> {
+  const authHeaders = await getAuthHeaders();
   let total = 0;
   let done = false;
   do {
-    const res = await fetch(`${WORKER_URL}/move-folder`, {
+    const res = await fetch(`/api/r2/move-folder`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${API_SECRET}`, 'Content-Type': 'application/json' },
+      headers: { ...authHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ oldPrefix, newPrefix }),
     });
-    if (!res.ok) throw new Error(`Failed to move folder: ${res.status}`);
-    const data = await res.json() as { count: number; done: boolean };
+    const data = await parseApiResponse<{ count: number; done: boolean }>(res, 'Failed to move folder');
     total += data.count;
     done = data.done;
     onProgress?.(total);
@@ -89,11 +122,11 @@ export async function r2MoveFolder(
 }
 
 export async function r2Rename(oldKey: string, newKey: string): Promise<{ url: string; key: string }> {
-  const res = await fetch(`${WORKER_URL}/rename`, {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(`/api/r2/rename`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${API_SECRET}`, 'Content-Type': 'application/json' },
+    headers: { ...authHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ oldKey, newKey }),
   });
-  if (!res.ok) throw new Error(`Failed to rename in storage: ${res.status}`);
-  return res.json();
+  return parseApiResponse<{ url: string; key: string }>(res, 'Failed to rename in storage');
 }

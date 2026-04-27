@@ -7,6 +7,13 @@ import { createServer as createViteServer } from "vite";
 import { applicationDefault, cert, getApp, getApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import {
+  handleR2Delete,
+  handleR2List,
+  handleR2MoveFolder,
+  handleR2Rename,
+  handleR2Upload,
+} from "./api/_lib/r2-proxy";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -147,6 +154,26 @@ async function startServer() {
           : message,
       });
     }
+  });
+
+  app.get("/api/r2/list", (req, res) => {
+    void handleR2List(req, res);
+  });
+
+  app.delete("/api/r2/delete", (req, res) => {
+    void handleR2Delete(req, res);
+  });
+
+  app.post("/api/r2/rename", (req, res) => {
+    void handleR2Rename(req, res);
+  });
+
+  app.post("/api/r2/move-folder", (req, res) => {
+    void handleR2MoveFolder(req, res);
+  });
+
+  app.post("/api/r2/upload", (req, res) => {
+    void handleR2Upload(req, res);
   });
 
   // Serve static files from the module directory if needed for documentation

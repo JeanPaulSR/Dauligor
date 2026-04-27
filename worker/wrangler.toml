@@ -4,7 +4,7 @@ compatibility_date = "2026-04-26"
 preview_urls = false
 
 [vars]
-R2_PUBLIC_URL = "https://pub-94b0cb6324664f419f514b439efe7218.r2.dev"
+R2_PUBLIC_URL = "https://images.dauligor.com"
 
 [observability]
 enabled = true
