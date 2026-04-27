@@ -1,12 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { applicationDefault, cert, getApp, getApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const HARDCODED_STAFF_EMAILS = new Set([
   "luapnaej101@gmail.com",
   "admin@archive.internal",
@@ -29,8 +23,11 @@ export class HttpError extends Error {
 }
 
 function loadFirebaseConfig(): FirebaseAppletConfig {
-  const configPath = path.resolve(__dirname, "../../firebase-applet-config.json");
-  return JSON.parse(fs.readFileSync(configPath, "utf8")) as FirebaseAppletConfig;
+  return {
+    projectId: process.env.FIREBASE_PROJECT_ID || "gen-lang-client-0493579997",
+    firestoreDatabaseId:
+      process.env.FIRESTORE_DATABASE_ID || "ai-studio-923ef1e5-9f79-409a-94a2-971dd56e6ef0",
+  };
 }
 
 export function getAdminServices() {
