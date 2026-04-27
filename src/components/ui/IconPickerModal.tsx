@@ -28,7 +28,7 @@ export interface IconPickerModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (url: string) => void;
-  rootFolder?: string;             // 'icons' or 'tokens'
+  rootFolder?: string;
   imageType?: 'icon' | 'token';
 }
 
@@ -81,7 +81,6 @@ export function IconPickerModal({
     }
   }, []);
 
-  // Reset on open
   useEffect(() => {
     if (open) {
       setCurrentPath(rootFolder);
@@ -143,7 +142,7 @@ export function IconPickerModal({
       toast.success(uploadToTemp ? 'Uploaded to _temp — move it via Image Manager' : 'Icon uploaded');
       if (!uploadToTemp) {
         setIcons((prev) => [...prev, { key: uploadPath, url, name: fileName.replace('.webp', '') }]);
-        setAllIcons(null); // invalidate flat-list cache
+        setAllIcons(null);
       }
       setShowUpload(false);
     } catch (err: any) {
@@ -165,27 +164,31 @@ export function IconPickerModal({
     setCurrentPath([rootFolder, ...pathSegments.slice(0, index + 1)].join('/'));
   };
 
-  // ── render ────────────────────────────────────────────────────────────────
-
   const title = imageType === 'token' ? 'Browse Tokens' : 'Browse Icons';
   const sizeLabel = imageType === 'token' ? '400×400' : '126×126';
 
+  // ── render ────────────────────────────────────────────────────────────────
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[82vh] flex flex-col gap-0 p-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-5 pb-3 shrink-0 border-b border-gold/10">
+      {/*
+        Override the shadcn DialogContent default sm:max-w-sm by explicitly
+        passing sm:max-w-[700px]. tailwind-merge removes the conflicting default.
+      */}
+      <DialogContent className="sm:max-w-[700px] max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b border-gold/10">
           <DialogTitle className="text-base font-serif">{title}</DialogTitle>
         </DialogHeader>
 
         {/* Toolbar */}
-        <div className="px-4 py-2 border-b border-gold/10 shrink-0 flex items-center gap-2 flex-wrap">
+        <div className="px-4 py-2 border-b border-gold/10 shrink-0 flex items-center gap-3">
           {/* Breadcrumb */}
           <div className="flex items-center gap-1 text-xs flex-1 min-w-0 overflow-hidden">
             <button
               onClick={() => { setCurrentPath(rootFolder); setSearch(''); }}
               className="text-gold hover:text-white transition-colors flex items-center gap-1 shrink-0"
             >
-              <Home className="w-3 h-3" />
+              <Home className="w-3.5 h-3.5" />
               <span>{rootFolder}</span>
             </button>
             {pathSegments.map((seg, i) => (
@@ -194,7 +197,7 @@ export function IconPickerModal({
                 <button
                   onClick={() => navigateToSegment(i)}
                   className={cn(
-                    'transition-colors truncate max-w-[120px]',
+                    'transition-colors truncate max-w-[160px]',
                     i === pathSegments.length - 1
                       ? 'text-ink/50 cursor-default'
                       : 'text-gold hover:text-white',
@@ -208,17 +211,17 @@ export function IconPickerModal({
 
           {/* Search */}
           <div className="relative shrink-0">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30 pointer-events-none" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
             <Input
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
               placeholder="Search all…"
-              className="pl-7 h-7 text-xs w-32 bg-background/50 border-gold/20"
+              className="pl-8 h-8 text-xs w-44 bg-background/50 border-gold/20"
             />
             {search && (
               <button
                 onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -229,7 +232,10 @@ export function IconPickerModal({
           <Button
             size="sm"
             variant="ghost"
-            className={cn('h-7 text-xs gap-1.5 shrink-0', showUpload ? 'btn-gold-solid' : 'btn-gold')}
+            className={cn(
+              'h-8 text-xs gap-1.5 shrink-0 uppercase tracking-widest font-bold',
+              showUpload ? 'btn-gold-solid' : 'btn-gold',
+            )}
             onClick={() => setShowUpload((v) => !v)}
           >
             <Upload className="w-3 h-3" /> Upload
@@ -241,7 +247,7 @@ export function IconPickerModal({
             className="text-ink/40 hover:text-gold transition-colors shrink-0"
             title="Refresh"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
           </button>
         </div>
 
@@ -277,9 +283,7 @@ export function IconPickerModal({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
               >
-                {uploading
-                  ? <Loader2 className="w-3 h-3 animate-spin" />
-                  : <Upload className="w-3 h-3" />}
+                {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
                 {uploading ? 'Uploading…' : 'Choose File'}
               </Button>
               <span className="text-[10px] text-ink/40">
@@ -300,11 +304,11 @@ export function IconPickerModal({
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 min-h-0">
+        <div className="flex-1 overflow-y-auto p-4 min-h-0 custom-scrollbar">
           {loading && !search ? (
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
+            <div className="grid grid-cols-5 gap-2">
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded border border-gold/10" />
               ))}
             </div>
           ) : search ? (
@@ -317,25 +321,33 @@ export function IconPickerModal({
                 No {imageType}s match "{search}"
               </p>
             ) : (
-              <IconGrid icons={displayedIcons} onSelect={(url) => { onSelect(url); onClose(); }} />
+              <>
+                <p className="text-xs text-ink/40 mb-3">
+                  {displayedIcons.length} result{displayedIcons.length !== 1 ? 's' : ''}
+                </p>
+                <IconGrid icons={displayedIcons} onSelect={(url) => { onSelect(url); onClose(); }} />
+              </>
             )
           ) : (
-            <div className="space-y-4">
-              {/* Sub-folders */}
+            <div className="space-y-3">
+              {/* Sub-folders — full-width list rows like Foundry */}
               {folders.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <div className="space-y-0.5">
                   {folders.map((f) => (
                     <button
                       key={f.fullPath}
                       onClick={() => setCurrentPath(f.fullPath)}
-                      className="flex items-center gap-2 p-3 border border-gold/20 rounded-lg bg-gold/5 hover:bg-gold/10 hover:border-gold/40 transition-all text-left group"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 border border-transparent hover:border-gold/20 hover:bg-gold/8 rounded transition-all text-left group"
                     >
-                      <Folder className="w-4 h-4 text-gold/60 group-hover:text-gold shrink-0" />
-                      <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
+                      <Folder className="w-4 h-4 text-gold/50 group-hover:text-gold/80 shrink-0" />
+                      <span className="text-sm text-ink/65 group-hover:text-ink/90">
                         {f.name}
                       </span>
                     </button>
                   ))}
+                  {displayedIcons.length > 0 && (
+                    <div className="border-t border-gold/10 my-2" />
+                  )}
                 </div>
               )}
 
@@ -368,22 +380,24 @@ function IconGrid({
   onSelect: (url: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+    <div className="grid grid-cols-5 gap-1">
       {icons.map((icon) => (
         <button
           key={icon.key}
           onClick={() => onSelect(icon.url)}
           title={icon.name}
-          className="flex flex-col items-center gap-1.5 p-2 border border-gold/10 rounded-lg hover:border-gold/50 hover:bg-gold/5 transition-all group aspect-square justify-center"
+          className="flex flex-col items-center gap-1.5 p-2 border border-transparent rounded hover:border-gold/40 hover:bg-gold/8 transition-all group"
         >
-          <img
-            src={icon.url}
-            alt={icon.name}
-            className="w-10 h-10 object-contain"
-            referrerPolicy="no-referrer"
-            onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }}
-          />
-          <span className="text-[9px] text-ink/50 group-hover:text-ink/80 truncate w-full text-center leading-tight">
+          <div className="w-full aspect-square flex items-center justify-center">
+            <img
+              src={icon.url}
+              alt={icon.name}
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+              onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }}
+            />
+          </div>
+          <span className="text-[10px] text-ink/45 group-hover:text-ink/75 truncate w-full text-center leading-tight">
             {icon.name}
           </span>
         </button>

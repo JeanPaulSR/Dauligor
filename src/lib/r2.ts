@@ -65,6 +65,29 @@ export async function r2Delete(key: string): Promise<void> {
   if (!res.ok) throw new Error(`Failed to delete from storage: ${res.status}`);
 }
 
+export async function r2MoveFolder(
+  oldPrefix: string,
+  newPrefix: string,
+  onProgress?: (moved: number) => void,
+): Promise<{ count: number }> {
+  let total = 0;
+  let done = false;
+  do {
+    const res = await fetch(`${WORKER_URL}/move-folder`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${API_SECRET}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldPrefix, newPrefix }),
+    });
+    if (!res.ok) throw new Error(`Failed to move folder: ${res.status}`);
+    const data = await res.json() as { count: number; done: boolean };
+    total += data.count;
+    done = data.done;
+    onProgress?.(total);
+    await new Promise(resolve => setTimeout(resolve, 0));
+  } while (!done);
+  return { count: total };
+}
+
 export async function r2Rename(oldKey: string, newKey: string): Promise<{ url: string; key: string }> {
   const res = await fetch(`${WORKER_URL}/rename`, {
     method: 'POST',

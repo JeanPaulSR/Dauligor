@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Swords, Wand2, Dices, Zap, Sparkles, ArrowRight, 
+import {
+  Swords, Wand2, Dices, Zap, Sparkles, ArrowRight,
   Heart, Shield, Boxes, RefreshCw, Wrench, Plus,
-  Trash2, Edit2, Info, Timer, Target,
-  ChevronRight, X, FileJson, Eye, MousePointer2
+  Trash2, Info, Timer, Target,
+  ChevronRight, X, FileJson,
 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -18,6 +19,7 @@ import { ActivityKind, SemanticActivity } from '../../types/activities';
 interface ActivityEditorProps {
   activities: SemanticActivity[] | Record<string, SemanticActivity>;
   onChange: (activities: SemanticActivity[]) => void;
+  context?: 'feature' | 'spell' | 'item' | 'feat';
 }
 
 const ACTIVITY_KINDS: { kind: ActivityKind; label: string; icon: any }[] = [
@@ -61,6 +63,72 @@ const CREATURE_TYPE_OPTIONS = [
   'plant',
   'undead'
 ];
+
+// ── shared form primitives ────────────────────────────────────────────────────
+
+function ActivitySection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 py-2.5">
+        <div className="flex-1 border-t border-dashed border-gold/20" />
+        <span className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 shrink-0 select-none">{label}</span>
+        <div className="flex-1 border-t border-dashed border-gold/20" />
+      </div>
+      <div className="divide-y divide-gold/5">{children}</div>
+    </div>
+  );
+}
+
+function FieldRow({
+  label, hint, children, inline = false,
+}: {
+  label: string; hint?: string; children: React.ReactNode; inline?: boolean;
+}) {
+  return (
+    <div className={cn('flex gap-4 py-2.5', inline ? 'items-center' : 'items-start')}>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-ink/75 leading-none">{label}</p>
+        {hint && <p className="text-[10px] text-ink/35 mt-1 leading-snug">{hint}</p>}
+      </div>
+      <div className={inline ? 'shrink-0' : 'w-[220px] shrink-0'}>{children}</div>
+    </div>
+  );
+}
+
+// ── constants ─────────────────────────────────────────────────────────────────
+
+const KIND_DESCRIPTIONS: Record<string, string> = {
+  attack:    'Roll to hit a target, then deal damage',
+  cast:      'Cast a linked spell from a spellbook',
+  check:     'Request an ability check from a creature',
+  damage:    'Deal damage without an attack roll',
+  enchant:   'Apply magical properties to a held item',
+  forward:   'Delegate execution to another activity',
+  heal:      'Restore hit points',
+  save:      'Force a saving throw, with optional damage',
+  summon:    'Conjure creatures into the encounter',
+  transform: 'Shift the user into an alternate form',
+  utility:   'Perform a custom roll or passive effect',
+};
+
+// Which kinds are "primary" (shown first) per context
+const PRIMARY_KINDS: Record<NonNullable<ActivityEditorProps['context']>, ActivityKind[]> = {
+  feature: ['attack', 'damage', 'save', 'heal', 'utility'],
+  spell:   ['attack', 'damage', 'save', 'heal'],
+  item:    ['attack', 'damage', 'save', 'heal', 'utility'],
+  feat:    ['attack', 'damage', 'save', 'heal', 'utility'],
+};
+
+function formatActivationSummary(activity: SemanticActivity): string {
+  if (!activity.activation?.type) return '';
+  const labels: Record<string, string> = {
+    action: 'Action', bonus: 'Bonus Action', reaction: 'Reaction',
+    minute: 'Minute', hour: 'Hour', special: 'Special',
+  };
+  const label = labels[activity.activation.type] ?? activity.activation.type;
+  const val = activity.activation.value;
+  return val && val > 1 ? `${val} ${label}s` : label;
+}
 
 const parseCsv = (value: string) => value.split(',').map(s => s.trim()).filter(Boolean);
 const parseNullableInteger = (value: string) => {
@@ -111,7 +179,7 @@ const sanitizeActivity = (activity: SemanticActivity): SemanticActivity => {
   return sanitized;
 };
 
-export default function ActivityEditor({ activities, onChange }: ActivityEditorProps) {
+export default function ActivityEditor({ activities, onChange, context = 'feature' }: ActivityEditorProps) {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('identity');
@@ -335,8 +403,12 @@ export default function ActivityEditor({ activities, onChange }: ActivityEditorP
     });
   };
 
+  const primaryKinds = PRIMARY_KINDS[context];
+  const secondaryKinds = ACTIVITY_KINDS.filter(k => !primaryKinds.includes(k.kind));
+  const primaryKindEntries = ACTIVITY_KINDS.filter(k => primaryKinds.includes(k.kind));
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="section-header">
         <h4 className="section-label text-gold">Activities</h4>
         <Button
@@ -346,87 +418,144 @@ export default function ActivityEditor({ activities, onChange }: ActivityEditorP
           onClick={() => setIsSelectorOpen(true)}
           className="h-7 px-2 gap-1.5 btn-gold"
         >
-          <Plus className="w-3 h-3" /> Add Activity
+          <Plus className="w-3 h-3" /> Add
         </Button>
       </div>
 
-      <div className="space-y-1">
-        {activityList.map((activity) => {
-          const kindInfo = ACTIVITY_KINDS.find(k => k.kind === activity.kind);
-          const Icon = kindInfo?.icon || Info;
+      {/* Activity list — Foundry-style tree rows */}
+      <div className={cn(
+        'rounded border overflow-hidden',
+        activityList.length > 0 ? 'border-gold/15 bg-background/20' : 'border-dashed border-gold/10',
+      )}>
+        {activityList.length === 0 ? (
+          <div className="py-8 flex flex-col items-center justify-center text-center">
+            <Zap className="w-6 h-6 text-gold/15 mb-2" />
+            <p className="text-ink/25 italic text-xs">No activities defined</p>
+            <p className="text-[10px] text-ink/20 mt-0.5">
+              Activities drive the mechanical behaviour of this {context === 'spell' ? 'spell' : context === 'item' ? 'item' : 'feature'}
+            </p>
+          </div>
+        ) : (
+          activityList.map((activity, index) => {
+            const kindInfo = ACTIVITY_KINDS.find(k => k.kind === activity.kind);
+            const KindIcon = kindInfo?.icon || Info;
+            const activationLabel = formatActivationSummary(activity);
+            const isExternal = activity.img && !activity.img.startsWith('systems/') && !activity.img.startsWith('icons/');
 
-          return (
-            <div 
-              key={activity.id}
-              className="group flex items-center justify-between p-2 border border-gold/5 bg-background/20 rounded hover:border-gold/30 hover:bg-gold/5 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded border border-gold/10 bg-gold/5 flex items-center justify-center text-gold">
-                  <Icon className="w-4 h-4" />
+            return (
+              <div
+                key={activity.id}
+                className={cn(
+                  'relative group flex items-center gap-2 pl-5 pr-2 py-1.5',
+                  'hover:bg-gold/5 cursor-pointer transition-colors',
+                  index === 0
+                    ? 'border-l-2 border-l-gold/50'
+                    : 'border-t border-t-gold/10 border-l-2 border-l-gold/10',
+                )}
+                onClick={() => setEditingId(activity.id)}
+              >
+                {/* Tree connector */}
+                <span className="absolute left-1.5 top-[9px] text-gold/30 text-[11px] font-bold select-none leading-none">┗</span>
+
+                {/* Icon */}
+                <div className="w-6 h-6 shrink-0 rounded border border-gold/20 bg-gold/5 flex items-center justify-center overflow-hidden">
+                  {isExternal ? (
+                    <img src={activity.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                  ) : (
+                    <KindIcon className="w-3.5 h-3.5 text-gold/70" />
+                  )}
                 </div>
-                <div>
-                  <div className="text-[13px] font-bold text-ink leading-none">{activity.name}</div>
-                  <div className="text-[10px] text-ink/40 uppercase tracking-tight mt-1">
-                    {activity.activation?.type || activity.kind}
+
+                {/* Name + meta */}
+                <div className="flex-1 min-w-0">
+                  <span className="text-[12px] font-semibold text-ink/85 leading-none">{activity.name}</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[9px] uppercase tracking-widest text-ink/30">{kindInfo?.label}</span>
+                    {activationLabel && (
+                      <>
+                        <span className="text-gold/20 leading-none">·</span>
+                        <span className="text-[9px] text-ink/30">{activationLabel}</span>
+                      </>
+                    )}
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button 
-                  type="button"
-                  size="icon" 
-                  variant="ghost" 
-                  onClick={() => setEditingId(activity.id)}
-                  className="h-7 w-7 text-ink/40 hover:text-gold"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </Button>
-                <Button 
-                  type="button"
-                  size="icon" 
-                  variant="ghost" 
-                  onClick={() => handleRemoveActivity(activity.id)}
-                  className="h-7 w-7 text-ink/40 hover:text-blood"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-          );
-        })}
 
-        {activityList.length === 0 && (
-          <div className="py-12 border border-dashed border-gold/10 rounded flex flex-col items-center justify-center text-center bg-background/5">
-            <Zap className="w-8 h-8 text-gold/10 mb-2" />
-            <div className="text-ink/20 italic text-xs">No activities defined yet.</div>
-          </div>
+                {/* Delete */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleRemoveActivity(activity.id); }}
+                  className="shrink-0 w-6 h-6 flex items-center justify-center text-ink/20 hover:text-blood opacity-0 group-hover:opacity-100 transition-all rounded"
+                  title="Remove activity"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })
         )}
       </div>
 
+      {/* Activity type selector */}
       <Dialog open={isSelectorOpen} onOpenChange={setIsSelectorOpen}>
-        <DialogContent className="max-w-md bg-card border-gold/20 p-6">
-          <DialogHeader className="mb-4">
-            <DialogTitle className="h2-title text-center text-gold">Create Activity</DialogTitle>
+        <DialogContent className="sm:max-w-[440px] bg-card border-gold/20 p-0">
+          <DialogHeader className="px-5 pt-4 pb-3 border-b border-gold/10">
+            <DialogTitle className="dialog-title">Add Activity</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-2">
-            {ACTIVITY_KINDS.map(({ kind, label, icon: Icon }) => (
-              <button
-                key={kind}
-                onClick={() => handleAddActivity(kind)}
-                className="flex flex-col items-center gap-2 p-4 rounded border border-gold/10 bg-background/20 hover:border-gold/40 hover:bg-gold/10 transition-all text-center group"
-              >
-                <div className="p-3 bg-background rounded border border-gold/10 text-gold group-hover:scale-110 transition-transform">
-                  <Icon className="w-6 h-6" />
+          <div className="p-3 overflow-y-auto max-h-[70vh]">
+            {/* Primary kinds for this context */}
+            <div className="space-y-0.5">
+              {primaryKindEntries.map(({ kind, label, icon: Icon }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => handleAddActivity(kind)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded border border-transparent hover:border-gold/20 hover:bg-gold/5 transition-all text-left group"
+                >
+                  <div className="w-7 h-7 rounded border border-gold/15 bg-gold/5 flex items-center justify-center shrink-0 group-hover:border-gold/40 group-hover:bg-gold/10 transition-colors">
+                    <Icon className="w-4 h-4 text-gold/60 group-hover:text-gold transition-colors" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-ink/75 group-hover:text-ink/95 leading-none">{label}</p>
+                    <p className="text-[10px] text-ink/30 mt-0.5 leading-snug">{KIND_DESCRIPTIONS[kind]}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Secondary / advanced kinds */}
+            {secondaryKinds.length > 0 && (
+              <>
+                <div className="flex items-center gap-2 my-2.5">
+                  <div className="flex-1 border-t border-gold/10" />
+                  <span className="text-[9px] uppercase tracking-widest text-ink/25">Advanced</span>
+                  <div className="flex-1 border-t border-gold/10" />
                 </div>
-                <span className="field-label group-hover:text-gold">{label}</span>
-              </button>
-            ))}
+                <div className="space-y-0.5">
+                  {secondaryKinds.map(({ kind, label, icon: Icon }) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => handleAddActivity(kind)}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded border border-transparent hover:border-gold/20 hover:bg-gold/5 transition-all text-left group"
+                    >
+                      <div className="w-6 h-6 rounded border border-gold/10 bg-gold/5 flex items-center justify-center shrink-0 group-hover:border-gold/30 transition-colors">
+                        <Icon className="w-3.5 h-3.5 text-gold/40 group-hover:text-gold/70 transition-colors" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold text-ink/60 group-hover:text-ink/85 leading-none">{label}</p>
+                        <p className="text-[9px] text-ink/25 mt-0.5 leading-snug">{KIND_DESCRIPTIONS[kind]}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editingId} onOpenChange={(open) => !open && setEditingId(null)}>
-        <DialogContent className="dialog-content max-w-[95vw] lg:max-w-4xl flex flex-col h-[90vh]">
+        <DialogContent className="dialog-content sm:max-w-[95vw] lg:max-w-4xl flex flex-col h-[90vh]">
           {editingActivity && (
             <>
               <DialogHeader className="p-6 pb-2 shrink-0 border-b border-gold/10">
@@ -456,208 +585,182 @@ export default function ActivityEditor({ activities, onChange }: ActivityEditorP
                 <div className="max-w-2xl mx-auto space-y-8 py-4">
                   
                   {activeTab === 'identity' && (
-                    <div className="space-y-6">
-                      <div className="form-group-custom">
-                        <div className="flex items-center justify-between mb-2">
-                           <Label className="label-text-custom">Activity</Label>
-                        </div>
-                        <div className="grid gap-4 p-4 border border-gold/10 bg-background/20 rounded">
-                          <div className="grid gap-1.5">
-                            <Label className="label-text-xs-custom">Name</Label>
-                            <Input 
-                              value={editingActivity.name}
-                              onChange={e => handleUpdateActivity(editingId!, { name: e.target.value })}
-                              className="bg-background/40 border-gold/10 h-9 font-serif text-lg"
+                    <div>
+                      {/* ——— ACTIVITY ——— */}
+                      <ActivitySection label="Activity">
+                        <FieldRow label="Name">
+                          <Input
+                            value={editingActivity.name}
+                            onChange={e => handleUpdateActivity(editingId!, { name: e.target.value })}
+                            className="field-input border-gold/15 font-serif"
+                          />
+                        </FieldRow>
+                        <FieldRow label="Icon" hint="Foundry asset path or public URL">
+                          <div className="flex gap-1.5">
+                            <Input
+                              value={editingActivity.img}
+                              onChange={e => handleUpdateActivity(editingId!, { img: e.target.value })}
+                              className="field-input border-gold/15 font-mono text-xs"
                             />
+                            <Button variant="outline" size="icon" className="h-9 w-9 border-gold/15 shrink-0">
+                              <FileJson className="w-4 h-4 text-gold/40" />
+                            </Button>
                           </div>
-                          <div className="grid gap-1.5">
-                            <Label className="label-text-xs-custom">Icon</Label>
-                            <div className="flex gap-1.5">
-                              <Input 
-                                value={editingActivity.img}
-                                onChange={e => handleUpdateActivity(editingId!, { img: e.target.value })}
-                                className="bg-background/40 border-gold/10 h-9 font-mono text-xs"
-                              />
-                              <Button variant="outline" size="icon" className="h-9 w-9 border-gold/10 shrink-0">
-                                <FileJson className="w-4 h-4 text-gold/40" />
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="grid gap-1.5">
-                            <Label className="label-text-xs-custom">Chat Flavor</Label>
-                            <Input 
-                              value={editingActivity.chatFlavor || ''}
-                              onChange={e => handleUpdateActivity(editingId!, { chatFlavor: e.target.value })}
-                              className="bg-background/40 border-gold/10 h-9 text-xs"
-                              placeholder="Additional text displayed in chat..."
-                            />
-                          </div>
-                        </div>
-                      </div>
+                        </FieldRow>
+                        <FieldRow label="Chat Flavor" hint="Extra text appended to this activity's chat message">
+                          <Input
+                            value={editingActivity.chatFlavor || ''}
+                            onChange={e => handleUpdateActivity(editingId!, { chatFlavor: e.target.value })}
+                            className="field-input border-gold/15 text-xs"
+                            placeholder="Additional context…"
+                          />
+                        </FieldRow>
+                      </ActivitySection>
 
+                      {/* ——— ATTACK ——— */}
                       {editingActivity.kind === 'attack' && (
-                        <div className="form-group-custom">
-                          <div className="flex items-center justify-between mb-2">
-                             <Label className="label-text-custom font-serif">Attack</Label>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4 p-4 border border-gold/10 bg-background/20 rounded">
-                            <div className="grid gap-1.5">
-                              <Label className="label-text-xs-custom">Attack Type</Label>
-                              <Select 
-                                value={editingActivity.attack?.type}
-                                onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, type: val as any } })}
-                              >
-                                <SelectTrigger className="h-9 bg-background/40 border-gold/10 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="melee">Melee</SelectItem>
-                                  <SelectItem value="ranged">Ranged</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="grid gap-1.5">
-                              <Label className="label-text-xs-custom">Classification</Label>
-                              <Select 
-                                value={editingActivity.attack?.classification}
-                                onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, classification: val as any } })}
-                              >
-                                <SelectTrigger className="h-9 bg-background/40 border-gold/10 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="unarmed">Unarmed Attack</SelectItem>
-                                  <SelectItem value="weapon">Weapon Attack</SelectItem>
-                                  <SelectItem value="spell">Spell Attack</SelectItem>
-                                  <SelectItem value="none">None</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="grid gap-1.5">
-                               <Label className="label-text-xs-custom">Ability</Label>
-                               <Select 
-                                value={editingActivity.attack?.ability || ''}
-                                onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, ability: val } })}
-                               >
-                                  <SelectTrigger className="h-9 bg-background/40 border-gold/10 text-xs">
-                                    <SelectValue placeholder="Default" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="">Default</SelectItem>
-                                    <SelectItem value="str">Strength</SelectItem>
-                                    <SelectItem value="dex">Dexterity</SelectItem>
-                                    <SelectItem value="con">Constitution</SelectItem>
-                                    <SelectItem value="int">Intelligence</SelectItem>
-                                    <SelectItem value="wis">Wisdom</SelectItem>
-                                    <SelectItem value="cha">Charisma</SelectItem>
-                                  </SelectContent>
-                               </Select>
-                            </div>
-                            <div className="grid gap-1.5">
-                               <Label className="label-text-xs-custom">Flat Bonus</Label>
-                               <Input 
-                                value={editingActivity.attack?.bonus || ''}
-                                onChange={e => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, bonus: e.target.value } })}
-                                className="h-9 bg-background/40 border-gold/10 font-mono text-xs text-center"
-                                placeholder="+2"
-                               />
-                            </div>
-                            <div className="grid gap-1.5">
-                               <Label className="label-text-xs-custom">Critical Threshold</Label>
-                               <Input
-                                type="number"
-                                value={editingActivity.attack?.critical?.threshold ?? ''}
-                                onChange={e => handleUpdateActivity(editingId!, {
-                                  attack: {
-                                    ...editingActivity.attack!,
-                                    critical: {
-                                      ...(editingActivity.attack?.critical ?? { threshold: null }),
-                                      threshold: parseNullableInteger(e.target.value)
-                                    }
+                        <ActivitySection label="Attack">
+                          <FieldRow label="Attack Type" hint="Is this a melee or ranged attack?">
+                            <Select
+                              value={editingActivity.attack?.type}
+                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, type: val as any } })}
+                            >
+                              <SelectTrigger className="field-input border-gold/15 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="melee">Melee</SelectItem>
+                                <SelectItem value="ranged">Ranged</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FieldRow>
+                          <FieldRow label="Classification" hint="Unarmed, weapon, or spell attack?">
+                            <Select
+                              value={editingActivity.attack?.classification}
+                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, classification: val as any } })}
+                            >
+                              <SelectTrigger className="field-input border-gold/15 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="unarmed">Unarmed Attack</SelectItem>
+                                <SelectItem value="weapon">Weapon Attack</SelectItem>
+                                <SelectItem value="spell">Spell Attack</SelectItem>
+                                <SelectItem value="none">None</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FieldRow>
+                          <FieldRow label="Ability Score" hint="Override which ability drives attack and damage rolls">
+                            <Select
+                              value={editingActivity.attack?.ability || ''}
+                              onValueChange={val => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, ability: val || undefined } })}
+                            >
+                              <SelectTrigger className="field-input border-gold/15 text-xs">
+                                <SelectValue placeholder="Default" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Default</SelectItem>
+                                <SelectItem value="str">Strength</SelectItem>
+                                <SelectItem value="dex">Dexterity</SelectItem>
+                                <SelectItem value="con">Constitution</SelectItem>
+                                <SelectItem value="int">Intelligence</SelectItem>
+                                <SelectItem value="wis">Wisdom</SelectItem>
+                                <SelectItem value="cha">Charisma</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FieldRow>
+                          <FieldRow label="Attack Bonus" hint="Flat bonus formula added on top of the derived roll">
+                            <Input
+                              value={editingActivity.attack?.bonus || ''}
+                              onChange={e => handleUpdateActivity(editingId!, { attack: { ...editingActivity.attack!, bonus: e.target.value } })}
+                              className="field-input border-gold/15 font-mono text-xs text-center"
+                              placeholder="e.g. +2 or @prof"
+                            />
+                          </FieldRow>
+                          <FieldRow label="Critical Threshold" hint="Minimum natural roll to score a critical hit (default 20)">
+                            <Input
+                              type="number"
+                              value={editingActivity.attack?.critical?.threshold ?? ''}
+                              onChange={e => handleUpdateActivity(editingId!, {
+                                attack: {
+                                  ...editingActivity.attack!,
+                                  critical: {
+                                    ...(editingActivity.attack?.critical ?? { threshold: null }),
+                                    threshold: parseNullableInteger(e.target.value)
                                   }
-                                })}
-                                className="h-9 bg-background/40 border-gold/10 text-center"
-                                placeholder="20"
-                               />
-                            </div>
-                            <div className="col-span-2 flex items-center justify-between border-t border-gold/5 pt-4">
-                              <div className="space-y-0.5">
-                                <Label className="font-bold text-xs uppercase text-ink/80">Flat Attack</Label>
-                                <p className="text-[10px] text-ink/40">Treat the attack bonus as a flat formula instead of deriving it.</p>
-                              </div>
+                                }
+                              })}
+                              className="field-input border-gold/15 text-center"
+                              placeholder="20"
+                            />
+                          </FieldRow>
+                        </ActivitySection>
+                      )}
+
+                      {/* ——— BEHAVIOR ——— */}
+                      {(editingActivity.kind === 'attack' || showsTemplatePrompt) && (
+                        <ActivitySection label="Behavior">
+                          {editingActivity.kind === 'attack' && (
+                            <FieldRow
+                              label="Flat Attack"
+                              hint="Treat the attack bonus as a complete flat formula rather than adding proficiency and ability"
+                              inline
+                            >
                               <Checkbox
                                 checked={editingActivity.attack?.flat}
                                 onCheckedChange={checked => handleUpdateActivity(editingId!, {
                                   attack: { ...editingActivity.attack!, flat: !!checked }
                                 })}
                               />
-                            </div>
-                          </div>
-                        </div>
+                            </FieldRow>
+                          )}
+                          {showsTemplatePrompt && (
+                            <FieldRow
+                              label="Template Prompt"
+                              hint="Ask the player to place a measured template before the activity resolves"
+                              inline
+                            >
+                              <Checkbox
+                                checked={editingActivity.target?.prompt}
+                                onCheckedChange={checked => updateTarget({ prompt: !!checked })}
+                              />
+                            </FieldRow>
+                          )}
+                        </ActivitySection>
                       )}
 
-                      {showsTemplatePrompt && (
-                      <div className="form-group-custom">
-                         <div className="flex items-center justify-between mb-2">
-                           <Label className="label-text-custom">Behavior</Label>
-                        </div>
-                        <div className="grid gap-4 p-4 border border-gold/10 bg-background/20 rounded">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                               <Label className="font-bold text-xs uppercase text-ink/80">Measured Template Prompt</Label>
-                               <p className="text-[10px] text-ink/40">Should player be prompted to place a template?</p>
-                            </div>
-                            <Checkbox 
-                              checked={editingActivity.target?.prompt}
-                              onCheckedChange={checked => updateTarget({ prompt: !!checked })}
+                      {/* ——— VISIBILITY ——— */}
+                      <ActivitySection label="Visibility">
+                        <FieldRow label="Level Range" hint="Character levels at which this activity is available">
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={editingActivity.visibility?.level?.min ?? 0}
+                              onChange={e => updateSection('visibility', {
+                                level: { min: parseInt(e.target.value, 10) || 0, max: editingActivity.visibility?.level?.max ?? 20 }
+                              })}
+                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs"
+                            />
+                            <ArrowRight className="w-3 h-3 text-gold/25 shrink-0" />
+                            <Input
+                              type="number"
+                              value={editingActivity.visibility?.level?.max ?? 20}
+                              onChange={e => updateSection('visibility', {
+                                level: { min: editingActivity.visibility?.level?.min ?? 0, max: parseInt(e.target.value, 10) || 20 }
+                              })}
+                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs"
                             />
                           </div>
-                        </div>
-                      </div>
-                      )}
-
-                      <div className="form-group-custom">
-                         <div className="flex items-center justify-between mb-2">
-                           <Label className="label-text-custom">Visibility</Label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 p-4 border border-gold/10 bg-background/20 rounded">
-                           <div className="grid gap-1.5">
-                              <Label className="label-text-xs-custom">Level Limit</Label>
-                              <div className="flex items-center gap-2">
-                                <Input 
-                                  type="number"
-                                  value={editingActivity.visibility?.level?.min ?? 0}
-                                  onChange={e => updateSection('visibility', {
-                                    level: { min: parseInt(e.target.value, 10) || 0, max: editingActivity.visibility?.level?.max ?? 20 }
-                                  })}
-                                  className="h-8 bg-background/40 border-gold/10 text-center"
-                                />
-                                <ArrowRight className="w-3 h-3 text-gold/20" />
-                                <Input 
-                                  type="number"
-                                  value={editingActivity.visibility?.level?.max ?? 20}
-                                  placeholder="∞"
-                                  onChange={e => updateSection('visibility', {
-                                    level: { min: editingActivity.visibility?.level?.min ?? 0, max: parseInt(e.target.value, 10) || 20 }
-                                  })}
-                                  className="h-8 bg-background/40 border-gold/10 text-center"
-                                />
-                              </div>
-                           </div>
-                           <div className="grid gap-1.5">
-                              <Label className="label-text-xs-custom">Identifier Override</Label>
-                              <Input 
-                                value={editingActivity.visibility?.identifier || ''}
-                                onChange={e => updateSection('visibility', { identifier: e.target.value })}
-                                placeholder="class-slug"
-                                className="h-8 bg-background/40 border-gold/10 text-xs font-mono"
-                              />
-                           </div>
-                           <p className="col-span-2 text-[10px] text-ink/40 border-t border-gold/5 pt-4">
-                             Item-specific visibility requirements like attunement, identification, and magic are handled later when item and spell workflows are added.
-                           </p>
-                        </div>
-                      </div>
+                        </FieldRow>
+                        <FieldRow label="Class Identifier" hint="Slug of the class whose level is checked; leave blank to use character level">
+                          <Input
+                            value={editingActivity.visibility?.identifier || ''}
+                            onChange={e => updateSection('visibility', { identifier: e.target.value })}
+                            placeholder="e.g. ranger"
+                            className="field-input border-gold/15 text-xs font-mono"
+                          />
+                        </FieldRow>
+                      </ActivitySection>
                     </div>
                   )}
 
