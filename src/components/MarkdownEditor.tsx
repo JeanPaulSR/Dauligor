@@ -261,7 +261,7 @@ export default function MarkdownEditor({
   };
 
   return (
-    <div className={`relative border border-gold/10 rounded-md focus-within:border-gold transition-colors bg-card/50 flex flex-col ${className}`}>
+    <div className={`relative border border-gold/10 rounded-md focus-within:border-gold transition-colors bg-card/50 flex flex-col overflow-hidden ${className}`}>
       <MarkdownToolbar 
         textareaRef={textareaRef} 
         onUpdate={onChange} 
@@ -281,11 +281,11 @@ export default function MarkdownEditor({
         {isWYSIWYG ? (
           <div 
             ref={contentRef}
-            className="prose prose-sm max-w-none flex-grow overflow-auto cursor-text flex flex-col" 
+            className="prose prose-sm max-w-none flex-grow overflow-auto custom-scrollbar cursor-text flex flex-col" 
           >
             <EditorContent 
-              editor={editor} 
-              className="flex-grow flex flex-col [&>.tiptap]:flex-grow [&>.tiptap]:outline-none [&>.tiptap]:p-4" 
+              editor={editor}
+              className="flex-grow flex flex-col overflow-hidden [&>.tiptap]:flex-grow [&>.tiptap]:outline-none [&>.tiptap]:p-4" 
             />
           </div>
         ) : (
@@ -295,7 +295,7 @@ export default function MarkdownEditor({
             onChange={e => onChange(e.target.value)}
             onKeyDown={handleTab}
             placeholder={placeholder}
-            className="w-full flex-grow p-6 outline-none text-base font-serif leading-relaxed resize-none bg-transparent overflow-auto"
+            className="w-full flex-grow p-6 outline-none text-base font-serif leading-relaxed resize-none bg-transparent overflow-auto custom-scrollbar"
           />
         )}
       </div>

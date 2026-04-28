@@ -1041,13 +1041,15 @@ export default function SubclassEditor() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 min-h-0 bg-background/50">
+              <div className={`flex-1 min-h-0 p-6 bg-background/50 ${featureTab === 'description' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                 {featureTab === 'description' && (
-                  <div className="space-y-4">
+                  <div className="space-y-4 h-full min-h-0">
                     <MarkdownEditor 
                       value={editingFeature.description || ''} 
                       onChange={(val) => setEditingFeature({...editingFeature, description: val})}
                       minHeight="400px"
+                      maxHeight="100%"
+                      className="h-full min-h-0"
                     />
                   </div>
                 )}
