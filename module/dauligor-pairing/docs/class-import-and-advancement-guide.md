@@ -78,6 +78,8 @@ Current working interpretation:
 - the exporter synthesizes inherent `ItemGrant` rows for ordinary class and subclass features
 - the module reads those root advancement rows directly
 - actor import applies resulting trait changes back onto the actor root so proficiencies and saves actually appear on the sheet
+- actor import now distinguishes fresh class import, same-class level-up, and secondary-class multiclass import
+- ability score improvements are surfaced through native `dnd5e` advancement flows after import when the gained levels cross an ASI row
 
 ## Two Import Targets
 
@@ -113,8 +115,69 @@ With the current importer, that actor-side update now explicitly includes:
 - skill selections written onto the class `Trait` advancement and then applied to `actor.system.skills`
 - saving throw trait grants applied to `actor.system.abilities.*.proficient`
 - tool, armor, weapon, and language trait grants applied to the actor root trait fields
+- ASI advancement dialogs opened through native `dnd5e` flows when the imported class levels cross `AbilityScoreImprovement` advancements
 
 This is the mode the Dauligor character creator should care about most.
+
+## Description Text Contract
+
+The importer now accepts three description families for class, subclass, feature, and class-option text:
+
+- already-rendered HTML
+- BBCode exported by the app editor
+- simple markdown-like prose using headings and list syntax
+
+Current module behavior:
+
+- HTML is preserved as-is
+- BBCode is converted to Foundry-friendly HTML during import
+- plain markdown-like blocks are converted into headings, lists, horizontal rules, inline emphasis, and paragraphs
+- plain text still falls back to paragraph-wrapped HTML
+
+Practical rule for the app:
+
+- BBCode is the preferred rich-text transport if the content is not already HTML
+
+## Actor Import Modes
+
+The actor importer now has three distinct progression modes.
+
+### 1. Fresh class import
+
+Use the class exactly as exported.
+
+Expected behavior:
+
+- class level starts at 1 unless the Foundry import flow chooses a higher level
+- base class proficiencies are applied
+- all granted features at or below the selected class level are imported
+
+### 2. Same-class level-up
+
+This applies when the actor already has the same class embedded.
+
+Expected behavior:
+
+- the importer keeps the current class level as the floor
+- lower-level class and subclass features are not re-imported if they already belong to earlier levels
+- newly gained levels still import their newly granted features
+- desired feature/source sets still include all features at or below the target level so stale higher-level imports can be pruned safely
+
+### 3. Multiclass initial import
+
+This applies when the actor already has a different class but does not yet have this class.
+
+Expected behavior:
+
+- the importer uses `class.multiclassProficiencies` instead of the primary class proficiency profile
+- base class saving throws are not granted
+- only multiclass proficiencies are applied to the actor root
+- the embedded class item stores `flags.dauligor-pairing.proficiencyMode = "multiclass"` so later reimports and level-ups keep using the same secondary-class behavior
+
+Important:
+
+- multiclass mode is sticky for that embedded class item
+- later level-ups in the same class should not suddenly grant primary-class proficiencies
 
 ## Current Working Advancement Contract
 
@@ -135,6 +198,7 @@ In practice, a class like Sorcerer should now import with root rows for:
 - `ItemChoice`
 - `AbilityScoreImprovement`
 - inherent feature `ItemGrant`
+- feature descriptions that can be normalized from BBCode into Foundry HTML
 
 ## Identity Model
 
@@ -219,7 +283,7 @@ Minimum high-value fields:
       "progression": "full",
       "ability": "cha",
       "preparation": {
-        "mode": "always"
+        "formula": ""
       }
     },
     "primaryAbility": {
@@ -248,7 +312,52 @@ This is one of the strongest matching keys on the Foundry side.
 - type: HTML string
 - purpose: the rich class description shown in the item sheet
 
-The app should send rendered HTML, not BBCode.
+The importer now accepts either:
+
+- rendered HTML
+- BBCode
+- simple markdown-like prose
+
+The module will normalize non-HTML text into Foundry-friendly HTML during import.
+
+## Feature Item Typing
+
+Imported class-related feat items now carry Foundry-native type metadata.
+
+### Ordinary class and subclass features
+
+These import as:
+
+```json
+{
+  "type": "feat",
+  "system": {
+    "type": {
+      "value": "class",
+      "subtype": ""
+    }
+  }
+}
+```
+
+That makes them display as `Class Feature` on `dnd5e` sheets.
+
+### Class option items
+
+These import as feat items whose `system.type.value` remains `class`, but whose subtype is derived from the option-group name.
+
+Examples:
+
+- native subtype: `artificerInfusion`
+- custom subtype: generated from the option-group name and registered at runtime by the module
+
+The module also stores:
+
+- `flags.dauligor-pairing.featureTypeValue`
+- `flags.dauligor-pairing.featureTypeSubtype`
+- `flags.dauligor-pairing.featureTypeLabel`
+
+This keeps the display label and future sheet-sorting metadata stable even when the subtype is custom.
 
 ### `system.source`
 

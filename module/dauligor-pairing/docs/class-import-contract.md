@@ -44,6 +44,34 @@ The normalized bundle is still the cleanest transport for a strict contract.
 
 The semantic full export is now supported so the app can ship one richer class payload and let the Foundry module perform the final normalization step.
 
+## Native Spellcasting Note
+
+Current `dnd5e` class and subclass documents no longer store a class-level `system.spellcasting.preparation.mode` field.
+
+For imported classes and subclasses, the module should normalize semantic spellcasting into the native item shape:
+
+```json
+{
+  "system": {
+    "spellcasting": {
+      "progression": "full",
+      "ability": "wis",
+      "preparation": {
+        "formula": "@abilities.wis.mod + @classes.druid.levels"
+      }
+    }
+  }
+}
+```
+
+Important:
+
+- `system.spellcasting.progression` should stay native: `none`, `full`, `half`, `third`, `pact`, or `artificer`
+- `system.spellcasting.ability` should use lowercase Foundry ability keys such as `wis` or `cha`
+- `system.spellcasting.preparation` should only carry native fields, currently `formula`
+- prepared-caster formulas must be real Foundry formulas, not display text like `WIS + Level`
+- semantic spellcasting metadata such as ritual-caster status or progression type identifiers should stay in module flags, not in native `system.spellcasting`
+
 ## Import Targets
 
 The module now supports two distinct import targets for classes:
@@ -64,6 +92,13 @@ Actor-import note:
 
 - importer-only choices like `hpMode` or a custom HP roll formula are local Foundry UI state
 - Dauligor should not send those fields in the endpoint payload
+
+Current actor-import progression rules:
+
+- if the actor has no copy of the class yet and no other classes, import as a primary/base class
+- if the actor already has the same class, import only the newly gained class/subclass features for levels above the current class level
+- if the actor does not yet have the class but already has another class, use `class.multiclassProficiencies` instead of the primary class proficiency profile
+- if an embedded class item was first imported in multiclass mode, later reimports and level-ups keep that multiclass proficiency mode
 
 ## Identity Rule
 
@@ -133,6 +168,69 @@ Important:
 - `advancementIdMap` is only needed on embedded actor class items
 - world items may keep semantic advancement ids directly
 - actor feature items do not need `advancementIdMap`
+- embedded actor class items may also persist `proficiencyMode`, currently `primary` or `multiclass`
+
+## Description Payloads
+
+The module now accepts these description families for class, subclass, feature, and class-option text:
+
+- rendered HTML
+- BBCode from the app editor
+- simple markdown-like prose
+
+Preferred contract:
+
+- if the app is not sending HTML yet, BBCode is the preferred rich-text transport
+
+The module will normalize BBCode and plain markdown-like prose into Foundry HTML during import.
+
+## Feature Type Metadata
+
+Imported class-related feat items now use native `dnd5e` feature typing.
+
+Expected shapes:
+
+- ordinary class/subclass features:
+
+```json
+{
+  "system": {
+    "type": {
+      "value": "class",
+      "subtype": ""
+    }
+  }
+}
+```
+
+- class option items:
+
+```json
+{
+  "system": {
+    "type": {
+      "value": "class",
+      "subtype": "artificerInfusion"
+    }
+  }
+}
+```
+
+or another runtime-registered subtype derived from the option-group name.
+
+The module may also preserve:
+
+- `flags.dauligor-pairing.featureTypeValue`
+- `flags.dauligor-pairing.featureTypeSubtype`
+- `flags.dauligor-pairing.featureTypeLabel`
+
+for future sorting and display work.
+
+## ASI Behavior
+
+`AbilityScoreImprovement` rows should still be exported as native advancement entries in the root class advancement tree.
+
+During actor import, when the gained class levels cross one or more ASI rows, the module now opens the native `dnd5e` advancement flow for those ASIs after the class import completes.
 
 ### Embedded Advancement Metadata
 

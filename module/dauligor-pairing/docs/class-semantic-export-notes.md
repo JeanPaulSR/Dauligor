@@ -40,7 +40,13 @@ Actor-sheet imports remain intentionally narrower:
 - embed the class item
 - embed only the class features granted at or below the selected level
 - do not embed subclass items
-- do not embed class option items yet
+- embed only the selected class option items that apply to the chosen class level
+
+More precisely, actor-sheet imports now behave like this:
+
+- fresh class import: embed features up to the chosen level
+- same-class level-up: embed only features unlocked above the actor's current level in that class
+- secondary-class multiclass import: use `class.multiclassProficiencies` instead of the primary proficiency profile
 
 For skill proficiencies, the semantic exporter may place the choice block in either of these locations:
 
@@ -139,6 +145,7 @@ The parser uses:
 - `description`
 - `uniqueOptionGroupIds`
 - `automation`
+- `imageUrl` or `iconUrl` when present
 
 Current supported `featureKind` values:
 
@@ -193,6 +200,11 @@ The parser uses:
 - `selectionCountsByLevel`
 - `description`
 
+Important behavior:
+
+- if `selectionCountsByLevel` is empty but the linked advancement uses a scaling column, the module now derives the available selections from that scaling column during normalization
+- the option-group name is also used to derive the imported feat subtype label for selected class-option items
+
 The current importer preserves this metadata on the normalized class item flags for future choice automation.
 
 ### `uniqueOptionItems`
@@ -204,8 +216,18 @@ The parser uses:
 - `description`
 - `groupSourceId`
 - `levelPrerequisite`
+- `imageUrl` or `iconUrl` when present
 
 These currently normalize into world feat items with `sourceType: "classOption"`.
+
+Class-option items now also receive:
+
+- `system.type.value = "class"`
+- `system.type.subtype` derived from the option-group label
+
+Native examples:
+
+- `artificerInfusion`
 
 ## Structured Data Wins Over Prose
 
@@ -220,6 +242,12 @@ Examples:
 
 Descriptions are still valuable for display, but they are not the authoritative source for progression logic.
 
+That said, the importer now accepts richer description text:
+
+- HTML as-is
+- BBCode converted to Foundry HTML
+- simple markdown-like prose converted to headings/lists/paragraphs
+
 ## Current Generalized Import Behavior
 
 The semantic class parser currently automates:
@@ -230,6 +258,7 @@ The semantic class parser currently automates:
 - spellcasting-derived cantrip/spell known scales from `spellsKnownScalings`
 - class feature grants
 - subclass feature grants on generated subclass items
+- actor-side ASI prompting through native `dnd5e` advancement flows when imported levels cross `AbilityScoreImprovement` rows
 
 The parser also preserves semantic spellcasting metadata on imported class or subclass flags, including:
 
@@ -239,6 +268,64 @@ The parser also preserves semantic spellcasting metadata on imported class or su
 - `progressionFormula`
 - `spellsKnownSourceId`
 - `altProgressionSourceId`
+
+## Multiclass Proficiency Shape
+
+When `class.multiclassProficiencies` is present, it should use the same normalized shape as `class.proficiencies`.
+
+Example:
+
+```json
+{
+  "multiclassProficiencies": {
+    "armor": { "choiceCount": 0, "categoryIds": ["med", "shl"], "fixedIds": [], "optionIds": [] },
+    "weapons": { "choiceCount": 0, "categoryIds": [], "fixedIds": [], "optionIds": [] },
+    "tools": { "choiceCount": 0, "categoryIds": [], "fixedIds": ["thief"], "optionIds": [] },
+    "languages": { "choiceCount": 0, "categoryIds": [], "fixedIds": [], "optionIds": [] },
+    "skills": { "choiceCount": 0, "fixedIds": [], "optionIds": [] },
+    "savingThrows": { "choiceCount": 0, "fixedIds": [], "optionIds": [] }
+  }
+}
+```
+
+The importer now uses this block for the actor-root proficiency application when the class is imported as a secondary multiclass choice.
+
+## Spellcasting Normalization Notes
+
+When the semantic export includes:
+
+```json
+{
+  "spellcasting": {
+    "type": "prepared",
+    "ability": "WIS",
+    "progression": "full",
+    "spellsKnownFormula": "WIS + Level"
+  }
+}
+```
+
+the importer should normalize that into native `dnd5e` class or subclass spellcasting:
+
+```json
+{
+  "system": {
+    "spellcasting": {
+      "progression": "full",
+      "ability": "wis",
+      "preparation": {
+        "formula": "@abilities.wis.mod + @classes.druid.levels"
+      }
+    }
+  }
+}
+```
+
+Important:
+
+- current `dnd5e` no longer expects `system.spellcasting.preparation.mode` on class or subclass items
+- prepared-caster display strings such as `WIS + Level` should be converted into native Foundry formulas during import
+- if a semantic formula is not already native and cannot be normalized safely, the importer should omit the native preparation formula rather than writing invalid human-readable text into the Foundry field
 
 It does not yet fully automate:
 

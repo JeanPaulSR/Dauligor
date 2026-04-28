@@ -198,6 +198,16 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     return null;
   }
 
+  const supportOptionItems = ensureArray(payload.optionItems).map((item) => {
+    const normalized = normalizeWorldItem(item, payload.source);
+    applyPayloadMetadata(normalized.flags?.[MODULE_ID], { payloadMeta: payload, importMode: "world" });
+    return normalized;
+  });
+  const importedSupportDocs = [];
+  for (const supportItem of supportOptionItems) {
+    importedSupportDocs.push(await upsertWorldItem(supportItem));
+  }
+
   if (workflow.requiresSubclassSelection && !workflow.selection.subclassSourceId) {
     notifyWarn(`Choose a subclass for "${workflow.classItem.name}" before importing it onto an actor.`);
     return null;
@@ -239,7 +249,9 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     targetLevel: classLevel,
     existingItem: existingClassItem,
     payloadMeta: payload,
-    importSelection: workflow.selection
+    importSelection: workflow.selection,
+    referencedDocs: importedSupportDocs,
+    proficiencyMode: workflow.proficiencyMode
   });
   const actorClassDoc = await upsertActorItem(targetActor, preparedClass);
   if (!actorClassDoc) {
@@ -248,7 +260,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   }
 
   const importedFeatures = [];
-  for (const featureItem of workflow.desiredClassFeatureItems) {
+  for (const featureItem of workflow.importClassFeatureItems) {
     const existingFeature = findMatchingActorItem(targetActor, featureItem);
     importedFeatures.push(await upsertActorItem(targetActor, normalizeEmbeddedActorFeature(featureItem, classSourceId, {
       existingItem: existingFeature,
@@ -262,7 +274,8 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     const preparedSubclass = prepareEmbeddedActorSubclassItem(workflow.selectedSubclassItem, {
       existingItem: existingSubclassItem,
       payloadMeta: payload,
-      classSourceId
+      classSourceId,
+      referencedDocs: importedSupportDocs
     });
     subclassDoc = await upsertActorItem(targetActor, preparedSubclass);
     if (!subclassDoc) {
@@ -271,7 +284,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   }
 
   const importedSubclassFeatures = [];
-  for (const featureItem of workflow.desiredSubclassFeatureItems) {
+  for (const featureItem of workflow.importSubclassFeatureItems) {
     const existingFeature = findMatchingActorItem(targetActor, featureItem);
     importedSubclassFeatures.push(await upsertActorItem(targetActor, normalizeEmbeddedActorFeature(featureItem, classSourceId, {
       existingItem: existingFeature,
@@ -280,7 +293,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   }
 
   const importedOptionItems = [];
-  for (const optionItem of workflow.selectedOptionItems) {
+  for (const optionItem of workflow.importOptionItems) {
     const existingOptionItem = findMatchingActorItem(targetActor, optionItem);
     importedOptionItems.push(await upsertActorItem(targetActor, normalizeEmbeddedActorFeature(optionItem, classSourceId, {
       existingItem: existingOptionItem,
@@ -316,7 +329,8 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     hpMode: workflow.selection.hpMode,
     hpCustomFormula: workflow.selection.hpCustomFormula,
     skillSelections: workflow.selection.skillSelections,
-    hpResolution
+    hpResolution,
+    referencedDocs: importedSupportDocs
   });
   log("Post-sync class advancement state", {
     actorName: targetActor.name,
@@ -328,10 +342,15 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   if (subclassDoc && workflow.selectedSubclassItem) {
     syncedSubclassDoc = await syncActorClassAdvancements(targetActor, subclassDoc, workflow.selectedSubclassItem.system?.advancement, {
       classSourceId,
-      targetLevel: classLevel
+      targetLevel: classLevel,
+      referencedDocs: importedSupportDocs
     });
   }
-  const appliedClassTraits = await applyActorTraitAdvancements(targetActor, syncedClassDoc ?? actorClassDoc);
+  const appliedClassTraits = workflow.isMulticlassImport
+    ? await applyActorTraitProfile(targetActor, workflow.semanticClassData?.multiclassProficiencies, {
+      skillSelections: workflow.selection.skillSelections
+    })
+    : await applyActorTraitAdvancements(targetActor, syncedClassDoc ?? actorClassDoc);
   const appliedSubclassTraits = syncedSubclassDoc
     ? await applyActorTraitAdvancements(targetActor, syncedSubclassDoc)
     : 0;
@@ -356,6 +375,10 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     sourceMeta: payload.source,
     relatedDocuments: importedActorDocs
   });
+  const openedAsiFlows = await promptActorAbilityScoreImprovements(targetActor, syncedClassDoc ?? actorClassDoc, {
+    existingClassLevel: workflow.existingClassLevel,
+    targetLevel: classLevel
+  });
 
   notifyInfo(
     `Imported "${(syncedClassDoc ?? actorClassDoc).name}" to "${targetActor.name}" at class level ${classLevel}`
@@ -369,6 +392,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     + `${removedSubclassFeatures ? ` Removed ${removedSubclassFeatures} subclass feature item(s).` : ""}`
     + `${removedOptionItems ? ` Removed ${removedOptionItems} class option item(s).` : ""}`
     + `${removedSubclassItems ? ` Removed ${removedSubclassItems} subclass item(s).` : ""}`
+    + `${openedAsiFlows ? ` Opened ${openedAsiFlows} ability score improvement advancement step(s).` : ""}`
   );
 
   log("Imported Dauligor class bundle to actor", {
@@ -383,6 +407,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     appliedClassTraits,
     appliedSubclassTraits,
     appliedSkillChoices,
+    openedAsiFlows,
     importedSubclassFeatures,
     importedOptionItems,
     desiredFeatureSourceIds: [...desiredFeatureSourceIds],
@@ -413,10 +438,23 @@ export function buildClassImportWorkflow(payload, {
   const targetActor = resolveTargetActor(actor);
   const existingClassItem = targetActor ? findMatchingActorItem(targetActor, classItem) : null;
   const existingClassLevel = Number(existingClassItem?.system?.levels ?? 0) || 0;
+  const storedProficiencyMode = trimString(existingClassItem?.getFlag?.(MODULE_ID, "proficiencyMode")) || null;
+  const existingOtherClasses = targetActor
+    ? targetActor.items.filter((item) =>
+      item.type === "class"
+      && item.id !== existingClassItem?.id
+      && (Number(item.system?.levels ?? 0) || 0) > 0)
+    : [];
   const requestedTargetLevel = normalizeClassLevel(targetLevel, classItem.system?.levels);
   const normalizedTargetLevel = normalizeClassLevel(Math.max(existingClassLevel, requestedTargetLevel), classItem.system?.levels);
   const existingSelections = sanitizeClassImportSelection(existingClassItem?.getFlag(MODULE_ID, "importSelections") ?? {});
   const semanticClassData = getSemanticClassData(supportedPayload);
+  const isExistingClassImport = existingClassLevel > 0;
+  const proficiencyMode = storedProficiencyMode === "multiclass"
+    ? "multiclass"
+    : (!isExistingClassImport && existingOtherClasses.length > 0 ? "multiclass" : "primary");
+  const isMulticlassImport = proficiencyMode === "multiclass";
+  const proficiencySource = getClassImportProficiencySource(semanticClassData, { isMulticlassImport });
 
   const classFeatures = ensureArray(bundle.classFeatures).map((item) => normalizeWorldItem(item, bundle.source));
   const subclassItems = ensureArray(bundle.subclassItems).map((item) => normalizeWorldItem(item, bundle.source));
@@ -444,7 +482,10 @@ export function buildClassImportWorkflow(payload, {
     : false;
   const effectiveSubclassSourceId = includeSubclass ? selectedSubclassSourceId : null;
 
-  const optionGroups = normalizeClassOptionGroups(classItem.flags?.[MODULE_ID]?.optionGroups)
+  const optionGroups = normalizeClassOptionGroups(
+    classItem.flags?.[MODULE_ID]?.optionGroups,
+    classItem.system?.advancement
+  )
     .map((group) => {
       const availableOptions = optionItems
         .filter((item) => (item.flags?.[MODULE_ID]?.groupSourceId ?? null) === group.sourceId)
@@ -476,7 +517,7 @@ export function buildClassImportWorkflow(payload, {
     hpCustomFormula: requestedSelections.hpCustomFormula ?? existingSelections.hpCustomFormula ?? null,
     spellMode: requestedSelections.spellMode ?? existingSelections.spellMode ?? (classItem.system?.spellcasting?.progression !== "none" ? "placeholder" : null),
     skillSelections: getInitialSkillSelections({
-      classData: semanticClassData,
+      classData: proficiencySource,
       requestedSelections,
       existingSelections
     })
@@ -510,7 +551,22 @@ export function buildClassImportWorkflow(payload, {
 
   const selectedOptionSourceIds = new Set(Object.values(normalizedSelection.optionSelections).flat());
   const selectedOptionItems = optionItems.filter((item) => selectedOptionSourceIds.has(item.flags?.[MODULE_ID]?.sourceId ?? ""));
-  const skillChoices = buildSkillChoiceConfig(semanticClassData);
+  const skillChoices = buildSkillChoiceConfig(proficiencySource);
+  const importClassFeatureItems = desiredClassFeatureItems.filter((item) =>
+    shouldImportProgressionItem(item, {
+      actor: targetActor,
+      existingClassLevel
+    }));
+  const importSubclassFeatureItems = desiredSubclassFeatureItems.filter((item) =>
+    shouldImportProgressionItem(item, {
+      actor: targetActor,
+      existingClassLevel
+    }));
+  const importOptionItems = selectedOptionItems.filter((item) =>
+    shouldImportProgressionItem(item, {
+      actor: targetActor,
+      existingClassLevel
+    }));
   const levelRows = buildClassLevelRows({
     classFeatures,
     subclassFeatures,
@@ -546,6 +602,10 @@ export function buildClassImportWorkflow(payload, {
     targetActor,
     targetLevel: normalizedTargetLevel,
     existingClassLevel,
+    isExistingClassImport,
+    isMulticlassImport,
+    proficiencyMode,
+    proficiencySource,
     classFeatures,
     subclassItems,
     subclassFeatures,
@@ -570,6 +630,9 @@ export function buildClassImportWorkflow(payload, {
     skillChoices,
     levelRows,
     spellcastingRows,
+    importClassFeatureItems,
+    importSubclassFeatureItems,
+    importOptionItems,
     startingEquipment: semanticClassData?.startingEquipment ?? ""
   };
 }
@@ -662,6 +725,18 @@ function getInitialSkillSelections({ classData = null, requestedSelections = {},
   return [...selected];
 }
 
+function getClassImportProficiencySource(classData, { isMulticlassImport = false } = {}) {
+  if (!classData || typeof classData !== "object") return null;
+  if (!isMulticlassImport) return classData;
+
+  const multiclassProficiencies = classData.multiclassProficiencies;
+  if (!multiclassProficiencies || typeof multiclassProficiencies !== "object") return classData;
+
+  return {
+    proficiencies: multiclassProficiencies
+  };
+}
+
 function buildSkillChoiceConfig(classData) {
   const skills = classData?.proficiencies?.skills ?? classData?.skills ?? {};
   const fixed = [...new Set(ensureArray(skills.fixed ?? skills.fixedIds).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))];
@@ -683,6 +758,26 @@ function summarizeSkillChoiceSource(classData) {
     topLevelSkills: foundry.utils.deepClone(classData?.skills ?? null),
     proficiencySkills: foundry.utils.deepClone(classData?.proficiencies?.skills ?? null)
   };
+}
+
+function shouldImportProgressionItem(item, { actor = null, existingClassLevel = 0 } = {}) {
+  if (!item) return false;
+  if (existingClassLevel <= 0) return true;
+
+  const unlockLevel = getProgressionItemLevel(item);
+  if (unlockLevel > existingClassLevel) return true;
+
+  const targetActor = resolveTargetActor(actor);
+  if (!targetActor) return false;
+  return !findMatchingActorItem(targetActor, item);
+}
+
+function getProgressionItemLevel(item) {
+  return Number(
+    item?.flags?.[MODULE_ID]?.levelPrerequisite
+    ?? item?.flags?.[MODULE_ID]?.level
+    ?? 0
+  ) || 0;
 }
 
 function normalizeSkillSlug(value) {
@@ -736,16 +831,51 @@ function normalizeSkillSlug(value) {
   return aliased && CONFIG.DND5E?.skills?.[aliased] ? aliased : null;
 }
 
-function normalizeClassOptionGroups(groups) {
+function normalizeClassOptionGroups(groups, advancement = null) {
   return ensureArray(groups)
-    .map((group) => ({
-      sourceId: trimString(group?.sourceId) || null,
-      featureSourceId: trimString(group?.featureSourceId) || null,
-      scalingSourceId: trimString(group?.scalingSourceId) || null,
-      selectionCountsByLevel: normalizeScaleValues(group?.selectionCountsByLevel),
-      name: trimString(group?.name) || null
-    }))
+    .map((group) => {
+      const sourceId = trimString(group?.sourceId) || null;
+      const configuredCounts = normalizeScaleValues(group?.selectionCountsByLevel);
+      const derivedCounts = Object.keys(configuredCounts).length
+        ? configuredCounts
+        : deriveOptionGroupSelectionCounts(sourceId, advancement);
+
+      return {
+        sourceId,
+        featureSourceId: trimString(group?.featureSourceId) || null,
+        scalingSourceId: trimString(group?.scalingSourceId) || null,
+        selectionCountsByLevel: derivedCounts,
+        name: trimString(group?.name) || null
+      };
+    })
     .filter((group) => group.sourceId);
+}
+
+function deriveOptionGroupSelectionCounts(groupSourceId, advancement) {
+  const normalizedGroupSourceId = trimString(groupSourceId);
+  if (!normalizedGroupSourceId) return {};
+
+  for (const advancementEntry of Object.values(normalizeAdvancementStructure(advancement))) {
+    if (advancementEntry?.type !== "ItemChoice") continue;
+
+    const entryGroupId = trimString(
+      advancementEntry?.flags?.[MODULE_ID]?.optionGroupSourceId
+      ?? advancementEntry?.configuration?.optionGroupSourceId
+      ?? advancementEntry?.configuration?.optionGroupId
+    );
+    if (entryGroupId !== normalizedGroupSourceId) continue;
+
+    const normalized = {};
+    for (const [level, data] of Object.entries(advancementEntry?.configuration?.choices ?? {})) {
+      const numericLevel = Number(level);
+      const count = Math.max(0, Number(data?.count ?? 0) || 0);
+      if (!Number.isFinite(numericLevel) || numericLevel <= 0 || count <= 0) continue;
+      normalized[String(numericLevel)] = count;
+    }
+    return normalized;
+  }
+
+  return {};
 }
 
 function getMinimumSubclassSelectionLevel(classAdvancement, classFeatures) {
@@ -1018,7 +1148,9 @@ function createSemanticClassItem(context) {
         spent: 0,
         additional: ""
       },
-      spellcasting: buildFoundrySpellcastingData(classData.spellcasting),
+      spellcasting: buildFoundrySpellcastingData(classData.spellcasting, {
+        classIdentifier
+      }),
       primaryAbility: {
         value: normalizeAbilityList(classData.primaryAbility),
         all: false
@@ -1054,6 +1186,8 @@ function createSemanticSubclassItem(subclass, context) {
     id: trimString(subclass?.id) || subclassSourceId
   };
 
+  const subclassIdentifier = normalizeSemanticIdentifier(subclass.identifier ?? subclassSourceId ?? subclass.name, "subclass");
+
   const item = {
     name: trimString(subclass.name) || "Subclass",
     type: "subclass",
@@ -1069,13 +1203,17 @@ function createSemanticSubclassItem(subclass, context) {
       }
     },
     system: {
-      identifier: normalizeSemanticIdentifier(subclass.identifier ?? subclassSourceId ?? subclass.name, "subclass"),
+      identifier: subclassIdentifier,
       classIdentifier: context.classIdentifier,
       description: {
         value: normalizeHtmlBlock(subclass.description) || `<p>${foundry.utils.escapeHTML(trimString(subclass.name) || "Subclass")} imported from Dauligor.</p>`,
         chat: ""
       },
       source: buildFoundrySourceData(sourceMeta, context.payload?.source ?? null),
+      spellcasting: buildFoundrySpellcastingData(subclass?.spellcasting, {
+        classIdentifier: context.classIdentifier,
+        subclassIdentifier
+      }),
       advancement: Object.keys(rootAdvancement).length
         ? rootAdvancement
         : buildSemanticSubclassAdvancement(subclass, context)
@@ -1091,6 +1229,10 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
   const classSourceId = feature?.classSourceId ?? context.classSourceId ?? null;
   const parentSourceId = feature?.parentSourceId ?? null;
   const requirementLabel = buildSemanticFeatureRequirement(feature, context);
+  const featureType = buildSemanticFeatureTypeData({
+    sourceType,
+    feature
+  });
 
   const flags = {
     sourceId,
@@ -1103,6 +1245,9 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
     featureKind: feature?.featureKind ?? null,
     level: Number(feature?.level ?? 0) || 0
   };
+  if (featureType?.label) flags.featureTypeLabel = featureType.label;
+  if (featureType?.subtype) flags.featureTypeSubtype = featureType.subtype;
+  if (featureType?.value) flags.featureTypeValue = featureType.value;
 
   if (parentSourceId && parentSourceId !== classSourceId) {
     flags.subclassSourceId = parentSourceId;
@@ -1125,7 +1270,8 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
       value: normalizeHtmlBlock(feature?.description) || `<p>${foundry.utils.escapeHTML(buildSemanticFeatureName(feature))}</p>`,
       chat: ""
     },
-    requirements: requirementLabel
+    requirements: requirementLabel,
+    type: featureType
   };
   const uses = normalizeSemanticUses(feature?.usage ?? feature?.uses);
   if (uses) system.uses = uses;
@@ -1139,7 +1285,13 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
   return {
     name: buildSemanticFeatureName(feature),
     type: "feat",
-    img: normalizeImagePath(feature?.imageUrl, DEFAULT_FEATURE_ICON),
+    img: normalizeImagePath(
+      feature?.imageUrl
+      ?? feature?.iconUrl
+      ?? feature?.img
+      ?? feature?.image,
+      DEFAULT_FEATURE_ICON
+    ),
     flags: {
       [MODULE_ID]: flags
     },
@@ -1157,6 +1309,11 @@ function createSemanticOptionItem(optionItem, context) {
   const feature = group?.featureSourceId
     ? context.featuresBySourceId.get(group.featureSourceId)
     : null;
+  const featureType = buildSemanticFeatureTypeData({
+    sourceType: "classOption",
+    optionGroup: group,
+    optionItem
+  });
 
   const flags = {
     sourceId,
@@ -1169,6 +1326,9 @@ function createSemanticOptionItem(optionItem, context) {
     featureSourceId: group?.featureSourceId ?? null,
     scalingSourceId: group?.scalingSourceId ?? null
   };
+  if (featureType?.label) flags.featureTypeLabel = featureType.label;
+  if (featureType?.subtype) flags.featureTypeSubtype = featureType.subtype;
+  if (featureType?.value) flags.featureTypeValue = featureType.value;
   if (optionItem?.levelPrerequisite != null) flags.levelPrerequisite = optionItem.levelPrerequisite;
 
   if (optionItem?.automation && typeof optionItem.automation === "object") {
@@ -1183,7 +1343,8 @@ function createSemanticOptionItem(optionItem, context) {
       value: normalizeHtmlBlock(optionItem?.description) || `<p>${foundry.utils.escapeHTML(trimString(optionItem?.name) || "Class Option")}</p>`,
       chat: ""
     },
-    requirements: buildSemanticOptionRequirement(optionItem, context, feature)
+    requirements: buildSemanticOptionRequirement(optionItem, context, feature),
+    type: featureType
   };
   const uses = normalizeSemanticUses(optionItem?.usage ?? optionItem?.uses);
   if (uses) system.uses = uses;
@@ -1197,7 +1358,13 @@ function createSemanticOptionItem(optionItem, context) {
   return {
     name: trimString(optionItem?.name) || "Class Option",
     type: "feat",
-    img: normalizeImagePath(optionItem?.imageUrl, DEFAULT_OPTION_ICON),
+    img: normalizeImagePath(
+      optionItem?.imageUrl
+      ?? optionItem?.iconUrl
+      ?? optionItem?.img
+      ?? optionItem?.image,
+      DEFAULT_OPTION_ICON
+    ),
     flags: {
       [MODULE_ID]: flags
     },
@@ -2384,13 +2551,18 @@ function buildSemanticOptionGroupMetadata(context) {
       ?? context.scalingColumnsById.get(group?.scalingColumnId)?.sourceId
       ?? context.scalingColumnsById.get(mapping?.scalingColumnId)?.sourceId
       ?? null;
+    const scalingValues = scalingSourceId
+      ? normalizeScaleValues(context.scalingColumnsBySourceId.get(scalingSourceId)?.values)
+      : {};
 
     return {
       sourceId: group?.sourceId ?? null,
       name: trimString(group?.name) || null,
       featureSourceId: group?.featureSourceId ?? feature?.sourceId ?? null,
       scalingSourceId,
-      selectionCountsByLevel: normalizeScaleValues(group?.selectionCountsByLevel)
+      selectionCountsByLevel: Object.keys(scalingValues).length
+        ? scalingValues
+        : normalizeScaleValues(group?.selectionCountsByLevel)
     };
   }).filter((group) => group.sourceId);
 }
@@ -2775,12 +2947,20 @@ function normalizeClassItem(item) {
   }
 }
 
-function prepareEmbeddedActorClassItem(classItem, { targetLevel = 1, existingItem = null, payloadMeta = null, importSelection = null } = {}) {
+function prepareEmbeddedActorClassItem(classItem, { targetLevel = 1, existingItem = null, payloadMeta = null, importSelection = null, referencedDocs = [], proficiencyMode = null } = {}) {
   const item = normalizeEmbeddedItem(classItem);
   item.system ??= {};
   item.flags ??= {};
   item.flags[MODULE_ID] ??= {};
   item.system.levels = normalizeClassLevel(targetLevel, item.system.levels);
+  if (referencedDocs.length) {
+    const docsBySourceId = new Map();
+    for (const doc of referencedDocs) {
+      const sourceId = doc?.getFlag?.(MODULE_ID, "sourceId");
+      if (sourceId) docsBySourceId.set(sourceId, doc);
+    }
+    resolveAdvancementDocumentReferences(item.system.advancement, docsBySourceId, []);
+  }
   const advancementMeta = rekeyEmbeddedActorAdvancements(filterEmbeddedActorAdvancements(item.system.advancement), {
     existingItem
   });
@@ -2792,17 +2972,26 @@ function prepareEmbeddedActorClassItem(classItem, { targetLevel = 1, existingIte
     importMode: "actor",
     existingFlags: existingItem?.flags?.[MODULE_ID] ?? null
   });
+  if (proficiencyMode) item.flags[MODULE_ID].proficiencyMode = proficiencyMode;
   if (importSelection) {
     item.flags[MODULE_ID].importSelections = sanitizeClassImportSelection(importSelection);
   }
   return item;
 }
 
-function prepareEmbeddedActorSubclassItem(subclassItem, { existingItem = null, payloadMeta = null, classSourceId = null } = {}) {
+function prepareEmbeddedActorSubclassItem(subclassItem, { existingItem = null, payloadMeta = null, classSourceId = null, referencedDocs = [] } = {}) {
   const item = normalizeEmbeddedItem(subclassItem);
   item.system ??= {};
   item.flags ??= {};
   item.flags[MODULE_ID] ??= {};
+  if (referencedDocs.length) {
+    const docsBySourceId = new Map();
+    for (const doc of referencedDocs) {
+      const sourceId = doc?.getFlag?.(MODULE_ID, "sourceId");
+      if (sourceId) docsBySourceId.set(sourceId, doc);
+    }
+    resolveAdvancementDocumentReferences(item.system.advancement, docsBySourceId, []);
+  }
   const advancementMeta = rekeyEmbeddedActorAdvancements(filterEmbeddedActorAdvancements(item.system.advancement), {
     existingItem
   });
@@ -3045,7 +3234,8 @@ async function syncActorClassAdvancements(actor, actorClassItem, sourceAdvanceme
   hpMode = null,
   hpCustomFormula = null,
   skillSelections = [],
-  hpResolution = null
+  hpResolution = null,
+  referencedDocs = []
 } = {}) {
   const targetActor = resolveTargetActor(actor);
   if (!targetActor || !actorClassItem) return actorClassItem;
@@ -3056,6 +3246,14 @@ async function syncActorClassAdvancements(actor, actorClassItem, sourceAdvanceme
     classSourceId,
     targetLevel
   });
+  if (referencedDocs.length) {
+    const docsBySourceId = new Map();
+    for (const doc of referencedDocs) {
+      const sourceId = doc?.getFlag?.(MODULE_ID, "sourceId");
+      if (sourceId) docsBySourceId.set(sourceId, doc);
+    }
+    resolveAdvancementDocumentReferences(resolvedAdvancement, docsBySourceId, []);
+  }
   const advancementMeta = rekeyEmbeddedActorAdvancements(resolvedAdvancement, {
     existingItem: currentClassItem
   });
@@ -3128,6 +3326,80 @@ async function applyActorTraitAdvancements(actor, item) {
   if (!changed) return 0;
   await targetActor.update(updates);
   return changed;
+}
+
+async function applyActorTraitProfile(actor, profile, { skillSelections = [] } = {}) {
+  const targetActor = resolveTargetActor(actor);
+  if (!targetActor || !profile || typeof profile !== "object") return 0;
+
+  const updates = {};
+  let changed = 0;
+  const selectedSkills = [...new Set(ensureArray(skillSelections).map((value) => normalizeSkillSlug(value)).filter(Boolean))];
+  const traitKeys = [
+    ...buildTraitKeysFromProfileBlock("savingThrows", profile?.savingThrows),
+    ...buildTraitKeysFromProfileBlock("armor", profile?.armor),
+    ...buildTraitKeysFromProfileBlock("weapons", profile?.weapons),
+    ...buildTraitKeysFromProfileBlock("tools", profile?.tools),
+    ...buildTraitKeysFromProfileBlock("languages", profile?.languages),
+    ...buildTraitKeysFromProfileBlock("skills", profile?.skills, { selectedOptionIds: selectedSkills })
+  ];
+
+  for (const key of traitKeys) {
+    changed += applyTraitKeyToActorUpdate(updates, targetActor, key, "default");
+  }
+
+  if (!changed) return 0;
+  await targetActor.update(updates);
+  return changed;
+}
+
+function buildTraitKeysFromProfileBlock(type, block, { selectedOptionIds = [] } = {}) {
+  if (!block || typeof block !== "object") return [];
+
+  const choiceCount = Math.max(0, Number(block.choiceCount ?? 0) || 0);
+  const implicitOptionIds = choiceCount > 0 ? [] : ensureArray(block.optionIds);
+  const values = [
+    ...ensureArray(block.categoryIds),
+    ...ensureArray(block.fixedIds),
+    ...implicitOptionIds,
+    ...(type === "skills" ? selectedOptionIds : [])
+  ];
+
+  return [...new Set(values
+    .map((value) => normalizeProfileTraitKey(type, value))
+    .filter(Boolean))];
+}
+
+function normalizeProfileTraitKey(type, value) {
+  const raw = trimString(value);
+  if (!raw) return null;
+
+  switch (type) {
+    case "skills": {
+      const skill = normalizeSkillSlug(raw);
+      return skill ? `skills:${skill}` : null;
+    }
+
+    case "savingThrows": {
+      const ability = normalizeAbilityCode(raw);
+      return ability ? `saves:${ability}` : null;
+    }
+
+    case "armor":
+      return raw.startsWith("armor:") ? raw : `armor:${raw}`;
+
+    case "weapons":
+      return raw.startsWith("weapon:") ? raw : `weapon:${raw}`;
+
+    case "tools":
+      return raw.startsWith("tool:") ? raw : `tool:${raw}`;
+
+    case "languages":
+      return raw.startsWith("languages:") ? raw : `languages:${raw}`;
+
+    default:
+      return raw;
+  }
 }
 
 function applyTraitKeyToActorUpdate(updates, actor, key, mode = "default") {
@@ -3225,6 +3497,42 @@ function buildEmbeddedActorAdvancementStructure(sourceAdvancement, { actor, clas
   }
 
   return resolved;
+}
+
+async function promptActorAbilityScoreImprovements(actor, actorClassItem, {
+  existingClassLevel = 0,
+  targetLevel = 1
+} = {}) {
+  const targetActor = resolveTargetActor(actor);
+  if (!targetActor || !actorClassItem || targetLevel <= existingClassLevel) return 0;
+  if (game.settings.get("dnd5e", "disableAdvancements")) return 0;
+
+  const AdvancementManager = globalThis.dnd5e?.applications?.advancement?.AdvancementManager;
+  if (!AdvancementManager) return 0;
+
+  const manager = new AdvancementManager(targetActor, {});
+  const clonedItem = manager.clone?.items?.get(actorClassItem.id);
+  if (!clonedItem) return 0;
+
+  const currentCharacterLevel = Number(targetActor.system?.details?.level ?? 0) || targetLevel;
+  const gainedLevels = Math.max(0, targetLevel - existingClassLevel);
+  const priorCharacterLevel = Math.max(0, currentCharacterLevel - gainedLevels);
+
+  for (let classLevel = existingClassLevel + 1; classLevel <= targetLevel; classLevel += 1) {
+    const characterLevel = priorCharacterLevel + (classLevel - existingClassLevel);
+    const flows = AdvancementManager.flowsForLevel(clonedItem, classLevel)
+      .filter((flow) => flow?.advancement?.type === "AbilityScoreImprovement");
+    manager.steps.push(...flows.map((flow) => ({
+      type: "forward",
+      flow,
+      class: { item: clonedItem, level: classLevel },
+      level: characterLevel
+    })));
+  }
+
+  if (!manager.steps.length) return 0;
+  manager.render({ force: true });
+  return manager.steps.length;
 }
 
 async function applyHitPointModeToAdvancements(advancement, {
@@ -3873,16 +4181,23 @@ function buildFoundrySourceData(sourceMeta, sourceRecord = null) {
   };
 }
 
-function buildFoundrySpellcastingData(spellcasting) {
+function buildFoundrySpellcastingData(spellcasting, {
+  classIdentifier = null,
+  subclassIdentifier = null
+} = {}) {
   const normalizedAbility = normalizeAbilityCode(spellcasting?.ability);
   const progression = trimString(spellcasting?.progression).toLowerCase() || "none";
+  const preparationFormula = normalizePreparedSpellFormula(spellcasting, {
+    ability: normalizedAbility,
+    classIdentifier,
+    subclassIdentifier
+  });
   return {
     progression,
     ability: normalizedAbility ?? "",
-    preparation: {
-      formula: trimString(spellcasting?.spellsKnownFormula ?? ""),
-      mode: normalizeSpellPreparationMode(spellcasting?.type)
-    }
+    preparation: preparationFormula
+      ? { formula: preparationFormula }
+      : {}
   };
 }
 
@@ -3918,6 +4233,54 @@ function normalizeSpellPreparationMode(type) {
   return "always";
 }
 
+function normalizePreparedSpellFormula(spellcasting, {
+  ability = null,
+  classIdentifier = null,
+  subclassIdentifier = null
+} = {}) {
+  if (normalizeSpellPreparationMode(spellcasting?.type) !== "prepared") return "";
+
+  const rawFormula = trimString(spellcasting?.spellsKnownFormula ?? "");
+  if (!rawFormula) return "";
+  if (rawFormula.includes("@")) return rawFormula;
+
+  const levelPath = classIdentifier
+    ? `@classes.${classIdentifier}.levels`
+    : (subclassIdentifier ? `@subclasses.${subclassIdentifier}.levels` : "@item.levels");
+  const abilityPath = ability ? `@abilities.${ability}.mod` : "";
+  if (!abilityPath) return "";
+
+  const abilityTokenPattern = getAbilityFormulaTokenPattern(ability);
+  const normalized = rawFormula.toLowerCase().replace(/\s+/g, " ").trim();
+  const patterns = [
+    new RegExp(`^${abilityTokenPattern}(?: modifier)? \\+ (?:your )?level$`, "i"),
+    new RegExp(`^(?:your )?level \\+ ${abilityTokenPattern}(?: modifier)?$`, "i"),
+    new RegExp(`^${abilityTokenPattern}(?: modifier)? \\+ (?:your )?[a-z-]+ level$`, "i"),
+    new RegExp(`^(?:your )?[a-z-]+ level \\+ ${abilityTokenPattern}(?: modifier)?$`, "i")
+  ];
+
+  if (patterns.some((pattern) => pattern.test(normalized))) {
+    return `${abilityPath} + ${levelPath}`;
+  }
+
+  return "";
+}
+
+function getAbilityFormulaTokenPattern(ability) {
+  const aliases = {
+    str: ["str", "strength"],
+    dex: ["dex", "dexterity"],
+    con: ["con", "constitution"],
+    int: ["int", "intelligence"],
+    wis: ["wis", "wisdom"],
+    cha: ["cha", "charisma"]
+  };
+
+  return `(?:${(aliases[ability] ?? [ability])
+    .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|")})`;
+}
+
 function normalizeHitDie(value) {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) && numeric > 0 ? `d${numeric}` : "d6";
@@ -3946,18 +4309,179 @@ function normalizeHtmlBlock(value) {
   const text = trimString(value);
   if (!text) return "";
   if (looksLikeHtml(text)) return text;
-
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => `<p>${foundry.utils.escapeHTML(part).replace(/\n/g, "<br>")}</p>`);
-
-  return paragraphs.join("");
+  if (looksLikeBbcode(text)) return bbcodeToFoundryHtml(text);
+  if (looksLikeMarkdown(text)) return markdownToFoundryHtml(text);
+  return plainTextToHtml(text);
 }
 
 function looksLikeHtml(value) {
   return /<\s*[a-z][^>]*>/i.test(String(value ?? ""));
+}
+
+function looksLikeBbcode(value) {
+  return /\[(?:\/)?(?:b|i|u|s|h[1-4]|left|center|right|justify|indent|ul|ol|li|quote|code|br|hr|small|sub|sup|url|table|tr|th|td|spoiler)\b/i
+    .test(String(value ?? ""));
+}
+
+function looksLikeMarkdown(value) {
+  return /^(?:\s{0,3}(?:#{1,4}\s|\* |\-\s|\+\s|\d+\.\s|> ))/m.test(String(value ?? ""));
+}
+
+function plainTextToHtml(text) {
+  return text
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => `<p>${foundry.utils.escapeHTML(part).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+function bbcodeToFoundryHtml(text) {
+  let html = foundry.utils.escapeHTML(text);
+
+  html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, "<strong>$1</strong>");
+  html = html.replace(/\[i\]([\s\S]*?)\[\/i\]/gi, "<em>$1</em>");
+  html = html.replace(/\[u\]([\s\S]*?)\[\/u\]/gi, "<u>$1</u>");
+  html = html.replace(/\[s\]([\s\S]*?)\[\/s\]/gi, "<del>$1</del>");
+  html = html.replace(/\[h1\]([\s\S]*?)\[\/h1\]/gi, "<h1>$1</h1>");
+  html = html.replace(/\[h2\]([\s\S]*?)\[\/h2\]/gi, "<h2>$1</h2>");
+  html = html.replace(/\[h3\]([\s\S]*?)\[\/h3\]/gi, "<h3>$1</h3>");
+  html = html.replace(/\[h4\]([\s\S]*?)\[\/h4\]/gi, "<h4>$1</h4>");
+  html = html.replace(/\[left\]([\s\S]*?)\[\/left\]/gi, '<p style="text-align: left">$1</p>');
+  html = html.replace(/\[center\]([\s\S]*?)\[\/center\]/gi, '<p style="text-align: center">$1</p>');
+  html = html.replace(/\[right\]([\s\S]*?)\[\/right\]/gi, '<p style="text-align: right">$1</p>');
+  html = html.replace(/\[justify\]([\s\S]*?)\[\/justify\]/gi, '<p style="text-align: justify">$1</p>');
+  html = html.replace(/\[indent\]([\s\S]*?)\[\/indent\]/gi, '<div style="padding-left: 2rem">$1</div>');
+  html = html.replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, "<blockquote>$1</blockquote>");
+  html = html.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, "<code>$1</code>");
+  html = html.replace(/\[br\]/gi, "<br/>");
+  html = html.replace(/\[hr\]/gi, "<hr/>");
+  html = html.replace(/\[small\]([\s\S]*?)\[\/small\]/gi, "<small>$1</small>");
+  html = html.replace(/\[sub\]([\s\S]*?)\[\/sub\]/gi, "<sub>$1</sub>");
+  html = html.replace(/\[sup\]([\s\S]*?)\[\/sup\]/gi, "<sup>$1</sup>");
+  html = html.replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$2</a>');
+  html = html.replace(/\[url\]([\s\S]*?)\[\/url\]/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+
+  for (let i = 0; i < 6; i += 1) {
+    html = html.replace(/\[li\]((?:(?!\[li\]|\[\/li\])[\s\S])*)\[\/li\]/gi, "<li>$1</li>");
+    html = html.replace(/\[ul\]((?:(?!\[ul\]|\[\/ul\])[\s\S])*)\[\/ul\]/gi, "<ul>$1</ul>");
+    html = html.replace(/\[ol\]((?:(?!\[ol\]|\[\/ol\])[\s\S])*)\[\/ol\]/gi, "<ol>$1</ol>");
+  }
+
+  html = html.replace(/\[table\]([\s\S]*?)\[\/table\]/gi, "<table>$1</table>");
+  html = html.replace(/\[tr\]([\s\S]*?)\[\/tr\]/gi, "<tr>$1</tr>");
+  html = html.replace(/\[th(?:\s+([^\]]+))?\]([\s\S]*?)\[\/th\]/gi, (match, attrs, content) =>
+    buildBbcodeTableCell("th", attrs, content));
+  html = html.replace(/\[td(?:\s+([^\]]+))?\]([\s\S]*?)\[\/td\]/gi, (match, attrs, content) =>
+    buildBbcodeTableCell("td", attrs, content));
+
+  const blocks = html
+    .replace(/<(h[1-4]|p|div|blockquote|ul|ol|li|hr|table|tr|th|td)([^>]*)>([\s\S]*?)<\/\1>/gi, (match) => `\n\n${match.trim()}\n\n`)
+    .replace(/<hr([^>]*)\/?>/gi, "\n\n<hr$1/>\n\n")
+    .split(/\n\n+/);
+
+  return blocks.map((block) => {
+    const trimmed = block.trim();
+    if (!trimmed) return "";
+    if (/^<(h[1-4]|div|blockquote|ul|ol|li|p|hr|table|tr|th|td)/i.test(trimmed)) {
+      return trimmed.replace(/>\s+\n/g, ">").replace(/\n\s+</g, "<");
+    }
+    return `<p>${trimmed.replace(/\n/g, "<br/>")}</p>`;
+  }).join("");
+}
+
+function buildBbcodeTableCell(tagName, attrs, content) {
+  let htmlAttrs = "";
+  if (attrs) {
+    const colspan = attrs.match(/colspan=?["']?(\d+)["']?/i);
+    if (colspan) htmlAttrs += ` colspan="${colspan[1]}"`;
+    const rowspan = attrs.match(/rowspan=?["']?(\d+)["']?/i);
+    if (rowspan) htmlAttrs += ` rowspan="${rowspan[1]}"`;
+  }
+  return `<${tagName}${htmlAttrs}>${content}</${tagName}>`;
+}
+
+function markdownToFoundryHtml(text) {
+  const lines = String(text ?? "").replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let paragraph = [];
+  let listType = null;
+  let listItems = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    blocks.push(`<p>${applyInlineMarkdown(foundry.utils.escapeHTML(paragraph.join(" ").trim()))}</p>`);
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (!listType || !listItems.length) return;
+    blocks.push(`<${listType}>${listItems.map((item) => `<li>${item}</li>`).join("")}</${listType}>`);
+    listType = null;
+    listItems = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = heading[1].length;
+      blocks.push(`<h${level}>${applyInlineMarkdown(foundry.utils.escapeHTML(heading[2].trim()))}</h${level}>`);
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*+]\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      if (listType && listType !== "ul") flushList();
+      listType = "ul";
+      listItems.push(applyInlineMarkdown(foundry.utils.escapeHTML(bullet[1].trim())));
+      continue;
+    }
+
+    const numbered = trimmed.match(/^\d+\.\s+(.+)$/);
+    if (numbered) {
+      flushParagraph();
+      if (listType && listType !== "ol") flushList();
+      listType = "ol";
+      listItems.push(applyInlineMarkdown(foundry.utils.escapeHTML(numbered[1].trim())));
+      continue;
+    }
+
+    if (/^---+$/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      blocks.push("<hr/>");
+      continue;
+    }
+
+    if (listType) flushList();
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+
+  return blocks.join("");
+}
+
+function applyInlineMarkdown(text) {
+  return String(text ?? "")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")
+    .replace(/(?<!_)_([^_]+)_(?!_)/g, "<em>$1</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
 function buildSemanticFeatureName(feature) {
@@ -3976,6 +4500,58 @@ function buildSemanticFeatureRequirement(feature, context) {
 
   if (!ownerName || level <= 0) return ownerName || "";
   return `${ownerName} ${level}`;
+}
+
+function buildSemanticFeatureTypeData({ sourceType = "classFeature", feature = null, optionGroup = null, optionItem = null } = {}) {
+  if (sourceType === "classOption") {
+    const label = trimString(optionGroup?.name) || trimString(optionItem?.name) || "Class Option";
+    return {
+      value: "class",
+      subtype: normalizeSemanticFeatureSubtype(label),
+      label
+    };
+  }
+
+  return {
+    value: "class",
+    subtype: "",
+    label: "Class Feature"
+  };
+}
+
+function normalizeSemanticFeatureSubtype(label) {
+  const raw = trimString(label);
+  if (!raw) return "";
+
+  const normalized = raw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const nativeSubtypes = {
+    "arcane shot": "arcaneShot",
+    "artificer infusion": "artificerInfusion",
+    "channel divinity": "channelDivinity",
+    "defensive tactic": "defensiveTactic",
+    "eldritch invocation": "eldritchInvocation",
+    "elemental discipline": "elementalDiscipline",
+    "fighting style": "fightingStyle",
+    "hunter's prey": "huntersPrey",
+    "hunters prey": "huntersPrey",
+    "ki": "ki",
+    "maneuver": "maneuver",
+    "metamagic": "metamagic",
+    "multiattack": "multiattack",
+    "pact boon": "pact",
+    "psionic power": "psionicPower",
+    "rune": "rune",
+    "superior hunter's defense": "superiorHuntersDefense",
+    "superior hunters defense": "superiorHuntersDefense"
+  };
+
+  if (nativeSubtypes[normalized]) return nativeSubtypes[normalized];
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (!words.length) return "";
+  return words
+    .map((word, index) => index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1))
+    .join("");
 }
 
 function buildSemanticOptionRequirement(optionItem, context, feature = null) {
@@ -4136,7 +4712,7 @@ function normalizeOptionalString(value) {
 }
 
 function normalizeImagePath(value, fallback) {
-  const text = trimString(value);
+  const text = trimString(value).replace(/^\/+(https?:\/\/)/i, "$1");
   return text || fallback;
 }
 

@@ -60,6 +60,12 @@ const FEATURE_TYPES = [
   { id: 'vehicle', name: 'Vehicle Feature' }
 ];
 
+const SPELLCASTING_FORMULA_GUIDANCE = [
+  'Preferred native Foundry formula: @abilities.wis.mod + @classes.druid.levels',
+  'Subclass spellcasting should usually still reference the parent class level path when it expands that class casting.',
+  'Accepted shorthand the module can convert: WIS + Level, CHA + Level, INT + Level'
+];
+
 function getScalingBreakpoints(values: Record<string, any> = {}) {
   let lastValue: string | undefined;
   return Object.entries(values)
@@ -589,6 +595,23 @@ export default function SubclassEditor() {
                       </div>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-gold select-none">Ritual Caster</span>
                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="label-text">Spells Known Formula</label>
+                  <Input
+                    value={spellcasting.spellsKnownFormula}
+                    onChange={e => setSpellcasting({...spellcasting, spellsKnownFormula: e.target.value})}
+                    placeholder="Preferred: @abilities.wis.mod + @classes.druid.levels"
+                    className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
+                  />
+                  <div className="rounded-md border border-gold/10 bg-background/30 px-3 py-2 space-y-1">
+                    {SPELLCASTING_FORMULA_GUIDANCE.map((line) => (
+                      <p key={line} className="text-[10px] text-ink/50 leading-relaxed">
+                        {line}
+                      </p>
+                    ))}
                   </div>
                 </div>
 

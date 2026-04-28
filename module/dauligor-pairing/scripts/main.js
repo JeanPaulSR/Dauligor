@@ -17,6 +17,16 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", () => {
   initializeSocket();
+  patchDnd5eRemoteItemImages();
+  registerCustomFeatureTypeLabels();
+});
+
+Hooks.on("createItem", (item) => {
+  registerFeatureTypeLabelFromItem(item);
+});
+
+Hooks.on("updateItem", (item) => {
+  registerFeatureTypeLabelFromItem(item);
 });
 
 function registerSettings() {
@@ -46,6 +56,67 @@ function registerSettings() {
     type: String,
     default: "Classes"
   });
+}
+
+function isAbsoluteHttpUrl(value) {
+  return typeof value === "string" && /^https?:\/\//i.test(value.trim());
+}
+
+function patchDnd5eRemoteItemImages() {
+  const sheetGroups = CONFIG.Actor?.sheetClasses ?? {};
+  const patched = new Set();
+
+  for (const group of Object.values(sheetGroups)) {
+    for (const entry of Object.values(group ?? {})) {
+      const sheetClass = entry?.cls;
+      if (!sheetClass?.prototype || patched.has(sheetClass)) continue;
+
+      const original = sheetClass.prototype._prepareItemFeature;
+      if (typeof original !== "function") continue;
+
+      sheetClass.prototype._prepareItemFeature = async function(item, ctx, ...args) {
+        const result = await original.call(this, item, ctx, ...args);
+        if (["class", "subclass"].includes(item?.type) && isAbsoluteHttpUrl(item?.img)) {
+          ctx.prefixedImage = item.img.trim();
+        }
+        return result;
+      };
+
+      patched.add(sheetClass);
+    }
+  }
+
+  if (patched.size) {
+    log(`Patched remote class/subclass image handling for ${patched.size} actor sheet class(es).`);
+  }
+}
+
+function registerCustomFeatureTypeLabels() {
+  const collections = [
+    game.items?.contents ?? [],
+    ...game.actors.contents.map((actor) => actor.items.contents)
+  ];
+
+  for (const items of collections) {
+    for (const item of items) {
+      registerFeatureTypeLabelFromItem(item);
+    }
+  }
+}
+
+function registerFeatureTypeLabelFromItem(item) {
+  if (item?.type !== "feat") return;
+
+  const flags = item.flags?.[MODULE_ID] ?? {};
+  const typeValue = flags.featureTypeValue;
+  const subtype = flags.featureTypeSubtype;
+  const label = flags.featureTypeLabel;
+  if (!typeValue || !subtype || !label) return;
+
+  const typeConfig = CONFIG.DND5E?.featureTypes?.[typeValue];
+  if (!typeConfig) return;
+  typeConfig.subtypes ??= {};
+  if (!typeConfig.subtypes[subtype]) typeConfig.subtypes[subtype] = label;
 }
 
 function registerKeybindings() {

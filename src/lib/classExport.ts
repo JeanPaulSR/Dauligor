@@ -25,6 +25,15 @@ function buildSemanticRecordSourceId(prefix: string, record: any, fallbackId: st
   return identifier ? `${prefix}-${identifier}` : trimString(fallbackId);
 }
 
+function resolveImageUrl(record: any) {
+  return trimString(
+    record?.imageUrl
+    || record?.iconUrl
+    || record?.img
+    || record?.image
+  );
+}
+
 /**
  * Imports a class semantic export bundle into Firestore.
  */
@@ -419,6 +428,89 @@ function buildOptionGroupFeatureSourceMap(records: any[] = [], featuresById: Rec
   });
 
   return featureSourceByOptionGroup;
+}
+
+function normalizeSelectionCountsByLevel(values: any) {
+  const normalized: Record<string, number> = {};
+  if (!values || typeof values !== 'object') return normalized;
+
+  Object.entries(values).forEach(([level, value]) => {
+    const normalizedLevel = String(Number(level || 0) || 0);
+    const numericValue = Number((value as any)?.count ?? value ?? 0) || 0;
+    if (normalizedLevel !== '0' && numericValue > 0) {
+      normalized[normalizedLevel] = numericValue;
+    }
+  });
+
+  return normalized;
+}
+
+function buildOptionGroupAdvancementMetadataMap(
+  records: any[] = [],
+  featuresById: Record<string, any> = {},
+  scalingById: Record<string, any> = {},
+  scalingSourceIdById: Record<string, string> = {}
+) {
+  const metadataByOptionGroup: Record<string, {
+    featureSourceId: string;
+    scalingSourceId: string;
+    selectionCountsByLevel: Record<string, number>;
+  }> = {};
+
+  records.forEach((record) => {
+    asArray(record?.advancements).forEach((advancement) => {
+      if (trimString(advancement?.type) !== 'ItemChoice') return;
+
+      const configuration = advancement?.configuration || {};
+      const optionGroupId = trimString(configuration?.optionGroupId);
+      if (!optionGroupId) return;
+
+      const entry = metadataByOptionGroup[optionGroupId] ||= {
+        featureSourceId: '',
+        scalingSourceId: '',
+        selectionCountsByLevel: {}
+      };
+
+      const featureSourceId = trimString(advancement?.featureSourceId)
+        || featuresById[trimString(advancement?.featureId)]?.sourceId
+        || '';
+      if (featureSourceId && !entry.featureSourceId) {
+        entry.featureSourceId = featureSourceId;
+      }
+
+      const scalingSourceId = scalingSourceIdById[trimString(configuration?.scalingColumnId)]
+        || trimString(configuration?.scalingSourceId)
+        || trimString(configuration?.scalingColumnId);
+      if (scalingSourceId && !entry.scalingSourceId) {
+        entry.scalingSourceId = scalingSourceId;
+      }
+
+      if (trimString(configuration?.countSource) === 'scaling') {
+        const scalingColumnId = trimString(configuration?.scalingColumnId);
+        const scalingValues = normalizeSelectionCountsByLevel(
+          scalingById[scalingColumnId]?.values
+        );
+        if (Object.keys(scalingValues).length) {
+          entry.selectionCountsByLevel = scalingValues;
+          return;
+        }
+      }
+
+      const explicitCounts = normalizeSelectionCountsByLevel(configuration?.choices);
+      if (Object.keys(explicitCounts).length) {
+        Object.assign(entry.selectionCountsByLevel, explicitCounts);
+        return;
+      }
+
+      const fixedCount = Number(configuration?.count || 0) || 0;
+      const level = Number(advancement?.level || 0) || 0;
+      if (fixedCount > 0 && level > 0 && !entry.selectionCountsByLevel[String(level)]) {
+        entry.selectionCountsByLevel[String(level)] = fixedCount;
+      }
+    });
+  });
+
+  return metadataByOptionGroup;
 }
 
 function buildBaseClassAdvancementsForExport({
@@ -922,6 +1014,7 @@ export async function exportClassSemantic(classId: string) {
 
     return omitKeys({
       ...feature,
+      imageUrl: resolveImageUrl(feature) || undefined,
       id: feature.id,
       identifier,
       sourceId: `${parentPrefix}-feature-${identifier}`,
@@ -946,17 +1039,33 @@ export async function exportClassSemantic(classId: string) {
   const featuresById = Object.fromEntries(features.map((feature) => [feature.id, feature]));
   const featureSourceIdById = Object.fromEntries(features.map((feature) => [feature.id, feature.sourceId]));
   const optionGroupFeatureSourceById = buildOptionGroupFeatureSourceMap([classDataRaw, ...subclassesRaw], featuresById);
+  const optionGroupAdvancementMetadataById = buildOptionGroupAdvancementMetadataMap(
+    [classDataRaw, ...subclassesRaw],
+    featuresById,
+    scalingById,
+    scalingSourceIdById
+  );
 
   uniqueOptionGroups = uniqueOptionGroups.map((group) => {
+    const advancementMetadata = optionGroupAdvancementMetadataById[group.id] || {
+      featureSourceId: '',
+      scalingSourceId: '',
+      selectionCountsByLevel: {}
+    };
     const associatedFeature = group.featureId ? featuresById[group.featureId] : null;
     const derivedFeatureSourceId = associatedFeature?.sourceId
       || optionGroupFeatureSourceById[group.id]
       || optionGroupFeatureSourceById[group.sourceId]
+      || advancementMetadata.featureSourceId
       || '';
     return {
       ...group,
       sourceBookId: associatedFeature?.sourceBookId || group.sourceBookId || resolvedClassBookId,
-      featureSourceId: derivedFeatureSourceId
+      featureSourceId: derivedFeatureSourceId,
+      scalingSourceId: trimString(group.scalingSourceId) || advancementMetadata.scalingSourceId || undefined,
+      selectionCountsByLevel: Object.keys(group.selectionCountsByLevel || {}).length
+        ? group.selectionCountsByLevel
+        : advancementMetadata.selectionCountsByLevel
     };
   });
 
@@ -970,6 +1079,7 @@ export async function exportClassSemantic(classId: string) {
       const linkedFeature = data.featureId ? featuresById[data.featureId] : null;
       return omitKeys({
         ...data,
+        imageUrl: resolveImageUrl(data) || undefined,
         id: d.id,
         identifier,
         sourceId: `class-option-${identifier}`,
