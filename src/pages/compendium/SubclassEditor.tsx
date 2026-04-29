@@ -41,6 +41,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
+import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
+import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
+import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
 import {
   Dialog,
   DialogContent,
@@ -61,10 +64,15 @@ const FEATURE_TYPES = [
 ];
 
 const SPELLCASTING_FORMULA_GUIDANCE = [
-  'Preferred native Foundry formula: @abilities.wis.mod + @classes.druid.levels',
-  'Subclass spellcasting should usually still reference the parent class level path when it expands that class casting.',
-  'Accepted shorthand the module can convert: WIS + Level, CHA + Level, INT + Level'
+  'Dauligor spellcasting shortcuts are contextual in this field.',
+  'Use min(), floor(), and ceil() for rounding or minimum logic.',
+  'The preview below shows how the current class and ability resolve.'
 ];
+
+function getReferenceIdentifier(sourceId: string, fallback: string, prefix: string) {
+  if (String(sourceId || '').startsWith(prefix)) return String(sourceId).slice(prefix.length);
+  return slugify(fallback || prefix.replace(/-$/u, ''));
+}
 
 function getScalingBreakpoints(values: Record<string, any> = {}) {
   let lastValue: string | undefined;
@@ -423,6 +431,34 @@ export default function SubclassEditor() {
     }
   };
 
+  const subclassReferenceContext = {
+    classIdentifier: getReferenceIdentifier(parentClass?.sourceId, parentClass?.name, 'class-'),
+    classLabel: parentClass?.name || 'Class',
+    subclassIdentifier: getReferenceIdentifier(sourceId, name, 'subclass-'),
+    subclassLabel: name || 'Subclass',
+    spellcastingAbility: spellcasting.ability,
+    classColumns: [
+      ...parentScalingColumns.map((column: any) => ({
+        name: column.name,
+        identifier: column.identifier,
+        sourceId: column.sourceId,
+        parentType: 'class',
+      })),
+      ...scalingColumns.map((column: any) => ({
+        name: column.name,
+        identifier: column.identifier,
+        sourceId: column.sourceId,
+        parentType: 'subclass',
+      })),
+    ],
+  };
+
+  const spellFormulaShortcuts = buildSpellFormulaShortcutRows(subclassReferenceContext);
+  const spellFormulaPreview = normalizeSpellFormulaShortcuts(
+    spellcasting.spellsKnownFormula,
+    subclassReferenceContext,
+  );
+
   if (loading) return <div className="p-8 text-center text-gold animate-pulse">Loading Subclass Editor...</div>;
 
   return (
@@ -443,9 +479,18 @@ export default function SubclassEditor() {
             )}
           </div>
         </div>
-        <Button onClick={handleSave} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
-          <Save className="w-4 h-4" /> Save Subclass
-        </Button>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <Button onClick={handleSave} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
+            <Save className="w-4 h-4" /> Save Subclass
+          </Button>
+          <ReferenceSheetDialog
+            title="Subclass Reference Sheet"
+            triggerLabel="Open Reference Sheet"
+            triggerIcon="scroll"
+            triggerClassName="w-full sm:w-auto"
+            context={subclassReferenceContext}
+          />
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
@@ -598,22 +643,52 @@ export default function SubclassEditor() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="label-text">Spells Known Formula</label>
-                  <Input
-                    value={spellcasting.spellsKnownFormula}
-                    onChange={e => setSpellcasting({...spellcasting, spellsKnownFormula: e.target.value})}
-                    placeholder="Preferred: @abilities.wis.mod + @classes.druid.levels"
-                    className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
-                  />
-                  <div className="rounded-md border border-gold/10 bg-background/30 px-3 py-2 space-y-1">
-                    {SPELLCASTING_FORMULA_GUIDANCE.map((line) => (
-                      <p key={line} className="text-[10px] text-ink/50 leading-relaxed">
-                        {line}
-                      </p>
-                    ))}
+                <fieldset className="config-fieldset bg-background/20">
+                  <legend className="section-label text-sky-500/60 px-1">Spells Known Formula</legend>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                    <div className="space-y-1.5">
+                      <label className="field-label">Formula</label>
+                      <Input
+                        value={spellcasting.spellsKnownFormula}
+                        onChange={e => setSpellcasting({...spellcasting, spellsKnownFormula: e.target.value})}
+                        placeholder="Preferred: @abilities.wis.mod + @classes.druid.levels"
+                        className="field-input text-xs"
+                      />
+                      <div className="space-y-1">
+                        {SPELLCASTING_FORMULA_GUIDANCE.map((line) => (
+                          <p key={line} className="field-hint">
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+                      <div className="rounded-md border border-gold/10 bg-background/30 px-3 py-2 space-y-2">
+                        <p className="label-text text-gold/70">Dauligor Shortcuts</p>
+                        <div className="grid gap-1 md:grid-cols-2">
+                          {spellFormulaShortcuts.map((row) => (
+                            <div key={row.authoring} className="rounded border border-gold/10 bg-card/40 px-2 py-2">
+                              <p className="text-[10px] font-black text-ink/75">{row.label}</p>
+                              <code className="mt-1 block text-[10px] text-gold">{row.authoring}</code>
+                              <p className="mt-1 text-[10px] text-ink/45 break-all">{row.preview}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {spellcasting.spellsKnownFormula ? (
+                          <p className="field-hint">
+                            Preview: <code className="text-gold break-all">{spellFormulaPreview}</code>
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex justify-start lg:justify-end">
+                      <ReferenceSyntaxHelp
+                        title="Spell Formula References"
+                        buttonLabel="Formula Help"
+                        value={spellcasting.spellsKnownFormula}
+                        context={subclassReferenceContext}
+                      />
+                    </div>
                   </div>
-                </div>
+                </fieldset>
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -689,6 +764,8 @@ export default function SubclassEditor() {
                 availableOptionGroups={allOptionGroups}
                 availableOptionItems={allOptionItems}
                 defaultHitDie={parentClass?.hitDie}
+                referenceContext={subclassReferenceContext}
+                referenceSheetTitle="Subclass Reference Sheet"
               />
             </div>
           </div>
@@ -1041,6 +1118,12 @@ export default function SubclassEditor() {
                         className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 outline-none pointer-events-none select-none opacity-80" 
                       />
                     </div>
+                    <ReferenceSheetDialog
+                      title="Subclass Reference Sheet"
+                      triggerLabel="Open Reference Sheet"
+                      triggerClassName="mt-2"
+                      context={subclassReferenceContext}
+                    />
                   </div>
                 </div>
 
@@ -1177,6 +1260,15 @@ export default function SubclassEditor() {
                           </div>
 
                           <div className="space-y-4">
+                            <div className="flex justify-end">
+                              <ReferenceSyntaxHelp
+                              title="Usage Formula References"
+                              description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape."
+                              buttonLabel="Usage Help"
+                              value={editingFeature.usage?.max || ''}
+                              context={subclassReferenceContext}
+                              />
+                            </div>
                             <div className="space-y-1">
                               <label className="text-[9px] uppercase text-ink/60 font-black">Spent</label>
                               <Input 

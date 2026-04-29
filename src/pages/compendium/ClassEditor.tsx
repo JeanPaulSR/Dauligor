@@ -21,6 +21,9 @@ import MarkdownEditor from '../../components/MarkdownEditor';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import { slugify, cn } from '../../lib/utils';
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
+import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
+import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
+import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
 
 const FEATURE_TYPES = [
   { id: 'background', name: 'Background Feature' },
@@ -34,10 +37,15 @@ const FEATURE_TYPES = [
 ];
 
 const SPELLCASTING_FORMULA_GUIDANCE = [
-  'Preferred native Foundry formula: @abilities.wis.mod + @classes.druid.levels',
-  'Other valid native examples: @abilities.cha.mod + @classes.sorcerer.levels, @abilities.int.mod + @classes.wizard.levels',
-  'Accepted shorthand the module can convert: WIS + Level, CHA + Level, INT + Level'
+  'Dauligor spellcasting shortcuts are contextual in this field.',
+  'Use min(), floor(), and ceil() for rounding or minimum logic.',
+  'The preview below shows how the current class and ability resolve.'
 ];
+
+function getClassReferenceIdentifier(sourceId: string, name: string) {
+  if (String(sourceId || '').startsWith('class-')) return String(sourceId).slice(6);
+  return slugify(name || 'class');
+}
 
 function getScalingBreakpoints(values: Record<string, any> = {}) {
   let lastValue: string | undefined;
@@ -1128,6 +1136,22 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     return acc;
   }, {} as Record<string, any[]>);
   const selectedSpellcastingType = spellcastingTypes.find((type) => type.id === spellcasting.progressionId);
+  const classReferenceContext = {
+    classIdentifier: getClassReferenceIdentifier(sourceId, name),
+    classLabel: name || 'Class',
+    spellcastingAbility: spellcasting.ability,
+    classColumns: scalingColumns.map((column: any) => ({
+      name: column.name,
+      identifier: column.identifier,
+      sourceId: column.sourceId,
+      parentType: 'class',
+    })),
+  };
+  const spellFormulaShortcuts = buildSpellFormulaShortcutRows(classReferenceContext);
+  const spellFormulaPreview = normalizeSpellFormulaShortcuts(
+    spellcasting.spellsKnownFormula,
+    classReferenceContext,
+  );
 
   const toggleGroup = (items: any[], type: 'armor' | 'weapons' | 'tools' | 'languages', target: 'fixedIds' | 'optionIds', categoryId?: string) => {
     const currentIds = new Set(proficiencies[type][target] || []);
@@ -1191,9 +1215,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             {id ? `Edit ${name || 'Class'}` : 'New Class'}
           </h1>
         </div>
-        <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
-          <Save className="w-4 h-4" /> Save Class
-        </Button>
+        <div className="flex flex-col items-stretch gap-2 sm:items-end">
+          <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
+            <Save className="w-4 h-4" /> Save Class
+          </Button>
+          <ReferenceSheetDialog
+            title="Class Reference Sheet"
+            triggerLabel="Open Reference Sheet"
+            triggerIcon="scroll"
+            triggerClassName="w-full sm:w-auto"
+            context={classReferenceContext}
+          />
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-4 gap-6">
@@ -2411,23 +2444,54 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       <option value="spellbook">Spellbook</option>
                     </select>
                   </div>
-                  <div className="space-y-1">
-                    <label className="label-text">Spells Known Formula</label>
-                    <Input 
-                      value={spellcasting.spellsKnownFormula} 
-                      onChange={e => setSpellcasting({...spellcasting, spellsKnownFormula: e.target.value})}
-                      placeholder="Preferred: @abilities.wis.mod + @classes.druid.levels"
-                      className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
-                    />
-                    <div className="rounded-md border border-gold/10 bg-background/30 px-3 py-2 space-y-1">
-                      {SPELLCASTING_FORMULA_GUIDANCE.map((line) => (
-                        <p key={line} className="text-[10px] text-ink/50 leading-relaxed">
-                          {line}
-                        </p>
-                      ))}
+                </div>
+
+                <fieldset className="config-fieldset bg-background/20">
+                  <legend className="section-label text-sky-500/60 px-1">Spells Known Formula</legend>
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                    <div className="space-y-1.5">
+                      <label className="field-label">Formula</label>
+                      <Input 
+                        value={spellcasting.spellsKnownFormula} 
+                        onChange={e => setSpellcasting({...spellcasting, spellsKnownFormula: e.target.value})}
+                        placeholder="Preferred: @abilities.wis.mod + @classes.druid.levels"
+                        className="field-input text-xs"
+                      />
+                      <div className="space-y-1">
+                        {SPELLCASTING_FORMULA_GUIDANCE.map((line) => (
+                          <p key={line} className="field-hint">
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+                      <div className="rounded-md border border-gold/10 bg-background/30 px-3 py-2 space-y-2">
+                        <p className="label-text text-gold/70">Dauligor Shortcuts</p>
+                        <div className="grid gap-1 md:grid-cols-2">
+                          {spellFormulaShortcuts.map((row) => (
+                            <div key={row.authoring} className="rounded border border-gold/10 bg-card/40 px-2 py-2">
+                              <p className="text-[10px] font-black text-ink/75">{row.label}</p>
+                              <code className="mt-1 block text-[10px] text-gold">{row.authoring}</code>
+                              <p className="mt-1 text-[10px] text-ink/45 break-all">{row.preview}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {spellcasting.spellsKnownFormula ? (
+                          <p className="field-hint">
+                            Preview: <code className="text-gold break-all">{spellFormulaPreview}</code>
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex justify-start lg:justify-end">
+                      <ReferenceSyntaxHelp
+                        title="Spell Formula References"
+                        buttonLabel="Formula Help"
+                        value={spellcasting.spellsKnownFormula}
+                        context={classReferenceContext}
+                      />
                     </div>
                   </div>
-                </div>
+                </fieldset>
 
                 <div className="space-y-4">
                   <div className="grid sm:grid-cols-2 gap-4">
@@ -3713,7 +3777,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             </div>
             <div className="space-y-4">
               <p className="text-[10px] text-ink/40 italic">Global progression rules for this class (Ability Score Improvements, Hit Points, etc.)</p>
-              <AdvancementManager 
+              <AdvancementManager
                 advancements={advancements}
                 onChange={setAdvancements}
                 availableFeatures={features}
@@ -3721,6 +3785,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 availableOptionGroups={allOptionGroups}
                 availableOptionItems={allOptionItems}
                 defaultHitDie={hitDie}
+                referenceContext={classReferenceContext}
+                referenceSheetTitle="Class Reference Sheet"
               />
             </div>
           </div>
@@ -3881,6 +3947,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 focus:ring-1 focus:ring-gold/50 hover:bg-gold/5 outline-none transition-colors" 
                       />
                     </div>
+                    <ReferenceSheetDialog
+                      title="Class Reference Sheet"
+                      triggerLabel="Open Reference Sheet"
+                      triggerClassName="mt-2"
+                      context={classReferenceContext}
+                    />
                   </div>
                 </div>
 
@@ -4027,8 +4099,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
                     <div className="space-y-4 pt-2">
                        <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Usage</h4>
-                       <div className="p-4 border border-gold/10 bg-gold/5 rounded-md space-y-4 flex items-center justify-between">
-                          <label className="text-[11px] text-ink/80 font-black">Limited Uses</label>
+                       <div className="p-4 border border-gold/10 bg-gold/5 rounded-md space-y-4">
+                          <div className="section-header">
+                            <label className="text-[11px] text-ink/80 font-black">Limited Uses</label>
+                            <ReferenceSyntaxHelp
+                              title="Usage Formula References"
+                              description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape."
+                              buttonLabel="Usage Help"
+                              value={editingFeature.usage?.max || ''}
+                              context={classReferenceContext}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
                           <div className="flex items-center gap-4">
                              <div className="space-y-1">
                               <label className="text-[9px] uppercase text-ink/60 font-black">Spent</label>
@@ -4054,6 +4136,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                 className="h-8 text-center text-xs bg-background/50 border-gold/10 focus:border-gold w-32"
                               />
                             </div>
+                          </div>
                           </div>
                        </div>
                     </div>

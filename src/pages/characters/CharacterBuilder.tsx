@@ -62,6 +62,7 @@ import {
 import { ClassList } from "../compendium/ClassList";
 import BBCodeRenderer from "../../components/BBCodeRenderer";
 import { exportCharacterJSON } from "../../lib/characterExport";
+import CharacterReferencePanel from "../../components/reference/CharacterReferencePanel";
 
 const getModifier = (score: number) => {
   const mod = Math.floor((score - 10) / 2);
@@ -1060,6 +1061,38 @@ export default function CharacterBuilder({
     return 10 + getSkillTotal(skillId);
   };
 
+  const selectedClassDocument =
+    (character.classId && classCache[character.classId]) ||
+    Object.values(classCache).find(
+      (entry: any) =>
+        entry?.id === character.classId || entry?.name === character.classId,
+    ) ||
+    null;
+
+  const selectedSubclassDocument =
+    (character.subclassId && subclassCache[character.subclassId]) || null;
+
+  const selectedClassIdentifier = selectedClassDocument?.sourceId?.startsWith("class-")
+    ? selectedClassDocument.sourceId.slice(6)
+    : selectedClassDocument?.identifier || selectedClassDocument?.name || "";
+
+  const selectedSubclassIdentifier = selectedSubclassDocument?.sourceId?.startsWith(
+    "subclass-",
+  )
+    ? selectedSubclassDocument.sourceId.slice(9)
+    : selectedSubclassDocument?.identifier || selectedSubclassDocument?.name || "";
+
+  const selectedSpellcastingAbility =
+    selectedClassDocument?.spellcasting?.ability || "INT";
+
+  const selectedReferenceColumns = Object.values(scalingCache).filter((column: any) => {
+    if (!column) return false;
+    return (
+      column.parentId === selectedClassDocument?.id ||
+      column.parentId === selectedSubclassDocument?.id
+    );
+  });
+
   if (loading) return null;
 
   return (
@@ -1286,6 +1319,21 @@ export default function CharacterBuilder({
                   />
                 ))}
               </div>
+
+              <CharacterReferencePanel
+                character={character}
+                classIdentifier={selectedClassIdentifier}
+                classLabel={selectedClassDocument?.name}
+                subclassIdentifier={selectedSubclassIdentifier}
+                subclassLabel={selectedSubclassDocument?.name}
+                spellcastingAbility={selectedSpellcastingAbility}
+                classColumns={selectedReferenceColumns.map((column: any) => ({
+                  name: column.name,
+                  identifier: column.identifier,
+                  sourceId: column.sourceId,
+                  parentType: column.parentType,
+                }))}
+              />
 
               <div className="grid xl:grid-cols-2 gap-8">
                 {/* PORTRAIT & CORE STATUS */}

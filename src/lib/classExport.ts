@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { normalizeSpellFormulaShortcuts } from './referenceSyntax';
 
 export interface SourceExportBundle {
   catalog: any;
@@ -253,18 +254,26 @@ function normalizeMappedId(id: string | undefined, map: Record<string, any>, opt
 }
 
 function normalizeSpellcastingForExport(spellcasting: any, refs: any = {}, {
-  preserveNativeProgression = false
-}: { preserveNativeProgression?: boolean } = {}) {
+  preserveNativeProgression = false,
+  classIdentifierForLevelRef = ''
+}: { preserveNativeProgression?: boolean; classIdentifierForLevelRef?: string } = {}) {
   if (!spellcasting || typeof spellcasting !== 'object') return null;
 
+  const normalizedAbility = trimString(spellcasting.ability).toUpperCase() || '';
   const normalized: any = {
     ...spellcasting,
     description: cleanText(spellcasting.description || ''),
     hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
     level: Number(spellcasting.level || 1) || 1,
-    ability: trimString(spellcasting.ability).toUpperCase() || '',
+    ability: normalizedAbility,
     type: trimString(spellcasting.type).toLowerCase() || 'prepared',
-    spellsKnownFormula: trimString(spellcasting.spellsKnownFormula)
+    spellsKnownFormula: normalizeSpellFormulaShortcuts(
+      trimString(spellcasting.spellsKnownFormula),
+      {
+        classIdentifier: classIdentifierForLevelRef,
+        spellcastingAbility: normalizedAbility,
+      },
+    )
   };
 
   const progressionTypeId = trimString(spellcasting.progressionId);
@@ -946,7 +955,10 @@ export async function exportClassSemantic(classId: string) {
       description: cleanText(subclass.description),
       lore: cleanText(subclass.lore),
       tagIds: uniqueStrings(asArray(subclass.tagIds).map((id: string) => getSemanticToken(refs.tagsById[id]) || trimString(id))),
-      spellcasting: normalizeSpellcastingForExport(subclass.spellcasting, refs, { preserveNativeProgression: true })
+      spellcasting: normalizeSpellcastingForExport(subclass.spellcasting, refs, {
+        preserveNativeProgression: true,
+        classIdentifierForLevelRef: classIdentifier,
+      })
     }, ['classId', 'excludedOptionIds']);
   }));
 
@@ -1153,7 +1165,10 @@ export async function exportClassSemantic(classId: string) {
     };
   });
 
-  const classSpellcasting = normalizeSpellcastingForExport(classDataRaw.spellcasting, refs, { preserveNativeProgression: false });
+  const classSpellcasting = normalizeSpellcastingForExport(classDataRaw.spellcasting, refs, {
+    preserveNativeProgression: false,
+    classIdentifierForLevelRef: classIdentifier,
+  });
   const usedAlternativeProgressionIds = uniqueStrings([
     trimString(classDataRaw.spellcasting?.altProgressionId),
     ...subclassesRaw.map((subclass: any) => trimString(subclass.spellcasting?.altProgressionId))

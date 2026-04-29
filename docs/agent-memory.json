@@ -1,0 +1,200 @@
+{
+  "version": 1,
+  "updatedAt": "2026-04-28",
+  "paths": {
+    "appRepo": "E:/DnD/Professional/Dev/Dauligor",
+    "moduleDev": "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing",
+    "moduleLive": "C:/Users/Jean/AppData/Local/FoundryVTT/Data/modules/dauligor-pairing",
+    "dnd5eSystem": "C:/Users/Jean/AppData/Local/FoundryVTT/Data/systems/dnd5e"
+  },
+  "sourceOfTruth": {
+    "moduleCode": "dev",
+    "moduleRuntime": "live",
+    "ignoreDataFolderForSync": true
+  },
+  "hosting": {
+    "website": "vercel",
+    "images": "cloudflare-r2",
+    "publicImageBaseUrl": "https://images.dauligor.com",
+    "imageWritesUseServerProxy": true
+  },
+  "classImport": {
+    "rootAdvancementsAuthoritative": true,
+    "featureGrantsSynthesizedAtExport": true,
+    "traitAdvancementsAppliedToActorRoot": true,
+    "importModes": [
+      "primary",
+      "same-class-level-up",
+      "multiclass"
+    ],
+    "multiclassModePersistsOnEmbeddedClass": true,
+    "asiFlowsOpenedAfterImport": false,
+    "asiHandledByDauligorPromptAfterImport": true,
+    "asiFeatChoicesCanUseDauligorFeatCatalog": true,
+    "asiUsesDedicatedDauligorAppWindow": true,
+    "sameClassLevelUpImportsOnlyNewFeatures": true,
+    "selectedSubclassPersistedOnSubclassAdvancement": true,
+    "selectedOptionItemsPersistedOnItemChoiceAdvancement": true
+  },
+  "hitPoints": {
+    "classHitPointAdvancementsDriveDerivedMaxHp": true,
+    "actorHpMaxOnlyWrittenWhenRawOverrideExists": true,
+    "conAsiAdjustsActorCurrentHpAcrossTotalClassLevels": true,
+    "actorResetBeforeHpValueUpdate": true,
+    "multiclassCurrentHpStillNeedsFollowup": true
+  },
+  "verification": {
+    "lastRuntimeCheckDate": "2026-04-28",
+    "verifiedCases": [
+      "artificer-primary plus sorcerer-multiclass actor keeps sorcerer proficiencyMode=multiclass",
+      "artificer-primary plus sorcerer-multiclass actor does not gain secondary-class saving throw proficiencies on actor root"
+    ],
+    "remainingRuntimeChecks": [
+      "verify Dauligor ASI prompts resolve correctly on multi-level imports that cross ASI levels",
+      "verify Dauligor feat selection works from a real feat catalog during ASI prompt flow",
+      "verify multiclass HP behavior after the max-override fix, especially second-class imports and damaged actors; max HP overwrite is fixed but current HP still needs follow-up",
+      "verify multiclass behavior across more class combinations",
+      "verify ItemChoice and Subclass advancement rows behave correctly in live UI after the latest sync fix"
+    ]
+  },
+  "appAlignment": {
+    "referenceSheetCreated": true,
+    "referenceDoc": "E:/DnD/Professional/Dev/Dauligor/docs/foundry-dnd5e-character-reference-sheet.md",
+    "asiUiShouldBeRevisitedLater": true,
+    "firstReferenceUiPassImplemented": true,
+    "nextGoals": [
+      "build a creator-facing reference model around native Foundry dnd5e terminology",
+      "update Dauligor class and character sheets to display and explain Foundry-style references while authoring",
+      "bring character-sheet advancement authoring back in line with the current Foundry-ready advancement model",
+      "remove or replace deprecated advancement-authoring paths in the app-side creator flow"
+    ],
+    "highestPriorityAfterReferences": "phase out deprecated advancement-authoring paths in the app-side creator flow",
+    "examplesToSupport": [
+      "@abilities.int.mod",
+      "@classes.druid.levels",
+      "@details.level",
+      "@attributes.spell.dc"
+    ],
+    "startingFiles": [
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/characters/CharacterBuilder.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/lib/characterExport.ts",
+      "E:/DnD/Professional/Dev/Dauligor/src/lib/referenceSyntax.ts",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/reference/ReferenceSyntaxHelp.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/reference/ReferenceSheetDialog.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/reference/CharacterReferencePanel.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/AdvancementManager.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/admin/SpellcastingAdvancementManager.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/ClassEditor.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/SubclassEditor.tsx"
+    ],
+    "notes": [
+      "CharacterBuilder.tsx is the most likely entry point for creator-facing character-sheet behavior",
+      "characterExport.ts is the likely convergence point for Foundry-oriented reference serialization or formula normalization",
+      "AdvancementManager.tsx is the current app-side advancement editor and should be compared against the Foundry-ready advancement shape first",
+      "SpellcastingAdvancementManager.tsx already exposes native-style formula examples and may inform reference-helper UX",
+      "SubclassEditor.tsx already has explicit deprecated-feature handling, which is a strong signal that advancement cleanup should include deprecated app-side class and subclass authoring paths",
+      "referenceSyntax.ts now provides first-wave semantic-to-Foundry preview logic for app-side helper surfaces",
+      "ReferenceSyntaxHelp.tsx now uses a compact side popout instead of a large inline block and is wired into class and subclass spellcasting formula fields plus limited-use feature formula fields",
+      "ReferenceSheetDialog.tsx now provides a draggable full reference utility window and is linked from class/subclass save areas, feature modal headers, advancement dialog headers, and the character sheet launcher card",
+      "CharacterReferencePanel.tsx is now a compact CharacterBuilder launcher card instead of a permanently expanded table",
+      "spellcasting formula authoring now supports contextual shortcuts: @level, @totalLevel, @prof, @mod, @value, plus min()/floor()/ceil() guidance",
+      "class export normalization now resolves those spellcasting shortcuts into Foundry-native formula paths using the current class identifier and selected ability",
+      "the next pass should extend reference helpers into more formula-bearing editor surfaces and then tackle deprecated advancement-authoring cleanup",
+      "the current inline usage formula helper is useful but too space-heavy; future reference help should prefer a button, hover target, side popout, or dedicated reference window",
+      "class authoring screens should likely get an 'open references sheet' action near the main save area",
+      "spellcasting authoring needs more room and should not feel cramped by the reference helper sharing the same narrow column",
+      "the dedicated reference sheet should eventually include sections for core information, attributes, skills, class features, class columns, and later effects",
+      "class references must key by stable identifier rather than display name so duplicate class names on a sheet do not break resolution",
+      "class-column references must resolve from linked ScaleValue / scaling identifiers rather than only from the column label",
+      "future effects/reference work should review Foundry wiki guidance and Midi-QOL effect conventions"
+    ]
+  },
+  "descriptions": {
+    "acceptedFormats": [
+      "html",
+      "bbcode",
+      "simple-markdown"
+    ],
+    "preferredNonHtmlFormat": "bbcode",
+    "normalizedInModule": true
+  },
+  "featureTyping": {
+    "defaultClassFeatureType": {
+      "itemType": "feat",
+      "value": "class",
+      "subtype": ""
+    },
+    "classOptionSubtypeDerivedFromOptionGroupName": true,
+    "runtimeRegistersCustomSubtypeLabels": true,
+    "moduleFlags": [
+      "featureTypeValue",
+      "featureTypeSubtype",
+      "featureTypeLabel"
+    ]
+  },
+  "spellcasting": {
+    "nativeFields": [
+      "progression",
+      "ability",
+      "preparation.formula"
+    ],
+    "deprecatedPreparationModeWritten": false,
+    "acceptedShorthandFormulaExample": "WIS + Level",
+    "preferredNativeFormulaExample": "@abilities.wis.mod + @classes.druid.levels"
+  },
+  "importantFiles": {
+    "app": [
+      "E:/DnD/Professional/Dev/Dauligor/src/lib/classExport.ts",
+      "E:/DnD/Professional/Dev/Dauligor/src/lib/characterExport.ts",
+      "E:/DnD/Professional/Dev/Dauligor/src/lib/referenceSyntax.ts",
+      "E:/DnD/Professional/Dev/Dauligor/src/lib/bbcode.ts",
+      "E:/DnD/Professional/Dev/Dauligor/src/lib/r2.ts",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/reference/ReferenceSyntaxHelp.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/reference/ReferenceSheetDialog.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/reference/CharacterReferencePanel.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/characters/CharacterBuilder.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/admin/SpellcastingAdvancementManager.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/ClassEditor.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/SubclassEditor.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/AdvancementManager.tsx"
+    ],
+    "module": [
+      "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/class-import-service.js",
+      "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/main.js",
+      "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/importer-app.js"
+    ],
+    "docs": [
+      "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-import-and-advancement-guide.md",
+      "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-import-contract.md",
+      "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-semantic-export-notes.md",
+      "E:/DnD/Professional/Dev/Dauligor/docs/foundry-dnd5e-character-reference-sheet.md"
+    ]
+  },
+  "activeFollowups": [
+    "start app-side character creator alignment with Foundry dnd5e references using the reference sheet and identified app entry points",
+    "update class sheet and character sheet authoring UX so creators can discover and use references like @abilities.int.mod directly",
+    "extend the new reference helper surface into more formula-bearing editors such as activity formulas and remaining character-sheet fields",
+    "keep refining the draggable reference sheet window sizing and placement based on real editor usage",
+    "replace large inline reference helpers with a popout, hover card, side panel, or dedicated reference-sheet flow",
+    "add an open-reference-sheet action near the main save area on class authoring screens",
+    "expand the future reference sheet to cover core information, attributes, skills, class features, class columns, and later effects",
+    "research Foundry wiki and Midi-QOL effect declaration patterns for the later effects/reference pass",
+    "replace deprecated character-sheet advancement authoring paths with the current Foundry-ready advancement model",
+    "verify multiclass behavior across more class combinations",
+    "verify Dauligor ASI prompt behavior in live Foundry, especially multi-level imports that cross ASI levels",
+    "verify Dauligor feat selection from a real feat catalog during ASI prompt flow",
+    "verify multiclass HP behavior after the max-override fix, especially second-class imports and damaged actors; max HP overwrite is fixed but current HP still needs follow-up",
+    "verify ItemChoice and Subclass advancement rows behave correctly in live UI after the latest sync fix",
+    "revisit and polish the Dauligor ASI UI after beta-critical functionality is stable",
+    "implement spell lists",
+    "continue activities verification",
+    "expand feats/items/spells Foundry import coverage",
+    "use option-group-derived feature type labels for future sheet sorting"
+  ],
+  "freshChatReadOrder": [
+    "E:/DnD/Professional/Dev/Dauligor/docs/agent-memory.md",
+    "E:/DnD/Professional/Dev/Dauligor/docs/agent-memory.json",
+    "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/class-import-service.js",
+    "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-import-and-advancement-guide.md"
+  ]
+}

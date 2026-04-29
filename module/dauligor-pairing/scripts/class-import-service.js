@@ -1,4 +1,4 @@
-import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS, SOURCE_LIBRARY_FILE } from "./constants.js";
+import { CLASS_CATALOG_FILE, CLASS_OPTIONS_TEMPLATE, MODULE_ID, SETTINGS, SOURCE_LIBRARY_FILE } from "./constants.js";
 import { applyReferenceNormalization, syncDocumentReferences } from "./reference-service.js";
 import { log, notifyInfo, notifyWarn, warn } from "./utils.js";
 
@@ -9,6 +9,7 @@ const DEFAULT_OPTION_ICON = "icons/svg/upgrade.svg";
 const DEFAULT_SOURCE_BOOK = "Dauligor";
 const FEATURE_SUPPORTED_ADVANCEMENT_TYPES = new Set(["AbilityScoreImprovement", "ItemChoice", "ItemGrant", "ScaleValue", "Trait"]);
 const SUPPORTED_SEMANTIC_ACTIVITY_TYPES = new Set(["attack", "cast", "check", "damage", "enchant", "forward", "heal", "save", "summon", "transform", "utility"]);
+const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 export async function openClassImportBrowser() {
   const catalogUrl = game.settings.get(MODULE_ID, SETTINGS.defaultClassCatalogUrl) || CLASS_CATALOG_FILE;
@@ -377,7 +378,10 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   });
   const openedAsiFlows = await promptActorAbilityScoreImprovements(targetActor, syncedClassDoc ?? actorClassDoc, {
     existingClassLevel: workflow.existingClassLevel,
-    targetLevel: classLevel
+    targetLevel: classLevel,
+    entry,
+    payload,
+    classSourceId
   });
 
   notifyInfo(
@@ -392,7 +396,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     + `${removedSubclassFeatures ? ` Removed ${removedSubclassFeatures} subclass feature item(s).` : ""}`
     + `${removedOptionItems ? ` Removed ${removedOptionItems} class option item(s).` : ""}`
     + `${removedSubclassItems ? ` Removed ${removedSubclassItems} subclass item(s).` : ""}`
-    + `${openedAsiFlows ? ` Opened ${openedAsiFlows} ability score improvement advancement step(s).` : ""}`
+    + `${openedAsiFlows ? ` Resolved ${openedAsiFlows} Dauligor ability score improvement step(s).` : ""}`
   );
 
   log("Imported Dauligor class bundle to actor", {
@@ -3241,10 +3245,13 @@ async function syncActorClassAdvancements(actor, actorClassItem, sourceAdvanceme
   if (!targetActor || !actorClassItem) return actorClassItem;
 
   const currentClassItem = targetActor.items.get(actorClassItem.id) ?? actorClassItem;
+  const importSelections = sanitizeClassImportSelection(currentClassItem.getFlag?.(MODULE_ID, "importSelections") ?? {});
   const resolvedAdvancement = buildEmbeddedActorAdvancementStructure(sourceAdvancement, {
     actor: targetActor,
     classSourceId,
-    targetLevel
+    targetLevel,
+    selectedSubclassSourceId: importSelections.subclassSourceId,
+    optionSelections: importSelections.optionSelections
   });
   if (referencedDocs.length) {
     const docsBySourceId = new Map();
@@ -3453,8 +3460,24 @@ function applyTraitKeyToActorUpdate(updates, actor, key, mode = "default") {
   return 1;
 }
 
-function buildEmbeddedActorAdvancementStructure(sourceAdvancement, { actor, classSourceId = null, targetLevel = 1 } = {}) {
+function buildEmbeddedActorAdvancementStructure(sourceAdvancement, {
+  actor,
+  classSourceId = null,
+  targetLevel = 1,
+  selectedSubclassSourceId = null,
+  optionSelections = {}
+} = {}) {
   const actorFeaturesBySourceId = buildActorFeatureSourceMap(actor, { classSourceId });
+  const actorSubclassesBySourceId = buildActorItemSourceMap(actor, {
+    classSourceId,
+    itemTypes: ["subclass"]
+  });
+  const selectedOptionSourceIds = new Set(
+    Object.values(optionSelections ?? {})
+      .flat()
+      .map((value) => trimString(value))
+      .filter(Boolean)
+  );
   const resolved = {};
 
   for (const [id, advancementEntry] of Object.entries(normalizeAdvancementStructure(sourceAdvancement))) {
@@ -3492,6 +3515,49 @@ function buildEmbeddedActorAdvancementStructure(sourceAdvancement, { actor, clas
       clone.value ??= {};
       clone.value.added = added;
     }
+    else if (clone.type === "ItemChoice") {
+      const configuredPool = Array.isArray(clone.configuration?.pool)
+        ? clone.configuration.pool
+        : [];
+      const resolvedPool = [];
+      const seenUuids = new Set();
+      const addPoolEntry = (entry) => {
+        const uuid = trimString(entry?.uuid);
+        if (!uuid || seenUuids.has(uuid)) return;
+        seenUuids.add(uuid);
+        resolvedPool.push(entry);
+      };
+
+      for (const configuredItem of configuredPool) {
+        addPoolEntry(foundry.utils.deepClone(configuredItem));
+      }
+
+      const added = {};
+      for (const sourceId of selectedOptionSourceIds) {
+        const actorFeature = actorFeaturesBySourceId.get(sourceId);
+        if (!actorFeature) continue;
+
+        addPoolEntry({
+          uuid: actorFeature.uuid,
+          sourceId
+        });
+        added[actorFeature.id] = actorFeature.uuid;
+      }
+
+      clone.configuration ??= {};
+      clone.configuration.pool = resolvedPool;
+      clone.value ??= {};
+      clone.value.added = added;
+      clone.value.replaced ??= {};
+    }
+    else if (clone.type === "Subclass") {
+      const actorSubclass = selectedSubclassSourceId
+        ? actorSubclassesBySourceId.get(selectedSubclassSourceId)
+        : null;
+      clone.value ??= {};
+      clone.value.document = actorSubclass?.id ?? null;
+      clone.value.uuid = actorSubclass?.uuid ?? null;
+    }
 
     resolved[id] = clone;
   }
@@ -3501,38 +3567,651 @@ function buildEmbeddedActorAdvancementStructure(sourceAdvancement, { actor, clas
 
 async function promptActorAbilityScoreImprovements(actor, actorClassItem, {
   existingClassLevel = 0,
-  targetLevel = 1
+  targetLevel = 1,
+  entry = null,
+  payload = null,
+  classSourceId = null
 } = {}) {
   const targetActor = resolveTargetActor(actor);
   if (!targetActor || !actorClassItem || targetLevel <= existingClassLevel) return 0;
   if (game.settings.get("dnd5e", "disableAdvancements")) return 0;
 
-  const AdvancementManager = globalThis.dnd5e?.applications?.advancement?.AdvancementManager;
-  if (!AdvancementManager) return 0;
+  let currentClassItem = targetActor.items.get(actorClassItem.id) ?? actorClassItem;
+  const pendingAsiEntries = Object.entries(normalizeAdvancementStructure(currentClassItem.system?.advancement))
+    .filter(([, advancementEntry]) => {
+      if (advancementEntry?.type !== "AbilityScoreImprovement") return false;
+      const level = Number(advancementEntry.level ?? 0);
+      if (level <= existingClassLevel || level > targetLevel) return false;
+      return !hasResolvedAbilityScoreImprovementChoice(advancementEntry);
+    })
+    .sort((left, right) => Number(left[1]?.level ?? 0) - Number(right[1]?.level ?? 0));
 
-  const manager = new AdvancementManager(targetActor, {});
-  const clonedItem = manager.clone?.items?.get(actorClassItem.id);
-  if (!clonedItem) return 0;
+  if (!pendingAsiEntries.length) return 0;
 
-  const currentCharacterLevel = Number(targetActor.system?.details?.level ?? 0) || targetLevel;
-  const gainedLevels = Math.max(0, targetLevel - existingClassLevel);
-  const priorCharacterLevel = Math.max(0, currentCharacterLevel - gainedLevels);
+  let featCatalog = null;
+  let resolvedCount = 0;
+  for (const [advancementId, advancementEntry] of pendingAsiEntries) {
+    const featAllowed = advancementEntry?.configuration?.featAllowed !== false;
+    if (featAllowed && featCatalog == null) {
+      featCatalog = await fetchDauligorFeatCatalog({ entry, payload });
+    }
 
-  for (let classLevel = existingClassLevel + 1; classLevel <= targetLevel; classLevel += 1) {
-    const characterLevel = priorCharacterLevel + (classLevel - existingClassLevel);
-    const flows = AdvancementManager.flowsForLevel(clonedItem, classLevel)
-      .filter((flow) => flow?.advancement?.type === "AbilityScoreImprovement");
-    manager.steps.push(...flows.map((flow) => ({
-      type: "forward",
-      flow,
-      class: { item: clonedItem, level: classLevel },
-      level: characterLevel
-    })));
+    const selection = await promptForDauligorAbilityScoreImprovement({
+      actor: targetActor,
+      classItem: currentClassItem,
+      advancementEntry,
+      featCatalog: featAllowed ? (featCatalog ?? []) : []
+    });
+    if (!selection) {
+      notifyWarn(`Skipped unresolved ability score improvement at class level ${Number(advancementEntry?.level ?? 0) || "?"}.`);
+      break;
+    }
+
+    currentClassItem = await applyActorAbilityScoreImprovementChoice(targetActor, currentClassItem, {
+      advancementId,
+      advancementEntry,
+      selection,
+      classSourceId
+    });
+    resolvedCount += 1;
   }
 
-  if (!manager.steps.length) return 0;
-  manager.render({ force: true });
-  return manager.steps.length;
+  return resolvedCount;
+}
+
+function hasResolvedAbilityScoreImprovementChoice(advancementEntry) {
+  if (advancementEntry?.type !== "AbilityScoreImprovement") return false;
+
+  const choiceType = trimString(advancementEntry?.value?.type);
+  if (choiceType === "feat") {
+    return Object.keys(advancementEntry?.value?.feat ?? {}).length > 0;
+  }
+  if (choiceType === "asi") {
+    return Object.values(advancementEntry?.value?.assignments ?? {})
+      .some((value) => (Number(value ?? 0) || 0) > 0);
+  }
+  return false;
+}
+
+async function fetchDauligorFeatCatalog({ entry = null, payload = null } = {}) {
+  const catalogUrl = trimString(entry?.featCatalogUrl)
+    || trimString(payload?.featCatalogUrl)
+    || trimString(payload?.source?.featCatalogUrl)
+    || "";
+  if (!catalogUrl) return [];
+
+  const catalogPayload = await fetchJson(catalogUrl);
+  if (!catalogPayload) return [];
+  if (catalogPayload.kind !== "dauligor.item-catalog.v1") {
+    notifyWarn(`Feat catalog at ${catalogUrl} did not return dauligor.item-catalog.v1.`);
+    return [];
+  }
+
+  return ensureArray(catalogPayload.entries)
+    .filter((catalogEntry) => catalogEntry?.payloadUrl && catalogEntry?.type === "feat")
+    .map((catalogEntry) => ({
+      ...catalogEntry,
+      payloadUrl: resolveCatalogUrl(catalogUrl, catalogEntry.payloadUrl)
+    }))
+    .sort((left, right) => String(left?.name ?? "").localeCompare(String(right?.name ?? "")));
+}
+
+async function promptForDauligorAbilityScoreImprovement({
+  actor,
+  classItem,
+  advancementEntry,
+  featCatalog = []
+} = {}) {
+  const targetActor = resolveTargetActor(actor);
+  if (!targetActor || advancementEntry?.type !== "AbilityScoreImprovement") return null;
+
+  const level = Number(advancementEntry.level ?? 0) || 0;
+  const points = Math.max(0, Number(advancementEntry?.configuration?.points ?? 2) || 0);
+  const perAbilityCap = Math.max(0, Number(advancementEntry?.configuration?.cap ?? points ?? 2) || 0);
+  const featAllowed = advancementEntry?.configuration?.featAllowed !== false && featCatalog.length > 0;
+  const defaultType = featAllowed && hasResolvedAbilityScoreImprovementChoice(advancementEntry)
+    ? trimString(advancementEntry?.value?.type) || "asi"
+    : "asi";
+  let promptState = getAbilityScoreImprovementPromptState({
+    actor: targetActor,
+    advancementEntry,
+    featCatalog,
+    defaultType
+  });
+
+  while (true) {
+    const response = await DauligorAbilityScoreImprovementApp.prompt({
+      actor: targetActor,
+      classItem,
+      advancementEntry,
+      featCatalog,
+      points,
+      perAbilityCap,
+      featAllowed,
+      state: promptState
+    });
+
+    if (!response || response.status === "cancelled") return null;
+    promptState = foundry.utils.deepClone(response.state ?? promptState);
+
+    if (response.type === "feat") {
+      if (!featAllowed) {
+        notifyWarn("No Dauligor feat catalog is available for this ability score improvement.");
+        continue;
+      }
+
+      const featSourceId = trimString(response.featSourceId);
+      const featEntry = featCatalog.find((catalogEntry) => trimString(catalogEntry?.sourceId) === featSourceId);
+      if (!featEntry?.payloadUrl) {
+        notifyWarn("Choose a Dauligor feat before continuing.");
+        continue;
+      }
+
+      return {
+        type: "feat",
+        featEntry
+      };
+    }
+
+    const assignments = {};
+    let assignedPoints = 0;
+    let invalid = false;
+    for (const [abilityKey, abilityData] of Object.entries(CONFIG.DND5E?.abilities ?? {})) {
+      const requested = Math.max(0, Math.floor(Number(response.assignments?.[abilityKey] ?? 0) || 0));
+      if (!requested) continue;
+
+      const abilityValue = Number(targetActor.system?.abilities?.[abilityKey]?.value ?? 0) || 0;
+      const abilityCap = Math.max(
+        Number(targetActor.system?.abilities?.[abilityKey]?.max ?? 20) || 20,
+        Number(advancementEntry?.configuration?.max ?? Number.NEGATIVE_INFINITY)
+      );
+      const allowedForAbility = Math.max(0, Math.min(perAbilityCap, abilityCap - abilityValue));
+      if (requested > allowedForAbility) {
+        notifyWarn(`${abilityData?.label ?? abilityKey.toUpperCase()} can only gain up to ${allowedForAbility} point(s) here.`);
+        invalid = true;
+        break;
+      }
+
+      assignments[abilityKey] = requested;
+      assignedPoints += requested;
+    }
+    if (invalid) continue;
+
+    if (assignedPoints !== points) {
+      notifyWarn(`Spend exactly ${points} ability score point(s) before continuing.`);
+      continue;
+    }
+
+    return {
+      type: "asi",
+      assignments
+    };
+  }
+}
+
+function getAbilityScoreImprovementPromptState({
+  actor,
+  advancementEntry,
+  featCatalog = [],
+  defaultType = "asi"
+} = {}) {
+  const assignments = {};
+  for (const abilityKey of Object.keys(CONFIG.DND5E?.abilities ?? {})) {
+    const saved = Number(advancementEntry?.value?.assignments?.[abilityKey] ?? 0) || 0;
+    if (saved > 0) assignments[abilityKey] = saved;
+  }
+
+  const featSourceId = trimString(Object.values(advancementEntry?.value?.feat ?? {})[0])
+    || trimString(Object.keys(advancementEntry?.value?.feat ?? {})[0])
+    || "";
+  const resolvedFeatEntry = featCatalog.find((catalogEntry) =>
+    trimString(catalogEntry?.sourceId) === featSourceId
+    || trimString(catalogEntry?.payloadUrl) === featSourceId
+  );
+
+  return {
+    type: defaultType,
+    assignments,
+    featSourceId: trimString(resolvedFeatEntry?.sourceId) || "",
+    status: "",
+    statusLevel: ""
+  };
+}
+
+function getAbilityScorePromptAbilityRows(actor, advancementEntry, perAbilityCap, assignments = {}) {
+  return Object.entries(CONFIG.DND5E?.abilities ?? {}).map(([abilityKey, abilityData]) => {
+    const abilityValue = Number(actor?.system?.abilities?.[abilityKey]?.value ?? 0) || 0;
+    const abilityCap = Math.max(
+      Number(actor?.system?.abilities?.[abilityKey]?.max ?? 20) || 20,
+      Number(advancementEntry?.configuration?.max ?? Number.NEGATIVE_INFINITY)
+    );
+    const currentAssignment = Math.max(0, Math.floor(Number(assignments?.[abilityKey] ?? 0) || 0));
+    const allowedForAbility = Math.max(0, Math.min(perAbilityCap, abilityCap - abilityValue));
+
+    return {
+      key: abilityKey,
+      label: abilityData?.label ?? abilityKey.toUpperCase(),
+      current: abilityValue,
+      cap: abilityCap,
+      assigned: currentAssignment,
+      maxAssignable: allowedForAbility
+    };
+  });
+}
+
+class DauligorAbilityScoreImprovementApp extends HandlebarsApplicationMixin(ApplicationV2) {
+  constructor({
+    actor = null,
+    classItem = null,
+    advancementEntry = null,
+    featCatalog = [],
+    points = 2,
+    perAbilityCap = 2,
+    featAllowed = false,
+    state = null
+  } = {}) {
+    super({
+      id: `${MODULE_ID}-asi-${foundry.utils.randomID()}`,
+      classes: ["dauligor-importer-app", "dauligor-importer-app--asi"],
+      window: {
+        title: `${classItem?.name ?? "Class"} Ability Score Improvement`,
+        resizable: true,
+        contentClasses: ["dauligor-importer-window"]
+      },
+      position: {
+        width: Math.min(window.innerWidth - 120, 960),
+        height: Math.min(window.innerHeight - 120, 760)
+      }
+    });
+
+    this._template = CLASS_OPTIONS_TEMPLATE;
+    this._actor = actor ?? null;
+    this._classItem = classItem ?? null;
+    this._advancementEntry = advancementEntry ?? null;
+    this._featCatalog = ensureArray(featCatalog);
+    this._points = Math.max(0, Number(points ?? 0) || 0);
+    this._perAbilityCap = Math.max(0, Number(perAbilityCap ?? 0) || 0);
+    this._featAllowed = Boolean(featAllowed);
+    this._state = foundry.utils.deepClone(state ?? {});
+    this._resolved = false;
+    this._waitPromise = new Promise((resolve) => {
+      this._resolve = resolve;
+    });
+  }
+
+  static async prompt(config = {}) {
+    const app = new this(config);
+    app.render({ force: true });
+    return app.wait();
+  }
+
+  wait() {
+    return this._waitPromise;
+  }
+
+  _configureRenderParts() {
+    return {
+      main: {
+        template: this._template
+      }
+    };
+  }
+
+  async close(options) {
+    const shouldResolve = !this._resolved;
+    const result = await super.close(options);
+    if (shouldResolve) {
+      this._resolved = true;
+      this._resolve({ status: "cancelled" });
+    }
+    return result;
+  }
+
+  _resolveAndClose(result) {
+    if (this._resolved) return;
+    this._resolved = true;
+    this._resolve(result);
+    this.close();
+  }
+
+  _getRootElement() {
+    if (this.element instanceof HTMLElement) return this.element;
+    if (this.element?.jquery && this.element[0] instanceof HTMLElement) return this.element[0];
+    if (this.element?.[0] instanceof HTMLElement) return this.element[0];
+    return document.getElementById(this.id) ?? null;
+  }
+
+  _getAbilityRows() {
+    return getAbilityScorePromptAbilityRows(
+      this._actor,
+      this._advancementEntry,
+      this._perAbilityCap,
+      this._state.assignments ?? {}
+    );
+  }
+
+  _getAssignedPoints() {
+    return Object.values(this._state.assignments ?? {})
+      .reduce((total, value) => total + Math.max(0, Number(value ?? 0) || 0), 0);
+  }
+
+  _getRemainingPoints() {
+    return this._points - this._getAssignedPoints();
+  }
+
+  async _onRender() {
+    super._onRender?.(...arguments);
+
+    const root = this._getRootElement();
+    if (!root) return;
+
+    const content = root.querySelector(".window-content") ?? root;
+    this._toolbarRegion = content.querySelector(`[data-region="toolbar"]`);
+    this._bodyRegion = content.querySelector(`[data-region="body"]`);
+    this._footerRegion = content.querySelector(`[data-region="footer"]`);
+
+    this._renderPrompt();
+  }
+
+  _renderPrompt() {
+    this._renderToolbar();
+    this._renderBody();
+    this._renderFooter();
+  }
+
+  _renderToolbar() {
+    if (!this._toolbarRegion) return;
+
+    const level = Number(this._advancementEntry?.level ?? 0) || 0;
+    this._toolbarRegion.innerHTML = `
+      <div class="dauligor-class-options__toolbar dauligor-asi__toolbar">
+        <div>
+          <span class="dauligor-class-browser__step">Resolve Advancement</span>
+          <h2 class="dauligor-class-browser__title">${foundry.utils.escapeHTML(this._advancementEntry?.title ?? "Ability Score Improvement")}</h2>
+          <p class="dauligor-class-browser__subtitle">Level ${level || "?"} for ${foundry.utils.escapeHTML(this._classItem?.name ?? "Class")} on ${foundry.utils.escapeHTML(this._actor?.name ?? "Actor")}.</p>
+        </div>
+        <div class="dauligor-class-options__toolbar-meta">
+          <div>
+            <span class="dauligor-class-browser__summary-label">Points</span>
+            <span class="dauligor-class-browser__summary-value">${this._points}</span>
+          </div>
+          <div>
+            <span class="dauligor-class-browser__summary-label">Per Ability Cap</span>
+            <span class="dauligor-class-browser__summary-value">${this._perAbilityCap}</span>
+          </div>
+          <div>
+            <span class="dauligor-class-browser__summary-label">Mode</span>
+            <span class="dauligor-class-browser__summary-value">${this._state.type === "feat" ? "Feat" : "ASI"}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderBody() {
+    if (!this._bodyRegion) return;
+
+    const remainingPoints = this._getRemainingPoints();
+    const abilityRows = this._getAbilityRows();
+    const selectedFeat = this._featCatalog.find((entry) => trimString(entry?.sourceId) === trimString(this._state.featSourceId));
+    const featOptions = this._featCatalog.length
+      ? this._featCatalog.map((catalogEntry) => `
+        <option value="${foundry.utils.escapeHTML(trimString(catalogEntry?.sourceId))}" ${trimString(this._state.featSourceId) === trimString(catalogEntry?.sourceId) ? "selected" : ""}>
+          ${foundry.utils.escapeHTML(trimString(catalogEntry?.name) || trimString(catalogEntry?.sourceId) || "Feat")}
+        </option>
+      `).join("")
+      : `<option value="">No Dauligor feats available</option>`;
+
+    this._bodyRegion.innerHTML = `
+      <div class="dauligor-class-options__body dauligor-asi__body">
+        <section class="dauligor-class-options__section">
+          <header class="dauligor-class-options__section-head">
+            <h3>Choose Resolution</h3>
+            <p>Use a direct ability score improvement or swap this level-up into a Dauligor feat import.</p>
+          </header>
+          <div class="dauligor-asi__mode-grid">
+            <button type="button" class="dauligor-asi__mode-card ${this._state.type === "asi" ? "is-active" : ""}" data-action="set-type" data-type="asi">
+              <span class="dauligor-asi__mode-title">Ability Score Improvement</span>
+              <span class="dauligor-asi__mode-copy">${remainingPoints} point(s) remaining.</span>
+            </button>
+            <button type="button" class="dauligor-asi__mode-card ${this._state.type === "feat" ? "is-active" : ""}" data-action="set-type" data-type="feat" ${this._featAllowed ? "" : "disabled"}>
+              <span class="dauligor-asi__mode-title">Feat</span>
+              <span class="dauligor-asi__mode-copy">${this._featAllowed ? "Import from the Dauligor feat catalog." : "No feat catalog is available for this source yet."}</span>
+            </button>
+          </div>
+        </section>
+        <div class="dauligor-asi__content-grid">
+          <section class="dauligor-class-options__section ${this._state.type === "asi" ? "is-active" : ""}">
+            <header class="dauligor-class-options__section-head">
+              <h3>Ability Scores</h3>
+              <p>Spend exactly ${this._points} point(s). Each ability can gain up to ${this._perAbilityCap} point(s) from this ASI.</p>
+            </header>
+            <div class="dauligor-asi__ability-grid">
+              ${abilityRows.map((row) => `
+                <article class="dauligor-asi__ability-card ${row.assigned > 0 ? "is-raised" : ""}">
+                  <div class="dauligor-asi__ability-head">
+                    <span class="dauligor-asi__ability-name">${foundry.utils.escapeHTML(row.label)}</span>
+                    <span class="dauligor-asi__ability-meta">${row.current} to ${row.current + row.assigned} / ${row.cap}</span>
+                  </div>
+                  <div class="dauligor-asi__ability-controls">
+                    <button type="button" class="dauligor-asi__ability-button" data-action="adjust-ability" data-ability="${row.key}" data-delta="-1" ${row.assigned > 0 ? "" : "disabled"}>-</button>
+                    <span class="dauligor-asi__ability-value">+${row.assigned}</span>
+                    <button type="button" class="dauligor-asi__ability-button" data-action="adjust-ability" data-ability="${row.key}" data-delta="1" ${row.assigned < row.maxAssignable && remainingPoints > 0 ? "" : "disabled"}>+</button>
+                  </div>
+                  <div class="dauligor-asi__ability-foot">Can assign up to ${row.maxAssignable}</div>
+                </article>
+              `).join("")}
+            </div>
+          </section>
+          <section class="dauligor-class-options__section ${this._state.type === "feat" ? "is-active" : ""}">
+            <header class="dauligor-class-options__section-head">
+              <h3>Dauligor Feat</h3>
+              <p>Choose the feat to import in place of an ability score increase.</p>
+            </header>
+            <div class="dauligor-asi__feat-panel">
+              <label class="dauligor-class-browser__field">
+                <span class="dauligor-class-browser__field-label">Feat</span>
+                <select class="dauligor-class-browser__input" data-action="select-feat" ${this._featAllowed ? "" : "disabled"}>
+                  <option value="">Select a feat</option>
+                  ${featOptions}
+                </select>
+              </label>
+              <div class="dauligor-asi__feat-preview ${selectedFeat ? "" : "is-empty"}">
+                <div class="dauligor-asi__feat-preview-title">${foundry.utils.escapeHTML(selectedFeat?.name ?? "No feat selected")}</div>
+                <div class="dauligor-asi__feat-preview-meta">${foundry.utils.escapeHTML(trimString(selectedFeat?.sourceId) || "Choose a feat from the Dauligor catalog.")}</div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    `;
+
+    this._bodyRegion.querySelectorAll(`[data-action="set-type"]`).forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextType = trimString(button.dataset.type) || "asi";
+        if (nextType === "feat" && !this._featAllowed) return;
+        this._state.type = nextType;
+        this._state.status = "";
+        this._state.statusLevel = "";
+        this._renderPrompt();
+      });
+    });
+    this._bodyRegion.querySelectorAll(`[data-action="adjust-ability"]`).forEach((button) => {
+      button.addEventListener("click", () => {
+        const abilityKey = trimString(button.dataset.ability);
+        const delta = Number(button.dataset.delta ?? 0) || 0;
+        if (!abilityKey || !delta) return;
+
+        const current = Number(this._state.assignments?.[abilityKey] ?? 0) || 0;
+        const row = this._getAbilityRows().find((entry) => entry.key === abilityKey);
+        if (!row) return;
+
+        const nextValue = clampValue(current + delta, 0, row.maxAssignable);
+        this._state.assignments ??= {};
+        if (nextValue > 0) this._state.assignments[abilityKey] = nextValue;
+        else delete this._state.assignments[abilityKey];
+        this._state.status = "";
+        this._state.statusLevel = "";
+        this._renderPrompt();
+      });
+    });
+    this._bodyRegion.querySelector(`[data-action="select-feat"]`)?.addEventListener("change", (event) => {
+      this._state.featSourceId = trimString(event.currentTarget.value);
+      this._state.status = "";
+      this._state.statusLevel = "";
+      this._renderPrompt();
+    });
+  }
+
+  _renderFooter() {
+    if (!this._footerRegion) return;
+
+    this._footerRegion.innerHTML = `
+      <div class="dauligor-class-options__footer">
+        <div class="dauligor-class-options__footer-fields">
+          <div class="dauligor-class-browser__status ${this._state.statusLevel ? `dauligor-class-browser__status--${this._state.statusLevel}` : ""}">
+            ${this._state.status ? foundry.utils.escapeHTML(this._state.status) : ""}
+          </div>
+        </div>
+        <div class="dauligor-class-options__footer-actions">
+          <div class="dauligor-class-browser__actions">
+            <button type="button" class="dauligor-class-browser__button" data-action="cancel">Cancel</button>
+            <button type="button" class="dauligor-class-browser__button dauligor-class-browser__button--primary" data-action="apply">Apply Choice</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this._footerRegion.querySelector(`[data-action="cancel"]`)?.addEventListener("click", () => {
+      this._resolveAndClose({ status: "cancelled" });
+    });
+    this._footerRegion.querySelector(`[data-action="apply"]`)?.addEventListener("click", () => {
+      this._resolveAndClose({
+        status: "confirmed",
+        type: this._state.type === "feat" ? "feat" : "asi",
+        featSourceId: trimString(this._state.featSourceId),
+        assignments: foundry.utils.deepClone(this._state.assignments ?? {}),
+        state: foundry.utils.deepClone(this._state)
+      });
+    });
+  }
+}
+
+async function applyActorAbilityScoreImprovementChoice(actor, classItem, {
+  advancementId = null,
+  advancementEntry = null,
+  selection = null,
+  classSourceId = null
+} = {}) {
+  const targetActor = resolveTargetActor(actor);
+  let currentClassItem = targetActor?.items?.get(classItem?.id) ?? classItem;
+  if (!targetActor || !currentClassItem || !advancementId || advancementEntry?.type !== "AbilityScoreImprovement" || !selection) {
+    return currentClassItem;
+  }
+
+  const nextValue = {};
+  if (selection.type === "feat") {
+    const featDoc = await importDauligorFeatToActor(targetActor, selection.featEntry, {
+      classSourceId,
+      advancementSourceId: getSourceAdvancementId(advancementId, advancementEntry)
+    });
+    if (!featDoc) return currentClassItem;
+    nextValue.type = "feat";
+    nextValue.feat = {
+      [featDoc.id]: featDoc.uuid
+    };
+  } else {
+    const assignments = foundry.utils.deepClone(selection.assignments ?? {});
+    const currentConMod = getActorConModifier(targetActor);
+    const abilityUpdates = {};
+    for (const [abilityKey, delta] of Object.entries(assignments)) {
+      const increment = Number(delta ?? 0) || 0;
+      if (!increment) continue;
+      const currentValue = Number(targetActor.system?.abilities?.[abilityKey]?.value ?? 0) || 0;
+      abilityUpdates[`system.abilities.${abilityKey}.value`] = currentValue + increment;
+    }
+
+    if (!foundry.utils.isEmpty(abilityUpdates)) {
+      await targetActor.update(abilityUpdates);
+      const nextConMod = getActorConModifier(targetActor);
+      const conDelta = nextConMod - currentConMod;
+      if (conDelta) {
+        await applyActorConHitPointAdjustment(targetActor, conDelta);
+      }
+    }
+
+    nextValue.type = "asi";
+    nextValue.assignments = assignments;
+  }
+
+  const advancement = foundry.utils.deepClone(normalizeAdvancementStructure(currentClassItem.system?.advancement));
+  const currentAdvancementEntry = advancement[advancementId];
+  if (!currentAdvancementEntry) return currentClassItem;
+  currentAdvancementEntry.value = nextValue;
+
+  const [updatedClassItem] = await targetActor.updateEmbeddedDocuments("Item", [{
+    _id: currentClassItem.id,
+    system: {
+      "==advancement": advancement
+    }
+  }]);
+
+  return updatedClassItem ?? targetActor.items.get(currentClassItem.id) ?? currentClassItem;
+}
+
+async function importDauligorFeatToActor(actor, featEntry, {
+  classSourceId = null,
+  advancementSourceId = null
+} = {}) {
+  const targetActor = resolveTargetActor(actor);
+  if (!targetActor || !featEntry?.payloadUrl) return null;
+
+  const featPayload = await fetchJson(featEntry.payloadUrl);
+  if (!featPayload) return null;
+
+  const rawFeat = featPayload.kind === "dauligor.item.v1"
+    ? featPayload.item
+    : featPayload;
+  if (!rawFeat || rawFeat.type !== "feat" || !rawFeat.system) {
+    notifyWarn(`Feat payload for "${featEntry?.name ?? "feat"}" was not a supported feat item.`);
+    return null;
+  }
+
+  const normalizedFeat = normalizeWorldItem(rawFeat, featPayload.source);
+  normalizedFeat.flags ??= {};
+  normalizedFeat.flags[MODULE_ID] ??= {};
+  normalizedFeat.flags[MODULE_ID].sourceType = "feat";
+  if (classSourceId) normalizedFeat.flags[MODULE_ID].grantedByClassSourceId = classSourceId;
+  if (advancementSourceId) normalizedFeat.flags[MODULE_ID].grantedByAdvancementId = advancementSourceId;
+
+  return upsertActorItem(targetActor, normalizedFeat);
+}
+
+async function applyActorConHitPointAdjustment(actor, conDelta) {
+  const targetActor = resolveTargetActor(actor);
+  const numericDelta = Number(conDelta ?? 0) || 0;
+  if (!targetActor || !numericDelta) return 0;
+
+  const totalClassLevels = targetActor.items
+    .filter((item) => item.type === "class")
+    .reduce((total, item) => total + (Number(item.system?.levels ?? 0) || 0), 0);
+  if (!totalClassLevels) return 0;
+
+  const hpDelta = totalClassLevels * numericDelta;
+  if (!hpDelta) return 0;
+
+  targetActor.reset?.();
+  const currentValue = Number(targetActor.system?.attributes?.hp?.value ?? 0) || 0;
+  const rawMaxOverride = targetActor._source?.system?.attributes?.hp?.max;
+  const updates = {
+    "system.attributes.hp.value": Math.max(currentValue + hpDelta, 0)
+  };
+  if (rawMaxOverride != null) {
+    updates["system.attributes.hp.max"] = (Number(rawMaxOverride) || 0) + hpDelta;
+  }
+
+  await targetActor.update(updates);
+  return hpDelta;
 }
 
 async function applyHitPointModeToAdvancements(advancement, {
@@ -3610,24 +4289,19 @@ async function applyActorHitPointIncrease(actor, classItem, {
 
   if (!hpGainData.total) return 0;
 
+  targetActor.reset?.();
   const currentValue = Number(targetActor.system?.attributes?.hp?.value ?? 0) || 0;
   const rawMaxOverride = targetActor._source?.system?.attributes?.hp?.max;
   const hasMaxOverride = rawMaxOverride != null;
-  const currentMax = hasMaxOverride ? (Number(rawMaxOverride) || 0) : null;
   const hpMeta = resolved.hpMeta;
 
   const updates = {
     "system.attributes.hp.value": (hpMeta.isFirstHpGain ? 0 : currentValue) + hpGainData.total
   };
 
-  const shouldSetMax = hasMaxOverride
-    || trimString(hpMode) !== "average"
-    || hpMeta.actorClassCount > 1;
-  if (shouldSetMax) {
-    const nextMax = currentMax == null
-      ? updates["system.attributes.hp.value"]
-      : (hpMeta.isFirstHpGain ? 0 : currentMax) + hpGainData.total;
-    updates["system.attributes.hp.max"] = nextMax;
+  if (hasMaxOverride) {
+    const currentMax = Number(rawMaxOverride) || 0;
+    updates["system.attributes.hp.max"] = (hpMeta.isFirstHpGain ? 0 : currentMax) + hpGainData.total;
   }
 
   log("Applying actor HP update", {
@@ -3641,7 +4315,8 @@ async function applyActorHitPointIncrease(actor, classItem, {
     hpGainData: summarizeHpGainData(hpGainData),
     currentHp: {
       value: currentValue,
-      rawMaxOverride
+      rawMaxOverride,
+      computedMax: targetActor.system?.attributes?.hp?.max ?? null
     },
     updates
   });
@@ -3961,16 +4636,24 @@ function parseHitDieFaces(value) {
 }
 
 function buildActorFeatureSourceMap(actor, { classSourceId = null } = {}) {
+  return buildActorItemSourceMap(actor, {
+    classSourceId,
+    itemTypes: ["feat"]
+  });
+}
+
+function buildActorItemSourceMap(actor, { classSourceId = null, itemTypes = [] } = {}) {
   const targetActor = resolveTargetActor(actor);
   const mapped = new Map();
   if (!targetActor) return mapped;
+  const allowedTypes = new Set(ensureArray(itemTypes).filter(Boolean));
 
-  const featureItems = targetActor.items.filter((item) =>
-    item.type === "feat"
+  const matchingItems = targetActor.items.filter((item) =>
+    (!allowedTypes.size || allowedTypes.has(item.type))
     && (!classSourceId || item.getFlag(MODULE_ID, "classSourceId") === classSourceId)
   );
 
-  for (const item of featureItems) {
+  for (const item of matchingItems) {
     const sourceId = item.getFlag(MODULE_ID, "sourceId");
     if (sourceId) mapped.set(sourceId, item);
   }

@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { db } from '../../lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
+import ReferenceSheetDialog from '../reference/ReferenceSheetDialog';
+import type { ReferenceContext } from '../../lib/referenceSyntax';
 
 export type AdvancementType =
   | 'AbilityScoreImprovement'
@@ -50,6 +52,8 @@ interface AdvancementManagerProps {
   rootAdvancements?: Advancement[];
   defaultLevel?: number;
   defaultHitDie?: number;
+  referenceContext?: ReferenceContext;
+  referenceSheetTitle?: string;
 }
 
 function UpArrow({ className }: { className?: string }) {
@@ -206,7 +210,9 @@ export default function AdvancementManager({
   onLinkAdvancement,
   rootAdvancements = [],
   defaultLevel = 1,
-  defaultHitDie = 8
+  defaultHitDie = 8,
+  referenceContext,
+  referenceSheetTitle = 'Reference Sheet'
 }: AdvancementManagerProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -686,10 +692,20 @@ export default function AdvancementManager({
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="dialog-content w-[95vw] max-w-[95vw] sm:max-w-[95vw] lg:max-w-5xl h-[85vh] flex flex-col">
           <DialogHeader className="dialog-header">
-            <DialogTitle className="dialog-title flex items-center gap-3">
-              {editingIndex !== null ? 'Configure Advancement' : 'New Advancement'}
-              {editingAdv.isBase && <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded border border-gold/20 tracking-widest">Base</span>}
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-4">
+              <DialogTitle className="dialog-title flex items-center gap-3">
+                {editingIndex !== null ? 'Configure Advancement' : 'New Advancement'}
+                {editingAdv.isBase && <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded border border-gold/20 tracking-widest">Base</span>}
+              </DialogTitle>
+              {referenceContext ? (
+                <ReferenceSheetDialog
+                  title={referenceSheetTitle}
+                  triggerLabel="Open Reference Sheet"
+                  triggerClassName="shrink-0"
+                  context={referenceContext}
+                />
+              ) : null}
+            </div>
           </DialogHeader>
 
           <div className="flex-1 min-h-0 dialog-body space-y-6">

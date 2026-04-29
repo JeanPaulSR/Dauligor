@@ -1628,6 +1628,174 @@
   margin-bottom: 0;
 }
 
+.dauligor-asi__toolbar .dauligor-class-browser__subtitle {
+  margin-top: 6px;
+}
+
+.dauligor-asi__body {
+  gap: 16px;
+}
+
+.dauligor-asi__content-grid,
+.dauligor-asi__mode-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.dauligor-asi__content-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+}
+
+.dauligor-asi__mode-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.dauligor-asi__mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--dauligor-text);
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.dauligor-asi__mode-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dauligor-asi__mode-card.is-active {
+  border-color: rgba(174, 31, 61, 0.65);
+  background: linear-gradient(180deg, rgba(174, 31, 61, 0.18), rgba(174, 31, 61, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(174, 31, 61, 0.22);
+}
+
+.dauligor-asi__mode-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dauligor-asi__mode-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dauligor-asi__mode-copy {
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+  line-height: 1.45;
+}
+
+.dauligor-asi__ability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dauligor-asi__ability-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.dauligor-asi__ability-card.is-raised {
+  border-color: rgba(174, 31, 61, 0.5);
+  background: linear-gradient(180deg, rgba(174, 31, 61, 0.12), rgba(0, 0, 0, 0.18));
+}
+
+.dauligor-asi__ability-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-asi__ability-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dauligor-asi__ability-meta,
+.dauligor-asi__ability-foot {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-asi__ability-controls {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  gap: 8px;
+  align-items: center;
+}
+
+.dauligor-asi__ability-button {
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dauligor-text);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.dauligor-asi__ability-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dauligor-asi__ability-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dauligor-asi__feat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dauligor-asi__feat-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 94px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.dauligor-asi__feat-preview.is-empty {
+  border-style: dashed;
+}
+
+.dauligor-asi__feat-preview-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dauligor-asi__feat-preview-meta {
+  font-size: 12px;
+  color: var(--dauligor-text-muted);
+  line-height: 1.45;
+}
+
 @media (max-width: 1120px) {
   .dauligor-importer__body {
     grid-template-columns: minmax(160px, 0.72fr) minmax(190px, 0.88fr) minmax(260px, 1fr);
@@ -1662,6 +1830,10 @@
     grid-column: 1 / -1;
   }
 
+  .dauligor-asi__content-grid {
+    grid-template-columns: 1fr;
+  }
+
   .dauligor-spell-manager__content {
     grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
   }
@@ -1692,6 +1864,11 @@
   }
 
   .dauligor-wizard__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .dauligor-asi__mode-grid,
+  .dauligor-asi__ability-grid {
     grid-template-columns: 1fr;
   }
 
