@@ -3784,6 +3784,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 availableScalingColumns={scalingColumns}
                 availableOptionGroups={allOptionGroups}
                 availableOptionItems={allOptionItems}
+                classId={id}
                 defaultHitDie={hitDie}
                 referenceContext={classReferenceContext}
                 referenceSheetTitle="Class Reference Sheet"
@@ -4188,12 +4189,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                        <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Linked Advancements</h4>
                        <p className="text-[10px] text-ink/40">Link this feature to progression rules defined on the class.</p>
                     </div>
-                    <AdvancementManager 
+                    <AdvancementManager
                       advancements={[]} // Not used for management here
                       onChange={() => {}} // Not used for management here
                       availableFeatures={features}
                       availableScalingColumns={scalingColumns}
                       availableOptionGroups={allOptionGroups}
+                      classId={id}
                       isInsideFeature={true}
                       featureId={editingFeature.id}
                       rootAdvancements={advancements}

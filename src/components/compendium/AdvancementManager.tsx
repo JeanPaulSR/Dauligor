@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
-import { Plus, Minus, Trash2, Edit2, Zap, Heart, Star, BookOpen, Settings, Sword, Lock, Check, Eye, EyeOff, X } from 'lucide-react';
+import { Plus, Minus, Trash2, Edit2, Zap, Heart, Star, BookOpen, Settings, Sword, Lock, Check, Eye, EyeOff, X, Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogClose } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -48,6 +48,7 @@ interface AdvancementManagerProps {
   availableOptionItems?: any[];
   isInsideFeature?: boolean;
   featureId?: string;
+  classId?: string;
   onLinkAdvancement?: (advId: string, featureId: string | undefined) => void;
   rootAdvancements?: Advancement[];
   defaultLevel?: number;
@@ -207,6 +208,7 @@ export default function AdvancementManager({
   availableOptionItems = [],
   isInsideFeature = false,
   featureId,
+  classId,
   onLinkAdvancement,
   rootAdvancements = [],
   defaultLevel = 1,
@@ -219,6 +221,10 @@ export default function AdvancementManager({
   const [editingAdv, setEditingAdv] = useState<Partial<Advancement>>({});
   const [traitOptionsMap, setTraitOptionsMap] = useState<Record<string, any[]>>({});
   const [collapsedTraitCategories, setCollapsedTraitCategories] = useState<Record<string, boolean>>({});
+  const [featureSearch, setFeatureSearch] = useState('');
+  const [allFeatures, setAllFeatures] = useState<any[]>([]);
+  const [optionGroupSearch, setOptionGroupSearch] = useState('');
+  const [showAllOptionGroups, setShowAllOptionGroups] = useState(false);
   const resolvedDefaultHitDie = [6, 8, 10, 12].includes(Number(defaultHitDie)) ? Number(defaultHitDie) : 8;
   const selectedScalingColumn = availableScalingColumns.find(c => c.id === editingAdv.configuration?.scalingColumnId);
   const selectedOptionGroup = availableOptionGroups.find(g => g.id === editingAdv.configuration?.optionGroupId);
@@ -235,7 +241,10 @@ export default function AdvancementManager({
     : [];
   const includedOptionItems = selectedOptionItems.filter((item: any) => !excludedOptionIds.has(item.id));
   const selectedPoolFeatures = (editingAdv.configuration?.pool || [])
-    .map((id: string) => availableFeatures.find((feature: any) => feature.id === id))
+    .map((id: string) =>
+      availableFeatures.find((f: any) => f.id === id) ||
+      allFeatures.find((f: any) => f.id === id)
+    )
     .filter(Boolean);
   const optionalPoolIds = new Set(editingAdv.configuration?.optionalPool || []);
   const selectedSizeIds = Object.entries(editingAdv.configuration?.sizes || {})
@@ -502,6 +511,14 @@ export default function AdvancementManager({
     }
   }, [editingAdv.type, editingAdv.configuration?.type, editingAdv.configuration?.mode]);
 
+  useEffect(() => {
+    if (!isModalOpen || allFeatures.length > 0) return;
+    getDocs(collection(db, 'features')).then(snap => {
+      setAllFeatures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }).catch(() => {});
+  }, [isModalOpen]);
+
+
   const handleAdd = () => {
     setEditingIndex(null);
     setEditingAdv({
@@ -573,6 +590,9 @@ export default function AdvancementManager({
     });
     onChange(next);
     setIsModalOpen(false);
+    setFeatureSearch('');
+    setOptionGroupSearch('');
+    setShowAllOptionGroups(false);
   };
 
   if (isInsideFeature) {
@@ -861,32 +881,74 @@ export default function AdvancementManager({
                             <label className="field-label">
                               {editingAdv.configuration?.choiceType === 'option-group' ? 'Target Option Group' : 'Grant Source'}
                             </label>
-                            {editingAdv.configuration?.choiceType === 'option-group' ? (
-                              <Select
-                                value={editingAdv.configuration?.optionGroupId || ''}
-                                onValueChange={val => setEditingAdv({
-                                  ...editingAdv,
-                                  configuration: {
-                                    ...editingAdv.configuration,
-                                    optionGroupId: val,
-                                    excludedOptionIds: []
-                                  }
-                                })}
-                              >
-                                <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
-                                  <SelectValue>
-                                    {editingAdv.configuration?.optionGroupId
-                                      ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
-                                      : 'Select a group...'}
-                                  </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {availableOptionGroups.map(g => (
-                                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
+                            {editingAdv.configuration?.choiceType === 'option-group' ? (() => {
+                              const classFiltered = classId
+                                ? availableOptionGroups.filter(g => !g.classIds?.length || g.classIds.includes(classId))
+                                : availableOptionGroups;
+                              const q = optionGroupSearch.trim().toLowerCase();
+                              const searchFiltered = q
+                                ? availableOptionGroups.filter(g => (g.name || '').toLowerCase().includes(q))
+                                : availableOptionGroups;
+                              return (
+                                <div className="space-y-1.5">
+                                  <Select
+                                    value={editingAdv.configuration?.optionGroupId || ''}
+                                    onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] }})}
+                                  >
+                                    <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                      <SelectValue>
+                                        {editingAdv.configuration?.optionGroupId
+                                          ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
+                                          : 'Select a group...'}
+                                      </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {classFiltered.map(g => (
+                                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                      ))}
+                                      {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/30">No groups assigned to this class.</p>}
+                                    </SelectContent>
+                                  </Select>
+                                  {/* Inline search-all panel */}
+                                  <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
+                                    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10">
+                                      <Search className="w-3 h-3 text-ink/40 shrink-0" />
+                                      <input
+                                        type="text"
+                                        placeholder="Search all option groups…"
+                                        value={optionGroupSearch}
+                                        onChange={e => { setOptionGroupSearch(e.target.value); setShowAllOptionGroups(true); }}
+                                        onFocus={() => setShowAllOptionGroups(true)}
+                                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/40 text-ink"
+                                      />
+                                      {optionGroupSearch && (
+                                        <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                      )}
+                                    </div>
+                                    {showAllOptionGroups && (
+                                      <div className="max-h-40 overflow-y-auto divide-y divide-gold/5">
+                                        {searchFiltered.map(g => (
+                                          <button
+                                            key={g.id}
+                                            type="button"
+                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gold/10 flex items-center justify-between gap-2"
+                                            onClick={() => {
+                                              setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: g.id, excludedOptionIds: [] }});
+                                              setShowAllOptionGroups(false);
+                                              setOptionGroupSearch('');
+                                            }}
+                                          >
+                                            <span className="font-bold text-ink">{g.name}</span>
+                                            {g.classIds?.length > 0 && <span className="text-[9px] text-gold/60 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
+                                          </button>
+                                        ))}
+                                        {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/30">No groups match.</p>}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })() : (
                               <div className="h-9 rounded-md border border-gold/10 bg-background/35 px-3 flex items-center text-[10px] text-ink/40">
                                 Specific Features
                               </div>
@@ -1078,63 +1140,87 @@ export default function AdvancementManager({
                               )}
                             </div>
                           </>
-                        ) : (
-                          <>
-                            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
-                            </div>
-                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
-                              {availableFeatures.map(f => (
-                                <div key={f.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
-                                  <label className="flex items-center gap-2 cursor-pointer min-w-0">
-                                    <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                                      (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'
-                                    }`}>
-                                      {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-white" />}
-                                    </div>
-                                    <input
-                                      type="checkbox"
-                                      className="hidden"
-                                      checked={(editingAdv.configuration?.pool || []).includes(f.id)}
-                                      onChange={e => {
-                                        const pool = [...(editingAdv.configuration?.pool || [])];
-                                        const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
-                                        if (e.target.checked) pool.push(f.id);
-                                        else {
-                                          const i = pool.indexOf(f.id);
-                                          if (i !== -1) pool.splice(i, 1);
-                                          const o = optionalPool.indexOf(f.id);
-                                          if (o !== -1) optionalPool.splice(o, 1);
-                                        }
-                                        setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool, optionalPool }});
-                                      }}
-                                    />
-                                    <span className="min-w-0 text-xs font-bold text-ink truncate">{f.name} <span className="text-ink/40 font-normal">(Lvl {f.level})</span></span>
-                                  </label>
-                                  <label className="flex justify-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
-                                      disabled={!(editingAdv.configuration?.pool || []).includes(f.id) || !editingAdv.configuration?.optional}
-                                      checked={(editingAdv.configuration?.optionalPool || []).includes(f.id)}
-                                      onChange={e => {
-                                        const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
-                                        if (e.target.checked) optionalPool.push(f.id);
-                                        else {
-                                          const i = optionalPool.indexOf(f.id);
-                                          if (i !== -1) optionalPool.splice(i, 1);
-                                        }
-                                        setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionalPool }});
-                                      }}
-                                    />
-                                  </label>
+                        ) : (() => {
+                            const q = featureSearch.trim().toLowerCase();
+                            const displayed = q
+                              ? allFeatures.filter(f => (f.name || '').toLowerCase().includes(q))
+                              : availableFeatures;
+                            return (
+                              <>
+                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
+                                  <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                                  <input
+                                    type="text"
+                                    placeholder={q ? `${displayed.length} result${displayed.length !== 1 ? 's' : ''}` : `${availableFeatures.length} local features — search all…`}
+                                    value={featureSearch}
+                                    onChange={e => setFeatureSearch(e.target.value)}
+                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
+                                  />
+                                  {featureSearch && (
+                                    <button type="button" onClick={() => setFeatureSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                  )}
                                 </div>
-                              ))}
-                              {availableFeatures.length === 0 && <p className="px-3 py-4 text-[10px] italic text-ink/30">No features created for this class yet.</p>}
-                            </div>
-                          </>
-                        )}
+                                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-gold/5 border-b border-gold/10">
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
+                                </div>
+                                <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto">
+                                  {displayed.map(f => (
+                                    <div key={f.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
+                                      <label className="flex items-center gap-2 cursor-pointer min-w-0">
+                                        <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
+                                          (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'
+                                        }`}>
+                                          {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-white" />}
+                                        </div>
+                                        <input
+                                          type="checkbox"
+                                          className="hidden"
+                                          checked={(editingAdv.configuration?.pool || []).includes(f.id)}
+                                          onChange={e => {
+                                            const pool = [...(editingAdv.configuration?.pool || [])];
+                                            const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
+                                            if (e.target.checked) pool.push(f.id);
+                                            else {
+                                              const i = pool.indexOf(f.id);
+                                              if (i !== -1) pool.splice(i, 1);
+                                              const o = optionalPool.indexOf(f.id);
+                                              if (o !== -1) optionalPool.splice(o, 1);
+                                            }
+                                            setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool, optionalPool }});
+                                          }}
+                                        />
+                                        <span className="min-w-0 text-xs font-bold text-ink truncate">{f.name} <span className="text-ink/40 font-normal">(Lvl {f.level})</span></span>
+                                      </label>
+                                      <label className="flex justify-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                                          disabled={!(editingAdv.configuration?.pool || []).includes(f.id) || !editingAdv.configuration?.optional}
+                                          checked={(editingAdv.configuration?.optionalPool || []).includes(f.id)}
+                                          onChange={e => {
+                                            const optionalPool = [...(editingAdv.configuration?.optionalPool || [])];
+                                            if (e.target.checked) optionalPool.push(f.id);
+                                            else {
+                                              const i = optionalPool.indexOf(f.id);
+                                              if (i !== -1) optionalPool.splice(i, 1);
+                                            }
+                                            setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionalPool }});
+                                          }}
+                                        />
+                                      </label>
+                                    </div>
+                                  ))}
+                                  {displayed.length === 0 && (
+                                    <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                      {q ? `No features match "${featureSearch}".` : 'No features created for this class yet.'}
+                                    </p>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()
+                        }
                       </div>
                     </fieldset>
                   </div>
@@ -1349,35 +1435,75 @@ export default function AdvancementManager({
                             </SelectContent>
                           </Select>
                         </div>
-                        {editingAdv.configuration?.choiceType === 'option-group' && (
-                          <div className="space-y-1.5">
-                            <label className="field-label">Option Group</label>
-                            <Select
-                              value={editingAdv.configuration?.optionGroupId || ''}
-                              onValueChange={val => setEditingAdv({
-                                ...editingAdv,
-                                configuration: {
-                                  ...editingAdv.configuration,
-                                  optionGroupId: val,
-                                  excludedOptionIds: []
-                                }
-                              })}
-                            >
-                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
-                                <SelectValue>
-                                  {editingAdv.configuration?.optionGroupId
-                                    ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
-                                    : 'Select a group...'}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableOptionGroups.map(g => (
-                                  <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
+                        {editingAdv.configuration?.choiceType === 'option-group' && (() => {
+                          const classFiltered = classId
+                            ? availableOptionGroups.filter(g => !g.classIds?.length || g.classIds.includes(classId))
+                            : availableOptionGroups;
+                          const q = optionGroupSearch.trim().toLowerCase();
+                          const searchFiltered = q
+                            ? availableOptionGroups.filter(g => (g.name || '').toLowerCase().includes(q))
+                            : availableOptionGroups;
+                          return (
+                            <div className="space-y-1.5">
+                              <label className="field-label">Option Group</label>
+                              <Select
+                                value={editingAdv.configuration?.optionGroupId || ''}
+                                onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: val, excludedOptionIds: [] }})}
+                              >
+                                <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                  <SelectValue>
+                                    {editingAdv.configuration?.optionGroupId
+                                      ? (availableOptionGroups.find(g => g.id === editingAdv.configuration.optionGroupId)?.name || editingAdv.configuration.optionGroupId)
+                                      : 'Select a group...'}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {classFiltered.map(g => (
+                                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                  ))}
+                                  {classFiltered.length === 0 && <p className="px-2 py-2 text-[10px] italic text-ink/30">No groups assigned to this class.</p>}
+                                </SelectContent>
+                              </Select>
+                              {/* Inline search-all panel */}
+                              <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
+                                <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10">
+                                  <Search className="w-3 h-3 text-ink/40 shrink-0" />
+                                  <input
+                                    type="text"
+                                    placeholder="Search all option groups…"
+                                    value={optionGroupSearch}
+                                    onChange={e => { setOptionGroupSearch(e.target.value); setShowAllOptionGroups(true); }}
+                                    onFocus={() => setShowAllOptionGroups(true)}
+                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/40 text-ink"
+                                  />
+                                  {optionGroupSearch && (
+                                    <button type="button" onClick={() => { setOptionGroupSearch(''); setShowAllOptionGroups(false); }} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                  )}
+                                </div>
+                                {showAllOptionGroups && (
+                                  <div className="max-h-40 overflow-y-auto divide-y divide-gold/5">
+                                    {searchFiltered.map(g => (
+                                      <button
+                                        key={g.id}
+                                        type="button"
+                                        className="w-full text-left px-3 py-2 text-xs hover:bg-gold/10 flex items-center justify-between gap-2"
+                                        onClick={() => {
+                                          setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, optionGroupId: g.id, excludedOptionIds: [] }});
+                                          setShowAllOptionGroups(false);
+                                          setOptionGroupSearch('');
+                                        }}
+                                      >
+                                        <span className="font-bold text-ink">{g.name}</span>
+                                        {g.classIds?.length > 0 && <span className="text-[9px] text-gold/60 shrink-0">{g.classIds.length} class{g.classIds.length !== 1 ? 'es' : ''}</span>}
+                                      </button>
+                                    ))}
+                                    {searchFiltered.length === 0 && <p className="px-3 py-3 text-[10px] italic text-ink/30">No groups match.</p>}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
@@ -1444,40 +1570,64 @@ export default function AdvancementManager({
                               )}
                             </div>
                           </>
-                        ) : (
-                          <>
-                            <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
-                            </div>
-                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
-                              {availableFeatures.map(f => (
-                                <label key={f.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gold/5 group transition-colors">
-                                  <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                                    (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
-                                  }`}>
-                                    {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-white" />}
-                                  </div>
+                        ) : (() => {
+                            const q = featureSearch.trim().toLowerCase();
+                            const displayed = q
+                              ? allFeatures.filter(f => (f.name || '').toLowerCase().includes(q))
+                              : availableFeatures;
+                            return (
+                              <>
+                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gold/10 bg-background/30">
+                                  <Search className="w-3 h-3 text-ink/30 shrink-0" />
                                   <input
-                                    type="checkbox"
-                                    className="hidden"
-                                    checked={(editingAdv.configuration?.pool || []).includes(f.id)}
-                                    onChange={e => {
-                                      const pool = [...(editingAdv.configuration?.pool || [])];
-                                      if (e.target.checked) pool.push(f.id);
-                                      else {
-                                        const i = pool.indexOf(f.id);
-                                        if (i !== -1) pool.splice(i, 1);
-                                      }
-                                      setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool }});
-                                    }}
+                                    type="text"
+                                    placeholder={q ? `${displayed.length} result${displayed.length !== 1 ? 's' : ''}` : `${availableFeatures.length} local features — search all…`}
+                                    value={featureSearch}
+                                    onChange={e => setFeatureSearch(e.target.value)}
+                                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink py-0.5"
                                   />
-                                  <span className="text-xs font-bold text-ink">{f.name} <span className="text-ink/40 font-normal">(Lvl {f.level})</span></span>
-                                </label>
-                              ))}
-                              {availableFeatures.length === 0 && <p className="px-3 py-4 text-[10px] italic text-ink/30">No features created yet.</p>}
-                            </div>
-                          </>
-                        )}
+                                  {featureSearch && (
+                                    <button type="button" onClick={() => setFeatureSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
+                                </div>
+                                <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto">
+                                  {displayed.map(f => (
+                                    <label key={f.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gold/5 group transition-colors">
+                                      <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
+                                        (editingAdv.configuration?.pool || []).includes(f.id) ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
+                                      }`}>
+                                        {(editingAdv.configuration?.pool || []).includes(f.id) && <Check className="w-2.5 h-2.5 text-white" />}
+                                      </div>
+                                      <input
+                                        type="checkbox"
+                                        className="hidden"
+                                        checked={(editingAdv.configuration?.pool || []).includes(f.id)}
+                                        onChange={e => {
+                                          const pool = [...(editingAdv.configuration?.pool || [])];
+                                          if (e.target.checked) pool.push(f.id);
+                                          else {
+                                            const i = pool.indexOf(f.id);
+                                            if (i !== -1) pool.splice(i, 1);
+                                          }
+                                          setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, pool }});
+                                        }}
+                                      />
+                                      <span className="text-xs font-bold text-ink">{f.name} <span className="text-ink/40 font-normal">(Lvl {f.level})</span></span>
+                                    </label>
+                                  ))}
+                                  {displayed.length === 0 && (
+                                    <p className="px-3 py-4 text-[10px] italic text-ink/30">
+                                      {q ? `No features match "${featureSearch}".` : 'No features created yet.'}
+                                    </p>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()
+                        }
                       </div>
                     </fieldset>
 

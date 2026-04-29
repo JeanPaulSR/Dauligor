@@ -756,13 +756,14 @@ export default function SubclassEditor() {
             </div>
             <div className="space-y-4">
               <p className="text-[10px] text-ink/40 italic">Global progression rules for this specialization.</p>
-              <AdvancementManager 
+              <AdvancementManager
                 advancements={advancements}
                 onChange={setAdvancements}
                 availableFeatures={features}
                 availableScalingColumns={[...scalingColumns, ...parentScalingColumns]}
                 availableOptionGroups={allOptionGroups}
                 availableOptionItems={allOptionItems}
+                classId={classId || parentClass?.id}
                 defaultHitDie={parentClass?.hitDie}
                 referenceContext={subclassReferenceContext}
                 referenceSheetTitle="Subclass Reference Sheet"
@@ -1327,7 +1328,7 @@ export default function SubclassEditor() {
                           <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Linked Advancements</h4>
                           <p className="text-[10px] text-ink/40">Link this feature to progression rules defined on the subclass.</p>
                        </div>
-                       <AdvancementManager 
+                       <AdvancementManager
                          advancements={[]} // Not used for management here
                          onChange={() => {}} // Not used for management here
                          availableFeatures={features}
@@ -1336,6 +1337,7 @@ export default function SubclassEditor() {
                            ...parentScalingColumns.map((c: any) => ({ ...c, name: `${c.name} (Class)` }))
                          ]}
                          availableOptionGroups={allOptionGroups}
+                         classId={classId || parentClass?.id}
                          isInsideFeature={true}
                          featureId={editingFeature.id}
                          rootAdvancements={advancements}

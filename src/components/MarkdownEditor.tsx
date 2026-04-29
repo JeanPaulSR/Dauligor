@@ -200,12 +200,11 @@ export default function MarkdownEditor({
 
   // Sync TipTap content when BBCode changes externally or when switching modes
   useEffect(() => {
-    if (editor && !isWYSIWYG) {
-      const currentHtml = editor.getHTML();
-      const newHtml = bbcodeToHtml(value);
-      if (currentHtml !== newHtml) {
-        editor.commands.setContent(newHtml, { emitUpdate: false });
-      }
+    if (!editor) return;
+    const currentHtml = editor.getHTML();
+    const newHtml = bbcodeToHtml(value);
+    if (currentHtml !== newHtml) {
+      editor.commands.setContent(newHtml, { emitUpdate: false });
     }
   }, [value, editor, isWYSIWYG]);
 
