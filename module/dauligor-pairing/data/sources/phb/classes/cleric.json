@@ -1,0 +1,5687 @@
+{
+  "class": {
+    "id": "sjsnEpcMI1KSHbb1GeUO",
+    "cardImageUrl": "",
+    "subclassFeatureLevels": [
+      1,
+      2,
+      6,
+      8,
+      17
+    ],
+    "primaryAbility": [
+      "WIS"
+    ],
+    "name": "Cleric",
+    "advancements": [
+      {
+        "title": "Hit Points",
+        "_id": "base-hp",
+        "level": 1,
+        "type": "HitPoints",
+        "configuration": {
+          "hitDie": 8
+        }
+      },
+      {
+        "_id": "base-items",
+        "level": 1,
+        "type": "ItemChoice",
+        "title": "Starting Equipment Choices",
+        "configuration": {
+          "pool": [],
+          "countSource": "fixed",
+          "excludedOptionIds": [],
+          "optionalPool": [],
+          "count": 1,
+          "choiceType": "item",
+          "optional": false
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-divine-domain",
+        "type": "ItemGrant",
+        "level": 1,
+        "title": "Divine Domain",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-divine-domain",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-divine-domain"
+      },
+      {
+        "configuration": {},
+        "title": "Divine Domain",
+        "_id": "base-subclass",
+        "level": 1,
+        "type": "Subclass"
+      },
+      {
+        "_id": "base-saves",
+        "type": "Trait",
+        "level": 1,
+        "title": "Saving Throw Proficiencies",
+        "configuration": {
+          "choiceCount": 0,
+          "mode": "default",
+          "replacements": [],
+          "allowReplacements": false,
+          "type": "saves",
+          "categoryIds": [],
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": [
+            "WIS",
+            "CHA"
+          ]
+        }
+      },
+      {
+        "title": "Armor Proficiencies",
+        "_id": "base-armor",
+        "level": 1,
+        "type": "Trait",
+        "configuration": {
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": [
+            "shield",
+            "leather",
+            "padded",
+            "studded-leather",
+            "breastplate",
+            "chain-shirt",
+            "half-plate",
+            "hide",
+            "scale-mail"
+          ],
+          "allowReplacements": false,
+          "type": "armor",
+          "categoryIds": [
+            "shields",
+            "light",
+            "medium"
+          ],
+          "choiceCount": 0,
+          "mode": "default",
+          "replacements": []
+        }
+      },
+      {
+        "configuration": {
+          "options": [],
+          "fixed": [
+            "club",
+            "dagger",
+            "greatclub",
+            "handaxe",
+            "javelin",
+            "lighthammer",
+            "mace",
+            "quarterstaff",
+            "sickle",
+            "spear",
+            "lightcrossbow",
+            "dart",
+            "shortbow",
+            "sling"
+          ],
+          "choiceSource": "fixed",
+          "allowReplacements": false,
+          "categoryIds": [],
+          "type": "weapons",
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 0
+        },
+        "title": "Weapon Proficiencies",
+        "_id": "base-weapons",
+        "level": 1,
+        "type": "Trait"
+      },
+      {
+        "title": "Skill Proficiencies",
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-skills",
+        "configuration": {
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 2,
+          "allowReplacements": false,
+          "categoryIds": [],
+          "type": "skills",
+          "fixed": [],
+          "options": [
+            "his",
+            "ins",
+            "med",
+            "per",
+            "rel"
+          ],
+          "choiceSource": "fixed"
+        }
+      },
+      {
+        "_id": "base-tools",
+        "type": "Trait",
+        "level": 1,
+        "title": "Tool Proficiencies",
+        "configuration": {
+          "options": [],
+          "fixed": [],
+          "choiceSource": "fixed",
+          "categoryIds": [],
+          "type": "tools",
+          "allowReplacements": false,
+          "mode": "default",
+          "replacements": [],
+          "choiceCount": 0
+        }
+      },
+      {
+        "title": "Languages",
+        "_id": "base-languages",
+        "level": 1,
+        "type": "Trait",
+        "configuration": {
+          "choiceCount": 0,
+          "replacements": [],
+          "mode": "default",
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": [],
+          "type": "languages",
+          "categoryIds": [],
+          "allowReplacements": false
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-harness-divine-power",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Harness Divine Power",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-harness-divine-power",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-harness-divine-power"
+      },
+      {
+        "_id": "inherent-class-feature-grant-channel-divinity--turn-undead",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Channel Divinity: Turn Undead",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-channel-divinity--turn-undead",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-channel-divinity--turn-undead"
+      },
+      {
+        "_id": "inherent-class-feature-grant-channel-divinity",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Channel Divinity",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-channel-divinity",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-channel-divinity"
+      },
+      {
+        "configuration": {
+          "fixed": {},
+          "locked": {},
+          "points": 2,
+          "featAllowed": true
+        },
+        "_id": "base-asi-0",
+        "level": 4,
+        "type": "AbilityScoreImprovement",
+        "title": "Ability Score Improvement"
+      },
+      {
+        "_id": "inherent-class-feature-grant-cantrip-versatility",
+        "type": "ItemGrant",
+        "level": 4,
+        "title": "Cantrip Versatility",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-cantrip-versatility",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-cantrip-versatility"
+      },
+      {
+        "_id": "inherent-class-feature-grant-destroy-undead",
+        "type": "ItemGrant",
+        "level": 5,
+        "title": "Destroy Undead",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-destroy-undead",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-destroy-undead"
+      },
+      {
+        "configuration": {
+          "points": 2,
+          "featAllowed": true,
+          "fixed": {},
+          "locked": {}
+        },
+        "type": "AbilityScoreImprovement",
+        "level": 8,
+        "_id": "base-asi-1",
+        "title": "Ability Score Improvement"
+      },
+      {
+        "_id": "inherent-class-feature-grant-blessed-strikes",
+        "type": "ItemGrant",
+        "level": 8,
+        "title": "Blessed Strikes",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-blessed-strikes",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-blessed-strikes"
+      },
+      {
+        "_id": "inherent-class-feature-grant-divine-intervention",
+        "type": "ItemGrant",
+        "level": 10,
+        "title": "Divine Intervention",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-divine-intervention",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-divine-intervention"
+      },
+      {
+        "configuration": {
+          "locked": {},
+          "fixed": {},
+          "points": 2,
+          "featAllowed": true
+        },
+        "title": "Ability Score Improvement",
+        "_id": "base-asi-2",
+        "level": 12,
+        "type": "AbilityScoreImprovement"
+      },
+      {
+        "_id": "base-asi-3",
+        "type": "AbilityScoreImprovement",
+        "level": 16,
+        "title": "Ability Score Improvement",
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "fixed": {},
+          "locked": {}
+        }
+      },
+      {
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "fixed": {},
+          "locked": {}
+        },
+        "_id": "base-asi-4",
+        "type": "AbilityScoreImprovement",
+        "level": 19,
+        "title": "Ability Score Improvement"
+      }
+    ],
+    "multiclassing": "",
+    "sourceId": "source-phb-2014",
+    "cardDisplay": {
+      "x": 48.9,
+      "scale": 1.1,
+      "y": 24
+    },
+    "imageDisplay": {
+      "x": 65.5,
+      "scale": 1,
+      "y": 0
+    },
+    "proficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [
+          "shields",
+          "light",
+          "medium"
+        ],
+        "optionIds": [],
+        "fixedIds": [
+          "shield",
+          "leather",
+          "padded",
+          "studded-leather",
+          "breastplate",
+          "chain-shirt",
+          "half-plate",
+          "hide",
+          "scale-mail"
+        ]
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "club",
+          "dagger",
+          "greatclub",
+          "handaxe",
+          "javelin",
+          "lighthammer",
+          "mace",
+          "quarterstaff",
+          "sickle",
+          "spear",
+          "lightcrossbow",
+          "dart",
+          "shortbow",
+          "sling"
+        ]
+      },
+      "tools": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 2,
+        "categoryIds": [],
+        "optionIds": [
+          "his",
+          "ins",
+          "med",
+          "per",
+          "rel"
+        ],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "WIS",
+          "CHA"
+        ]
+      }
+    },
+    "lore": "",
+    "startingEquipment": "",
+    "savingThrows": [
+      "WIS",
+      "CHA"
+    ],
+    "tagIds": [
+      "full-caster",
+      "moderate",
+      "support",
+      "healer",
+      "divine",
+      "debuffer",
+      "controller"
+    ],
+    "createdAt": "2026-04-25T22:38:15.613Z",
+    "primaryAbilityChoice": [],
+    "wealth": "",
+    "updatedAt": "2026-04-29T15:40:30.584Z",
+    "preview": "",
+    "previewDisplay": {
+      "x": 54.9,
+      "scale": 1,
+      "y": 22.1
+    },
+    "imageUrl": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2Fnew%2F1777156674114_os1jy8f.webp?alt=media&token=c689277d-baad-4c0e-b00f-5a9205d9c027",
+    "identifier": "cleric",
+    "spellcasting": {
+      "spellsKnownFormula": "WIS + Level",
+      "description": "As a conduit for divine power, you can cast cleric spells.\n\n## Cantrips\n\nAt 1st level, you know three cantrips of your choice from the cleric spell list. You learn additional cleric cantrips of your choice at higher levels, as shown in the Cantrips Known column of the Cleric table.\n\n## Spell Slots\n\nThe Cleric table shows how many spell slots you have to cast your cleric spells of 1st level and higher. To cast one of these spells, you must expend a slot of the spell's level or higher. You regain all expended spell slots when you finish a long rest.\n\nYou prepare the list of cleric spells that are available for you to cast, choosing from the cleric spell list. When you do so, choose a number of cleric spells equal to your Wisdom modifier + your cleric level (minimum of one spell). The spells must be of a level for which you have spell slots.\n\nFor example, if you are a 3rd-level cleric, you have four 1st-level and two 2nd-level spell slots. With a Wisdom of 16, your list of prepared spells can include six spells of 1st or 2nd level, in any combination. If you prepare the 1st-level spell Cure Wounds, you can cast it using a 1st-level or 2nd-level slot. Casting the spell doesn't remove it from your list of prepared spells.\n\nYou can change your list of prepared spells when you finish a long rest. Preparing a new list of cleric spells requires time spent in prayer and meditation: at least 1 minute per spell level for each spell on your list.\n\n## Spellcasting Ability\n\nWisdom is your spellcasting ability for your cleric spells. The power of your spells comes from your devotion to your deity. You use your Wisdom whenever a cleric spell refers to your spellcasting ability. In addition, you use your Wisdom modifier when setting the saving throw DC for a cleric spell you cast and when making an attack roll with one.\n\n**Spell save DC** = 8 + your proficiency bonus + your Wisdom modifier**Spell attack modifier** = your proficiency bonus + your Wisdom modifier\n\n## Ritual Casting\n\nYou can cast a cleric spell as a ritual if that spell has the ritual tag and you have the spell prepared.\n\n## Spellcasting Focus\n\nYou can use a holy symbol as a spellcasting focus for your cleric spells.",
+      "isRitualCaster": true,
+      "ability": "WIS",
+      "level": 1,
+      "type": "prepared",
+      "hasSpellcasting": true,
+      "progressionTypeSourceId": "spellcasting-type-full-caster",
+      "progressionTypeIdentifier": "full-caster",
+      "progressionTypeLabel": "Full Caster",
+      "progressionFormula": "1 * level",
+      "progression": "full",
+      "spellsKnownSourceId": "spells-known-scaling-cleric"
+    },
+    "previewImageUrl": "",
+    "hitDie": 8,
+    "multiclassProficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "shield",
+          "scale-mail",
+          "half-plate",
+          "hide",
+          "chain-shirt",
+          "breastplate",
+          "studded-leather",
+          "leather",
+          "padded"
+        ]
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "tools": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      }
+    },
+    "description": "Clerics are intermediaries between the mortal world and the distant planes of the gods. As varied as the gods they serve, clerics strive to embody the handiwork of their deities. No ordinary priest, a cleric is imbued with divine magic.",
+    "classSourceId": "class-cleric",
+    "sourceBookId": "source-phb-2014"
+  },
+  "subclasses": [
+    {
+      "id": "1kzkCUF0ty8v7UgQjA6q",
+      "tagIds": [],
+      "sourceId": "subclass-light-domain",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-light-domain-warding-flare",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Warding Flare",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-warding-flare",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-warding-flare"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-light-domain-light-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Light Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-light-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-light-domain-spells"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-light-domain-bonus-cantrip",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Bonus Cantrip",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-cantrip",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-cantrip"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-light-domain-channel-divinity--radiance-of-the-dawn",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Radiance of the Dawn",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--radiance-of-the-dawn",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--radiance-of-the-dawn"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-light-domain-improved-flare",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Improved Flare",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-improved-flare",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-improved-flare"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-light-domain-potent-spellcasting",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Potent Spellcasting",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-potent-spellcasting",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-potent-spellcasting"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-light-domain-corona-of-light",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Corona of Light",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-corona-of-light",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-corona-of-light"
+        }
+      ],
+      "classIdentifier": "cleric",
+      "name": "Light Domain",
+      "description": "Gods of light - including Helm, Lathander, Pholtus, Branchala, the Silver Flame, Belenus, Apollo, and Re-Horakhty - promote the ideals of rebirth and renewal, truth, vigilance, and beauty, often using the symbol of the sun. Some of these gods are portrayed as the sun itself or as a charioteer who guides the sun across the sky. Others are tireless sentinels whose eyes pierce every shadow and see through every deception. Some are deities of beauty and artistry, who teach that art is a vehicle for the soul's improvement. Clerics of a god of light are enlightened souls infused with radiance and the power of their gods' discerning vision, charged with chasing away lies and burning away darkness.",
+      "spellcasting": {
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT",
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared"
+      },
+      "identifier": "light-domain",
+      "imageUrl": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158825,
+        "nanoseconds": 534000000
+      },
+      "lore": "",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158762,
+        "nanoseconds": 200000000
+      },
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "5kSssWK0raJbR9QGSWAs",
+      "spellcasting": {
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT",
+        "hasSpellcasting": false,
+        "type": "prepared",
+        "level": 3
+      },
+      "description": "***Gods of the grave watch over the line between life and death. To these deities, death and the afterlife are a foundational part of the multiverse's workings. To resist death, or to desecrate the dead's rest, is an abomination. Deities of the grave include Kelemvor, Wee Jas, the ancestral spirits of the Undying Court, Hades, Anubis, and Osiris. These deities teach their followers to respect the dead and pay them due homage. Followers of these deities seek to put restless spirits to rest, destroy the undead wherever they find them, and ease the suffering of dying creatures. Their magic also allows them to stave off a creature's death, though they refuse to use such magic to extend a creature's lifespan beyond its mortal limits.***",
+      "imageUrl": "",
+      "identifier": "grave-domain",
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158469,
+        "nanoseconds": 114000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158396,
+        "nanoseconds": 111000000
+      },
+      "sourceId": "subclass-grave-domain",
+      "tagIds": [],
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-grave-domain-grave-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Grave Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-grave-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-grave-domain-spells"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-grave-domain-eyes-of-the-grave",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Eyes of the Grave",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-eyes-of-the-grave",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-eyes-of-the-grave"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-grave-domain-circle-of-mortality",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Circle of Mortality",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-circle-of-mortality",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-circle-of-mortality"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-grave-domain-channel-divinity--path-to-the-grave",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Path to the Grave",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--path-to-the-grave",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--path-to-the-grave"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-grave-domain-sentinel-at-death-s-door",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Sentinel at Death's Door",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-sentinel-at-death-s-door",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-sentinel-at-death-s-door"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-grave-domain-potent-spellcasting",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Potent Spellcasting",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-potent-spellcasting",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-potent-spellcasting"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-grave-domain-keeper-of-souls",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Keeper of Souls",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-keeper-of-souls",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-keeper-of-souls"
+        }
+      ],
+      "classIdentifier": "cleric",
+      "name": "Grave Domain",
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "7gr8b46alkxNTSdQfeKd",
+      "name": "Death Domain",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-death-domain-reaper",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Reaper",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-reaper",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-reaper"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-death-domain-death-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Death Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-death-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-death-domain-spells"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-death-domain-bonus-proficiency",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Bonus Proficiency",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiency",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiency"
+        },
+        {
+          "title": "Bonus Proficiency",
+          "type": "Trait",
+          "level": 1,
+          "_id": "xuuam9ztf",
+          "configuration": {
+            "type": "weapons",
+            "mode": "default",
+            "allowReplacements": false,
+            "replacements": [],
+            "choiceSource": "fixed",
+            "options": [],
+            "fixed": [
+              "battleaxe",
+              "flail",
+              "glaive",
+              "greataxe",
+              "greatsword",
+              "halberd",
+              "lance",
+              "longsword",
+              "maul",
+              "morningstar",
+              "pike",
+              "rapier",
+              "scimitar",
+              "shortsword",
+              "trident",
+              "warpick",
+              "warhammer",
+              "whip",
+              "blowgun",
+              "handcrossbow",
+              "heavycrossbow",
+              "longbow",
+              "met"
+            ],
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiency"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-death-domain-channel-divinity--touch-of-death",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Touch of Death",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--touch-of-death",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--touch-of-death"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-death-domain-inescapable-destruction",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Inescapable Destruction",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-inescapable-destruction",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-inescapable-destruction"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-death-domain-divine-strike",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Divine Strike",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-divine-strike",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-divine-strike"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-death-domain-improved-reaper",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Improved Reaper",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-improved-reaper",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-improved-reaper"
+        }
+      ],
+      "classIdentifier": "cleric",
+      "tagIds": [],
+      "sourceId": "subclass-death-domain",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158016,
+        "nanoseconds": 641000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158152,
+        "nanoseconds": 516000000
+      },
+      "lore": "",
+      "identifier": "death-domain",
+      "imageUrl": "",
+      "description": "The Death domain is concerned with the forces that cause death, as well as the negative energy that gives rise to undead creatures. Deities such as Chemosh, Myrkul, and Wee Jas are patrons of necromancers, death knights, liches, mummy lords, and vampires. Gods of the Death domain also embody murder (Anubis, Bhaal, and Pyremius), pain (Iuz or Loviatar), disease or poison (Incabulos, Talona, or Morgion), and the underworld (Hades and Hel).",
+      "spellcasting": {
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT",
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared"
+      },
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "BSTvNDAaxI4TRMHg0pfa",
+      "classIdentifier": "cleric",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-nature-domain-bonus-proficiency",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Bonus Proficiency",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiency",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiency"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-nature-domain-acolyte-of-nature",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Acolyte of Nature",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-acolyte-of-nature",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-acolyte-of-nature"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-nature-domain-nature-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Nature Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-nature-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-nature-domain-spells"
+        },
+        {
+          "title": "Acolyte of Nature",
+          "type": "Trait",
+          "level": 1,
+          "_id": "91t3dcwax",
+          "configuration": {
+            "choiceSource": "fixed",
+            "fixed": [],
+            "options": [
+              "ani",
+              "nat",
+              "sur"
+            ],
+            "choiceCount": 1,
+            "replacements": [],
+            "allowReplacements": false,
+            "mode": "default",
+            "type": "skills",
+            "categoryIds": []
+          }
+        },
+        {
+          "_id": "4i8v8jnnx",
+          "level": 1,
+          "type": "Trait",
+          "title": "Bonus Proficiency",
+          "configuration": {
+            "replacements": [],
+            "allowReplacements": false,
+            "mode": "default",
+            "type": "armor",
+            "options": [],
+            "fixed": [
+              "chain-mail",
+              "plate",
+              "ring-mail",
+              "splint"
+            ],
+            "choiceSource": "fixed",
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiency"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-nature-domain-channel-divinity--charm-animals-and-plants",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Charm Animals and Plants",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--charm-animals-and-plants",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--charm-animals-and-plants"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-nature-domain-dampen-elements",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Dampen Elements",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-dampen-elements",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-dampen-elements"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-nature-domain-divine-strike",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Divine Strike",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-divine-strike",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-divine-strike"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-nature-domain-master-of-nature",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Master of Nature",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-master-of-nature",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-master-of-nature"
+        }
+      ],
+      "tagIds": [],
+      "sourceId": "subclass-nature-domain",
+      "name": "Nature Domain",
+      "imageUrl": "",
+      "identifier": "nature-domain",
+      "description": "Gods of nature are as varied as the natural world itself; from inscrutable gods of the deep forests (such as Silvanus, Obad-Hai, Chislev, Balinor, and Pan) to friendly deities associated with particular springs and groves (such as Eldath). Druids revere nature as a whole and might serve one of these deities, practicing mysterious rites and reciting all-but-forgotten prayers in their own secret tongue. But many of these gods have clerics as well, champions who take a more active role in advancing the interests of a particular nature god. These clerics might hunt the evil monstrosities that despoil the woodlands, bless the harvest of the faithful, or wither the crops of those who anger their gods.",
+      "spellcasting": {
+        "description": "",
+        "isRitualCaster": false,
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT",
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared"
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158844,
+        "nanoseconds": 498000000
+      },
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158987,
+        "nanoseconds": 735000000
+      },
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "JeAsKxp0BzUIRLPBwPAZ",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-life-domain-life-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Life Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-life-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-life-domain-spells"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-life-domain-bonus-proficiency",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Bonus Proficiency",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiency",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiency"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-life-domain-disciple-of-life",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Disciple of Life",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-disciple-of-life",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-disciple-of-life"
+        },
+        {
+          "configuration": {
+            "options": [],
+            "fixed": [
+              "chain-mail",
+              "plate",
+              "ring-mail",
+              "splint"
+            ],
+            "choiceSource": "fixed",
+            "allowReplacements": false,
+            "mode": "default",
+            "replacements": [],
+            "type": "armor",
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "_id": "5aawegg1l",
+          "level": 1,
+          "type": "Trait",
+          "title": "Bonus Proficiency",
+          "featureSourceId": "subclass-feature-bonus-proficiency"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-life-domain-channel-divinity--preserve-life",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Preserve Life",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--preserve-life",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--preserve-life"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-life-domain-blessed-healer",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Blessed Healer",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-blessed-healer",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-blessed-healer"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-life-domain-divine-strike",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Divine Strike",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-divine-strike",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-divine-strike"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-life-domain-supreme-healing",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Supreme Healing",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-supreme-healing",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-supreme-healing"
+        }
+      ],
+      "classIdentifier": "cleric",
+      "tagIds": [],
+      "sourceId": "subclass-life-domain",
+      "name": "Life Domain",
+      "identifier": "life-domain",
+      "imageUrl": "",
+      "description": "The Life domain focuses on the vibrant positive energy - one of the fundamental forces of the universe - that sustains all life. The gods of life promote vitality and health through healing the sick and wounded, caring for those in need, and driving away the forces of death and undeath. Almost any non-evil deity can claim influence over this domain, particularly agricultural deities (such as Chauntea, Arawai, and Demeter), sun gods (such as Lathander, Pelor, and Re-Horakhty), gods of healing or endurance (such as Ilmater, Mishakal, Apollo, and Diancecht), and gods of home and community (such as Hestia, Hathor, and Boldrci).",
+      "spellcasting": {
+        "hasSpellcasting": false,
+        "type": "prepared",
+        "level": 3,
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT"
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158653,
+        "nanoseconds": 542000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158745,
+        "nanoseconds": 307000000
+      },
+      "lore": "",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "fhuLTdeDvBsicNhFOULj",
+      "name": "Knowledge Domain",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-knowledge-domain-knowledge-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Knowledge Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-knowledge-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-knowledge-domain-spells"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-knowledge-domain-blessings-of-knowledge",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Blessings of Knowledge",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-blessings-of-knowledge",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-blessings-of-knowledge"
+        },
+        {
+          "title": "Blessings of Knowledge",
+          "level": 1,
+          "type": "Trait",
+          "_id": "8a2x4bz9w",
+          "configuration": {
+            "type": "skills",
+            "choiceCount": 2,
+            "allowReplacements": false,
+            "replacements": [],
+            "mode": "expertise",
+            "choiceSource": "fixed",
+            "options": [
+              "arc",
+              "his",
+              "nat",
+              "rel"
+            ],
+            "fixed": [],
+            "categoryIds": []
+          },
+          "featureSourceId": "subclass-feature-blessings-of-knowledge"
+        },
+        {
+          "title": "Blessings of Knowledge",
+          "type": "Trait",
+          "level": 1,
+          "_id": "2fke8cias",
+          "configuration": {
+            "options": [
+              "aarakocra",
+              "abyssal",
+              "celestial",
+              "deep",
+              "druidic",
+              "gith",
+              "gnoll",
+              "infernal",
+              "primordial",
+              "sylvan",
+              "cant",
+              "undercommon",
+              "aquan",
+              "auran",
+              "ignan",
+              "terran",
+              "common",
+              "draconic",
+              "dwarvish",
+              "elvish",
+              "giant",
+              "gnomish",
+              "goblin",
+              "halfling",
+              "orc"
+            ],
+            "fixed": [],
+            "choiceSource": "fixed",
+            "allowReplacements": false,
+            "replacements": [],
+            "mode": "default",
+            "choiceCount": 2,
+            "type": "languages",
+            "categoryIds": []
+          },
+          "featureSourceId": "subclass-feature-blessings-of-knowledge"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-knowledge-domain-channel-divinity--knowledge-of-the-ages",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Knowledge of the Ages",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--knowledge-of-the-ages",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--knowledge-of-the-ages"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-knowledge-domain-channel-divinity--read-thoughts",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Channel Divinity: Read Thoughts",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--read-thoughts",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--read-thoughts"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-knowledge-domain-potent-spellcasting",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Potent Spellcasting",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-potent-spellcasting",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-potent-spellcasting"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-knowledge-domain-visions-of-the-past",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Visions of the Past",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-visions-of-the-past",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-visions-of-the-past"
+        }
+      ],
+      "classIdentifier": "cleric",
+      "sourceId": "subclass-knowledge-domain",
+      "tagIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158488,
+        "nanoseconds": 939000000
+      },
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158635,
+        "nanoseconds": 96000000
+      },
+      "imageUrl": "",
+      "identifier": "knowledge-domain",
+      "spellcasting": {
+        "type": "prepared",
+        "level": 3,
+        "hasSpellcasting": false,
+        "spellsKnownFormula": "",
+        "description": "",
+        "isRitualCaster": false,
+        "ability": "INT",
+        "progression": "none"
+      },
+      "description": "The gods of knowledge - including Oghma, Boccob, Gilean, Aureon, and Thoth - value learning and understanding above all. Some teach that knowledge is to be gathered and shared in libraries and universities, or promote the practical knowledge of craft and invention. Some deities hoard knowledge and keep its secrets to themselves. And some promise their followers that they will gain tremendous power if they unlock the secrets of the multiverse. Followers of these gods study esoteric lore, collect old tomes, delve into the secret places of the earth, and learn all they can. Some gods of knowledge promote the practical knowledge of craft and invention, including smith deities like Gond, Reorx, Onatar, Moradin, Hephaestus, and Goibhniu.\n\nIn Amonkhet, knowledge is the second virtue of society. Kefnet's task is to pass on this teaching of the God-Pharaoh and elucidate its meaning. He teaches that the afterlife will be inhabited only by those who have proved by their wits that they are worthy of dwelling in the glorious presence of the God-Pharaoh. He trains acolytes and initiates to push their limits and challenge their mental capacity with spells of ever-greater power.",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "in4BINER8x5TgExaDkF3",
+      "spellcasting": {
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT",
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared"
+      },
+      "description": "Magic is an energy that suffuses the multiverse and that fuels both destruction and creation. Gods of the Arcana domain know the secrets and potential of magic intimately. For some of these gods, magical knowledge is a great responsibility that comes with a special understanding of the nature of reality. Other gods of Arcana see magic as pure power, to be used as its wielder sees fit.\n\nThe gods of this domain are often associated with knowledge, as learning and arcane power tend to go hand-in-hand. In the Realms, deities of this domain include Azuth and Mystra, as well as Corellon Larethian of the elven pantheon. In other worlds, this domain includes Hecate, Math Mathonwy, and Isis; the triple moon gods of Solinari, Lunitari, and Nuitari of Krynn; and Boccob, Vecna, and Wee Jas of Greyhawk.",
+      "imageUrl": "",
+      "identifier": "arcana-domain",
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157993,
+        "nanoseconds": 699000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157714,
+        "nanoseconds": 987000000
+      },
+      "sourceId": "subclass-arcana-domain",
+      "tagIds": [],
+      "classIdentifier": "cleric",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-arcana-domain-arcana-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Arcana Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-arcana-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-arcana-domain-spells"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-arcana-domain-arcane-initiate",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Arcane Initiate",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-arcane-initiate",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-arcane-initiate"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-arcana-domain-channel-divinity--arcane-abjuration",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Arcane Abjuration",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--arcane-abjuration",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--arcane-abjuration"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-arcana-domain-spell-breaker",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Spell Breaker",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-spell-breaker",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-spell-breaker"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-arcana-domain-potent-spellcasting",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Potent Spellcasting",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-potent-spellcasting",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-potent-spellcasting"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-arcana-domain-arcane-mastery",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Arcane Mastery",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-arcane-mastery",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-arcane-mastery"
+        }
+      ],
+      "name": "Arcana Domain",
+      "sourceBookId": "source-scag-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "kReMl1DHSgxiTQZUa8qD",
+      "sourceId": "subclass-forge-domain",
+      "tagIds": [],
+      "classIdentifier": "cleric",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-forge-domain-forge-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Forge Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-forge-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-forge-domain-spells"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-forge-domain-bonus-proficiencies",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Bonus Proficiencies",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiencies",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-forge-domain-blessing-of-the-forge",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Blessing of the Forge",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-blessing-of-the-forge",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-blessing-of-the-forge"
+        },
+        {
+          "configuration": {
+            "options": [],
+            "fixed": [
+              "chain-mail",
+              "plate",
+              "ring-mail",
+              "splint"
+            ],
+            "choiceSource": "fixed",
+            "type": "armor",
+            "replacements": [],
+            "mode": "default",
+            "allowReplacements": false,
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "level": 1,
+          "type": "Trait",
+          "_id": "5f6vwh34m",
+          "title": "Bonus Proficiencies",
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "configuration": {
+            "options": [],
+            "fixed": [
+              "smith"
+            ],
+            "choiceSource": "fixed",
+            "type": "tools",
+            "allowReplacements": false,
+            "replacements": [],
+            "mode": "default",
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "title": "Bonus Proficiencies",
+          "type": "Trait",
+          "level": 1,
+          "_id": "9t3aqwdhk",
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-forge-domain-channel-divinity--artisan-s-blessing",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Artisan's Blessing",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--artisan-s-blessing",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--artisan-s-blessing"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-forge-domain-soul-of-the-forge",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Soul of the Forge",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-soul-of-the-forge",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-soul-of-the-forge"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-forge-domain-divine-strike",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Divine Strike",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-divine-strike",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-divine-strike"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-forge-domain-saint-of-forge-and-fire",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Saint of Forge and Fire",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-saint-of-forge-and-fire",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-saint-of-forge-and-fire"
+        }
+      ],
+      "name": "Forge Domain",
+      "spellcasting": {
+        "level": 3,
+        "type": "prepared",
+        "hasSpellcasting": false,
+        "ability": "INT",
+        "progression": "none",
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": ""
+      },
+      "description": "The gods of the forge are patrons of artisans who work with metal, from a humble blacksmith who keeps a village in horseshoes and plow blades to the mighty elf artisan whose diamond-tipped arrows of mithral have felled demon lords. The gods of the forge teach that, with patience and hard work, even the most intractable metal can be transformed from a lump of ore to a beautifully wrought object. Clerics of these deities search for objects lost to the forces of darkness, liberate mines overrun by orcs, and uncover rare and wondrous materials necessary to create potent magic items. Followers of these gods take great pride in their work, and they are willing to craft and use heavy armor and powerful weapons to protect them. Deities of this domain include Gond, Reorx, Onatar, Moradin, Hephaestus, and Goibhniu.",
+      "identifier": "forge-domain",
+      "imageUrl": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158350,
+        "nanoseconds": 798000000
+      },
+      "lore": "",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158171,
+        "nanoseconds": 707000000
+      },
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-cleric"
+    },
+    {
+      "id": "rWvadczzpA0BYIzBelqT",
+      "imageUrl": "",
+      "identifier": "order-domain",
+      "description": "The Order Domain represents discipline, as well as devotion to the laws that govern a society, an institution, or a philosophy. Clerics of Order meditate on logic and justice as they serve their gods, examples of which appear in the Order Deities table.\n\nClerics of Order believe that well-crafted laws establish legitimate hierarchies, and those selected by law to lead must be obeyed. Those who obey must do so to the best of their ability, and if those who lead fail to protect the law, they must be replaced. In this manner, law weaves a web of obligations that create order and security in a chaotic multiverse.",
+      "spellcasting": {
+        "type": "prepared",
+        "level": 3,
+        "hasSpellcasting": false,
+        "ability": "INT",
+        "progression": "none",
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159004,
+        "nanoseconds": 268000000
+      },
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159165,
+        "nanoseconds": 509000000
+      },
+      "classIdentifier": "cleric",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-order-domain-bonus-proficiencies",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Bonus Proficiencies",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiencies",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-order-domain-voice-of-authority",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Voice of Authority",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-voice-of-authority",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-voice-of-authority"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-order-domain-order-domain-spells",
+          "type": "ItemGrant",
+          "level": 1,
+          "title": "Order Domain Spells",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-order-domain-spells",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-order-domain-spells"
+        },
+        {
+          "level": 1,
+          "type": "Trait",
+          "_id": "9x763vv3s",
+          "title": "Bonus Proficiencies",
+          "configuration": {
+            "mode": "default",
+            "replacements": [],
+            "allowReplacements": false,
+            "type": "armor",
+            "options": [],
+            "fixed": [
+              "chain-mail",
+              "plate",
+              "ring-mail",
+              "splint"
+            ],
+            "choiceSource": "fixed",
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "configuration": {
+            "type": "skills",
+            "mode": "default",
+            "replacements": [],
+            "allowReplacements": false,
+            "choiceCount": 1,
+            "options": [
+              "per",
+              "itm"
+            ],
+            "fixed": [],
+            "choiceSource": "fixed",
+            "categoryIds": []
+          },
+          "type": "Trait",
+          "level": 1,
+          "_id": "4184mr5oc",
+          "title": "Bonus Proficiencies",
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-order-domain-channel-divinity--order-s-demand",
+          "type": "ItemGrant",
+          "level": 2,
+          "title": "Channel Divinity: Order's Demand",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-channel-divinity--order-s-demand",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-channel-divinity--order-s-demand"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-order-domain-embodiment-of-the-law",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Embodiment of the Law",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-embodiment-of-the-law",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-embodiment-of-the-law"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-order-domain-divine-strike",
+          "type": "ItemGrant",
+          "level": 8,
+          "title": "Divine Strike",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-divine-strike",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-divine-strike"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-order-domain-order-s-wrath",
+          "type": "ItemGrant",
+          "level": 17,
+          "title": "Order's Wrath",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-order-s-wrath",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-order-s-wrath"
+        }
+      ],
+      "tagIds": [],
+      "sourceId": "subclass-order-domain",
+      "name": "Order Domain",
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-cleric"
+    }
+  ],
+  "features": [
+    {
+      "id": "0MQz619MTHpY5QOsiOde",
+      "name": "Channel Divinity: Charm Animals and Plants",
+      "level": 2,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158947,
+        "nanoseconds": 204000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158947,
+        "nanoseconds": 204000000
+      },
+      "parentType": "subclass",
+      "description": "Starting at 2nd level, you can use your Channel Divinity to charm animals and plants.\n\nAs an action, you present your holy symbol and invoke the name of your deity. Each beast or plant creature that can see you within 30 feet of you must make a Wisdom saving throw. If the creature fails its saving throw, it is charmed by you for 1 minute or until it takes damage. While it is charmed by you, it is friendly to you and other creatures you designate.",
+      "identifier": "channel-divinity--charm-animals-and-plants",
+      "sourceId": "subclass-feature-channel-divinity--charm-animals-and-plants",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-nature-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "0wzjLhHp6lUDQ05rFd17",
+      "name": "Channel Divinity: Touch of Death",
+      "level": 2,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158123,
+        "nanoseconds": 420000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158123,
+        "nanoseconds": 420000000
+      },
+      "parentType": "subclass",
+      "description": "Starting at 2nd level, you can use Channel Divinity to destroy another creature's life force by touch. When you hit a creature with a melee attack, you can use Channel Divinity to deal extra necrotic damage to the target. The damage equals 5 + twice your cleric level.",
+      "identifier": "channel-divinity--touch-of-death",
+      "sourceId": "subclass-feature-channel-divinity--touch-of-death",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-death-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "16h4oyQGy6MEQUtWhNhi",
+      "name": "Reaper",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158114,
+        "nanoseconds": 454000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158114,
+        "nanoseconds": 454000000
+      },
+      "parentType": "subclass",
+      "description": "At 1st level, you learn one necromancy cantrip of your choice from any spell list. When you cast a necromancy cantrip that normally targets only one creature, the spell can instead target two creatures within range and within 5 feet of each other.",
+      "identifier": "reaper",
+      "sourceId": "subclass-feature-reaper",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-death-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "297nJGkkN68lBeHARn7J",
+      "description": "Also at 1st level, you gain proficiency with heavy armor.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158918,
+        "nanoseconds": 361000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158918,
+        "nanoseconds": 361000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "name": "Bonus Proficiency",
+      "identifier": "bonus-proficiency",
+      "sourceId": "subclass-feature-bonus-proficiency",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-nature-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "2gLAE4pljdn3lIpqYo6q",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 8,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Divine Strike",
+      "parentType": "subclass",
+      "description": "At 8th level, you gain the ability to infuse your weapon strikes with necrotic energy. Once on each of your turns when you hit a creature with a weapon attack, you can cause the attack to deal an extra 1d8 necrotic damage to the target. When you reach 14th level, the extra damage increases to 2d8.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158137,
+        "nanoseconds": 966000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158137,
+        "nanoseconds": 966000000
+      },
+      "isSubclassFeature": false,
+      "identifier": "divine-strike",
+      "sourceId": "subclass-feature-divine-strike",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-death-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "4brHW7u045YQlDARMZOJ",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Improved Flare",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 6,
+      "description": "Starting at 6th level, you can also use your Warding Flare feature when a creature that you can see within 30 feet of you attacks a creature other than you.",
+      "parentType": "subclass",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158813,
+        "nanoseconds": 921000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158813,
+        "nanoseconds": 921000000
+      },
+      "identifier": "improved-flare",
+      "sourceId": "subclass-feature-improved-flare",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-light-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "5JuBufxqcGDnYcyb7Ipb",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158706,
+        "nanoseconds": 892000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158706,
+        "nanoseconds": 892000000
+      },
+      "parentType": "subclass",
+      "description": "Beginning at 6th level, the healing spells you cast on others heal you as well. When you cast a spell of 1st level or higher that restores hit points to a creature other than you, you regain hit points equal to 2 + the spell's level.",
+      "name": "Blessed Healer",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "blessed-healer",
+      "sourceId": "subclass-feature-blessed-healer",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-life-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "64KGJ8rtREQ9jGSiAI9W",
+      "parentType": "subclass",
+      "description": "At 8th level, you gain the ability to infuse your weapon strikes with divine energy. Once on each of your turns when you hit a creature with a weapon attack, you can cause the attack to deal an extra 1d8 psychic damage to the target. When you reach 14th level, the extra damage increases to 2d8.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159113,
+        "nanoseconds": 696000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159113,
+        "nanoseconds": 696000000
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 8,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Divine Strike",
+      "identifier": "divine-strike",
+      "sourceId": "subclass-feature-divine-strike",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-order-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "6Pv9gqj5dbCY9kJePDfW",
+      "description": "At 6th level, you gain the ability to impede death's progress. As a reaction when you or an ally that you can see within 30 feet of you suffers a critical hit, you can turn that attack into a normal hit. Any effects triggered by a critical hit are canceled.\n\nYou can use this feature a number of times equal to your Wisdom modifier (minimum of once). You regain all expended uses when you finish a long rest.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158459,
+        "nanoseconds": 210000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158459,
+        "nanoseconds": 210000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 6,
+      "name": "Sentinel at Death's Door",
+      "identifier": "sentinel-at-death-s-door",
+      "sourceId": "subclass-feature-sentinel-at-death-s-door",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-grave-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "75xxzx9v8RzUNqyfVnUU",
+      "parentType": "subclass",
+      "description": "At 8th level, you gain the ability to infuse your weapon strikes with divine energy. Once on each of your turns when you hit a creature with a weapon attack, you can cause the attack to deal an extra 1d8 radiant damage to the target. When you reach 14th level, the extra damage increases to 2d8.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158711,
+        "nanoseconds": 302000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158711,
+        "nanoseconds": 302000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 8,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Divine Strike",
+      "identifier": "divine-strike",
+      "sourceId": "subclass-feature-divine-strike",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-life-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "Be9Wclj1wcdVZcv15b0u",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157992,
+        "nanoseconds": 687000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157992,
+        "nanoseconds": 687000000
+      },
+      "parentType": "subclass",
+      "description": "At 17th level, you choose four spells from the wizard spell list, one from each of the following levels: 6th, 7th, 8th, and 9th. You add them to your list of domain spells. Like your other domain spells, they are always prepared and count as cleric spells for you.",
+      "name": "Arcane Mastery",
+      "level": 17,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "arcane-mastery",
+      "sourceId": "subclass-feature-arcane-mastery",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-arcana-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "BnL00eU1ZZr6ZWv2zgmz",
+      "name": "Corona of Light",
+      "properties": [
+        "passive"
+      ],
+      "level": 17,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158824,
+        "nanoseconds": 620000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158824,
+        "nanoseconds": 620000000
+      },
+      "description": "Starting at 17th level, you can use your action to activate an aura of sunlight that lasts for 1 minute or until you dismiss it using another action. You emit bright light in a 60-foot radius and dim light 30 feet beyond that. Your enemies in the bright light have disadvantage on saving throws against any spell that deals fire or radiant damage.",
+      "parentType": "subclass",
+      "identifier": "corona-of-light",
+      "sourceId": "subclass-feature-corona-of-light",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-light-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "EGQqoXcgJEgFPuXeFD8D",
+      "level": 17,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Improved Reaper",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158150,
+        "nanoseconds": 970000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158150,
+        "nanoseconds": 970000000
+      },
+      "parentType": "subclass",
+      "description": "Starting at 17th level, when you cast a necromancy spell of 1st through 5th level that targets only one creature, the spell can instead target two creatures within range and within 5 feet of each other. If the spell consumes its material components, you must provide them for each target.",
+      "identifier": "improved-reaper",
+      "sourceId": "subclass-feature-improved-reaper",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-death-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "EZMNQMNX19ybq5hxKOKe",
+      "type": "class",
+      "level": 2,
+      "properties": [
+        "passive"
+      ],
+      "name": "Channel Divinity: Knowledge of the Ages",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158613,
+        "nanoseconds": 258000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158613,
+        "nanoseconds": 258000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "parentType": "subclass",
+      "description": "Starting at 2nd level, you can use your Channel Divinity to tap into a divine well of knowledge. As an action, you choose one skill or tool. For 10 minutes, you have proficiency with the chosen skill or tool.",
+      "identifier": "channel-divinity--knowledge-of-the-ages",
+      "sourceId": "subclass-feature-channel-divinity--knowledge-of-the-ages",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-knowledge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "HMTnmEYbrrLdacFxQPen",
+      "parentType": "subclass",
+      "description": "Starting at 6th level, when you restore hit points to an ally with a spell of 1st level or higher, you can also end one spell of your choice on that creature. The level of the spell you end must be equal to or lower than the level of the spell slot you use to cast the healing spell.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157972,
+        "nanoseconds": 113000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157972,
+        "nanoseconds": 113000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Spell Breaker",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "identifier": "spell-breaker",
+      "sourceId": "subclass-feature-spell-breaker",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-arcana-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "HScIBSCX7PuNf4N7OmXx",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158621,
+        "nanoseconds": 384000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158621,
+        "nanoseconds": 384000000
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "At 6th level, you can use your Channel Divinity to read a creature's thoughts. You can then use your access to the creature's mind to command it.\n\nAs an action, choose one creature that you can see within 60 feet of you. That creature must make a Wisdom saving throw. If the creature succeeds on the saving throw, you can't use this feature on it again until you finish a long rest.\n\nIf the creature fails its save, you can read its surface thoughts (those foremost in its mind, reflecting its current emotions and what it is actively thinking about) when it is within 60 feet of you. This effect lasts for 1 minute.\n\nDuring that time, you can use your action to end this effect and cast the Suggestion spell on the creature without expending a spell slot. The target automatically fails its saving throw against the spell.",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Channel Divinity: Read Thoughts",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "channel-divinity--read-thoughts",
+      "sourceId": "subclass-feature-channel-divinity--read-thoughts",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-knowledge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "HaJnhLUvaEaLvtpbTDmS",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "name": "Divine Intervention",
+      "properties": [
+        "passive"
+      ],
+      "level": 10,
+      "type": "class",
+      "description": "Beginning at 10th level, you can call on your deity to intervene on your behalf when your need is great.\n\nImploring your deity's aid requires you to use your action. Describe the assistance you seek, and roll percentile dice. If you roll a number equal to or lower than your cleric level, your deity intervenes. The DM chooses the nature of the intervention; the effect of any cleric spell or cleric domain spell would be appropriate. If your deity intervenes, you can't use this feature again for 7 days. Otherwise, you can use it again after you finish a long rest.\n\nAt 20th level, your call for intervention succeeds automatically, no roll required.",
+      "parentType": "class",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 10
+      },
+      "updatedAt": "2026-04-25T23:24:46.047Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": "2026-04-25T23:24:46.047Z",
+      "identifier": "divine-intervention",
+      "sourceId": "class-feature-divine-intervention",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "IRjNF92L7ge8ic7QCybl",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 2,
+      "type": "class",
+      "name": "Harness Divine Power",
+      "description": "At 2nd level, you can expend a use of your Channel Divinity to fuel your spells. As a bonus action, you touch your holy symbol, utter a prayer, and regain one expended spell slot, the level of which can be no higher than half your proficiency bonus (rounded up). The number of times you can use this feature is based on the level you've reached in this class: 2nd level, once; 6th level, twice; and 18th level, thrice. You regain all expended uses when you finish a long rest.",
+      "parentType": "class",
+      "createdAt": "2026-04-25T23:21:08.000Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 2,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-25T23:23:42.967Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "harness-divine-power",
+      "sourceId": "class-feature-harness-divine-power",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "JuUT9c2wlilALzFXVlGj",
+      "description": "Starting at 8th level, you add your Wisdom modifier to the damage you deal with any cleric cantrip.",
+      "parentType": "subclass",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157979,
+        "nanoseconds": 35000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157979,
+        "nanoseconds": 35000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Potent Spellcasting",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 8,
+      "identifier": "potent-spellcasting",
+      "sourceId": "subclass-feature-potent-spellcasting",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-arcana-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "KfBWlxmRwoPdypdn1tbc",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 17,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Order's Wrath",
+      "parentType": "subclass",
+      "description": "Starting at 17th level, enemies you designate for destruction wilt under the combined efforts of you and your allies. If you deal your Divine Strike damage to a creature on your turn, you can curse that creature until the start of your next turn. The next time one of your allies hits the cursed creature with an attack, the target also takes 2d8 psychic damage, and the curse ends. You can curse a creature in this way only once per turn.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159117,
+        "nanoseconds": 635000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159117,
+        "nanoseconds": 635000000
+      },
+      "identifier": "order-s-wrath",
+      "sourceId": "subclass-feature-order-s-wrath",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-order-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "LCCs69G5GYQC7ua8GsOH",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Grave Domain Spells",
+      "parentType": "subclass",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Bane, False Life\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Gentle Repose, Ray of Enfeeblement\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Revivify, Vampiric Touch\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Blight, Death Ward\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Antilife Shell, Raise Dead\n\n[/td][/tr][/table]",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158411,
+        "nanoseconds": 797000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158411,
+        "nanoseconds": 797000000
+      },
+      "isSubclassFeature": false,
+      "identifier": "grave-domain-spells",
+      "sourceId": "subclass-feature-grave-domain-spells",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-grave-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "LWeIyhNJ7t14RC7LRIlr",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158195,
+        "nanoseconds": 319000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158195,
+        "nanoseconds": 319000000
+      },
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Identify, Searing Smite\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Heat Metal, Magic Weapon\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Elemental Weapon, Protection from Energy\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Fabricate, Wall of Fire\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Animate Objects, Creation\n\n[/td][/tr][/table]",
+      "parentType": "subclass",
+      "name": "Forge Domain Spells",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 1,
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "forge-domain-spells",
+      "sourceId": "subclass-feature-forge-domain-spells",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-forge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "MncFnqZ2AtniqCHLUHUP",
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "type": "class",
+      "level": 5,
+      "properties": [
+        "passive"
+      ],
+      "name": "Destroy Undead",
+      "parentType": "class",
+      "description": "Starting at 5th level, when an undead fails its saving throw against your Turn Undead feature, the creature is instantly destroyed if its challenge rating is at or below a certain threshold, as shown in the Cleric table above.",
+      "createdAt": "2026-04-25T23:23:55.761Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 5
+      },
+      "updatedAt": "2026-04-25T23:23:55.761Z",
+      "identifier": "destroy-undead",
+      "sourceId": "class-feature-destroy-undead",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "MuXXzgYrHQWhp9RP77Vr",
+      "parentType": "subclass",
+      "description": "At 1st level, you learn one cantrip of your choice from the druid spell list. This cantrip counts as a cleric cantrip for you, but it doesn't count against the number of cleric cantrips you know. You also gain proficiency in one of the following skills of your choice: Animal Handling, Nature, or Survival.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158888,
+        "nanoseconds": 117000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158888,
+        "nanoseconds": 117000000
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Acolyte of Nature",
+      "identifier": "acolyte-of-nature",
+      "sourceId": "subclass-feature-acolyte-of-nature",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-nature-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "NCk87bn3CVhpX3Gns9L7",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158699,
+        "nanoseconds": 303000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158699,
+        "nanoseconds": 303000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Starting at 2nd level, you can use your Channel Divinity to heal the badly injured.\n\nAs an action, you present your holy symbol and evoke healing energy that can restore a number of hit points equal to five times your cleric level. Choose any creatures within 30 feet of you, and divide those hit points among them. This feature can restore a creature to no more than half of its hit point maximum. You can't use this feature on an undead or a construct.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "level": 2,
+      "type": "class",
+      "name": "Channel Divinity: Preserve Life",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "channel-divinity--preserve-life",
+      "sourceId": "subclass-feature-channel-divinity--preserve-life",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-life-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "NiHOSAw4Bj9UwxcCTr4E",
+      "name": "Arcana Domain Spells",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157776,
+        "nanoseconds": 714000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157776,
+        "nanoseconds": 714000000
+      },
+      "parentType": "subclass",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Detect Magic, Magic Missile\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Magic Weapon, Nystul's Magic Aura\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Dispel Magic, Magic Circle\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Arcane Eye, Leomund's Secret Chest\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Planar Binding, Teleportation Circle\n\n[/td][/tr][/table]",
+      "identifier": "arcana-domain-spells",
+      "sourceId": "subclass-feature-arcana-domain-spells",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-arcana-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "PBtRibFMkjdRV0FUIIuX",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158453,
+        "nanoseconds": 559000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158453,
+        "nanoseconds": 559000000
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "Starting at 8th level, you add your Wisdom modifier to the damage you deal with any cleric cantrip.",
+      "type": "class",
+      "level": 8,
+      "properties": [
+        "passive"
+      ],
+      "name": "Potent Spellcasting",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "potent-spellcasting",
+      "sourceId": "subclass-feature-potent-spellcasting",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-grave-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "PLcPJ46ISjbUOUrX96VR",
+      "type": "class",
+      "level": 1,
+      "properties": [
+        "passive"
+      ],
+      "name": "Bonus Proficiencies",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159031,
+        "nanoseconds": 663000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159031,
+        "nanoseconds": 663000000
+      },
+      "parentType": "subclass",
+      "description": "When you choose this domain at 1st level, you gain proficiency with heavy armor. You also gain proficiency in the Intimidation or Persuasion skill (your choice).",
+      "identifier": "bonus-proficiencies",
+      "sourceId": "subclass-feature-bonus-proficiencies",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-order-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "PQ1DRDCRnWpklJiDkXFR",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157787,
+        "nanoseconds": 260000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157787,
+        "nanoseconds": 260000000
+      },
+      "parentType": "subclass",
+      "description": "When you choose this domain at 1st level, you gain proficiency in the Arcana skill, and you gain two cantrips of your choice from the wizard spell list. For you, these cantrips count as cleric cantrips.",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Arcane Initiate",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "arcane-initiate",
+      "sourceId": "subclass-feature-arcane-initiate",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-arcana-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "Pfl1Ex1zCnh8Vj5loqaB",
+      "description": "Starting at 6th level, when you or a creature within 30 feet of you takes acid, cold, fire, lightning, or thunder damage, you can use your reaction to grant resistance to the creature against that instance of the damage.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158956,
+        "nanoseconds": 896000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158956,
+        "nanoseconds": 896000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "name": "Dampen Elements",
+      "identifier": "dampen-elements",
+      "sourceId": "subclass-feature-dampen-elements",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-nature-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "ULBJolfXfZCwv0Pr6Xfy",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 2,
+      "type": "class",
+      "name": "Channel Divinity: Turn Undead",
+      "description": "As an action, you present your holy symbol and speak a prayer censuring the undead. Each undead that can see or hear you within 30 feet of you must make a Wisdom saving throw. If the creature fails its saving throw, it is turned for 1 minute or until it takes any damage.\n\nA turned creature must spend its turns trying to move as far away from you as it can, and it can't willingly move to a space within 30 feet of you. It also can't take reactions. For its action, it can use only the Dash action or try to escape from an effect that prevents it from moving. If there's nowhere to move, the creature can use the Dodge action.",
+      "parentType": "class",
+      "createdAt": "2026-04-25T23:20:49.964Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": "2026-04-25T23:20:49.964Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "channel-divinity--turn-undead",
+      "sourceId": "class-feature-channel-divinity--turn-undead",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "UdrI4Ny6bZbhxOiu4U8F",
+      "name": "Warding Flare",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158795,
+        "nanoseconds": 670000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158795,
+        "nanoseconds": 670000000
+      },
+      "parentType": "subclass",
+      "description": "Also at 1st level, you can interpose divine light between yourself and an attacking enemy. When you are attacked by a creature within 30 feet of you that you can see, you can use your reaction to impose disadvantage on the attack roll, causing light to flare before the attacker before it hits or misses. An attacker that can't be blinded is immune to this feature.\n\nYou can use this feature a number of times equal to your Wisdom modifier (a minimum of once). You regain all expended uses when you finish a long rest.",
+      "identifier": "warding-flare",
+      "sourceId": "subclass-feature-warding-flare",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-light-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "Vpf3sdd0d8GrsfOdDlzp",
+      "parentType": "subclass",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Command, Identify\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Augury, Suggestion\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Nondetection, Speak with Dead\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Arcane Eye, Confusion\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Legend Lore, Scrying\n\n[/td][/tr][/table]",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158503,
+        "nanoseconds": 969000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158503,
+        "nanoseconds": 969000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Knowledge Domain Spells",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "identifier": "knowledge-domain-spells",
+      "sourceId": "subclass-feature-knowledge-domain-spells",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-knowledge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "XRktBa4NIsW32yhfqvkc",
+      "description": "At 1st level, you gain the ability to occasionally sense the presence of the undead, whose existence is an insult to the natural cycle of life. As an action, you can open your awareness to magically detect undead. Until the end of your next turn, you know the location of any undead within 60 feet of you that isn't behind total cover and that isn't protected from divination magic. This sense doesn't tell you anything about a creature's capabilities or identity.\n\nYou can use this feature a number of times equal to your Wisdom modifier (minimum of once). You regain all expended uses when you finish a long rest.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158424,
+        "nanoseconds": 836000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158424,
+        "nanoseconds": 836000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 1,
+      "name": "Eyes of the Grave",
+      "identifier": "eyes-of-the-grave",
+      "sourceId": "subclass-feature-eyes-of-the-grave",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-grave-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "YHoEc6H2uUtknm2KHsNj",
+      "name": "Channel Divinity: Arcane Abjuration",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 2,
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157961,
+        "nanoseconds": 102000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777157961,
+        "nanoseconds": 102000000
+      },
+      "description": "Starting at 2nd level, you can use your Channel Divinity to abjure otherworldly creatures.\n\nAs an action, you present your holy symbol, and one celestial, elemental, fey, or fiend of your choice that is within 30 feet of you must make a Wisdom saving throw, provided that the creature can see or hear you. If the creature fails its saving throw, it is turned for 1 minute or until it takes any damage.\n\nA turned creature must spend its turns trying to move as far away from you as it can, and it can't willingly end its move in a space within 30 feet of you. It also can't take reactions. For its action, it can only use the Dash action or try to escape from an effect that prevents it from moving. If there's nowhere to move, the creature can use the Dodge action.\n\nAfter you reach 5th level, when a creature fails its saving throw against your Arcane Abjuration feature, the creature is banished for 1 minute (as in the Banishment spell, no concentration required) if it isn't on its plane of origin and its challenge rating is at or below a certain threshold, as shown on the Arcane Banishment table.\n\n[table][tr][th colspan=2 rowspan=1]Arcane Banishment\n\n[/th][/tr][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Banishes Creatures of CR...\n\n[/th][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]1/2 or lower\n\n[/td][/tr][tr][td colspan=1 rowspan=1]8th\n\n[/td][td colspan=1 rowspan=1]1 or lower\n\n[/td][/tr][tr][td colspan=1 rowspan=1]11th\n\n[/td][td colspan=1 rowspan=1]2 or lower\n\n[/td][/tr][tr][td colspan=1 rowspan=1]14th\n\n[/td][td colspan=1 rowspan=1]3 or lower\n\n[/td][/tr][tr][td colspan=1 rowspan=1]17th\n\n[/td][td colspan=1 rowspan=1]4 or lower\n\n[/td][/tr][/table]",
+      "parentType": "subclass",
+      "identifier": "channel-divinity--arcane-abjuration",
+      "sourceId": "subclass-feature-channel-divinity--arcane-abjuration",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-arcana-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "a0H4SOBRY8AAnalTWSNo",
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "name": "Soul of the Forge",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158333,
+        "nanoseconds": 511000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158333,
+        "nanoseconds": 511000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Starting at 6th level, your mastery of the forge grants you special abilities:\n\n* You gain resistance to fire damage.\n\n* While wearing heavy armor, you gain a +1 bonus to AC.",
+      "parentType": "subclass",
+      "identifier": "soul-of-the-forge",
+      "sourceId": "subclass-feature-soul-of-the-forge",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-forge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "aZxLJxDHyxsEWnRahkR0",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158863,
+        "nanoseconds": 746000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158863,
+        "nanoseconds": 746000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "parentType": "subclass",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Animal Friendship, Speak with Animals\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Barkskin, Spike Growth\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Plant Growth, Wind Wall\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Dominate Beast, Grasping Vine\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Insect Plague, Tree Stride\n\n[/td][/tr][/table]",
+      "type": "class",
+      "level": 1,
+      "properties": [
+        "passive"
+      ],
+      "name": "Nature Domain Spells",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "nature-domain-spells",
+      "sourceId": "subclass-feature-nature-domain-spells",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-nature-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "awOxwaxS1bb6K55hl4HS",
+      "parentType": "subclass",
+      "description": "At 1st level, you gain the ability to manipulate the line between life and death. When you would normally roll one or more dice to restore hit points with a spell to a creature at 0 hit points, you instead use the highest number possible for each die.\n\nIn addition, you learn the Spare the Dying cantrip, which doesn't count against the number of cleric cantrips you know. For you, it has a range of 30 feet, and you can cast it as a bonus action.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158419,
+        "nanoseconds": 474000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158419,
+        "nanoseconds": 474000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Circle of Mortality",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "identifier": "circle-of-mortality",
+      "sourceId": "subclass-feature-circle-of-mortality",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-grave-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "db7cZ8tA65xzBiyqdeYZ",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158819,
+        "nanoseconds": 916000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158819,
+        "nanoseconds": 916000000
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "Starting at 8th level, you add your Wisdom modifier to the damage you deal with any cleric cantrip.",
+      "level": 8,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Potent Spellcasting",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "potent-spellcasting",
+      "sourceId": "subclass-feature-potent-spellcasting",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-light-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "ds40BU9XZR5XGP1cbeog",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158328,
+        "nanoseconds": 300000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158328,
+        "nanoseconds": 300000000
+      },
+      "parentType": "subclass",
+      "description": "Starting at 2nd level, you can use your Channel Divinity to create simple items.\n\nYou conduct an hour-long ritual that crafts a nonmagical item that must include some metal: a simple or martial weapon, a suit of armor, ten pieces of ammunition, a set of tools, or another metal object. The creation is completed at the end of the hour, coalescing in an unoccupied space of your choice on a surface within 5 feet of you.\n\nThe thing you create can be something that is worth no more than 100 gp. As part of this ritual, you must lay out metal, which can include coins, with a value equal to the creation. The metal irretrievably coalesces and transforms into the creation at the ritual's end, magically forming even nonmetal parts of the creation.\n\nThe ritual can create a duplicate of a nonmagical item that contains metal, such as a key, if you possess the original during the ritual.",
+      "name": "Channel Divinity: Artisan's Blessing",
+      "type": "class",
+      "level": 2,
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "channel-divinity--artisan-s-blessing",
+      "sourceId": "subclass-feature-channel-divinity--artisan-s-blessing",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-forge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "eD3DXUWwmXY2sEEiJ5Kz",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Channel Divinity: Radiance of the Dawn",
+      "type": "class",
+      "level": 2,
+      "properties": [
+        "passive"
+      ],
+      "parentType": "subclass",
+      "description": "Starting at 2nd level, you can use your Channel Divinity to harness sunlight, banishing darkness and dealing radiant damage to your foes.\n\nAs an action, you present your holy symbol, and any magical darkness within 30 feet of you is dispelled. Additionally, each hostile creature within 30 feet of you must make a Constitution saving throw. A creature takes radiant damage equal to 2d10 + your cleric level on a failed saving throw, and half as much damage on a successful one. A creature that has total cover from you is not affected.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158808,
+        "nanoseconds": 56000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158808,
+        "nanoseconds": 56000000
+      },
+      "identifier": "channel-divinity--radiance-of-the-dawn",
+      "sourceId": "subclass-feature-channel-divinity--radiance-of-the-dawn",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-light-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "eHqfbPNplGnPCMe1TQIl",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Blessings of Knowledge",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158517,
+        "nanoseconds": 202000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158517,
+        "nanoseconds": 202000000
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "At 1st level, you learn two languages of your choice. You also become proficient in your choice of two of the following skills: Arcana, History, Nature, or Religion.\n\nYour proficiency bonus is doubled for any ability check you make that uses either of those skills.",
+      "identifier": "blessings-of-knowledge",
+      "sourceId": "subclass-feature-blessings-of-knowledge",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-knowledge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "gZTp3VS6bfTOqQRzccXV",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 4,
+      "type": "class",
+      "name": "Cantrip Versatility",
+      "description": "Whenever you reach a level in this class that grants the Ability Score Improvement feature, you can replace one cantrip you learned from this class's Spellcasting feature with another cantrip from the cleric spell list.",
+      "parentType": "class",
+      "createdAt": "2026-04-25T23:23:37.649Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 4
+      },
+      "updatedAt": "2026-04-25T23:23:37.649Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "cantrip-versatility",
+      "sourceId": "class-feature-cantrip-versatility",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "giKHY8wjfyNf2EJ17GL7",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Life Domain Spells",
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Bless, Cure Wounds\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Lesser Restoration, Spiritual Weapon\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Beacon of Hope, Revivify\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Death Ward, Guardian of Faith\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Mass Cure Wounds, Raise Dead\n\n[/td][/tr][/table]",
+      "parentType": "subclass",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158668,
+        "nanoseconds": 260000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158668,
+        "nanoseconds": 260000000
+      },
+      "identifier": "life-domain-spells",
+      "sourceId": "subclass-feature-life-domain-spells",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-life-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "h9LMi5Yv31nCqtt9776x",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Light Domain Spells",
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Burning Hands, Faerie Fire\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Flaming Sphere, Scorching Ray\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Daylight, Fireball\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Guardian of Faith, Wall of Fire\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Flame Strike, Scrying\n\n[/td][/tr][/table]",
+      "parentType": "subclass",
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158776,
+        "nanoseconds": 963000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158776,
+        "nanoseconds": 963000000
+      },
+      "identifier": "light-domain-spells",
+      "sourceId": "subclass-feature-light-domain-spells",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-light-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "hBXjyxdTbPnMEZkOKZKG",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Bonus Cantrip",
+      "parentType": "subclass",
+      "description": "When you choose this domain at 1st level, you gain the Light cantrip if you don't already know it. This cantrip doesn't count against the number of cleric cantrips you know.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158781,
+        "nanoseconds": 628000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158781,
+        "nanoseconds": 628000000
+      },
+      "identifier": "bonus-cantrip",
+      "sourceId": "subclass-feature-bonus-cantrip",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-light-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "hQpzuVZFw4NzEfDP5NwC",
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158676,
+        "nanoseconds": 30000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158676,
+        "nanoseconds": 30000000
+      },
+      "description": "When you choose this domain at 1st level, you gain proficiency with heavy armor.",
+      "parentType": "subclass",
+      "name": "Bonus Proficiency",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 1,
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "bonus-proficiency",
+      "sourceId": "subclass-feature-bonus-proficiency",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-life-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "iCpm0oursibBwhtNTBSy",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 17,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Saint of Forge and Fire",
+      "parentType": "subclass",
+      "description": "At 17th level, your blessed affinity with fire and metal becomes more powerful:\n\n* You gain immunity to fire damage.\n\n* While wearing heavy armor, you have resistance to bludgeoning, piercing, and slashing damage from nonmagical attacks.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158344,
+        "nanoseconds": 890000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158344,
+        "nanoseconds": 890000000
+      },
+      "isSubclassFeature": false,
+      "identifier": "saint-of-forge-and-fire",
+      "sourceId": "subclass-feature-saint-of-forge-and-fire",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-forge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "iE0KWRGc3Kx7UgKTZnh6",
+      "parentType": "subclass",
+      "description": "At 8th level, you gain the ability to infuse your weapon strikes with divine energy. Once on each of your turns when you hit a creature with a weapon attack, you can cause the attack to deal an extra 1d8 cold, fire, or lightning damage (your choice) to the target. When you reach 14th level, the extra damage increases to 2d8.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158961,
+        "nanoseconds": 592000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158961,
+        "nanoseconds": 592000000
+      },
+      "isSubclassFeature": false,
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 8,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Divine Strike",
+      "identifier": "divine-strike",
+      "sourceId": "subclass-feature-divine-strike",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-nature-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "ilVdkVfPhvcTNgm39guF",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158045,
+        "nanoseconds": 784000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158045,
+        "nanoseconds": 784000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "parentType": "subclass",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]False Life, Ray of Sickness\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Blindness/Deafness, Ray of Enfeeblement\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Animate Dead, Vampiric Touch\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Blight, Death Ward\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Antilife Shell, Cloudkill\n\n[/td][/tr][/table]",
+      "type": "class",
+      "level": 1,
+      "properties": [
+        "passive"
+      ],
+      "name": "Death Domain Spells",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "death-domain-spells",
+      "sourceId": "subclass-feature-death-domain-spells",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-death-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "iy4F3URliMs50amow6f7",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159096,
+        "nanoseconds": 396000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159096,
+        "nanoseconds": 396000000
+      },
+      "description": "Starting at 1st level, you can invoke the power of law to embolden an ally to attack. If you cast a spell with a spell slot of 1st level or higher and target an ally with the spell, that ally can use their reaction immediately after the spell to make one weapon attack against a creature of your choice that you can see.\n\nIf the spell targets more than one ally, you choose the ally who can make the attack.",
+      "parentType": "subclass",
+      "name": "Voice of Authority",
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "voice-of-authority",
+      "sourceId": "subclass-feature-voice-of-authority",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-order-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "kpyDHv0J9q3AUcnVdFJS",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159022,
+        "nanoseconds": 51000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159022,
+        "nanoseconds": 51000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "[table][tr][th colspan=1 rowspan=1]Cleric Level\n\n[/th][th colspan=1 rowspan=1]Spells\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1st\n\n[/td][td colspan=1 rowspan=1]Command, Heroism\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3rd\n\n[/td][td colspan=1 rowspan=1]Hold Person, Zone of Truth\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5th\n\n[/td][td colspan=1 rowspan=1]Mass Healing Word, Slow\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7th\n\n[/td][td colspan=1 rowspan=1]Compulsion, Locate Creature\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9th\n\n[/td][td colspan=1 rowspan=1]Commune, Dominate Person\n\n[/td][/tr][/table]",
+      "type": "class",
+      "level": 1,
+      "properties": [
+        "passive"
+      ],
+      "name": "Order Domain Spells",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "order-domain-spells",
+      "sourceId": "subclass-feature-order-domain-spells",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-order-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "lnfNGnlbNzJLsBJjTxFg",
+      "description": "At 17th level, you gain the ability to command animals and plant creatures. While creatures are charmed by your Charm Animals and Plants feature, you can take a bonus action on your turn to verbally command what each of those creatures will do on its next turn.",
+      "parentType": "subclass",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158977,
+        "nanoseconds": 276000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158977,
+        "nanoseconds": 276000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Master of Nature",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 17,
+      "identifier": "master-of-nature",
+      "sourceId": "subclass-feature-master-of-nature",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-nature-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "nr10p7gW1UfwIitTIrrn",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158202,
+        "nanoseconds": 614000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158202,
+        "nanoseconds": 614000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "When you choose this domain at 1st level, you gain proficiency with heavy armor and smith's tools.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "name": "Bonus Proficiencies",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "bonus-proficiencies",
+      "sourceId": "subclass-feature-bonus-proficiencies",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-forge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "okn4dr0AEc7qVF4f1VdV",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158716,
+        "nanoseconds": 642000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158716,
+        "nanoseconds": 642000000
+      },
+      "parentType": "subclass",
+      "description": "Starting at 17th level, when you would normally roll one or more dice to restore hit points with a spell, you instead use the highest number possible for each die. For example, instead of restoring 2d6 hit points to a creature, you restore 12.",
+      "level": 17,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Supreme Healing",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "supreme-healing",
+      "sourceId": "subclass-feature-supreme-healing",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-life-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "oxMqy2RHgIEwgVjJxzpa",
+      "description": "Starting at 2nd level, you can use your Channel Divinity to mark another creature's life force for termination.\n\nAs an action, you choose one creature you can see within 30 feet of you, cursing it until the end of your next turn. The next time you or an ally of yours hits the cursed creature with an attack, the creature has vulnerability to all of that attack's damage, and then the curse ends.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158434,
+        "nanoseconds": 708000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158434,
+        "nanoseconds": 708000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 2,
+      "name": "Channel Divinity: Path to the Grave",
+      "identifier": "channel-divinity--path-to-the-grave",
+      "sourceId": "subclass-feature-channel-divinity--path-to-the-grave",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-grave-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "pCxC5uvh6DcCIHq9VZyw",
+      "parentType": "subclass",
+      "description": "Starting at 17th level, you can call up visions of the past that relate to an object you hold or your immediate surroundings. You spend at least 1 minute in meditation and prayer, then receive dreamlike, shadowy glimpses of recent events. You can meditate in this way for a number of minutes equal to your Wisdom score and must maintain concentration during that time, as if you were casting a spell.\n\nOnce you use this feature, you can't use it again until you finish a short or long rest.\n\n***Object Reading.*** Holding an object as you meditate, you can see visions of the object's previous owner. After meditating for 1 minute, you learn how the owner acquired and lost the object, as well as the most recent significant event involving the object and that owner. If the object was owned by another creature in the recent past (within a number of days equal to your Wisdom score), you can spend 1 additional minute for each owner to learn the same information about that creature.\n\n***Area Reading.*** As you meditate, you see visions of recent events in your immediate vicinity (a room, street, tunnel, clearing, or the like, up to a 50-foot cube), going back a number of days equal to your Wisdom score. For each minute you meditate, you learn about one significant event, beginning with the most recent. Significant events typically involve powerful emotions, such as battles and betrayals, marriages and murders, births and funerals. However, they might also include more mundane events that are nevertheless important in your current situation.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158633,
+        "nanoseconds": 755000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158633,
+        "nanoseconds": 755000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Visions of the Past",
+      "level": 17,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "identifier": "visions-of-the-past",
+      "sourceId": "subclass-feature-visions-of-the-past",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-knowledge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "pMV3aXwB3gKuenTMoTpC",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158320,
+        "nanoseconds": 324000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158320,
+        "nanoseconds": 324000000
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "At 1st level, you gain the ability to imbue magic into a weapon or armor. At the end of a long rest, you can touch one nonmagical object that is a suit of armor or a simple or martial weapon. Until the end of your next long rest or until you die, the object becomes a magic item, granting a +1 bonus to AC if it's armor or a +1 bonus to attack and damage rolls if it's a weapon.\n\nOnce you use this feature, you can't use it again until you finish a long rest.",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Blessing of the Forge",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "blessing-of-the-forge",
+      "sourceId": "subclass-feature-blessing-of-the-forge",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-forge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "pnWXG6JtfdlnMo2N7Ihb",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 8,
+      "name": "Blessed Strikes",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "createdAt": "2026-04-25T23:24:36.243Z",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": "2026-04-25T23:24:36.243Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "*Replaces the Divine Strike or Potent Spellcasting feature*\n\nWhen you reach 8th level, you are blessed with divine might in battle. When a creature takes damage from one of your cantrips or weapon attacks, you can also deal 1d8 radiant damage to that creature. Once you deal this damage, you can't use this feature again until the start of your next turn.",
+      "parentType": "class",
+      "identifier": "blessed-strikes",
+      "sourceId": "class-feature-blessed-strikes",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "tiB9E0oc8TkcPnFwAFDa",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Inescapable Destruction",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "parentType": "subclass",
+      "description": "Starting at 6th level, your ability to channel negative energy becomes more potent. Necrotic damage dealt by your cleric spells and Channel Divinity options ignores resistance to necrotic damage.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158132,
+        "nanoseconds": 316000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158132,
+        "nanoseconds": 316000000
+      },
+      "identifier": "inescapable-destruction",
+      "sourceId": "subclass-feature-inescapable-destruction",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-death-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "vbRsZPIXJwhMK9aGlhBU",
+      "name": "Potent Spellcasting",
+      "level": 8,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158627,
+        "nanoseconds": 154000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158627,
+        "nanoseconds": 154000000
+      },
+      "parentType": "subclass",
+      "description": "Starting at 8th level, you add your Wisdom modifier to the damage you deal with any cleric cantrip.",
+      "identifier": "potent-spellcasting",
+      "sourceId": "subclass-feature-potent-spellcasting",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-knowledge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "vpLpkSNVC559k1N8zld3",
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "name": "Divine Domain",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "createdAt": "2026-04-25T22:52:21.671Z",
+      "isSubclassFeature": true,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": "2026-04-25T22:52:34.628Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 1st level, you choose a domain shaped by your choice of Deity and the gifts they grant you. Your choice grants you domain spells and other features when you choose it at 1st level. It also grants you additional ways to use Channel Divinity when you gain that feature at 2nd level, and additional benefits at 6th, 8th, and 17th levels.\n\n### Domain Spells\n\nEach domain has a list of spells-its domain spells that you gain at the cleric levels noted in the domain description. Once you gain a domain spell, you always have it prepared, and it doesn't count against the number of spells you can prepare each day.\n\nIf you have a domain spell that doesn't appear on the cleric spell list, the spell is nonetheless a cleric spell for you.",
+      "parentType": "class",
+      "identifier": "divine-domain",
+      "sourceId": "class-feature-divine-domain",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "vywFOjmlYKVG2bv5YiJP",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 17,
+      "name": "Keeper of Souls",
+      "description": "At 17th level, you can seize a trace of vitality from a parting soul and use it to heal the living. When an enemy you can see dies within 30 feet of you, you or one ally of your choice that is within 30 feet of you regains hit points equal to the enemy's number of Hit Dice. You can use this feature only if you aren't incapacitated. Once you use it, you can't do so again until the start of your next turn.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158465,
+        "nanoseconds": 655000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 17
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158465,
+        "nanoseconds": 655000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "keeper-of-souls",
+      "sourceId": "subclass-feature-keeper-of-souls",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-grave-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "w0bkA9gDM57wapjZA9ih",
+      "parentType": "class",
+      "description": "At 2nd level, you gain the ability to channel divine energy directly from your deity, using that energy to fuel magical effects. You start with two such effects: Turn Undead and an effect determined by your domain. Some domains grant you additional effects as you advance in levels, as noted in the domain description.\n\nWhen you use your Channel Divinity, you choose which effect to create. You must then finish a short or long rest to use your Channel Divinity again.\n\nSome Channel Divinity effects require saving throws. When you use such an effect from this class, the DC equals your cleric spell save DC.\n\nBeginning at 6th level, you can use your Channel Divinity twice between rests, and beginning at 18th level, you can use it three times between rests. When you finish a short or long rest, you regain your expended uses.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 2,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-25T23:20:42.202Z",
+      "createdAt": "2026-04-25T23:20:37.734Z",
+      "uniqueOptionGroupIds": [],
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Channel Divinity",
+      "type": "class",
+      "level": 2,
+      "properties": [
+        "passive"
+      ],
+      "identifier": "channel-divinity",
+      "sourceId": "class-feature-channel-divinity",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-cleric",
+      "classSourceId": "class-cleric",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "wlv3GMi2NZtblPnSL8Rh",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 8,
+      "name": "Divine Strike",
+      "description": "At 8th level, you gain the ability to infuse your weapon strikes with the fiery power of the forge. Once on each of your turns when you hit a creature with a weapon attack, you can cause the attack to deal an extra 1d8 fire damage to the target. When you reach 14th level, the extra damage increases to 2d8.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158339,
+        "nanoseconds": 63000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 8
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158339,
+        "nanoseconds": 63000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "divine-strike",
+      "sourceId": "subclass-feature-divine-strike",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-forge-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "yczB1C6NWXJLPUmrxY8u",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Embodiment of the Law",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159108,
+        "nanoseconds": 682000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159108,
+        "nanoseconds": 682000000
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "At 6th level, you become remarkably adept at channeling magical energy to compel others.\n\nIf you cast a spell of the enchantment school using a spell slot of 1st level or higher, you can change the spell's casting time to 1 bonus action for this casting, provided the spell's casting time is normally 1 action.\n\nYou can use this feature a number of times equal to your Wisdom modifier (minimum of once), and you regain all expended uses of it when you finish a long rest.",
+      "identifier": "embodiment-of-the-law",
+      "sourceId": "subclass-feature-embodiment-of-the-law",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-order-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "ypcJxIIDhn2S4NUynGyA",
+      "properties": [
+        "passive"
+      ],
+      "level": 2,
+      "type": "class",
+      "name": "Channel Divinity: Order's Demand",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159103,
+        "nanoseconds": 122000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777159103,
+        "nanoseconds": 122000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Starting at 2nd level, you can use your Channel Divinity to exert an intimidating presence over others.\n\nAs an action, you present your holy symbol, and each creature of your choice that can see or hear you within 30 feet of you must succeed on a Wisdom saving throw or be charmed by you until the end of your next turn or until the charmed creature takes any damage. You can also cause any of the charmed creatures to drop what they are holding when they fail the saving throw.",
+      "parentType": "subclass",
+      "identifier": "channel-divinity--order-s-demand",
+      "sourceId": "subclass-feature-channel-divinity--order-s-demand",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-order-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "zNG8I6ukhxWPitV2BP1Q",
+      "name": "Bonus Proficiency",
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158094,
+        "nanoseconds": 457000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158094,
+        "nanoseconds": 457000000
+      },
+      "description": "When you choose this domain at 1st level, you gain proficiency with martial weapons.",
+      "parentType": "subclass",
+      "identifier": "bonus-proficiency",
+      "sourceId": "subclass-feature-bonus-proficiency",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-death-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "zxB1hra2Uy1PYwusYfzo",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 1,
+      "name": "Disciple of Life",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158693,
+        "nanoseconds": 754000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777158693,
+        "nanoseconds": 754000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Also starting at 1st level, your healing spells are more effective. Whenever you use a spell of 1st level or higher to restore hit points to a creature, the creature regains additional hit points equal to 2 + the spell's level.",
+      "parentType": "subclass",
+      "identifier": "disciple-of-life",
+      "sourceId": "subclass-feature-disciple-of-life",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-life-domain",
+      "classSourceId": "class-cleric",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    }
+  ],
+  "scalingColumns": [
+    {
+      "id": "DgPZz7WQqSQd2064R23H",
+      "parentType": "class",
+      "name": "Harness Divine Power Uses",
+      "values": {
+        "2": "1",
+        "3": "1",
+        "4": "1",
+        "5": "1",
+        "6": "2",
+        "7": "2",
+        "8": "2",
+        "9": "2",
+        "10": "2",
+        "11": "2",
+        "12": "2",
+        "13": "2",
+        "14": "2",
+        "15": "2",
+        "16": "2",
+        "17": "2",
+        "18": "3",
+        "19": "3",
+        "20": "3"
+      },
+      "updatedAt": "2026-04-25T23:22:17.224Z",
+      "createdAt": "2026-04-25T23:22:17.224Z",
+      "identifier": "harness-divine-power-uses",
+      "sourceId": "scale-harness-divine-power-uses",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-cleric",
+      "parentSourceId": "class-cleric"
+    },
+    {
+      "id": "G3NwxnyhYavGDGoipnoK",
+      "parentType": "class",
+      "name": "Channel Divinity Uses",
+      "values": {
+        "2": "1",
+        "3": "1",
+        "4": "1",
+        "5": "1",
+        "6": "2",
+        "7": "2",
+        "8": "2",
+        "9": "2",
+        "10": "2",
+        "11": "2",
+        "12": "2",
+        "13": "2",
+        "14": "2",
+        "15": "2",
+        "16": "2",
+        "17": "2",
+        "18": "3",
+        "19": "3",
+        "20": "3"
+      },
+      "updatedAt": "2026-04-25T23:21:55.062Z",
+      "createdAt": "2026-04-25T23:21:55.062Z",
+      "identifier": "channel-divinity-uses",
+      "sourceId": "scale-channel-divinity-uses",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-cleric",
+      "parentSourceId": "class-cleric"
+    }
+  ],
+  "uniqueOptionGroups": [],
+  "uniqueOptionItems": [],
+  "spellsKnownScalings": {
+    "spells-known-scaling-cleric": {
+      "id": "7Bry6OstkLsZ6hD4dOgg",
+      "sourceId": "spells-known-scaling-cleric",
+      "identifier": "cleric",
+      "name": "Cleric",
+      "levels": {
+        "1": {
+          "cantrips": 3,
+          "spellsKnown": 0
+        },
+        "2": {
+          "spellsKnown": 0,
+          "cantrips": 3
+        },
+        "3": {
+          "spellsKnown": 0,
+          "cantrips": 3
+        },
+        "4": {
+          "cantrips": 4,
+          "spellsKnown": 0
+        },
+        "5": {
+          "spellsKnown": 0,
+          "cantrips": 4
+        },
+        "6": {
+          "spellsKnown": 0,
+          "cantrips": 4
+        },
+        "7": {
+          "cantrips": 4,
+          "spellsKnown": 0
+        },
+        "8": {
+          "cantrips": 4,
+          "spellsKnown": 0
+        },
+        "9": {
+          "cantrips": 4,
+          "spellsKnown": 0
+        },
+        "10": {
+          "cantrips": 5,
+          "spellsKnown": 0
+        },
+        "11": {
+          "cantrips": 5,
+          "spellsKnown": 0
+        },
+        "12": {
+          "spellsKnown": 0,
+          "cantrips": 5
+        },
+        "13": {
+          "cantrips": 5,
+          "spellsKnown": 0
+        },
+        "14": {
+          "cantrips": 5,
+          "spellsKnown": 0
+        },
+        "15": {
+          "spellsKnown": 0,
+          "cantrips": 5
+        },
+        "16": {
+          "spellsKnown": 0,
+          "cantrips": 5
+        },
+        "17": {
+          "spellsKnown": 0,
+          "cantrips": 5
+        },
+        "18": {
+          "cantrips": 5,
+          "spellsKnown": 0
+        },
+        "19": {
+          "spellsKnown": 0,
+          "cantrips": 5
+        },
+        "20": {
+          "cantrips": 5,
+          "spellsKnown": 0
+        }
+      },
+      "updatedAt": "2026-04-25T22:46:00.765Z",
+      "createdAt": "2026-04-25T22:46:00.765Z"
+    }
+  },
+  "alternativeSpellcastingScalings": {},
+  "source": {
+    "id": "joi0FqfJfNvgzrUlMmbn",
+    "slug": "phb",
+    "url": "",
+    "description": "The Player's Hand Book",
+    "status": "ready",
+    "imageUrl": "",
+    "abbreviation": "PHB",
+    "rules": "2014",
+    "name": "Player's Handbook",
+    "updatedAt": "2026-04-20T16:08:59.612Z",
+    "createdAt": "2026-04-20T15:29:16.300Z",
+    "tags": [
+      "Classes",
+      "Items",
+      "Spells",
+      "Feats"
+    ]
+  }
+}

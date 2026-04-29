@@ -11,6 +11,11 @@ import { db } from '../../lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 import ReferenceSheetDialog from '../reference/ReferenceSheetDialog';
 import type { ReferenceContext } from '../../lib/referenceSyntax';
+import {
+  buildDefaultAdvancementConfiguration,
+  normalizeAdvancementForEditor,
+  resolveAdvancementDefaultHitDie
+} from '../../lib/advancementState';
 
 export type AdvancementType =
   | 'AbilityScoreImprovement'
@@ -216,16 +221,27 @@ export default function AdvancementManager({
   referenceContext,
   referenceSheetTitle = 'Reference Sheet'
 }: AdvancementManagerProps) {
+  const resolvedDefaultHitDie = resolveAdvancementDefaultHitDie(defaultHitDie);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editingAdv, setEditingAdv] = useState<Partial<Advancement>>({});
+  const [editingAdv, setEditingAdvState] = useState<Partial<Advancement>>({});
   const [traitOptionsMap, setTraitOptionsMap] = useState<Record<string, any[]>>({});
   const [collapsedTraitCategories, setCollapsedTraitCategories] = useState<Record<string, boolean>>({});
   const [featureSearch, setFeatureSearch] = useState('');
   const [allFeatures, setAllFeatures] = useState<any[]>([]);
   const [optionGroupSearch, setOptionGroupSearch] = useState('');
   const [showAllOptionGroups, setShowAllOptionGroups] = useState(false);
-  const resolvedDefaultHitDie = [6, 8, 10, 12].includes(Number(defaultHitDie)) ? Number(defaultHitDie) : 8;
+  const setEditingAdv = (nextValue: React.SetStateAction<Partial<Advancement>>) => {
+    setEditingAdvState((previousValue) => normalizeAdvancementForEditor(
+      typeof nextValue === 'function'
+        ? (nextValue as (value: Partial<Advancement>) => Partial<Advancement>)(previousValue)
+        : nextValue,
+      {
+        defaultLevel,
+        defaultHitDie: resolvedDefaultHitDie
+      }
+    ));
+  };
   const selectedScalingColumn = availableScalingColumns.find(c => c.id === editingAdv.configuration?.scalingColumnId);
   const selectedOptionGroup = availableOptionGroups.find(g => g.id === editingAdv.configuration?.optionGroupId);
   const excludedOptionIds = new Set(editingAdv.configuration?.excludedOptionIds || []);
@@ -250,14 +266,13 @@ export default function AdvancementManager({
   const selectedSizeIds = Object.entries(editingAdv.configuration?.sizes || {})
     .filter(([, isSelected]) => Boolean(isSelected))
     .map(([size]) => size);
-  if (selectedSizeIds.length === 0 && editingAdv.configuration?.size) {
-    selectedSizeIds.push(editingAdv.configuration.size);
-  }
   const scalingBreakpointRows = getScalingBreakpoints(selectedScalingColumn?.values || {});
   const choiceCountMode = editingAdv.configuration?.countSource === 'scaling'
     ? (editingAdv.configuration?.scalingColumnId || '')
     : 'manual';
   const traitType = editingAdv.configuration?.type || 'skills';
+  const traitAllowsReplacements = Boolean(editingAdv.configuration?.allowReplacements);
+  const traitChoiceUsesScaling = editingAdv.configuration?.choiceSource === 'scaling';
   const traitOptions = traitOptionsMap[traitType] || [];
   const groupedTraitEntries: Record<string, any[]> = getGroupedTraitEntries(traitOptions, traitType);
   const averageHitPointsAtLevel = (level: number) => {
@@ -283,13 +298,11 @@ export default function AdvancementManager({
     const nextSizes = { ...(editingAdv.configuration?.sizes || {}) };
     if (isSelected) nextSizes[sizeId] = true;
     else delete nextSizes[sizeId];
-    const nextSelectedSizeIds = Object.keys(nextSizes);
     setEditingAdv({
       ...editingAdv,
       configuration: {
         ...editingAdv.configuration,
-        sizes: nextSizes,
-        size: nextSelectedSizeIds[0] || undefined
+        sizes: nextSizes
       }
     });
   };
@@ -526,14 +539,14 @@ export default function AdvancementManager({
       type: 'ItemGrant',
       level: defaultLevel,
       title: '',
-      configuration: {}
+      configuration: buildDefaultAdvancementConfiguration('ItemGrant', resolvedDefaultHitDie)
     });
     setIsModalOpen(true);
   };
 
   const handleEdit = (index: number) => {
     setEditingIndex(index);
-    setEditingAdv({ ...advancements[index] });
+    setEditingAdv(advancements[index]);
     setIsModalOpen(true);
   };
 
@@ -543,42 +556,15 @@ export default function AdvancementManager({
     onChange(next);
   };
 
-  const normalizeAdvancementForSave = (value: Advancement): Advancement => {
-    const nextAdvancement = JSON.parse(JSON.stringify(value)) as Advancement;
-    const configuration = { ...(nextAdvancement.configuration || {}) };
-
-    if (nextAdvancement.type === 'Trait') {
-      const currentTraitType = configuration.type || 'skills';
-      configuration.mode = TRAIT_MODE_ENABLED_TYPES.has(currentTraitType)
-        ? (configuration.mode || 'default')
-        : 'default';
-      configuration.allowReplacements = Boolean(configuration.allowReplacements ?? configuration.allowReplacement);
-      delete configuration.allowReplacement;
-
-      if (configuration.choiceSource !== 'scaling') {
-        configuration.choiceSource = 'fixed';
-        delete configuration.scalingColumnId;
-      }
-    }
-
-    if (nextAdvancement.type === 'ItemChoice' || nextAdvancement.type === 'ItemGrant') {
-      if (configuration.countSource !== 'scaling') {
-        configuration.countSource = 'fixed';
-        delete configuration.scalingColumnId;
-      }
-
-      configuration.pool = Array.from(new Set(configuration.pool || []));
-      configuration.optionalPool = Array.from(new Set(configuration.optionalPool || []));
-      configuration.excludedOptionIds = Array.from(new Set(configuration.excludedOptionIds || []));
-    }
-
-    nextAdvancement.configuration = configuration;
-    return nextAdvancement;
-  };
-
   const handleSave = () => {
-    const next = [...advancements];
-    const adv = normalizeAdvancementForSave(editingAdv as Advancement);
+    const next = advancements.map((advancement) => normalizeAdvancementForEditor(advancement, {
+      defaultLevel,
+      defaultHitDie: resolvedDefaultHitDie
+    }) as Advancement);
+    const adv = normalizeAdvancementForEditor(editingAdv as Advancement, {
+      defaultLevel,
+      defaultHitDie: resolvedDefaultHitDie
+    }) as Advancement;
     if (editingIndex !== null) {
       next[editingIndex] = adv;
     } else {
@@ -765,14 +751,11 @@ export default function AdvancementManager({
                     value={editingAdv.type}
                     onValueChange={(val: AdvancementType | null) => {
                       if (!val) return;
-                      const base: Partial<Advancement> = { ...editingAdv, type: val };
-                      if (val === 'ItemGrant') base.configuration = { pool: [], optional: false, optionalPool: [], excludedOptionIds: [], choiceType: 'option-group' };
-                      if (val === 'ItemChoice') base.configuration = { pool: [], count: 1, excludedOptionIds: [], choiceType: 'option-group' };
-                      if (val === 'HitPoints') base.configuration = { hitDie: resolvedDefaultHitDie };
-                      if (val === 'Trait') base.configuration = { type: 'skills', options: [], fixed: [] };
-                      if (val === 'ScaleValue') base.configuration = { identifier: '', type: 'number' };
-                      if (val === 'Size') base.configuration = { sizes: { med: true }, size: 'med' };
-                      if (val === 'Subclass') base.configuration = {};
+                      const base: Partial<Advancement> = {
+                        ...editingAdv,
+                        type: val,
+                        configuration: buildDefaultAdvancementConfiguration(val, resolvedDefaultHitDie)
+                      };
                       setEditingAdv(base);
                     }}
                   >
@@ -1865,13 +1848,13 @@ export default function AdvancementManager({
                       </div>
                       <label className="flex items-start gap-2.5 cursor-pointer group">
                         <div className={`w-4 h-4 mt-0.5 rounded border shrink-0 flex items-center justify-center transition-all ${
-                          (editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
+                          traitAllowsReplacements ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
                         }`}>
-                          {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && <Check className="w-2.5 h-2.5 text-white" />}
+                          {traitAllowsReplacements && <Check className="w-2.5 h-2.5 text-white" />}
                         </div>
                         <input type="checkbox" className="hidden"
-                          checked={(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) || false}
-                          onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, allowReplacements: e.target.checked, allowReplacement: undefined }})}
+                          checked={traitAllowsReplacements}
+                          onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, allowReplacements: e.target.checked }})}
                         />
                         <div>
                           <span className="text-[10px] uppercase font-bold text-ink/70 block">Allow Replacements</span>
@@ -1932,10 +1915,10 @@ export default function AdvancementManager({
                             }}
                             className="text-[8px] uppercase font-bold text-gold hover:underline"
                           >
-                            {editingAdv.configuration?.choiceSource === 'scaling' ? 'Switch to Fixed' : 'Link Scaling'}
+                            {traitChoiceUsesScaling ? 'Switch to Fixed' : 'Link Scaling'}
                           </button>
                         </div>
-                        {editingAdv.configuration?.choiceSource === 'scaling' ? (
+                        {traitChoiceUsesScaling ? (
                           <Select
                             value={editingAdv.configuration?.scalingColumnId || ''}
                             onValueChange={val => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, scalingColumnId: val }})}
@@ -2001,11 +1984,11 @@ export default function AdvancementManager({
                       </Select>
                     </div>
                     <div className="border border-gold/10 rounded-md overflow-hidden">
-                      <div className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} bg-gold/5 border-b border-gold/10 px-3 py-2`}>
+                      <div className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} bg-gold/5 border-b border-gold/10 px-3 py-2`}>
                         <span className="text-[9px] uppercase font-black text-ink/40 tracking-widest leading-none flex items-center">Trait</span>
                         <span className="text-[9px] uppercase font-black text-gold/60 tracking-widest text-center leading-none flex items-center justify-center">Guaranteed</span>
                         <span className="text-[9px] uppercase font-black text-sky-500/60 tracking-widest text-center leading-none flex items-center justify-center">Choice Pool</span>
-                        {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
+                        {traitAllowsReplacements && (
                           <span className="text-[9px] uppercase font-black text-purple-500/60 tracking-widest text-center leading-none flex items-center justify-center">Replace</span>
                         )}
                       </div>
@@ -2023,7 +2006,7 @@ export default function AdvancementManager({
 
                             return (
                               <div key={category} className="divide-y divide-gold/5">
-                                <div className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 bg-background/50 items-center`}>
+                              <div className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 bg-background/50 items-center`}>
                                   <button
                                     type="button"
                                     onClick={() => setCollapsedTraitCategories(prev => ({ ...prev, [collapseKey]: !isCollapsed }))}
@@ -2063,8 +2046,8 @@ export default function AdvancementManager({
                                       />
                                     </label>
                                   </div>
-                                  {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
-                                    <div className="flex justify-center">
+                                {traitAllowsReplacements && (
+                                  <div className="flex justify-center">
                                       <label className="cursor-pointer">
                                         <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
                                           allReplacements ? 'bg-purple-500 border-purple-500' : 'border-gold/30 hover:border-purple-400/50'
@@ -2086,7 +2069,7 @@ export default function AdvancementManager({
                                   const isOption = (editingAdv.configuration?.options || []).includes(t.id);
                                   const isReplacement = (editingAdv.configuration?.replacements || []).includes(t.id);
                                   return (
-                                    <div key={t.id} className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
+                                    <div key={t.id} className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
                                       <span className="text-xs text-ink/80 truncate pl-5">{t.name}</span>
                                       <div className="flex justify-center">
                                         <label className="cursor-pointer">
@@ -2112,8 +2095,8 @@ export default function AdvancementManager({
                                           />
                                         </label>
                                       </div>
-                                      {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
-                                        <div className="flex justify-center">
+                                    {traitAllowsReplacements && (
+                                      <div className="flex justify-center">
                                           <label className="cursor-pointer">
                                             <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
                                               isReplacement ? 'bg-purple-500 border-purple-500' : 'border-gold/30 group-hover:border-purple-400/50'
@@ -2137,7 +2120,7 @@ export default function AdvancementManager({
                           const isOption = (editingAdv.configuration?.options || []).includes(t.id);
                           const isReplacement = (editingAdv.configuration?.replacements || []).includes(t.id);
                           return (
-                            <div key={t.id} className={`grid ${(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
+                            <div key={t.id} className={`grid ${traitAllowsReplacements ? 'grid-cols-[1fr_5rem_5rem_5rem]' : 'grid-cols-[1fr_5rem_5rem]'} px-3 py-2 hover:bg-gold/5 transition-colors items-center group`}>
                               <span className="text-xs text-ink/80 truncate">{t.name}</span>
                               <div className="flex justify-center">
                                 <label className="cursor-pointer">
@@ -2163,7 +2146,7 @@ export default function AdvancementManager({
                                   />
                                 </label>
                               </div>
-                              {(editingAdv.configuration?.allowReplacements ?? editingAdv.configuration?.allowReplacement) && (
+                              {traitAllowsReplacements && (
                                 <div className="flex justify-center">
                                   <label className="cursor-pointer">
                                     <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${

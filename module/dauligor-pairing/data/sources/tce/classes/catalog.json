@@ -1,0 +1,22 @@
+{
+  "kind": "dauligor.class-catalog.v1",
+  "schemaVersion": 1,
+  "source": {
+    "system": "dauligor",
+    "entity": "class-catalog",
+    "id": "source-tce-2014-classes",
+    "sourceId": "source-tce-2014"
+  },
+  "entries": [
+    {
+      "sourceId": "class-artificer",
+      "name": "Artificer",
+      "type": "class",
+      "img": "https://images.dauligor.com/images/classes/wsXYRazx14xEPewtUerr/1777317822695_xvt6mi2.webp",
+      "rules": "2014",
+      "description": "Artificers are arcane casters who channel their magic through a specific tool and are defined by their ability to infuse mundane items with magic, effectively turning equipment into customizable, semi",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "artificer.json"
+    }
+  ]
+}

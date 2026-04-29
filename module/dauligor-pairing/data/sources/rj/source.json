@@ -1,0 +1,39 @@
+{
+  "kind": "dauligor.source.v1",
+  "schemaVersion": 1,
+  "sourceId": "source-rj-2014",
+  "slug": "rj",
+  "name": "Rain-Junkie",
+  "shortName": "RJ",
+  "description": "I write D&D 5e homebrew!",
+  "coverImage": "",
+  "status": "ready",
+  "rules": "2014",
+  "tags": [],
+  "dates": {
+    "addedAt": "2026-04-24T22:28:51.998Z",
+    "updatedAt": "2026-04-24T22:28:51.998Z"
+  },
+  "linkedContent": {
+    "classes": {
+      "count": 0,
+      "catalogUrl": "classes/catalog.json"
+    },
+    "spells": {
+      "count": 0,
+      "catalogUrl": "spells/catalog.json"
+    },
+    "items": {
+      "count": 0,
+      "catalogUrl": "items/catalog.json"
+    },
+    "bestiary": {
+      "count": 0,
+      "catalogUrl": "bestiary/catalog.json"
+    },
+    "journals": {
+      "count": 0,
+      "catalogUrl": "journals/catalog.json"
+    }
+  }
+}

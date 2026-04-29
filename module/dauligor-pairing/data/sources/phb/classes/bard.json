@@ -1,0 +1,3982 @@
+{
+  "class": {
+    "id": "0db5d98Gj95jUet5gypC",
+    "createdAt": "2026-04-25T21:42:05.359Z",
+    "primaryAbilityChoice": [],
+    "updatedAt": "2026-04-29T15:40:00.040Z",
+    "preview": "",
+    "wealth": "",
+    "identifier": "bard",
+    "imageUrl": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2F0db5d98Gj95jUet5gypC%2F1777154817760_0hz9nam.webp?alt=media&token=a6d6a277-6d91-4423-9a5b-bda628642d55",
+    "previewDisplay": {
+      "y": 0,
+      "scale": 1,
+      "x": 57.2
+    },
+    "description": "Whether scholar, skald, or scoundrel, a bard weaves magic through words and music to inspire allies, demoralize foes, manipulate minds, create illusions, and even heal wounds. The bard is a master of song, speech, and the magic they contain.",
+    "multiclassProficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "tools": {
+        "choiceCount": 1,
+        "categoryIds": [],
+        "optionIds": [
+          "bagpipes",
+          "dulcimer",
+          "horn",
+          "lyre",
+          "shawm",
+          "viol",
+          "panflute",
+          "lute",
+          "flute",
+          "drum"
+        ],
+        "fixedIds": []
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [
+          "ani",
+          "ath",
+          "itm",
+          "sur",
+          "slt",
+          "per",
+          "prc",
+          "med",
+          "his",
+          "ste",
+          "rel",
+          "prf",
+          "nat",
+          "inv",
+          "ins",
+          "dec",
+          "arc",
+          "acr"
+        ],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      }
+    },
+    "hitDie": 8,
+    "spellcasting": {
+      "hasSpellcasting": true,
+      "type": "known",
+      "level": 1,
+      "description": "You have learned to untangle and reshape the fabric of reality in harmony with your wishes and music. Your spells are part of your vast repertoire, magic that you can tune to different situations.\n\n## Cantrips\n\nYou know two cantrips of your choice from the bard spell list. You learn additional bard cantrips of your choice at higher levels, as shown in the Cantrips Known column of the Bard table.\n\n## Spell Slots\n\nThe Bard table shows how many spell slots you have to cast your bard spells of 1st level and higher. To cast one of these spells, you must expend a slot of the spell's level or higher. You regain all expended spell slots when you finish a long rest. For example, if you know the 1st-level spell Cure Wounds and have a 1st-level and a 2nd-level spell slot available, you can cast Cure Wounds using either slot.\n\n## Spells Known of 1st Level and Higher\n\nYou know four 1st-level spells of your choice from the bard spell list.\n\nThe Spells Known column of the Bard table shows when you learn more bard spells of your choice. Each of these spells must be of a level for which you have spell slots, as shown on the table. For instance, when you reach 3rd level in this class, you can learn one new spell of 1st or 2nd level.\n\nAdditionally, when you gain a level in this class, you can choose one of the bard spells you know and replace it with another spell from the bard spell list, which also must be of a level for which you have spell slots.\n\n## Spellcasting Ability\n\nCharisma is your spellcasting ability for your bard spells. Your magic comes from the heart and soul you pour into the performance of your music or oration. You use your Charisma whenever a spell refers to your spellcasting ability. In addition, you use your Charisma modifier when setting the saving throw DC for a bard spell you cast and when making an attack roll with one.\n\n**Spell save DC** = 8 + your proficiency bonus + your Charisma modifier**Spell attack modifier** = your proficiency bonus + your Charisma modifier\n\n## Ritual Casting\n\nYou can cast any bard spell you know as a ritual if that spell has the ritual tag.\n\n## Spellcasting Focus\n\nYou can use a musical instrument (found in chapter 5) as a spellcasting focus for your bard spells.",
+      "isRitualCaster": true,
+      "spellsKnownFormula": "",
+      "ability": "CHA",
+      "progressionTypeSourceId": "spellcasting-type-full-caster",
+      "progressionTypeIdentifier": "full-caster",
+      "progressionTypeLabel": "Full Caster",
+      "progressionFormula": "1 * level",
+      "progression": "full",
+      "spellsKnownSourceId": "spells-known-scaling-bard"
+    },
+    "previewImageUrl": "",
+    "savingThrows": [
+      "DEX",
+      "CHA"
+    ],
+    "startingEquipment": "You start with the following equipment, in addition to the equipment granted by your background:\n\n* (a) a rapier, (b) a longsword, or (c) any simple weapon\n* (a) a diplomat's pack or (b) an entertainer's pack\n* (a) a lute or (b) any other musical instrument\n* Leather armor and a dagger",
+    "tagIds": [
+      "full-caster",
+      "moderate",
+      "support",
+      "jack-of-all-trades",
+      "debuffer",
+      "arcane"
+    ],
+    "imageDisplay": {
+      "y": 0,
+      "scale": 1,
+      "x": 53.6
+    },
+    "lore": "",
+    "proficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [
+          "light"
+        ],
+        "optionIds": [],
+        "fixedIds": [
+          "leather",
+          "padded",
+          "studded-leather"
+        ]
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "club",
+          "dagger",
+          "greatclub",
+          "handaxe",
+          "javelin",
+          "lighthammer",
+          "mace",
+          "quarterstaff",
+          "sickle",
+          "spear",
+          "lightcrossbow",
+          "dart",
+          "shortbow",
+          "sling",
+          "handcrossbow",
+          "longsword",
+          "rapier",
+          "shortsword"
+        ]
+      },
+      "tools": {
+        "choiceCount": 3,
+        "categoryIds": [
+          "music"
+        ],
+        "optionIds": [
+          "bagpipes",
+          "drum",
+          "dulcimer",
+          "flute",
+          "horn",
+          "lute",
+          "lyre",
+          "panflute",
+          "shawm",
+          "viol"
+        ],
+        "fixedIds": []
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 3,
+        "categoryIds": [],
+        "optionIds": [
+          "acr",
+          "arc",
+          "dec",
+          "ins",
+          "inv",
+          "nat",
+          "prf",
+          "rel",
+          "ste",
+          "sur",
+          "slt",
+          "per",
+          "prc",
+          "med",
+          "itm",
+          "his",
+          "ath",
+          "ani"
+        ],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "DEX",
+          "CHA"
+        ]
+      }
+    },
+    "primaryAbility": [
+      "CHA"
+    ],
+    "subclassFeatureLevels": [
+      3,
+      6,
+      14
+    ],
+    "cardImageUrl": "",
+    "name": "Bard",
+    "advancements": [
+      {
+        "configuration": {
+          "hitDie": 8
+        },
+        "_id": "base-hp",
+        "type": "HitPoints",
+        "level": 1,
+        "title": "Hit Points"
+      },
+      {
+        "title": "Starting Equipment Choices",
+        "_id": "base-items",
+        "level": 1,
+        "type": "ItemChoice",
+        "configuration": {
+          "excludedOptionIds": [],
+          "pool": [],
+          "countSource": "fixed",
+          "optionalPool": [],
+          "count": 1,
+          "choiceType": "item",
+          "optional": false
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-bardic-inspiration",
+        "type": "ItemGrant",
+        "level": 1,
+        "title": "Bardic Inspiration",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-bardic-inspiration",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-bardic-inspiration"
+      },
+      {
+        "title": "Saving Throw Proficiencies",
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-saves",
+        "configuration": {
+          "options": [],
+          "fixed": [
+            "DEX",
+            "CHA"
+          ],
+          "choiceSource": "fixed",
+          "categoryIds": [],
+          "type": "saves",
+          "allowReplacements": false,
+          "mode": "default",
+          "replacements": [],
+          "choiceCount": 0
+        }
+      },
+      {
+        "configuration": {
+          "mode": "default",
+          "replacements": [],
+          "choiceCount": 0,
+          "categoryIds": [
+            "light"
+          ],
+          "type": "armor",
+          "allowReplacements": false,
+          "fixed": [
+            "leather",
+            "padded",
+            "studded-leather"
+          ],
+          "options": [],
+          "choiceSource": "fixed"
+        },
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-armor",
+        "title": "Armor Proficiencies"
+      },
+      {
+        "type": "Trait",
+        "level": 1,
+        "_id": "base-weapons",
+        "title": "Weapon Proficiencies",
+        "configuration": {
+          "choiceCount": 0,
+          "replacements": [],
+          "mode": "default",
+          "choiceSource": "fixed",
+          "fixed": [
+            "club",
+            "dagger",
+            "greatclub",
+            "handaxe",
+            "javelin",
+            "lighthammer",
+            "mace",
+            "quarterstaff",
+            "sickle",
+            "spear",
+            "lightcrossbow",
+            "dart",
+            "shortbow",
+            "sling",
+            "handcrossbow",
+            "longsword",
+            "rapier",
+            "shortsword"
+          ],
+          "options": [],
+          "allowReplacements": false,
+          "type": "weapons",
+          "categoryIds": []
+        }
+      },
+      {
+        "configuration": {
+          "type": "skills",
+          "categoryIds": [],
+          "allowReplacements": false,
+          "choiceSource": "fixed",
+          "options": [
+            "acr",
+            "arc",
+            "dec",
+            "ins",
+            "inv",
+            "nat",
+            "prf",
+            "rel",
+            "ste",
+            "sur",
+            "slt",
+            "per",
+            "prc",
+            "med",
+            "itm",
+            "his",
+            "ath",
+            "ani"
+          ],
+          "fixed": [],
+          "choiceCount": 3,
+          "replacements": [],
+          "mode": "default"
+        },
+        "title": "Skill Proficiencies",
+        "type": "Trait",
+        "level": 1,
+        "_id": "base-skills"
+      },
+      {
+        "title": "Tool Proficiencies",
+        "_id": "base-tools",
+        "type": "Trait",
+        "level": 1,
+        "configuration": {
+          "categoryIds": [
+            "music"
+          ],
+          "type": "tools",
+          "allowReplacements": false,
+          "options": [
+            "bagpipes",
+            "drum",
+            "dulcimer",
+            "flute",
+            "horn",
+            "lute",
+            "lyre",
+            "panflute",
+            "shawm",
+            "viol"
+          ],
+          "fixed": [],
+          "choiceSource": "fixed",
+          "mode": "default",
+          "replacements": [],
+          "choiceCount": 3
+        }
+      },
+      {
+        "configuration": {
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 0,
+          "options": [],
+          "fixed": [],
+          "choiceSource": "fixed",
+          "categoryIds": [],
+          "type": "languages",
+          "allowReplacements": false
+        },
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-languages",
+        "title": "Languages"
+      },
+      {
+        "_id": "inherent-class-feature-grant-song-of-rest",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Song of Rest",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-song-of-rest",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-song-of-rest"
+      },
+      {
+        "_id": "inherent-class-feature-grant-magical-inspiration",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Magical Inspiration",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-magical-inspiration",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-magical-inspiration"
+      },
+      {
+        "_id": "inherent-class-feature-grant-jack-of-all-trades",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Jack of All Trades",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-jack-of-all-trades",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-jack-of-all-trades"
+      },
+      {
+        "_id": "inherent-class-feature-grant-expertise",
+        "type": "ItemGrant",
+        "level": 3,
+        "title": "Expertise",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-expertise",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-expertise"
+      },
+      {
+        "_id": "inherent-class-feature-grant-bard-college",
+        "type": "ItemGrant",
+        "level": 3,
+        "title": "Bard College",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-bard-college",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-bard-college"
+      },
+      {
+        "configuration": {},
+        "title": "Bard College",
+        "_id": "base-subclass",
+        "type": "Subclass",
+        "level": 3
+      },
+      {
+        "title": "Expertise",
+        "_id": "0b1fds35x",
+        "type": "Trait",
+        "level": 3,
+        "configuration": {
+          "replacements": [],
+          "mode": "upgrade",
+          "choiceCount": 2,
+          "fixed": [],
+          "options": [
+            "acr",
+            "ani",
+            "arc",
+            "ath",
+            "his",
+            "dec",
+            "ins",
+            "itm",
+            "inv",
+            "med",
+            "nat",
+            "prc",
+            "prf",
+            "per",
+            "rel",
+            "slt",
+            "ste",
+            "sur"
+          ],
+          "choiceSource": "fixed",
+          "categoryIds": [],
+          "type": "skills",
+          "allowReplacements": false
+        },
+        "featureSourceId": "class-feature-expertise"
+      },
+      {
+        "level": 4,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-0",
+        "title": "Ability Score Improvement",
+        "configuration": {
+          "locked": {},
+          "fixed": {},
+          "featAllowed": true,
+          "points": 2
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-bardic-versatility",
+        "type": "ItemGrant",
+        "level": 4,
+        "title": "Bardic Versatility",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-bardic-versatility",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-bardic-versatility"
+      },
+      {
+        "_id": "inherent-class-feature-grant-font-of-inspiration",
+        "type": "ItemGrant",
+        "level": 5,
+        "title": "Font of Inspiration",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-font-of-inspiration",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-font-of-inspiration"
+      },
+      {
+        "_id": "inherent-class-feature-grant-countercharm",
+        "type": "ItemGrant",
+        "level": 6,
+        "title": "Countercharm",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-countercharm",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-countercharm"
+      },
+      {
+        "title": "Ability Score Improvement",
+        "level": 8,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-1",
+        "configuration": {
+          "fixed": {},
+          "locked": {},
+          "points": 2,
+          "featAllowed": true
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-magical-secrets",
+        "type": "ItemGrant",
+        "level": 10,
+        "title": "Magical Secrets",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-magical-secrets",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-magical-secrets"
+      },
+      {
+        "configuration": {
+          "allowReplacements": false,
+          "type": "skills",
+          "categoryIds": [],
+          "choiceSource": "fixed",
+          "options": [
+            "acr",
+            "ani",
+            "arc",
+            "ath",
+            "dec",
+            "his",
+            "ins",
+            "itm",
+            "inv",
+            "med",
+            "nat",
+            "prc",
+            "prf",
+            "per",
+            "rel",
+            "slt",
+            "ste",
+            "sur"
+          ],
+          "fixed": [],
+          "choiceCount": 2,
+          "replacements": [],
+          "mode": "upgrade"
+        },
+        "title": "Expertise",
+        "level": 10,
+        "type": "Trait",
+        "_id": "va1tj0w3o"
+      },
+      {
+        "title": "Ability Score Improvement",
+        "_id": "base-asi-2",
+        "level": 12,
+        "type": "AbilityScoreImprovement",
+        "configuration": {
+          "locked": {},
+          "fixed": {},
+          "points": 2,
+          "featAllowed": true
+        }
+      },
+      {
+        "level": 16,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-3",
+        "title": "Ability Score Improvement",
+        "configuration": {
+          "locked": {},
+          "fixed": {},
+          "featAllowed": true,
+          "points": 2
+        }
+      },
+      {
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "locked": {},
+          "fixed": {}
+        },
+        "level": 19,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-4",
+        "title": "Ability Score Improvement"
+      },
+      {
+        "_id": "inherent-class-feature-grant-superior-inspiration",
+        "type": "ItemGrant",
+        "level": 20,
+        "title": "Superior Inspiration",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-superior-inspiration",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-superior-inspiration"
+      }
+    ],
+    "cardDisplay": {
+      "x": 48.8,
+      "scale": 1,
+      "y": 19.6
+    },
+    "multiclassing": "",
+    "sourceId": "source-phb-2014",
+    "classSourceId": "class-bard",
+    "sourceBookId": "source-phb-2014"
+  },
+  "subclasses": [
+    {
+      "id": "4LSL0VG4BZvl4HSbF5jp",
+      "name": "College of Glamour",
+      "tagIds": [],
+      "sourceId": "subclass-college-of-glamour",
+      "classIdentifier": "bard",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-glamour-enthralling-performance",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Enthralling Performance",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-enthralling-performance",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-enthralling-performance"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-glamour-mantle-of-inspiration",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Mantle of Inspiration",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-mantle-of-inspiration",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-mantle-of-inspiration"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-glamour-mantle-of-majesty",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Mantle of Majesty",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-mantle-of-majesty",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-mantle-of-majesty"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-glamour-unbreakable-majesty",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Unbreakable Majesty",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-unbreakable-majesty",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-unbreakable-majesty"
+        }
+      ],
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154092,
+        "nanoseconds": 977000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154065,
+        "nanoseconds": 771000000
+      },
+      "description": "The College of Glamour is the home of bards who mastered their craft in the vibrant realm of the Feywild or under the tutelage of someone who dwelled there. Tutored by satyrs, eladrin, and other fey, these bards learn to use their magic to delight and captivate others.\n\nThe bards of this college are regarded with a mixture of awe and fear. Their performances are the stuff of legend. These bards are so eloquent that a speech or song that one of them performs can cause captors to release the bard unharmed and can lull a furious dragon into complacency. The same magic that allows them to quell beasts can also bend minds. Villainous bards of this college can leech off a community for weeks, abusing their magic to turn their hosts into thralls. Heroic bards of this college instead use this power to gladden the downtrodden and undermine oppressors.",
+      "spellcasting": {
+        "progression": "none",
+        "ability": "INT",
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared"
+      },
+      "imageUrl": "",
+      "identifier": "college-of-glamour",
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-bard"
+    },
+    {
+      "id": "6M2BEW73tKa4GCkZxGm6",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153945,
+        "nanoseconds": 275000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153989,
+        "nanoseconds": 302000000
+      },
+      "lore": "",
+      "identifier": "college-of-creation",
+      "imageUrl": "",
+      "description": "Bards believe the cosmos is a work of art - the creation of the first dragons and gods. That creative work included harmonies that continue to resound through existence today, a power known as the Song of Creation. The bards of the College of Creation draw on that primeval song through dance, music, and poetry, and their teachers share this lesson: \"Before the sun and the moon, there was the Song, and its music awoke the first dawn. Its melodies so delighted the stones and trees that some of them gained a voice of their own. And now they sing too. Learn the Song, students, and you too can teach the mountains to sing and dance.\"\n\nDwarves and gnomes often encourage their bards to become students of the Song of Creation. And among dragonborn, the Song of Creation is revered, for legends portray Bahamut and Tiamat-the greatest of dragons -as two of the song's first singers.",
+      "spellcasting": {
+        "ability": "INT",
+        "progression": "none",
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": "",
+        "level": 3,
+        "type": "prepared",
+        "hasSpellcasting": false
+      },
+      "name": "College of Creation",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-creation-mote-of-potential",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Mote of Potential",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-mote-of-potential",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-mote-of-potential"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-creation-performance-of-creation",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Performance of Creation",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-performance-of-creation",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-performance-of-creation"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-creation-animating-performance",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Animating Performance",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-animating-performance",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-animating-performance"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-creation-creative-crescendo",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Creative Crescendo",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-creative-crescendo",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-creative-crescendo"
+        }
+      ],
+      "classIdentifier": "bard",
+      "tagIds": [],
+      "sourceId": "subclass-college-of-creation",
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-bard"
+    },
+    {
+      "id": "C076UOQAeA6pLtOZST5u",
+      "name": "College of Lore",
+      "tagIds": [],
+      "sourceId": "subclass-college-of-lore",
+      "classIdentifier": "bard",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-lore-cutting-words",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Cutting Words",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-cutting-words",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-cutting-words"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-lore-bonus-proficiencies",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Bonus Proficiencies",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiencies",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-lore-additional-magical-secrets",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Additional Magical Secrets",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-additional-magical-secrets",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-additional-magical-secrets"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-lore-peerless-skill",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Peerless Skill",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-peerless-skill",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-peerless-skill"
+        }
+      ],
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154227,
+        "nanoseconds": 998000000
+      },
+      "lore": "",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154197,
+        "nanoseconds": 389000000
+      },
+      "description": "Bards of the College of Lore know something about most things, collecting bits of knowledge from sources as diverse as scholarly tomes and peasant tales. Whether singing folk ballads in taverns or elaborate compositions in royal courts, these bards use their gifts to hold audiences spellbound. When the applause dies down, the audience members might find themselves questioning everything they held to be true, from their faith in the priesthood of the local temple to their loyalty to the king.\n\nThe loyalty of these bards lies in the pursuit of beauty and truth, not in fealty to a monarch or following the tenets of a deity. A noble who keeps such a bard as a herald or advisor knows that the bard would rather be honest than politic.\n\nThe college's members gather in libraries and sometimes in actual colleges, complete with classrooms and dormitories, to share their lore with one another. They also meet at festivals or affairs of state, where they can expose corruption, unravel lies, and poke fun at self-important figures of authority.",
+      "spellcasting": {
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": "",
+        "ability": "INT",
+        "progression": "none",
+        "type": "prepared",
+        "level": 3,
+        "hasSpellcasting": false
+      },
+      "identifier": "college-of-lore",
+      "imageUrl": "",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-bard"
+    },
+    {
+      "id": "CJXjNmfupYIMCffKfxDR",
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154486,
+        "nanoseconds": 983000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154457,
+        "nanoseconds": 867000000
+      },
+      "spellcasting": {
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared",
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT"
+      },
+      "description": "Bards of the College of Valor are daring skalds whose tales keep alive the memory of the great heroes of the past, and thereby inspire a new generation of heroes. These bards gather in mead halls or around great bonfires to sing the deeds of the mighty, both past and present. They travel the land to witness great events firsthand and to ensure that the memory of those events doesn't pass from the world. With their songs, they inspire others to reach the same heights of accomplishment as the heroes of old.",
+      "imageUrl": "",
+      "identifier": "college-of-valor",
+      "name": "College of Valor",
+      "sourceId": "subclass-college-of-valor",
+      "tagIds": [],
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-valor-combat-inspiration",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Combat Inspiration",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-combat-inspiration",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-combat-inspiration"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-valor-bonus-proficiencies",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Bonus Proficiencies",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiencies",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-valor-extra-attack",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Extra Attack",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-extra-attack",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-extra-attack"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-valor-battle-magic",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Battle Magic",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-battle-magic",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-battle-magic"
+        }
+      ],
+      "classIdentifier": "bard",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-bard"
+    },
+    {
+      "id": "F2nlx4DyVrUPUJgIBcnK",
+      "name": "College of Whispers",
+      "classIdentifier": "bard",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-whispers-psychic-blades",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Psychic Blades",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-psychic-blades",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-psychic-blades"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-whispers-words-of-terror",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Words of Terror",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-words-of-terror",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-words-of-terror"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-whispers-mantle-of-whispers",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Mantle of Whispers",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-mantle-of-whispers",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-mantle-of-whispers"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-whispers-shadow-lore",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Shadow Lore",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-shadow-lore",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-shadow-lore"
+        }
+      ],
+      "tagIds": [],
+      "sourceId": "subclass-college-of-whispers",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154507,
+        "nanoseconds": 354000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154528,
+        "nanoseconds": 451000000
+      },
+      "lore": "",
+      "identifier": "college-of-whispers",
+      "imageUrl": "",
+      "description": "Most folk are happy to welcome a bard into their midst. Bards of the College of Whispers use this to their advantage. They appear to be like any other bard, sharing news, singing songs, and telling tales to the audiences they gather. In truth, the College of Whispers teaches its students that they are wolves among sheep. These bards use their knowledge and magic to uncover secrets and turn them against others through extortion and threats.\n\nMany other bards hate the College of Whispers, viewing it as a parasite that uses the bards' reputation to acquire wealth and power. For this reason, these bards rarely reveal their true nature unless they must. They typically claim to follow some other college, or keep their true nature secret in order to better infiltrate and exploit royal courts and other settings of power.",
+      "spellcasting": {
+        "progression": "none",
+        "ability": "INT",
+        "isRitualCaster": false,
+        "description": "",
+        "spellsKnownFormula": "",
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared"
+      },
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-bard"
+    },
+    {
+      "id": "JFzZOPxyJVN2mJz8WaSV",
+      "sourceId": "subclass-college-of-eloquence",
+      "tagIds": [],
+      "classIdentifier": "bard",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-eloquence-silver-tongue",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Silver Tongue",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-silver-tongue",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-silver-tongue"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-eloquence-unsettling-words",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Unsettling Words",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-unsettling-words",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-unsettling-words"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-eloquence-unfailing-inspiration",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Unfailing Inspiration",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-unfailing-inspiration",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-unfailing-inspiration"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-eloquence-universal-speech",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Universal Speech",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-universal-speech",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-universal-speech"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-eloquence-infectious-inspiration",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Infectious Inspiration",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-infectious-inspiration",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-infectious-inspiration"
+        }
+      ],
+      "name": "College of Eloquence",
+      "spellcasting": {
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": "",
+        "ability": "INT",
+        "progression": "none",
+        "level": 3,
+        "type": "prepared",
+        "hasSpellcasting": false
+      },
+      "description": "Adherents of the College of Eloquence master the art of oratory. Persuasion is regarded as a high art, and a well-reasoned, well-spoken argument often proves more powerful than objective truth. These bards wield a blend of logic and theatrical wordplay, winning over skeptics and detractors with logical arguments, and plucking at heartstrings to appeal to the emotions of entire audiences.",
+      "identifier": "college-of-eloquence",
+      "imageUrl": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154045,
+        "nanoseconds": 126000000
+      },
+      "lore": "",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154010,
+        "nanoseconds": 817000000
+      },
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-bard"
+    },
+    {
+      "id": "Nv1C34RGEr36yv2ptY0z",
+      "sourceId": "subclass-college-of-spirits",
+      "tagIds": [],
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-spirits-tales-from-beyond",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Tales from Beyond",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-tales-from-beyond",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-tales-from-beyond"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-spirits-spiritual-focus",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Spiritual Focus",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-spiritual-focus",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-spiritual-focus"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-spirits-guiding-whispers",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Guiding Whispers",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-guiding-whispers",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-guiding-whispers"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-spirits-spirit-session",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Spirit Session",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-spirit-session",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-spirit-session"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-spirits-mystical-connection",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Mystical Connection",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-mystical-connection",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-mystical-connection"
+        }
+      ],
+      "classIdentifier": "bard",
+      "name": "College of Spirits",
+      "spellcasting": {
+        "level": 3,
+        "type": "prepared",
+        "hasSpellcasting": false,
+        "ability": "INT",
+        "progression": "none",
+        "spellsKnownFormula": "",
+        "description": "",
+        "isRitualCaster": false
+      },
+      "description": "Bards of the College of Spirits seek tales with inherent power-be they legends, histories, or fictions-and bring their subjects to life. Using occult trappings, these bards conjure spiritual embodiments of powerful forces to change the world once more. Such spirits are capricious, though, and what a bard summons isn't always entirely under their control.",
+      "imageUrl": "",
+      "identifier": "college-of-spirits",
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154370,
+        "nanoseconds": 453000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154329,
+        "nanoseconds": 355000000
+      },
+      "sourceBookId": "source-vrgr-2014",
+      "classSourceId": "class-bard"
+    },
+    {
+      "id": "PhKgj1YMc6tIbsywgMDi",
+      "spellcasting": {
+        "level": 3,
+        "type": "prepared",
+        "hasSpellcasting": false,
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": "",
+        "ability": "INT",
+        "progression": "none"
+      },
+      "description": "Bards of the College of Swords are called blades, and they entertain through daring feats of weapon prowess. Blades perform stunts such as sword swallowing, knife throwing and juggling, and mock combats. Though they use their weapons to entertain, they are also highly trained and skilled warriors in their own right.\n\nTheir talent with weapons inspires many blades to lead double lives. One blade might use a circus troupe as cover for nefarious deeds such as assassination, robbery, and blackmail. Other blades strike at the wicked, bringing justice to bear against the cruel and powerful. Most troupes are happy to accept a blade's talent for the excitement it adds to a performance, but few entertainers fully trust a blade in their ranks.\n\nBlades who abandon their lives as entertainers have often run into trouble that makes maintaining their secret activities impossible. A blade caught stealing or engaging in vigilante justice is too great a liability for most troupes. With their weapon skills and magic, these blades either take up work as enforcers for thieves' guilds or strike out on their own as adventurers.",
+      "identifier": "college-of-swords",
+      "imageUrl": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154438,
+        "nanoseconds": 528000000
+      },
+      "lore": "",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154387,
+        "nanoseconds": 772000000
+      },
+      "sourceId": "subclass-college-of-swords",
+      "tagIds": [],
+      "classIdentifier": "bard",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-swords-bonus-proficiencies",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Bonus Proficiencies",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiencies",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-swords-blade-flourish",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Blade Flourish",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-blade-flourish",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-blade-flourish"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-swords-fighting-style",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Fighting Style",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-fighting-style",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-fighting-style"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-swords-extra-attack",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Extra Attack",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-extra-attack",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-extra-attack"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-college-of-swords-master-s-flourish",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Master's Flourish",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-master-s-flourish",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-master-s-flourish"
+        }
+      ],
+      "name": "College of Swords",
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-bard"
+    }
+  ],
+  "features": [
+    {
+      "id": "01KYZvMOlOYrE6PzVlyU",
+      "name": "Cutting Words",
+      "level": 3,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154215,
+        "nanoseconds": 904000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154215,
+        "nanoseconds": 904000000
+      },
+      "parentType": "subclass",
+      "description": "Also at 3rd level, you learn how to use your wit to distract, confuse, and otherwise sap the confidence and competence of others. When a creature that you can see within 60 feet of you makes an attack roll, an ability check, or a damage roll, you can use your reaction to expend one of your uses of Bardic Inspiration, rolling a Bardic Inspiration die and subtracting the number rolled from the creature's roll. You can choose to use this feature after the creature makes its roll, but before the DM determines whether the attack roll or ability check succeeds or fails, or before the creature deals its damage. The creature is immune if it can't hear you or if it's immune to being charmed.",
+      "identifier": "cutting-words",
+      "sourceId": "subclass-feature-cutting-words",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-lore",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "0oYPWniNvfOFgaUVznPl",
+      "parentType": "subclass",
+      "description": "Starting at 3rd level, you are a master at saying the right thing at the right time. When you make a Charisma (Persuasion) or Charisma (Deception) check, you can treat a d20 roll of 9 or lower as a 10.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154017,
+        "nanoseconds": 814000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154017,
+        "nanoseconds": 814000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "isSubclassFeature": false,
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "type": "class",
+      "level": 3,
+      "properties": [
+        "passive"
+      ],
+      "name": "Silver Tongue",
+      "identifier": "silver-tongue",
+      "sourceId": "subclass-feature-silver-tongue",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-eloquence",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "4BzjPnxOF8lZoH3XDhny",
+      "name": "Bardic Versatility",
+      "properties": [
+        "passive"
+      ],
+      "level": 4,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 4
+      },
+      "updatedAt": "2026-04-25T22:04:42.790Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": "2026-04-25T22:04:42.790Z",
+      "description": "Whenever you reach a level in this class that grants the Ability Score Improvement feature, you can do one of the following, representing a change in focus as you use your skills and magic:\n\n* Replace one of the skills you chose for the Expertise feature with one of your other skill proficiencies that isn't benefiting from Expertise.\n\n* Replace one cantrip you learned from this class's Spellcasting feature with another cantrip from the bard spell list.",
+      "parentType": "class",
+      "identifier": "bardic-versatility",
+      "sourceId": "class-feature-bardic-versatility",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "74wCRialVrpWfp621n5m",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154511,
+        "nanoseconds": 778000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154511,
+        "nanoseconds": 778000000
+      },
+      "parentType": "subclass",
+      "description": "When you join the College of Whispers at 3rd level, you gain the ability to make your weapon attacks magically toxic to a creature's mind.\n\nWhen you hit a creature with a weapon attack, you can expend one use of your Bardic Inspiration to deal an additional 2d6 psychic damage to that target. You can do so only once per round on your turn.\n\nThe psychic damage increases when you reach certain levels in this class, increasing to 3d6 at 5th level, 5d6 at 10th level, and 8d6 at 15th level.",
+      "name": "Psychic Blades",
+      "level": 3,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "psychic-blades",
+      "sourceId": "subclass-feature-psychic-blades",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-whispers",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "7isoMLSp2RyO9l0vHwSp",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154221,
+        "nanoseconds": 240000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154221,
+        "nanoseconds": 240000000
+      },
+      "parentType": "subclass",
+      "description": "At 6th level, you learn two spells of your choice from any class. A spell you choose must be of a level you can cast, as shown on the Bard table, or a cantrip. The chosen spells count as bard spells for you but don't count against the number of bard spells you know.",
+      "name": "Additional Magical Secrets",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "additional-magical-secrets",
+      "sourceId": "subclass-feature-additional-magical-secrets",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-lore",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "8O1U0m2eveOAjUz4LaUy",
+      "parentType": "subclass",
+      "description": "At 6th level, your inspiring words are so persuasive that others feel driven to succeed. When a creature adds one of your Bardic Inspiration dice to its ability check, attack roll, or saving throw and the roll fails, the creature can keep the Bardic Inspiration die.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154030,
+        "nanoseconds": 128000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154030,
+        "nanoseconds": 128000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Unfailing Inspiration",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "identifier": "unfailing-inspiration",
+      "sourceId": "subclass-feature-unfailing-inspiration",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-eloquence",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "8bzPBRnzJehIa0BS3cDY",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Tales from Beyond",
+      "type": "class",
+      "level": 3,
+      "properties": [
+        "passive"
+      ],
+      "parentType": "subclass",
+      "description": "At 3rd level, you reach out to spirits who tell their tales through you. While you are holding your Spiritual Focus, you can use a bonus action to expend one use of your Bardic Inspiration and roll on the Spirit Tales table using your Bardic Inspiration die to determine the tale the spirits direct you to tell. You retain the tale in mind until you bestow the tale's effect or you finish a short or long rest.\n\nYou can use an action to choose one creature you can see within 30 feet of you (this can be you) to be the target of the tale's effect. Once you do so, you can't bestow the tale's effect again until you roll it again.\n\nYou can retain only one of these tales in mind at a time, and rolling on the Spirit Tales table immediately ends the effect of the previous tale.\n\nIf the tale requires a saving throw, the DC equals your spell save DC.\n\n[table][tr][th colspan=2 rowspan=1]Spirit Tales\n\n[/th][/tr][tr][th colspan=1 rowspan=1]Bardic Insp. Die\n\n[/th][th colspan=1 rowspan=1]Tale Told Through You\n\n[/th][/tr][tr][td colspan=1 rowspan=1]1\n\n[/td][td colspan=1 rowspan=1]**Tale of the Clever Animal.** For the next 10 minutes, whenever the target makes an Intelligence, a Wisdom, or a Charisma check, the target can roll an extra die immediately after rolling the d20 and add the extra die's number to the check. The extra die is the same type as your Bardic Inspiration die.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]2\n\n[/td][td colspan=1 rowspan=1]**Tale of the Renowned Duelist.** You make a melee spell attack against the target. On a hit, the target takes force damage equal to two rolls of your Bardic Inspiration die + your Charisma modifier.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]3\n\n[/td][td colspan=1 rowspan=1]**Tale of the Beloved Friends.** The target and another creature of its choice it can see within 5 feet of it gains temporary hit points equal to a roll of your Bardic Inspiration die + your Charisma modifier\n\n[/td][/tr][tr][td colspan=1 rowspan=1]4\n\n[/td][td colspan=1 rowspan=1]**Tale of the Runaway.** The target can immediately use its reaction to teleport up to 30 feet to an unoccupied space it can see. When the target teleports, it can choose a number of creatures it can see within 30 feet of it up to your Charisma modifier (minimum of 0) to immediately use the same reaction.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]5\n\n[/td][td colspan=1 rowspan=1]**Tale of the Avenger.** For 1 minute, any creature that hits the target with a melee attack takes force damage equal to a roll of your Bardic Inspiration die.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]6\n\n[/td][td colspan=1 rowspan=1]**Tale of the Traveler.** The target gains temporary hit points equal to a roll of your Bardic Inspiration die + your bard level. While it has these temporary hit points, the target's walking speed increases by 10 feet and it gains a +1 bonus to its AC.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]7\n\n[/td][td colspan=1 rowspan=1]**Tale of the Beguiler.** The target must succeed on a Wisdom saving throw or take psychic damage equal to two rolls of your Bardic Inspiration die, and the target is incapacitated until the end of its next turn.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]8\n\n[/td][td colspan=1 rowspan=1]**Tale of the Phantom.** The target becomes invisible until the end of its next turn or until it hits a creature with an attack. If it hits a creature with an attack during this invisibility, the creature it hits takes necrotic damage equal to a roll of your Bardic Inspiration die and is frightened of the target until the end of the frightened creature's next turn.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]9\n\n[/td][td colspan=1 rowspan=1]**Tale of the Brute.** Each creature of the target's choice it can see within 30 feet of it must make a Strength saving throw. On a failed save, a creature takes thunder damage equal to three rolls of your Bardic Inspiration die and is knocked prone. A creature that succeeds on its saving throw takes half as much damage and isn't knocked prone.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]10\n\n[/td][td colspan=1 rowspan=1]**Tale of the Dragon.** The target spews fire from the mouth in a 30-foot cone. Each creature in that area must make a Dexterity saving throw, taking fire damage equal to four rolls of your Bardic Inspiration die on a failed save, or half as much damage on a successful one.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]11\n\n[/td][td colspan=1 rowspan=1]**Tale of the Angel.** The target regains hit points equal to two rolls of your Bardic Inspiration die + your Charisma modifier, and you end one condition from the following list affecting the target: blinded, deafened, paralyzed, petrified, or poisoned.\n\n[/td][/tr][tr][td colspan=1 rowspan=1]12\n\n[/td][td colspan=1 rowspan=1]**Tale of the Mind-Bender** You evoke an incomprehensible fable from an otherworldly being. The target must succeed on an Intelligence saving throw or take psychic damage equal to three rolls of your Bardic Inspiration die and be stunned until the end of its next turn.\n\n[/td][/tr][/table]",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154356,
+        "nanoseconds": 142000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154356,
+        "nanoseconds": 142000000
+      },
+      "identifier": "tales-from-beyond",
+      "sourceId": "subclass-feature-tales-from-beyond",
+      "sourceBookId": "source-vrgr-2014",
+      "parentSourceId": "subclass-college-of-spirits",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "96JjeiSABgmHRt0UtFQz",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 14,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Shadow Lore",
+      "parentType": "subclass",
+      "description": "At 14th level, you gain the ability to weave dark magic into your words and tap into a creature's deepest fears.\n\nAs an action, you magically whisper a phrase that only one creature of your choice within 30 feet of you can hear. The target must make a Wisdom saving throw against your spell save DC. It automatically succeeds if it doesn't share a language with you or if it can't hear you. On a successful saving throw, your whisper sounds like unintelligible mumbling and has no effect.\n\nIf the target fails its saving throw, it is charmed by you for the next 8 hours or until you or your allies attack or damage it. It interprets the whispers as a description of its most mortifying secret.\n\nWhile you gain no knowledge of this secret, the target is convinced you know it. While charmed in this way, the creature obeys your commands for fear that you will reveal its secret. It won't risk its life for you or fight for you, unless it was already inclined to do so. It grants you favors and gifts it would offer to a close friend.\n\nWhen the effect ends, the creature has no understanding of why it held you in such fear.\n\nOnce you use this feature, you can't use it again until you finish a long rest.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154527,
+        "nanoseconds": 614000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154527,
+        "nanoseconds": 614000000
+      },
+      "identifier": "shadow-lore",
+      "sourceId": "subclass-feature-shadow-lore",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-whispers",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "9os8uEQeTnNvcYXPNkj5",
+      "name": "Peerless Skill",
+      "type": "class",
+      "level": 14,
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154226,
+        "nanoseconds": 599000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154226,
+        "nanoseconds": 599000000
+      },
+      "parentType": "subclass",
+      "description": "Starting at 14th level, when you make an ability check, you can expend one use of Bardic Inspiration. Roll a Bardic Inspiration die and add the number rolled to your ability check. You can choose to do so after you roll the die for the ability check, but before the DM tells you whether you succeed or fail.",
+      "identifier": "peerless-skill",
+      "sourceId": "subclass-feature-peerless-skill",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-lore",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "BtgQwuim4GOnctxFQRRT",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154036,
+        "nanoseconds": 221000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154036,
+        "nanoseconds": 221000000
+      },
+      "parentType": "subclass",
+      "description": "Also at 6th level, you have gained the ability to make your speech intelligible to any creature. As an action, choose one or more creatures within 60 feet of you, up to a number equal to your Charisma modifier (minimum of one creature). The chosen creatures can magically understand you, regardless of the language you speak, for 1 hour.\n\nOnce you use this feature, you can't use it again until you finish a long rest, unless you expend a spell slot to use it again.",
+      "name": "Universal Speech",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "universal-speech",
+      "sourceId": "subclass-feature-universal-speech",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-eloquence",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "FYkUxUAe4ApXdOSG1fBd",
+      "parentType": "class",
+      "description": "Beginning at 2nd level, you can use soothing music or oration to help revitalize your wounded allies during a short rest. If you or any friendly creatures who can hear your performance regain hit points at the end of the short rest by spending one or more Hit Dice, each of those creatures regains an extra 1d6 hit points.\n\nThe extra Hit Points increase when you reach certain levels in this class: to 1d8 at 9th level, to 1d10 at 13th level, and to 1d12 at 17th level.",
+      "createdAt": "2026-04-25T21:49:50.174Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": "2026-04-25T21:49:50.174Z",
+      "isSubclassFeature": false,
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 2,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Song of Rest",
+      "identifier": "song-of-rest",
+      "sourceId": "class-feature-song-of-rest",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "HldjWUipAGNUuwVgs3wx",
+      "isSubclassFeature": false,
+      "updatedAt": "2026-04-25T21:51:10.241Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": "2026-04-25T21:51:10.241Z",
+      "description": "At 2nd level, if a creature has a Bardic Inspiration die from you and casts a spell that restores hit points or deals damage, the creature can roll that die and choose a target affected by the spell. Add the number rolled as a bonus to the hit points regained or the damage dealt. The Bardic Inspiration die is then lost.",
+      "parentType": "class",
+      "name": "Magical Inspiration",
+      "properties": [
+        "passive"
+      ],
+      "level": 2,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "identifier": "magical-inspiration",
+      "sourceId": "class-feature-magical-inspiration",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "KSKAN4V6yVnRxrC8fNd8",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Spirit Session",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "parentType": "subclass",
+      "description": "At 6th level, spirits provide you with supernatural insights. You can conduct an hour-long ritual channeling spirits (which can be done during a short or long rest) using your Spiritual Focus. You can conduct the ritual with a number of willing creatures equal to your proficiency bonus (including yourself). At the end of the ritual, you temporarily learn one spell of your choice from any class.\n\nThe spell you choose must be of a level equal to the number of creatures that conducted the ritual or less, the spell must be of a level you can cast, and it must be in the school of Divination or Necromancy. The chosen spell counts as a bard spell for you but doesn't count against the number of bard spells you know.\n\nOnce you perform the ritual, you can't do so again until you start a long rest, and you know the chosen spell until you start a long rest.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154363,
+        "nanoseconds": 765000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154363,
+        "nanoseconds": 765000000
+      },
+      "identifier": "spirit-session",
+      "sourceId": "subclass-feature-spirit-session",
+      "sourceBookId": "source-vrgr-2014",
+      "parentSourceId": "subclass-college-of-spirits",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "KjMdsegR7uKBpaTFSOm9",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 3,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Mote of Potential",
+      "parentType": "subclass",
+      "description": "When you join the College of Creation at 3rd level, whenever you give a creature a Bardic Inspiration die, you can utter a note from the Song of Creation to create a Tiny mote of potential, which orbits within 5 feet of that creature. The mote is intangible and invulnerable, and it lasts until the Bardic Inspiration die is lost. The mote looks like a musical note, a star, a flower, or another symbol of art or life that you choose.\n\nWhen the creature uses the Bardic Inspiration die, the mote provides an additional effect based on whether the die benefits an ability check, an attack roll, or a saving throw, as detailed below:\n\n**Ability Check.** When the creature rolls the Bardic Inspiration die to add it to an ability check, the creature can roll the Bardic Inspiration die again and choose which roll to use, as the mote pops and emits colorful, harmless sparks for a moment.\n\n**Attack Roll.** Immediately after the creature rolls the Bardic Inspiration die to add it to an attack roll against a target, the mote thunderously shatters. The target and each creature of your choice that you can see within 5 feet of it must succeed on a Constitution saving throw against your spell save DC or take thunder damage equal to the number rolled on the Bardic Inspiration die.\n\n**Saving Throw.** Immediately after the creature rolls the Bardic Inspiration die and adds it to a saving throw, the mote vanishes with the sound of soft music, causing the creature to gain temporary hit points equal to the number rolled on the Bardic Inspiration die plus your Charisma modifier (minimum of 1 temporary hit point).",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153953,
+        "nanoseconds": 802000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153953,
+        "nanoseconds": 802000000
+      },
+      "isSubclassFeature": false,
+      "identifier": "mote-of-potential",
+      "sourceId": "subclass-feature-mote-of-potential",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-creation",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "LQ9uc0jSiWEFCO8NCNef",
+      "description": "At 6th level, you gain the ability to use musical notes or words of power to disrupt mind-influencing effects. As an action, you can start a performance that lasts until the end of your next turn. During that time, you and any friendly creatures within 30 feet of you have advantage on saving throws against being frightened or charmed. A creature must be able to hear you to gain this benefit. The performance ends early if you are incapacitated or silenced or if you voluntarily end it (no action required).",
+      "parentType": "class",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": "2026-04-25T22:05:06.064Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": "2026-04-25T22:05:06.064Z",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "name": "Countercharm",
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "identifier": "countercharm",
+      "sourceId": "class-feature-countercharm",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "MBQUyW3kDmvOMkc5bNdY",
+      "type": "class",
+      "level": 10,
+      "properties": [
+        "passive"
+      ],
+      "name": "Magical Secrets",
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": "2026-04-25T22:05:19.475Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": "2026-04-25T22:05:19.475Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 10
+      },
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "description": "By 10th level, you have plundered magical knowledge from a wide spectrum of disciplines. Choose two spells from any classes, including this one. A spell you choose must be of a level you can cast, as shown on the Bard table, or a cantrip.\n\nThe chosen spells count as bard spells for you and are included in the number in the Spells Known column of the Bard table.\n\nYou learn two additional spells from any classes at 14th level and again at 18th level.",
+      "identifier": "magical-secrets",
+      "sourceId": "class-feature-magical-secrets",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "MBhaD19hWRzprrNr2Et2",
+      "createdAt": "2026-04-25T22:04:54.326Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 5
+      },
+      "updatedAt": "2026-04-25T22:04:54.326Z",
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "description": "Beginning when you reach 5th level, you regain all of your expended uses of Bardic Inspiration when you finish a short or long rest.",
+      "level": 5,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Font of Inspiration",
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "font-of-inspiration",
+      "sourceId": "class-feature-font-of-inspiration",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "MSKLNRcnKDeLNndXg58r",
+      "parentType": "subclass",
+      "description": "At 14th level, your appearance permanently gains an otherworldly aspect that makes you look more lovely and fierce.\n\nIn addition, as a bonus action, you can assume a magically majestic presence for 1 minute or until you are incapacitated. For the duration, whenever any creature tries to attack you for the first time on a turn, the attacker must make a Charisma saving throw against your spell save DC. On a failed save, it can't attack you on this turn, and it must choose a new target for its attack or the attack is wasted. On a successful save, it can attack you on this turn, but it has disadvantage on any saving throw it makes against your spells on your next turn.\n\nOnce you assume this majestic presence, you can't do so again until you finish a short or long rest.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154092,
+        "nanoseconds": 39000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154092,
+        "nanoseconds": 39000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Unbreakable Majesty",
+      "level": 14,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "identifier": "unbreakable-majesty",
+      "sourceId": "subclass-feature-unbreakable-majesty",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-glamour",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "O1T74m0h6gqRl7gnNdWP",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Expertise",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "createdAt": "2026-04-25T22:02:24.750Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 3,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-25T22:02:32.103Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 3rd level, choose two of your skill proficiencies. Your proficiency bonus is doubled for any ability check you make that uses either of the chosen proficiencies.\n\nAt 10th level, you can choose another two skill proficiencies to gain this benefit.",
+      "parentType": "class",
+      "identifier": "expertise",
+      "sourceId": "class-feature-expertise",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "OImBB8N5fTTHH2O42cef",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Extra Attack",
+      "type": "class",
+      "level": 6,
+      "properties": [
+        "passive"
+      ],
+      "parentType": "subclass",
+      "description": "Starting at 6th level, you can attack twice, instead of once, whenever you take the Attack action on your turn.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154422,
+        "nanoseconds": 709000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154422,
+        "nanoseconds": 709000000
+      },
+      "identifier": "extra-attack",
+      "sourceId": "subclass-feature-extra-attack",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-swords",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "P4EKNVy6UKe4k24FPyEg",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "type": "class",
+      "level": 14,
+      "properties": [
+        "passive"
+      ],
+      "name": "Infectious Inspiration",
+      "parentType": "subclass",
+      "description": "At 14th level, when you successfully inspire someone, the power of your eloquence can now spread to someone else. When a creature within 60 feet of you adds one of your Bardic Inspiration dice to its ability check, attack roll, or saving throw and the roll succeeds, you can use your reaction to encourage a different creature (other than yourself) that can hear you within 60 feet of you, giving it a Bardic Inspiration die without expending any of your Bardic Inspiration uses.\n\nYou can use this reaction a number of times equal to your Charisma modifier (minimum of once), and you regain all expended uses when you finish a long rest.",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154044,
+        "nanoseconds": 80000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154044,
+        "nanoseconds": 80000000
+      },
+      "identifier": "infectious-inspiration",
+      "sourceId": "subclass-feature-infectious-inspiration",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-eloquence",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "QCx901cFgMMZ5vkDypzF",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153960,
+        "nanoseconds": 109000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153960,
+        "nanoseconds": 109000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Also at 3rd level, as an action, you can channel the magic of the Song of Creation to create one nonmagical item of your choice in an unoccupied space within 10 feet of you. The item must appear on a surface or in a liquid that can support it. The gp value of the item can't be more than 20 times your bard level, and the item must be Medium or smaller. The item glimmers softly, and a creature can faintly hear music when touching it. The created item disappears after a number of hours equal to your proficiency bonus. For examples of items you can create, see the equipment chapter of the *Player's Handbook*.\n\nOnce you create an item with this feature, you can't do so again until you finish a long rest, unless you expend a spell slot of 2nd level or higher to use this feature again. You can have only one item created by this feature at a time; if you use this action and already have an item from this feature, the first one immediately vanishes.\n\nThe size of the item you can create with this feature increases by one size category when you reach 6th level (Large) and 14th level (Huge).",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Performance of Creation",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "performance-of-creation",
+      "sourceId": "subclass-feature-performance-of-creation",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-creation",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "TdfU477DBv7azQafHYE5",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Unsettling Words",
+      "description": "Also at 3rd level, you can spin words laced with magic that unsettle a creature and cause it to doubt itself. As a bonus action, you can expend one use of your Bardic Inspiration and choose one creature you can see within 60 feet of you. Roll the Bardic Inspiration die. The creature must subtract the number rolled from the next saving throw it makes before the start of your next turn.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154025,
+        "nanoseconds": 107000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154025,
+        "nanoseconds": 107000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "unsettling-words",
+      "sourceId": "subclass-feature-unsettling-words",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-eloquence",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "VaNtSH5pMUAN41j7hM2F",
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "name": "Animating Performance",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153970,
+        "nanoseconds": 472000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153970,
+        "nanoseconds": 472000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "By 6th level, as an action, you can animate one Large or smaller nonmagical item within 30 feet of you that isn't being worn or carried. The animate item uses the Dancing Item stat block, which uses your proficiency bonus (PB), The item is friendly to you and your companions and obeys your commands. It lives for 1 hour, until it is reduced to 0 hit points, or until you die.\n\nIn combat, the item shares your initiative count, but it takes its turn immediately after yours. It can move and use its reaction on its own, but the only action it takes on its turn is the Dodge action, unless you take a bonus action on your turn to command it to take another action. That action can be one in its stat block or some other action. If you are incapacitated, the item can take any action of its choice, not just Dodge.\n\nWhen you use your Bardic Inspiration feature, you can command the item as part of the same bonus action you use for Bardic Inspiration.\n\nOnce you animate an item with this feature, you can't do so again until you finish a long rest, unless you expend a spell slot of 3rd level or higher to use this feature again. You can have only one item animated by this feature at a time; if you use this action and already have a dancing item from this feature, the first one immediately becomes inanimate.\n\n[table][tr][th colspan=6 rowspan=1]Dancing Item\n\n[/th][/tr][tr][td colspan=6 rowspan=1]*Large or smaller construct*\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Armor Class:** 16 (natural armor)\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Hit Points:** 10 + 5 times your bard level\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Speed:** 30 ft., fly 30 ft. (hover)\n\n[/td][/tr][tr][th colspan=1 rowspan=1]STR\n\n[/th][th colspan=1 rowspan=1]DEX\n\n[/th][th colspan=1 rowspan=1]CON\n\n[/th][th colspan=1 rowspan=1]INT\n\n[/th][th colspan=1 rowspan=1]WIS\n\n[/th][th colspan=1 rowspan=1]CHA\n\n[/th][/tr][tr][td colspan=1 rowspan=1]18 (+4)\n\n[/td][td colspan=1 rowspan=1]14 (+2)\n\n[/td][td colspan=1 rowspan=1]16 (+3)\n\n[/td][td colspan=1 rowspan=1]4 (−3)\n\n[/td][td colspan=1 rowspan=1]10 (+0)\n\n[/td][td colspan=1 rowspan=1]6 (−2)\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Damage Immunities:** poison, psychic\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Condition Immunities:** charmed, exhaustion, poisoned, frightened\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Senses:** darkvision 60 ft., passive Perception 10\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Languages:** understands the languages you speak\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Challenge:** --\n\n[/td][/tr][tr][td colspan=6 rowspan=1]**Proficiency Bonus (PB):** equals your bonus\n\n[/td][/tr][tr][td colspan=6 rowspan=1]***Immutable Form.*** The item is immune to any spell or effect that would alter its form.\n\n[/td][/tr][tr][td colspan=6 rowspan=1]***Irrepressible Dance.*** When any creature starts its turn within 10 feet of the item, the item can increase or decrease (your choice) the walking speed of that creature by 10 feet until the end of the turn, provided the item isn't incapacitated.\n\n[/td][/tr][tr][th colspan=6 rowspan=1]Actions\n\n[/th][/tr][tr][td colspan=6 rowspan=1]***Force-Empowered Slam.*** *Melee Weapon Attack:* your spell attack modifier to hit, reach 5 ft., one target you can see. *Hit:* 1d10 + PB force damage.\n\n[/td][/tr][/table]",
+      "parentType": "subclass",
+      "identifier": "animating-performance",
+      "sourceId": "subclass-feature-animating-performance",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-creation",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "VlQhYlxoUZrQySvL8DI0",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Spiritual Focus",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "description": "At 3rd level, you employ tools that aid you in channeling spirits, be they historical figures or fictional archetypes. You can use the following objects as a spellcasting focus for your bard spells: a candle, crystal ball, skull, spirit board, or tarokka deck.\n\nStarting at 6th level, when you cast a bard spell that deals damage or restores hit points through the Spiritual Focus, roll a d6, and you gain a bonus to one damage or healing roll of the spell equal to the number rolled.",
+      "parentType": "subclass",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154344,
+        "nanoseconds": 676000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154344,
+        "nanoseconds": 676000000
+      },
+      "identifier": "spiritual-focus",
+      "sourceId": "subclass-feature-spiritual-focus",
+      "sourceBookId": "source-vrgr-2014",
+      "parentSourceId": "subclass-college-of-spirits",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "XhKGLobOk33EtTrEg8Ae",
+      "parentType": "subclass",
+      "description": "Also at 3rd level, you learn to inspire others in battle. A creature that has a Bardic Inspiration die from you can roll that die and add the number rolled to a weapon damage roll it just made. Alternatively, when an attack roll is made against the creature, it can use its reaction to roll the Bardic Inspiration die and add the number rolled to its AC against that attack, after seeing the roll but before knowing whether it hits or misses.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154470,
+        "nanoseconds": 124000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154470,
+        "nanoseconds": 124000000
+      },
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Combat Inspiration",
+      "level": 3,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "identifier": "combat-inspiration",
+      "sourceId": "subclass-feature-combat-inspiration",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-valor",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "YNIo2mNHwoKzt7xMZ2UB",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154081,
+        "nanoseconds": 457000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154081,
+        "nanoseconds": 457000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Starting at 3rd level, you can charge your performance with seductive, fey magic.\n\nIf you perform for at least 1 minute, you can attempt to inspire wonder in your audience by singing, reciting a poem, or dancing. At the end of the performance, choose a number of humanoids within 60 feet of you who watched and listened to all of it, up to a number equal to your Charisma modifier (minimum of one). Each target must succeed on a Wisdom saving throw against your spell save DC or be charmed by you. While charmed in this way, the target idolizes you, it speaks glowingly of you to anyone who speaks to it, and it hinders anyone who opposes you, avoiding violence unless it was already inclined to fight on your behalf. This effect ends on a target after 1 hour, if it takes any damage, if you attack it, or if it witnesses you attacking or damaging any of its allies.\n\nIf a target succeeds on its saving throw, the target has no hint that you tried to charm it.\n\nOnce you use this feature, you can't use it again until you finish a short or long rest.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Enthralling Performance",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "enthralling-performance",
+      "sourceId": "subclass-feature-enthralling-performance",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-glamour",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "YywAe4mFQ7cwkSjH99Gx",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154485,
+        "nanoseconds": 841000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154485,
+        "nanoseconds": 841000000
+      },
+      "parentType": "subclass",
+      "description": "At 14th level, you have mastered the art of weaving spellcasting and weapon use into a single harmonious act. When you use your action to cast a bard spell, you can make one weapon attack as a bonus action.",
+      "level": 14,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Battle Magic",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "battle-magic",
+      "sourceId": "subclass-feature-battle-magic",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-valor",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "aS9VVx3XsIPaLVV6PqLS",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154396,
+        "nanoseconds": 202000000
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154396,
+        "nanoseconds": 202000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "When you join the College of Swords at 3rd level, you gain proficiency with medium armor and the scimitar.\n\nIf you're proficient with a simple or martial melee weapon, you can use it as a spellcasting focus for your bard spells.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Bonus Proficiencies",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "bonus-proficiencies",
+      "sourceId": "subclass-feature-bonus-proficiencies",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-swords",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "asQEb37ScIkVZKmOtcoi",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154465,
+        "nanoseconds": 336000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154465,
+        "nanoseconds": 336000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "When you join the College of Valor at 3rd level, you gain proficiency with medium armor, shields, and martial weapons.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "level": 3,
+      "type": "class",
+      "name": "Bonus Proficiencies",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "bonus-proficiencies",
+      "sourceId": "subclass-feature-bonus-proficiencies",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-valor",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "gdKJgOVYhiRpq0Iftzo5",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Blade Flourish",
+      "description": "At 3rd level, you learn to conduct impressive displays of martial prowess and speed.\n\nWhenever you take the Attack action on your turn, your walking speed increases by 10 feet until the end of the turn, and if a weapon attack that you make as part of this action hits a creature, you can use one of the following Blade Flourish options of your choice. You can use only one Blade Flourish option per turn.\n\n***Defensive Flourish.*** You can expend one use of your Bardic Inspiration to cause the weapon to deal extra damage to the target you hit. The damage equals the number you roll on the Bardic Inspiration die. You also add the number rolled to your AC until the start of your next turn.\n\n***Slashing Flourish.*** You can expend one use of your Bardic Inspiration to cause the weapon to deal extra damage to the target you hit and to any other creature of your choice that you can see within 5 feet of you. The damage equals the number you roll on the Bardic Inspiration die.\n\n***Mobile Flourish.*** You can expend one use of your Bardic Inspiration to cause the weapon to deal extra damage to the target you hit. The damage equals the number you roll on the Bardic Inspiration die. You can also push the target up to 5 feet away from you, plus a number of feet equal to the number you roll on that die. You can then immediately use your reaction to move up to your walking speed to an unoccupied space within 5 feet of the target.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154429,
+        "nanoseconds": 791000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154429,
+        "nanoseconds": 791000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "blade-flourish",
+      "sourceId": "subclass-feature-blade-flourish",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-swords",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "iGS6xcUzKnV8Gdyu4CoE",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154522,
+        "nanoseconds": 133000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154522,
+        "nanoseconds": 133000000
+      },
+      "description": "At 6th level, you gain the ability to adopt a humanoid's persona. When a humanoid dies within 30 feet of you, you can magically capture its shadow using your reaction. You retain this shadow until you use it or you finish a long rest.\n\nYou can use the shadow as an action. When you do so, it vanishes, magically transforming into a disguise that appears on you. You now look like the dead person, but healthy and alive. This disguise lasts for 1 hour or until you end it as a bonus action.\n\nWhile you're in the disguise, you gain access to all information that the humanoid would freely share with a casual acquaintance. Such information includes general details on its background and personal life, but doesn't include secrets. The information is enough that you can pass yourself off as the person by drawing on its memories.\n\nAnother creature can see through this disguise by succeeding on a Wisdom (Insight) check contested by your Charisma (Deception) check. You gain a +5 bonus to your check.\n\nOnce you capture a shadow with this feature, you can't capture another one with it until you finish a short or long rest.",
+      "parentType": "subclass",
+      "name": "Mantle of Whispers",
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "mantle-of-whispers",
+      "sourceId": "subclass-feature-mantle-of-whispers",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-whispers",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "ldq6sjGSBjLBDFPFvBgC",
+      "name": "Words of Terror",
+      "type": "class",
+      "level": 3,
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154516,
+        "nanoseconds": 672000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154516,
+        "nanoseconds": 672000000
+      },
+      "parentType": "subclass",
+      "description": "At 3rd level, you learn to infuse innocent-seeming words with an insidious magic that can inspire terror.\n\nIf you speak to a humanoid alone for at least 1 minute, you can attempt to seed paranoia and fear into its mind. At the end of the conversation, the target must succeed on a Wisdom saving throw against your spell save DC or be frightened of you or another creature of your choice. The target is frightened in this way for 1 hour, until it is attacked or damaged, or until it witnesses its allies being attacked or damaged.\n\nIf the target succeeds on its saving throw, the target has no hint that you tried to frighten it.\n\nOnce you use this feature, you can't use it again until you finish a short rest or long rest.",
+      "identifier": "words-of-terror",
+      "sourceId": "subclass-feature-words-of-terror",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-whispers",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "pNMAU5Iliz93mAqErHIU",
+      "createdAt": "2026-04-25T21:51:21.601Z",
+      "updatedAt": "2026-04-25T21:51:27.042Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 3,
+        "requiredIds": []
+      },
+      "isSubclassFeature": true,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 3rd level, you delve into the advanced techniques of a bard college of your choice. Your choice grants you features at 3rd level and again at 6th and 14th level.",
+      "parentType": "class",
+      "properties": [
+        "passive"
+      ],
+      "level": 3,
+      "type": "class",
+      "name": "Bard College",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "identifier": "bard-college",
+      "sourceId": "class-feature-bard-college",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "q2A5qBYbmNpl67PMePa3",
+      "description": "When you join the College of Lore at 3rd level, you gain proficiency with three skills of your choice.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154208,
+        "nanoseconds": 702000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154208,
+        "nanoseconds": 702000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Bonus Proficiencies",
+      "identifier": "bonus-proficiencies",
+      "sourceId": "subclass-feature-bonus-proficiencies",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-lore",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "quxBbeKbJ3WykphEUxkc",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154369,
+        "nanoseconds": 377000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154369,
+        "nanoseconds": 377000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "parentType": "subclass",
+      "description": "At 14th level, you now have the ability to nudge the spirits of Tales from Beyond toward certain tales. Whenever you roll on the Spirit Tales table, you can roll the die twice and choose which of the two effects to bestow. If you roll the same number on both dice, you can ignore the number and choose any effect on the table.",
+      "level": 14,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Mystical Connection",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "mystical-connection",
+      "sourceId": "subclass-feature-mystical-connection",
+      "sourceBookId": "source-vrgr-2014",
+      "parentSourceId": "subclass-college-of-spirits",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "rNDpbh94zrIOuymmMVbq",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 6,
+      "name": "Extra Attack",
+      "description": "Starting at 6th level, you can attack twice, instead of once, whenever you take the Attack action on your turn.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154480,
+        "nanoseconds": 77000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154480,
+        "nanoseconds": 77000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "extra-attack",
+      "sourceId": "subclass-feature-extra-attack",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-college-of-valor",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "rojsejRlzvLpS4U9ndLs",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Fighting Style",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "description": "At 3rd level, you adopt a particular style of fighting as your specialty. Choose one of the following options. You can't take a Fighting Style option more than once, even if you later get to choose again.\n\n* **Dueling.** When you are wielding a melee weapon in one hand and no other weapons, you gain a +2 bonus to damage rolls with that weapon.\n\n* **Two-Weapon Fighting.** When you engage in two-weapon fighting, you can add your ability modifier to the damage of the second attack.",
+      "parentType": "subclass",
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154403,
+        "nanoseconds": 823000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154403,
+        "nanoseconds": 823000000
+      },
+      "identifier": "fighting-style",
+      "sourceId": "subclass-feature-fighting-style",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-swords",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "tfgASTHIeuSl0kOYVCQm",
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154436,
+        "nanoseconds": 405000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154436,
+        "nanoseconds": 405000000
+      },
+      "description": "Starting at 14th level, whenever you use a Blade Flourish option, you can roll a d6 and use it instead of expending a Bardic Inspiration die.",
+      "parentType": "subclass",
+      "name": "Master's Flourish",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 14,
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "master-s-flourish",
+      "sourceId": "subclass-feature-master-s-flourish",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-swords",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "trzKTj7c2y3AUqzhMLxg",
+      "description": "You can inspire others through stirring words or music. To do so, you use a bonus action on your turn to choose one creature other than yourself within 60 feet of you who can hear you. That creature gains one Bardic Inspiration die, a d6.\n\nOnce within the next 10 minutes, the creature can roll the die and add the number rolled to one ability check, attack roll, or saving throw it makes. The creature can wait until after it rolls the d20 before deciding to use the Bardic Inspiration die, but must decide before the DM says whether the roll succeeds or fails. Once the Bardic Inspiration die is rolled, it is lost. A creature can have only one Bardic Inspiration die at a time.\n\nYou can use this feature a number of times equal to your Charisma modifier (a minimum of once). You regain any expended uses when you finish a long rest.\n\nYour Bardic Inspiration die changes when you reach certain levels in this class. The die becomes a d8 at 5th level, a d10 at 10th level, and a d12 at 15th level.",
+      "parentType": "class",
+      "updatedAt": "2026-04-25T21:48:20.182Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": "2026-04-25T21:48:20.182Z",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "name": "Bardic Inspiration",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 1,
+      "identifier": "bardic-inspiration",
+      "sourceId": "class-feature-bardic-inspiration",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "uBdeD94HiT47QiyBggFH",
+      "description": "At 20th level, when you roll initiative and have no uses of Bardic Inspiration left, you regain one use.",
+      "parentType": "class",
+      "createdAt": "2026-04-25T22:05:26.750Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 20,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-25T22:05:34.913Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 20,
+      "type": "class",
+      "name": "Superior Inspiration",
+      "identifier": "superior-inspiration",
+      "sourceId": "class-feature-superior-inspiration",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "uxZWT3YWqxvay9CjKCNA",
+      "createdAt": "2026-04-25T21:48:54.601Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 2,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-25T21:49:25.695Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Starting at 2nd level, you can add half your proficiency bonus, rounded down, to any ability check you make that doesn't already include your proficiency bonus.",
+      "parentType": "class",
+      "properties": [
+        "passive"
+      ],
+      "level": 2,
+      "type": "class",
+      "name": "Jack of All Trades",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "identifier": "jack-of-all-trades",
+      "sourceId": "class-feature-jack-of-all-trades",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-bard",
+      "classSourceId": "class-bard",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "wU2IQbbE0B3CutLyPxdg",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154087,
+        "nanoseconds": 406000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154087,
+        "nanoseconds": 406000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 6th level, you gain the ability to cloak yourself in a fey magic that makes others want to serve you. As a bonus action, you cast Command, without expending a spell slot, and you take on an appearance of unearthly beauty for 1 minute or until your concentration ends (as if you were concentrating on a spell). During this time, you can cast Command as a bonus action on each of your turns, without expending a spell slot.\n\nAny creature charmed by you automatically fails its saving throw against the Command you cast with this feature.\n\nOnce you use this feature, you can't use it again until you finish a long rest.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "name": "Mantle of Majesty",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "mantle-of-majesty",
+      "sourceId": "subclass-feature-mantle-of-majesty",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-glamour",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "x2IxtPj10x6esST4ywjV",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153976,
+        "nanoseconds": 385000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777153976,
+        "nanoseconds": 385000000
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "At 14th level, when you use your Performance of Creation feature, you can create more than one item at once. The number of items equals your Charisma modifier (minimum of two items). If you create an item that would exceed that number, you choose which of the previously created items disappears. Only one of these items can be of the maximum size you can create; the rest must be Small or Tiny.\n\nYou are no longer limited by gp value when creating items with Performance of Creation.",
+      "level": 14,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Creative Crescendo",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "creative-crescendo",
+      "sourceId": "subclass-feature-creative-crescendo",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-college-of-creation",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "yHMTfAeCBKwDIjz4R5Yc",
+      "description": "When you join the College of Glamour at 3rd level, you gain the ability to weave a song of fey magic that imbues your allies with vigor and speed.\n\nAs a bonus action, you can expend one use of your Bardic Inspiration to grant yourself a wondrous appearance. When you do so, choose a number of creatures you can see and who can see you within 60 feet of you, up to a number equal to your Charisma modifier (minimum of one). Each of them gains 5 temporary hit points. When a creature gains these temporary hit points, it can immediately use its reaction to move up to its speed, without provoking opportunity attacks.\n\nThe number of temporary hit points increases when you reach certain levels in this class, increasing to 8 at 5th level, 11 at 10th level, and 14 at 15th level.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154073,
+        "nanoseconds": 512000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154073,
+        "nanoseconds": 512000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 3,
+      "type": "class",
+      "name": "Mantle of Inspiration",
+      "identifier": "mantle-of-inspiration",
+      "sourceId": "subclass-feature-mantle-of-inspiration",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-college-of-glamour",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "zZYrxfcTqHa1xX13F5bt",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154339,
+        "nanoseconds": 205000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777154339,
+        "nanoseconds": 205000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 3rd level, you can reach out to spirits to guide you and others. You learn the Guidance cantrip, which doesn't count against the number of bard cantrips you know. For you, it has a range of 60 feet when you cast it.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "level": 3,
+      "type": "class",
+      "name": "Guiding Whispers",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "guiding-whispers",
+      "sourceId": "subclass-feature-guiding-whispers",
+      "sourceBookId": "source-vrgr-2014",
+      "parentSourceId": "subclass-college-of-spirits",
+      "classSourceId": "class-bard",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    }
+  ],
+  "scalingColumns": [
+    {
+      "id": "KzE8vC0OnTzI9w0up3xL",
+      "updatedAt": "2026-04-25T21:50:52.622Z",
+      "values": {
+        "1": "d6",
+        "2": "d6",
+        "3": "d6",
+        "4": "d6",
+        "5": "d8",
+        "6": "d8",
+        "7": "d8",
+        "8": "d8",
+        "9": "d8",
+        "10": "d10",
+        "11": "d10",
+        "12": "d10",
+        "13": "d10",
+        "14": "d10",
+        "15": "d12",
+        "16": "d12",
+        "17": "d12",
+        "18": "d12",
+        "19": "d12",
+        "20": "d12"
+      },
+      "name": "Bardic Inspiration Die",
+      "parentType": "class",
+      "createdAt": "2026-04-25T21:47:45.349Z",
+      "identifier": "bardic-inspiration-die",
+      "sourceId": "scale-bardic-inspiration-die",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-bard",
+      "parentSourceId": "class-bard"
+    },
+    {
+      "id": "ekJQRhOEh8qsHueJ3CoN",
+      "createdAt": "2026-04-25T21:50:21.028Z",
+      "name": "Song of Rest Die",
+      "updatedAt": "2026-04-25T21:50:21.028Z",
+      "values": {
+        "2": "d6",
+        "3": "d6",
+        "4": "d6",
+        "5": "d6",
+        "6": "d6",
+        "7": "d6",
+        "8": "d6",
+        "9": "d8",
+        "10": "d8",
+        "11": "d8",
+        "12": "d8",
+        "13": "d10",
+        "14": "d10",
+        "15": "d10",
+        "16": "d10",
+        "17": "d12",
+        "18": "d12",
+        "19": "d12",
+        "20": "d12"
+      },
+      "parentType": "class",
+      "identifier": "song-of-rest-die",
+      "sourceId": "scale-song-of-rest-die",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-bard",
+      "parentSourceId": "class-bard"
+    }
+  ],
+  "uniqueOptionGroups": [],
+  "uniqueOptionItems": [],
+  "spellsKnownScalings": {
+    "spells-known-scaling-bard": {
+      "id": "vPlHKOrSt8j1YDVa0tqg",
+      "sourceId": "spells-known-scaling-bard",
+      "identifier": "bard",
+      "name": "Bard",
+      "levels": {
+        "1": {
+          "cantrips": 2,
+          "spellsKnown": 4
+        },
+        "2": {
+          "cantrips": 2,
+          "spellsKnown": 5
+        },
+        "3": {
+          "spellsKnown": 6,
+          "cantrips": 2
+        },
+        "4": {
+          "spellsKnown": 7,
+          "cantrips": 3
+        },
+        "5": {
+          "spellsKnown": 8,
+          "cantrips": 3
+        },
+        "6": {
+          "cantrips": 3,
+          "spellsKnown": 9
+        },
+        "7": {
+          "cantrips": 3,
+          "spellsKnown": 10
+        },
+        "8": {
+          "cantrips": 3,
+          "spellsKnown": 11
+        },
+        "9": {
+          "cantrips": 3,
+          "spellsKnown": 12
+        },
+        "10": {
+          "spellsKnown": 14,
+          "cantrips": 4
+        },
+        "11": {
+          "spellsKnown": 15,
+          "cantrips": 4
+        },
+        "12": {
+          "cantrips": 4,
+          "spellsKnown": 15
+        },
+        "13": {
+          "cantrips": 4,
+          "spellsKnown": 16
+        },
+        "14": {
+          "spellsKnown": 18,
+          "cantrips": 4
+        },
+        "15": {
+          "cantrips": 4,
+          "spellsKnown": 19
+        },
+        "16": {
+          "cantrips": 4,
+          "spellsKnown": 19
+        },
+        "17": {
+          "spellsKnown": 20,
+          "cantrips": 4
+        },
+        "18": {
+          "spellsKnown": 22,
+          "cantrips": 4
+        },
+        "19": {
+          "spellsKnown": 22,
+          "cantrips": 4
+        },
+        "20": {
+          "cantrips": 4,
+          "spellsKnown": 22
+        }
+      },
+      "updatedAt": "2026-04-25T21:46:27.040Z",
+      "createdAt": "2026-04-25T21:46:27.040Z"
+    }
+  },
+  "alternativeSpellcastingScalings": {},
+  "source": {
+    "id": "joi0FqfJfNvgzrUlMmbn",
+    "slug": "phb",
+    "url": "",
+    "description": "The Player's Hand Book",
+    "status": "ready",
+    "imageUrl": "",
+    "abbreviation": "PHB",
+    "rules": "2014",
+    "name": "Player's Handbook",
+    "updatedAt": "2026-04-20T16:08:59.612Z",
+    "createdAt": "2026-04-20T15:29:16.300Z",
+    "tags": [
+      "Classes",
+      "Items",
+      "Spells",
+      "Feats"
+    ]
+  }
+}

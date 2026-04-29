@@ -1,0 +1,39 @@
+{
+  "kind": "dauligor.source.v1",
+  "schemaVersion": 1,
+  "sourceId": "source-dsotdq-2014",
+  "slug": "dsotdq",
+  "name": "Dragonlance: Shadow of the Dragon Queen",
+  "shortName": "DSotDQ",
+  "description": "Dragonlance: Shadow of the Dragon Queen",
+  "coverImage": "",
+  "status": "ready",
+  "rules": "2014",
+  "tags": [],
+  "dates": {
+    "addedAt": "2026-04-21T04:34:39.960Z",
+    "updatedAt": "2026-04-21T04:35:09.127Z"
+  },
+  "linkedContent": {
+    "classes": {
+      "count": 0,
+      "catalogUrl": "classes/catalog.json"
+    },
+    "spells": {
+      "count": 0,
+      "catalogUrl": "spells/catalog.json"
+    },
+    "items": {
+      "count": 0,
+      "catalogUrl": "items/catalog.json"
+    },
+    "bestiary": {
+      "count": 0,
+      "catalogUrl": "bestiary/catalog.json"
+    },
+    "journals": {
+      "count": 0,
+      "catalogUrl": "journals/catalog.json"
+    }
+  }
+}

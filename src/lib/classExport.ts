@@ -13,6 +13,10 @@ import {
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { normalizeSpellFormulaShortcuts } from './referenceSyntax';
+import {
+  buildCanonicalClassProgression,
+  buildCanonicalSubclassProgression
+} from './classProgression';
 
 export interface SourceExportBundle {
   catalog: any;
@@ -374,48 +378,11 @@ function normalizeClassProficiencies(rawProficiencies: any, refs: any) {
       choiceCount: Number(raw.savingThrows?.choiceCount || 0) || 0,
       optionIds: uniqueStrings(asArray(raw.savingThrows?.optionIds).map((id: string) => normalizeMappedId(id, refs.attributesById, { uppercase: true }))),
       fixedIds: uniqueStrings(asArray(raw.savingThrows?.fixedIds).map((id: string) => normalizeMappedId(id, refs.attributesById, { uppercase: true })))
-    })
+    }),
+    armorDisplayName: trimString(raw.armorDisplayName),
+    weaponsDisplayName: trimString(raw.weaponsDisplayName),
+    toolsDisplayName: trimString(raw.toolsDisplayName)
   };
-}
-
-function collectExplicitGrantedFeatureRefs(advancements: any[] = []) {
-  const granted = new Set<string>();
-
-  advancements.forEach((advancement) => {
-    if (trimString(advancement?.type) !== 'ItemGrant') return;
-    if (trimString(advancement?.featureId)) granted.add(trimString(advancement.featureId));
-    if (trimString(advancement?.featureSourceId)) granted.add(trimString(advancement.featureSourceId));
-
-    asArray(advancement?.configuration?.pool).forEach((entry: any) => granted.add(trimString(entry)));
-    asArray(advancement?.configuration?.optionalPool).forEach((entry: any) => granted.add(trimString(entry)));
-    asArray(advancement?.configuration?.items).forEach((entry: any) => {
-      const sourceId = trimString(entry?.sourceId);
-      const uuid = trimString(entry?.uuid);
-      if (sourceId) granted.add(sourceId);
-      if (uuid) granted.add(uuid);
-    });
-  });
-
-  return granted;
-}
-
-function buildInherentFeatureGrantAdvancements(features: any[] = [], existingAdvancements: any[] = [], prefix: string) {
-  const explicitlyGranted = collectExplicitGrantedFeatureRefs(existingAdvancements);
-
-  return features
-    .filter((feature) => !explicitlyGranted.has(feature.id) && !explicitlyGranted.has(feature.sourceId))
-    .map((feature) => ({
-      _id: `${prefix}-${feature.identifier || feature.id}`,
-      type: 'ItemGrant',
-      level: Number(feature.level || 1) || 1,
-      title: feature.name || 'Grant Feature',
-      featureId: feature.id,
-      configuration: {
-        choiceType: 'feature',
-        optional: false,
-        items: [{ uuid: feature.id, optional: false }]
-      }
-    }));
 }
 
 function buildOptionGroupFeatureSourceMap(records: any[] = [], featuresById: Record<string, any>) {
@@ -520,167 +487,6 @@ function buildOptionGroupAdvancementMetadataMap(
   });
 
   return metadataByOptionGroup;
-}
-
-function buildBaseClassAdvancementsForExport({
-  classDataRaw,
-  normalizedProficiencies,
-  hitDie,
-  subclassTitle,
-  subclassFeatureLevels,
-  asiLevels,
-  existingAdvancements
-}: {
-  classDataRaw: any;
-  normalizedProficiencies: any;
-  hitDie: number;
-  subclassTitle: string;
-  subclassFeatureLevels: number[];
-  asiLevels: number[];
-  existingAdvancements: any[];
-}) {
-  const existingById = new Map(asArray(existingAdvancements).map((adv: any) => [adv._id, adv]));
-  const baseItems = existingById.get('base-items');
-  const subclassLevel = Number(subclassFeatureLevels?.[0] || existingById.get('base-subclass')?.level || 3) || 3;
-  const baseAdvancements: any[] = [
-    {
-      _id: 'base-hp',
-      type: 'HitPoints',
-      isBase: true,
-      level: 1,
-      title: 'Hit Points',
-      configuration: { hitDie }
-    },
-    {
-      _id: 'base-saves',
-      type: 'Trait',
-      isBase: true,
-      level: 1,
-      title: 'Saving Throw Proficiencies',
-      configuration: {
-        type: 'saves',
-        mode: 'default',
-        choiceCount: normalizedProficiencies.savingThrows.choiceCount,
-        fixed: normalizedProficiencies.savingThrows.fixedIds,
-        options: normalizedProficiencies.savingThrows.optionIds,
-        categoryIds: []
-      }
-    },
-    {
-      _id: 'base-armor',
-      type: 'Trait',
-      isBase: true,
-      level: 1,
-      title: 'Armor Proficiencies',
-      configuration: {
-        type: 'armor',
-        mode: 'default',
-        choiceCount: normalizedProficiencies.armor.choiceCount,
-        fixed: normalizedProficiencies.armor.fixedIds,
-        options: normalizedProficiencies.armor.optionIds,
-        categoryIds: normalizedProficiencies.armor.categoryIds
-      }
-    },
-    {
-      _id: 'base-weapons',
-      type: 'Trait',
-      isBase: true,
-      level: 1,
-      title: 'Weapon Proficiencies',
-      configuration: {
-        type: 'weapons',
-        mode: 'default',
-        choiceCount: normalizedProficiencies.weapons.choiceCount,
-        fixed: normalizedProficiencies.weapons.fixedIds,
-        options: normalizedProficiencies.weapons.optionIds,
-        categoryIds: normalizedProficiencies.weapons.categoryIds
-      }
-    },
-    {
-      _id: 'base-skills',
-      type: 'Trait',
-      isBase: true,
-      level: 1,
-      title: 'Skill Proficiencies',
-      configuration: {
-        type: 'skills',
-        mode: 'default',
-        choiceCount: normalizedProficiencies.skills.choiceCount,
-        fixed: normalizedProficiencies.skills.fixedIds,
-        options: normalizedProficiencies.skills.optionIds,
-        categoryIds: []
-      }
-    },
-    {
-      _id: 'base-tools',
-      type: 'Trait',
-      isBase: true,
-      level: 1,
-      title: 'Tool Proficiencies',
-      configuration: {
-        type: 'tools',
-        mode: 'default',
-        choiceCount: normalizedProficiencies.tools.choiceCount,
-        fixed: normalizedProficiencies.tools.fixedIds,
-        options: normalizedProficiencies.tools.optionIds,
-        categoryIds: normalizedProficiencies.tools.categoryIds
-      }
-    },
-    {
-      _id: 'base-languages',
-      type: 'Trait',
-      isBase: true,
-      level: 1,
-      title: 'Languages',
-      configuration: {
-        type: 'languages',
-        mode: 'default',
-        choiceCount: normalizedProficiencies.languages.choiceCount,
-        fixed: normalizedProficiencies.languages.fixedIds,
-        options: normalizedProficiencies.languages.optionIds,
-        categoryIds: normalizedProficiencies.languages.categoryIds
-      }
-    },
-    {
-      _id: 'base-items',
-      type: 'ItemChoice',
-      isBase: true,
-      level: 1,
-      title: baseItems?.title || 'Starting Equipment Choices',
-      configuration: {
-        ...(baseItems?.configuration || {}),
-        choiceType: baseItems?.configuration?.choiceType || 'item',
-        pool: asArray(baseItems?.configuration?.pool),
-        count: Number(baseItems?.configuration?.count || 1) || 1
-      }
-    },
-    {
-      _id: 'base-subclass',
-      type: 'Subclass',
-      isBase: true,
-      level: subclassLevel,
-      title: trimString(subclassTitle) || existingById.get('base-subclass')?.title || 'Select Subclass',
-      configuration: {
-        ...(existingById.get('base-subclass')?.configuration || {})
-      }
-    }
-  ];
-
-  (asiLevels || []).forEach((level, index) => {
-    baseAdvancements.push({
-      _id: `base-asi-${index}`,
-      type: 'AbilityScoreImprovement',
-      isBase: true,
-      level,
-      title: 'Ability Score Improvement',
-      configuration: {
-        points: 2,
-        featAllowed: true
-      }
-    });
-  });
-
-  return baseAdvancements;
 }
 
 function collectReferencedOptionGroupIds(...records: any[]) {
@@ -815,6 +621,21 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
           : null;
       }).filter(Boolean);
     }
+  } else if (type === 'Size') {
+    const selectedSizeIds = uniqueStrings([
+      ...Object.entries(configuration?.sizes || {})
+        .filter(([, isSelected]) => Boolean(isSelected))
+        .map(([sizeId]) => trimString(sizeId)),
+      trimString(configuration?.size)
+    ]);
+
+    normalized.configuration = {
+      ...configuration,
+      sizes: Object.fromEntries(selectedSizeIds.map((sizeId) => [sizeId, true]))
+    };
+
+    if (selectedSizeIds[0]) normalized.configuration.size = selectedSizeIds[0];
+    else delete normalized.configuration.size;
   } else if (type === 'ScaleValue') {
     const linkedScale = context.scalingById[configuration.scalingColumnId];
     normalized.configuration = {
@@ -1121,41 +942,41 @@ export async function exportClassSemantic(classId: string) {
     advancements: asArray(feature.advancements).map((advancement: any) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean)
   }));
 
-  const baseClassAdvancements = buildBaseClassAdvancementsForExport({
-    classDataRaw,
-    normalizedProficiencies,
+  const canonicalClassProgression = buildCanonicalClassProgression({
+    advancements: asArray(classDataRaw.advancements),
     hitDie: Number(classDataRaw.hitDie || 0) || 8,
+    proficiencies: normalizedProficiencies,
+    savingThrows: normalizedSavingThrows,
     subclassTitle: classDataRaw.subclassTitle || '',
     subclassFeatureLevels: asArray(classDataRaw.subclassFeatureLevels).map((level: any) => Number(level)).filter(Boolean),
     asiLevels: asArray(classDataRaw.asiLevels).map((level: any) => Number(level)).filter(Boolean),
-    existingAdvancements: asArray(classDataRaw.advancements)
-  }).map((advancement) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean);
-  const inherentClassFeatureGrants = buildInherentFeatureGrantAdvancements(
-    normalizedFeatures.filter((feature) => feature.parentSourceId === classSourceId),
-    asArray(classDataRaw.advancements),
-    'inherent-class-feature-grant'
-  ).map((advancement) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean);
+    features: normalizedFeatures.filter((feature) => feature.parentSourceId === classSourceId),
+    implicitGrantPrefix: 'inherent-class-feature-grant',
+    includeImplicitFeatureGrants: true
+  });
 
-  const customClassAdvancements = asArray(classDataRaw.advancements)
-    .filter((advancement: any) => {
-      const id = trimString(advancement?._id);
-      if (!id) return true;
-      if (id === 'base-items') return false;
-      if (id.startsWith('base-')) return false;
-      if (id.startsWith('implicit-class-features-')) return false;
-      return true;
-    })
-    .map((advancement: any) => normalizeAdvancementForExport(advancement, advancementContext))
+  const baseClassAdvancements = canonicalClassProgression.baseAdvancements
+    .map((advancement) => normalizeAdvancementForExport(advancement, advancementContext))
+    .filter(Boolean);
+  const inherentClassFeatureGrants = canonicalClassProgression.implicitFeatureGrants
+    .map((advancement) => normalizeAdvancementForExport(advancement, advancementContext))
+    .filter(Boolean);
+  const customClassAdvancements = canonicalClassProgression.customAdvancements
+    .map((advancement) => normalizeAdvancementForExport(advancement, advancementContext))
     .filter(Boolean);
 
   const normalizedSubclasses = (subclasses as any[]).map((subclass: any) => {
     const subclassRaw: any = subclassesRaw.find((entry: any) => entry.id === subclass.id) || {};
-    const inherentSubclassFeatureGrants = buildInherentFeatureGrantAdvancements(
-      normalizedFeatures.filter((feature) => feature.parentSourceId === subclass.sourceId),
-      asArray(subclassRaw.advancements),
-      `inherent-subclass-feature-grant-${subclass.identifier || subclass.id}`
-    ).map((advancement) => normalizeAdvancementForExport(advancement, advancementContext)).filter(Boolean);
-    const customAdvancements = asArray(subclass.advancements)
+    const canonicalSubclassProgression = buildCanonicalSubclassProgression({
+      advancements: asArray(subclassRaw.advancements),
+      features: normalizedFeatures.filter((feature) => feature.parentSourceId === subclass.sourceId),
+      implicitGrantPrefix: `inherent-subclass-feature-grant-${subclass.identifier || subclass.id}`,
+      includeImplicitFeatureGrants: true
+    });
+    const inherentSubclassFeatureGrants = canonicalSubclassProgression.implicitFeatureGrants
+      .map((advancement) => normalizeAdvancementForExport(advancement, advancementContext))
+      .filter(Boolean);
+    const customAdvancements = canonicalSubclassProgression.customAdvancements
       .map((advancement: any) => normalizeAdvancementForExport(advancement, advancementContext))
       .filter(Boolean);
 

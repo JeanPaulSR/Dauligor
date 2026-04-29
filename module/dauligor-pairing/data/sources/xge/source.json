@@ -1,0 +1,39 @@
+{
+  "kind": "dauligor.source.v1",
+  "schemaVersion": 1,
+  "sourceId": "source-xge-2014",
+  "slug": "xge",
+  "name": "Xanathar's Guide to Everything",
+  "shortName": "XGE",
+  "description": "Xanathar's Guide to Everything",
+  "coverImage": "",
+  "status": "ready",
+  "rules": "2014",
+  "tags": [],
+  "dates": {
+    "addedAt": "2026-04-21T04:33:21.299Z",
+    "updatedAt": "2026-04-21T04:33:21.299Z"
+  },
+  "linkedContent": {
+    "classes": {
+      "count": 0,
+      "catalogUrl": "classes/catalog.json"
+    },
+    "spells": {
+      "count": 0,
+      "catalogUrl": "spells/catalog.json"
+    },
+    "items": {
+      "count": 0,
+      "catalogUrl": "items/catalog.json"
+    },
+    "bestiary": {
+      "count": 0,
+      "catalogUrl": "bestiary/catalog.json"
+    },
+    "journals": {
+      "count": 0,
+      "catalogUrl": "journals/catalog.json"
+    }
+  }
+}

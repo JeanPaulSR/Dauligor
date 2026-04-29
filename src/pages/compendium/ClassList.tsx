@@ -1001,7 +1001,9 @@ export function ClassList({
                           <span className="text-xs text-ink/80">
                             {(() => {
                               const tools = selectedClass.proficiencies?.tools;
-                              if (!tools || typeof tools === 'string') return tools || 'None';
+                              const displayName = String(selectedClass.proficiencies?.toolsDisplayName || '').trim();
+                              if (!tools || typeof tools === 'string') return tools || displayName || 'None';
+                              if (displayName) return displayName;
                               
                               const categoryIds = tools.categoryIds || [];
                               const catNames = categoryIds.map((cid: string) => allToolCategories.find(c => c.id === cid)?.name).filter(Boolean);

@@ -1,0 +1,982 @@
+{
+  "class": {
+    "id": "brT9PXIFUy5A11B0lwsY",
+    "createdAt": "2026-04-26T02:17:17.601Z",
+    "primaryAbilityChoice": [],
+    "wealth": "",
+    "updatedAt": "2026-04-29T15:40:49.685Z",
+    "preview": "Whether calling on the elemental forces of nature or emulating the creatures of the animal world, druids are an embodiment of nature's resilience, cunning, and fury. They claim no mastery over nature, but see themselves as extensions of nature's indomitable will.",
+    "identifier": "druid",
+    "imageUrl": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2Fnew%2F1777169678619_83p5y5j.webp?alt=media&token=155ffea7-d295-4fef-b717-898758c4ef30",
+    "previewDisplay": {
+      "x": 52.1,
+      "y": 0,
+      "scale": 1
+    },
+    "hitDie": 8,
+    "previewImageUrl": "",
+    "spellcasting": {
+      "ability": "WIS",
+      "spellsKnownFormula": "WIS + Level",
+      "description": "Drawing on the divine essence of nature itself, you can cast spells to shape that essence to your will.\n\n## Cantrips\n\nAt 1st level, you know two cantrips of your choice from the druid spell list. You learn additional druid cantrips of your choice at higher levels, as shown in the Cantrips Known column of the Druid table.\n\n## Preparing and Casting Spells\n\nThe Druid table shows how many spell slots you have to cast your druid spells of 1st level and higher. To cast one of these druid spells, you must expend a slot of the spell's level or higher. You regain all expended spell slots when you finish a long rest.\n\nYou prepare the list of druid spells that are available for you to cast, choosing from the druid spell list. When you do so, choose a number of druid spells equal to your Wisdom modifier + your Druid level (minimum of one spell). The spells must be of a level for which you have spell slots.\n\nFor example, if you are a 3rd-level druid, you have four 1st-level and two 2nd-level spell slots. With a Wisdom of 16, your list of prepared spells can include six spells of 1st or 2nd level, in any combination. If you prepare the 1st-level spell Cure Wounds, you can cast it using a 1st-level or 2nd-level slot. Casting the spell doesn't remove it from your list of prepared spells.\n\nYou can also change your list of prepared spells when you finish a long rest. Preparing a new list of druid spells requires time spent in prayer and meditation: at least 1 minute per spell level for each spell on your list.\n\n## Spellcasting Ability\n\nWisdom is your spellcasting ability for your druid spells, since your magic draws upon your devotion and attunement to nature. You use your Wisdom whenever a spell refers to your spellcasting ability. In addition, you use your Wisdom modifier when setting the saving throw DC for a druid spell you cast and when making an attack roll with one.\n\n**Spell save DC** = 8 + your proficiency bonus + your Wisdom modifier**Spell attack modifier** = your proficiency bonus + your Wisdom modifier\n\n## Ritual Casting\n\nYou can cast a druid spell as a ritual if that spell has the ritual tag and you have the spell prepared.\n\n## Spellcasting Focus\n\nYou can use a druidic focus as a spellcasting focus for your druid spells.",
+      "isRitualCaster": true,
+      "level": 1,
+      "type": "prepared",
+      "hasSpellcasting": true,
+      "progressionTypeSourceId": "spellcasting-type-full-caster",
+      "progressionTypeIdentifier": "full-caster",
+      "progressionTypeLabel": "Full Caster",
+      "progressionFormula": "1 * level",
+      "progression": "full",
+      "spellsKnownSourceId": "spells-known-scaling-druid"
+    },
+    "description": "",
+    "multiclassProficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "leather",
+          "studded-leather",
+          "padded",
+          "breastplate",
+          "half-plate",
+          "scale-mail",
+          "hide",
+          "chain-shirt",
+          "shield"
+        ]
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "tools": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      }
+    },
+    "startingEquipment": "You start with the following equipment, in addition to the equipment granted by your background:\n\n• (a) a wooden shield or (b) any simple weapon\n\n• (a) a scimitar or (b) any simple melee weapon\n\n• Leather armor, an explorer's pack, and a druidic focus",
+    "savingThrows": [
+      "INT",
+      "WIS"
+    ],
+    "tagIds": [
+      "full-caster",
+      "complex",
+      "summoner",
+      "controller",
+      "support",
+      "debuffer",
+      "primordial"
+    ],
+    "imageDisplay": {
+      "x": 54.6,
+      "scale": 1,
+      "y": 31.3
+    },
+    "proficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [
+          "light",
+          "medium"
+        ],
+        "optionIds": [],
+        "fixedIds": [
+          "shield",
+          "leather",
+          "padded",
+          "studded-leather",
+          "breastplate",
+          "chain-shirt",
+          "half-plate",
+          "hide",
+          "scale-mail"
+        ]
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "club",
+          "dagger",
+          "greatclub",
+          "handaxe",
+          "javelin",
+          "lighthammer",
+          "mace",
+          "quarterstaff",
+          "sickle",
+          "spear",
+          "lightcrossbow",
+          "dart",
+          "shortbow",
+          "sling"
+        ]
+      },
+      "tools": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "herb"
+        ]
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 2,
+        "categoryIds": [],
+        "optionIds": [
+          "arc",
+          "ani",
+          "ins",
+          "med",
+          "prc",
+          "rel",
+          "sur"
+        ],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "INT",
+          "WIS"
+        ]
+      }
+    },
+    "lore": "",
+    "subclassFeatureLevels": [
+      2,
+      6,
+      10,
+      14
+    ],
+    "cardImageUrl": "",
+    "primaryAbility": [
+      "WIS"
+    ],
+    "name": "Druid",
+    "advancements": [
+      {
+        "title": "Hit Points",
+        "type": "HitPoints",
+        "level": 1,
+        "_id": "base-hp",
+        "configuration": {
+          "hitDie": 8
+        }
+      },
+      {
+        "_id": "base-items",
+        "level": 1,
+        "type": "ItemChoice",
+        "title": "Starting Equipment Choices",
+        "configuration": {
+          "optional": false,
+          "optionalPool": [],
+          "pool": [],
+          "excludedOptionIds": [],
+          "countSource": "fixed",
+          "count": 1,
+          "choiceType": "item"
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-druidic",
+        "type": "ItemGrant",
+        "level": 1,
+        "title": "Druidic",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-druidic",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-druidic"
+      },
+      {
+        "configuration": {
+          "choiceCount": 0,
+          "replacements": [],
+          "mode": "default",
+          "type": "saves",
+          "categoryIds": [],
+          "allowReplacements": false,
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": [
+            "INT",
+            "WIS"
+          ]
+        },
+        "title": "Saving Throw Proficiencies",
+        "_id": "base-saves",
+        "type": "Trait",
+        "level": 1
+      },
+      {
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-armor",
+        "title": "Armor Proficiencies",
+        "configuration": {
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 0,
+          "options": [],
+          "fixed": [
+            "shield",
+            "leather",
+            "padded",
+            "studded-leather",
+            "breastplate",
+            "chain-shirt",
+            "half-plate",
+            "hide",
+            "scale-mail"
+          ],
+          "choiceSource": "fixed",
+          "categoryIds": [
+            "light",
+            "medium"
+          ],
+          "type": "armor",
+          "allowReplacements": false
+        }
+      },
+      {
+        "configuration": {
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": [
+            "club",
+            "dagger",
+            "greatclub",
+            "handaxe",
+            "javelin",
+            "lighthammer",
+            "mace",
+            "quarterstaff",
+            "sickle",
+            "spear",
+            "lightcrossbow",
+            "dart",
+            "shortbow",
+            "sling"
+          ],
+          "type": "weapons",
+          "categoryIds": [],
+          "allowReplacements": false,
+          "choiceCount": 0,
+          "mode": "default",
+          "replacements": []
+        },
+        "title": "Weapon Proficiencies",
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-weapons"
+      },
+      {
+        "title": "Skill Proficiencies",
+        "_id": "base-skills",
+        "level": 1,
+        "type": "Trait",
+        "configuration": {
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 2,
+          "options": [
+            "arc",
+            "ani",
+            "ins",
+            "med",
+            "prc",
+            "rel",
+            "sur"
+          ],
+          "fixed": [],
+          "choiceSource": "fixed",
+          "categoryIds": [],
+          "type": "skills",
+          "allowReplacements": false
+        }
+      },
+      {
+        "_id": "base-tools",
+        "level": 1,
+        "type": "Trait",
+        "title": "Tool Proficiencies",
+        "configuration": {
+          "type": "tools",
+          "categoryIds": [],
+          "allowReplacements": false,
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": [
+            "herb"
+          ],
+          "choiceCount": 0,
+          "mode": "default",
+          "replacements": []
+        }
+      },
+      {
+        "configuration": {
+          "type": "languages",
+          "categoryIds": [],
+          "allowReplacements": false,
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": [],
+          "choiceCount": 0,
+          "replacements": [],
+          "mode": "default"
+        },
+        "type": "Trait",
+        "level": 1,
+        "_id": "base-languages",
+        "title": "Languages"
+      },
+      {
+        "title": "Druidic",
+        "_id": "h1xkw0f4n",
+        "type": "Trait",
+        "level": 1,
+        "configuration": {
+          "fixed": [
+            "druidic"
+          ],
+          "options": [],
+          "choiceSource": "fixed",
+          "allowReplacements": false,
+          "categoryIds": [],
+          "type": "languages",
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 0
+        },
+        "featureSourceId": "class-feature-druidic"
+      },
+      {
+        "_id": "inherent-class-feature-grant-wild-companion",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Wild Companion",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-wild-companion",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-wild-companion"
+      },
+      {
+        "_id": "inherent-class-feature-grant-wild-shape",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Wild Shape",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-wild-shape",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-wild-shape"
+      },
+      {
+        "configuration": {},
+        "_id": "base-subclass",
+        "type": "Subclass",
+        "level": 2,
+        "title": "Druid Circle"
+      },
+      {
+        "configuration": {
+          "fixed": {},
+          "locked": {},
+          "points": 2,
+          "featAllowed": true
+        },
+        "level": 4,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-0",
+        "title": "Ability Score Improvement"
+      },
+      {
+        "_id": "inherent-class-feature-grant-cantrip-versatility",
+        "type": "ItemGrant",
+        "level": 4,
+        "title": "Cantrip Versatility",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-cantrip-versatility",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-cantrip-versatility"
+      },
+      {
+        "_id": "base-asi-1",
+        "level": 8,
+        "type": "AbilityScoreImprovement",
+        "title": "Ability Score Improvement",
+        "configuration": {
+          "fixed": {},
+          "locked": {},
+          "featAllowed": true,
+          "points": 2
+        }
+      },
+      {
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "fixed": {},
+          "locked": {}
+        },
+        "type": "AbilityScoreImprovement",
+        "level": 12,
+        "_id": "base-asi-2",
+        "title": "Ability Score Improvement"
+      },
+      {
+        "title": "Ability Score Improvement",
+        "level": 16,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-3",
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "locked": {},
+          "fixed": {}
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-beast-spells",
+        "type": "ItemGrant",
+        "level": 18,
+        "title": "Beast Spells",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-beast-spells",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-beast-spells"
+      },
+      {
+        "_id": "inherent-class-feature-grant-timeless-body",
+        "type": "ItemGrant",
+        "level": 18,
+        "title": "Timeless Body",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-timeless-body",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-timeless-body"
+      },
+      {
+        "title": "Ability Score Improvement",
+        "level": 19,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-4",
+        "configuration": {
+          "locked": {},
+          "fixed": {},
+          "points": 2,
+          "featAllowed": true
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-archdruid",
+        "type": "ItemGrant",
+        "level": 20,
+        "title": "Archdruid",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-archdruid",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-archdruid"
+      }
+    ],
+    "multiclassing": "",
+    "sourceId": "source-phb-2014",
+    "cardDisplay": {
+      "y": 42.3,
+      "scale": 1,
+      "x": 56
+    },
+    "classSourceId": "class-druid",
+    "sourceBookId": "source-phb-2014"
+  },
+  "subclasses": [],
+  "features": [
+    {
+      "id": "BhEAx53Qdfb8hCkthLYf",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 2,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-26T02:20:28.721Z",
+      "isSubclassFeature": false,
+      "createdAt": "2026-04-26T02:20:12.414Z",
+      "parentType": "class",
+      "description": "At 2nd level, you gain the ability to summon a spirit that assumes an animal form: as an action, you can expend a use of your Wild Shape feature to cast the Find Familiar spell, without material components.\n\nWhen you cast the spell in this way, the familiar is a fey instead of a beast, and the familiar disappears after a number of hours equal to half your druid level.",
+      "name": "Wild Companion",
+      "type": "class",
+      "level": 2,
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "wild-companion",
+      "sourceId": "class-feature-wild-companion",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-druid",
+      "classSourceId": "class-druid",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "EnZi8881a4pOfBZgcg7b",
+      "description": "Beginning at 18th level, you can cast many of your druid spells in any shape you assume using Wild Shape. You can perform the somatic and verbal components of a druid spell while in a beast shape, but you aren't able to provide material components.",
+      "parentType": "class",
+      "createdAt": "2026-04-26T02:20:46.378Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 18
+      },
+      "updatedAt": "2026-04-26T02:20:46.378Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 18,
+      "type": "class",
+      "name": "Beast Spells",
+      "identifier": "beast-spells",
+      "sourceId": "class-feature-beast-spells",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-druid",
+      "classSourceId": "class-druid",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "KRrazcqdcmHgcHx4Sl2m",
+      "level": 18,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Timeless Body",
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": "2026-04-26T02:20:37.773Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 18
+      },
+      "updatedAt": "2026-04-26T02:20:37.773Z",
+      "parentType": "class",
+      "description": "Starting at 18th level, the primal magic that you wield causes you to age more slowly. For every 10 years that pass, your body ages only 1 year.",
+      "identifier": "timeless-body",
+      "sourceId": "class-feature-timeless-body",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-druid",
+      "classSourceId": "class-druid",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "Kswhwesc9J7nCA66IiNO",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 4,
+      "type": "class",
+      "name": "Cantrip Versatility",
+      "description": "Whenever you reach a level in this class that grants the Ability Score Improvement feature, you can replace one cantrip you learned from this class's Spellcasting feature with another cantrip from the druid spell list.",
+      "parentType": "class",
+      "createdAt": "2026-04-26T02:20:23.473Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 4
+      },
+      "updatedAt": "2026-04-26T02:20:23.473Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "cantrip-versatility",
+      "sourceId": "class-feature-cantrip-versatility",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-druid",
+      "classSourceId": "class-druid",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "WF8fENhu1jTDMrBOzL26",
+      "createdAt": "2026-04-26T02:19:06.922Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": "2026-04-26T02:19:06.922Z",
+      "parentType": "class",
+      "description": "You know Druidic, the secret language of druids. You can speak the language and use it to leave hidden messages. You and others who know this language automatically spot such a message. Others spot the message's presence with a successful DC 15 Wisdom (Perception) check but can't decipher it without magic.",
+      "level": 1,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Druidic",
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "druidic",
+      "sourceId": "class-feature-druidic",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-druid",
+      "classSourceId": "class-druid",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "a78Gf8ys92GRrKMfyb8D",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 20,
+      "name": "Archdruid",
+      "description": "At 20th level, you can use your Wild Shape an unlimited number of times.\n\nAdditionally, you can ignore the verbal and somatic components of your druid spells, as well as any material components that lack a cost and aren't consumed by a spell. You gain this benefit in both your normal shape and your beast shape from Wild Shape.",
+      "parentType": "class",
+      "createdAt": "2026-04-26T02:20:53.559Z",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 20,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-26T02:35:14.179Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "archdruid",
+      "sourceId": "class-feature-archdruid",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-druid",
+      "classSourceId": "class-druid",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "zwckdx5C9n2STv9Sdi0T",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 2,
+      "name": "Wild Shape",
+      "description": "Starting at 2nd level, you can use your action to magically assume the shape of a beast that you have seen before. You can use this feature twice. You regain expended uses when you finish a short or long rest.\n\nYour druid level determines the beasts you can transform into, as shown in the Beast Shapes table. At 2nd level, for example, you can transform into any beast that has a challenge rating of 1/4 or lower that doesn't have a flying or swimming speed.\n\n[table][tr][th colspan=4 rowspan=1]Beast Shapes\n\n[/th][/tr][tr][th colspan=1 rowspan=1]Level\n\n[/th][th colspan=1 rowspan=1]Max. CR\n\n[/th][th colspan=1 rowspan=1]Limitations\n\n[/th][th colspan=1 rowspan=1]Example\n\n[/th][/tr][tr][td colspan=1 rowspan=1]2nd\n\n[/td][td colspan=1 rowspan=1]1/4\n\n[/td][td colspan=1 rowspan=1]No flying or swimming speed\n\n[/td][td colspan=1 rowspan=1]Wolf\n\n[/td][/tr][tr][td colspan=1 rowspan=1]4th\n\n[/td][td colspan=1 rowspan=1]1/2\n\n[/td][td colspan=1 rowspan=1]No flying speed\n\n[/td][td colspan=1 rowspan=1]Crocodile\n\n[/td][/tr][tr][td colspan=1 rowspan=1]8th\n\n[/td][td colspan=1 rowspan=1]1\n\n[/td][td colspan=1 rowspan=1]\n\n[/td][td colspan=1 rowspan=1]Giant eagle\n\n[/td][/tr][/table]You can stay in a beast shape for a number of hours equal to half your druid level (rounded down). You then revert to your normal form unless you expend another use of this feature. You can revert to your normal form earlier by using a bonus action on your turn. You automatically revert if you fall unconscious, drop to 0 hit points, or die.\n\nWhile you are transformed, the following rules apply:\n\n* Your game statistics are replaced by the statistics of the beast, but you retain your alignment, personality, and Intelligence, Wisdom, and Charisma scores. You also retain all of your skill and saving throw proficiencies, in addition to gaining those of the creature. If the creature has the same proficiency as you and the bonus in its stat block is higher than yours, use the creature's bonus instead of yours. If the creature has any legendary or lair actions, you can't use them.\n\n* When you transform, you assume the beast's hit points and Hit Dice. When you revert to your normal form, you return to the number of hit points you had before you transformed. However, if you revert as a result of dropping to 0 hit points, any excess damage carries over to your normal form, For example, if you take 10 damage in animal form and have only 1 hit point left, you revert and take 9 damage. As long as the excess damage doesn't reduce your normal form to 0 hit points, you aren't knocked unconscious.\n* You can't cast spells, and your ability to speak or take any action that requires hands is limited to the capabilities of your beast form. Transforming doesn't break your concentration on a spell you've already cast, however, or prevent you from taking actions that are part of a spell, such as Call Lightning, that you've already cast.\n\n* You retain the benefit of any features from your class, race, or other source and can use them if the new form is physically capable of doing so. However, you can't use any of your special senses, such as darkvision, unless your new form also has that sense.\n\n* You choose whether your equipment falls to the ground in your space, merges into your new form, or is worn by it. Worn equipment functions as normal, but the DM decides whether it is practical for the new form to wear a piece of equipment, based on the creature's shape and size. Your equipment doesn't change size or shape to match the new form, and any equipment that the new form can't wear must either fall to the ground or merge with it. Equipment that merges with the form has no effect until you leave the form.",
+      "parentType": "class",
+      "createdAt": "2026-04-26T02:19:57.096Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 2,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-26T02:20:02.783Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "wild-shape",
+      "sourceId": "class-feature-wild-shape",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-druid",
+      "classSourceId": "class-druid",
+      "featureKind": "classFeature",
+      "tagIds": []
+    }
+  ],
+  "scalingColumns": [],
+  "uniqueOptionGroups": [],
+  "uniqueOptionItems": [],
+  "spellsKnownScalings": {
+    "spells-known-scaling-druid": {
+      "id": "zpGwMAO95FIIHf07zPD3",
+      "sourceId": "spells-known-scaling-druid",
+      "identifier": "druid",
+      "name": "Druid",
+      "levels": {
+        "1": {
+          "cantrips": 2,
+          "spellsKnown": 4
+        },
+        "2": {
+          "cantrips": 2,
+          "spellsKnown": 5
+        },
+        "3": {
+          "cantrips": 2,
+          "spellsKnown": 6
+        },
+        "4": {
+          "cantrips": 3,
+          "spellsKnown": 7
+        },
+        "5": {
+          "spellsKnown": 8,
+          "cantrips": 3
+        },
+        "6": {
+          "cantrips": 3,
+          "spellsKnown": 9
+        },
+        "7": {
+          "cantrips": 3,
+          "spellsKnown": 10
+        },
+        "8": {
+          "spellsKnown": 11,
+          "cantrips": 3
+        },
+        "9": {
+          "cantrips": 3,
+          "spellsKnown": 12
+        },
+        "10": {
+          "spellsKnown": 14,
+          "cantrips": 4
+        },
+        "11": {
+          "spellsKnown": 15,
+          "cantrips": 4
+        },
+        "12": {
+          "cantrips": 4,
+          "spellsKnown": 15
+        },
+        "13": {
+          "spellsKnown": 16,
+          "cantrips": 4
+        },
+        "14": {
+          "spellsKnown": 18,
+          "cantrips": 4
+        },
+        "15": {
+          "spellsKnown": 19,
+          "cantrips": 4
+        },
+        "16": {
+          "cantrips": 4,
+          "spellsKnown": 19
+        },
+        "17": {
+          "cantrips": 4,
+          "spellsKnown": 20
+        },
+        "18": {
+          "spellsKnown": 22,
+          "cantrips": 4
+        },
+        "19": {
+          "spellsKnown": 22,
+          "cantrips": 4
+        },
+        "20": {
+          "spellsKnown": 22,
+          "cantrips": 4
+        }
+      },
+      "updatedAt": "2026-04-26T02:18:30.188Z",
+      "createdAt": "2026-04-26T02:18:30.188Z"
+    }
+  },
+  "alternativeSpellcastingScalings": {},
+  "source": {
+    "id": "joi0FqfJfNvgzrUlMmbn",
+    "slug": "phb",
+    "url": "",
+    "description": "The Player's Hand Book",
+    "status": "ready",
+    "imageUrl": "",
+    "abbreviation": "PHB",
+    "rules": "2014",
+    "name": "Player's Handbook",
+    "updatedAt": "2026-04-20T16:08:59.612Z",
+    "createdAt": "2026-04-20T15:29:16.300Z",
+    "tags": [
+      "Classes",
+      "Items",
+      "Spells",
+      "Feats"
+    ]
+  }
+}

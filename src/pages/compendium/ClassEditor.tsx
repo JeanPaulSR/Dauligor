@@ -24,6 +24,8 @@ import AdvancementManager, { Advancement } from '../../components/compendium/Adv
 import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
 import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
 import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
+import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } from '../../lib/advancementState';
+import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 
 const FEATURE_TYPES = [
   { id: 'background', name: 'Background Feature' },
@@ -140,6 +142,131 @@ function sanitizeProficiencyCollection(raw: any = {}) {
   };
 }
 
+function buildNextGroupedProficiencyCollection(
+  collection: any,
+  items: any[],
+  type: 'armor' | 'weapons' | 'tools' | 'languages',
+  target: 'fixedIds' | 'optionIds',
+  categoryId?: string
+) {
+  const section = collection?.[type] || {};
+  const currentIds = new Set<string>((section[target] || []) as string[]);
+  const itemIds = (items || []).map((item) => item.id).filter(Boolean) as string[];
+  const allExist = itemIds.every((itemId) => currentIds.has(itemId));
+
+  let nextIds: string[];
+  if (allExist) {
+    nextIds = Array.from(currentIds).filter((id) => !itemIds.includes(id));
+  } else {
+    nextIds = Array.from(new Set([...Array.from(currentIds), ...itemIds]));
+  }
+
+  const allowOverlap = true;
+  const otherTarget = target === 'fixedIds' ? 'optionIds' : 'fixedIds';
+  let nextOtherIds = (section[otherTarget] || []) as string[];
+  if (!allowOverlap && !allExist) {
+    nextOtherIds = nextOtherIds.filter((id: string) => !itemIds.includes(id));
+  }
+
+  const currentCatIds = (section.categoryIds || []) as string[];
+  let nextCatIds = currentCatIds;
+  if (categoryId) {
+    nextCatIds = allExist
+      ? currentCatIds.filter((id: string) => id !== categoryId)
+      : Array.from(new Set([...currentCatIds, categoryId]));
+  }
+
+  return {
+    ...collection,
+    [type]: {
+      ...section,
+      [target]: nextIds,
+      [otherTarget]: nextOtherIds,
+      categoryIds: nextCatIds
+    }
+  };
+}
+
+function joinDisplaySegments(fixedSegments: string[], choiceSegments: string[]) {
+  const normalizedFixed = fixedSegments.filter(Boolean);
+  const normalizedChoices = choiceSegments.filter(Boolean);
+  const fixedText = normalizedFixed.join(', ');
+  const choiceText = normalizedChoices.join('; and ');
+
+  if (fixedText && choiceText) return `${fixedText}; and ${choiceText}`;
+  return fixedText || choiceText;
+}
+
+function buildGroupedProficiencyDisplayName(
+  selection: any,
+  items: any[] = [],
+  categories: any[] = []
+) {
+  const fixedIds = new Set(selection?.fixedIds || []);
+  const optionIds = new Set(selection?.optionIds || []);
+  const choiceCount = Math.max(normalizeChoiceCount(selection?.choiceCount), 1);
+  const categoryList = Array.isArray(categories) ? categories : [];
+  const itemList = Array.isArray(items) ? items : [];
+  const itemsByCategory = new Map<string, any[]>();
+
+  for (const item of itemList) {
+    const categoryId = String(item?.categoryId || '').trim();
+    if (!categoryId) continue;
+    if (!itemsByCategory.has(categoryId)) itemsByCategory.set(categoryId, []);
+    itemsByCategory.get(categoryId)?.push(item);
+  }
+
+  const fixedCategoryIds = new Set<string>();
+  const optionCategoryIds = new Set<string>();
+
+  for (const category of categoryList) {
+    const categoryId = String(category?.id || '').trim();
+    if (!categoryId) continue;
+    const categoryItems = itemsByCategory.get(categoryId) || [];
+    if (categoryItems.length === 0) continue;
+
+    const isFixedCategory = categoryItems.every((item) => fixedIds.has(item.id));
+    if (isFixedCategory) {
+      fixedCategoryIds.add(categoryId);
+      continue;
+    }
+
+    const isOptionCategory = categoryItems.every((item) => optionIds.has(item.id));
+    if (isOptionCategory) {
+      optionCategoryIds.add(categoryId);
+    }
+  }
+
+  const fixedSegments = categoryList
+    .filter((category) => fixedCategoryIds.has(String(category?.id || '')))
+    .map((category) => String(category?.name || '').trim())
+    .filter(Boolean);
+
+  const fixedItemSegments = itemList
+    .filter((item) => fixedIds.has(item.id) && !fixedCategoryIds.has(String(item?.categoryId || '')))
+    .map((item) => String(item?.name || '').trim())
+    .filter(Boolean);
+
+  const optionEntries = [
+    ...categoryList
+      .filter((category) => optionCategoryIds.has(String(category?.id || '')))
+      .map((category) => String(category?.name || '').trim())
+      .filter(Boolean),
+    ...itemList
+      .filter((item) => optionIds.has(item.id) && !fixedIds.has(item.id) && !optionCategoryIds.has(String(item?.categoryId || '')))
+      .map((item) => String(item?.name || '').trim())
+      .filter(Boolean)
+  ];
+
+  const choiceSegments = optionEntries.length === 0
+    ? []
+    : optionEntries.length === 1
+      ? [`${choiceCount} ${optionEntries[0]} of your choice`]
+      : [`${choiceCount} of your choice from ${optionEntries.join(', ')}`];
+
+  return joinDisplaySegments([...fixedSegments, ...fixedItemSegments], choiceSegments);
+}
+
 function sortAdvancementsByLevelThenType(a: Advancement, b: Advancement) {
   if (a.level !== b.level) return a.level - b.level;
   return a.type.localeCompare(b.type);
@@ -182,179 +309,6 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
   }
 
   return normalized;
-}
-
-function buildSyncedBaseAdvancements({
-  advancements,
-  hitDie,
-  proficiencies,
-  savingThrows,
-  subclassTitle,
-  subclassFeatureLevels,
-  asiLevels
-}: {
-  advancements: Advancement[];
-  hitDie: number;
-  proficiencies: any;
-  savingThrows: string[];
-  subclassTitle: string;
-  subclassFeatureLevels: number[];
-  asiLevels: number[];
-}) {
-  const existingById = new Map((advancements || []).map((adv) => [adv._id, adv]));
-  const baseItems = existingById.get('base-items');
-  const normalizedSavingThrows = Array.from(new Set(proficiencies.savingThrows?.fixedIds || savingThrows || []));
-
-  const defaults: Advancement[] = [
-    {
-      _id: 'base-hp',
-      type: 'HitPoints',
-      level: 1,
-      title: 'Hit Points',
-      isBase: true,
-      configuration: { hitDie: hitDie || 8 }
-    },
-    {
-      _id: 'base-saves',
-      type: 'Trait',
-      level: 1,
-      title: 'Saving Throw Proficiencies',
-      isBase: true,
-      configuration: {
-        type: 'saves',
-        fixed: normalizedSavingThrows,
-        options: proficiencies.savingThrows?.optionIds || [],
-        choiceCount: proficiencies.savingThrows?.choiceCount || 0,
-        mode: 'default'
-      }
-    },
-    {
-      _id: 'base-armor',
-      type: 'Trait',
-      level: 1,
-      title: 'Armor Proficiencies',
-      isBase: true,
-      configuration: {
-        type: 'armor',
-        fixed: proficiencies.armor?.fixedIds || [],
-        options: proficiencies.armor?.optionIds || [],
-        choiceCount: proficiencies.armor?.choiceCount || 0,
-        categoryIds: proficiencies.armor?.categoryIds || [],
-        mode: 'default'
-      }
-    },
-    {
-      _id: 'base-weapons',
-      type: 'Trait',
-      level: 1,
-      title: 'Weapon Proficiencies',
-      isBase: true,
-      configuration: {
-        type: 'weapons',
-        fixed: proficiencies.weapons?.fixedIds || [],
-        options: proficiencies.weapons?.optionIds || [],
-        choiceCount: proficiencies.weapons?.choiceCount || 0,
-        categoryIds: proficiencies.weapons?.categoryIds || [],
-        mode: 'default'
-      }
-    },
-    {
-      _id: 'base-skills',
-      type: 'Trait',
-      level: 1,
-      title: 'Skill Proficiencies',
-      isBase: true,
-      configuration: {
-        type: 'skills',
-        fixed: proficiencies.skills?.fixedIds || [],
-        options: proficiencies.skills?.optionIds || [],
-        choiceCount: proficiencies.skills?.choiceCount || 0,
-        mode: 'default'
-      }
-    },
-    {
-      _id: 'base-tools',
-      type: 'Trait',
-      level: 1,
-      title: 'Tool Proficiencies',
-      isBase: true,
-      configuration: {
-        type: 'tools',
-        fixed: proficiencies.tools?.fixedIds || [],
-        options: proficiencies.tools?.optionIds || [],
-        choiceCount: proficiencies.tools?.choiceCount || 0,
-        categoryIds: proficiencies.tools?.categoryIds || [],
-        mode: 'default'
-      }
-    },
-    {
-      _id: 'base-languages',
-      type: 'Trait',
-      level: 1,
-      title: 'Languages',
-      isBase: true,
-      configuration: {
-        type: 'languages',
-        fixed: proficiencies.languages?.fixedIds || [],
-        options: proficiencies.languages?.optionIds || [],
-        choiceCount: proficiencies.languages?.choiceCount || 0,
-        categoryIds: proficiencies.languages?.categoryIds || [],
-        mode: 'default'
-      }
-    },
-    {
-      _id: 'base-items',
-      type: 'ItemChoice',
-      level: 1,
-      title: baseItems?.title || 'Starting Equipment Choices',
-      isBase: true,
-      configuration: {
-        choiceType: 'item',
-        pool: Array.isArray(baseItems?.configuration?.pool) ? baseItems.configuration.pool : [],
-        count: Number(baseItems?.configuration?.count || 1) || 1,
-        ...(baseItems?.configuration || {})
-      }
-    },
-    {
-      _id: 'base-subclass',
-      type: 'Subclass',
-      level: subclassFeatureLevels[0] || 3,
-      title: subclassTitle || 'Select Subclass',
-      isBase: true,
-      configuration: {
-        ...(existingById.get('base-subclass')?.configuration || {})
-      }
-    }
-  ];
-
-  asiLevels.forEach((lvl, i) => {
-    defaults.push({
-      _id: `base-asi-${i}`,
-      type: 'AbilityScoreImprovement',
-      level: lvl,
-      title: 'Ability Score Improvement',
-      isBase: true,
-      configuration: { points: 2, featAllowed: true }
-    });
-  });
-
-  const customAdvancements = (advancements || []).filter((adv) => !String(adv._id || '').startsWith('base-'));
-  const syncedBaseAdvancements = defaults.map((baseAdvancement) => {
-    const existing = existingById.get(baseAdvancement._id);
-    if (!existing) return baseAdvancement;
-
-    return {
-      ...existing,
-      ...baseAdvancement,
-      isBase: true,
-      configuration: {
-        ...(existing.configuration || {}),
-        ...(baseAdvancement.configuration || {})
-      }
-    };
-  });
-
-  return [...syncedBaseAdvancements, ...customAdvancements].sort(sortAdvancementsByLevelThenType);
 }
 
 export default function ClassEditor({ userProfile }: { userProfile: any }) {
@@ -479,6 +433,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [allTags, setAllTags] = useState<any[]>([]);
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
+
+  const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1, dieOverride?: number) => (
+    normalizeAdvancementListForEditor(list, {
+      defaultLevel,
+      defaultHitDie: resolveAdvancementDefaultHitDie(dieOverride ?? hitDie)
+    }) as Advancement[]
+  ), [hitDie]);
+
+  const normalizeFeatureForEditor = useCallback((feature: any) => ({
+    ...feature,
+    advancements: normalizeEditorAdvancements(feature?.advancements || [], Number(feature?.level || 1) || 1)
+  }), [normalizeEditorAdvancements]);
 
   // Unique Options Management
   const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
@@ -788,7 +754,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             });
             setSpellcasting(loadedSpellcasting);
             setTagIds(data.tagIds || []);
-            setAdvancements(data.advancements || []);
+            setAdvancements(normalizeEditorAdvancements(data.advancements || [], 1, data.hitDie || hitDie));
             setSubclassTitle(data.subclassTitle || '');
             const levels = data.subclassFeatureLevels || [];
             setSubclassFeatureLevels(levels);
@@ -819,7 +785,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       );
       const unsubscribeFeatures = onSnapshot(featuresQuery, (snap) => {
         console.log(`[ClassEditor] Features snapshot received. Count: ${snap.docs.length}`);
-        setFeatures(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setFeatures(snap.docs.map(doc => normalizeFeatureForEditor({ id: doc.id, ...doc.data() })));
       }, (err) => console.error("[ClassEditor] Features listener error:", err));
 
       // Fetch Scaling Columns
@@ -923,6 +889,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         ...editingFeature,
         parentId: id,
         parentType: 'class',
+        advancements: normalizeEditorAdvancements(editingFeature.advancements || [], Number(editingFeature.level || 1) || 1),
         quantityColumnId: editingFeature.quantityColumnId || '',
         scalingColumnId: editingFeature.scalingColumnId || '',
         automation: {
@@ -985,38 +952,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     setLoading(true);
 
     try {
-      const armorSelections = (proficiencies.armor.fixedIds || [])
-        .map((id: string) => allArmor.find((item: any) => item.id === id))
-        .filter(Boolean);
-      const weaponSelections = (proficiencies.weapons.fixedIds || [])
-        .map((id: string) => allWeapons.find((item: any) => item.id === id))
-        .filter(Boolean);
-      const toolSelections = (proficiencies.tools.fixedIds || [])
-        .map((id: string) => allTools.find((item: any) => item.id === id))
-        .filter(Boolean);
-      const multiclassArmorSelections = (multiclassProficiencies.armor.fixedIds || [])
-        .map((id: string) => allArmor.find((item: any) => item.id === id))
-        .filter(Boolean);
-      const multiclassWeaponSelections = (multiclassProficiencies.weapons.fixedIds || [])
-        .map((id: string) => allWeapons.find((item: any) => item.id === id))
-        .filter(Boolean);
-      const multiclassToolSelections = (multiclassProficiencies.tools.fixedIds || [])
-        .map((id: string) => allTools.find((item: any) => item.id === id))
-        .filter(Boolean);
-
       const normalizedProficiencies = sanitizeProficiencyCollection({
         ...proficiencies,
-        armorDisplayName: proficiencies.armorDisplayName || armorSelections.map((item: any) => item.name).join(', '),
-        weaponsDisplayName: proficiencies.weaponsDisplayName || weaponSelections.map((item: any) => item.name).join(', '),
-        toolsDisplayName: proficiencies.toolsDisplayName || toolSelections.map((item: any) => item.name).join(', ')
+        armorDisplayName: proficiencies.armorDisplayName || buildGroupedProficiencyDisplayName(proficiencies.armor, allArmor, allArmorCategories),
+        weaponsDisplayName: proficiencies.weaponsDisplayName || buildGroupedProficiencyDisplayName(proficiencies.weapons, allWeapons, allWeaponCategories),
+        toolsDisplayName: proficiencies.toolsDisplayName || buildGroupedProficiencyDisplayName(proficiencies.tools, allTools, allToolCategories)
       });
       const normalizedMulticlassProficiencies = sanitizeProficiencyCollection({
         ...multiclassProficiencies,
-        armorDisplayName: multiclassProficiencies.armorDisplayName || multiclassArmorSelections.map((item: any) => item.name).join(', '),
-        weaponsDisplayName: multiclassProficiencies.weaponsDisplayName || multiclassWeaponSelections.map((item: any) => item.name).join(', '),
-        toolsDisplayName: multiclassProficiencies.toolsDisplayName || multiclassToolSelections.map((item: any) => item.name).join(', ')
+        armorDisplayName: multiclassProficiencies.armorDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.armor, allArmor, allArmorCategories),
+        weaponsDisplayName: multiclassProficiencies.weaponsDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.weapons, allWeapons, allWeaponCategories),
+        toolsDisplayName: multiclassProficiencies.toolsDisplayName || buildGroupedProficiencyDisplayName(multiclassProficiencies.tools, allTools, allToolCategories)
       });
-      const syncedAdvancements = buildSyncedBaseAdvancements({
+      const syncedAdvancements = buildCanonicalBaseClassAdvancements({
         advancements,
         hitDie,
         proficiencies: normalizedProficiencies,
@@ -1025,6 +973,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         subclassFeatureLevels,
         asiLevels
       });
+      const normalizedSyncedAdvancements = normalizeEditorAdvancements(syncedAdvancements, 1, hitDie);
       const normalizedSpellcasting = normalizeClassSpellcastingForSave(spellcasting);
 
       const classData = {
@@ -1049,7 +998,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         subclassTitle,
         subclassFeatureLevels,
         asiLevels,
-        advancements: syncedAdvancements,
+        advancements: normalizedSyncedAdvancements,
         imageUrl,
         imageDisplay,
         cardImageUrl,
@@ -1070,7 +1019,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       }
       setProficiencies(normalizedProficiencies);
       setMulticlassProficiencies(normalizedMulticlassProficiencies);
-      setAdvancements(syncedAdvancements);
+      setAdvancements(normalizedSyncedAdvancements);
       toast.success('Class saved successfully!');
       setLastSavedTick(Date.now());
     } catch (error) {
@@ -1083,7 +1032,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
   const handleInitializeBaseAdvancements = () => {
     const normalizedProficiencies = sanitizeProficiencyCollection(proficiencies);
-    const syncedAdvancements = buildSyncedBaseAdvancements({
+    const syncedAdvancements = buildCanonicalBaseClassAdvancements({
       advancements,
       hitDie,
       proficiencies: normalizedProficiencies,
@@ -1092,15 +1041,16 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       subclassFeatureLevels,
       asiLevels
     });
+    const normalizedSyncedAdvancements = normalizeEditorAdvancements(syncedAdvancements, 1, hitDie);
 
-    if (JSON.stringify(advancements) === JSON.stringify(syncedAdvancements)) {
+    if (JSON.stringify(advancements) === JSON.stringify(normalizedSyncedAdvancements)) {
       toast.info('All base advancements are already present and up to date');
       return;
     }
 
-    const added = syncedAdvancements.filter((adv) => adv.isBase && !advancements.some((existing) => existing._id === adv._id)).length;
-    const updated = syncedAdvancements.filter((adv) => adv.isBase && advancements.some((existing) => existing._id === adv._id)).length;
-    setAdvancements(syncedAdvancements);
+    const added = normalizedSyncedAdvancements.filter((adv) => adv.isBase && !advancements.some((existing) => existing._id === adv._id)).length;
+    const updated = normalizedSyncedAdvancements.filter((adv) => adv.isBase && advancements.some((existing) => existing._id === adv._id)).length;
+    setAdvancements(normalizedSyncedAdvancements);
     toast.success(`Advancements synced: ${added} added, ${updated} updated.`);
   };
 
@@ -1154,40 +1104,24 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   );
 
   const toggleGroup = (items: any[], type: 'armor' | 'weapons' | 'tools' | 'languages', target: 'fixedIds' | 'optionIds', categoryId?: string) => {
-    const currentIds = new Set(proficiencies[type][target] || []);
-    const allExist = items.every(item => currentIds.has(item.id));
-    
-    let nextIds: string[];
-    const castIds = currentIds as Set<string>;
-    if (allExist) {
-      nextIds = Array.from(castIds).filter(id => !items.find(item => item.id === id));
-    } else {
-      nextIds = Array.from(new Set([...Array.from(castIds), ...items.map(item => item.id)]));
-    }
+    setProficiencies(buildNextGroupedProficiencyCollection(proficiencies, items, type, target, categoryId));
+  };
 
-    // If adding to one, remove from other
-    const otherTarget = target === 'fixedIds' ? 'optionIds' : 'fixedIds';
-    let nextOtherIds = proficiencies[type][otherTarget] || [];
-    if (!allExist) {
-      nextOtherIds = nextOtherIds.filter((id: string) => !items.find(item => item.id === id));
-    }
+  const toggleMulticlassGroup = (items: any[], type: 'armor' | 'weapons' | 'tools' | 'languages', target: 'fixedIds' | 'optionIds', categoryId?: string) => {
+    setMulticlassProficiencies(buildNextGroupedProficiencyCollection(multiclassProficiencies, items, type, target, categoryId));
+  };
 
-    const currentCatIds = proficiencies[type].categoryIds || [];
-    let nextCatIds = currentCatIds;
-    if (categoryId) {
-      nextCatIds = allExist 
-        ? currentCatIds.filter((id: string) => id !== categoryId)
-        : Array.from(new Set([...currentCatIds, categoryId]));
-    }
-
-    setProficiencies({
-      ...proficiencies,
-      [type]: {
-        ...proficiencies[type],
-        [target]: nextIds,
-        [otherTarget]: nextOtherIds,
-        categoryIds: nextCatIds
-      }
+  const syncGroupedDisplayName = (
+    collection: any,
+    setCollection: (value: any) => void,
+    type: 'armor' | 'weapons' | 'tools',
+    displayKey: 'armorDisplayName' | 'weaponsDisplayName' | 'toolsDisplayName',
+    items: any[],
+    categories: any[]
+  ) => {
+    setCollection({
+      ...collection,
+      [displayKey]: buildGroupedProficiencyDisplayName(collection[type], items, categories)
     });
   };
 
@@ -1599,21 +1533,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       size="sm" 
                       variant="outline" 
                       className="h-8 text-[10px] uppercase font-bold border-gold/20"
-                      onClick={() => {
-                        const catNames = (proficiencies.armor.categoryIds || [])
-                          .map((cid: string) => allArmorCategories.find(c => c.id === cid)?.name)
-                          .filter(Boolean);
-                        
-                        const fixedNotInCats = (allArmor || []).filter(a => 
-                          proficiencies.armor.fixedIds?.includes(a.id) && 
-                          !(proficiencies.armor.categoryIds || []).includes(a.categoryId)
-                        ).map(a => a.name);
-
-                        setProficiencies({
-                          ...proficiencies,
-                          armorDisplayName: [...catNames, ...fixedNotInCats].join(', ')
-                        });
-                      }}
+                      onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'armor', 'armorDisplayName', allArmor, allArmorCategories)}
                     >
                       Sync
                     </Button>
@@ -1653,15 +1573,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = proficiencies.armor.optionIds?.includes(armor.id);
                                   const isFixed = proficiencies.armor.fixedIds?.includes(armor.id);
                                   return (
-                                    <label key={`armor-option-${armor.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`armor-option-${armor.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = proficiencies.armor.optionIds;
                                           const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
@@ -1723,8 +1642,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                         onChange={e => {
                                           const current = proficiencies.armor.fixedIds;
                                           const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
-                                          let nextOptions = proficiencies.armor.optionIds;
-                                          if (e.target.checked) nextOptions = nextOptions.filter((id: string) => id !== armor.id);
+                                          const nextOptions = proficiencies.armor.optionIds;
                                           setProficiencies({ ...proficiencies, armor: { ...proficiencies.armor, fixedIds: next, optionIds: nextOptions } });
                                         }}
                                       />
@@ -1776,21 +1694,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       size="sm" 
                       variant="outline" 
                       className="h-8 text-[10px] uppercase font-bold border-gold/20"
-                      onClick={() => {
-                        const catNames = (proficiencies.weapons.categoryIds || [])
-                          .map((cid: string) => allWeaponCategories.find(c => c.id === cid)?.name)
-                          .filter(Boolean);
-                        
-                        const fixedNotInCats = (allWeapons || []).filter(w => 
-                          proficiencies.weapons.fixedIds?.includes(w.id) && 
-                          !(proficiencies.weapons.categoryIds || []).includes(w.categoryId)
-                        ).map(w => w.name);
-
-                        setProficiencies({
-                          ...proficiencies,
-                          weaponsDisplayName: [...catNames, ...fixedNotInCats].join(', ')
-                        });
-                      }}
+                      onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'weapons', 'weaponsDisplayName', allWeapons, allWeaponCategories)}
                     >
                       Sync
                     </Button>
@@ -1830,15 +1734,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = proficiencies.weapons.optionIds?.includes(weapon.id);
                                   const isFixed = proficiencies.weapons.fixedIds?.includes(weapon.id);
                                   return (
-                                    <label key={`weapon-option-${weapon.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`weapon-option-${weapon.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = proficiencies.weapons.optionIds;
                                           const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
@@ -1899,8 +1802,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                         onChange={e => {
                                           const current = proficiencies.weapons.fixedIds;
                                           const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
-                                          let nextOptions = proficiencies.weapons.optionIds;
-                                          if (e.target.checked) nextOptions = nextOptions.filter((id: string) => id !== weapon.id);
+                                          const nextOptions = proficiencies.weapons.optionIds;
                                           setProficiencies({ ...proficiencies, weapons: { ...proficiencies.weapons, fixedIds: next, optionIds: nextOptions } });
                                         }}
                                       />
@@ -2051,21 +1953,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       size="sm" 
                       variant="outline" 
                       className="h-8 text-[10px] uppercase font-bold border-gold/20"
-                      onClick={() => {
-                        const catNames = (proficiencies.tools.categoryIds || [])
-                          .map((cid: string) => allToolCategories.find(c => c.id === cid)?.name)
-                          .filter(Boolean);
-                        
-                        const fixedNotInCats = (allTools || []).filter(t => 
-                          proficiencies.tools.fixedIds?.includes(t.id) && 
-                          !(proficiencies.tools.categoryIds || []).includes(t.categoryId)
-                        ).map(t => t.name);
-
-                        setProficiencies({
-                          ...proficiencies,
-                          toolsDisplayName: [...catNames, ...fixedNotInCats].join(', ')
-                        });
-                      }}
+                      onClick={() => syncGroupedDisplayName(proficiencies, setProficiencies, 'tools', 'toolsDisplayName', allTools, allToolCategories)}
                     >
                       Sync
                     </Button>
@@ -2103,15 +1991,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = proficiencies.tools.optionIds?.includes(tool.id);
                                   const isFixed = proficiencies.tools.fixedIds?.includes(tool.id);
                                   return (
-                                    <label key={`tool-option-${tool.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`tool-option-${tool.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = proficiencies.tools.optionIds;
                                           const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
@@ -2173,14 +2060,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                           const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
                                           
                                           // If adding to fixed, remove from options
-                                          let nextOptions = proficiencies.tools.optionIds;
-                                          if (e.target.checked) {
-                                            nextOptions = nextOptions.filter((id: string) => id !== tool.id);
-                                          }
-
                                           setProficiencies({
                                             ...proficiencies,
-                                            tools: { ...proficiencies.tools, fixedIds: next, optionIds: nextOptions }
+                                            tools: { ...proficiencies.tools, fixedIds: next, optionIds: proficiencies.tools.optionIds }
                                           });
                                         }}
                                       />
@@ -2249,15 +2131,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = proficiencies.languages.optionIds?.includes(lang.id);
                                   const isFixed = proficiencies.languages.fixedIds?.includes(lang.id);
                                   return (
-                                    <label key={`lang-option-${lang.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`lang-option-${lang.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = proficiencies.languages.optionIds;
                                           const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
@@ -2319,14 +2200,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                           const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
                                           
                                           // If adding to fixed, remove from options
-                                          let nextOptions = proficiencies.languages.optionIds;
-                                          if (e.target.checked) {
-                                            nextOptions = nextOptions.filter((id: string) => id !== lang.id);
-                                          }
-
                                           setProficiencies({
                                             ...proficiencies,
-                                            languages: { ...proficiencies.languages, fixedIds: next, optionIds: nextOptions }
+                                            languages: { ...proficiencies.languages, fixedIds: next, optionIds: proficiencies.languages.optionIds }
                                           });
                                         }}
                                       />
@@ -2613,7 +2489,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 <Button 
                   size="sm"
                   onClick={() => {
-                    setEditingFeature({ 
+                    setEditingFeature(normalizeFeatureForEditor({ 
                       id: doc(collection(db, 'features')).id,
                       name: '', 
                       description: '', 
@@ -2636,7 +2512,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       activities: {},
                       effectsStr: '[]',
                       advancements: []
-                    });
+                    }));
                     setIsFeatureModalOpen(true);
                   }}
                   className="h-6 gap-1 btn-gold"
@@ -2653,7 +2529,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="sm" onClick={() => { 
-                        setEditingFeature({
+                        setEditingFeature(normalizeFeatureForEditor({
                           ...feature,
                           type: feature.type || 'class',
                           configuration: feature.configuration || {
@@ -2669,7 +2545,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           activities: feature.automation?.activities || {},
                           effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
                           advancements: feature.advancements || []
-                        }); 
+                        })); 
                         setIsFeatureModalOpen(true); 
                       }} className="h-6 w-6 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDeleteFeature(feature.id)} className="h-6 w-6 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
@@ -2952,21 +2828,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       size="sm" 
                       variant="outline" 
                       className="h-8 text-[10px] uppercase font-bold border-gold/20"
-                      onClick={() => {
-                        const catNames = (multiclassProficiencies.armor.categoryIds || [])
-                          .map((cid: string) => allArmorCategories.find(c => c.id === cid)?.name)
-                          .filter(Boolean);
-                        
-                        const fixedNotInCats = (allArmor || []).filter(a => 
-                          multiclassProficiencies.armor.fixedIds?.includes(a.id) && 
-                          !(multiclassProficiencies.armor.categoryIds || []).includes(a.categoryId)
-                        ).map(a => a.name);
-
-                        setMulticlassProficiencies({
-                          ...multiclassProficiencies,
-                          armorDisplayName: [...catNames, ...fixedNotInCats].join(', ')
-                        });
-                      }}
+                      onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'armor', 'armorDisplayName', allArmor, allArmorCategories)}
                     >
                       Sync
                     </Button>
@@ -2993,7 +2855,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   checked={allExist} 
                                   onChange={() => {
                                     const catId = allArmorCategories.find(c => c.name === category)?.id;
-                                    toggleGroup(items as any[], 'armor', 'optionIds', catId);
+                                    toggleMulticlassGroup(items as any[], 'armor', 'optionIds', catId);
                                   }} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
@@ -3006,15 +2868,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = multiclassProficiencies.armor.optionIds?.includes(armor.id);
                                   const isFixed = multiclassProficiencies.armor.fixedIds?.includes(armor.id);
                                   return (
-                                    <label key={`armor-option-${armor.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`armor-option-${armor.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = multiclassProficiencies.armor.optionIds;
                                           const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
@@ -3053,7 +2914,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   checked={allFixed} 
                                   onChange={() => {
                                     const catId = allArmorCategories.find(c => c.name === category)?.id;
-                                    toggleGroup(items as any[], 'armor', 'fixedIds', catId);
+                                    toggleMulticlassGroup(items as any[], 'armor', 'fixedIds', catId);
                                   }} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
@@ -3076,8 +2937,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                         onChange={e => {
                                           const current = multiclassProficiencies.armor.fixedIds;
                                           const next = e.target.checked ? [...current, armor.id] : current.filter((id: string) => id !== armor.id);
-                                          let nextOptions = multiclassProficiencies.armor.optionIds;
-                                          if (e.target.checked) nextOptions = nextOptions.filter((id: string) => id !== armor.id);
+                                          const nextOptions = multiclassProficiencies.armor.optionIds;
                                           setMulticlassProficiencies({ ...multiclassProficiencies, armor: { ...multiclassProficiencies.armor, fixedIds: next, optionIds: nextOptions } });
                                         }}
                                       />
@@ -3129,21 +2989,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       size="sm" 
                       variant="outline" 
                       className="h-8 text-[10px] uppercase font-bold border-gold/20"
-                      onClick={() => {
-                        const catNames = (multiclassProficiencies.weapons.categoryIds || [])
-                          .map((cid: string) => allWeaponCategories.find(c => c.id === cid)?.name)
-                          .filter(Boolean);
-                        
-                        const fixedNotInCats = (allWeapons || []).filter(w => 
-                          multiclassProficiencies.weapons.fixedIds?.includes(w.id) && 
-                          !(multiclassProficiencies.weapons.categoryIds || []).includes(w.categoryId)
-                        ).map(w => w.name);
-
-                        setMulticlassProficiencies({
-                          ...multiclassProficiencies,
-                          weaponsDisplayName: [...catNames, ...fixedNotInCats].join(', ')
-                        });
-                      }}
+                      onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'weapons', 'weaponsDisplayName', allWeapons, allWeaponCategories)}
                     >
                       Sync
                     </Button>
@@ -3170,7 +3016,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   checked={allExist} 
                                   onChange={() => {
                                     const catId = allWeaponCategories.find(c => c.name === category)?.id;
-                                    toggleGroup(items as any[], 'weapons', 'optionIds', catId);
+                                    toggleMulticlassGroup(items as any[], 'weapons', 'optionIds', catId);
                                   }} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
@@ -3183,15 +3029,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = multiclassProficiencies.weapons.optionIds?.includes(weapon.id);
                                   const isFixed = multiclassProficiencies.weapons.fixedIds?.includes(weapon.id);
                                   return (
-                                    <label key={`weapon-option-${weapon.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`weapon-option-${weapon.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = multiclassProficiencies.weapons.optionIds;
                                           const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
@@ -3229,7 +3074,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   checked={allFixed} 
                                   onChange={() => {
                                     const catId = allWeaponCategories.find(c => c.name === category)?.id;
-                                    toggleGroup(items as any[], 'weapons', 'fixedIds', catId);
+                                    toggleMulticlassGroup(items as any[], 'weapons', 'fixedIds', catId);
                                   }} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
@@ -3252,8 +3097,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                         onChange={e => {
                                           const current = multiclassProficiencies.weapons.fixedIds;
                                           const next = e.target.checked ? [...current, weapon.id] : current.filter((id: string) => id !== weapon.id);
-                                          let nextOptions = multiclassProficiencies.weapons.optionIds;
-                                          if (e.target.checked) nextOptions = nextOptions.filter((id: string) => id !== weapon.id);
+                                          const nextOptions = multiclassProficiencies.weapons.optionIds;
                                           setMulticlassProficiencies({ ...multiclassProficiencies, weapons: { ...multiclassProficiencies.weapons, fixedIds: next, optionIds: nextOptions } });
                                         }}
                                       />
@@ -3404,21 +3248,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       size="sm" 
                       variant="outline" 
                       className="h-8 text-[10px] uppercase font-bold border-gold/20"
-                      onClick={() => {
-                        const catNames = (multiclassProficiencies.tools.categoryIds || [])
-                          .map((cid: string) => allToolCategories.find(c => c.id === cid)?.name)
-                          .filter(Boolean);
-                        
-                        const fixedNotInCats = (allTools || []).filter(t => 
-                          multiclassProficiencies.tools.fixedIds?.includes(t.id) && 
-                          !(multiclassProficiencies.tools.categoryIds || []).includes(t.categoryId)
-                        ).map(t => t.name);
-
-                        setMulticlassProficiencies({
-                          ...multiclassProficiencies,
-                          toolsDisplayName: [...catNames, ...fixedNotInCats].join(', ')
-                        });
-                      }}
+                      onClick={() => syncGroupedDisplayName(multiclassProficiencies, setMulticlassProficiencies, 'tools', 'toolsDisplayName', allTools, allToolCategories)}
                     >
                       Sync
                     </Button>
@@ -3444,7 +3274,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   type="checkbox" 
                                   className="hidden" 
                                   checked={allExist} 
-                                  onChange={() => toggleGroup(items as any[], 'tools', 'optionIds', catId)} 
+                                  onChange={() => toggleMulticlassGroup(items as any[], 'tools', 'optionIds', catId)} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{categoryName}</span>
                               </label>
@@ -3456,15 +3286,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = multiclassProficiencies.tools.optionIds?.includes(tool.id);
                                   const isFixed = multiclassProficiencies.tools.fixedIds?.includes(tool.id);
                                   return (
-                                    <label key={`tool-option-${tool.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`tool-option-${tool.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = multiclassProficiencies.tools.optionIds;
                                           const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
@@ -3502,7 +3331,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   type="checkbox" 
                                   className="hidden" 
                                   checked={allFixed} 
-                                  onChange={() => toggleGroup(items as any[], 'tools', 'fixedIds', catId)} 
+                                  onChange={() => toggleMulticlassGroup(items as any[], 'tools', 'fixedIds', catId)} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{categoryName}</span>
                               </label>
@@ -3526,14 +3355,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                           const next = e.target.checked ? [...current, tool.id] : current.filter((id: string) => id !== tool.id);
                                           
                                           // If adding to fixed, remove from options
-                                          let nextOptions = multiclassProficiencies.tools.optionIds;
-                                          if (e.target.checked) {
-                                            nextOptions = nextOptions.filter((id: string) => id !== tool.id);
-                                          }
-
                                           setMulticlassProficiencies({
                                             ...multiclassProficiencies,
-                                            tools: { ...multiclassProficiencies.tools, fixedIds: next, optionIds: nextOptions }
+                                            tools: { ...multiclassProficiencies.tools, fixedIds: next, optionIds: multiclassProficiencies.tools.optionIds }
                                           });
                                         }}
                                       />
@@ -3590,7 +3414,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   type="checkbox" 
                                   className="hidden" 
                                   checked={allExist} 
-                                  onChange={() => toggleGroup(items as any[], 'languages', 'optionIds', catId)} 
+                                  onChange={() => toggleMulticlassGroup(items as any[], 'languages', 'optionIds', catId)} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{categoryName}</span>
                               </label>
@@ -3602,15 +3426,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   const isOption = multiclassProficiencies.languages.optionIds?.includes(lang.id);
                                   const isFixed = multiclassProficiencies.languages.fixedIds?.includes(lang.id);
                                   return (
-                                    <label key={`lang-option-${lang.id}`} className={`flex items-center gap-2 cursor-pointer group ${isFixed ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption || isFixed ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
-                                        {(isOption || isFixed) && <Check className="w-2 h-2 text-white" />}
+                                    <label key={`lang-option-${lang.id}`} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${isOption ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/50'}`}>
+                                        {isOption && <Check className="w-2 h-2 text-white" />}
                                       </div>
                                       <input
                                         type="checkbox"
                                         className="hidden"
-                                        disabled={isFixed}
-                                        checked={isOption || isFixed}
+                                        checked={isOption}
                                         onChange={e => {
                                           const current = multiclassProficiencies.languages.optionIds;
                                           const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
@@ -3648,7 +3471,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                   type="checkbox" 
                                   className="hidden" 
                                   checked={allFixed} 
-                                  onChange={() => toggleGroup(items as any[], 'languages', 'fixedIds', catId)} 
+                                  onChange={() => toggleMulticlassGroup(items as any[], 'languages', 'fixedIds', catId)} 
                                 />
                                 <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{categoryName}</span>
                               </label>
@@ -3672,14 +3495,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                           const next = e.target.checked ? [...current, lang.id] : current.filter((id: string) => id !== lang.id);
                                           
                                           // If adding to fixed, remove from options
-                                          let nextOptions = multiclassProficiencies.languages.optionIds;
-                                          if (e.target.checked) {
-                                            nextOptions = nextOptions.filter((id: string) => id !== lang.id);
-                                          }
-
                                           setMulticlassProficiencies({
                                             ...multiclassProficiencies,
-                                            languages: { ...multiclassProficiencies.languages, fixedIds: next, optionIds: nextOptions }
+                                            languages: { ...multiclassProficiencies.languages, fixedIds: next, optionIds: multiclassProficiencies.languages.optionIds }
                                           });
                                         }}
                                       />

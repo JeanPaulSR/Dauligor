@@ -1,0 +1,39 @@
+{
+  "kind": "dauligor.source.v1",
+  "schemaVersion": 1,
+  "sourceId": "source-uah-2014",
+  "slug": "uah",
+  "name": "The Ultimate Adventurer's Handbook",
+  "shortName": "UAH",
+  "description": "The Ultimate Adventurer’s Handbook is the ultimate resource for creating new characters to play in your next Dungeons & Dragons campaign. Within this book you’ll find new races, subclasses, feats, spells, magic items, and more. In addition to new options available to every class published by Wizards of the Coast, as well as Matt Mercer’s Blood Hunter, this book features updated and expanded versions of two popular DMsGuild classes: the Accursed and the Pugilist.",
+  "coverImage": "",
+  "status": "ready",
+  "rules": "2014",
+  "tags": [],
+  "dates": {
+    "addedAt": "2026-04-24T20:33:45.884Z",
+    "updatedAt": "2026-04-24T20:34:06.817Z"
+  },
+  "linkedContent": {
+    "classes": {
+      "count": 0,
+      "catalogUrl": "classes/catalog.json"
+    },
+    "spells": {
+      "count": 0,
+      "catalogUrl": "spells/catalog.json"
+    },
+    "items": {
+      "count": 0,
+      "catalogUrl": "items/catalog.json"
+    },
+    "bestiary": {
+      "count": 0,
+      "catalogUrl": "bestiary/catalog.json"
+    },
+    "journals": {
+      "count": 0,
+      "catalogUrl": "journals/catalog.json"
+    }
+  }
+}

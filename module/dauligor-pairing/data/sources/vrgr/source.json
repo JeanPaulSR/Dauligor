@@ -1,0 +1,39 @@
+{
+  "kind": "dauligor.source.v1",
+  "schemaVersion": 1,
+  "sourceId": "source-vrgr-2014",
+  "slug": "vrgr",
+  "name": "Van Richten's Guide to Ravenloft",
+  "shortName": "VRGR",
+  "description": "This book explores the Domains of Dread, the mysterious expanses of the Shadowfell that serve as backdrops for excitement and terror. It guides players and Dungeon Masters through the process of creating characters, domains, and stories ripe for chilling D&D adventures.",
+  "coverImage": "",
+  "status": "ready",
+  "rules": "2014",
+  "tags": [],
+  "dates": {
+    "addedAt": "2026-04-25T21:58:24.296Z",
+    "updatedAt": "2026-04-25T21:58:24.296Z"
+  },
+  "linkedContent": {
+    "classes": {
+      "count": 0,
+      "catalogUrl": "classes/catalog.json"
+    },
+    "spells": {
+      "count": 0,
+      "catalogUrl": "spells/catalog.json"
+    },
+    "items": {
+      "count": 0,
+      "catalogUrl": "items/catalog.json"
+    },
+    "bestiary": {
+      "count": 0,
+      "catalogUrl": "bestiary/catalog.json"
+    },
+    "journals": {
+      "count": 0,
+      "catalogUrl": "journals/catalog.json"
+    }
+  }
+}

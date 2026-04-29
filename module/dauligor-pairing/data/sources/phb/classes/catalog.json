@@ -1,0 +1,62 @@
+{
+  "kind": "dauligor.class-catalog.v1",
+  "schemaVersion": 1,
+  "source": {
+    "system": "dauligor",
+    "entity": "class-catalog",
+    "id": "source-phb-2014-classes",
+    "sourceId": "source-phb-2014"
+  },
+  "entries": [
+    {
+      "sourceId": "class-bard",
+      "name": "Bard",
+      "type": "class",
+      "img": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2F0db5d98Gj95jUet5gypC%2F1777154817760_0hz9nam.webp?alt=media&token=a6d6a277-6d91-4423-9a5b-bda628642d55",
+      "rules": "2014",
+      "description": "Whether scholar, skald, or scoundrel, a bard weaves magic through words and music to inspire allies, demoralize foes, manipulate minds, create illusions, and even heal wounds. The bard is a master of ",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "bard.json"
+    },
+    {
+      "sourceId": "class-sorcerer",
+      "name": "Sorcerer",
+      "type": "class",
+      "img": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2Fb49Mkm7KjFfenfXBnRVY%2F1777156150134_9obnsjn.webp?alt=media&token=ddf95c55-bb3b-44ed-a3d6-3ca9d17b29f2",
+      "rules": "2014",
+      "description": "Sorcerer gains a smaller number of spells than other classes normally. Their subclasses instead grant them a narrow field of spells to choose from, representing their unique magic they gained from an ",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "sorcerer.json"
+    },
+    {
+      "sourceId": "class-druid",
+      "name": "Druid",
+      "type": "class",
+      "img": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2Fnew%2F1777169678619_83p5y5j.webp?alt=media&token=155ffea7-d295-4fef-b717-898758c4ef30",
+      "rules": "2014",
+      "description": "",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "druid.json"
+    },
+    {
+      "sourceId": "class-barbarian",
+      "name": "Barbarian",
+      "type": "class",
+      "img": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2Fs7MrVS5INDtJC5BlQkpy%2F1777153234332_4rt0pxk.webp?alt=media&token=268df1e9-6737-4b9e-a960-984f1574552d",
+      "rules": "2014",
+      "description": "For some, their rage springs from a communion with fierce animal spirits. Others draw from a roiling reservoir of anger at a world full of pain. For every barbarian, rage is a power that fuels not jus",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "barbarian.json"
+    },
+    {
+      "sourceId": "class-cleric",
+      "name": "Cleric",
+      "type": "class",
+      "img": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2Fnew%2F1777156674114_os1jy8f.webp?alt=media&token=c689277d-baad-4c0e-b00f-5a9205d9c027",
+      "rules": "2014",
+      "description": "Clerics are intermediaries between the mortal world and the distant planes of the gods. As varied as the gods they serve, clerics strive to embody the handiwork of their deities. No ordinary priest, a",
+      "payloadKind": "dauligor.semantic.class-export",
+      "payloadUrl": "cleric.json"
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "kind": "dauligor.source-catalog.v1",
+  "schemaVersion": 1,
+  "source": {
+    "system": "dauligor",
+    "entity": "source-catalog",
+    "id": "full-exported-source-library"
+  },
+  "entries": [
+    {
+      "sourceId": "source-uah-2014",
+      "slug": "uah",
+      "name": "The Ultimate Adventurer's Handbook",
+      "shortName": "UAH",
+      "description": "The Ultimate Adventurer’s Handbook is the ultimate resource for creating new characters to play in your next Dungeons & Dragons campaign. Within this book you’ll find new races, subclasses, feats, spe",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 0,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "uah/source.json",
+      "classCatalogUrl": "uah/classes/catalog.json"
+    },
+    {
+      "sourceId": "source-xge-2014",
+      "slug": "xge",
+      "name": "Xanathar's Guide to Everything",
+      "shortName": "XGE",
+      "description": "Xanathar's Guide to Everything",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 0,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "xge/source.json",
+      "classCatalogUrl": "xge/classes/catalog.json"
+    },
+    {
+      "sourceId": "source-dsotdq-2014",
+      "slug": "dsotdq",
+      "name": "Dragonlance: Shadow of the Dragon Queen",
+      "shortName": "DSotDQ",
+      "description": "Dragonlance: Shadow of the Dragon Queen",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 0,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "dsotdq/source.json",
+      "classCatalogUrl": "dsotdq/classes/catalog.json"
+    },
+    {
+      "sourceId": "source-rj-2014",
+      "slug": "rj",
+      "name": "Rain-Junkie",
+      "shortName": "RJ",
+      "description": "I write D&D 5e homebrew!",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 0,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "rj/source.json",
+      "classCatalogUrl": "rj/classes/catalog.json"
+    },
+    {
+      "sourceId": "source-tce-2014",
+      "slug": "tce",
+      "name": "Tasha's Cauldron of Everything",
+      "shortName": "TCE",
+      "description": "Tasha's Cauldron of Everything",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 1,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "tce/source.json",
+      "classCatalogUrl": "tce/classes/catalog.json"
+    },
+    {
+      "sourceId": "source-scag-2014",
+      "slug": "scag",
+      "name": "Sword Coast Adventurer's Guide",
+      "shortName": "SCAG",
+      "description": "Sword Coast Adventurer's Guide is a regional sourcebook, by Wizards of the Coast, set in the Forgotten Realms using the Dungeons & Dragons 5th edition ruleset. It focuses on west and northwest Faerûn.",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 0,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "scag/source.json",
+      "classCatalogUrl": "scag/classes/catalog.json"
+    },
+    {
+      "sourceId": "source-phb-2014",
+      "slug": "phb",
+      "name": "Player's Handbook",
+      "shortName": "PHB",
+      "description": "The Player's Hand Book",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [
+        "Classes",
+        "Items",
+        "Spells",
+        "Feats"
+      ],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 5,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "phb/source.json",
+      "classCatalogUrl": "phb/classes/catalog.json"
+    },
+    {
+      "sourceId": "source-vrgr-2014",
+      "slug": "vrgr",
+      "name": "Van Richten's Guide to Ravenloft",
+      "shortName": "VRGR",
+      "description": "This book explores the Domains of Dread, the mysterious expanses of the Shadowfell that serve as backdrops for excitement and terror. It guides players and Dungeon Masters through the process of creat",
+      "status": "ready",
+      "rules": "2014",
+      "tags": [],
+      "supportedImportTypes": [
+        "classes-subclasses"
+      ],
+      "counts": {
+        "classes": 0,
+        "spells": 0,
+        "items": 0,
+        "bestiary": 0,
+        "journals": 0
+      },
+      "detailUrl": "vrgr/source.json",
+      "classCatalogUrl": "vrgr/classes/catalog.json"
+    }
+  ]
+}

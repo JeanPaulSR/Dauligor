@@ -1,0 +1,3183 @@
+{
+  "class": {
+    "id": "s7MrVS5INDtJC5BlQkpy",
+    "wealth": "",
+    "updatedAt": "2026-04-29T15:37:45.937Z",
+    "preview": "",
+    "primaryAbilityChoice": [],
+    "createdAt": "2026-04-25T21:08:07.388Z",
+    "hitDie": 12,
+    "previewImageUrl": "",
+    "spellcasting": {
+      "ability": "INT",
+      "spellsKnownFormula": "",
+      "description": "",
+      "isRitualCaster": false,
+      "level": 1,
+      "type": "prepared",
+      "hasSpellcasting": false
+    },
+    "description": "For some, their rage springs from a communion with fierce animal spirits. Others draw from a roiling reservoir of anger at a world full of pain. For every barbarian, rage is a power that fuels not just a battle frenzy but also uncanny reflexes, resilience, and feats of strength.",
+    "multiclassProficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "shield"
+        ]
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "club",
+          "greatclub",
+          "javelin",
+          "mace",
+          "sickle",
+          "spear",
+          "quarterstaff",
+          "lighthammer",
+          "handaxe",
+          "dagger",
+          "dart",
+          "sling",
+          "shortbow",
+          "lightcrossbow",
+          "longbow",
+          "handcrossbow",
+          "met",
+          "heavycrossbow",
+          "blowgun",
+          "battleaxe",
+          "glaive",
+          "greatsword",
+          "lance",
+          "maul",
+          "pike",
+          "scimitar",
+          "trident",
+          "warhammer",
+          "whip",
+          "warpick",
+          "shortsword",
+          "rapier",
+          "morningstar",
+          "longsword",
+          "greataxe",
+          "flail",
+          "halberd"
+        ]
+      },
+      "tools": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      }
+    },
+    "identifier": "barbarian",
+    "imageUrl": "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0493579997.firebasestorage.app/o/images%2Fclasses%2Fs7MrVS5INDtJC5BlQkpy%2F1777153234332_4rt0pxk.webp?alt=media&token=268df1e9-6737-4b9e-a960-984f1574552d",
+    "previewDisplay": {
+      "y": 10.5,
+      "scale": 1,
+      "x": 61.6
+    },
+    "startingEquipment": "You start with the following equipment, in addition to the equipment granted by your background:\n\n* (a) a greataxe or (b) any martial melee weapon\n* (a) two handaxes or (b) any simple weapon\n* An explorer's pack and four javelins",
+    "savingThrows": [
+      "STR",
+      "CON"
+    ],
+    "tagIds": [
+      "frontline",
+      "striker",
+      "none",
+      "martial",
+      "simple"
+    ],
+    "proficiencies": {
+      "armor": {
+        "choiceCount": 0,
+        "categoryIds": [
+          "light",
+          "medium",
+          "shields"
+        ],
+        "optionIds": [],
+        "fixedIds": [
+          "leather",
+          "padded",
+          "studded-leather",
+          "breastplate",
+          "chain-shirt",
+          "half-plate",
+          "hide",
+          "scale-mail",
+          "shield"
+        ]
+      },
+      "weapons": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "blowgun",
+          "handcrossbow",
+          "heavycrossbow",
+          "longbow",
+          "met",
+          "lightcrossbow",
+          "dart",
+          "shortbow",
+          "sling",
+          "club",
+          "dagger",
+          "greatclub",
+          "handaxe",
+          "javelin",
+          "lighthammer",
+          "mace",
+          "quarterstaff",
+          "sickle",
+          "spear",
+          "battleaxe",
+          "flail",
+          "glaive",
+          "greataxe",
+          "greatsword",
+          "halberd",
+          "lance",
+          "longsword",
+          "maul",
+          "morningstar",
+          "pike",
+          "rapier",
+          "scimitar",
+          "shortsword",
+          "trident",
+          "warpick",
+          "warhammer",
+          "whip"
+        ]
+      },
+      "tools": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "languages": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": []
+      },
+      "skills": {
+        "choiceCount": 2,
+        "categoryIds": [],
+        "optionIds": [
+          "ani",
+          "ath",
+          "itm",
+          "nat",
+          "prc",
+          "sur"
+        ],
+        "fixedIds": []
+      },
+      "savingThrows": {
+        "choiceCount": 0,
+        "categoryIds": [],
+        "optionIds": [],
+        "fixedIds": [
+          "STR",
+          "CON"
+        ]
+      }
+    },
+    "lore": "",
+    "imageDisplay": {
+      "x": 56.6,
+      "y": 26.2,
+      "scale": 1.21
+    },
+    "name": "Barbarian",
+    "subclassFeatureLevels": [
+      3,
+      6,
+      10,
+      14
+    ],
+    "cardImageUrl": "",
+    "primaryAbility": [
+      "STR"
+    ],
+    "sourceId": "source-phb-2014",
+    "multiclassing": "",
+    "cardDisplay": {
+      "x": 53.6,
+      "y": 0,
+      "scale": 1.46
+    },
+    "advancements": [
+      {
+        "title": "Hit Points",
+        "_id": "base-hp",
+        "type": "HitPoints",
+        "level": 1,
+        "configuration": {
+          "hitDie": 12
+        }
+      },
+      {
+        "configuration": {
+          "count": 1,
+          "choiceType": "item",
+          "countSource": "fixed",
+          "optionalPool": [],
+          "excludedOptionIds": [],
+          "pool": [],
+          "optional": false
+        },
+        "title": "Starting Equipment Choices",
+        "_id": "base-items",
+        "type": "ItemChoice",
+        "level": 1
+      },
+      {
+        "_id": "inherent-class-feature-grant-unarmored-defense",
+        "type": "ItemGrant",
+        "level": 1,
+        "title": "Unarmored Defense",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-unarmored-defense",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-unarmored-defense"
+      },
+      {
+        "_id": "inherent-class-feature-grant-rage",
+        "type": "ItemGrant",
+        "level": 1,
+        "title": "Rage",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-rage",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-rage"
+      },
+      {
+        "title": "Rage Uses",
+        "type": "ScaleValue",
+        "level": 1,
+        "_id": "wv0xwvhb2",
+        "configuration": {
+          "scalingColumnId": "scale-rages",
+          "type": "number",
+          "values": {
+            "1": "2",
+            "2": "2",
+            "3": "3",
+            "4": "3",
+            "5": "3",
+            "6": "4",
+            "7": "4",
+            "8": "4",
+            "9": "4",
+            "10": "4",
+            "11": "4",
+            "12": "5",
+            "13": "5",
+            "14": "5",
+            "15": "5",
+            "16": "5",
+            "17": "6",
+            "18": "6",
+            "19": "6",
+            "20": "Unlimited"
+          },
+          "identifier": "rages"
+        },
+        "sourceScaleId": "scale-rages"
+      },
+      {
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-saves",
+        "title": "Saving Throw Proficiencies",
+        "configuration": {
+          "options": [],
+          "fixed": [
+            "STR",
+            "CON"
+          ],
+          "choiceSource": "fixed",
+          "categoryIds": [],
+          "type": "saves",
+          "allowReplacements": false,
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 0
+        }
+      },
+      {
+        "configuration": {
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 0,
+          "allowReplacements": false,
+          "categoryIds": [
+            "light",
+            "medium",
+            "shields"
+          ],
+          "type": "armor",
+          "fixed": [
+            "leather",
+            "padded",
+            "studded-leather",
+            "breastplate",
+            "chain-shirt",
+            "half-plate",
+            "hide",
+            "scale-mail",
+            "shield"
+          ],
+          "options": [],
+          "choiceSource": "fixed"
+        },
+        "title": "Armor Proficiencies",
+        "type": "Trait",
+        "level": 1,
+        "_id": "base-armor"
+      },
+      {
+        "title": "Weapon Proficiencies",
+        "type": "Trait",
+        "level": 1,
+        "_id": "base-weapons",
+        "configuration": {
+          "options": [],
+          "fixed": [
+            "blowgun",
+            "handcrossbow",
+            "heavycrossbow",
+            "longbow",
+            "met",
+            "lightcrossbow",
+            "dart",
+            "shortbow",
+            "sling",
+            "club",
+            "dagger",
+            "greatclub",
+            "handaxe",
+            "javelin",
+            "lighthammer",
+            "mace",
+            "quarterstaff",
+            "sickle",
+            "spear",
+            "battleaxe",
+            "flail",
+            "glaive",
+            "greataxe",
+            "greatsword",
+            "halberd",
+            "lance",
+            "longsword",
+            "maul",
+            "morningstar",
+            "pike",
+            "rapier",
+            "scimitar",
+            "shortsword",
+            "trident",
+            "warpick",
+            "warhammer",
+            "whip"
+          ],
+          "choiceSource": "fixed",
+          "allowReplacements": false,
+          "categoryIds": [],
+          "type": "weapons",
+          "replacements": [],
+          "mode": "default",
+          "choiceCount": 0
+        }
+      },
+      {
+        "configuration": {
+          "mode": "default",
+          "replacements": [],
+          "choiceCount": 2,
+          "fixed": [],
+          "options": [
+            "ani",
+            "ath",
+            "itm",
+            "nat",
+            "prc",
+            "sur"
+          ],
+          "choiceSource": "fixed",
+          "categoryIds": [],
+          "type": "skills",
+          "allowReplacements": false
+        },
+        "title": "Skill Proficiencies",
+        "_id": "base-skills",
+        "type": "Trait",
+        "level": 1
+      },
+      {
+        "configuration": {
+          "categoryIds": [],
+          "type": "tools",
+          "allowReplacements": false,
+          "options": [],
+          "fixed": [],
+          "choiceSource": "fixed",
+          "mode": "default",
+          "replacements": [],
+          "choiceCount": 0
+        },
+        "title": "Tool Proficiencies",
+        "level": 1,
+        "type": "Trait",
+        "_id": "base-tools"
+      },
+      {
+        "_id": "base-languages",
+        "type": "Trait",
+        "level": 1,
+        "title": "Languages",
+        "configuration": {
+          "choiceCount": 0,
+          "replacements": [],
+          "mode": "default",
+          "type": "languages",
+          "categoryIds": [],
+          "allowReplacements": false,
+          "choiceSource": "fixed",
+          "options": [],
+          "fixed": []
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-reckless-attack",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Reckless Attack",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-reckless-attack",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-reckless-attack"
+      },
+      {
+        "_id": "inherent-class-feature-grant-danger-sense",
+        "type": "ItemGrant",
+        "level": 2,
+        "title": "Danger Sense",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-danger-sense",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-danger-sense"
+      },
+      {
+        "_id": "inherent-class-feature-grant-primal-path",
+        "type": "ItemGrant",
+        "level": 3,
+        "title": "Primal Path",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-primal-path",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-primal-path"
+      },
+      {
+        "_id": "inherent-class-feature-grant-primal-knowledge",
+        "type": "ItemGrant",
+        "level": 3,
+        "title": "Primal Knowledge",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-primal-knowledge",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-primal-knowledge"
+      },
+      {
+        "configuration": {},
+        "type": "Subclass",
+        "level": 3,
+        "_id": "base-subclass",
+        "title": "Primal Path"
+      },
+      {
+        "configuration": {
+          "choiceSource": "fixed",
+          "options": [
+            "ani",
+            "ath",
+            "itm",
+            "nat",
+            "prc",
+            "sur"
+          ],
+          "fixed": [],
+          "type": "skills",
+          "categoryIds": [],
+          "allowReplacements": false,
+          "choiceCount": 0,
+          "replacements": [],
+          "mode": "default"
+        },
+        "_id": "ql53fw6x3",
+        "type": "Trait",
+        "level": 3,
+        "title": "Primal Knowledge",
+        "featureSourceId": "class-feature-primal-knowledge"
+      },
+      {
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "fixed": {},
+          "locked": {}
+        },
+        "type": "AbilityScoreImprovement",
+        "level": 4,
+        "_id": "base-asi-0",
+        "title": "Ability Score Improvement"
+      },
+      {
+        "_id": "inherent-class-feature-grant-fast-movement",
+        "type": "ItemGrant",
+        "level": 5,
+        "title": "Fast Movement",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-fast-movement",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-fast-movement"
+      },
+      {
+        "_id": "inherent-class-feature-grant-extra-attack",
+        "type": "ItemGrant",
+        "level": 5,
+        "title": "Extra Attack",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-extra-attack",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-extra-attack"
+      },
+      {
+        "_id": "inherent-class-feature-grant-feral-instinct",
+        "type": "ItemGrant",
+        "level": 7,
+        "title": "Feral Instinct",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-feral-instinct",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-feral-instinct"
+      },
+      {
+        "_id": "inherent-class-feature-grant-instinctive-pounce",
+        "type": "ItemGrant",
+        "level": 7,
+        "title": "Instinctive Pounce",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-instinctive-pounce",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-instinctive-pounce"
+      },
+      {
+        "_id": "base-asi-1",
+        "type": "AbilityScoreImprovement",
+        "level": 8,
+        "title": "Ability Score Improvement",
+        "configuration": {
+          "locked": {},
+          "fixed": {},
+          "featAllowed": true,
+          "points": 2
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-brutal-critical",
+        "type": "ItemGrant",
+        "level": 9,
+        "title": "Brutal Critical",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-brutal-critical",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-brutal-critical"
+      },
+      {
+        "_id": "inherent-class-feature-grant-relentless-rage",
+        "type": "ItemGrant",
+        "level": 11,
+        "title": "Relentless Rage",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-relentless-rage",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-relentless-rage"
+      },
+      {
+        "title": "Ability Score Improvement",
+        "level": 12,
+        "type": "AbilityScoreImprovement",
+        "_id": "base-asi-2",
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "locked": {},
+          "fixed": {}
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-persistent-rage",
+        "type": "ItemGrant",
+        "level": 15,
+        "title": "Persistent Rage",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-persistent-rage",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-persistent-rage"
+      },
+      {
+        "configuration": {
+          "points": 2,
+          "featAllowed": true,
+          "locked": {},
+          "fixed": {}
+        },
+        "title": "Ability Score Improvement",
+        "type": "AbilityScoreImprovement",
+        "level": 16,
+        "_id": "base-asi-3"
+      },
+      {
+        "_id": "inherent-class-feature-grant-indomitable-might",
+        "type": "ItemGrant",
+        "level": 18,
+        "title": "Indomitable Might",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-indomitable-might",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-indomitable-might"
+      },
+      {
+        "title": "Ability Score Improvement",
+        "type": "AbilityScoreImprovement",
+        "level": 19,
+        "_id": "base-asi-4",
+        "configuration": {
+          "featAllowed": true,
+          "points": 2,
+          "fixed": {},
+          "locked": {}
+        }
+      },
+      {
+        "_id": "inherent-class-feature-grant-primal-champion",
+        "type": "ItemGrant",
+        "level": 20,
+        "title": "Primal Champion",
+        "configuration": {
+          "choiceType": "feature",
+          "optional": false,
+          "items": [
+            {
+              "sourceId": "class-feature-primal-champion",
+              "optional": false
+            }
+          ],
+          "countSource": "fixed",
+          "count": 0,
+          "pool": [],
+          "optionalPool": [],
+          "excludedOptionIds": []
+        },
+        "featureSourceId": "class-feature-primal-champion"
+      }
+    ],
+    "classSourceId": "class-barbarian",
+    "sourceBookId": "source-phb-2014"
+  },
+  "subclasses": [
+    {
+      "id": "CnPqqFXlz6zffCEQwi1c",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777472109,
+        "nanoseconds": 200000000
+      },
+      "lore": "",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777433683,
+        "nanoseconds": 580000000
+      },
+      "spellcasting": {
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": "",
+        "ability": "INT",
+        "progression": "none",
+        "type": "prepared",
+        "level": 3,
+        "hasSpellcasting": false
+      },
+      "description": "Typical barbarians harbor a fury that dwells within. Their rage grants them superior strength, durability, and speed. Barbarians who follow the Path of the Storm Herald learn instead to transform their rage into a mantle of primal magic that swirls around them. When in a fury, a barbarian of this path taps into nature to create powerful, magical effects.\n\nStorm heralds are typically elite champions who train alongside druids, rangers, and others sworn to protect the natural realm. Other storm heralds hone their craft in elite lodges founded in regions wracked by storms, in the frozen reaches at the world's end, or deep in the hottest deserts.",
+      "identifier": "path-of-the-storm-herald",
+      "imageUrl": "https://images.dauligor.com/images/subclasses/CnPqqFXlz6zffCEQwi1c/1777434639309_m8ddg8k.webp",
+      "name": "Path of the Storm Herald",
+      "sourceId": "subclass-path-of-the-storm-herald",
+      "tagIds": [],
+      "classIdentifier": "barbarian",
+      "advancements": [],
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-barbarian"
+    },
+    {
+      "id": "PfOP4lFPBMssrIb0embg",
+      "name": "Path of the Berserker",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-berserker-frenzied-rage",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Frenzied Rage",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-frenzied-rage",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-frenzied-rage"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-berserker-mindless-rage",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Mindless Rage",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-mindless-rage",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-mindless-rage"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-berserker-intimidating-presence",
+          "type": "ItemGrant",
+          "level": 10,
+          "title": "Intimidating Presence",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-intimidating-presence",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-intimidating-presence"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-berserker-retaliation",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Retaliation",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-retaliation",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-retaliation"
+        }
+      ],
+      "classIdentifier": "barbarian",
+      "tagIds": [],
+      "sourceId": "subclass-path-of-the-berserker",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152313,
+        "nanoseconds": 345000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777433500,
+        "nanoseconds": 522000000
+      },
+      "lore": "",
+      "identifier": "path-of-the-berserker",
+      "imageUrl": "https://images.dauligor.com/images/subclasses/PfOP4lFPBMssrIb0embg/1777433495122_elrjetf.webp",
+      "description": "For some barbarians, rage is a means to an end - that end being violence. The Path of the Berserker is a path of untrammeled fury, slick with blood. As you enter the berserker's rage, you thrill in the chaos of battle, heedless of your own health or well-being.",
+      "spellcasting": {
+        "ability": "INT",
+        "progression": "none",
+        "spellsKnownFormula": "",
+        "description": "",
+        "isRitualCaster": false,
+        "type": "prepared",
+        "level": 3,
+        "hasSpellcasting": false
+      },
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-barbarian"
+    },
+    {
+      "id": "QK1xhPfYQ6Rta8FHiKwm",
+      "tagIds": [],
+      "sourceId": "subclass-path-of-the-battlerager",
+      "classIdentifier": "barbarian",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-battlerager-battlerager-armor",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Battlerager Armor",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-battlerager-armor",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-battlerager-armor"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-battlerager-battlerager-armor-attack",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Battlerager Armor Attack",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-battlerager-armor-attack",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-battlerager-armor-attack"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-battlerager-bonus-proficiencies",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Bonus Proficiencies",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bonus-proficiencies",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "title": "Bonus Proficiencies (Armor)",
+          "_id": "ydx6j43yl",
+          "type": "Trait",
+          "level": 3,
+          "configuration": {
+            "options": [],
+            "fixed": [
+              "chain-mail",
+              "plate",
+              "ring-mail",
+              "splint"
+            ],
+            "choiceSource": "fixed",
+            "type": "armor",
+            "allowReplacements": false,
+            "replacements": [],
+            "mode": "default",
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "type": "Trait",
+          "level": 3,
+          "_id": "ep71tf6ed",
+          "title": "Bonus Proficiencies (Smith's tools)",
+          "configuration": {
+            "replacements": [],
+            "allowReplacements": false,
+            "mode": "default",
+            "type": "tools",
+            "options": [],
+            "fixed": [
+              "smith"
+            ],
+            "choiceSource": "fixed",
+            "choiceCount": 0,
+            "categoryIds": []
+          },
+          "featureSourceId": "subclass-feature-bonus-proficiencies"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-battlerager-reckless-abandon",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Reckless Abandon",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-reckless-abandon",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-reckless-abandon"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-battlerager-battlerager-charge",
+          "type": "ItemGrant",
+          "level": 10,
+          "title": "Battlerager Charge",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-battlerager-charge",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-battlerager-charge"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-battlerager-spiked-retribution",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Spiked Retribution",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-spiked-retribution",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-spiked-retribution"
+        }
+      ],
+      "name": "Path of the Battlerager",
+      "description": "Known as Kuldjargh (literally \"axe idiot\") in Dwarvish, battleragers are dwarf followers of the gods of war and take the Path of the Battlerager. They specialize in wearing bulky, spiked armor and throwing themselves into combat, striking with their body itself and giving themselves over to the fury of battle.",
+      "spellcasting": {
+        "ability": "INT",
+        "progression": "none",
+        "spellsKnownFormula": "",
+        "isRitualCaster": false,
+        "description": "",
+        "level": 3,
+        "type": "prepared",
+        "hasSpellcasting": false
+      },
+      "imageUrl": "https://images.dauligor.com/images/subclasses/QK1xhPfYQ6Rta8FHiKwm/1777432616219_8gz23db.webp",
+      "identifier": "path-of-the-battlerager",
+      "lore": "",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432772,
+        "nanoseconds": 861000000
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151950,
+        "nanoseconds": 921000000
+      },
+      "sourceBookId": "source-scag-2014",
+      "classSourceId": "class-barbarian"
+    },
+    {
+      "id": "XWztwji8B58qFyBIGRN7",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151687,
+        "nanoseconds": 169000000
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777431787,
+        "nanoseconds": 416000000
+      },
+      "lore": "",
+      "identifier": "path-of-the-ancestral-guardian",
+      "imageUrl": "https://images.dauligor.com/images/subclasses/XWztwji8B58qFyBIGRN7/1777431694637_yupm4i6.webp",
+      "description": "Some barbarians hail from cultures that revere their ancestors. These tribes teach that the warriors of the past linger in the world as mighty spirits, who can guide and protect the living. When a barbarian who follows this path rages, the barbarian contacts the spirit world and calls on these guardian spirits for aid.\n\nBarbarians who draw on their ancestral guardians can better fight to protect their tribes and their allies. In order to cement ties to their ancestral guardians, barbarians who follow this path cover themselves in elaborate tattoos that celebrate their ancestors' deeds. These tattoos tell sagas of victories against terrible monsters and other fearsome rivals.",
+      "spellcasting": {
+        "hasSpellcasting": false,
+        "level": 3,
+        "type": "prepared",
+        "description": "",
+        "isRitualCaster": false,
+        "spellsKnownFormula": "",
+        "progression": "none",
+        "ability": "INT"
+      },
+      "name": "Path of the Ancestral Guardian",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-ancestral-guardian-ancestral-protectors",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Ancestral Protectors",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-ancestral-protectors",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-ancestral-protectors"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-ancestral-guardian-spirit-shield",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Spirit Shield",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-spirit-shield",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-spirit-shield"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-ancestral-guardian-consult-the-spirits",
+          "type": "ItemGrant",
+          "level": 10,
+          "title": "Consult the Spirits",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-consult-the-spirits",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-consult-the-spirits"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-ancestral-guardian-vengeful-ancestors",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Vengeful Ancestors",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-vengeful-ancestors",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-vengeful-ancestors"
+        }
+      ],
+      "classIdentifier": "barbarian",
+      "tagIds": [],
+      "sourceId": "subclass-path-of-the-ancestral-guardian",
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-barbarian"
+    },
+    {
+      "id": "kc9yMfq5l6WVyRwPBPa7",
+      "description": "Barbarians who walk the Path of the Beast draw their rage from a bestial spark burning within their souls. That beast bursts forth in the throes of rage, physically transforming the barbarian.\n\nSuch a barbarian might be inhabited by a primal spirit or be descended from shape-shifters. You can choose the origin of your feral might or determine it by rolling on the Origin of the Beast table.",
+      "spellcasting": {
+        "ability": "INT",
+        "progression": "none",
+        "spellsKnownFormula": "",
+        "description": "",
+        "isRitualCaster": false,
+        "level": 3,
+        "type": "prepared",
+        "hasSpellcasting": false
+      },
+      "identifier": "path-of-the-beast",
+      "imageUrl": "https://images.dauligor.com/images/subclasses/kc9yMfq5l6WVyRwPBPa7/1777432860124_z3m6fap.webp",
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432948,
+        "nanoseconds": 707000000
+      },
+      "lore": "",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152254,
+        "nanoseconds": 938000000
+      },
+      "tagIds": [],
+      "sourceId": "subclass-path-of-the-beast",
+      "classIdentifier": "barbarian",
+      "advancements": [
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-beast-form-of-the-beast",
+          "type": "ItemGrant",
+          "level": 3,
+          "title": "Form of the Beast",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-form-of-the-beast",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-form-of-the-beast"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-beast-bestial-soul",
+          "type": "ItemGrant",
+          "level": 6,
+          "title": "Bestial Soul",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-bestial-soul",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-bestial-soul"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-beast-infectious-fury",
+          "type": "ItemGrant",
+          "level": 10,
+          "title": "Infectious Fury",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-infectious-fury",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-infectious-fury"
+        },
+        {
+          "_id": "inherent-subclass-feature-grant-path-of-the-beast-call-the-hunt",
+          "type": "ItemGrant",
+          "level": 14,
+          "title": "Call the Hunt",
+          "configuration": {
+            "choiceType": "feature",
+            "optional": false,
+            "items": [
+              {
+                "sourceId": "subclass-feature-call-the-hunt",
+                "optional": false
+              }
+            ],
+            "countSource": "fixed",
+            "count": 0,
+            "pool": [],
+            "optionalPool": [],
+            "excludedOptionIds": []
+          },
+          "featureSourceId": "subclass-feature-call-the-hunt"
+        }
+      ],
+      "name": "Path Of The Beast",
+      "sourceBookId": "source-tce-2014",
+      "classSourceId": "class-barbarian"
+    }
+  ],
+  "features": [
+    {
+      "id": "0ME2NlrKd8Y43uZ1o6nS",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432131,
+        "nanoseconds": 651000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151970,
+        "nanoseconds": 210000000
+      },
+      "description": "You have taken up a rare fighting style that incorporates your armor as a weapon. Starting at 3rd level, when you finish along rest, you can use smith's tools to affix spikes to a set of armor that you touch, turning it into a set of Spiked Armor. For you, Spiked Armor is a martial melee weapon with a reach of 5 feet that deals 1d4 piercing damage on hit\n\nThe damage of your Spiked Armor increases as you gain levels in this class, at 6th level (1d6) and 14th level (1d8).\n\nWhile you are raging, you can use a bonus action on your turn to make an attack with your Spiked Armor. In addition, when you successfully initiate a grapple, the target takes the damage of your Spiked Armor attack.",
+      "parentType": "subclass",
+      "name": "Battlerager Armor",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "identifier": "battlerager-armor",
+      "sourceId": "subclass-feature-battlerager-armor",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-path-of-the-battlerager",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "1vpHLddHW8w2vp5EoRaS",
+      "createdAt": "2026-04-25T21:13:54.484Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": "2026-04-29T02:35:19.249Z",
+      "isSubclassFeature": false,
+      "parentType": "class",
+      "description": "Starting at 2nd level, you can throw aside all concern for defense to attack with fierce desperation. When you make your first attack on your turn, you can decide to attack recklessly. Doing so gives you advantage on melee weapon attack rolls using Strength during this turn, but attack rolls against you have advantage until your next turn.",
+      "type": "class",
+      "level": 2,
+      "properties": [
+        "passive"
+      ],
+      "name": "Reckless Attack",
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "iconUrl": "https://images.dauligor.com/icons/skills/melee/strike-axe-blood-red.webp",
+      "uniqueOptionGroupIds": [],
+      "imageUrl": "https://images.dauligor.com/icons/skills/melee/strike-axe-blood-red.webp",
+      "identifier": "reckless-attack",
+      "sourceId": "class-feature-reckless-attack",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "35iBw3coRFnmoQhcULZd",
+      "createdAt": "2026-04-25T21:28:00.409Z",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 5
+      },
+      "updatedAt": "2026-04-29T02:38:04.063Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Starting at 5th level, your speed increases by 10 feet while you aren't wearing heavy armor.",
+      "parentType": "class",
+      "properties": [
+        "passive"
+      ],
+      "level": 5,
+      "type": "class",
+      "name": "Fast Movement",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/skills/movement/feet-winged-boots-brown.webp",
+      "imageUrl": "https://images.dauligor.com/icons/skills/movement/feet-winged-boots-brown.webp",
+      "identifier": "fast-movement",
+      "sourceId": "class-feature-fast-movement",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "4XH2e2HLh5aKlp0uKegd",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": "2026-04-29T02:51:06.682Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 20,
+        "requiredIds": []
+      },
+      "isSubclassFeature": false,
+      "createdAt": "2026-04-25T21:29:45.351Z",
+      "parentType": "class",
+      "description": "At 20th level, you embody the power of the wilds. Your Strength and Constitution scores increase by 4. Your maximum for those scores is now 24.",
+      "name": "Primal Champion",
+      "level": 20,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "iconUrl": "https://images.dauligor.com/icons/magic/symbols/rune-sigil-rough-white-teal.webp",
+      "uniqueOptionGroupIds": [],
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "imageUrl": "https://images.dauligor.com/icons/magic/symbols/rune-sigil-rough-white-teal.webp",
+      "identifier": "primal-champion",
+      "sourceId": "class-feature-primal-champion",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "5MZr8i1oPr7NUdwrlP4R",
+      "createdAt": "2026-04-25T21:29:30.370Z",
+      "updatedAt": "2026-04-29T02:50:33.226Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 15,
+        "requiredIds": []
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Beginning at 15th level, your rage is so fierce that it ends early only if you fall unconscious or if you choose to end it.",
+      "parentType": "class",
+      "properties": [
+        "passive"
+      ],
+      "level": 15,
+      "type": "class",
+      "name": "Persistent Rage",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/skills/wounds/injury-face-impact-orange.webp",
+      "imageUrl": "https://images.dauligor.com/icons/skills/wounds/injury-face-impact-orange.webp",
+      "identifier": "persistent-rage",
+      "sourceId": "class-feature-persistent-rage",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "7Ib34BeJv4KeGGDYHpDk",
+      "name": "Infectious Fury",
+      "type": "class",
+      "level": 10,
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 10
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152272,
+        "nanoseconds": 835000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152272,
+        "nanoseconds": 835000000
+      },
+      "parentType": "subclass",
+      "description": "At 10th level, when you hit a creature with your natural weapons while you are raging, the beast within you can curse your target with rabid fury. The target must succeed on a Wisdom saving throw (DC equal to 8 + your Constitution modifier + your proficiency bonus) or suffer one of the following effects (your choice):\n\n* The target must use its reaction to make a melee attack against another creature of your choice that you can see.\n\n* Target takes 2d12 psychic damage.\n\nYou can use this feature a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest.",
+      "identifier": "infectious-fury",
+      "sourceId": "subclass-feature-infectious-fury",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-path-of-the-beast",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "8wlL9XjMJ84fhhkALGU8",
+      "description": "Beginning at 5th level, you can attack twice, instead of once, whenever you take the Attack action on your turn.",
+      "parentType": "class",
+      "createdAt": "2026-04-25T21:27:33.690Z",
+      "isSubclassFeature": false,
+      "updatedAt": "2026-04-29T02:38:42.015Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 5,
+        "requiredIds": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/magic/fire/dagger-rune-enchant-flame-red.webp",
+      "properties": [
+        "passive"
+      ],
+      "level": 5,
+      "type": "class",
+      "name": "Extra Attack",
+      "imageUrl": "https://images.dauligor.com/icons/magic/fire/dagger-rune-enchant-flame-red.webp",
+      "identifier": "extra-attack",
+      "sourceId": "class-feature-extra-attack",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "Bxq58OJ8EgXfTTeyqcox",
+      "createdAt": "2026-04-25T21:13:42.969Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 2
+      },
+      "updatedAt": "2026-04-29T02:36:29.965Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 2nd level, you gain an uncanny sense of when things nearby aren't as they should be, giving you an edge when you dodge away from danger. You have advantage on Dexterity saving throws against effects that you can see, such as traps and spells. To gain this benefit, you can't be blinded, deafened, or incapacitated.",
+      "parentType": "class",
+      "properties": [
+        "passive"
+      ],
+      "level": 2,
+      "type": "class",
+      "name": "Danger Sense",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/magic/perception/eye-ringed-glow-angry-red.webp",
+      "imageUrl": "https://images.dauligor.com/icons/magic/perception/eye-ringed-glow-angry-red.webp",
+      "identifier": "danger-sense",
+      "sourceId": "class-feature-danger-sense",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "CLFhvahJEo0T2mLG90k9",
+      "createdAt": "2026-04-25T21:28:47.106Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 9,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-29T02:47:34.018Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Beginning at 9th level, you can roll one additional weapon damage die when determining the extra damage for a critical hit with a melee attack.\n\nThis increases to two additional dice at 13th level and three additional dice at 17th level.",
+      "parentType": "class",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 9,
+      "name": "Brutal Critical",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/skills/melee/strike-axe-blood-red.webp",
+      "imageUrl": "https://images.dauligor.com/icons/skills/melee/strike-axe-blood-red.webp",
+      "identifier": "brutal-critical",
+      "sourceId": "class-feature-brutal-critical",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "ChvC621azdaJE0YiZRWC",
+      "level": 6,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Reckless Abandon",
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151979,
+        "nanoseconds": 688000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432306,
+        "nanoseconds": 661000000
+      },
+      "parentType": "subclass",
+      "description": "Beginning at 6th level, when you use Reckless Attack while raging, you also gain temporary hit points equal to your Constitution modifier (minimum of 1 temporary hit point). They vanish if any of them are left when your rage ends. In addition, you can turn magical armor into Spiked Armor.",
+      "identifier": "reckless-abandon",
+      "sourceId": "subclass-feature-reckless-abandon",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-path-of-the-battlerager",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "Fl8Dc3qknOJgzbGUW2nl",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 14,
+      "name": "Retaliation",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152337,
+        "nanoseconds": 468000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777433315,
+        "nanoseconds": 814000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "Starting at 14th level, when you take damage from a creature that is within 5 feet of you, you can use your reaction to make a melee weapon attack against that creature.\n\nIn addition, when you finish a short rest, you can reduce your exhaustion level by 1. Once you use this ability you must finish a long rest before you can do so again.",
+      "parentType": "subclass",
+      "identifier": "retaliation",
+      "sourceId": "subclass-feature-retaliation",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-path-of-the-berserker",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "I4fUvUDkhI2V7XBhjBHz",
+      "description": "By 7th level, your instincts are so honed that you have advantage on initiative rolls.\n\nAdditionally, if you are surprised at the beginning of combat and aren't incapacitated, you can act normally on your first turn, but only if you enter your rage before doing anything else on that turn.",
+      "parentType": "class",
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 7
+      },
+      "updatedAt": "2026-04-29T02:42:20.784Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": "2026-04-25T21:28:14.629Z",
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/creatures/mammals/wolf-howl-moon-forest-blue.webp",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "name": "Feral Instinct",
+      "properties": [
+        "passive"
+      ],
+      "level": 7,
+      "type": "class",
+      "imageUrl": "https://images.dauligor.com/icons/creatures/mammals/wolf-howl-moon-forest-blue.webp",
+      "identifier": "feral-instinct",
+      "sourceId": "class-feature-feral-instinct",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "IJqZFokVHhQIU6CcU4vB",
+      "name": "Ancestral Protectors",
+      "type": "class",
+      "level": 3,
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151757,
+        "nanoseconds": 108000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151757,
+        "nanoseconds": 108000000
+      },
+      "parentType": "subclass",
+      "description": "Starting when you choose this path at 3rd level, spectral warriors appear when you enter your rage. While you're raging, the first creature you hit with an attack on your turn becomes the target of the warriors, which hinder its attacks. Until the start of your next turn, that target has disadvantage on any attack roll that isn't against you, and when the target hits a creature other than you with an attack, that creature has resistance to the damage dealt by the attack. The effect on the target ends early if your rage ends.",
+      "identifier": "ancestral-protectors",
+      "sourceId": "subclass-feature-ancestral-protectors",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-path-of-the-ancestral-guardian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "IQdTive9oelbzaUJzJEn",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "name": "Intimidating Presence",
+      "properties": [
+        "passive"
+      ],
+      "level": 10,
+      "type": "class",
+      "description": "Beginning at 10th level, you can strike fear into the hearts of your enemies with your menacing presence. As an action, you can force a creature within 30 feet that can see or hear you to succeed on a Wisdom saving throw or be frightened of you until the end of your next turn. The DC is equal to 8 + your proficiency bonus + your Strength modifier.\n\nOn a subsequent turn, you can use your action to extend the duration of this fear effect, so long as the creature is still within 60 feet of you and can either see or hear you.\n\nIf the creature succeeds on its saving throw, you can't use this feature on that creature again for 24 hours.",
+      "parentType": "subclass",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 10
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777433285,
+        "nanoseconds": 789000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152332,
+        "nanoseconds": 222000000
+      },
+      "identifier": "intimidating-presence",
+      "sourceId": "subclass-feature-intimidating-presence",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-path-of-the-berserker",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "JTUaJV0I9cIWY2xRI1IZ",
+      "properties": [
+        "passive"
+      ],
+      "level": 14,
+      "type": "class",
+      "name": "Call the Hunt",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152277,
+        "nanoseconds": 361000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152277,
+        "nanoseconds": 361000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 14th level, the beast within you grows so powerful that you can spread its ferocity to others and gain resilience from them joining your hunt. When you enter your rage, you can choose a number of other willing creatures you can see within 30 feet of you equal to your Constitution modifier (minimum of one creature). You gain 5 temporary hit points for each creature that accepts this feature. Until the rage ends, the chosen creatures can use the following benefit once on each of their turns: when the creature hits a target with an attack roll and deals damage to it, the creature can roll a d6 and gain a bonus to the damage equal to the number rolled.\n\nYou can use this feature a number of times equal to your proficiency bonus, and you regain all expended uses when you finish a long rest.",
+      "parentType": "subclass",
+      "identifier": "call-the-hunt",
+      "sourceId": "subclass-feature-call-the-hunt",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-path-of-the-beast",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "MsMreeMdxqWHx8YUOfG2",
+      "properties": [
+        "passive"
+      ],
+      "level": 14,
+      "type": "class",
+      "name": "Vengeful Ancestors",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151838,
+        "nanoseconds": 15000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151838,
+        "nanoseconds": 15000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 14th level, your ancestral spirits grow powerful enough to retaliate. When you use your Spirit Shield to reduce the damage of an attack, the attacker takes an amount of force damage that your Spirit Shield prevents.",
+      "parentType": "subclass",
+      "identifier": "vengeful-ancestors",
+      "sourceId": "subclass-feature-vengeful-ancestors",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-path-of-the-ancestral-guardian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "NLl5eRYrLJ3VoTOQUthR",
+      "description": "While you are not wearing any armor, your armor class equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit.",
+      "parentType": "class",
+      "createdAt": "2026-04-25T21:13:28.352Z",
+      "isSubclassFeature": false,
+      "updatedAt": "2026-04-29T02:22:44.840Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/magic/control/buff-flight-wings-red.webp",
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 1,
+      "name": "Unarmored Defense",
+      "imageUrl": "https://images.dauligor.com/icons/magic/control/buff-flight-wings-red.webp",
+      "identifier": "unarmored-defense",
+      "sourceId": "class-feature-unarmored-defense",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "NoXqmVaItw26U2nL3oEm",
+      "description": "You give yourself over completely to your rage. Beginning at 6th level, you can't be charmed or frightened while raging. If you are charmed or frightened when you enter your rage, the effect is suspended for the duration of the rage.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152326,
+        "nanoseconds": 787000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777433189,
+        "nanoseconds": 901000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 6,
+      "name": "Mindless Rage",
+      "identifier": "mindless-rage",
+      "sourceId": "subclass-feature-mindless-rage",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-path-of-the-berserker",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "OGLawFbxat3CQH20u3WI",
+      "createdAt": "2026-04-25T21:14:06.916Z",
+      "updatedAt": "2026-04-29T02:37:29.678Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 3,
+        "requiredIds": []
+      },
+      "isSubclassFeature": true,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 3rd level, you choose a path that shapes the nature of your rage. Your choice grants you features at 3rd level and again at 6th, 10th, and 14th levels.",
+      "parentType": "class",
+      "properties": [
+        "passive"
+      ],
+      "level": 3,
+      "type": "class",
+      "name": "Primal Path",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/magic/fire/projectile-wave-arrow.webp",
+      "imageUrl": "https://images.dauligor.com/icons/magic/fire/projectile-wave-arrow.webp",
+      "identifier": "primal-path",
+      "sourceId": "class-feature-primal-path",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "REe9ljrgPkv1j2ROuO3o",
+      "uniqueOptionGroupIds": [],
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Frenzied Rage",
+      "level": 3,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "parentType": "subclass",
+      "description": "Starting when you choose this Primal Path at 3rd level, when you enter a rage, you can enter a Frenzied Rage. For the duration of that rage, each time you take the Attack action, you can make one additional attack as part of that action.\n\nAt the end of a Frenzied Rage, you must make a DC 10 Constitution saving throw. On a failed save, you suffer one level of exhaustion. Each additional time you choose to enter a Frenzied Rage before the end of your next long rest, the DC of this Constitution saving throw increases by 5.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777433158,
+        "nanoseconds": 623000000
+      },
+      "isSubclassFeature": false,
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152321,
+        "nanoseconds": 605000000
+      },
+      "identifier": "frenzied-rage",
+      "sourceId": "subclass-feature-frenzied-rage",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "subclass-path-of-the-berserker",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "RKz7q0YVHEdfsDuXTwhn",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "name": "Spirit Shield",
+      "description": "Beginning at 6th level, the guardian spirits that aid you can provide supernatural protection to those you defend. If you are raging and another creature you can see within 30 feet of you takes damage, you can use your reaction to reduce that damage by 2d6.\n\nWhen you reach certain levels in this class, you can reduce the damage by more: by 3d6 at 10th level and by 4d6 at 14th level.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151784,
+        "nanoseconds": 148000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151784,
+        "nanoseconds": 148000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "spirit-shield",
+      "sourceId": "subclass-feature-spirit-shield",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-path-of-the-ancestral-guardian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "SPDhSrWx6CZCjTMnTFEJ",
+      "automation": {
+        "activities": [
+          {
+            "activation": {
+              "value": 1,
+              "type": "action"
+            },
+            "duration": {
+              "concentration": false,
+              "units": "inst"
+            },
+            "target": {
+              "template": {
+                "count": "",
+                "type": ""
+              },
+              "prompt": false,
+              "affects": {
+                "count": "",
+                "type": ""
+              }
+            },
+            "kind": "attack",
+            "attack": {
+              "classification": "weapon",
+              "flat": false,
+              "type": "melee",
+              "critical": {
+                "threshold": null
+              }
+            },
+            "id": "liscz9zqp",
+            "img": "systems/dnd5e/icons/svg/activity/attack.svg",
+            "visibility": {
+              "identifier": "",
+              "level": {
+                "min": 0,
+                "max": 20
+              }
+            },
+            "uses": {
+              "recovery": [],
+              "spent": 0,
+              "max": ""
+            },
+            "consumption": {
+              "spellSlot": false,
+              "scaling": {
+                "allowed": false,
+                "max": ""
+              },
+              "targets": []
+            },
+            "name": "Attack",
+            "damage": {
+              "critical": {
+                "bonus": "",
+                "allow": false
+              },
+              "parts": [
+                {
+                  "custom": {
+                    "formula": "@scale.barbarian.spiked-armor",
+                    "enabled": true
+                  }
+                }
+              ],
+              "includeBase": true
+            },
+            "range": {
+              "units": "self"
+            }
+          }
+        ],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "type": "class",
+      "level": 3,
+      "name": "Battlerager Armor Attack",
+      "description": "Spiked Armor is a martial melee weapon with a reach of 5 feet that deals 1d4 piercing damage on hit.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432181,
+        "nanoseconds": 403000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432241,
+        "nanoseconds": 454000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "identifier": "battlerager-armor-attack",
+      "sourceId": "subclass-feature-battlerager-armor-attack",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-path-of-the-battlerager",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "TGzZJkf6O9h3r14qyAY0",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151830,
+        "nanoseconds": 703000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 10
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151830,
+        "nanoseconds": 703000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "At 10th level, you gain the ability to consult with your ancestral spirits. When you do so, you cast the Augury or Clairvoyance spell, without using a spell slot or material components. Rather than creating a spherical sensor, this use of clairvoyance invisibly summons one of your ancestral spirits to the chosen location. Wisdom is your spellcasting ability for these spells.\n\nAfter you cast either spell in this way, you can't use this feature again until you finish a short or long rest.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "level": 10,
+      "type": "class",
+      "name": "Consult the Spirits",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "consult-the-spirits",
+      "sourceId": "subclass-feature-consult-the-spirits",
+      "sourceBookId": "source-xge-2014",
+      "parentSourceId": "subclass-path-of-the-ancestral-guardian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "WNsYG0qYuxvCfEMcJhbw",
+      "name": "Spiked Retribution",
+      "properties": [
+        "passive"
+      ],
+      "level": 14,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 14
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432349,
+        "nanoseconds": 126000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151997,
+        "nanoseconds": 585000000
+      },
+      "description": "Starting at 14th level, when a creature hits you with a melee attack while you are wearing your spiked armor, the attacker takes piercing damage equal to your Strength modifier. If you are conscious, you can use your reaction to replace this damage with the damage from a Spiked Armor attack.",
+      "parentType": "subclass",
+      "identifier": "spiked-retribution",
+      "sourceId": "subclass-feature-spiked-retribution",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-path-of-the-battlerager",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "YltSTKqtmnykuZcfFqxY",
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 1
+      },
+      "updatedAt": "2026-04-29T02:27:35.095Z",
+      "isSubclassFeature": false,
+      "usage": {
+        "max": "@scale.barbarian.rages",
+        "spent": 0
+      },
+      "createdAt": "2026-04-25T21:12:46.072Z",
+      "description": "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action.\n\nWhile raging, you gain the following benefits if you aren't wearing heavy armor:\n\n* You have advantage on Strength checks and Strength saving throws.\n* When you make a melee weapon attack using Strength, you gain a bonus to the damage roll that increases as you gain levels as a barbarian, as shown in the Rage Damage column of the Barbarian table.\n* You have resistance to bludgeoning, piercing, and slashing damage.\n\nIf you are able to cast spells, you can't cast them or concentrate on them while raging.\n\nYour rage lasts for 1 minute. It ends early if you are knocked unconscious or if your turn ends and you haven't attacked a hostile creature since your last turn or taken damage since then. You can also end your rage on your turn as a bonus action.\n\nOnce you have raged the number of times shown for your barbarian level in the Rages column of the Barbarian table, you must finish a long rest before you can rage again.",
+      "parentType": "class",
+      "name": "Rage",
+      "properties": [
+        "passive"
+      ],
+      "level": 1,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/creatures/abilities/mouth-teeth-human.webp",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "imageUrl": "https://images.dauligor.com/icons/creatures/abilities/mouth-teeth-human.webp",
+      "identifier": "rage",
+      "sourceId": "class-feature-rage",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "copOq9YJrdEECnBEsARS",
+      "description": "Beginning at 6th level, the feral power within you increases, causing the natural weapons of your Form of the Beast to count as magical for the purpose of overcoming resistance and immunity to nonmagical attacks and damage.\n\nYou can also alter your form to help you adapt to your surroundings. When you finish a short or long rest, choose one of the following benefits, which lasts until you finish a short or long rest:\n\n* You gain a swimming speed equal to your walking speed, and you can breathe underwater.\n\n* You gain a climbing speed equal to your walking speed, and you can climb difficult surfaces, including upside down on ceilings, without needing to make an ability check.\n\n* When you jump, you can make a Strength (Athletics) check and extend your jump by a number of feet equal to the check's total. You can make this special check only once per turn.",
+      "parentType": "subclass",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152267,
+        "nanoseconds": 433000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 6
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152267,
+        "nanoseconds": 433000000
+      },
+      "isSubclassFeature": false,
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "properties": [
+        "passive"
+      ],
+      "level": 6,
+      "type": "class",
+      "name": "Bestial Soul",
+      "identifier": "bestial-soul",
+      "sourceId": "subclass-feature-bestial-soul",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-path-of-the-beast",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "eBGs2ptimouTnFGJ8jPj",
+      "parentType": "class",
+      "description": "When you reach 3rd level and again at 10th level, you gain proficiency in one skill of your choice from the list of skills available to barbarians at 1st level.",
+      "createdAt": "2026-04-25T21:26:29.526Z",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": "2026-04-25T21:26:39.230Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 3,
+        "requiredIds": []
+      },
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "level": 3,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "name": "Primal Knowledge",
+      "identifier": "primal-knowledge",
+      "sourceId": "class-feature-primal-knowledge",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "emPlUN8DrW3noQ98KwCW",
+      "name": "Indomitable Might",
+      "properties": [
+        "passive"
+      ],
+      "level": 18,
+      "type": "class",
+      "uniqueOptionGroupIds": [],
+      "iconUrl": "https://images.dauligor.com/icons/skills/melee/unarmed-punch-fist-yellow-red.webp",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "isSubclassFeature": false,
+      "updatedAt": "2026-04-29T02:50:49.067Z",
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 18,
+        "requiredIds": []
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "createdAt": "2026-04-25T21:29:38.252Z",
+      "description": "Beginning at 18th level, if your total for a Strength check is less than your Strength score, you can use that score in place of the total.",
+      "parentType": "class",
+      "imageUrl": "https://images.dauligor.com/icons/skills/melee/unarmed-punch-fist-yellow-red.webp",
+      "identifier": "indomitable-might",
+      "sourceId": "class-feature-indomitable-might",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "kIZ9UYDPnyHSW02AUgHV",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777431922,
+        "nanoseconds": 211000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777431922,
+        "nanoseconds": 211000000
+      },
+      "parentType": "subclass",
+      "description": "When you adopt the Path of the Battlerager at 3rd level, you gain proficiency with smith's tools and heavy armor. You can also Rage while wearing heavy armor with no drawbacks.",
+      "name": "Bonus Proficiencies",
+      "type": "class",
+      "level": 3,
+      "properties": [
+        "passive"
+      ],
+      "uniqueOptionGroupIds": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "identifier": "bonus-proficiencies",
+      "sourceId": "subclass-feature-bonus-proficiencies",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-path-of-the-battlerager",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "mYGUOSwFeFLtEQjYcuRy",
+      "parentType": "class",
+      "description": "At 7th level, as part of the bonus action you take to enter your rage, you can move up to half your speed",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 7
+      },
+      "updatedAt": "2026-04-29T02:44:32.782Z",
+      "createdAt": "2026-04-25T21:28:26.073Z",
+      "iconUrl": "https://images.dauligor.com/icons/creatures/abilities/cougar-roar-rush-orange.webp",
+      "uniqueOptionGroupIds": [],
+      "advancements": [],
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "name": "Instinctive Pounce",
+      "type": "class",
+      "level": 7,
+      "properties": [
+        "passive"
+      ],
+      "imageUrl": "https://images.dauligor.com/icons/creatures/abilities/cougar-roar-rush-orange.webp",
+      "identifier": "instinctive-pounce",
+      "sourceId": "class-feature-instinctive-pounce",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    },
+    {
+      "id": "rn73s2V1iyqkGDYJbkng",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777151987,
+        "nanoseconds": 394000000
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 10
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777432324,
+        "nanoseconds": 407000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "description": "You revel in the thrill of combat and are often the first to engage in battle. Beginning at 10th level, you can take the Dash action as a bonus action while you are raging.",
+      "parentType": "subclass",
+      "properties": [
+        "passive"
+      ],
+      "level": 10,
+      "type": "class",
+      "name": "Battlerager Charge",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "advancements": [],
+      "uniqueOptionGroupIds": [],
+      "identifier": "battlerager-charge",
+      "sourceId": "subclass-feature-battlerager-charge",
+      "sourceBookId": "source-scag-2014",
+      "parentSourceId": "subclass-path-of-the-battlerager",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": []
+    },
+    {
+      "id": "umkunZyc7PyqAjbyem8C",
+      "createdAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152260,
+        "nanoseconds": 888000000
+      },
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "updatedAt": {
+        "type": "firestore/timestamp/1.0",
+        "seconds": 1777152260,
+        "nanoseconds": 888000000
+      },
+      "configuration": {
+        "repeatable": false,
+        "requiredIds": [],
+        "requiredLevel": 3
+      },
+      "isSubclassFeature": false,
+      "parentType": "subclass",
+      "description": "Starting when you choose this path at 3rd level, when you enter your rage, you can transform, revealing the bestial power within you. Until the rage ends, you manifest a natural weapon. It counts as a simple melee weapon for you, and you add your Strength modifier to the attack and damage rolls when you attack with it, as normal.\n\nYou choose the weapon's form each time you rage:\n\n**Bite.** Your mouth transforms into a bestial muzzle or great mandibles (your choice). It deals 1d8 piercing damage on a hit. Once on each of your turns when you damage a creature with this bite, you regain a number of hit points equal to your proficiency bonus, provided you have less than half your hit points when you hit.\n\n**Claws.** Each of your hands transforms into a claw, which you can use as a weapon if it's empty. It deals 1d6 slashing damage on a hit. Once on each of your turns when you attack with a claw using the Attack action, you can make one additional claw attack as part of the same action.\n\n**Tail.** You grow a lashing, spiny tail, which deals 1d8 piercing damage on a hit and has the reach property. If a creature you can see within 10 feet of you hits you with an attack roll, you can use your reaction to swipe your tail and roll a d8, applying a bonus to your AC equal to the number rolled, potentially causing the attack to miss you.",
+      "type": "class",
+      "level": 3,
+      "properties": [
+        "passive"
+      ],
+      "name": "Form of the Beast",
+      "automation": {
+        "activities": [],
+        "effects": []
+      },
+      "uniqueOptionGroupIds": [],
+      "identifier": "form-of-the-beast",
+      "sourceId": "subclass-feature-form-of-the-beast",
+      "sourceBookId": "source-tce-2014",
+      "parentSourceId": "subclass-path-of-the-beast",
+      "classSourceId": "class-barbarian",
+      "featureKind": "subclassFeature",
+      "tagIds": [],
+      "advancements": []
+    },
+    {
+      "id": "zF9xjqLKKYvLu39OJv1V",
+      "parentType": "class",
+      "description": "Starting at 11th level, your rage can keep you fighting despite grievous wounds. If you drop to 0 hit points while you're raging and don't die outright, you can make a DC 10 Constitution saving throw. If you succeed, you drop to 1 hit point instead.\n\nEach time you use this feature after the first, the DC increases by 5. When you finish a short or long rest, the DC resets to 10.",
+      "usage": {
+        "spent": 0,
+        "max": ""
+      },
+      "isSubclassFeature": false,
+      "configuration": {
+        "repeatable": false,
+        "requiredLevel": 11,
+        "requiredIds": []
+      },
+      "updatedAt": "2026-04-29T02:50:06.492Z",
+      "createdAt": "2026-04-25T21:29:14.724Z",
+      "iconUrl": "https://images.dauligor.com/icons/magic/control/debuff-chains-shackles-movement-blue.webp",
+      "uniqueOptionGroupIds": [],
+      "advancements": [],
+      "automation": {
+        "activities": [
+          {
+            "visibility": {
+              "level": {
+                "max": 20,
+                "min": 0
+              },
+              "identifier": ""
+            },
+            "img": "systems/dnd5e/icons/svg/activity/save.svg",
+            "id": "ud99jff9v",
+            "save": {
+              "dc": {
+                "calculation": "spellcasting"
+              },
+              "abilities": [
+                "dex"
+              ]
+            },
+            "range": {
+              "units": "self"
+            },
+            "damage": {
+              "onSave": "half",
+              "parts": [
+                {}
+              ]
+            },
+            "name": "Save",
+            "consumption": {
+              "targets": [],
+              "scaling": {
+                "max": "",
+                "allowed": false
+              },
+              "spellSlot": false
+            },
+            "uses": {
+              "recovery": [],
+              "spent": 0,
+              "max": ""
+            },
+            "activation": {
+              "type": "action",
+              "value": 1
+            },
+            "target": {
+              "template": {
+                "count": "",
+                "type": ""
+              },
+              "prompt": true,
+              "affects": {
+                "count": "",
+                "type": ""
+              }
+            },
+            "kind": "save",
+            "duration": {
+              "concentration": false,
+              "units": "inst"
+            }
+          }
+        ],
+        "effects": []
+      },
+      "name": "Relentless Rage",
+      "level": 11,
+      "type": "class",
+      "properties": [
+        "passive"
+      ],
+      "imageUrl": "https://images.dauligor.com/icons/magic/control/debuff-chains-shackles-movement-blue.webp",
+      "identifier": "relentless-rage",
+      "sourceId": "class-feature-relentless-rage",
+      "sourceBookId": "source-phb-2014",
+      "parentSourceId": "class-barbarian",
+      "classSourceId": "class-barbarian",
+      "featureKind": "classFeature",
+      "tagIds": []
+    }
+  ],
+  "scalingColumns": [
+    {
+      "id": "6JiFmX8KIDj42Ky7yWiV",
+      "createdAt": "2026-04-25T21:10:02.039Z",
+      "values": {
+        "1": "+2",
+        "2": "+2",
+        "3": "+2",
+        "4": "+2",
+        "5": "+2",
+        "6": "+2",
+        "7": "+2",
+        "8": "+2",
+        "9": "+3",
+        "10": "+3",
+        "11": "+3",
+        "12": "+3",
+        "13": "+3",
+        "14": "+3",
+        "15": "+3",
+        "16": "+4",
+        "17": "+4",
+        "18": "+4",
+        "19": "+4",
+        "20": "+4"
+      },
+      "updatedAt": "2026-04-25T21:10:02.039Z",
+      "name": "Rage Damage",
+      "parentType": "class",
+      "identifier": "rage-damage",
+      "sourceId": "scale-rage-damage",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-barbarian",
+      "parentSourceId": "class-barbarian"
+    },
+    {
+      "id": "7lqioDnuvDUc15JaKvCu",
+      "createdAt": "2026-04-29T03:06:46.546Z",
+      "parentType": "subclass",
+      "name": "Spiked Armor",
+      "updatedAt": "2026-04-29T03:06:46.545Z",
+      "values": {
+        "3": "1d4",
+        "4": "1d4",
+        "5": "1d4",
+        "6": "1d6",
+        "7": "1d6",
+        "8": "1d6",
+        "9": "1d6",
+        "10": "1d6",
+        "11": "1d6",
+        "12": "1d6",
+        "13": "1d6",
+        "14": "1d8",
+        "15": "1d8",
+        "16": "1d8",
+        "17": "1d8",
+        "18": "1d8",
+        "19": "1d8",
+        "20": "1d8"
+      },
+      "identifier": "spiked-armor",
+      "sourceId": "scale-spiked-armor",
+      "sourceBookId": "source-scag-2014",
+      "classSourceId": "class-barbarian",
+      "parentSourceId": "subclass-path-of-the-battlerager"
+    },
+    {
+      "id": "8HlgjYFIq7ZbXjNWWbFk",
+      "parentType": "class",
+      "values": {
+        "1": "2",
+        "2": "2",
+        "3": "3",
+        "4": "3",
+        "5": "3",
+        "6": "4",
+        "7": "4",
+        "8": "4",
+        "9": "4",
+        "10": "4",
+        "11": "4",
+        "12": "5",
+        "13": "5",
+        "14": "5",
+        "15": "5",
+        "16": "5",
+        "17": "6",
+        "18": "6",
+        "19": "6",
+        "20": "Unlimited"
+      },
+      "updatedAt": "2026-04-25T21:09:36.308Z",
+      "name": "Rages",
+      "createdAt": "2026-04-25T21:09:36.308Z",
+      "identifier": "rages",
+      "sourceId": "scale-rages",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-barbarian",
+      "parentSourceId": "class-barbarian"
+    },
+    {
+      "id": "JJTUnkpHtVXKyVqX9Lb4",
+      "parentType": "subclass",
+      "values": {
+        "6": "2d6",
+        "7": "2d6",
+        "8": "2d6",
+        "9": "2d6",
+        "10": "3d6",
+        "11": "3d6",
+        "12": "3d6",
+        "13": "3d6",
+        "14": "4d6",
+        "15": "4d6",
+        "16": "4d6",
+        "17": "4d6",
+        "18": "4d6",
+        "19": "4d6",
+        "20": "4d6"
+      },
+      "updatedAt": "2026-04-25T21:16:53.467Z",
+      "name": "Spirit Shield",
+      "createdAt": "2026-04-25T21:16:53.467Z",
+      "identifier": "spirit-shield",
+      "sourceId": "scale-spirit-shield",
+      "sourceBookId": "source-xge-2014",
+      "classSourceId": "class-barbarian",
+      "parentSourceId": "subclass-path-of-the-ancestral-guardian"
+    },
+    {
+      "id": "br7RRYfNG7xhWIf7Pzoa",
+      "createdAt": "2026-04-29T02:46:54.424Z",
+      "name": "Brutal Critical Dice",
+      "updatedAt": "2026-04-29T02:46:54.424Z",
+      "values": {
+        "9": "1",
+        "10": "1",
+        "11": "1",
+        "12": "1",
+        "13": "2",
+        "14": "2",
+        "15": "2",
+        "16": "2",
+        "17": "3",
+        "18": "3",
+        "19": "3",
+        "20": "3"
+      },
+      "parentType": "class",
+      "identifier": "brutal-critical-dice",
+      "sourceId": "scale-brutal-critical-dice",
+      "sourceBookId": "source-phb-2014",
+      "classSourceId": "class-barbarian",
+      "parentSourceId": "class-barbarian"
+    }
+  ],
+  "uniqueOptionGroups": [],
+  "uniqueOptionItems": [],
+  "spellsKnownScalings": {},
+  "alternativeSpellcastingScalings": {},
+  "source": {
+    "id": "joi0FqfJfNvgzrUlMmbn",
+    "slug": "phb",
+    "url": "",
+    "description": "The Player's Hand Book",
+    "status": "ready",
+    "imageUrl": "",
+    "abbreviation": "PHB",
+    "rules": "2014",
+    "name": "Player's Handbook",
+    "updatedAt": "2026-04-20T16:08:59.612Z",
+    "createdAt": "2026-04-20T15:29:16.300Z",
+    "tags": [
+      "Classes",
+      "Items",
+      "Spells",
+      "Feats"
+    ]
+  }
+}

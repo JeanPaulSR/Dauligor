@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Checkbox } from '../../components/ui/checkbox';
 import { useKeyboardSave } from '../../hooks/useKeyboardSave';
@@ -44,6 +44,8 @@ import AdvancementManager, { Advancement } from '../../components/compendium/Adv
 import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
 import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
 import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
+import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } from '../../lib/advancementState';
+import { buildCanonicalSubclassProgression } from '../../lib/classProgression';
 import {
   Dialog,
   DialogContent,
@@ -144,6 +146,18 @@ export default function SubclassEditor() {
   const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
   const [managingGroupSearch, setManagingGroupSearch] = useState('');
 
+  const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1) => (
+    normalizeAdvancementListForEditor(list, {
+      defaultLevel,
+      defaultHitDie: resolveAdvancementDefaultHitDie(parentClass?.hitDie || 8)
+    }) as Advancement[]
+  ), [parentClass?.hitDie]);
+
+  const normalizeFeatureForEditor = useCallback((feature: any) => ({
+    ...feature,
+    advancements: normalizeEditorAdvancements(feature?.advancements || [], Number(feature?.level || 1) || 1)
+  }), [normalizeEditorAdvancements]);
+
   useEffect(() => {
     const unsubSources = onSnapshot(collection(db, 'sources'), (snap) => {
       setSources(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -207,7 +221,7 @@ export default function SubclassEditor() {
           setLore(data.lore || '');
           setImageUrl(data.imageUrl || '');
           setTagIds(data.tagIds || []);
-          setAdvancements(data.advancements || []);
+          setAdvancements(normalizeEditorAdvancements(data.advancements || [], 1));
           setSpellcasting(data.spellcasting || {
             hasSpellcasting: false,
             description: '',
@@ -258,7 +272,7 @@ export default function SubclassEditor() {
         const unsubFeatures = onSnapshot(
           query(collection(db, 'features'), where('parentId', '==', id), where('parentType', '==', 'subclass'), orderBy('level', 'asc')),
           (snap) => {
-            setFeatures(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setFeatures(snap.docs.map(doc => normalizeFeatureForEditor({ id: doc.id, ...doc.data() })));
           }
         );
 
@@ -310,6 +324,11 @@ export default function SubclassEditor() {
         }
       : spellcasting;
 
+    const canonicalSubclassProgression = buildCanonicalSubclassProgression({
+      advancements: normalizeEditorAdvancements(advancements, 1),
+      includeImplicitFeatureGrants: false
+    });
+
     const subclassData: any = {
       name,
       identifier: slugify(name),
@@ -322,7 +341,7 @@ export default function SubclassEditor() {
       tagIds,
       spellcasting: normalizedSpellcasting,
       excludedOptionIds,
-      advancements,
+      advancements: canonicalSubclassProgression.customAdvancements,
       updatedAt: serverTimestamp(),
     };
 
@@ -370,6 +389,7 @@ export default function SubclassEditor() {
         parentType: 'subclass',
         level: Number(editingFeature.level || editingFeature.configuration?.requiredLevel || 1),
         name: String(editingFeature.name || '').trim(),
+        advancements: normalizeEditorAdvancements(editingFeature.advancements || [], Number(editingFeature.level || editingFeature.configuration?.requiredLevel || 1) || 1),
         quantityColumnId: editingFeature.quantityColumnId || '',
         scalingColumnId: editingFeature.scalingColumnId || '',
         automation: {
@@ -810,7 +830,7 @@ export default function SubclassEditor() {
                                 variant="ghost" 
                                 size="sm" 
                                 onClick={() => {
-                                  setEditingFeature({ 
+                                  setEditingFeature(normalizeFeatureForEditor({ 
                                     id: doc(collection(db, 'features')).id,
                                     name: '', 
                                     description: '', 
@@ -832,7 +852,7 @@ export default function SubclassEditor() {
                                     uniqueOptionGroupIds: [],
                                     activities: {},
                                     effectsStr: '[]'
-                                  });
+                                  }));
                                   setIsFeatureModalOpen(true);
                                 }}
                                 className="h-6 px-2 text-gold hover:bg-gold/10 gap-1 border border-gold/20 bg-gold/5"
@@ -847,7 +867,7 @@ export default function SubclassEditor() {
                                   <span className="text-sm font-bold text-ink">{feature.name}</span>
                                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Button variant="ghost" size="sm" onClick={() => { 
-                                      setEditingFeature({
+                                      setEditingFeature(normalizeFeatureForEditor({
                                         ...feature,
                                         type: feature.type || 'class',
                                         configuration: feature.configuration || {
@@ -863,7 +883,7 @@ export default function SubclassEditor() {
                                         activities: feature.automation?.activities || {},
                                         effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
                                         advancements: feature.advancements || []
-                                      }); 
+                                      })); 
                                       setIsFeatureModalOpen(true); 
                                     }} className="h-6 w-6 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
                                     <Button variant="ghost" size="sm" onClick={() => handleDeleteFeature(feature.id)} className="h-6 w-6 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>
@@ -896,7 +916,7 @@ export default function SubclassEditor() {
                                 </div>
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <Button variant="ghost" size="sm" onClick={() => { 
-                                    setEditingFeature({
+                                    setEditingFeature(normalizeFeatureForEditor({
                                       ...feature,
                                       type: feature.type || 'class',
                                       configuration: feature.configuration || {
@@ -912,7 +932,7 @@ export default function SubclassEditor() {
                                       activities: feature.automation?.activities || {},
                                       effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
                                       advancements: feature.advancements || []
-                                    }); 
+                                    })); 
                                     setIsFeatureModalOpen(true); 
                                   }} className="h-6 w-6 p-0 text-gold"><Edit className="w-3 h-3" /></Button>
                                   <Button variant="ghost" size="sm" onClick={() => handleDeleteFeature(feature.id)} className="h-6 w-6 p-0 text-blood"><Trash2 className="w-3 h-3" /></Button>

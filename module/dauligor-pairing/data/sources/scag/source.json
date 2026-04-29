@@ -1,0 +1,39 @@
+{
+  "kind": "dauligor.source.v1",
+  "schemaVersion": 1,
+  "sourceId": "source-scag-2014",
+  "slug": "scag",
+  "name": "Sword Coast Adventurer's Guide",
+  "shortName": "SCAG",
+  "description": "Sword Coast Adventurer's Guide is a regional sourcebook, by Wizards of the Coast, set in the Forgotten Realms using the Dungeons & Dragons 5th edition ruleset. It focuses on west and northwest Faerûn.",
+  "coverImage": "",
+  "status": "ready",
+  "rules": "2014",
+  "tags": [],
+  "dates": {
+    "addedAt": "2026-04-25T21:18:47.064Z",
+    "updatedAt": "2026-04-25T21:18:47.064Z"
+  },
+  "linkedContent": {
+    "classes": {
+      "count": 0,
+      "catalogUrl": "classes/catalog.json"
+    },
+    "spells": {
+      "count": 0,
+      "catalogUrl": "spells/catalog.json"
+    },
+    "items": {
+      "count": 0,
+      "catalogUrl": "items/catalog.json"
+    },
+    "bestiary": {
+      "count": 0,
+      "catalogUrl": "bestiary/catalog.json"
+    },
+    "journals": {
+      "count": 0,
+      "catalogUrl": "journals/catalog.json"
+    }
+  }
+}

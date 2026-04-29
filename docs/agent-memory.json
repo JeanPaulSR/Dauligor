@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "updatedAt": "2026-04-28",
+  "version": 2,
+  "updatedAt": "2026-04-29",
   "paths": {
     "appRepo": "E:/DnD/Professional/Dev/Dauligor",
     "moduleDev": "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing",
@@ -62,6 +62,8 @@
     "referenceDoc": "E:/DnD/Professional/Dev/Dauligor/docs/foundry-dnd5e-character-reference-sheet.md",
     "asiUiShouldBeRevisitedLater": true,
     "firstReferenceUiPassImplemented": true,
+    "firstDeprecatedAdvancementCleanupPassImplemented": true,
+    "secondDeprecatedAdvancementCleanupPassImplemented": true,
     "nextGoals": [
       "build a creator-facing reference model around native Foundry dnd5e terminology",
       "update Dauligor class and character sheets to display and explain Foundry-style references while authoring",
@@ -99,15 +101,57 @@
       "CharacterReferencePanel.tsx is now a compact CharacterBuilder launcher card instead of a permanently expanded table",
       "spellcasting formula authoring now supports contextual shortcuts: @level, @totalLevel, @prof, @mod, @value, plus min()/floor()/ceil() guidance",
       "class export normalization now resolves those spellcasting shortcuts into Foundry-native formula paths using the current class identifier and selected ability",
-      "the next pass should extend reference helpers into more formula-bearing editor surfaces and then tackle deprecated advancement-authoring cleanup",
+      "AdvancementManager.tsx now canonicalizes editor state on every modal update instead of relying on save-time repair for deprecated advancement shapes",
+      "touched advancement rows now save canonical allowReplacements, sizes, trait choice source, and item-choice count source data",
+      "classExport.ts now derives a compatibility size field from canonical sizes data during export so Foundry payloads remain stable",
+      "advancementState.ts now provides shared canonical advancement normalization for app-side editor and creator flows",
+      "ClassEditor.tsx and SubclassEditor.tsx now normalize root and feature advancement arrays when loading, editing, and saving",
+      "CharacterBuilder.tsx now normalizes cached class, subclass, and feature advancements before progression logic consumes them",
+      "CharacterBuilder.tsx now derives trait choices from canonical options/choiceCount data instead of only the older configuration.choices shape",
+      "CharacterBuilder.tsx now distinguishes primary-class level 1 from multiclass level 1 when interpreting base class advancements",
+      "CharacterBuilder.tsx now re-applies class profile trait grants and selected trait choices onto live sheet state through classGrantedTraits so class saves, skills, armor, weapons, tools, and languages appear on the character",
+      "CharacterBuilder.tsx now skips base starting-equipment ItemChoice rows for multiclass class onboarding and preserves classId alongside className in new progression entries",
+      "CharacterBuilder.tsx no longer fuzzy-attaches advancement cards to feature text by matching names or identifiers; level advancements now render as their own standalone sections beneath the feature list",
+      "CharacterBuilder.tsx Character Sheet tab now derives a class progression summary from cached class/subclass features and scaling columns, showing per-class granted features, current scale values, and selected advancement options",
+      "advancementState.ts canonical trait choice helpers now preserve categoryIds so builder dialogs can resolve both explicit pools and category-backed trait collections",
+      "the next pass should extend reference helpers into more formula-bearing editor surfaces and continue deprecated advancement-authoring cleanup beyond AdvancementManager.tsx",
       "the current inline usage formula helper is useful but too space-heavy; future reference help should prefer a button, hover target, side popout, or dedicated reference window",
-      "class authoring screens should likely get an 'open references sheet' action near the main save area",
       "spellcasting authoring needs more room and should not feel cramped by the reference helper sharing the same narrow column",
       "the dedicated reference sheet should eventually include sections for core information, attributes, skills, class features, class columns, and later effects",
       "class references must key by stable identifier rather than display name so duplicate class names on a sheet do not break resolution",
       "class-column references must resolve from linked ScaleValue / scaling identifiers rather than only from the column label",
       "future effects/reference work should review Foundry wiki guidance and Midi-QOL effect conventions"
     ]
+  },
+  "uniqueOptionGroupEditor": {
+    "classIdsStoredAtGroupLevel": true,
+    "classIdsNotOnIndividualItems": true,
+    "itemListPattern": "compact divide-y rows with hover-reveal edit/delete buttons, matching ClassEditor feature list",
+    "itemEditPattern": "Dialog modal max-w-4xl, consistent with ClassEditor feature modal",
+    "groupDetailsClassRestrictions": "searchable multi-select with chip display, search input, scrollable filtered list",
+    "prerequisitesDisplayedAsText": true,
+    "prerequisitesOnlyShownWhenPopulated": true
+  },
+  "advancementManager": {
+    "classIdProp": "optional classId from ClassEditor (id) or SubclassEditor (classId || parentClass?.id)",
+    "optionGroupFiltering": "shows groups where classIds is empty or includes classId",
+    "crossClassGroupSearch": "inline max-h-40 panel, no absolute positioning, to avoid overflow clipping in modal containers",
+    "allFeaturesFetch": "lazy fetch on modal open, cached in allFeatures state",
+    "selectedPoolFeaturesResolvesFromBoth": "availableFeatures (class-local) and allFeatures (global)",
+    "editorStateCanonicalizedOnEveryUpdate": true,
+    "canonicalAuthoringShapeNotes": [
+      "trait rows now author allowReplacements instead of allowReplacement",
+      "size rows now author sizes as the editor source of truth",
+      "item pools, optional pools, and excluded option ids are deduped in editor state",
+      "trait choiceSource and item countSource are normalized inside the modal instead of only on save"
+    ],
+    "sharedNormalizer": "src/lib/advancementState.ts is now the common source for canonical advancement normalization across editors and creator flows",
+    "statesClearedOnClose": ["featureSearch", "optionGroupSearch", "showAllOptionGroups"]
+  },
+  "markdownEditor": {
+    "asyncSyncBugFixed": true,
+    "bugDescription": "TipTap WYSIWYG mode never received async-loaded values because the sync useEffect was gated on !isWYSIWYG",
+    "fix": "removed !isWYSIWYG guard; emitUpdate: false on setContent prevents feedback loops"
   },
   "descriptions": {
     "acceptedFormats": [
@@ -142,6 +186,112 @@
     "acceptedShorthandFormulaExample": "WIS + Level",
     "preferredNativeFormulaExample": "@abilities.wis.mod + @classes.druid.levels"
   },
+  "characterBuilderSheetAlignment": {
+    "sheetSubtabs": [
+      "info",
+      "features",
+      "spells"
+    ],
+    "referencePanelShownOnCharacterSheet": false,
+    "progressionShownByDefaultOnCharacterSheet": false,
+    "hpDerivesFromClassProgression": true,
+    "sharedProgressionSummarySource": "CharacterBuilder.tsx now builds a per-class progression summary used by both the sheet and the class-step timeline",
+    "progressionSummaryIncludes": [
+      "grant-first class and subclass features",
+      "raw feature fallback when no ItemGrant-backed feature records exist",
+      "granted non-feature items from class, subclass, and feature-owned ItemGrant rows",
+      "scale values"
+    ],
+    "featuresTabShows": [
+      "class level summary",
+      "subclass summary",
+      "granted features",
+      "granted items",
+      "scale values",
+      "selected advancement options"
+    ],
+    "classTimelineUsesSharedSummary": true,
+    "classTimelineStandaloneGrantSections": [
+      "granted items render separately from feature cards"
+    ]
+  },
+  "classMigrationDirection": {
+    "editorUxRemainsConvenienceFirst": true,
+    "initializeBaseAdvancementsIsAuthoringBridge": true,
+    "baseRowsAuthorsShouldNotNeedToHandBuild": [
+      "HitPoints",
+      "Subclass",
+      "AbilityScoreImprovement"
+    ],
+    "backendGoal": "saved/exported class data should converge on canonical advancement-driven progression truth even if editor fields remain convenience inputs",
+    "knownEditorIssues": [
+      "multiclass proficiency category headers currently do not work because toggleGroup only updates proficiencies state",
+      "proficiency display sync currently expands category selections into individual item names instead of preferring category labels"
+    ],
+    "preferredDisplaySyncRules": [
+      "whole-category fixed selections should display the category label when possible",
+      "choice rows should prefer phrasing like '{Choice Number} {Category} of your choice'",
+      "if appended after existing fixed text, use '; and {Choice Number} {Category} of your choice'"
+    ],
+    "spellcastingMigrationNote": "before turning spellcasting into a more progression-linked backend model, compare local Foundry dnd5e and Plutonium expectations"
+  },
+  "latestClassMigrationPass": {
+    "implementedEditorFixes": [
+      "multiclass proficiency category headers now update multiclassProficiencies instead of the main proficiencies state",
+      "grouped proficiency display sync now prefers whole-category labels over expanding full categories into individual item names",
+      "choice-oriented grouped display sync now generates phrasing such as '{Choice Number} {Category} of your choice' and appends it after fixed text when needed",
+      "handleSave fallback display generation now reuses the same grouped sync helper as the Sync buttons",
+      "category-backed proficiency overlap is now allowed for armor, weapons, tools, and languages so a fixed item can coexist with a category choice pool"
+    ],
+    "nextBackendStep": "review and extend the shared canonical class progression builder into adjacent subclass and builder-owned-state flows",
+    "sharedProgressionBuilder": {
+      "file": "E:/DnD/Professional/Dev/Dauligor/src/lib/classProgression.ts",
+      "consumers": [
+        "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/ClassEditor.tsx",
+        "E:/DnD/Professional/Dev/Dauligor/src/lib/classExport.ts",
+        "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/SubclassEditor.tsx"
+      ],
+      "reviewDoc": "E:/DnD/Professional/Dev/Dauligor/docs/class-progression-architecture.md"
+    },
+    "exportReview": [
+      "generated class JSON shows canonical base rows and implicit ItemGrant rows from the shared progression builder",
+      "classExport.ts now preserves armorDisplayName, weaponsDisplayName, and toolsDisplayName inside exported proficiency blocks"
+    ],
+    "classPreviewFollowup": [
+      "ClassList.tsx tools preview now prefers the saved toolsDisplayName string before rebuilding from raw tool category/item state",
+      "existing exported source files need to be regenerated to include the new preserved display-name fields"
+    ],
+    "subclassProgressionAlignment": {
+      "implemented": [
+        "buildCanonicalSubclassProgression now owns canonical subclass custom-advancement filtering and optional implicit subclass feature grants",
+        "SubclassEditor save now writes canonical subclass custom advancements through the shared helper",
+        "classExport subclass export now uses the shared subclass progression helper instead of a direct implicit-grant branch"
+      ],
+      "resolvedPolicy": [
+        "subclasses should not gain generated base progression rows beyond their reference to the parent class; the parent class already defines the subclass feature schedule",
+        "subclass features should always be granted at their authored levels once a subclass is selected, like main-class features",
+        "subclass custom advancements must be allowed at non-subclass levels such as 5, 11, and 17; only the main subclass feature schedule stays locked to the parent class",
+        "subclass spellcasting should participate in the same overall spellcasting system as main-class spellcasting",
+        "subclass spellcasting should contribute to multiclass slot progression exactly the same way Foundry/dnd5e does, using the admin multiclass master chart plus formula-mapped casting contribution"
+      ],
+      "resolvedExample": "Wizard 3 contributes 3 casting levels and Fighter 3 (Eldritch Knight) contributes ceil(3 / 3) = 1, so Wizard 3 / Fighter 3 (Eldritch Knight) has total spellcasting level 4"
+    },
+    "characterBuilderProgressionAlignment": {
+      "implemented": [
+        "CharacterBuilder.tsx now treats progression entries as the source of truth for per-class subclassId ownership",
+        "builder save now persists derived classes summaries from grouped progression entries while mirroring top-level classId and subclassId for compatibility",
+        "subclass selection in the class step now writes the chosen subclass onto matching progression entries for that class",
+        "builder trait-grant and class progression summaries now resolve subclass documents per class group instead of only through the global subclass field",
+        "sheet spellcasting now computes multiclass slot progression from all active class and subclass spellcasting contributors using spellcastingTypes formulas plus the standardMulticlassProgression master chart",
+        "generatePairingJson now derives class and subclass items from grouped progression data instead of the stale character.classes field and now includes subclass spellcasting blocks",
+        "selected advancement options in CharacterBuilder.tsx now use parent-scoped keys instead of plain _id-level keys, with scope built from parent type plus stable class/subclass/feature identifiers",
+        "builder selection writes now clean up matching legacy _id-level keys when an advancement choice is edited",
+        "the builder no longer reads legacy _id-level advancement-selection keys and instead shows a blocking warning telling the user to go back to class progression and reselect those choices before export or JSON preview"
+      ],
+      "discrepancyToRevisit": "existing saved characters can still carry legacy _id-level advancement-selection keys until those choices are manually reselected or a future explicit migration rewrites them eagerly",
+      "nextStateOutlineDoc": "E:/DnD/Professional/Dev/Dauligor/docs/character-builder-progression-owned-state-outline.md"
+    }
+  },
   "importantFiles": {
     "app": [
       "E:/DnD/Professional/Dev/Dauligor/src/lib/classExport.ts",
@@ -156,7 +306,9 @@
       "E:/DnD/Professional/Dev/Dauligor/src/pages/admin/SpellcastingAdvancementManager.tsx",
       "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/ClassEditor.tsx",
       "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/SubclassEditor.tsx",
-      "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/AdvancementManager.tsx"
+      "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/UniqueOptionGroupEditor.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/AdvancementManager.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/MarkdownEditor.tsx"
     ],
     "module": [
       "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/class-import-service.js",
@@ -171,15 +323,13 @@
     ]
   },
   "activeFollowups": [
-    "start app-side character creator alignment with Foundry dnd5e references using the reference sheet and identified app entry points",
-    "update class sheet and character sheet authoring UX so creators can discover and use references like @abilities.int.mod directly",
     "extend the new reference helper surface into more formula-bearing editors such as activity formulas and remaining character-sheet fields",
-    "keep refining the draggable reference sheet window sizing and placement based on real editor usage",
-    "replace large inline reference helpers with a popout, hover card, side panel, or dedicated reference-sheet flow",
-    "add an open-reference-sheet action near the main save area on class authoring screens",
     "expand the future reference sheet to cover core information, attributes, skills, class features, class columns, and later effects",
     "research Foundry wiki and Midi-QOL effect declaration patterns for the later effects/reference pass",
-    "replace deprecated character-sheet advancement authoring paths with the current Foundry-ready advancement model",
+    "continue replacing deprecated character-sheet advancement authoring paths with the current Foundry-ready advancement model beyond AdvancementManager.tsx",
+    "continue checking CharacterBuilder.tsx for any remaining creator behavior that still depends on legacy advancement sub-shapes after cache normalization",
+    "continue the CharacterBuilder creator-alignment pass so class onboarding, starting items, feature grants, option-item ownership, and trait/state application track the module contract more closely",
+    "push selected advancement options and granted ownership into an even more explicit progression-derived state model for the builder/sheet",
     "verify multiclass behavior across more class combinations",
     "verify Dauligor ASI prompt behavior in live Foundry, especially multi-level imports that cross ASI levels",
     "verify Dauligor feat selection from a real feat catalog during ASI prompt flow",
