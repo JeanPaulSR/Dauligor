@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, deleteDoc, doc, getDoc, onSnapshot, orderBy, query, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { ChevronLeft, Edit3, Plus, Save, Search, Trash2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { auth, db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { adminDeleteSpell, adminUpsertSpell } from '../../lib/spellAdminApi';
 import { slugify } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
@@ -18,7 +19,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import VirtualizedList from '../../components/ui/VirtualizedList';
-import { backfillSpellSummaries, createSpellWithSummary, deleteSpellSummary, type SpellSummaryRecord, upsertSpellSummary } from '../../lib/spellSummary';
+import { backfillSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
 
 const SPELL_SCHOOLS = [
   ['abj', 'Abjuration'],
@@ -324,25 +325,31 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       });
 
       if (editingId) {
-        await setDoc(doc(db, 'spells', editingId), {
+        const response = await adminUpsertSpell(editingId, {
           ...payload,
           createdAt: formData.createdAt || new Date().toISOString()
-        }, { merge: true });
-        await upsertSpellSummary(editingId, {
-          ...payload,
-          id: editingId,
-          createdAt: formData.createdAt || new Date().toISOString(),
-          tagIds: Array.isArray(formData.tagIds) ? formData.tagIds : []
         });
+        const resolvedId = response.id || editingId;
         toast.success('Spell updated');
-      } else {
-        const createdId = await createSpellWithSummary({
-          ...payload,
-          createdAt: new Date().toISOString()
-        });
         setSpellDetailsById((current) => ({
           ...current,
-          [createdId]: { id: createdId, ...payload, createdAt: new Date().toISOString() }
+          [resolvedId]: {
+            id: resolvedId,
+            ...payload,
+            createdAt: formData.createdAt || new Date().toISOString(),
+            tagIds: Array.isArray(formData.tagIds) ? formData.tagIds : []
+          }
+        }));
+      } else {
+        const createdPayload = {
+          ...payload,
+          createdAt: new Date().toISOString()
+        };
+        const response = await adminUpsertSpell(null, createdPayload);
+        const createdId = response.id;
+        setSpellDetailsById((current) => ({
+          ...current,
+          [createdId]: { id: createdId, ...createdPayload }
         }));
         toast.success('Spell created');
       }
@@ -362,8 +369,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     if (!window.confirm('Delete this spell?')) return;
 
     try {
-      await deleteDoc(doc(db, 'spells', editingId));
-      await deleteSpellSummary(editingId);
+      await adminDeleteSpell(editingId);
       toast.success('Spell deleted');
       resetForm();
     } catch (error) {

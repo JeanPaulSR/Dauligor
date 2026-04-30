@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { collection, doc, onSnapshot, orderBy, query, setDoc, where } from 'firebase/firestore';
+import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles, Tag, Upload, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { adminImportSpellBatch, adminUpsertSpell } from '../../lib/spellAdminApi';
 import { cn } from '../../lib/utils';
 import { buildSpellImportCandidates, formatFoundrySpellDescriptionForDisplay, type FoundrySpellFolderExport, type SpellImportCandidate } from '../../lib/spellImport';
-import { createSpellWithSummary, type SpellSummaryRecord, upsertSpellSummary } from '../../lib/spellSummary';
+import { type SpellSummaryRecord } from '../../lib/spellSummary';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -284,15 +285,11 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
         tagIds: candidateTagIds[candidate.candidateId] || [],
         createdAt: existingEntries.find((entry) => entry.id === candidate.existingEntryId)?.createdAt || new Date().toISOString()
       };
-      await setDoc(doc(db, 'spells', candidate.existingEntryId), updatedPayload, { merge: true });
-      await upsertSpellSummary(candidate.existingEntryId, {
-        id: candidate.existingEntryId,
-        ...updatedPayload
-      });
+      await adminUpsertSpell(candidate.existingEntryId, updatedPayload);
       return 'updated';
     }
 
-    await createSpellWithSummary({
+    await adminUpsertSpell(null, {
       ...payload,
       tagIds: candidateTagIds[candidate.candidateId] || [],
       createdAt: new Date().toISOString()
@@ -333,14 +330,27 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
 
     setSaving(true);
     try {
-      let created = 0;
-      let updated = 0;
-      for (const candidate of importable) {
-        const action = await saveCandidate(candidate);
-        if (action === 'created') created += 1;
-        else updated += 1;
-      }
-      toast.success(`Imported ${importable.length} spells (${created} new, ${updated} updated).`);
+      const entries = importable.map((candidate) => {
+        const existingCreatedAt = existingEntries.find((entry) => entry.id === candidate.existingEntryId)?.createdAt || new Date().toISOString();
+        const payload = {
+          ...candidate.savePayload,
+          tagIds: candidateTagIds[candidate.candidateId] || [],
+          updatedAt: new Date().toISOString(),
+          createdAt: candidate.existingEntryId ? existingCreatedAt : new Date().toISOString()
+        } as Record<string, any>;
+
+        Object.keys(payload).forEach((key) => {
+          if (payload[key] === undefined) delete payload[key];
+        });
+
+        return {
+          id: candidate.existingEntryId || null,
+          payload
+        };
+      });
+
+      const result = await adminImportSpellBatch(entries);
+      toast.success(`Imported ${result.total} spells (${result.created} new, ${result.updated} updated).`);
     } catch (error) {
       console.error('Error importing visible spells:', error);
       toast.error('Failed to import visible spells.');

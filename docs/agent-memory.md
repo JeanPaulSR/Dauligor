@@ -280,6 +280,13 @@ Latest spell-compendium details:
 - `src/pages/compendium/SpellsEditor.tsx` now also includes an admin-only `Purge All Spells` action intended for full reimport/reset workflows
 - spell purge no longer attempts browser-side Firestore batch deletes; `SpellsEditor.tsx` now calls `api/admin/spells/purge.ts` with the signed-in Firebase bearer token, and that route performs the purge through Firebase Admin after explicit admin verification
 - `api/_lib/firebase-admin.ts` now also exposes `requireAdminAccess(...)` for admin-only server actions beyond the R2 image manager flow
+- spell import/save/delete no longer depend on direct client-side writes for admin flows:
+  - `src/lib/spellAdminApi.ts` now wraps authenticated calls to admin spell routes
+  - `api/admin/spells/upsert.ts` upserts a spell and its summary through Firebase Admin
+  - `api/admin/spells/import-batch.ts` batch imports/upserts visible spell candidates through Firebase Admin
+  - `api/admin/spells/delete.ts` deletes both the spell and its summary through Firebase Admin
+  - `src/components/compendium/SpellImportWorkbench.tsx` now uses the admin API for single-spell import and visible-batch import
+  - `src/pages/compendium/SpellsEditor.tsx` manual save/delete now use the admin API too
 - the manual spell editor no longer uses the generic `DevelopmentCompendiumManager` layout
 - the manual spell editor now follows the importer rhythm:
   - left column is a searchable spell selector list in the same visual language as the import browser
