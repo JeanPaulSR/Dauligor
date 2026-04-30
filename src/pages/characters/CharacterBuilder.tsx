@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardSave } from "../../hooks/useKeyboardSave";
 import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
@@ -125,6 +125,131 @@ function uniqueStringList(values: any[] = []) {
   );
 }
 
+function buildNamedDocLookup(entries: any[] = []) {
+  const lookup: Record<string, string> = {};
+
+  (Array.isArray(entries) ? entries : []).forEach((entry: any) => {
+    const label = String(
+      entry?.name || entry?.label || entry?.title || entry?.identifier || entry?.id || "",
+    ).trim();
+    if (!label) return;
+
+    const keys = uniqueStringList([
+      entry?.id,
+      entry?.identifier,
+      entry?.sourceId,
+      entry?.slug,
+      entry?.key,
+    ]);
+
+    keys.forEach((key) => {
+      lookup[String(key)] = label;
+      lookup[String(key).toLowerCase()] = label;
+      lookup[String(key).toUpperCase()] = label;
+    });
+  });
+
+  return lookup;
+}
+
+function flattenStringArray(values: any): string[] {
+  if (!Array.isArray(values)) {
+    const single = String(values ?? "").trim();
+    return single ? [single] : [];
+  }
+
+  return values.flatMap((value) => flattenStringArray(value));
+}
+
+function normalizePrimaryAbilityValue(values: any): string[] {
+  const valid = new Set(["str", "dex", "con", "int", "wis", "cha"]);
+  return Array.from(
+    new Set(
+      flattenStringArray(values)
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter((value) => valid.has(value)),
+    ),
+  );
+}
+
+function normalizeSpellcastingForExport(spellcasting: any, fallbackLevel = 1) {
+  if (!spellcasting || typeof spellcasting !== "object") {
+    return {
+      progression: "none",
+      ability: "",
+      type: "",
+      level: fallbackLevel,
+      hasSpellcasting: false,
+      isRitualCaster: false,
+      description: "",
+      spellsKnownFormula: "",
+      spellsKnownId: "",
+      progressionId: "",
+      altProgressionId: "",
+    };
+  }
+
+  const normalized = {
+    ...spellcasting,
+    ability: String(spellcasting.ability || "").trim().toUpperCase(),
+    type: String(spellcasting.type || "").trim().toLowerCase(),
+    level: Number(spellcasting.level || fallbackLevel) || fallbackLevel,
+    hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
+    isRitualCaster: Boolean(spellcasting.isRitualCaster),
+  } as any;
+
+  if (!normalized.hasSpellcasting) {
+    return {
+      progression: "none",
+      ability: "",
+      type: "",
+      level: normalized.level,
+      hasSpellcasting: false,
+      isRitualCaster: false,
+      description: "",
+      spellsKnownFormula: "",
+      spellsKnownId: "",
+      progressionId: "",
+      altProgressionId: "",
+    };
+  }
+
+  return normalized;
+}
+
+function getTotalCharacterLevel(
+  progression: any[] = [],
+  fallbackLevel = 1,
+) {
+  const progressionCount = Array.isArray(progression) ? progression.length : 0;
+  if (progressionCount > 0) return progressionCount;
+  return Math.max(1, Number(fallbackLevel || 1) || 1);
+}
+
+function getProficiencyBonusForLevel(level: any) {
+  const numericLevel = Math.max(1, Number(level || 1) || 1);
+  return Math.floor((numericLevel - 1) / 4) + 2;
+}
+
+function getStoredHpMax(character: any) {
+  const rawMax = character?.hp?.max;
+  if (rawMax == null || rawMax === "") return null;
+  const numericMax = Number(rawMax);
+  return Number.isFinite(numericMax) && numericMax > 0 ? numericMax : null;
+}
+
+function hasExplicitHpMaxOverride(character: any) {
+  const storedMax = getStoredHpMax(character);
+  const derivedHpMax = Number(character?.derivedHpMax ?? 0) || 0;
+  return storedMax != null && (derivedHpMax <= 0 || storedMax !== derivedHpMax);
+}
+
+function getEffectiveHpMax(character: any) {
+  const storedMax = getStoredHpMax(character);
+  if (storedMax != null) return storedMax;
+  return Number(character?.derivedHpMax ?? 10) || 10;
+}
+
 function areStringListsEqual(left: any[] = [], right: any[] = []) {
   const normalizedLeft = uniqueStringList(left);
   const normalizedRight = uniqueStringList(right);
@@ -224,6 +349,21 @@ function isLegacyAdvancementSelectionKey(key: any) {
   return !raw.includes("|adv:") && raw.includes("-");
 }
 
+function parseAdvancementSourceScope(scope: any) {
+  return String(scope ?? "")
+    .split("|")
+    .reduce(
+      (acc: Record<string, string>, part) => {
+        const [rawKey, ...rest] = String(part || "").split(":");
+        const key = String(rawKey || "").trim();
+        if (!key) return acc;
+        acc[key] = rest.join(":").trim();
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+}
+
 function buildAdvancementSelectionKey({
   sourceScope = "",
   source,
@@ -303,6 +443,481 @@ function writeAdvancementSelectionValues(
   return nextSelectedOptions;
 }
 
+function buildEmptyProgressionState() {
+  return {
+    classPackages: [] as any[],
+    ownedFeatures: [] as any[],
+    ownedItems: [] as any[],
+    ownedSpells: [] as any[],
+    derivedSync: {},
+  };
+}
+
+function normalizeAdvancementSelectionEntry(entry: any) {
+  return {
+    key: String(entry?.key || "").trim(),
+    parentType: String(entry?.parentType || "").trim(),
+    parentId: String(entry?.parentId || "").trim(),
+    parentSourceId: String(entry?.parentSourceId || "").trim(),
+    advancementId: String(entry?.advancementId || "").trim(),
+    level: Number(entry?.level || 0) || 0,
+    choiceId: String(entry?.choiceId || "").trim(),
+    type: String(entry?.type || "").trim(),
+    selectedIds: uniqueStringList(entry?.selectedIds || []),
+    selectedSemantic: uniqueStringList(entry?.selectedSemantic || []),
+  };
+}
+
+function normalizeProgressionState(progressState: any) {
+  const normalized = progressState && typeof progressState === "object"
+    ? progressState
+    : {};
+
+  return {
+    ...buildEmptyProgressionState(),
+    ...normalized,
+    classPackages: Array.isArray(normalized.classPackages)
+      ? normalized.classPackages.map((pkg: any) => ({
+          ...pkg,
+          advancementSelections: Array.isArray(pkg?.advancementSelections)
+            ? pkg.advancementSelections.map(normalizeAdvancementSelectionEntry)
+            : [],
+          grantedFeatureRefs: Array.isArray(pkg?.grantedFeatureRefs)
+            ? pkg.grantedFeatureRefs
+            : [],
+          grantedItemRefs: Array.isArray(pkg?.grantedItemRefs)
+            ? pkg.grantedItemRefs
+            : [],
+          spellcasting: pkg?.spellcasting && typeof pkg.spellcasting === "object"
+            ? pkg.spellcasting
+            : {},
+          hitPointHistory:
+            pkg?.hitPointHistory &&
+            typeof pkg.hitPointHistory === "object" &&
+            !Array.isArray(pkg.hitPointHistory)
+              ? pkg.hitPointHistory
+              : {},
+          scaleState:
+            pkg?.scaleState &&
+            typeof pkg.scaleState === "object" &&
+            !Array.isArray(pkg.scaleState)
+              ? pkg.scaleState
+              : {},
+        }))
+      : [],
+    ownedFeatures: Array.isArray(normalized.ownedFeatures)
+      ? normalized.ownedFeatures
+      : [],
+    ownedItems: Array.isArray(normalized.ownedItems) ? normalized.ownedItems : [],
+    ownedSpells: Array.isArray(normalized.ownedSpells) ? normalized.ownedSpells : [],
+    derivedSync:
+      normalized.derivedSync &&
+      typeof normalized.derivedSync === "object" &&
+      !Array.isArray(normalized.derivedSync)
+        ? normalized.derivedSync
+        : {},
+  };
+}
+
+function buildSelectedOptionsMapFromClassPackages(classPackages: any[] = []) {
+  const mappedEntries = (Array.isArray(classPackages) ? classPackages : []).flatMap(
+    (pkg: any) =>
+      (Array.isArray(pkg?.advancementSelections)
+        ? pkg.advancementSelections
+        : []
+      )
+        .map(normalizeAdvancementSelectionEntry)
+        .filter((entry: any) => entry.key)
+        .map((entry: any) => [entry.key, uniqueStringList(entry.selectedIds)] as const),
+  );
+
+  return Object.fromEntries(
+    mappedEntries.filter(([, value]) => Array.isArray(value) && value.length > 0),
+  ) as Record<string, string[]>;
+}
+
+function buildNonLegacySelectedOptionsMap(selectedOptions: Record<string, string[]> = {}) {
+  return Object.fromEntries(
+    Object.entries(selectedOptions || {}).filter(
+      ([key, value]) =>
+        !isLegacyAdvancementSelectionKey(key) &&
+        Array.isArray(value) &&
+        value.length > 0,
+    ),
+  ) as Record<string, string[]>;
+}
+
+function buildCharacterSelectedOptionsMap(character: any) {
+  const normalizedProgressionState = normalizeProgressionState(
+    character?.progressionState,
+  );
+  const fromPackages = buildSelectedOptionsMapFromClassPackages(
+    normalizedProgressionState.classPackages,
+  );
+  if (Object.keys(fromPackages).length > 0) {
+    return fromPackages;
+  }
+
+  return buildNonLegacySelectedOptionsMap(character?.selectedOptions || {});
+}
+
+function buildAdvancementSelectionsForPackage(
+  selectedOptions: Record<string, string[]> = {},
+  classToken = "",
+  subclassToken = "",
+  existingSelections: any[] = [],
+) {
+  const seededSelections = Array.isArray(existingSelections)
+    ? existingSelections.map(normalizeAdvancementSelectionEntry)
+    : [];
+  const nextSelections = new Map<string, any>();
+
+  seededSelections.forEach((entry) => {
+    if (entry.key) nextSelections.set(entry.key, entry);
+  });
+
+  Object.entries(selectedOptions || {}).forEach(([key, value]) => {
+    if (!key.includes("|adv:")) return;
+    const parsedScope = parseAdvancementSourceScope(key);
+    const selectionClassToken = String(parsedScope.class || "").trim();
+    const selectionSubclassToken = String(parsedScope.subclass || "").trim();
+    const classMatches =
+      selectionClassToken &&
+      (selectionClassToken === classToken || selectionClassToken === "none");
+    const subclassMatches =
+      !subclassToken ||
+      !selectionSubclassToken ||
+      selectionSubclassToken === "none" ||
+      selectionSubclassToken === subclassToken;
+
+    if (!classMatches || !subclassMatches) return;
+
+    const advSegment = key.split("|").find((segment) => segment.startsWith("adv:")) || "";
+    const levelSegment =
+      key.split("|").find((segment) => segment.startsWith("level:")) || "";
+    const choiceSegment =
+      key.split("|").find((segment) => segment.startsWith("choice:")) || "";
+
+    nextSelections.set(key, {
+      key,
+      parentType: String(parsedScope.type || "").trim(),
+      parentId: String(parsedScope.parent || "").trim(),
+      parentSourceId: "",
+      advancementId: advSegment.replace(/^adv:/, "").trim(),
+      level: Number(levelSegment.replace(/^level:/, "").trim() || 0) || 0,
+      choiceId: choiceSegment.replace(/^choice:/, "").trim(),
+      type: "",
+      selectedIds: uniqueStringList(value),
+      selectedSemantic: [],
+    });
+  });
+
+  return Array.from(nextSelections.values())
+    .map(normalizeAdvancementSelectionEntry)
+    .filter((entry: any) => entry.key && entry.selectedIds.length > 0);
+}
+
+function buildProgressionStateForCharacter(
+  character: any,
+  progressionGroups: any[] = [],
+  selectedOptions: Record<string, string[]> = {},
+  subclassCache: Record<string, any> = {},
+) {
+  const currentProgression = buildCurrentProgression(character);
+  const normalizedProgressionState = normalizeProgressionState(
+    character?.progressionState,
+  );
+  const existingPackages = new Map<string, any>();
+  normalizedProgressionState.classPackages.forEach((pkg: any) => {
+    const packageKey = String(pkg?.classId || pkg?.className || "").trim();
+    if (packageKey) existingPackages.set(packageKey, pkg);
+  });
+
+  const classPackages = progressionGroups.map((group: any) => {
+    const classDocument = group.classDocument || null;
+    const subclassDocument = group.subclassId
+      ? subclassCache[group.subclassId] || null
+      : null;
+    const packageKey = String(group.classId || group.className || "").trim();
+    const existingPackage = existingPackages.get(packageKey) || {};
+    const classToken = sanitizeAdvancementKeyPart(
+      group.classId || group.className,
+      "none",
+    );
+    const subclassToken = sanitizeAdvancementKeyPart(
+      group.subclassId ||
+        subclassDocument?.id ||
+        subclassDocument?.name ||
+        "",
+      "none",
+    );
+
+    return {
+      classId: group.classId || "",
+      classIdentifier:
+        String(classDocument?.identifier || "").trim() ||
+        String(existingPackage?.classIdentifier || "").trim(),
+      classSourceId:
+        String(classDocument?.sourceId || "").trim() ||
+        String(existingPackage?.classSourceId || "").trim() ||
+        (group.classId ? `class-${group.classId}` : ""),
+      className: group.className || "",
+      classLevel: group.classLevel || 0,
+      introductionMode: getClassIntroductionMode(
+        currentProgression,
+        group.classKey,
+      ),
+      subclassId: group.subclassId || "",
+      subclassIdentifier:
+        String(subclassDocument?.identifier || "").trim() ||
+        String(existingPackage?.subclassIdentifier || "").trim(),
+      subclassSourceId:
+        String(subclassDocument?.sourceId || "").trim() ||
+        String(existingPackage?.subclassSourceId || "").trim() ||
+        (group.subclassId ? `subclass-${group.subclassId}` : ""),
+      subclassName:
+        String(subclassDocument?.name || "").trim() ||
+        String(existingPackage?.subclassName || "").trim(),
+      advancementSelections: buildAdvancementSelectionsForPackage(
+        selectedOptions,
+        classToken,
+        subclassToken,
+        existingPackage?.advancementSelections || [],
+      ),
+      grantedFeatureRefs: Array.isArray(existingPackage?.grantedFeatureRefs)
+        ? existingPackage.grantedFeatureRefs
+        : [],
+      grantedItemRefs: Array.isArray(existingPackage?.grantedItemRefs)
+        ? existingPackage.grantedItemRefs
+        : [],
+      spellcasting: {
+        class: classDocument?.spellcasting || null,
+        subclass: subclassDocument?.spellcasting || null,
+      },
+      hitPointHistory:
+        existingPackage?.hitPointHistory &&
+        typeof existingPackage.hitPointHistory === "object" &&
+        !Array.isArray(existingPackage.hitPointHistory)
+          ? existingPackage.hitPointHistory
+          : {},
+      scaleState:
+        existingPackage?.scaleState &&
+        typeof existingPackage.scaleState === "object" &&
+        !Array.isArray(existingPackage.scaleState)
+          ? existingPackage.scaleState
+          : {},
+    };
+  });
+
+  return {
+    ...normalizedProgressionState,
+    classPackages,
+  };
+}
+
+function updateCharacterAdvancementSelectionState(
+  character: any,
+  keyConfig: {
+    sourceScope?: string;
+    source?: Record<string, any>;
+    advancementId: any;
+    level: any;
+    choiceId?: any;
+  },
+  nextValues: string[] = [],
+) {
+  const nextSelectedOptions = writeAdvancementSelectionValues(
+    character?.selectedOptions || {},
+    keyConfig,
+    nextValues,
+  );
+  const normalizedProgressionState = normalizeProgressionState(
+    character?.progressionState,
+  );
+  const scopedKey = buildAdvancementSelectionKey(keyConfig);
+  const parsedScope = parseAdvancementSourceScope(
+    keyConfig.sourceScope || buildAdvancementSourceScope(keyConfig.source || {}),
+  );
+  const classToken = String(parsedScope.class || "").trim();
+  const normalizedValues = uniqueStringList(nextValues);
+
+  const nextClassPackages = normalizedProgressionState.classPackages.map((pkg: any) => {
+    const packageClassToken = sanitizeAdvancementKeyPart(
+      pkg?.classId || pkg?.className,
+      "none",
+    );
+    if (packageClassToken !== classToken) return pkg;
+
+    const existingSelections = Array.isArray(pkg?.advancementSelections)
+      ? pkg.advancementSelections.map(normalizeAdvancementSelectionEntry)
+      : [];
+    const filteredSelections = existingSelections.filter(
+      (entry: any) => entry.key !== scopedKey,
+    );
+
+    return {
+      ...pkg,
+      advancementSelections:
+        normalizedValues.length > 0
+          ? [
+              ...filteredSelections,
+              {
+                key: scopedKey,
+                parentType: String(parsedScope.type || "").trim(),
+                parentId: String(parsedScope.parent || "").trim(),
+                parentSourceId: String(
+                  keyConfig.source?.sourceId || "",
+                ).trim(),
+                advancementId: String(keyConfig.advancementId || "").trim(),
+                level: Number(keyConfig.level || 0) || 0,
+                choiceId: String(keyConfig.choiceId || "").trim(),
+                type: "",
+                selectedIds: normalizedValues,
+                selectedSemantic: [],
+              },
+            ]
+          : filteredSelections,
+    };
+  });
+
+  return {
+    ...character,
+    selectedOptions: nextSelectedOptions,
+    progressionState: {
+      ...normalizedProgressionState,
+      classPackages: nextClassPackages,
+    },
+  };
+}
+
+function dedupeOwnedStateEntries(entries: any[] = []) {
+  const seen = new Set<string>();
+  return entries.filter((entry: any) => {
+    const key = [
+      String(entry?.ownerClassId || ""),
+      String(entry?.ownerSubclassId || ""),
+      String(entry?.sourceId || entry?.entityId || ""),
+      String(entry?.parentType || ""),
+      String(entry?.level || ""),
+    ].join(":");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildOwnedFeaturesFromSummaries(classProgressionSummaries: any[] = []) {
+  return dedupeOwnedStateEntries(
+    classProgressionSummaries.flatMap((summary: any) =>
+      (Array.isArray(summary?.features) ? summary.features : []).map((feature: any) => ({
+        ownerClassId: summary.classId || "",
+        ownerSubclassId: summary.subclassDocument?.id || "",
+        ownerClassName: summary.className || "",
+        ownerSubclassName: summary.subclassName || "",
+        sourceId:
+          String(feature?.sourceId || "").trim() || `feature-${feature.id}`,
+        entityId: String(feature?.id || "").trim(),
+        sourceType:
+          String(feature?.parentType || "").includes("subclass")
+            ? "subclass-feature"
+            : "class-feature",
+        level: Number(feature?.level || 1) || 1,
+        parentType: String(feature?.parentType || "").trim(),
+        parentId: String(feature?.parentId || "").trim(),
+        classSourceId: summary.classId ? `class-${summary.classId}` : "",
+        subclassSourceId: summary.subclassDocument?.id
+          ? `subclass-${summary.subclassDocument.id}`
+          : "",
+        name: feature?.name || "",
+        description: feature?.description || "",
+        imageUrl: feature?.imageUrl || "",
+        featureTypeValue: String(feature?.parentType || "").includes("subclass")
+          ? "subclass"
+          : "class",
+        featureTypeSubtype: String(feature?.featureTypeSubtype || "").trim(),
+        active: true,
+      })),
+    ),
+  );
+}
+
+function buildOwnedItemsFromState(
+  classProgressionSummaries: any[] = [],
+  classPackages: any[] = [],
+  optionsCache: Record<string, any> = {},
+) {
+  const grantedItems = classProgressionSummaries.flatMap((summary: any) =>
+    (Array.isArray(summary?.grantedItems) ? summary.grantedItems : []).map(
+      (item: any) => ({
+        ownerClassId: summary.classId || "",
+        ownerSubclassId: summary.subclassDocument?.id || "",
+        ownerClassName: summary.className || "",
+        ownerSubclassName: summary.subclassName || "",
+        sourceId: String(item?.sourceId || "").trim() || `${item?.kind || "item"}-${item?.id}`,
+        entityId: String(item?.id || "").trim(),
+        sourceType: String(item?.kind || "item").trim(),
+        level: Number(item?.level || 1) || 1,
+        parentType: String(item?.parentType || "").trim(),
+        parentId: String(item?.parentId || "").trim(),
+        classSourceId: summary.classId ? `class-${summary.classId}` : "",
+        subclassSourceId: summary.subclassDocument?.id
+          ? `subclass-${summary.subclassDocument.id}`
+          : "",
+        name: item?.name || "",
+        description: item?.description || "",
+        imageUrl: item?.imageUrl || "",
+        itemKind: item?.kind || "item",
+        featureTypeValue: String(item?.featureTypeValue || "").trim(),
+        featureTypeSubtype: String(item?.featureTypeSubtype || "").trim(),
+        groupSourceId: String(item?.groupSourceId || "").trim(),
+        featureSourceId: String(item?.featureSourceId || "").trim(),
+        scalingSourceId: String(item?.scalingSourceId || "").trim(),
+        active: true,
+      }),
+    ),
+  );
+
+  const selectedOptionItems = (Array.isArray(classPackages) ? classPackages : []).flatMap(
+    (pkg: any) =>
+      (Array.isArray(pkg?.advancementSelections) ? pkg.advancementSelections : []).flatMap(
+        (selection: any) => {
+          const parsedScope = parseAdvancementSourceScope(selection?.key || "");
+          return uniqueStringList(selection?.selectedIds || []).map((selectedId) => {
+            const option = optionsCache[selectedId];
+            return {
+              ownerClassId: String(pkg?.classId || "").trim(),
+              ownerSubclassId: String(pkg?.subclassId || "").trim(),
+              ownerClassName: String(pkg?.className || "").trim(),
+              ownerSubclassName: String(pkg?.subclassName || "").trim(),
+              sourceId:
+                String(option?.sourceId || "").trim() ||
+                `class-option-${selectedId}`,
+              entityId: String(selectedId || "").trim(),
+              sourceType: option ? "option" : "selection",
+              level: Number(selection?.level || 1) || 1,
+              parentType: String(parsedScope.type || "").trim(),
+              parentId: String(parsedScope.parent || "").trim(),
+              classSourceId: String(pkg?.classSourceId || "").trim(),
+              subclassSourceId: String(pkg?.subclassSourceId || "").trim(),
+              name: option?.name || selectedId,
+              description: option?.description || "",
+              imageUrl: option?.imageUrl || "",
+              itemKind: option ? "option" : "selection",
+              featureTypeValue: "class",
+              featureTypeSubtype: String(option?.featureType || "").trim(),
+              groupSourceId: String(option?.groupSourceId || "").trim(),
+              featureSourceId: String(option?.featureSourceId || "").trim(),
+              scalingSourceId: String(option?.scalingSourceId || "").trim(),
+              active: true,
+            };
+          });
+        },
+      ),
+  );
+
+  return dedupeOwnedStateEntries([...grantedItems, ...selectedOptionItems]);
+}
+
 function getClassIntroductionMode(progression: any[] = [], classKey = "") {
   const firstIndex = progression.findIndex(
     (entry) => getProgressionClassKey(entry) === classKey,
@@ -333,11 +948,21 @@ function buildTraitConfigurationFromProfileBlock(
   traitType: string,
   fallbackConfiguration: any = {},
 ) {
+  const normalizedFixed = uniqueStringList(
+    profileBlock?.fixedIds ||
+      fallbackConfiguration?.fixed ||
+      fallbackConfiguration?.grants,
+  );
   return {
     ...fallbackConfiguration,
     type: traitType,
     mode: "default",
-    fixed: uniqueStringList(profileBlock?.fixedIds || fallbackConfiguration?.fixed),
+    fixed: normalizedFixed,
+    grants: uniqueStringList(
+      profileBlock?.fixedIds ||
+        fallbackConfiguration?.grants ||
+        fallbackConfiguration?.fixed,
+    ),
     options: uniqueStringList(
       profileBlock?.optionIds || fallbackConfiguration?.options,
     ),
@@ -400,6 +1025,7 @@ function collectTraitValuesFromAdvancement(
 
   const values = [
     ...uniqueStringList(configuration.fixed),
+    ...uniqueStringList(configuration.grants),
     ...uniqueStringList(configuration.categoryIds),
   ];
 
@@ -432,6 +1058,48 @@ function collectTraitValuesFromAdvancement(
   return uniqueStringList(
     values.map((value) => normalizeTraitValueForCharacter(traitType, value)),
   );
+}
+
+function resolveProgressionEntryName(entry: any, lookups: any) {
+  const currentName = String(entry?.name || "").trim();
+  const entryId = String(entry?.id || entry?.entityId || "").trim();
+  const sourceId = String(entry?.sourceId || "").trim();
+  const likelyIdentifierName =
+    !currentName ||
+    currentName === entryId ||
+    currentName === sourceId ||
+    /^(class|subclass|feature|option|selection)-/i.test(currentName);
+
+  if (!likelyIdentifierName) {
+    return currentName;
+  }
+
+  const resolved =
+    resolveGrantedItemRecord(sourceId, lookups) ||
+    resolveGrantedItemRecord(entryId, lookups) ||
+    resolveGrantedItemRecord(currentName, lookups);
+
+  return (
+    String(resolved?.name || "").trim() ||
+    currentName ||
+    entryId ||
+    sourceId
+  );
+}
+
+function normalizeProgressionEntryDisplay(entry: any, lookups: any) {
+  const resolved =
+    resolveGrantedItemRecord(String(entry?.sourceId || "").trim(), lookups) ||
+    resolveGrantedItemRecord(String(entry?.id || entry?.entityId || "").trim(), lookups);
+
+  return {
+    ...entry,
+    name: resolveProgressionEntryName(entry, lookups),
+    description: entry?.description || resolved?.description || "",
+    imageUrl: entry?.imageUrl || resolved?.imageUrl || "",
+    featureTypeSubtype:
+      entry?.featureTypeSubtype || resolved?.featureTypeSubtype || "",
+  };
 }
 
 function collectAdvancementSelectionsForExport(
@@ -1156,13 +1824,19 @@ export default function CharacterBuilder({
       appearance: "",
     },
     bookmarks: [],
+    progressionState: buildEmptyProgressionState(),
     selectedOptions: {}, // e.g. { "Invocations": ["item_id_1", "item_id_2"] }
   });
+
+  const selectedOptionsMap = useMemo(
+    () => buildCharacterSelectedOptionsMap(character),
+    [character.progressionState, character.selectedOptions],
+  );
 
   useEffect(() => {
     const fetchSelectedOptions = async () => {
       const allSelectedIds = Object.values(
-        character.selectedOptions || {},
+        selectedOptionsMap || {},
       ).flat() as string[];
       if (allSelectedIds.length === 0) return;
 
@@ -1189,7 +1863,7 @@ export default function CharacterBuilder({
     };
     fetchSelectedOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character.selectedOptions]);
+  }, [selectedOptionsMap]);
 
   useEffect(() => {
     const fetchFeatures = async () => {
@@ -1426,7 +2100,7 @@ export default function CharacterBuilder({
           effectiveAdvancement.configuration?.type,
           collectTraitValuesFromAdvancement(
             effectiveAdvancement,
-            character.selectedOptions,
+            selectedOptionsMap,
             buildAdvancementSourceContext({
               parentType: "class",
               classDocument,
@@ -1451,7 +2125,7 @@ export default function CharacterBuilder({
             advancement.configuration?.type,
             collectTraitValuesFromAdvancement(
               advancement,
-              character.selectedOptions,
+              selectedOptionsMap,
               buildAdvancementSourceContext({
                 parentType: "feature",
                 classDocument,
@@ -1482,7 +2156,7 @@ export default function CharacterBuilder({
           advancement.configuration?.type,
           collectTraitValuesFromAdvancement(
             advancement,
-            character.selectedOptions,
+            selectedOptionsMap,
             buildAdvancementSourceContext({
               parentType: "subclass",
               classDocument,
@@ -1508,7 +2182,7 @@ export default function CharacterBuilder({
             advancement.configuration?.type,
             collectTraitValuesFromAdvancement(
               advancement,
-              character.selectedOptions,
+              selectedOptionsMap,
               buildAdvancementSourceContext({
                 parentType: "subclass-feature",
                 classDocument,
@@ -1565,12 +2239,24 @@ export default function CharacterBuilder({
     character.classId,
     character.level,
     character.progression,
-    character.selectedOptions,
+    selectedOptionsMap,
     character.subclassId,
     classCache,
     featureCache,
     subclassCache,
   ]);
+
+  useEffect(() => {
+    const progression = buildCurrentProgression(character);
+    const totalLevel = getTotalCharacterLevel(progression, character.level);
+    const nextProficiencyBonus = getProficiencyBonusForLevel(totalLevel);
+
+    setCharacter((prev: any) => (
+      Number(prev.proficiencyBonus ?? 0) === nextProficiencyBonus
+        ? prev
+        : { ...prev, proficiencyBonus: nextProficiencyBonus }
+    ));
+  }, [character.progression, character.level]);
 
   useEffect(() => {
     const progression = buildCurrentProgression(character);
@@ -1604,11 +2290,13 @@ export default function CharacterBuilder({
     setCharacter((prev: any) => {
       const previousDerivedHpMax =
         Number(prev.derivedHpMax ?? 10) || 10;
-      const currentHpMax = Number(prev.hp?.max ?? 10) || 10;
+      const storedHpMax = getStoredHpMax(prev);
+      const currentHpMax = storedHpMax ?? previousDerivedHpMax;
       const currentHpValue = Number(prev.hp?.current ?? currentHpMax) || currentHpMax;
 
       const shouldUpdateMax =
-        currentHpMax === previousDerivedHpMax || currentHpMax === 10;
+        storedHpMax != null &&
+        (storedHpMax === previousDerivedHpMax || storedHpMax === 10);
       const shouldUpdateCurrent =
         currentHpValue === previousDerivedHpMax || currentHpValue === 10 || currentHpValue === currentHpMax;
 
@@ -1632,9 +2320,11 @@ export default function CharacterBuilder({
       if (shouldUpdateMax || shouldUpdateCurrent) {
         nextState.hp = {
           ...(prev.hp || {}),
-          max: shouldUpdateMax ? derivedHpMax : currentHpMax,
+          ...(storedHpMax != null
+            ? { max: shouldUpdateMax ? derivedHpMax : storedHpMax }
+            : {}),
           current: shouldUpdateCurrent
-            ? Math.min(derivedHpMax, shouldUpdateMax ? derivedHpMax : currentHpValue)
+            ? (storedHpMax != null && !shouldUpdateMax ? storedHpMax : derivedHpMax)
             : currentHpValue,
         };
       }
@@ -1655,6 +2345,16 @@ export default function CharacterBuilder({
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [allSkills, setAllSkills] = useState<any[]>([]);
   const [allAttributes, setAllAttributes] = useState<any[]>([]);
+  const [proficiencyCatalogs, setProficiencyCatalogs] = useState<Record<string, Record<string, string>>>({
+    armor: {},
+    armorCategories: {},
+    weapons: {},
+    weaponCategories: {},
+    tools: {},
+    toolCategories: {},
+    languages: {},
+    languageCategories: {},
+  });
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
   const isStaff = ["admin", "co-dm"].includes(userProfile?.role);
@@ -1719,9 +2419,18 @@ export default function CharacterBuilder({
     });
 
     const items: any[] = [];
+    const exportProgression = buildCurrentProgression(character);
+    const totalCharacterLevel = getTotalCharacterLevel(
+      exportProgression,
+      character.level,
+    );
+    const proficiencyBonus = getProficiencyBonusForLevel(totalCharacterLevel);
+    const hpMaxOverride = hasExplicitHpMaxOverride(character)
+      ? getStoredHpMax(character)
+      : null;
     const exportClassGroups = buildCharacterClassesFromProgression(
       buildProgressionClassGroups(
-        buildCurrentProgression(character),
+        exportProgression,
         classCache,
         subclassCache,
         character.subclassId,
@@ -1731,6 +2440,17 @@ export default function CharacterBuilder({
 
     exportClassGroups.forEach((clsData: any) => {
       const clsDoc = classCache[clsData.classId];
+      const classSummary =
+        resolvedClassProgressionSummaries.find(
+          (summary: any) =>
+            summary.classId === clsData.classId &&
+            String(summary.subclassDocument?.id || "").trim() ===
+              String(clsData.subclassId || "").trim(),
+        ) ||
+        resolvedClassProgressionSummaries.find(
+          (summary: any) => summary.classId === clsData.classId,
+        ) ||
+        null;
       if (clsDoc) {
         const classAdvancementSource = buildAdvancementSourceContext({
           parentType: "class",
@@ -1748,16 +2468,18 @@ export default function CharacterBuilder({
               number: clsData.level || 1,
               denomination: String(hitDieFaces || 10),
             },
-            spellcasting: clsDoc.spellcasting || {
-              progression: "none",
-              ability: "",
+            spellcasting: normalizeSpellcastingForExport(clsDoc.spellcasting, 1),
+            primaryAbility: {
+              value:
+                normalizePrimaryAbilityValue(clsDoc.primaryAbility).length > 0
+                  ? normalizePrimaryAbilityValue(clsDoc.primaryAbility)
+                  : ["str"],
             },
-            primaryAbility: { value: [clsDoc.primaryAbility || "str"] },
             advancement: (clsDoc.advancements || []).map((adv: any) => {
               const res = { ...adv };
               const chosenSelections = collectAdvancementSelectionsForExport(
                 adv,
-                character.selectedOptions,
+                selectedOptionsMap,
                 classAdvancementSource,
               );
               
@@ -1820,9 +2542,14 @@ export default function CharacterBuilder({
           },
         });
 
-        const features = featureCache[clsDoc.id] || [];
-        features.forEach((feat: any) => {
-          if (feat.level <= clsData.level) {
+        const ownedClassFeatures = (
+          classSummary?.features || []
+        ).filter(
+          (feature: any) =>
+            !String(feature?.parentType || "").includes("subclass"),
+        );
+        ownedClassFeatures.forEach((feat: any) => {
+          if ((Number(feat.level || 1) || 1) <= clsData.level) {
             items.push({
               name: feat.name,
               type: "feat",
@@ -1834,11 +2561,46 @@ export default function CharacterBuilder({
               },
               flags: {
                 "dauligor-pairing": {
-                  sourceId: `feature-${feat.id}`,
+                  sourceId: feat.sourceId || `feature-${feat.id}`,
+                  classSourceId: `class-${clsDoc.id}`,
                 },
               },
             });
           }
+        });
+
+        const ownedClassOptionItems = (
+          classSummary?.grantedItems || []
+        ).filter((entry: any) =>
+          ["option", "selection"].includes(String(entry?.kind || "").trim()),
+        );
+        ownedClassOptionItems.forEach((entry: any) => {
+          items.push({
+            name: entry.name,
+            type: "feat",
+            img: entry.imageUrl || "icons/svg/book.svg",
+            system: {
+              description: { value: entry.description || "" },
+              identifier: String(entry.sourceId || entry.id || entry.name)
+                .toLowerCase()
+                .replace(/\W+/g, "-"),
+              type: {
+                value: entry.featureTypeValue || "class",
+                subtype: entry.featureTypeSubtype || "",
+              },
+            },
+            flags: {
+              "dauligor-pairing": {
+                sourceId: entry.sourceId || `class-option-${entry.id}`,
+                classSourceId: `class-${clsDoc.id}`,
+                groupSourceId: entry.groupSourceId || null,
+                featureSourceId: entry.featureSourceId || null,
+                scalingSourceId: entry.scalingSourceId || null,
+                featureTypeValue: entry.featureTypeValue || "class",
+                featureTypeSubtype: entry.featureTypeSubtype || "",
+              },
+            },
+          });
         });
       }
 
@@ -1859,15 +2621,15 @@ export default function CharacterBuilder({
               classIdentifier: clsDoc
                 ? clsDoc.name.toLowerCase().replace(/\s+/g, "-")
                 : "",
-              spellcasting: subDoc.spellcasting || {
-                progression: "none",
-                ability: "",
-              },
+              spellcasting: normalizeSpellcastingForExport(
+                subDoc.spellcasting,
+                3,
+              ),
               advancement: (subDoc.advancements || []).map((adv: any) => {
                 const res = { ...adv };
                 const chosenSelections = collectAdvancementSelectionsForExport(
                   adv,
-                  character.selectedOptions,
+                  selectedOptionsMap,
                   subclassAdvancementSource,
                 );
                 if (chosenSelections.length > 0) {
@@ -1891,9 +2653,13 @@ export default function CharacterBuilder({
             },
           });
 
-          const subFeatures = featureCache[subDoc.id] || [];
-          subFeatures.forEach((feat: any) => {
-            if (feat.level <= clsData.level) {
+          const ownedSubclassFeatures = (
+            classSummary?.features || []
+          ).filter((feature: any) =>
+            String(feature?.parentType || "").includes("subclass"),
+          );
+          ownedSubclassFeatures.forEach((feat: any) => {
+            if ((Number(feat.level || 1) || 1) <= clsData.level) {
               items.push({
                 name: feat.name,
                 type: "feat",
@@ -1905,7 +2671,9 @@ export default function CharacterBuilder({
                 },
                 flags: {
                   "dauligor-pairing": {
-                    sourceId: `feature-${feat.id}`,
+                    sourceId: feat.sourceId || `feature-${feat.id}`,
+                    classSourceId: clsDoc ? `class-${clsDoc.id}` : null,
+                    parentSourceId: `subclass-${subDoc.id}`,
                   },
                 },
               });
@@ -1934,7 +2702,7 @@ export default function CharacterBuilder({
           attributes: {
             hp: {
               value: character.hp?.current ?? 10,
-              max: character.hp?.max ?? 10,
+              ...(hpMaxOverride != null ? { max: hpMaxOverride } : {}),
               temp: character.hp?.temp ?? 0,
             },
             ac: {
@@ -1943,7 +2711,7 @@ export default function CharacterBuilder({
             },
             init: { bonus: character.initiative ?? 0 },
             movement: { walk: character.speed ?? 30, units: "ft" },
-            prof: character.proficiencyBonus ?? 2,
+            prof: proficiencyBonus,
             exhaustion: character.exhaustion ?? 0,
           },
           details: {
@@ -1976,6 +2744,16 @@ export default function CharacterBuilder({
             sourceId: `character-${character.id || id || "new"}`,
             entityKind: "character",
             schemaVersion: 1,
+            primaryClassId: exportClassGroups[0]?.classId || character.classId || "",
+            primarySubclassId:
+              exportClassGroups[0]?.subclassId || character.subclassId || "",
+            progressionClassIds: uniqueStringList(
+              exportClassGroups.map((group: any) => group.classId),
+            ),
+            progressionSubclassIds: uniqueStringList(
+              exportClassGroups.map((group: any) => group.subclassId),
+            ),
+            selectedOptions: selectedOptionsMap,
           },
         },
       },
@@ -2060,6 +2838,7 @@ export default function CharacterBuilder({
                 ...(data.stats || { method: "point-buy" }),
                 base: normalizedBase,
               },
+              progressionState: normalizeProgressionState(data.progressionState),
             });
           } else {
             navigate("/characters");
@@ -2073,6 +2852,49 @@ export default function CharacterBuilder({
 
         const skillsSnap = await getDocs(query(collection(db, "skills")));
         setAllSkills(skillsSnap.docs.map((s) => ({ id: s.id, ...s.data() })));
+
+        const [
+          armorSnap,
+          armorCategoriesSnap,
+          weaponsSnap,
+          weaponCategoriesSnap,
+          toolsSnap,
+          toolCategoriesSnap,
+          languagesSnap,
+          languageCategoriesSnap,
+        ] = await Promise.all([
+          getDocs(query(collection(db, "armor"))),
+          getDocs(query(collection(db, "armorCategories"))),
+          getDocs(query(collection(db, "weapons"))),
+          getDocs(query(collection(db, "weaponCategories"))),
+          getDocs(query(collection(db, "tools"))),
+          getDocs(query(collection(db, "toolCategories"))),
+          getDocs(query(collection(db, "languages"))),
+          getDocs(query(collection(db, "languageCategories"))),
+        ]);
+
+        setProficiencyCatalogs({
+          armor: buildNamedDocLookup(armorSnap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+          armorCategories: buildNamedDocLookup(
+            armorCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          ),
+          weapons: buildNamedDocLookup(
+            weaponsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          ),
+          weaponCategories: buildNamedDocLookup(
+            weaponCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          ),
+          tools: buildNamedDocLookup(toolsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+          toolCategories: buildNamedDocLookup(
+            toolCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          ),
+          languages: buildNamedDocLookup(
+            languagesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          ),
+          languageCategories: buildNamedDocLookup(
+            languageCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          ),
+        });
 
         const spellcastingTypesSnap = await getDocs(query(collection(db, "spellcastingTypes")));
         setSpellcastingTypes(spellcastingTypesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -2107,6 +2929,55 @@ export default function CharacterBuilder({
     };
     fetchData();
   }, [id, navigate, isStaff]);
+
+  useEffect(() => {
+    const progression = buildCurrentProgression(character);
+    const progressionGroups = buildProgressionClassGroups(
+      progression,
+      classCache,
+      subclassCache,
+      character.subclassId,
+    );
+    const nextProgressionState = buildProgressionStateForCharacter(
+      character,
+      progressionGroups,
+      selectedOptionsMap,
+      subclassCache,
+    );
+    const nextSelectedOptions = buildSelectedOptionsMapFromClassPackages(
+      nextProgressionState.classPackages,
+    );
+
+    const currentProgressionState = normalizeProgressionState(
+      character.progressionState,
+    );
+    const currentSelectedOptions = buildNonLegacySelectedOptionsMap(
+      character.selectedOptions || {},
+    );
+
+    if (
+      JSON.stringify(currentProgressionState) ===
+        JSON.stringify(nextProgressionState) &&
+      JSON.stringify(currentSelectedOptions) ===
+        JSON.stringify(nextSelectedOptions)
+    ) {
+      return;
+    }
+
+    setCharacter((prev: any) => ({
+      ...prev,
+      progressionState: nextProgressionState,
+      selectedOptions: nextSelectedOptions,
+    }));
+  }, [
+    character.progression,
+    character.progressionState,
+    character.selectedOptions,
+    character.subclassId,
+    classCache,
+    selectedOptionsMap,
+    subclassCache,
+  ]);
 
   useEffect(() => {
     const progression = buildCurrentProgression(character);
@@ -2158,10 +3029,32 @@ export default function CharacterBuilder({
         character.subclassId,
       );
       const primaryGroup = progressionGroups[0];
+      const progressionState = buildProgressionStateForCharacter(
+        character,
+        progressionGroups,
+        selectedOptionsMap,
+        subclassCache,
+      );
+      const selectedOptions =
+        buildSelectedOptionsMapFromClassPackages(
+          progressionState.classPackages,
+        );
 
       const payload = {
         ...character,
         progression,
+        progressionState,
+        selectedOptions,
+        hp: {
+          current: Number(character.hp?.current ?? 10) || 10,
+          ...(hasExplicitHpMaxOverride(character)
+            ? { max: getStoredHpMax(character) }
+            : {}),
+          temp: Number(character.hp?.temp ?? 0) || 0,
+        },
+        proficiencyBonus: getProficiencyBonusForLevel(
+          getTotalCharacterLevel(progression, character.level),
+        ),
         classes: buildCharacterClassesFromProgression(progressionGroups, subclassCache),
         classId: primaryGroup?.classId || "",
         subclassId: primaryGroup?.subclassId || "",
@@ -2267,7 +3160,107 @@ export default function CharacterBuilder({
     subclassCache,
     character.subclassId,
   );
+  const normalizedProgressionState = useMemo(
+    () => normalizeProgressionState(character.progressionState),
+    [character.progressionState],
+  );
   const grantedItemLookups = buildGrantedItemLookups(featureCache, optionsCache);
+  const skillLabelLookup = useMemo(
+    () =>
+      Object.fromEntries(
+        allSkills.flatMap((skill: any) => {
+          const label = String(skill?.name || skill?.id || "").trim();
+          return [
+            [String(skill?.id || ""), label],
+            [String(skill?.id || "").toLowerCase(), label],
+          ];
+        }),
+      ),
+    [allSkills],
+  );
+  const attributeLabelLookup = useMemo(
+    () =>
+      Object.fromEntries(
+        allAttributes.flatMap((attribute: any) => {
+          const label = String(attribute?.name || attribute?.identifier || attribute?.id || "").trim();
+          return [
+            [String(attribute?.id || ""), label],
+            [String(attribute?.identifier || ""), label],
+            [String(attribute?.id || "").toLowerCase(), label],
+            [String(attribute?.identifier || "").toLowerCase(), label],
+            [String(attribute?.id || "").toUpperCase(), label],
+            [String(attribute?.identifier || "").toUpperCase(), label],
+          ];
+        }),
+      ),
+    [allAttributes],
+  );
+
+  const resolveTraitDisplayLabel = (
+    traitType: string,
+    value: any,
+  ) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+
+    if (traitType === "skills") {
+      return skillLabelLookup[raw] || skillLabelLookup[raw.toLowerCase()] || raw;
+    }
+
+    if (traitType === "saves") {
+      return (
+        attributeLabelLookup[raw] ||
+        attributeLabelLookup[raw.toUpperCase()] ||
+        attributeLabelLookup[raw.toLowerCase()] ||
+        raw
+      );
+    }
+
+    if (traitType === "armor") {
+      return (
+        proficiencyCatalogs.armor[raw] ||
+        proficiencyCatalogs.armorCategories[raw] ||
+        proficiencyCatalogs.armor[raw.toLowerCase()] ||
+        proficiencyCatalogs.armorCategories[raw.toLowerCase()] ||
+        raw
+      );
+    }
+
+    if (traitType === "weapons") {
+      return (
+        proficiencyCatalogs.weapons[raw] ||
+        proficiencyCatalogs.weaponCategories[raw] ||
+        proficiencyCatalogs.weapons[raw.toLowerCase()] ||
+        proficiencyCatalogs.weaponCategories[raw.toLowerCase()] ||
+        raw
+      );
+    }
+
+    if (traitType === "tools") {
+      return (
+        proficiencyCatalogs.tools[raw] ||
+        proficiencyCatalogs.toolCategories[raw] ||
+        proficiencyCatalogs.tools[raw.toLowerCase()] ||
+        proficiencyCatalogs.toolCategories[raw.toLowerCase()] ||
+        raw
+      );
+    }
+
+    if (traitType === "languages") {
+      return (
+        proficiencyCatalogs.languages[raw] ||
+        proficiencyCatalogs.languageCategories[raw] ||
+        proficiencyCatalogs.languages[raw.toLowerCase()] ||
+        proficiencyCatalogs.languageCategories[raw.toLowerCase()] ||
+        raw
+      );
+    }
+
+    return raw;
+  };
+
+  const formatTraitValues = (traitType: string, values: any[] = []) =>
+    uniqueStringList(values.map((value) => resolveTraitDisplayLabel(traitType, value)));
 
   const classProgressionSummaries = progressionClassGroups
     .map((entry: any) => {
@@ -2406,15 +3399,22 @@ export default function CharacterBuilder({
       ];
 
       const features = dedupeProgressionEntries([
-        ...grantedFeatures.map((feature: any) => ({
-          ...feature,
-          description: feature.description || "",
-          parentId:
-            feature.parentType === "subclass" || feature.parentType === "subclass-feature"
-              ? subclassDocument?.id || ""
-              : classDocument.id,
-        })),
-        ...fallbackFeatures,
+        ...grantedFeatures.map((feature: any) =>
+          normalizeProgressionEntryDisplay(
+            {
+              ...feature,
+              description: feature.description || "",
+              parentId:
+                feature.parentType === "subclass" || feature.parentType === "subclass-feature"
+                  ? subclassDocument?.id || ""
+                  : classDocument.id,
+            },
+            grantedItemLookups,
+          ),
+        ),
+        ...fallbackFeatures.map((feature: any) =>
+          normalizeProgressionEntryDisplay(feature, grantedItemLookups),
+        ),
       ]).sort((left: any, right: any) => {
         if (left.level !== right.level) return left.level - right.level;
         return String(left.name || "").localeCompare(String(right.name || ""));
@@ -2427,7 +3427,11 @@ export default function CharacterBuilder({
           ...grantedFeatureEntries,
           ...grantedSubclassFeatureEntries,
         ].filter((granted: any) => granted.kind !== "feature"),
-      ).sort((left: any, right: any) => {
+      )
+        .map((entry: any) =>
+          normalizeProgressionEntryDisplay(entry, grantedItemLookups),
+        )
+        .sort((left: any, right: any) => {
         if (left.level !== right.level) return left.level - right.level;
         return String(left.name || "").localeCompare(String(right.name || ""));
       });
@@ -2469,21 +3473,236 @@ export default function CharacterBuilder({
     })
     .filter(Boolean) as any[];
 
-  const classProgressionSummaryByKey = new Map(
-    classProgressionSummaries.map((summary: any) => [summary.classKey, summary]),
+  const persistedOwnedFeatures = normalizedProgressionState.ownedFeatures || [];
+  const persistedOwnedItems = normalizedProgressionState.ownedItems || [];
+  const ownedFeaturesByClass = new Map<string, any[]>();
+  const ownedItemsByClass = new Map<string, any[]>();
+
+  persistedOwnedFeatures.forEach((entry: any) => {
+    const key = String(entry?.ownerClassId || "").trim();
+    if (!key) return;
+    if (!ownedFeaturesByClass.has(key)) ownedFeaturesByClass.set(key, []);
+    ownedFeaturesByClass.get(key)?.push(entry);
+  });
+
+  persistedOwnedItems.forEach((entry: any) => {
+    const key = String(entry?.ownerClassId || "").trim();
+    if (!key) return;
+    if (!ownedItemsByClass.has(key)) ownedItemsByClass.set(key, []);
+    ownedItemsByClass.get(key)?.push(entry);
+  });
+
+  const canonicalOwnedFeatures = buildOwnedFeaturesFromSummaries(
+    classProgressionSummaries,
+  );
+  const canonicalOwnedItems = buildOwnedItemsFromState(
+    classProgressionSummaries,
+    normalizedProgressionState.classPackages,
+    optionsCache,
+  );
+  const resolvedClassProgressionSummaries = classProgressionSummaries.map(
+    (summary: any) => {
+      const persistedFeatures = (
+        ownedFeaturesByClass.get(summary.classId) || []
+      )
+        .filter(
+          (entry: any) =>
+            String(entry?.ownerSubclassId || "").trim() ===
+              String(summary.subclassDocument?.id || "").trim() ||
+            !String(entry?.ownerSubclassId || "").trim(),
+        )
+        .map((entry: any) => ({
+          id: entry.entityId,
+          sourceId: entry.sourceId,
+          name: resolveProgressionEntryName(entry, grantedItemLookups),
+          description: entry.description || "",
+          level: Number(entry.level || 1) || 1,
+          parentType: entry.parentType,
+          parentId: entry.parentId,
+          kind: "feature",
+          imageUrl: entry.imageUrl || "",
+          featureTypeSubtype: entry.featureTypeSubtype || "",
+        }))
+        .sort((left: any, right: any) => {
+          if (left.level !== right.level) return left.level - right.level;
+          return String(left.name || "").localeCompare(String(right.name || ""));
+        });
+
+      const persistedItems = (
+        ownedItemsByClass.get(summary.classId) || []
+      )
+        .filter(
+          (entry: any) =>
+            String(entry?.ownerSubclassId || "").trim() ===
+              String(summary.subclassDocument?.id || "").trim() ||
+            !String(entry?.ownerSubclassId || "").trim(),
+        )
+        .map((entry: any) =>
+          normalizeProgressionEntryDisplay(
+            {
+              id: entry.entityId,
+              sourceId: entry.sourceId,
+              name: entry.name,
+              description: entry.description || "",
+              level: Number(entry.level || 1) || 1,
+              parentType: entry.parentType,
+              parentId: entry.parentId,
+              kind: entry.itemKind || entry.sourceType || "item",
+              imageUrl: entry.imageUrl || "",
+              featureTypeValue: entry.featureTypeValue || "",
+              featureTypeSubtype: entry.featureTypeSubtype || "",
+              groupSourceId: entry.groupSourceId || "",
+              featureSourceId: entry.featureSourceId || "",
+              scalingSourceId: entry.scalingSourceId || "",
+            },
+            grantedItemLookups,
+          ),
+        )
+        .sort((left: any, right: any) => {
+          if (left.level !== right.level) return left.level - right.level;
+          return String(left.name || "").localeCompare(String(right.name || ""));
+        });
+
+      const features =
+        persistedFeatures.length > 0 ? persistedFeatures : summary.features;
+      const grantedItems =
+        persistedItems.length > 0 ? persistedItems : summary.grantedItems;
+
+      return {
+        ...summary,
+        features,
+        featuresByLevel: groupProgressionEntriesByLevel(features),
+        grantedItems,
+        grantedItemsByLevel: groupProgressionEntriesByLevel(grantedItems),
+      };
+    },
   );
 
-  const sheetClassSummaries = classProgressionSummaries;
+  useEffect(() => {
+    const loadGrantedItemLabels = async () => {
+      const referencedIds = uniqueStringList(
+        resolvedClassProgressionSummaries.flatMap((summary: any) =>
+          (Array.isArray(summary?.grantedItems) ? summary.grantedItems : []).map(
+            (item: any) => String(item?.id || item?.sourceId || "").trim(),
+          ),
+        ),
+      ).filter(
+        (id) => id && !grantedItemLookups.byId?.[id] && !optionsCache[id],
+      );
+
+      if (referencedIds.length === 0) return;
+
+      try {
+        const refs = await Promise.all(
+          referencedIds.map((entryId) => getDoc(doc(db, "uniqueOptionItems", entryId))),
+        );
+
+        setOptionsCache((prev) => {
+          const next = { ...prev };
+          refs.forEach((snap) => {
+            if (snap.exists()) {
+              next[snap.id] = { id: snap.id, ...snap.data() };
+            }
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error("Failed to load granted item labels", err);
+      }
+    };
+
+    loadGrantedItemLabels();
+  }, [resolvedClassProgressionSummaries, grantedItemLookups.byId, optionsCache]);
+
+  useEffect(() => {
+    const nextClassPackages = normalizedProgressionState.classPackages.map((pkg: any) => {
+      const grantedFeatureRefs = canonicalOwnedFeatures
+        .filter(
+          (entry: any) =>
+            String(entry?.ownerClassId || "").trim() ===
+              String(pkg?.classId || "").trim() &&
+            String(entry?.ownerSubclassId || "").trim() ===
+              String(pkg?.subclassId || "").trim(),
+        )
+        .map((entry: any) => ({
+          sourceId: entry.sourceId,
+          entityId: entry.entityId,
+          level: entry.level,
+          sourceType: entry.sourceType,
+          parentType: entry.parentType,
+          parentId: entry.parentId,
+        }));
+
+      const grantedItemRefs = canonicalOwnedItems
+        .filter(
+          (entry: any) =>
+            String(entry?.ownerClassId || "").trim() ===
+              String(pkg?.classId || "").trim() &&
+            String(entry?.ownerSubclassId || "").trim() ===
+              String(pkg?.subclassId || "").trim(),
+        )
+        .map((entry: any) => ({
+          sourceId: entry.sourceId,
+          entityId: entry.entityId,
+          level: entry.level,
+          sourceType: entry.sourceType,
+          itemKind: entry.itemKind,
+          parentType: entry.parentType,
+          parentId: entry.parentId,
+          featureSourceId: entry.featureSourceId || "",
+          groupSourceId: entry.groupSourceId || "",
+        }));
+
+      return {
+        ...pkg,
+        grantedFeatureRefs,
+        grantedItemRefs,
+      };
+    });
+
+    const nextProgressionState = {
+      ...normalizedProgressionState,
+      classPackages: nextClassPackages,
+      ownedFeatures: canonicalOwnedFeatures,
+      ownedItems: canonicalOwnedItems,
+    };
+
+    if (
+      JSON.stringify(normalizedProgressionState.classPackages) ===
+        JSON.stringify(nextClassPackages) &&
+      JSON.stringify(normalizedProgressionState.ownedFeatures || []) ===
+        JSON.stringify(canonicalOwnedFeatures) &&
+      JSON.stringify(normalizedProgressionState.ownedItems || []) ===
+        JSON.stringify(canonicalOwnedItems)
+    ) {
+      return;
+    }
+
+    setCharacter((prev: any) => ({
+      ...prev,
+      progressionState: nextProgressionState,
+    }));
+  }, [
+    canonicalOwnedFeatures,
+    canonicalOwnedItems,
+    normalizedProgressionState,
+  ]);
+
+  const classProgressionSummaryByKey = new Map(
+    resolvedClassProgressionSummaries.map((summary: any) => [summary.classKey, summary]),
+  );
+
+  const sheetClassSummaries = resolvedClassProgressionSummaries;
 
   const selectedAdvancementOptionItems = uniqueStringList(
-    Object.values(character.selectedOptions || {}).flat() as string[],
+    Object.values(selectedOptionsMap || {}).flat() as string[],
   ).map((optionId) => ({
     id: optionId,
     name: optionsCache[optionId]?.name || optionId,
     featureType: optionsCache[optionId]?.featureType || "",
   }));
 
-  const spellcastingContributors = classProgressionSummaries
+  const spellcastingContributors = resolvedClassProgressionSummaries
     .flatMap((summary: any) => {
       const contributors: any[] = [];
       const classSpellcasting = summary.classDocument?.spellcasting;
@@ -2816,27 +4035,7 @@ export default function CharacterBuilder({
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 border-b border-gold/10 pb-4 -mt-2">
-                {[
-                  { id: "info", label: "Character Info" },
-                  { id: "features", label: "Features" },
-                  { id: "spells", label: "Spells" },
-                ].map((section) => (
-                  <button
-                    key={section.id}
-                    onClick={() => setSheetSection(section.id)}
-                    className={`px-4 py-2 border text-xs font-black uppercase tracking-widest transition-colors ${
-                      sheetSection === section.id
-                        ? "bg-gold/15 border-gold text-gold"
-                        : "bg-card/30 border-gold/20 text-ink/45 hover:border-gold/50 hover:text-gold"
-                    }`}
-                  >
-                    {section.label}
-                  </button>
-                ))}
-              </div>
-
-              {sheetSection === "features" && (
+              {false && (
               <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
@@ -2995,7 +4194,7 @@ export default function CharacterBuilder({
               </div>
               )}
 
-              {sheetSection === "info" && (
+              {true && (
               <>
               <div className="grid xl:grid-cols-2 gap-8">
                 {/* PORTRAIT & CORE STATUS */}
@@ -3052,7 +4251,7 @@ export default function CharacterBuilder({
                           </span>
                           <span className="text-xs text-ink/20">/</span>
                           <span className="text-xs text-ink/60">
-                            {character.hp.max}
+                            {getEffectiveHpMax(character)}
                           </span>
                         </div>
                       </div>
@@ -3061,7 +4260,7 @@ export default function CharacterBuilder({
                         <div
                           className="h-full bg-emerald-600 rounded-full transition-all duration-700 shadow-[inset_0_1px_2px_rgba(255,255,255,0.3)]"
                           style={{
-                            width: `${Math.min(100, (character.hp.current / character.hp.max) * 100)}%`,
+                            width: `${Math.min(100, (character.hp.current / Math.max(1, getEffectiveHpMax(character))) * 100)}%`,
                           }}
                         />
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-card/10 backdrop-blur-[1px]">
@@ -3073,7 +4272,7 @@ export default function CharacterBuilder({
                                   hp: {
                                     ...character.hp,
                                     current: Math.min(
-                                      character.hp.max,
+                                      getEffectiveHpMax(character),
                                       character.hp.current + 1,
                                     ),
                                   },
@@ -3501,7 +4700,7 @@ export default function CharacterBuilder({
                     </h4>
                     <div className="space-y-1">
                       {character.toolProficiencies?.length ? (
-                        character.toolProficiencies.map((item: string) => (
+                        formatTraitValues("tools", character.toolProficiencies).map((item: string) => (
                           <div
                             key={item}
                             className="text-xs font-bold text-ink/70 flex items-center gap-2 uppercase tracking-tight"
@@ -3520,15 +4719,27 @@ export default function CharacterBuilder({
                 </div>
 
                 <div className="md:col-span-2 space-y-4">
-                  {/* TAB HEADER */}
-                  <div className="flex items-center gap-2 border-b border-gold/10 pb-2">
-                    <button className="px-4 py-2 bg-gold text-white text-xs font-black uppercase tracking-widest border border-gold shadow-md shadow-gold/20">
-                      Character Info
-                    </button>
-                    {/* Add future tabs here */}
+                  <div className="flex flex-wrap items-center gap-3 border-b border-gold/10 pb-4">
+                    {[
+                      { id: "info", label: "Character Info" },
+                      { id: "features", label: "Features" },
+                      { id: "spells", label: "Spells" },
+                    ].map((section) => (
+                      <button
+                        key={section.id}
+                        onClick={() => setSheetSection(section.id)}
+                        className={`px-4 py-2 border text-xs font-black uppercase tracking-widest transition-colors ${
+                          sheetSection === section.id
+                            ? "bg-gold/15 border-gold text-gold"
+                            : "bg-card/30 border-gold/20 text-ink/45 hover:border-gold/50 hover:text-gold"
+                        }`}
+                      >
+                        {section.label}
+                      </button>
+                    ))}
                   </div>
 
-                  {/* CONTENT */}
+                  {sheetSection === "info" && (
                   <div className="grid md:grid-cols-2 gap-6">
                     {/* SENSES & DEFENSES */}
                     <div className="space-y-6">
@@ -3577,7 +4788,7 @@ export default function CharacterBuilder({
                             </span>
                             <div className="flex flex-wrap gap-1">
                               {character.languages?.length ? (
-                                character.languages.map((l: string) => (
+                                formatTraitValues("languages", character.languages).map((l: string) => (
                                   <span
                                     key={l}
                                     className="px-2 py-0.5 bg-gold/5 border border-gold/10 rounded-sm text-[10px] font-bold text-gold uppercase"
@@ -3642,14 +4853,14 @@ export default function CharacterBuilder({
                         {
                           title: "Armor Proficiencies",
                           sub:
-                            character.armorProficiencies?.join(", ") || "None",
+                            formatTraitValues("armor", character.armorProficiencies).join(", ") || "None",
                           icon: <Shield className="w-5 h-5" />,
                           type: "",
                         },
                         {
                           title: "Weapon Proficiencies",
                           sub:
-                            character.weaponProficiencies?.join(", ") || "None",
+                            formatTraitValues("weapons", character.weaponProficiencies).join(", ") || "None",
                           icon: <Sword className="w-5 h-5" />,
                           type: "",
                         },
@@ -3695,12 +4906,276 @@ export default function CharacterBuilder({
                       ))}
                     </div>
                   </div>
+                  )}
+
+                  {sheetSection === "features" && (
+                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
+                            Class Progression
+                          </h3>
+                          <p className="text-xs text-ink/50 font-serif italic mt-1">
+                            Features, scale tracks, and advancement selections currently active on this character.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveStep("class")}
+                          className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
+                        >
+                          Open Class Step
+                        </Button>
+                      </div>
+
+                      {sheetClassSummaries.length > 0 ? (
+                        <div className="grid gap-4 xl:grid-cols-2">
+                          {sheetClassSummaries.map((summary: any) => (
+                            <div
+                              key={summary.classId}
+                              className="border border-gold/15 bg-background/40 rounded-lg p-4 space-y-4"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-lg font-serif font-black text-ink leading-none">
+                                    {summary.className}
+                                  </div>
+                                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-gold/70 mt-1">
+                                    Level {summary.classLevel}
+                                    {summary.subclassName ? ` • ${summary.subclassName}` : ""}
+                                  </div>
+                                </div>
+                                <div className="px-2 py-1 border border-gold/20 bg-gold/5 rounded text-[10px] font-black uppercase tracking-widest text-ink/50">
+                                  {summary.features.length} Features
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
+                                  Scale Values
+                                </div>
+                                {summary.scales.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    {summary.scales.map((scale: any) => (
+                                      <div
+                                        key={scale.id}
+                                        className="px-2 py-1 border border-gold/20 bg-gold/5 rounded-sm"
+                                      >
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-gold/70">
+                                          {scale.name}
+                                        </span>
+                                        <span className="ml-2 text-sm font-black text-ink">
+                                          {String(scale.value)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs font-serif italic text-ink/35">
+                                    No tracked scale values yet.
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
+                                  Granted Features
+                                </div>
+                                {summary.features.length > 0 ? (
+                                  <div className="space-y-1.5">
+                                    {summary.features.map((feature: any) => (
+                                      <div
+                                        key={`${summary.classId}-${feature.id}`}
+                                        className="flex items-center justify-between gap-3 border-b border-gold/10 pb-1 last:border-b-0 last:pb-0"
+                                      >
+                                        <span className="text-sm font-serif text-ink">
+                                          {feature.name}
+                                        </span>
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-ink/35">
+                                          L{feature.level}
+                                          {feature.parentType === "subclass" ? " • Subclass" : ""}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs font-serif italic text-ink/35">
+                                    No granted features yet.
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
+                                  Granted Items
+                                </div>
+                                {summary.grantedItems.length > 0 ? (
+                                  <div className="space-y-1.5">
+                                    {summary.grantedItems.map((item: any) => (
+                                      <div
+                                        key={`${summary.classId}-item-${item.id}-${item.level}`}
+                                        className="flex items-center justify-between gap-3 border-b border-gold/10 pb-1 last:border-b-0 last:pb-0"
+                                      >
+                                        <span className="text-sm font-serif text-ink">
+                                          {item.name}
+                                        </span>
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-ink/35">
+                                          L{item.level}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs font-serif italic text-ink/35">
+                                    No granted items yet.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm font-serif italic text-ink/35">
+                          No class progression is active yet.
+                        </div>
+                      )}
+
+                      <div className="space-y-2 pt-2 border-t border-gold/10">
+                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
+                          Selected Advancement Options
+                        </div>
+                        {selectedAdvancementOptionItems.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedAdvancementOptionItems.map((option: any) => (
+                              <span
+                                key={option.id}
+                                className="px-2 py-1 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase"
+                              >
+                                {option.name}
+                                {option.featureType ? ` • ${option.featureType}` : ""}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs font-serif italic text-ink/35">
+                            No advancement options selected yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {sheetSection === "spells" && (
+                    <div className="border border-gold/20 bg-card/40 rounded-xl p-6 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
+                            Spellcasting
+                          </h3>
+                          <p className="text-xs text-ink/50 font-serif italic mt-1">
+                            This sheet pane will reflect prepared or known spell state from the same class progression model.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveStep("class")}
+                          className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
+                        >
+                          Open Class Step
+                        </Button>
+                      </div>
+
+                      {spellcastingContributors.length > 0 ? (
+                        <div className="space-y-4">
+                          <div className="grid gap-4 md:grid-cols-3">
+                            <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
+                                Casting Level
+                              </div>
+                              <div className="text-xl font-black text-ink">
+                                {totalSpellcastingLevel}
+                              </div>
+                            </div>
+                            <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
+                                Active Sources
+                              </div>
+                              <div className="text-xl font-black text-ink">
+                                {spellcastingContributors.length}
+                              </div>
+                            </div>
+                            <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
+                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
+                                Highest Slot
+                              </div>
+                              <div className="text-xl font-black text-ink">
+                                {Math.max(
+                                  0,
+                                  ...multiclassSpellSlots.map((count: number, index: number) => (count > 0 ? index + 1 : 0)),
+                                ) || "None"}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {spellcastingContributors.map((contributor: any) => (
+                              <div
+                                key={`${contributor.kind}-${contributor.classId}-${contributor.subclassId || "none"}`}
+                                className="border border-gold/15 bg-background/40 rounded-lg p-4 space-y-2"
+                              >
+                                <div className="text-sm font-serif font-black text-ink">
+                                  {contributor.label}
+                                </div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/60">
+                                  {contributor.progressionLabel || contributor.progression || "Spellcasting"}
+                                </div>
+                                <div className="text-xs font-serif text-ink/55">
+                                  Contributes {contributor.effectiveLevel} casting level
+                                  {contributor.effectiveLevel === 1 ? "" : "s"}.
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
+                            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-3">
+                              Multiclass Spell Slots
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                              {multiclassSpellSlots.map((count: number, index: number) => (
+                                <div
+                                  key={`slot-${index}`}
+                                  className="border border-gold/10 bg-card/40 rounded-md p-3 text-center"
+                                >
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/60">
+                                    {index + 1}
+                                    {index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"}
+                                  </div>
+                                  <div className="text-lg font-black text-ink mt-1">
+                                    {count}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm font-serif italic text-ink/35">
+                          No active spellcasting sources yet.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               </>
               )}
 
-              {sheetSection === "spells" && (
+              {false && (
                 <div className="border border-gold/20 bg-card/40 rounded-xl p-6 shadow-sm space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -4021,6 +5496,25 @@ export default function CharacterBuilder({
 
                                   let resolvedCount = 0;
                                   let isIncremental = false;
+
+                                  if (adv.type === "AbilityScoreImprovement") {
+                                    if (advLevel !== prog.level) return;
+
+                                    choicesAtThisLevel.push({
+                                      name: adv.title || "Ability Score Improvement",
+                                      count: 1,
+                                      type: "asi-trigger",
+                                      advType: adv.type,
+                                      featureId: adv.featureId,
+                                      advId: adv._id,
+                                      sourceScope:
+                                        buildAdvancementSourceScope(sourceContext),
+                                      classId: matchedClass?.id,
+                                      level: prog.level,
+                                      configuration: adv.configuration,
+                                    });
+                                    return;
+                                  }
 
                                   if (scalingSource) {
                                     if (prog.level < advLevel) return;
@@ -4441,8 +5935,75 @@ export default function CharacterBuilder({
 
                                                 if (
                                                   choice.type ===
+                                                  "asi-trigger"
+                                                ) {
+                                                  return (
+                                                    <div
+                                                      key={`asi-${cidx}`}
+                                                      className="bg-sky-500/5 border border-sky-500/20 rounded-md p-4 mt-2 mb-4 ml-[3px]"
+                                                    >
+                                                      <div className="flex items-center justify-between gap-3 mb-2">
+                                                        <span className="font-serif font-bold text-ink text-sm uppercase tracking-wider flex items-center gap-2">
+                                                          <Edit2 className="w-4 h-4 text-sky-600" />
+                                                          {choice.name}
+                                                        </span>
+                                                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-sky-700/70">
+                                                          Level {choice.level}
+                                                        </span>
+                                                      </div>
+                                                      <p className="text-xs text-ink/60 font-serif mb-4 italic">
+                                                        This level grants an ability score improvement.
+                                                        Use the sheet controls to apply the increase for now.
+                                                      </p>
+                                                      <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => setShowPointBuy(true)}
+                                                        className="w-full border-dashed border-sky-500/40 text-sky-700 hover:bg-sky-500/10 hover:border-sky-500 font-bold tracking-widest uppercase text-[10px]"
+                                                      >
+                                                        <Edit2 className="w-3 h-3 mr-2" />
+                                                        Manage Ability Scores
+                                                      </Button>
+                                                    </div>
+                                                  );
+                                                }
+
+                                                if (
+                                                  choice.type ===
                                                   "advancement-info"
                                                 ) {
+                                                  const traitValues =
+                                                    choice.advType === "Trait"
+                                                      ? uniqueStringList(
+                                                          [
+                                                            ...uniqueStringList(
+                                                              choice.configuration
+                                                                ?.grants,
+                                                            ),
+                                                            ...uniqueStringList(
+                                                              choice.configuration
+                                                                ?.fixed,
+                                                            ),
+                                                            ...uniqueStringList(
+                                                              choice.configuration
+                                                                ?.options,
+                                                            ),
+                                                            ...uniqueStringList(
+                                                              choice.configuration
+                                                                ?.categoryIds,
+                                                            ),
+                                                          ].map((value) =>
+                                                            normalizeTraitValueForCharacter(
+                                                              String(
+                                                                choice
+                                                                  .configuration
+                                                                  ?.type || "",
+                                                              ),
+                                                              value,
+                                                            ),
+                                                          ),
+                                                        )
+                                                      : [];
                                                   return (
                                                     <div
                                                       key={`info-${cidx}`}
@@ -4485,8 +6046,10 @@ export default function CharacterBuilder({
                                                         "Trait" && (
                                                         <p className="text-ink/50 italic">
                                                           Gains proficiency in:{" "}
-                                                          {choice.configuration
-                                                            ?.type || "Trait"}
+                                                          {traitValues.length > 0
+                                                            ? traitValues.join(", ")
+                                                            : choice.configuration
+                                                                ?.type || "Trait"}
                                                         </p>
                                                       )}
                                                       {choice.advType ===
@@ -4517,7 +6080,7 @@ export default function CharacterBuilder({
                                                   });
                                                 const selectedChoicesForOption =
                                                   getAdvancementSelectionValues(
-                                                    character.selectedOptions,
+                                                    selectedOptionsMap,
                                                     {
                                                       sourceScope:
                                                         choice.sourceScope,
@@ -4528,6 +6091,20 @@ export default function CharacterBuilder({
                                                         choice.choiceId,
                                                     },
                                                   );
+                                                const selectedChoiceLabels =
+                                                  choice.advType === "Trait"
+                                                    ? formatTraitValues(
+                                                        String(
+                                                          choice.configuration
+                                                            ?.type || "",
+                                                        ),
+                                                        selectedChoicesForOption,
+                                                      )
+                                                    : selectedChoicesForOption.map(
+                                                        (optId: string) =>
+                                                          optionsCache[optId]
+                                                            ?.name || optId,
+                                                      );
 
                                                 return (
                                                   <div key={`choice-${cidx}`}>
@@ -4557,49 +6134,45 @@ export default function CharacterBuilder({
                                                       {selectedChoicesForOption.length >
                                                         0 && (
                                                         <div className="space-y-2 mb-2">
-                                                          {selectedChoicesForOption.map(
-                                                            (optId: string) => (
+                                                          {selectedChoiceLabels.map(
+                                                            (label: string, labelIdx: number) => (
                                                               <div
-                                                                key={optId}
+                                                                key={`${selectionKey}-${labelIdx}-${label}`}
                                                                 className="flex justify-between items-center bg-card border border-gold/20 p-2 text-sm font-serif"
                                                               >
-                                                                <span>
-                                                                  {optionsCache[
-                                                                    optId
-                                                                  ]?.name ||
-                                                                    optId}
-                                                                </span>
+                                                                <span>{label}</span>
                                                                 <Button
                                                                   variant="ghost"
                                                                   size="sm"
                                                                 onClick={() => {
+                                                                  const targetSelectionId =
+                                                                    selectedChoicesForOption[
+                                                                      labelIdx
+                                                                    ];
                                                                   setCharacter(
                                                                     (
                                                                       prev: any,
-                                                                    ) => ({
-                                                                      ...prev,
-                                                                      selectedOptions:
-                                                                        writeAdvancementSelectionValues(
-                                                                          prev.selectedOptions,
-                                                                          {
-                                                                            sourceScope:
-                                                                              choice.sourceScope,
-                                                                            advancementId:
-                                                                              choice.advId,
-                                                                            level:
-                                                                              choice.level,
-                                                                            choiceId:
-                                                                              choice.choiceId,
-                                                                          },
-                                                                          selectedChoicesForOption.filter(
-                                                                            (
-                                                                              id: string,
-                                                                            ) =>
-                                                                              id !==
-                                                                              optId,
-                                                                          ),
+                                                                    ) =>
+                                                                      updateCharacterAdvancementSelectionState(
+                                                                        prev,
+                                                                        {
+                                                                          sourceScope:
+                                                                            choice.sourceScope,
+                                                                          advancementId:
+                                                                            choice.advId,
+                                                                          level:
+                                                                            choice.level,
+                                                                          choiceId:
+                                                                            choice.choiceId,
+                                                                        },
+                                                                        selectedChoicesForOption.filter(
+                                                                          (
+                                                                            id: string,
+                                                                          ) =>
+                                                                            id !==
+                                                                            targetSelectionId,
                                                                         ),
-                                                                    }),
+                                                                      ),
                                                                   );
                                                                 }}
                                                                   className="h-6 w-6 p-0 text-blood hover:text-white hover:bg-blood transition-colors"
@@ -4780,7 +6353,7 @@ export default function CharacterBuilder({
                     if (!optionDialogOpen) return null;
                     const selectedForDialog =
                       getAdvancementSelectionValues(
-                        character.selectedOptions,
+                        selectedOptionsMap,
                         {
                           advancementId: optionDialogOpen.advId,
                           level: optionDialogOpen.level,
@@ -4792,7 +6365,7 @@ export default function CharacterBuilder({
 
                     // Check if this option was already chosen in OTHER levels for the same modular group
                     const allSelectionsForGroup = Object.entries(
-                      character.selectedOptions || {},
+                      selectedOptionsMap || {},
                     ).flatMap(([, val]: any) => {
                       // We need to know if the key belongs to an advancement with the same modular group
                       // Since we don't have a direct map easily in this render scope without extra lookups,
@@ -4821,9 +6394,11 @@ export default function CharacterBuilder({
                             disabled={isDisabled}
                             onClick={() => {
                               setCharacter((prev: any) => {
+                                const previousSelectedOptions =
+                                  buildCharacterSelectedOptionsMap(prev);
                                 const current =
                                   getAdvancementSelectionValues(
-                                    prev.selectedOptions,
+                                    previousSelectedOptions,
                                     {
                                       sourceScope:
                                         optionDialogOpen.sourceScope,
@@ -4835,45 +6410,37 @@ export default function CharacterBuilder({
                                     },
                                   );
                                 if (isSelected) {
-                                  return {
-                                    ...prev,
-                                    selectedOptions:
-                                      writeAdvancementSelectionValues(
-                                        prev.selectedOptions,
-                                        {
-                                          sourceScope:
-                                            optionDialogOpen.sourceScope,
-                                          advancementId:
-                                            optionDialogOpen.advId,
-                                          level: optionDialogOpen.level,
-                                          choiceId:
-                                            optionDialogOpen.choiceId,
-                                        },
-                                        current.filter(
-                                          (i: string) => i !== opt.id,
-                                        ),
-                                      ),
-                                  };
+                                  return updateCharacterAdvancementSelectionState(
+                                    prev,
+                                    {
+                                      sourceScope:
+                                        optionDialogOpen.sourceScope,
+                                      advancementId:
+                                        optionDialogOpen.advId,
+                                      level: optionDialogOpen.level,
+                                      choiceId:
+                                        optionDialogOpen.choiceId,
+                                    },
+                                    current.filter(
+                                      (i: string) => i !== opt.id,
+                                    ),
+                                  );
                                 } else {
                                   if (current.length >= optionDialogOpen.count)
                                     return prev;
-                                  return {
-                                    ...prev,
-                                    selectedOptions:
-                                      writeAdvancementSelectionValues(
-                                        prev.selectedOptions,
-                                        {
-                                          sourceScope:
-                                            optionDialogOpen.sourceScope,
-                                          advancementId:
-                                            optionDialogOpen.advId,
-                                          level: optionDialogOpen.level,
-                                          choiceId:
-                                            optionDialogOpen.choiceId,
-                                        },
-                                        [...current, opt.id],
-                                      ),
-                                  };
+                                  return updateCharacterAdvancementSelectionState(
+                                    prev,
+                                    {
+                                      sourceScope:
+                                        optionDialogOpen.sourceScope,
+                                      advancementId:
+                                        optionDialogOpen.advId,
+                                      level: optionDialogOpen.level,
+                                      choiceId:
+                                        optionDialogOpen.choiceId,
+                                    },
+                                    [...current, opt.id],
+                                  );
                                 }
                               });
                             }}

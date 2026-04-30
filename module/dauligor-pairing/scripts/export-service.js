@@ -178,6 +178,190 @@ export async function exportWorldResearchSnapshot() {
   if (shouldDownload) downloadJson(snapshot, `${game.world?.title ?? "world"}-research-snapshot`);
 }
 
+function getFolderPath(folder) {
+  if (!folder) return "";
+
+  const parts = [];
+  let current = folder;
+  while (current) {
+    parts.unshift(current.name ?? "");
+    current = current.folder ?? null;
+  }
+
+  return parts.filter(Boolean).join("/");
+}
+
+function escapeRegex(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function collectDescendantFolderIds(folder) {
+  const ids = new Set();
+  const queue = [folder];
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current?.id || ids.has(current.id)) continue;
+    ids.add(current.id);
+
+    const children = Array.from(game.folders ?? []).filter((candidate) =>
+      candidate.type === folder.type
+      && (candidate.folder?.id ?? null) === current.id
+    );
+
+    queue.push(...children);
+  }
+
+  return ids;
+}
+
+function summarizeSpellCounts(spells) {
+  const byLevel = {};
+  const bySchool = {};
+  const byMethod = {};
+  let totalActivities = 0;
+  let totalEffects = 0;
+
+  for (const spell of spells) {
+    const source = spell.toObject();
+    const level = Number(source.system?.level ?? 0);
+    const school = String(source.system?.school ?? "").trim() || "unknown";
+    const method = String(source.system?.method ?? "").trim() || "unknown";
+    const activityCount = Object.keys(source.system?.activities ?? {}).length;
+    const effectCount = Array.isArray(source.effects) ? source.effects.length : 0;
+
+    byLevel[level] = (byLevel[level] ?? 0) + 1;
+    bySchool[school] = (bySchool[school] ?? 0) + 1;
+    byMethod[method] = (byMethod[method] ?? 0) + 1;
+    totalActivities += activityCount;
+    totalEffects += effectCount;
+  }
+
+  return {
+    spellCount: spells.length,
+    byLevel,
+    bySchool,
+    byMethod,
+    totalActivities,
+    totalEffects
+  };
+}
+
+function buildSpellExportEntry(spell, rootFolder) {
+  const source = getCleanSource(spell);
+  const folderPath = spell.folder ? getFolderPath(spell.folder) : "";
+  const activityEntries = Object.entries(source.system?.activities ?? {});
+
+  return {
+    id: spell.id,
+    uuid: spell.uuid,
+    name: spell.name,
+    type: spell.type,
+    folderId: spell.folder?.id ?? null,
+    folderPath,
+    relativeFolderPath: folderPath && rootFolder
+      ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+      : "",
+    source: {
+      book: source.system?.source?.book ?? "",
+      page: source.system?.source?.page ?? null,
+      rules: source.system?.source?.rules ?? ""
+    },
+    spellSummary: {
+      level: source.system?.level ?? 0,
+      school: source.system?.school ?? "",
+      method: source.system?.method ?? "",
+      prepared: source.system?.prepared ?? 0,
+      ability: source.system?.ability ?? "",
+      sourceItem: source.system?.sourceItem ?? "",
+      properties: Array.from(source.system?.properties ?? []),
+      materialSummary: {
+        value: source.system?.materials?.value ?? "",
+        cost: source.system?.materials?.cost ?? 0,
+        consumed: source.system?.materials?.consumed ?? false,
+        supply: source.system?.materials?.supply ?? 0
+      },
+      activation: source.system?.activation ?? {},
+      range: source.system?.range ?? {},
+      target: source.system?.target ?? {},
+      duration: source.system?.duration ?? {},
+      activityCount: activityEntries.length,
+      effectCount: Array.isArray(source.effects) ? source.effects.length : 0
+    },
+    sourceDocument: source
+  };
+}
+
+export function buildSpellFolderExport(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const spells = Array.from(game.items ?? []).filter((item) =>
+    item.type === "spell"
+    && includedFolderIds.has(item.folder?.id ?? "")
+  );
+
+  const folderPath = getFolderPath(folder);
+
+  return {
+    kind: "dauligor.foundry-spell-folder-export.v1",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    game: {
+      worldId: game.world?.id ?? null,
+      worldTitle: game.world?.title ?? null,
+      systemId: game.system?.id ?? null,
+      systemVersion: game.system?.version ?? null,
+      coreVersion: game.release?.version ?? null
+    },
+    folder: {
+      id: folder.id,
+      uuid: folder.uuid ?? null,
+      name: folder.name,
+      type: folder.type,
+      path: folderPath,
+      includeSubfolders,
+      includedFolderIds: Array.from(includedFolderIds),
+      parentId: folder.folder?.id ?? null
+    },
+    summary: summarizeSpellCounts(spells),
+    spells: spells
+      .slice()
+      .sort((a, b) => {
+        const aLevel = Number(a.system?.level ?? 0);
+        const bLevel = Number(b.system?.level ?? 0);
+        if (aLevel !== bLevel) return aLevel - bLevel;
+        return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      })
+      .map((spell) => buildSpellExportEntry(spell, folder))
+  };
+}
+
+export async function exportSpellFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") {
+    notifyWarn("Select an Item folder before exporting spells.");
+    return;
+  }
+
+  const payload = buildSpellFolderExport(folder, { includeSubfolders });
+  const spellCount = payload?.summary?.spellCount ?? 0;
+  if (!spellCount) {
+    notifyWarn(`No spell items were found in "${folder.name}".`);
+    return;
+  }
+
+  log("Prepared spell folder export", payload);
+  notifyInfo(`Prepared ${spellCount} spells from "${folder.name}". See console for the full object.`);
+
+  const shouldDownload = await chooseDownload({
+    title: "Export Spell Folder",
+    name: `${folder.name} (${spellCount} spells)`
+  });
+
+  if (shouldDownload) downloadJson(payload, `${folder.name}-spells-export`);
+}
+
 export function buildActorClassSnapshot(actor) {
   if (!actor) return null;
 

@@ -35,6 +35,7 @@ interface MarkdownEditorProps {
   className?: string;
   minHeight?: string;
   maxHeight?: string;
+  autoSizeToContent?: boolean;
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
   stickyOffset?: string;
@@ -48,6 +49,7 @@ export default function MarkdownEditor({
   className = "", 
   minHeight = "350px",
   maxHeight = "70vh",
+  autoSizeToContent = true,
   onKeyDown,
   textareaRef: externalRef,
   stickyOffset,
@@ -90,6 +92,13 @@ export default function MarkdownEditor({
 
   // Initial sizing based on content
   useEffect(() => {
+    if (!autoSizeToContent) {
+      if (!hasManuallyResized) {
+        setCurrentHeight(minHeight);
+        lastHeightRef.current = typeof minHeight === 'string' ? parseInt(minHeight) || 0 : Number(minHeight) || 0;
+      }
+      return;
+    }
     if (hasManuallyResized) return;
 
     const measureAndSetHeight = () => {
@@ -122,7 +131,7 @@ export default function MarkdownEditor({
     // Small delay to ensure content is rendered
     const timer = setTimeout(measureAndSetHeight, 100);
     return () => clearTimeout(timer);
-  }, [value, isWYSIWYG, minHeight, maxHeight, hasManuallyResized]);
+  }, [value, isWYSIWYG, minHeight, maxHeight, hasManuallyResized, autoSizeToContent]);
 
   // Detect manual resize start
   const handleMouseDown = () => {

@@ -7,6 +7,7 @@ const HARDCODED_STAFF_EMAILS = new Set([
   "gm@archive.internal",
 ]);
 const IMAGE_MANAGER_ROLES = new Set(["admin", "co-dm", "lore-writer"]);
+const ADMIN_ROLES = new Set(["admin"]);
 
 type FirebaseAppletConfig = {
   projectId: string;
@@ -69,6 +70,30 @@ export async function requireImageManagerAccess(authHeader?: string | string[]) 
 
   if (!isAllowed) {
     throw new HttpError(403, "Image manager access required.");
+  }
+
+  return {
+    decoded,
+    role: actingRole,
+  };
+}
+
+export async function requireAdminAccess(authHeader?: string | string[]) {
+  const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  if (!headerValue?.startsWith("Bearer ")) {
+    throw new HttpError(401, "Missing bearer token.");
+  }
+
+  const idToken = headerValue.slice("Bearer ".length);
+  const { auth, db } = getAdminServices();
+  const decoded = await auth.verifyIdToken(idToken);
+  const actingUserSnapshot = await db.collection("users").doc(decoded.uid).get();
+  const actingRole = actingUserSnapshot.exists ? actingUserSnapshot.data()?.role : null;
+  const isAllowed =
+    HARDCODED_STAFF_EMAILS.has(decoded.email ?? "") || ADMIN_ROLES.has(actingRole);
+
+  if (!isAllowed) {
+    throw new HttpError(403, "Admin access required.");
   }
 
   return {

@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Card } from '../ui/card';
 import { cn } from '../../lib/utils';
+import type { ReactNode } from 'react';
 
 export interface FilterBarProps {
   search: string;
@@ -12,35 +13,135 @@ export interface FilterBarProps {
   isFilterOpen: boolean;
   setIsFilterOpen: (val: boolean) => void;
   activeFilterCount: number;
-  tagGroups: any[];
-  tagsByGroup: Record<string, any[]>;
-  tagStates: Record<string, number>;
-  setTagStates: (val: any) => void;
-  cycleTagState: (tagId: string) => void;
-  groupCombineModes: Record<string, 'AND' | 'OR' | 'XOR'>;
-  cycleGroupMode: (groupId: string) => void;
-  groupExclusionModes: Record<string, 'AND' | 'OR' | 'XOR'>;
-  cycleExclusionMode: (groupId: string) => void;
+  tagGroups?: any[];
+  tagsByGroup?: Record<string, any[]>;
+  tagStates?: Record<string, number>;
+  setTagStates?: (val: any) => void;
+  cycleTagState?: (tagId: string) => void;
+  groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  cycleGroupMode?: (groupId: string) => void;
+  groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  cycleExclusionMode?: (groupId: string) => void;
   resetFilters: () => void;
+  searchPlaceholder?: string;
+  filterTitle?: string;
+  filterSubtitle?: string;
+  resetLabel?: string;
+  applyLabel?: string;
+  renderFilters?: ReactNode;
 }
 
 export function FilterBar({
   search, setSearch,
   isFilterOpen, setIsFilterOpen,
   activeFilterCount,
-  tagGroups, tagsByGroup,
-  tagStates, setTagStates, cycleTagState,
-  groupCombineModes, cycleGroupMode,
-  groupExclusionModes, cycleExclusionMode,
-  resetFilters
+  tagGroups = [],
+  tagsByGroup = {},
+  tagStates = {},
+  setTagStates,
+  cycleTagState,
+  groupCombineModes = {},
+  cycleGroupMode,
+  groupExclusionModes = {},
+  cycleExclusionMode,
+  resetFilters,
+  searchPlaceholder = 'Search...',
+  filterTitle = 'Advanced Filters',
+  filterSubtitle,
+  resetLabel = 'Reset All Filters',
+  applyLabel = 'Apply & Close',
+  renderFilters
 }: FilterBarProps) {
+  const defaultFilterContent = (
+    <>
+      {tagGroups.map(group => {
+        const groupTags = tagsByGroup[group.id] || [];
+        if (groupTags.length === 0) return null;
+        const mode = groupCombineModes[group.id] || 'OR';
+        const exMode = groupExclusionModes[group.id] || 'OR';
+
+        return (
+          <div key={group.id} className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <span className="h3-title uppercase text-ink">{group.name}</span>
+                <div className="flex items-center gap-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => cycleGroupMode?.(group.id)}
+                    className="h-6 px-3 btn-gold text-[9px]"
+                  >
+                    {mode}
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="label-text text-blood/60">Exclusion Logic</span>
+                    <Button
+                      size="sm"
+                      onClick={() => cycleExclusionMode?.(group.id)}
+                      className="h-6 px-3 btn-danger"
+                    >
+                      {exMode}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    if (!setTagStates) return;
+                    const newStates: Record<string, number> = { ...tagStates };
+                    groupTags.forEach(t => newStates[t.id] = 1);
+                    setTagStates(newStates);
+                  }}
+                  className="label-text hover:underline"
+                >
+                  Include All
+                </button>
+                <span className="text-gold/20">|</span>
+                <button
+                  onClick={() => {
+                    if (!setTagStates) return;
+                    const newStates: Record<string, number> = { ...tagStates };
+                    groupTags.forEach(t => delete newStates[t.id]);
+                    setTagStates(newStates);
+                  }}
+                  className="label-text hover:underline"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {groupTags.map(tag => {
+                const state = tagStates[tag.id] || 0;
+                return (
+                  <button
+                    key={tag.id}
+                    onClick={() => cycleTagState?.(tag.id)}
+                    className={cn(
+                      "filter-tag",
+                      state === 1 ? "btn-gold-solid border-gold shadow-lg shadow-gold/20" : state === 2 ? "btn-danger border-blood" : "btn-gold"
+                    )}
+                  >
+                    {tag.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-4 items-center bg-card p-2 rounded-lg border border-gold/10 shadow-sm">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
           <Input 
-            placeholder="Search..." 
+            placeholder={searchPlaceholder}
             className="field-input pl-8 h-8 focus:border-gold"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -70,7 +171,12 @@ export function FilterBar({
           <Card className="relative w-full max-w-4xl max-h-full overflow-hidden flex flex-col border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
             <div className="flex items-center justify-between p-6 border-b border-gold/10 bg-gold/5">
               <div className="flex items-center gap-6">
-                <h2 className="h2-title uppercase text-ink">Advanced Filters</h2>
+                <div className="space-y-1">
+                  <h2 className="h2-title uppercase text-ink">{filterTitle}</h2>
+                  {filterSubtitle ? (
+                    <p className="text-sm text-ink/55">{filterSubtitle}</p>
+                  ) : null}
+                </div>
               </div>
               <Button variant="ghost" size="sm" onClick={() => setIsFilterOpen(false)} className="text-ink/40 hover:text-gold transition-colors">
                 <X className="w-5 h-5" />
@@ -78,82 +184,7 @@ export function FilterBar({
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-12 custom-scrollbar">
-              {tagGroups.map(group => {
-                const groupTags = tagsByGroup[group.id] || [];
-                if (groupTags.length === 0) return null;
-                const mode = groupCombineModes[group.id] || 'OR';
-                const exMode = groupExclusionModes[group.id] || 'OR';
-
-                return (
-                  <div key={group.id} className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-6">
-                        <span className="h3-title uppercase text-ink">{group.name}</span>
-                        <div className="flex items-center gap-4">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => cycleGroupMode(group.id)}
-                            className="h-6 px-3 btn-gold text-[9px]"
-                          >
-                            {mode}
-                          </Button>
-                          <div className="flex items-center gap-2">
-                            <span className="label-text text-blood/60">Exclusion Logic</span>
-                            <Button
-                              size="sm"
-                              onClick={() => cycleExclusionMode(group.id)}
-                              className="h-6 px-3 btn-danger"
-                            >
-                              {exMode}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => {
-                            const newStates: Record<string, number> = { ...tagStates };
-                            groupTags.forEach(t => newStates[t.id] = 1);
-                            setTagStates(newStates);
-                          }}
-                          className="label-text hover:underline"
-                        >
-                          Include All
-                        </button>
-                        <span className="text-gold/20">|</span>
-                        <button
-                          onClick={() => {
-                            const newStates: Record<string, number> = { ...tagStates };
-                            groupTags.forEach(t => delete newStates[t.id]);
-                            setTagStates(newStates);
-                          }}
-                          className="label-text hover:underline"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {groupTags.map(tag => {
-                        const state = tagStates[tag.id] || 0;
-                        return (
-                          <button
-                            key={tag.id}
-                            onClick={() => cycleTagState(tag.id)}
-                            className={cn(
-                              "filter-tag",
-                              state === 1 ? "btn-gold-solid border-gold shadow-lg shadow-gold/20" : state === 2 ? "btn-danger border-blood" : "btn-gold"
-                            )}
-                          >
-                            {tag.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+              {renderFilters || defaultFilterContent}
             </div>
 
             <div className="p-6 border-t border-gold/10 bg-gold/5 flex items-center justify-between">
@@ -163,10 +194,10 @@ export function FilterBar({
                 onClick={resetFilters}
                 className="label-text text-ink/40 hover:text-blood"
               >
-                Reset All Filters
+                {resetLabel}
               </Button>
               <Button onClick={() => setIsFilterOpen(false)} className="btn-gold-solid px-10 h-10 shadow-lg shadow-gold/20">
-                Apply & Close
+                {applyLabel}
               </Button>
             </div>
           </Card>

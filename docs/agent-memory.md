@@ -226,10 +226,88 @@ Still active or likely follow-up areas:
 - verify the new Dauligor ASI prompt in live Foundry, especially multi-level imports that cross an ASI level and feat selection from a real Dauligor feat catalog
 - verify multiclass HP behavior in live Foundry after the max-override fix, especially second-class imports and damaged actors
 - revisit and polish the Dauligor ASI window UX after beta-critical behavior is stable
+- add a separate native Foundry sheet-import export mode later; the current `dauligor.actor-bundle.v1` export is for the module importer, not Foundry's top-level actor JSON import flow
 - spell lists
 - activities follow-up verification
 - items / feats / spells broader Foundry import coverage
 - sheet sorting behavior based on option-group type labels
+
+Latest builder/site cleanup details:
+
+- the duplicate nested `Character Info` header inside the sheet info column was removed; the top-level `Character Info / Features / Spells` tab bar is now the only sheet subtab control
+- class-profile trait synthesis now mirrors fixed trait values into both `fixed` and `grants`, and trait collection now reads `grants` as well as `fixed`, which restores base class saving throws and other grant-style trait rows
+- progression summaries now rehydrate feature and granted-item names from the shared feature/option caches before rendering or persisting owned state, so builder class timelines and sheet features stop falling back to raw ids
+- `AbilityScoreImprovement` advancements now surface as explicit level-advancement cards in the class timeline and open the existing ability-score management modal; deeper builder-side ASI choice persistence is still a follow-up
+- the sheet tab behavior was corrected so the upper sheet stays visible and only the existing lower `md:col-span-2` pane swaps between `Character Info`, `Features`, and `Spells`
+- the builder now preloads grant-linked `uniqueOptionItems` for class/subclass progression summaries, which lets granted-item displays resolve names after reload instead of staying on raw document ids
+- the builder now fetches armor, armor-category, weapon, weapon-category, tool, tool-category, language, and language-category labels during initial sheet load and uses them to render human-readable proficiencies and trait-choice selections
+
+Latest spell-compendium details:
+
+- the Foundry spell import workbench preserves `activities`, `effects`, `foundryDocument`, `foundryShell`, and `foundryImport` metadata even if the manual spell editor does not yet fully expose every one of those surfaces
+- imported Foundry spell image paths are normalized to absolute `https://images.dauligor.com/...` URLs when possible
+- spell import now supports spell-classified tag groups and tag assignment/filtering before save
+- `src/pages/compendium/SpellList.tsx` is now the user-facing spell browser at `/compendium/spells`
+- `src/pages/compendium/SpellsEditor.tsx` is now the admin/import manager at `/compendium/spells/manage`
+- the spell list uses a top search bar plus a filter dialog for:
+  - sources
+  - spell level
+  - spell school
+  - custom spell tags from Tag Manager
+- the spell list now reuses the shared `src/components/compendium/FilterBar.tsx` shell instead of maintaining a separate modal implementation
+- `FilterBar.tsx` now supports custom filter content and labeling so ClassList can keep its tag-logic behavior while SpellList can supply source/level/school/tag sections through the same window component
+- the preferred spell-filter styling is the ClassList filter language, not a lighter spell-specific variation:
+  - `ADVANCED FILTERS` title treatment
+  - section headers styled like class filter groups
+  - `Include All | Clear` controls in the section header row
+  - `filter-tag` / `btn-gold` button styling for options
+- the spell list left pane is a compact spell table with:
+  - name
+  - level
+  - school
+  - source abbreviation
+- the spell list right pane is a user-facing spell detail view based on the importer display shell, not the admin import metadata panel
+- image loading for the spell list is intentionally selection-only:
+  - no spell icons are rendered in the list rows
+  - no spell is auto-selected on initial page load
+  - the right detail pane only renders an `<img>` when a specific spell is selected
+- spell art loading now goes through `src/components/compendium/SpellArtPreview.tsx`, which preloads the next image and shows a ClassView-style gold spinner instead of leaving the previous spell image visible while the next one loads
+- the spell filter modal now uses the broader class-list-style shell (`max-w-[95vw] md:max-w-4xl`, tall centered modal card, stronger header/footer treatment) instead of the narrower stock dialog look
+- the spell detail pane now renders art at the native `126x126` icon size
+- the spell detail image wrapper is now explicitly `126x126`, `overflow-hidden`, and the `<img>` is rendered as `display: block` so the icon no longer leaves the extra inline gap below the art
+- the spell list heading no longer includes the earlier explanatory subtitle paragraph
+- `src/pages/compendium/SpellsEditor.tsx` now includes a Back To Spells link to the public spell list
+- `src/pages/compendium/SpellsEditor.tsx` now also includes an admin-only `Purge All Spells` action intended for full reimport/reset workflows
+- spell purge no longer attempts browser-side Firestore batch deletes; `SpellsEditor.tsx` now calls `api/admin/spells/purge.ts` with the signed-in Firebase bearer token, and that route performs the purge through Firebase Admin after explicit admin verification
+- `api/_lib/firebase-admin.ts` now also exposes `requireAdminAccess(...)` for admin-only server actions beyond the R2 image manager flow
+- the manual spell editor no longer uses the generic `DevelopmentCompendiumManager` layout
+- the manual spell editor now follows the importer rhythm:
+  - left column is a searchable spell selector list in the same visual language as the import browser
+  - right column is dedicated to the actual spell editor form
+  - the left draft list, right editor pane, and effects textarea now use the app-wide `custom-scrollbar` styling
+- the manual spell editor now uses the compact top-left icon uploader (`ImageUpload` with `imageType="icon"` and `compact`) instead of a separate image section lower in the form
+- the manual spell description editor now uses a steadier `300px` baseline height so swapping between spells keeps a more consistent editing footprint while still allowing manual resizing
+- `MarkdownEditor.tsx` now supports `autoSizeToContent={false}` so the spell description editor can start from a stable `300px` baseline instead of re-growing based on each newly opened spell
+- Foundry spell imports now convert description HTML into site-native BBCode using `htmlToBbcode(...)` while preserving Foundry inline syntax tokens in storage/editor
+- Foundry inline syntax should be flattened only in user-facing display views, not stripped from stored spell descriptions:
+  - `[[/r X]] -> X`
+  - `[[/damage X]] -> X`
+  - `[[/damage X type=acid]] -> X acid`
+  - `@... [status||Status Name] -> Status Name`
+- spell list and import-browser detail views now apply those display-only flattening rules when rendering descriptions
+- later spell export should convert stored BBCode back into Foundry-friendly HTML again
+- spell browsing/management now has a lightweight summary-index layer:
+  - `src/lib/spellSummary.ts`
+  - summary docs live in `spellSummaries`
+  - summary docs carry the fields needed for search/filter/list rows: name, identifier, sourceId, imageUrl, level, school, tagIds, and light source metadata
+  - full spell docs remain in `spells`
+- `firestore.rules` now includes an explicit `spellSummaries/{spellId}` rule block so admin create/update/delete of summary docs follow the same authorization model as `spells`
+- `SpellList.tsx` now queries `spellSummaries` for the left list and filters, then fetches the full spell doc from `spells` only when a specific spell is selected
+- `SpellsEditor.tsx` manual editor now queries `spellSummaries` for the left draft selector and fetches the full spell doc only when a draft is opened
+- `SpellImportWorkbench.tsx` now uses `spellSummaries` for existing-entry matching instead of subscribing to the full `spells` collection
+- `VirtualizedList.tsx` now virtualizes the left spell rows in the public spell list and the manual spell manager so large spell counts do not render every row at once
+- admin spell pages automatically backfill `spellSummaries` from existing `spells` docs when the summary index is empty
+- display-only token flattening now also handles unlabeled Foundry references like `@...[status]` by rendering `Status`
 
 ## Next Major Workstream
 
@@ -453,6 +531,90 @@ Latest class-migration planning notes:
       - per-class `hitPointHistory` and `scaleState`
       - derived sync output for sheet-facing values
       - direct mapping into a Foundry actor root plus embedded class, subclass, feature, spell, and inventory items
+  - first progression-owned state implementation pass:
+    - `CharacterBuilder.tsx` now persists `progressionState` on the character document
+    - `progressionState.classPackages` is now synchronized from grouped progression entries and stores per-class:
+      - class identity
+      - subclass identity
+      - class level
+      - introduction mode
+      - per-class `advancementSelections`
+      - reserved `grantedFeatureRefs`, `grantedItemRefs`, `spellcasting`, `hitPointHistory`, and `scaleState` fields
+    - builder reads advancement selections from `progressionState.classPackages` first and mirrors a non-legacy top-level `selectedOptions` map from those packages for compatibility
+    - save now rebuilds and persists both `progressionState.classPackages` and the mirrored scoped `selectedOptions` map from the package-backed state
+  - second progression-owned state implementation pass:
+    - `progressionState.ownedFeatures` is now synchronized from the class/subclass progression summaries and stores canonical granted feature ownership by class/subclass
+    - `progressionState.ownedItems` is now synchronized from:
+      - granted non-feature progression entries
+      - selected option-item advancement choices
+    - each class package now also stores synchronized `grantedFeatureRefs` and `grantedItemRefs`
+    - the sheet-side progression summaries now prefer persisted `ownedFeatures` and `ownedItems` instead of only reconstructing granted ownership from raw class data every render
+    - `generatePairingJson()` now exports class and subclass feat items from canonical owned feature state and also exports selected class-option items as feat items using their semantic/source-id metadata
+    - module-compatibility boundary preserved:
+      - actor bundle shape remains `actor + items[]`
+      - class/subclass items still own advancement truth
+      - exported owned feature-like items keep `flags.dauligor-pairing.sourceId`-style metadata the module can interpret
+      - broader inventory/equipment-style owned items are not yet emitted into the actor bundle until their import contract is ready
+  - character exporter base refactor:
+    - `src/lib/characterExport.ts` no longer exports the older actor-root-heavy single-class snapshot shape
+    - it now builds a direct `dauligor.actor-bundle.v1` payload with:
+      - actor root
+      - embedded class items from `progressionState.classPackages`
+      - embedded subclass items from `progressionState.classPackages`
+      - owned feature feat items from `progressionState.ownedFeatures`
+      - selected option feat items from `progressionState.ownedItems`
+    - class and subclass advancement values now come from package-backed advancement selections instead of the old top-level single-class shortcut
+    - the exporter keeps module-compatible `flags.dauligor-pairing.sourceId` style metadata on embedded items so the current actor import flow can still interpret them
+  - export-shape cleanup after reviewing a live character bundle:
+    - `characterExport.ts` now derives actor proficiency bonus from total character level instead of trusting stale stored `proficiencyBonus`
+    - actor export flags now use `primaryClassId` / `primarySubclassId` plus `progressionClassIds` / `progressionSubclassIds` instead of misleading singular multiclass `classId` / `subclassId` flags
+    - class and subclass actor-bundle spellcasting blocks now export a clean `progression: "none"` shape when `hasSpellcasting` is false instead of carrying active-looking defaults
+    - class actor-bundle `system.primaryAbility.value` is now flattened and normalized instead of exporting nested arrays like `[[\"STR\"]]`
+    - `ClassEditor.tsx` now saves normalized lowercase `primaryAbility` / `primaryAbilityChoice` arrays and deletes the `spellcasting` field entirely when spellcasting is disabled
+    - `SubclassEditor.tsx` now deletes the `spellcasting` field entirely when spellcasting is disabled
+    - `CharacterBuilder.tsx` now derives and persists proficiency bonus from total character level
+    - builder save/export now treat class advancements as the source of HP max unless there is a real override:
+      - saved character `hp.max` is omitted when it only matches `derivedHpMax`
+      - actor-bundle `system.attributes.hp.max` is omitted unless there is an explicit max-HP override
+      - builder sheet HP display now falls back to `derivedHpMax` when there is no stored max override
+  - next progression-owned state follow-up:
+    - `ownedSpells` is still a reserved shell, not a canonical builder-owned spell layer yet
+    - broader inventory/equipment ownership still needs a formal export contract before those owned items should be emitted into the actor bundle
+  - spell import research:
+    - document saved at `docs/foundry-spell-import-research.md`
+    - Foundry `dnd5e` spells should be imported from native spell item JSON exports or a Foundry-side `Item.toObject()` dump, not from the raw installed `packs/spells*` folders
+    - the installed `spells` / `spells24` packs are LevelDB-style pack stores, not plain JSON
+    - current `SpellData` schema centers on `system.ability`, `activation`, `duration`, `level`, `materials`, `method`, `prepared`, `properties`, `range`, `school`, `sourceItem`, `target`, plus `system.activities` and top-level `effects`
+    - Dauligor's current spell editor is directionally aligned with shell + activities + effects, but still needs importer mapping for property/component flags, preparation shape, material cost/supply, and casting shell fields like range/duration/target
+  - Foundry spell-folder exporter:
+    - module export surface now supports batch-exporting all native Foundry spell items in a chosen Item folder
+    - UI entry point: Item Directory sidebar `Export Spell Folder` button
+    - export payload kind: `dauligor.foundry-spell-folder-export.v1`
+    - payload includes world metadata, selected folder metadata, batch summary counts, and a `spells[]` array
+    - each spell entry includes convenience metadata plus the authoritative native Foundry `sourceDocument`
+    - contract saved at `module/dauligor-pairing/docs/spell-folder-export-contract.md`
+    - next app-side spell step should consume this batch payload for bulk import and individual review
+  - app-side spell batch import/browser:
+    - `src/lib/spellImport.ts` now parses `dauligor.foundry-spell-folder-export.v1` payloads into import candidates, matches source books to Dauligor `sources`, preserves the authoritative Foundry `sourceDocument`, and prepares normalized save payloads for the `spells` collection
+    - `src/components/compendium/SpellImportWorkbench.tsx` now provides a Foundry spell import workbench with:
+      - multi-file JSON upload
+      - batch summary stats
+      - left-column search/filter spell list
+      - right-column 5etools-style spell detail view
+      - single-spell import
+      - visible-batch import
+    - `src/pages/compendium/SpellsEditor.tsx` is now split into tabs:
+      - `Foundry Import`
+      - `Manual Editor`
+    - spell preparation mode handling was corrected to use Foundry-native method values, with `spell` replacing the old incorrect `prepared` default in the spell editor
+    - imported spell saves now preserve:
+      - normalized shell fields for the current app schema
+      - full `foundryDocument`
+      - `foundryShell`
+      - `foundryImport` batch metadata
+    - current first-pass browser/import focus is shell + description + activities + effects; later refinement can extend the preview/import surface for richer spell list metadata
+    - Foundry spell images now normalize relative paths like `icons/...` and `/icons/...` to `https://images.dauligor.com/...` during import candidate preparation, so saved spells keep usable app-facing image URLs
+    - the spell import workbench now also fetches spell-classified tag groups and tags, supports per-spell tag assignment before import, persists `tagIds` on saved spell records, and allows filtering the left-column spell list by selected tags
 
 ## Important Files
 

@@ -33,8 +33,9 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
     {
       title: 'Magic & Equipment',
       items: [
+        { name: 'Spells', icon: Wand2, path: '/compendium/spells', description: 'Browse imported spell records by source, level, school, and tags.' },
         ...(userProfile?.role === 'admin' ? [
-          { name: 'Spells', icon: Wand2, path: '/compendium/spells', description: 'Admin-only development manager for Foundry-facing spells.' },
+          { name: 'Spell Manager', icon: Wand2, path: '/compendium/spells/manage', description: 'Admin-only import and development manager for Foundry-facing spells.' },
           { name: 'Items', icon: Hammer, path: '/compendium/items', description: 'Admin-only development manager for non-spell items.' },
         ] : []),
       ]

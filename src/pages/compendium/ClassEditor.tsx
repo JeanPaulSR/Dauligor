@@ -5,7 +5,7 @@ import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, addDoc, deleteDoc, where } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, addDoc, deleteDoc, where, deleteField } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -272,29 +272,63 @@ function sortAdvancementsByLevelThenType(a: Advancement, b: Advancement) {
   return a.type.localeCompare(b.type);
 }
 
-function normalizeClassSpellcastingForSave(spellcasting: any) {
+function flattenStringArray(values: any): string[] {
+  if (!Array.isArray(values)) {
+    const single = String(values ?? '').trim();
+    return single ? [single] : [];
+  }
+
+  return values.flatMap((value) => flattenStringArray(value));
+}
+
+function normalizePrimaryAbilityListForSave(values: any): string[] {
+  return Array.from(new Set(
+    flattenStringArray(values)
+      .map((value) => String(value || '').trim().toLowerCase())
+      .filter((value) => ['str', 'dex', 'con', 'int', 'wis', 'cha'].includes(value))
+  ));
+}
+
+function normalizePrimaryAbilityListForEditor(values: any): string[] {
+  return normalizePrimaryAbilityListForSave(values).map((value) => value.toUpperCase());
+}
+
+function buildEmptyClassSpellcastingState() {
+  return {
+    hasSpellcasting: false,
+    isRitualCaster: false,
+    description: '',
+    level: 1,
+    ability: 'INT',
+    type: 'prepared',
+    progressionId: '',
+    altProgressionId: '',
+    spellsKnownId: '',
+    spellsKnownFormula: ''
+  };
+}
+
+function normalizeClassSpellcastingForEditor(spellcasting: any) {
   if (!spellcasting || typeof spellcasting !== 'object') {
-    return {
-      hasSpellcasting: false,
-      isRitualCaster: false,
-      description: '',
-      level: 1,
-      ability: 'INT',
-      type: 'prepared',
-      progressionId: '',
-      altProgressionId: '',
-      spellsKnownId: '',
-      spellsKnownFormula: ''
-    };
+    return buildEmptyClassSpellcastingState();
   }
 
   const normalized = {
+    ...buildEmptyClassSpellcastingState(),
     ...spellcasting,
+    hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
     isRitualCaster: Boolean(spellcasting.isRitualCaster),
     ability: String(spellcasting.ability || 'INT').toUpperCase(),
     type: String(spellcasting.type || 'prepared').toLowerCase(),
     level: Number(spellcasting.level || 1) || 1
   } as any;
+
+  return normalized;
+}
+
+function normalizeClassSpellcastingForSave(spellcasting: any) {
+  const normalized = normalizeClassSpellcastingForEditor(spellcasting);
+  if (!normalized.hasSpellcasting) return null;
 
   const hasLinkedScalingIds = Boolean(
     normalized.progressionId
@@ -683,8 +717,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               toolsDisplayName: rawProf.toolsDisplayName || ''
             }));
             setStartingEquipment(data.startingEquipment || '');
-            setPrimaryAbility((data.primaryAbility || []).map((s: string) => s.toUpperCase()));
-            setPrimaryAbilityChoice((data.primaryAbilityChoice || []).map((s: string) => s.toUpperCase()));
+            setPrimaryAbility(normalizePrimaryAbilityListForEditor(data.primaryAbility || []));
+            setPrimaryAbilityChoice(normalizePrimaryAbilityListForEditor(data.primaryAbilityChoice || []));
             setWealth(data.wealth || '');
             setImageUrl(data.imageUrl || '');
             // Migrate old imageFocalPoint → imageDisplay if needed
@@ -741,17 +775,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               toolsDisplayName: rawMultiProf.toolsDisplayName || ''
             }));
 
-            const loadedSpellcasting = normalizeClassSpellcastingForSave(data.spellcasting || {
-              hasSpellcasting: false,
-              description: '',
-              level: 1,
-              ability: 'INT',
-              type: 'prepared',
-              progressionId: '',
-              altProgressionId: '',
-              spellsKnownId: '',
-              spellsKnownFormula: ''
-            });
+            const loadedSpellcasting = normalizeClassSpellcastingForEditor(data.spellcasting);
             setSpellcasting(loadedSpellcasting);
             setTagIds(data.tagIds || []);
             setAdvancements(normalizeEditorAdvancements(data.advancements || [], 1, data.hitDie || hitDie));
@@ -976,6 +1000,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       const normalizedSyncedAdvancements = normalizeEditorAdvancements(syncedAdvancements, 1, hitDie);
       const normalizedSpellcasting = normalizeClassSpellcastingForSave(spellcasting);
 
+      const normalizedPrimaryAbility = normalizePrimaryAbilityListForSave(primaryAbility);
+      const normalizedPrimaryAbilityChoice = normalizePrimaryAbilityListForSave(primaryAbilityChoice);
       const classData = {
         name,
         identifier: slugify(name),
@@ -987,12 +1013,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         savingThrows: normalizedProficiencies.savingThrows?.fixedIds || [],
         proficiencies: normalizedProficiencies,
         startingEquipment,
-        primaryAbility,
-        primaryAbilityChoice,
+        primaryAbility: normalizedPrimaryAbility,
+        primaryAbilityChoice: normalizedPrimaryAbilityChoice,
         wealth,
         multiclassing,
         multiclassProficiencies: normalizedMulticlassProficiencies,
-        spellcasting: normalizedSpellcasting,
         excludedOptionIds,
         tagIds,
         subclassTitle,
@@ -1009,12 +1034,17 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       };
 
       if (id) {
-        await updateDoc(doc(db, 'classes', id), classData);
+        await updateDoc(doc(db, 'classes', id), {
+          ...classData,
+          spellcasting: normalizedSpellcasting ?? deleteField()
+        });
       } else {
-        const docRef = await addDoc(collection(db, 'classes'), {
+        const createPayload: any = {
           ...classData,
           createdAt: new Date().toISOString()
-        });
+        };
+        if (normalizedSpellcasting) createPayload.spellcasting = normalizedSpellcasting;
+        const docRef = await addDoc(collection(db, 'classes'), createPayload);
         navigate(`/compendium/classes/edit/${docRef.id}`);
       }
       setProficiencies(normalizedProficiencies);

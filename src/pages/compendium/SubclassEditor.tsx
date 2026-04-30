@@ -13,7 +13,8 @@ import {
   where, 
   onSnapshot,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  deleteField
 } from 'firebase/firestore';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -88,6 +89,45 @@ function getScalingBreakpoints(values: Record<string, any> = {}) {
     });
 }
 
+function buildEmptySubclassSpellcastingState() {
+  return {
+    hasSpellcasting: false,
+    description: '',
+    level: 3,
+    ability: 'INT',
+    type: 'prepared',
+    progression: 'none',
+    progressionId: '',
+    altProgressionId: '',
+    spellsKnownId: '',
+    spellsKnownFormula: '',
+    isRitualCaster: false
+  };
+}
+
+function normalizeSubclassSpellcastingForEditor(spellcasting: any) {
+  if (!spellcasting || typeof spellcasting !== 'object') {
+    return buildEmptySubclassSpellcastingState();
+  }
+
+  return {
+    ...buildEmptySubclassSpellcastingState(),
+    ...spellcasting,
+    hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
+    isRitualCaster: Boolean(spellcasting.isRitualCaster),
+    ability: String(spellcasting.ability || 'INT').toUpperCase(),
+    type: String(spellcasting.type || 'prepared').toLowerCase(),
+    level: Number(spellcasting.level || 3) || 3,
+    progression: String(spellcasting.progression || 'none').toLowerCase()
+  };
+}
+
+function normalizeSubclassSpellcastingForSave(spellcasting: any) {
+  const normalized = normalizeSubclassSpellcastingForEditor(spellcasting);
+  if (!normalized.hasSpellcasting) return null;
+  return normalized;
+}
+
 export default function SubclassEditor() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -103,19 +143,7 @@ export default function SubclassEditor() {
   const [tagIds, setTagIds] = useState<string[]>([]);
 
   // Spellcasting
-  const [spellcasting, setSpellcasting] = useState({
-    hasSpellcasting: false,
-    description: '',
-    level: 3,
-    ability: 'INT',
-    type: 'prepared',
-    progression: 'none',
-    progressionId: '',
-    altProgressionId: '',
-    spellsKnownId: '',
-    spellsKnownFormula: '',
-    isRitualCaster: false
-  });
+  const [spellcasting, setSpellcasting] = useState(buildEmptySubclassSpellcastingState());
 
   // Unique Options
   const [excludedOptionIds, setExcludedOptionIds] = useState<Record<string, string[]>>({});
@@ -222,19 +250,7 @@ export default function SubclassEditor() {
           setImageUrl(data.imageUrl || '');
           setTagIds(data.tagIds || []);
           setAdvancements(normalizeEditorAdvancements(data.advancements || [], 1));
-          setSpellcasting(data.spellcasting || {
-            hasSpellcasting: false,
-            description: '',
-            level: 3,
-            ability: 'INT',
-            type: 'prepared',
-            progression: 'none',
-            progressionId: '',
-            altProgressionId: '',
-            spellsKnownId: '',
-            spellsKnownFormula: '',
-            isRitualCaster: false
-          });
+          setSpellcasting(normalizeSubclassSpellcastingForEditor(data.spellcasting));
           setExcludedOptionIds(data.excludedOptionIds || {});
 
           const actualClassId = data.classId || classId;
@@ -315,14 +331,7 @@ export default function SubclassEditor() {
       return;
     }
 
-    const normalizedSpellcasting = spellcasting && typeof spellcasting === 'object'
-      ? {
-          ...spellcasting,
-          ability: String(spellcasting.ability || '').toUpperCase(),
-          type: String(spellcasting.type || 'prepared').toLowerCase(),
-          level: Number(spellcasting.level || 1) || 1
-        }
-      : spellcasting;
+    const normalizedSpellcasting = normalizeSubclassSpellcastingForSave(spellcasting);
 
     const canonicalSubclassProgression = buildCanonicalSubclassProgression({
       advancements: normalizeEditorAdvancements(advancements, 1),
@@ -339,7 +348,6 @@ export default function SubclassEditor() {
       lore,
       imageUrl,
       tagIds,
-      spellcasting: normalizedSpellcasting,
       excludedOptionIds,
       advancements: canonicalSubclassProgression.customAdvancements,
       updatedAt: serverTimestamp(),
@@ -351,11 +359,16 @@ export default function SubclassEditor() {
 
     try {
       if (id) {
-        await updateDoc(doc(db, 'subclasses', id), subclassData);
+        await updateDoc(doc(db, 'subclasses', id), {
+          ...subclassData,
+          spellcasting: normalizedSpellcasting ?? deleteField()
+        });
         toast.success("Subclass updated");
       } else {
         const newRef = doc(collection(db, 'subclasses'));
-        await setDoc(newRef, subclassData);
+        const createPayload: any = { ...subclassData };
+        if (normalizedSpellcasting) createPayload.spellcasting = normalizedSpellcasting;
+        await setDoc(newRef, createPayload);
         toast.success("Subclass created");
         navigate(`/compendium/subclasses/edit/${newRef.id}`);
       }

@@ -38,6 +38,7 @@ import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor'
 import TagManager from './pages/compendium/TagManager';
 import TagGroupEditor from './pages/compendium/TagGroupEditor';
 import SkillsEditor from './pages/compendium/SkillsEditor';
+import SpellList from './pages/compendium/SpellList';
 import ToolsEditor from './pages/compendium/ToolsEditor';
 import SpellsEditor from './pages/compendium/SpellsEditor';
 import FeatsEditor from './pages/compendium/FeatsEditor';
@@ -224,7 +225,8 @@ export default function App() {
                   <Route path="/compendium/classes/edit/:id" element={<ClassEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/subclasses/new" element={<SubclassEditor />} />
                   <Route path="/compendium/subclasses/edit/:id" element={<SubclassEditor />} />
-                  <Route path="/compendium/spells" element={<SpellsEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/spells" element={<SpellList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/spells/manage" element={<SpellsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/feats" element={<FeatsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/items" element={<ItemsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/new" element={<ScalingEditor userProfile={effectiveProfile} />} />

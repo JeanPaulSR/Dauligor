@@ -1,4 +1,5 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
+import { exportSpellFolder } from "./export-service.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
 import { openSpellPreparationManager } from "./spell-preparation-app.js";
@@ -171,11 +172,11 @@ function registerLauncherControl() {
 
 function registerSidebarButtons() {
   Hooks.on("renderActorDirectory", (_app, html) => {
-    injectSidebarDirectoryButtons(resolveHookRoot(html));
+    injectSidebarDirectoryButtons(resolveHookRoot(html), { directoryType: "Actor" });
   });
 
   Hooks.on("renderItemDirectory", (_app, html) => {
-    injectSidebarDirectoryButtons(resolveHookRoot(html));
+    injectSidebarDirectoryButtons(resolveHookRoot(html), { directoryType: "Item" });
   });
 }
 
@@ -445,7 +446,7 @@ function injectSettingsButtons(root) {
   anchor.insertAdjacentElement("afterend", wrapper);
 }
 
-function injectSidebarDirectoryButtons(root) {
+function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   if (!game.user?.isGM) return;
   if (!root || root.querySelector?.(`[data-${MODULE_ID}-sidebar-tools]`)) return;
 
@@ -455,11 +456,21 @@ function injectSidebarDirectoryButtons(root) {
   const wrapper = document.createElement("div");
   wrapper.className = "header-actions action-buttons dauligor-directory-tools";
   wrapper.setAttribute(`data-${MODULE_ID}-sidebar-tools`, "true");
+  const exportSpellButton = directoryType === "Item"
+    ? `
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-spell-folder" title="Export a Foundry spell folder for Dauligor spell import research">
+      <i class="fas fa-wand-magic-sparkles"></i>
+      <span>Export Spell Folder</span>
+    </button>
+  `
+    : "";
+
   wrapper.innerHTML = `
     <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--primary" data-action="open-importer" title="Open Dauligor Importer">
       <i class="fas fa-book"></i>
       <span>Dauligor Import</span>
     </button>
+    ${exportSpellButton}
     <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--icon" data-action="open-options" title="Open Dauligor Options">
       <i class="fas fa-screwdriver-wrench"></i>
     </button>
@@ -468,11 +479,116 @@ function injectSidebarDirectoryButtons(root) {
   wrapper.querySelector(`[data-action="open-importer"]`)?.addEventListener("click", async () => {
     await openDauligorImporter();
   });
+  wrapper.querySelector(`[data-action="export-spell-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportSpellFolder();
+  });
   wrapper.querySelector(`[data-action="open-options"]`)?.addEventListener("click", async () => {
     await openLauncher();
   });
 
   anchor.insertAdjacentElement("afterend", wrapper);
+}
+
+function getItemFolderPath(folder) {
+  if (!folder) return "";
+
+  const parts = [];
+  let current = folder;
+  while (current) {
+    parts.unshift(current.name ?? "");
+    current = current.folder ?? null;
+  }
+
+  return parts.filter(Boolean).join("/");
+}
+
+function collectSpellFolderChoices() {
+  const folders = Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Item")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Item") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+
+      const spellCount = Array.from(game.items ?? []).filter((item) =>
+        item.type === "spell"
+        && descendants.has(item.folder?.id ?? "")
+      ).length;
+
+      return {
+        folder,
+        path: getItemFolderPath(folder),
+        spellCount
+      };
+    })
+    .filter((entry) => entry.spellCount > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  return folders;
+}
+
+async function promptAndExportSpellFolder() {
+  const choices = collectSpellFolderChoices();
+  if (!choices.length) {
+    notifyWarn("No Item folders with spell items were found in this world.");
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.spellCount} spells)`)}
+    </option>
+  `).join("");
+
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Export Spell Folder" },
+      content: `
+        <div class="form-group">
+          <label>Spell folder</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all native Foundry spell items in the selected Item folder as a Dauligor research/import batch.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked)
+        })
+      },
+      rejectClose: false,
+      modal: true
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected spell folder could not be found.");
+    return;
+  }
+
+  await exportSpellFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
 }
 
 function injectSpellTabButton(appLike, root) {
