@@ -309,9 +309,10 @@ Latest spell-compendium details:
   - summary docs carry the fields needed for search/filter/list rows: name, identifier, sourceId, imageUrl, level, school, tagIds, and light source metadata
   - full spell docs remain in `spells`
 - `firestore.rules` now includes an explicit `spellSummaries/{spellId}` rule block so admin create/update/delete of summary docs follow the same authorization model as `spells`
-- `SpellList.tsx` now queries `spellSummaries` for the left list and filters, then fetches the full spell doc from `spells` only when a specific spell is selected
-- `SpellsEditor.tsx` manual editor now queries `spellSummaries` for the left draft selector and fetches the full spell doc only when a draft is opened
-- `SpellImportWorkbench.tsx` now uses `spellSummaries` for existing-entry matching instead of subscribing to the full `spells` collection
+- client spell pages no longer open live listeners on `spellSummaries` directly; `subscribeSpellSummaries(...)` currently reads from the canonical `spells` collection and derives summary rows client-side, which avoids permission-denied listener failures until the `spellSummaries` rules are actually deployed
+- `SpellList.tsx` now uses `subscribeSpellSummaries(...)` for the left list and filters, then fetches the full spell doc from `spells` only when a specific spell is selected
+- `SpellsEditor.tsx` manual editor now uses `subscribeSpellSummaries(...)` for the left draft selector and fetches the full spell doc only when a draft is opened
+- `SpellImportWorkbench.tsx` now uses `subscribeSpellSummaries(...)` for existing-entry matching instead of subscribing to the full `spells` collection
 - `VirtualizedList.tsx` now virtualizes the left spell rows in the public spell list and the manual spell manager so large spell counts do not render every row at once
 - admin spell pages automatically backfill `spellSummaries` from existing `spells` docs when the summary index is empty
 - display-only token flattening now also handles unlabeled Foundry references like `@...[status]` by rendering `Status`

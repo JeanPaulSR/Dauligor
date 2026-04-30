@@ -20,7 +20,7 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { FilterBar } from '../../components/compendium/FilterBar';
 import SpellArtPreview from '../../components/compendium/SpellArtPreview';
 import VirtualizedList from '../../components/ui/VirtualizedList';
-import { backfillSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
+import { subscribeSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
 
 type SourceRecord = {
   id: string;
@@ -84,17 +84,15 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [selectedSpellId, setSelectedSpellId] = useState('');
   const [spellDetailsById, setSpellDetailsById] = useState<Record<string, SpellRecord>>({});
   const [loadingSelectedSpell, setLoadingSelectedSpell] = useState(false);
-  const [backfillingIndex, setBackfillingIndex] = useState(false);
-  const [attemptedBackfill, setAttemptedBackfill] = useState(false);
   const [sourceFilterIds, setSourceFilterIds] = useState<string[]>([]);
   const [levelFilters, setLevelFilters] = useState<string[]>([]);
   const [schoolFilters, setSchoolFilters] = useState<string[]>([]);
   const [tagFilterIds, setTagFilterIds] = useState<string[]>([]);
 
   useEffect(() => {
-    const unsubscribeSpells = onSnapshot(
-      query(collection(db, 'spellSummaries'), orderBy('name', 'asc')),
-      (snapshot) => setSpells(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
+    const unsubscribeSpells = subscribeSpellSummaries(
+      (records) => setSpells(records),
+      (error) => console.error('Error loading spells:', error)
     );
 
     const unsubscribeSources = onSnapshot(
@@ -119,14 +117,6 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       unsubscribeTags();
     };
   }, []);
-
-  useEffect(() => {
-    if (spells.length > 0 || attemptedBackfill || !isAdmin) return;
-    setAttemptedBackfill(true);
-    setBackfillingIndex(true);
-    void backfillSpellSummaries()
-      .finally(() => setBackfillingIndex(false));
-  }, [attemptedBackfill, isAdmin, spells.length]);
 
   const sourceById = useMemo(() => Object.fromEntries(sources.map((source) => [source.id, source])), [sources]);
   const tagsByGroup = useMemo(() => {
@@ -315,11 +305,11 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                 <span>School</span>
                 <span>Source</span>
               </div>
-              {filteredSpells.length === 0 ? (
-                <div className="px-6 py-12 text-center text-ink/45">
-                  {backfillingIndex ? 'Building spell index...' : 'No spells match the current search and filters.'}
-                </div>
-              ) : (
+                  {filteredSpells.length === 0 ? (
+                    <div className="px-6 py-12 text-center text-ink/45">
+                      No spells match the current search and filters.
+                    </div>
+                  ) : (
                 <VirtualizedList
                   items={filteredSpells}
                   height={SPELL_LIST_HEIGHT}

@@ -19,7 +19,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import VirtualizedList from '../../components/ui/VirtualizedList';
-import { backfillSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
+import { subscribeSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
 
 const SPELL_SCHOOLS = [
   ['abj', 'Abjuration'],
@@ -159,17 +159,14 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [purging, setPurging] = useState(false);
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [backfillingIndex, setBackfillingIndex] = useState(false);
-  const [attemptedBackfill, setAttemptedBackfill] = useState(false);
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
 
   useEffect(() => {
     if (!isAdmin) return;
 
-    const unsubscribeEntries = onSnapshot(
-      query(collection(db, 'spellSummaries'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setEntries(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+    const unsubscribeEntries = subscribeSpellSummaries(
+      (records) => {
+        setEntries(records);
         setLoading(false);
       },
       (error) => {
@@ -191,14 +188,6 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       unsubscribeSources();
     };
   }, [isAdmin]);
-
-  useEffect(() => {
-    if (entries.length > 0 || attemptedBackfill || !isAdmin) return;
-    setAttemptedBackfill(true);
-    setBackfillingIndex(true);
-    void backfillSpellSummaries()
-      .finally(() => setBackfillingIndex(false));
-  }, [attemptedBackfill, entries.length, isAdmin]);
 
   useEffect(() => {
     if (editingId) return;
@@ -489,7 +478,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     {loading ? (
                       <div className="px-3 py-8 text-sm text-ink/40 italic">Loading...</div>
                     ) : filteredEntries.length === 0 ? (
-                      <div className="px-3 py-8 text-sm text-ink/40 italic">{backfillingIndex ? 'Building spell index...' : 'No spells match the current search.'}</div>
+                      <div className="px-3 py-8 text-sm text-ink/40 italic">No spells match the current search.</div>
                     ) : (
                       <VirtualizedList
                         items={filteredEntries}

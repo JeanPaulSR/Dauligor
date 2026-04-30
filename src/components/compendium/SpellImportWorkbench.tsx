@@ -6,7 +6,7 @@ import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { adminImportSpellBatch, adminUpsertSpell } from '../../lib/spellAdminApi';
 import { cn } from '../../lib/utils';
 import { buildSpellImportCandidates, formatFoundrySpellDescriptionForDisplay, type FoundrySpellFolderExport, type SpellImportCandidate } from '../../lib/spellImport';
-import { type SpellSummaryRecord } from '../../lib/spellSummary';
+import { subscribeSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -82,9 +82,9 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
       (snapshot) => setSources(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
     );
 
-    const unsubscribeSpells = onSnapshot(
-      query(collection(db, 'spellSummaries'), orderBy('name', 'asc')),
-      (snapshot) => setExistingEntries(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
+    const unsubscribeSpells = subscribeSpellSummaries(
+      (records) => setExistingEntries(records),
+      (error) => console.error('Error loading spell summaries:', error)
     );
 
     const unsubscribeTagGroups = onSnapshot(

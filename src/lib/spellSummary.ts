@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, limit, orderBy, query, setDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 
 export type SpellSummaryRecord = {
@@ -39,6 +39,30 @@ export function buildSpellSummaryPayload(spell: Record<string, any>) {
   };
 }
 
+function mapSpellDocsToSummaries(snapshot: any): SpellSummaryRecord[] {
+  return snapshot.docs.map((docSnap: any) => ({
+    id: docSnap.id,
+    ...buildSpellSummaryPayload({ id: docSnap.id, ...docSnap.data() })
+  }));
+}
+
+export function subscribeSpellSummaries(
+  onData: (records: SpellSummaryRecord[]) => void,
+  onError?: (error: unknown) => void,
+  onModeChange?: (mode: 'spellSummaries' | 'spells-fallback') => void
+) {
+  // Client reads currently use the canonical spells collection directly.
+  // The server still maintains spellSummaries for future lightweight reads,
+  // but avoiding a direct spellSummaries listener keeps the app functional
+  // even before updated Firestore rules are deployed.
+  onModeChange?.('spells-fallback');
+  return onSnapshot(
+    query(collection(db, 'spells'), orderBy('name', 'asc')),
+    (snapshot) => onData(mapSpellDocsToSummaries(snapshot)),
+    (error) => onError?.(error)
+  );
+}
+
 export async function upsertSpellSummary(spellId: string, spell: Record<string, any>) {
   await setDoc(doc(db, 'spellSummaries', spellId), buildSpellSummaryPayload(spell), { merge: true });
 }
@@ -59,24 +83,31 @@ export async function spellSummariesExist() {
 }
 
 export async function backfillSpellSummaries() {
-  const spellsSnapshot = await getDocs(query(collection(db, 'spells'), orderBy('name', 'asc')));
-  const docs = spellsSnapshot.docs;
-  if (!docs.length) return { count: 0 };
+  try {
+    const spellsSnapshot = await getDocs(query(collection(db, 'spells'), orderBy('name', 'asc')));
+    const docs = spellsSnapshot.docs;
+    if (!docs.length) return { count: 0 };
 
-  let count = 0;
-  for (let start = 0; start < docs.length; start += 400) {
-    const batch = writeBatch(db);
-    const chunk = docs.slice(start, start + 400);
-    for (const spellDoc of chunk) {
-      batch.set(
-        doc(db, 'spellSummaries', spellDoc.id),
-        buildSpellSummaryPayload({ id: spellDoc.id, ...spellDoc.data() }),
-        { merge: true }
-      );
-      count += 1;
+    let count = 0;
+    for (let start = 0; start < docs.length; start += 400) {
+      const batch = writeBatch(db);
+      const chunk = docs.slice(start, start + 400);
+      for (const spellDoc of chunk) {
+        batch.set(
+          doc(db, 'spellSummaries', spellDoc.id),
+          buildSpellSummaryPayload({ id: spellDoc.id, ...spellDoc.data() }),
+          { merge: true }
+        );
+        count += 1;
+      }
+      await batch.commit();
     }
-    await batch.commit();
-  }
 
-  return { count };
+    return { count };
+  } catch (error: any) {
+    if (error?.code === 'permission-denied') {
+      return { count: 0, skipped: true, reason: 'permission-denied' as const };
+    }
+    throw error;
+  }
 }
