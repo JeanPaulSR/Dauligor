@@ -103,9 +103,8 @@ export default function Sidebar({
         path: '/compendium',
         subItems: [
           { label: 'Classes', path: '/compendium/classes' },
-          { label: 'Subclasses', path: '/compendium/subclasses' },
+          { label: 'Spells', path: '/compendium/spells' },
           ...(isAdmin ? [
-            { label: 'Spells', path: '/compendium/spells' },
             { label: 'Feats', path: '/compendium/feats' },
             { label: 'Items', path: '/compendium/items' },
           ] : []),

@@ -258,6 +258,18 @@ Latest spell-compendium details:
 - `FilterBar.tsx` now supports custom filter content and labeling so ClassList can keep its tag-logic behavior while SpellList can supply source/level/school/tag sections through the same window component
 - the preferred spell-filter styling is the ClassList filter language, not a lighter spell-specific variation:
   - `ADVANCED FILTERS` title treatment
+
+Latest Foundry window-structure capture details:
+
+- the module now adds a temporary GM-only header export button to Foundry item and activity-style windows
+- this button exports:
+  - the backing document envelope when available
+  - prepared sheet/app context from `_prepareContext()` or `getData()`
+  - rendered window HTML
+  - static template metadata such as `PARTS`, `TABS`, and default options when exposed by the app class
+- this was added specifically to let us capture real spell / feat / item / activity window structures for Dauligor parity work
+- it now also covers standalone `ActiveEffect` config windows
+- this debug export button should be removed later after enough reference captures have been saved
   - section headers styled like class filter groups
   - `Include All | Clear` controls in the section header row
   - `filter-tag` / `btn-gold` button styling for options
@@ -316,6 +328,23 @@ Latest spell-compendium details:
 - `VirtualizedList.tsx` now virtualizes the left spell rows in the public spell list and the manual spell manager so large spell counts do not render every row at once
 - admin spell pages automatically backfill `spellSummaries` from existing `spells` docs when the summary index is empty
 - display-only token flattening now also handles unlabeled Foundry references like `@...[status]` by rendering `Status`
+- Firestore spell permissions appear to have stabilized after propagation; keep the admin API write paths in place, but the latest user verification suggests the earlier permission-denied behavior was at least partly timing/propagation-related
+- sidebar compendium navigation now shows `Spells` directly under `Classes` and no longer links to the missing `/compendium/subclasses` page
+- the compendium landing page also removes the dead `Subclasses` card and surfaces `Spells` in the Character Options section instead
+- `SpellList.tsx` now shows a real `Loading spells...` state during initial hydrate so users do not briefly see an incorrect empty-state message before the list populates
+- new implementation note saved at `E:/DnD/Professional/Dev/Dauligor/docs/foundry-item-activity-effects-authoring-plan.md`
+- this doc defines the current preferred direction for spell / feature / item cards, activities, and effects:
+  - Foundry `dnd5e` is the structural source of truth for these editors
+  - Dauligor should copy the item-window shell and tabs (`Description`, `Details`, `Activities`, `Effects`) instead of inventing a separate editor model
+  - type-specific details panels should follow Foundry’s per-item-type splits such as `details-spell`, `details-feat`, `details-weapon`, etc.
+  - activity creation/editing should follow Foundry’s activity selector and per-type activity forms, beginning with high-value activity types like attack, damage, save, heal, utility, and cast
+  - effects should remain structured and Foundry-compatible even when early editor passes still rely on partial UI plus raw JSON fallback
+  - description content can remain BBCode-authored in Dauligor, but should round-trip cleanly back to Foundry-friendly HTML on export
+  - immediate recommended build order is shared item-editor shell -> spell tab parity -> activity system -> feature/feat parity -> broader item editors
+- local Foundry template references recorded in that doc include:
+  - `C:/Users/Jean/AppData/Local/FoundryVTT/Data/systems/dnd5e/templates/items/*`
+  - `C:/Users/Jean/AppData/Local/FoundryVTT/Data/systems/dnd5e/templates/activity/*`
+  - `C:/Users/Jean/AppData/Local/FoundryVTT/Data/systems/dnd5e/templates/shared/*`
 
 ## Next Major Workstream
 

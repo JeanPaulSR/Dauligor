@@ -362,6 +362,172 @@ export async function exportSpellFolder(folder, { includeSubfolders = true } = {
   if (shouldDownload) downloadJson(payload, `${folder.name}-spells-export`);
 }
 
+function serializeForJson(value, { seen = new WeakSet(), depth = 0, maxDepth = 10 } = {}) {
+  if (value == null) return value;
+  if (depth > maxDepth) return "[MaxDepth]";
+
+  const valueType = typeof value;
+  if (["string", "number", "boolean"].includes(valueType)) return value;
+  if (valueType === "bigint") return value.toString();
+  if (valueType === "function") return `[Function ${value.name || "anonymous"}]`;
+  if (valueType === "symbol") return value.toString();
+
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof RegExp) return value.toString();
+  if (value instanceof Set) {
+    return Array.from(value, (entry) => serializeForJson(entry, { seen, depth: depth + 1, maxDepth }));
+  }
+  if (value instanceof Map) {
+    return Object.fromEntries(Array.from(value.entries(), ([key, entry]) => [
+      String(key),
+      serializeForJson(entry, { seen, depth: depth + 1, maxDepth })
+    ]));
+  }
+  if (value instanceof HTMLElement) {
+    return {
+      tagName: value.tagName,
+      className: value.className,
+      outerHTML: value.outerHTML
+    };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => serializeForJson(entry, { seen, depth: depth + 1, maxDepth }));
+  }
+
+  if (valueType === "object") {
+    if (seen.has(value)) return "[Circular]";
+    seen.add(value);
+
+    if (typeof value.toObject === "function" && value.documentName) {
+      try {
+        return {
+          documentName: value.documentName,
+          uuid: value.uuid ?? null,
+          name: value.name ?? null,
+          type: value.type ?? null,
+          source: foundry.utils.deepClone(value.toObject())
+        };
+      } catch (_error) {
+        return {
+          documentName: value.documentName,
+          uuid: value.uuid ?? null,
+          name: value.name ?? null,
+          type: value.type ?? null
+        };
+      }
+    }
+
+    const output = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "parent" || key === "collection") continue;
+      output[key] = serializeForJson(entry, { seen, depth: depth + 1, maxDepth });
+    }
+    return output;
+  }
+
+  return String(value);
+}
+
+async function prepareApplicationContext(app) {
+  if (!app) return null;
+
+  try {
+    if (typeof app._prepareContext === "function") {
+      return await app._prepareContext({});
+    }
+  } catch (error) {
+    return {
+      error: `_prepareContext failed: ${error.message}`
+    };
+  }
+
+  try {
+    if (typeof app.getData === "function") {
+      return await app.getData({});
+    }
+  } catch (error) {
+    return {
+      error: `getData failed: ${error.message}`
+    };
+  }
+
+  return null;
+}
+
+function collectApplicationTemplateMetadata(app) {
+  const ctor = app?.constructor;
+  return serializeForJson({
+    constructorName: ctor?.name ?? null,
+    parts: ctor?.PARTS ?? null,
+    tabs: ctor?.TABS ?? null,
+    defaultOptions: ctor?.DEFAULT_OPTIONS ?? null
+  });
+}
+
+function resolveAppDocument(documentLike) {
+  if (!documentLike) return null;
+  if (typeof documentLike.toObject === "function") return documentLike;
+  if (typeof documentLike.object?.toObject === "function") return documentLike.object;
+  return null;
+}
+
+function getAppRootElement(app) {
+  return app?.element?.[0]
+    ?? app?.element
+    ?? app?.window?.element?.[0]
+    ?? app?.window?.element
+    ?? null;
+}
+
+export async function exportApplicationWindow(app) {
+  if (!app) {
+    notifyWarn("No application window was selected to export.");
+    return;
+  }
+
+  const root = getAppRootElement(app);
+  const document = resolveAppDocument(app.document ?? app.object ?? null);
+  const context = await prepareApplicationContext(app);
+
+  const payload = {
+    kind: "dauligor.window-export.v1",
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    application: {
+      id: app.id ?? null,
+      appId: app.appId ?? null,
+      constructorName: app.constructor?.name ?? null,
+      title: app.title ?? app.window?.title ?? document?.name ?? null,
+      documentName: document?.documentName ?? app.document?.documentName ?? null,
+      uuid: document?.uuid ?? app.document?.uuid ?? null,
+      type: document?.type ?? app.document?.type ?? null,
+      templates: collectApplicationTemplateMetadata(app)
+    },
+    document: document ? buildDocumentEnvelope(document) : null,
+    context: serializeForJson(context),
+    renderedHtml: root?.outerHTML ?? null
+  };
+
+  log("Prepared application window export", payload);
+  notifyInfo(`Prepared window export for "${payload.application.title ?? payload.application.constructorName ?? "window"}".`);
+
+  const shouldDownload = await chooseDownload({
+    title: "Export Window Structure",
+    name: payload.application.title ?? payload.application.constructorName ?? "window"
+  });
+
+  if (!shouldDownload) return;
+
+  const filenameBase = [
+    payload.application.documentName || "window",
+    payload.application.type || payload.application.constructorName || "app",
+    payload.application.title || document?.name || "export"
+  ].filter(Boolean).join("-");
+
+  downloadJson(payload, filenameBase);
+}
+
 export function buildActorClassSnapshot(actor) {
   if (!actor) return null;
 

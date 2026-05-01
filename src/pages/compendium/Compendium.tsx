@@ -6,7 +6,6 @@ import {
   Sword, 
   Wand2, 
   Scroll, 
-  Shield, 
   Users, 
   Hammer, 
   Dna,
@@ -21,7 +20,7 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
       title: 'Character Options',
       items: [
         { name: 'Classes', icon: Sword, path: '/compendium/classes', description: 'Core character classes and their progressions.' },
-        { name: 'Subclasses', icon: Shield, path: '/compendium/subclasses', description: 'Specializations for each class.' },
+        { name: 'Spells', icon: Wand2, path: '/compendium/spells', description: 'Browse imported spell records by source, level, school, and tags.' },
         { name: 'Races', icon: Dna, path: '/compendium/races', description: 'Species and lineages of the world.' },
         ...(userProfile?.role === 'admin' ? [
           { name: 'Feats', icon: Scroll, path: '/compendium/feats', description: 'Admin-only development manager for feat-style items.' },
@@ -33,7 +32,6 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
     {
       title: 'Magic & Equipment',
       items: [
-        { name: 'Spells', icon: Wand2, path: '/compendium/spells', description: 'Browse imported spell records by source, level, school, and tags.' },
         ...(userProfile?.role === 'admin' ? [
           { name: 'Spell Manager', icon: Wand2, path: '/compendium/spells/manage', description: 'Admin-only import and development manager for Foundry-facing spells.' },
           { name: 'Items', icon: Hammer, path: '/compendium/items', description: 'Admin-only development manager for non-spell items.' },

@@ -1,5 +1,5 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
-import { exportSpellFolder } from "./export-service.js";
+import { exportApplicationWindow, exportSpellFolder } from "./export-service.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
 import { openSpellPreparationManager } from "./spell-preparation-app.js";
@@ -185,12 +185,18 @@ function registerSettingsUiButtons() {
     injectSettingsButtons(resolveHookRoot(html));
   });
 
+  Hooks.on("renderActiveEffectConfig", (app, html) => {
+    injectWindowExportButton(app, resolveHookRoot(html));
+  });
+
   Hooks.on("renderApplicationV2", (app, element) => {
-    injectSpellTabButton(app, resolveHookRoot(element));
+    const root = resolveHookRoot(element);
+    injectSpellTabButton(app, root);
+    injectWindowExportButton(app, root);
 
     const isSettingsConfig = app?.constructor?.name === "SettingsConfig" || app?.id === "settings";
     if (!isSettingsConfig) return;
-    injectSettingsButtons(resolveHookRoot(element));
+    injectSettingsButtons(root);
   });
 }
 
@@ -628,6 +634,62 @@ function injectSpellTabButton(appLike, root) {
   }
 
   spellsTab.prepend(wrapper);
+}
+
+function shouldExposeWindowExport(app) {
+  if (!game.user?.isGM) return false;
+  if (!app) return false;
+
+  const constructorName = String(app.constructor?.name ?? "");
+  const documentName = String(app.document?.documentName ?? app.object?.documentName ?? "");
+
+  if (documentName === "Item" || documentName === "Activity" || documentName === "ActiveEffect") return true;
+  if (constructorName.includes("ActiveEffect")) return true;
+  if (constructorName.includes("ActivitySheet")) return true;
+  if (constructorName.includes("AttackSheet")) return true;
+  if (constructorName.includes("CastSheet")) return true;
+  if (constructorName.includes("CheckSheet")) return true;
+  if (constructorName.includes("DamageSheet")) return true;
+  if (constructorName.includes("EnchantSheet")) return true;
+  if (constructorName.includes("ForwardSheet")) return true;
+  if (constructorName.includes("HealSheet")) return true;
+  if (constructorName.includes("Order")) return true;
+  if (constructorName.includes("SaveSheet")) return true;
+  if (constructorName.includes("SummonSheet")) return true;
+  if (constructorName.includes("TransformSheet")) return true;
+  if (constructorName.includes("UtilitySheet")) return true;
+  if (constructorName.includes("ActivityChoiceDialog")) return true;
+
+  return false;
+}
+
+function injectWindowExportButton(app, root) {
+  if (!shouldExposeWindowExport(app)) return;
+  if (!root) return;
+  if (root.querySelector?.(`[data-${MODULE_ID}-window-export]`)) return;
+
+  const header = root.querySelector(".window-header");
+  if (!header) return;
+
+  const anchor = header.querySelector(".header-control-buttons, .window-controls, .header-actions, .controls");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "header-control icon";
+  button.title = "Temporary Dauligor debug export for this window";
+  button.setAttribute(`data-${MODULE_ID}-window-export`, "true");
+  button.innerHTML = `<i class="fas fa-file-export"></i>`;
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await exportApplicationWindow(app);
+  });
+
+  if (anchor) {
+    anchor.prepend(button);
+    return;
+  }
+
+  header.append(button);
 }
 
 async function openDauligorLevelUp(actorLike) {

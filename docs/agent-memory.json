@@ -121,6 +121,9 @@
       "class references must key by stable identifier rather than display name so duplicate class names on a sheet do not break resolution",
       "class-column references must resolve from linked ScaleValue / scaling identifiers rather than only from the column label",
       "future effects/reference work should review Foundry wiki guidance and Midi-QOL effect conventions"
+      ,
+      "the Foundry module now adds a temporary GM-only header export button to item, activity-style, and standalone ActiveEffect config windows so we can capture document envelopes, prepared context, rendered HTML, and static template metadata for parity work",
+      "that temporary Foundry window export button should be removed later after enough spell, feat, item, and activity reference captures have been saved"
     ]
   },
   "uniqueOptionGroupEditor": {
@@ -474,13 +477,42 @@
           "SpellList.tsx now uses subscribeSpellSummaries(...) for search/filter/list rows and fetches the full spell doc only when a spell is selected",
           "SpellsEditor.tsx manual editor now uses subscribeSpellSummaries(...) for the left draft selector and fetches the full spell doc only when a draft is opened",
           "SpellImportWorkbench.tsx now uses subscribeSpellSummaries(...) for existing-entry matching instead of subscribing to the full spells collection",
-          "admin spell pages automatically backfill spellSummaries from existing spells docs when the summary index is empty"
+          "admin spell pages automatically backfill spellSummaries from existing spells docs when the summary index is empty",
+          "latest user verification suggests the earlier spell permission-denied behavior at least partly reflected Firestore permission propagation timing; keep the admin API write paths in place"
         ],
         "virtualization": [
           "src/components/ui/VirtualizedList.tsx now virtualizes large fixed-height spell lists",
           "SpellList.tsx now virtualizes the public spell rows",
           "SpellsEditor.tsx manual editor now virtualizes the draft selector rows"
-        ]
+        ],
+        "navigationAndLoading": [
+          "Sidebar.tsx now lists Spells directly under Classes in the Compendium section and no longer links to the missing /compendium/subclasses page",
+          "Compendium.tsx removes the dead Subclasses card and surfaces Spells in Character Options instead of leaving a broken subclass landing link",
+          "SpellList.tsx now shows a Loading spells... state during initial hydrate so users do not briefly see a false empty-state message before the list populates"
+        ],
+        "itemActivityEffectsAuthoringPlan": {
+          "doc": "E:/DnD/Professional/Dev/Dauligor/docs/foundry-item-activity-effects-authoring-plan.md",
+          "coreDirection": [
+            "Foundry dnd5e is the structural source of truth for spell, feat/feature, and item editors",
+            "Dauligor should copy the item window shell and tabs: Description, Details, Activities, Effects",
+            "type-specific details panels should follow Foundry's per-item-type detail splits",
+            "activity creation/editing should follow Foundry's activity selector and per-type activity forms",
+            "effects should remain structured and Foundry-compatible even when early editor passes still rely on partial UI plus raw JSON fallback",
+            "description content can stay BBCode-authored in Dauligor so long as it round-trips back to Foundry-friendly HTML on export"
+          ],
+          "recommendedBuildOrder": [
+            "shared item-editor shell",
+            "spell tab parity",
+            "activity system",
+            "feature/feat parity",
+            "broader item editors"
+          ],
+          "foundryTemplateRoots": [
+            "C:/Users/Jean/AppData/Local/FoundryVTT/Data/systems/dnd5e/templates/items",
+            "C:/Users/Jean/AppData/Local/FoundryVTT/Data/systems/dnd5e/templates/activity",
+            "C:/Users/Jean/AppData/Local/FoundryVTT/Data/systems/dnd5e/templates/shared"
+          ]
+        }
       }
     }
   },

@@ -74,11 +74,11 @@ const SCHOOL_OPTIONS = [
 ];
 
 export default function SpellList({ userProfile }: { userProfile: any }) {
-  const isAdmin = userProfile?.role === 'admin';
   const [spells, setSpells] = useState<SpellSummaryRecord[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [tagGroups, setTagGroups] = useState<TagGroupRecord[]>([]);
   const [allTags, setAllTags] = useState<TagRecord[]>([]);
+  const [loadingSpells, setLoadingSpells] = useState(true);
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedSpellId, setSelectedSpellId] = useState('');
@@ -91,8 +91,14 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
   useEffect(() => {
     const unsubscribeSpells = subscribeSpellSummaries(
-      (records) => setSpells(records),
-      (error) => console.error('Error loading spells:', error)
+      (records) => {
+        setSpells(records);
+        setLoadingSpells(false);
+      },
+      (error) => {
+        console.error('Error loading spells:', error);
+        setLoadingSpells(false);
+      }
     );
 
     const unsubscribeSources = onSnapshot(
@@ -224,7 +230,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {isAdmin ? (
+          {userProfile?.role === 'admin' ? (
             <Link to="/compendium/spells/manage">
               <Button type="button" variant="outline" className="border-gold/20 text-gold hover:bg-gold/5">
                 Spell Manager
@@ -305,10 +311,14 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                 <span>School</span>
                 <span>Source</span>
               </div>
-                  {filteredSpells.length === 0 ? (
-                    <div className="px-6 py-12 text-center text-ink/45">
-                      No spells match the current search and filters.
-                    </div>
+              {loadingSpells ? (
+                <div className="px-6 py-12 text-center text-ink/45">
+                  Loading spells...
+                </div>
+              ) : filteredSpells.length === 0 ? (
+                <div className="px-6 py-12 text-center text-ink/45">
+                  No spells match the current search and filters.
+                </div>
                   ) : (
                 <VirtualizedList
                   items={filteredSpells}
