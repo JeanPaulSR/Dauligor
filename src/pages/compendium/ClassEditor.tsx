@@ -4227,9 +4227,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
                 {featureTab === 'activities' && (
                   <div className="pt-2">
-                    <ActivityEditor 
+                    <ActivityEditor
                       activities={editingFeature.activities || {}}
                       onChange={(acts) => setEditingFeature({ ...editingFeature, activities: acts })}
+                      availableEffects={editingFeature.effects || []}
                     />
                   </div>
                 )}

@@ -1,6 +1,6 @@
 {
-  "version": 6,
-  "updatedAt": "2026-04-28",
+  "version": 7,
+  "updatedAt": "2026-05-02",
   "paths": {
     "appRepo": "E:/DnD/Professional/Dev/Dauligor",
     "moduleDev": "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing",
@@ -288,9 +288,15 @@
     "activities": {
       "primaryFile": "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/ActivityEditor.tsx",
       "currentState": [
-        "activity type coverage is already broad",
-        "the current editor is a useful foundation",
-        "it is still a custom semantic editor rather than a closer Foundry-parity editor"
+        "activity type coverage is already broad (attack, cast, check, damage, enchant, forward, heal, save, summon, transform, utility)",
+        "RECOVERY_PERIOD_OPTIONS now uses correct Foundry keys: lr, sr, day, dawn, dusk, turn, turnStart, turnEnd, round, recharge, charges — was previously using shortRest/longRest which Foundry does not recognize",
+        "CONSUMPTION_TARGET_TYPES now uses Foundry-native types: activityUses, itemUses, material, hitDice, spellSlots, attribute — removed non-Foundry resource and custom types",
+        "DAMAGE_TYPE_OPTIONS added as proper multi-select button group (acid through thunder plus healing/temphp) — replaces free-text CSV input",
+        "save abilities converted from comma-separated text input to multi-select ability toggle buttons (str/dex/con/int/wis/cha)",
+        "DC calculation options now include 'initial' (Item Default) matching Foundry's actual options",
+        "onSave damage select already existed for save activities (half/none)",
+        "module's normalizeSemanticAttack handles attack.type (app flat) → attack.type.value (Foundry nested) conversion transparently",
+        "module's normalizeSemanticSave reads save.abilities (app) OR save.ability (Foundry) transparently"
       ],
       "referenceFolder": "E:/DnD/Professional/Foundry-JSON/windows",
       "capturedTypes": [
@@ -670,7 +676,7 @@
     ]
   },
   "activeFollowups": [
-    "activities tab parity pass — apply the same Foundry-parity approach to ActivityEditor using the captured Foundry activity window JSONs in E:/DnD/Professional/Foundry-JSON/windows/",
+    "activity effects linking — DONE: ActivityEditor now receives availableEffects prop (FoundryActiveEffect[]) and shows APPLIED EFFECTS section in Effect tab; each effect can be toggled linked/unlinked with optional level min/max range; ClassEditor and SubclassEditor pass editingFeature.effects as availableEffects",
     "add statuses (status condition strings) editing UI to ActiveEffectEditor Details tab when a creator needs to author status conditions on an effect",
     "reconcile editingFeature.uses (ClassEditor) vs editingFeature.usage (SubclassEditor) path inconsistency in a future cleanup pass so both editors use the same state shape",
     "extend the new reference helper surface into more formula-bearing editors such as activity formulas and remaining character-sheet fields",

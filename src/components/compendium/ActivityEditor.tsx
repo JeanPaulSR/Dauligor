@@ -3,8 +3,10 @@ import {
   Swords, Wand2, Dices, Zap, Sparkles, ArrowRight,
   Heart, Shield, Boxes, RefreshCw, Wrench, Plus,
   Trash2, Info, Timer, Target,
-  ChevronRight, X, FileJson,
+  X,
 } from 'lucide-react';
+import { ImageUpload } from '../ui/ImageUpload';
+import { type FoundryActiveEffect } from './ActiveEffectEditor';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -21,6 +23,7 @@ interface ActivityEditorProps {
   activities: SemanticActivity[] | Record<string, SemanticActivity>;
   onChange: (activities: SemanticActivity[]) => void;
   context?: 'feature' | 'spell' | 'item' | 'feat';
+  availableEffects?: FoundryActiveEffect[];
 }
 
 const ACTIVITY_KINDS: { kind: ActivityKind; label: string; icon: any }[] = [
@@ -220,7 +223,7 @@ const sanitizeActivity = (activity: SemanticActivity): SemanticActivity => {
   return sanitized;
 };
 
-export default function ActivityEditor({ activities, onChange, context = 'feature' }: ActivityEditorProps) {
+export default function ActivityEditor({ activities, onChange, context = 'feature', availableEffects = [] }: ActivityEditorProps) {
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('identity');
@@ -649,18 +652,19 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                             className="field-input border-gold/15 font-serif"
                           />
                         </FieldRow>
-                        <FieldRow label="Icon" hint="Foundry asset path or public URL">
-                          <div className="flex gap-1.5">
-                            <Input
-                              value={editingActivity.img}
-                              onChange={e => handleUpdateActivity(editingId!, { img: e.target.value })}
-                              className="field-input border-gold/15 font-mono text-xs"
+                        <div className="flex gap-4 items-center py-2.5">
+                          <p className="text-xs font-semibold text-ink/75 flex-1">Icon</p>
+                          <div className="w-14 h-14 shrink-0">
+                            <ImageUpload
+                              compact
+                              imageType="icon"
+                              storagePath="icons/activities/"
+                              currentImageUrl={editingActivity.img || ''}
+                              onUpload={url => handleUpdateActivity(editingId!, { img: url })}
+                              className="w-full h-full"
                             />
-                            <Button variant="outline" size="icon" className="h-9 w-9 border-gold/15 shrink-0">
-                              <FileJson className="w-4 h-4 text-gold/40" />
-                            </Button>
                           </div>
-                        </FieldRow>
+                        </div>
                         <FieldRow label="Chat Flavor" hint="Extra text appended to this activity's chat message">
                           <Input
                             value={editingActivity.chatFlavor || ''}
@@ -1357,6 +1361,72 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
 
                   {activeTab === 'effect' && (
                     <div>
+                      {/* ── Applied Effects ── */}
+                      <ActivitySection label="APPLIED EFFECTS">
+                        {availableEffects.length === 0 ? (
+                          <p className="text-[10px] text-ink/30 italic py-2 text-center">
+                            No effects defined on this feature. Add effects in the Effects tab first.
+                          </p>
+                        ) : (
+                          <div className="space-y-1 pb-1">
+                            {availableEffects.map(fx => {
+                              const linked = (editingActivity.effects || []).find(e => e._id === fx._id);
+                              const toggle = () => {
+                                const cur = editingActivity.effects || [];
+                                handleUpdateActivity(editingId!, {
+                                  effects: linked
+                                    ? cur.filter(e => e._id !== fx._id)
+                                    : [...cur, { _id: fx._id!, level: { min: null, max: null } }]
+                                });
+                              };
+                              const patchLevel = (patch: { min?: number | null; max?: number | null }) => {
+                                const cur = editingActivity.effects || [];
+                                handleUpdateActivity(editingId!, {
+                                  effects: cur.map(e => e._id === fx._id ? { ...e, level: { ...e.level, ...patch } } : e)
+                                });
+                              };
+                              return (
+                                <div key={fx._id} className="flex items-center gap-2 py-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={toggle}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${linked ? 'bg-gold/30 border-gold/60' : 'border-gold/20 hover:border-gold/40'}`}
+                                  >
+                                    {linked && <svg className="w-2.5 h-2.5 text-gold" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2}><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>}
+                                  </button>
+                                  {fx.img && (
+                                    <div className="w-5 h-5 rounded border border-gold/15 overflow-hidden shrink-0">
+                                      <img src={fx.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                    </div>
+                                  )}
+                                  <span className={`flex-1 text-xs truncate ${linked ? 'text-ink/85 font-medium' : 'text-ink/40'}`}>{fx.name}</span>
+                                  {linked && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className="text-[9px] text-ink/30 uppercase tracking-wider">Lvl</span>
+                                      <Input
+                                        type="number"
+                                        value={linked.level?.min ?? ''}
+                                        onChange={e => patchLevel({ min: e.target.value === '' ? null : parseInt(e.target.value) })}
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
+                                        placeholder="—"
+                                      />
+                                      <span className="text-[9px] text-ink/20">–</span>
+                                      <Input
+                                        type="number"
+                                        value={linked.level?.max ?? ''}
+                                        onChange={e => patchLevel({ max: e.target.value === '' ? null : parseInt(e.target.value) })}
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
+                                        placeholder="—"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </ActivitySection>
+
                       {(editingActivity.save || editingActivity.check) && (
                         <ActivitySection label={editingActivity.save ? 'SAVING THROW' : 'ABILITY CHECK'}>
                           {editingActivity.save && (
@@ -1434,10 +1504,11 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="initial">Item Default</SelectItem>
                                 <SelectItem value="spellcasting">Spellcasting DC</SelectItem>
                                 <SelectItem value="__formula">Flat / Formula</SelectItem>
                                 {ABILITY_OPTIONS.map(ability => (
-                                  <SelectItem key={ability} value={ability}>{ability.toUpperCase()}</SelectItem>
+                                  <SelectItem key={ability} value={ability}>{ability.toUpperCase()} Save</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>

@@ -17,6 +17,7 @@ import Map from './pages/core/Map';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminCampaigns from './pages/admin/AdminCampaigns';
 import AdminProficiencies from './pages/admin/AdminProficiencies';
+import StatusesEditor from './pages/admin/StatusesEditor';
 import ImageManager from './pages/admin/ImageManager';
 import ImageViewer from './pages/admin/ImageViewer';
 import Settings from './pages/core/Settings';
@@ -251,6 +252,7 @@ export default function App() {
                   <Route path="/admin/users" element={<AdminUsers userProfile={effectiveProfile} />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
                   <Route path="/admin/proficiencies" element={<AdminProficiencies userProfile={effectiveProfile} />} />
+                  <Route path="/admin/statuses" element={<StatusesEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />
                   <Route path="/images/view" element={<ImageViewer userProfile={effectiveProfile} />} />
                   <Route path="/settings" element={<Settings user={user} userProfile={userProfile} />} />

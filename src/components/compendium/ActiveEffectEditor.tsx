@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
+import { ImageUpload } from '../ui/ImageUpload';
 
 // Mirrors Foundry's EFFECT_MODES constant
 const EFFECT_MODE_OPTIONS = [
@@ -175,11 +176,15 @@ export default function ActiveEffectEditor({ effects, onChange }: ActiveEffectEd
           {/* Dialog header — name + icon, Foundry-style */}
           {draft && (
             <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-gold/10">
-              <div className="w-12 h-12 rounded border border-gold/20 bg-background/50 flex items-center justify-center shrink-0 overflow-hidden">
-                {draft.img
-                  ? <img src={draft.img} alt="" className="w-full h-full object-contain" />
-                  : <Zap className="w-6 h-6 text-gold/40" />
-                }
+              <div className="w-12 h-12 shrink-0">
+                <ImageUpload
+                  compact
+                  imageType="icon"
+                  storagePath="icons/effects/"
+                  currentImageUrl={draft.img || ''}
+                  onUpload={url => patch({ img: url || null })}
+                  className="w-full h-full rounded border border-gold/20"
+                />
               </div>
               <input
                 value={draft.name}
@@ -259,16 +264,6 @@ export default function ActiveEffectEditor({ effects, onChange }: ActiveEffectEd
                   <p className="text-[11px] text-ink/40 mt-1">If checked, this Effect will be applied to any Actor that owns this Effect's parent Item.</p>
                 </div>
 
-                {/* Icon Path (advanced) */}
-                <div className="flex items-center gap-3 py-2.5">
-                  <span className="text-sm font-semibold text-ink/80 w-44 shrink-0">Icon Path</span>
-                  <Input
-                    value={draft.img || ''}
-                    onChange={e => patch({ img: e.target.value || null })}
-                    placeholder="icons/…/effect.webp"
-                    className="h-7 text-xs font-mono flex-1 bg-background/50 border-gold/10 focus:border-gold"
-                  />
-                </div>
               </TabsContent>
 
               {/* ── Duration ─────────────────────────────── */}

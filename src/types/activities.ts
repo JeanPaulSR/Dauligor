@@ -193,6 +193,13 @@ export interface SemanticActivity {
     visible?: boolean;
   };
 
+  // Links to parent item's ActiveEffects that this activity applies
+  effects?: {
+    _id: string;
+    level?: { min?: number | null; max?: number | null };
+    riders?: Record<string, string[]>;
+  }[];
+
   // Behavior & Visibility
   visibility?: {
     identifier?: string;

@@ -17,7 +17,7 @@ import {
   Biohazard, Swords, Scroll, Footprints, Languages,
   Coins, Layers, Flame, Scale, ListChecks, Hammer,
   Quote, Crown, Wand2, FlaskConical, Heart, BookOpen,
-  ChevronDown, Link as LinkIcon, Eye, Globe, X
+  ChevronDown, Link as LinkIcon, Globe, X
 } from 'lucide-react';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue

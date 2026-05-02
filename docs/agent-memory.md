@@ -250,9 +250,20 @@ Implemented or substantially working:
   - the sheet now shows per-class granted features, current scale values, and selected advancement options so the builder sheet reflects more of the same advancement state Foundry would surface on an actor
   - the sheet progression card includes a quick jump back into the class step for editing
 
+## Activity Editor Parity Pass
+
+Targeted parity fixes applied to `src/components/compendium/ActivityEditor.tsx`:
+
+- **Recovery period keys fixed** — `RECOVERY_PERIOD_OPTIONS` now uses Foundry-native keys (`lr`, `sr`, `day`, `dawn`, `dusk`, `turn`, `turnStart`, `turnEnd`, `round`, `recharge`, `charges`). Was previously using `shortRest`/`longRest` which Foundry does not recognize.
+- **Consumption target types fixed** — `CONSUMPTION_TARGET_TYPES` now matches Foundry exactly: `activityUses`, `itemUses`, `material`, `hitDice`, `spellSlots`, `attribute`. Removed non-Foundry `resource` and `custom` types.
+- **Damage types multi-select** — replaced free-text CSV input with proper toggle buttons for all Foundry damage types (acid, bludgeoning, cold, fire, force, lightning, necrotic, piercing, poison, psychic, radiant, slashing, thunder, healing, temphp).
+- **Save abilities multi-select** — converted from comma-separated text input to toggle buttons for str/dex/con/int/wis/cha.
+- **DC calculation options** — added `initial` (Item Default) matching Foundry's actual calculation choices. Added ability labels as `STR Save` etc.
+- **Pre-existing correct**: `onSave` damage select (half/none) was already present for save activities. Module `normalizeSemanticAttack` already converts flat `attack.type` to nested `attack.type.value`.
+
 Still active or likely follow-up areas:
 
-- **activities tab parity pass** — apply the same Foundry-parity approach to `ActivityEditor.tsx` using the captured Foundry activity window JSONs in `E:/DnD/Professional/Foundry-JSON/windows/`
+- **Activity effects linking** — each activity has an `effects[]` array that links to parent item ActiveEffects by `_id` with an optional level range; no UI exists for this yet in `ActivityEditor` (enchant activities benefit most from this)
 - **ActiveEffectEditor statuses** — `statuses` strings pass through unchanged; no UI yet to author status conditions on an effect
 - **uses vs usage path inconsistency** — `ClassEditor` uses `editingFeature.uses.recovery`; `SubclassEditor` uses `editingFeature.usage.recovery`; pre-existing, worth reconciling in a cleanup pass
 - multiclassing verification with more class examples beyond the verified Artificer/Sorcerer case

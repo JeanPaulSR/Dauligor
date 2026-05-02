@@ -1,17 +1,18 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
-import { 
-  Book, 
-  Sword, 
-  Wand2, 
-  Scroll, 
-  Users, 
-  Hammer, 
+import {
+  Book,
+  Sword,
+  Wand2,
+  Scroll,
+  Users,
+  Hammer,
   Dna,
   Brain,
   ChevronRight,
-  Tags as TagsIcon
+  Tags as TagsIcon,
+  HeartPulse
 } from 'lucide-react';
 
 export default function Compendium({ userProfile }: { userProfile: any }) {
@@ -48,6 +49,7 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
       title: 'Admin Tools',
       items: [
         { name: 'Proficiencies', icon: Brain, path: '/admin/proficiencies', description: 'Manage skills, tools, weapons, and armor.' },
+        { name: 'Status Conditions', icon: HeartPulse, path: '/admin/statuses', description: 'Manage D&D 5e status conditions and custom homebrew conditions.' },
         { name: 'Tag Management', icon: TagsIcon, path: '/compendium/tags', description: 'Organize and categorize compendium entries with custom tags.' },
       ]
     }] : [])
