@@ -48,6 +48,8 @@ import ItemsEditor from './pages/compendium/ItemsEditor';
 import CharacterList from './pages/characters/CharacterList';
 import CharacterBuilder from './pages/characters/CharacterBuilder';
 import { TooltipProvider } from './components/ui/tooltip';
+import CampaignManager from './pages/campaign/CampaignManager';
+import CampaignEditor from './pages/campaign/CampaignEditor';
 
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -251,6 +253,8 @@ export default function App() {
                   <Route path="/map" element={<Map userProfile={effectiveProfile} />} />
                   <Route path="/admin/users" element={<AdminUsers userProfile={effectiveProfile} />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
+                  <Route path="/campaign/:id" element={<CampaignManager userProfile={effectiveProfile} />} />
+                  <Route path="/campaign/edit/:id" element={<CampaignEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/proficiencies" element={<AdminProficiencies userProfile={effectiveProfile} />} />
                   <Route path="/admin/statuses" element={<StatusesEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />

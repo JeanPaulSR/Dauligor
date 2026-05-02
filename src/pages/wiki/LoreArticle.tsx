@@ -308,6 +308,68 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   if (loading) return <div className="text-center py-20 font-serif italic">Consulting the scrolls...</div>;
   if (!article) return <div className="text-center py-20 font-serif italic">This article has been lost to time.</div>;
 
+  const PreviewBanner = isStaff && (
+    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm ${previewCampaign ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-gold/5 border-gold/10 text-ink/40'}`}>
+      <Eye className="w-4 h-4 shrink-0 text-gold" />
+      <span className="label-text uppercase tracking-widest text-[10px] shrink-0">
+        {previewCampaign ? `Previewing as: ${previewCampaign.name}` : 'Preview as Campaign:'}
+      </span>
+      <div className="flex-grow max-w-[220px]">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button type="button" className="flex items-center justify-between w-full h-7 px-2 rounded border border-gold/10 bg-background/50 hover:bg-background/80 hover:border-gold/30 transition-colors text-left text-xs font-normal">
+              <span className="truncate">
+                {previewCampaign ? previewCampaign.name : "None (Staff View)"}
+              </span>
+              <ChevronDown className="w-3 h-3 text-ink/30 shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search campaigns..." className="h-8" />
+              <CommandList className="max-h-48">
+                <CommandEmpty>No campaigns found.</CommandEmpty>
+                <CommandGroup>
+                  <CommandItem
+                    onSelect={() => setPreviewCampaign(null)}
+                    className="flex items-center gap-2 cursor-pointer text-xs"
+                  >
+                    <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${!previewCampaign ? 'bg-primary border-primary' : 'border-primary/30'}`}>
+                      {!previewCampaign && <Check className="w-2.5 h-2.5 text-white" />}
+                    </div>
+                    <span>None (Staff View)</span>
+                  </CommandItem>
+                  {allCampaigns.map((c: any) => {
+                    const isSelected = previewCampaign?.id === c.id;
+                    return (
+                      <CommandItem
+                        key={c.id}
+                        onSelect={() => {
+                          setPreviewCampaign({ id: c.id, name: c.name, eraId: c.eraId ?? null });
+                        }}
+                        className="flex items-center gap-2 cursor-pointer text-xs"
+                      >
+                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-primary/30'}`}>
+                          {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                        </div>
+                        <span className="truncate">{c.name}</span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
+      {previewCampaign && (
+        <button onClick={() => setPreviewCampaign(null)} className="ml-auto text-primary/60 hover:text-primary transition-colors">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+
   // Article-level visibility check for players (staff always see everything)
   if (!isStaff || previewCampaign) {
     const effectiveEraId = isStaff && previewCampaign ? previewCampaign.eraId : activeCampaignEraId;
@@ -318,17 +380,23 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
 
     if (hasCampaignScope && !article.visibilityCampaignIds.includes(effectiveCampaignId)) {
       return (
-        <div className="text-center py-32 space-y-4">
-          <Globe className="w-16 h-16 text-gold/10 mx-auto" />
-          <h2 className="font-serif text-xl text-ink/40 italic">This article is not available in your current campaign.</h2>
+        <div className="max-w-6xl mx-auto space-y-8 pb-20 relative px-4">
+          {PreviewBanner}
+          <div className="text-center py-32 space-y-4 animate-in fade-in duration-300">
+            <Globe className="w-16 h-16 text-gold/10 mx-auto" />
+            <h2 className="font-serif text-xl text-ink/40 italic">This article is not available in your current campaign.</h2>
+          </div>
         </div>
       );
     }
     if (hasEraScope && effectiveEraId && !article.visibilityEraIds.includes(effectiveEraId)) {
       return (
-        <div className="text-center py-32 space-y-4">
-          <Globe className="w-16 h-16 text-gold/10 mx-auto" />
-          <h2 className="font-serif text-xl text-ink/40 italic">This article belongs to a different era.</h2>
+        <div className="max-w-6xl mx-auto space-y-8 pb-20 relative px-4">
+          {PreviewBanner}
+          <div className="text-center py-32 space-y-4 animate-in fade-in duration-300">
+            <Globe className="w-16 h-16 text-gold/10 mx-auto" />
+            <h2 className="font-serif text-xl text-ink/40 italic">This article belongs to a different era.</h2>
+          </div>
         </div>
       );
     }
@@ -374,67 +442,8 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
       )}
 
       {/* Staff Campaign Preview Banner */}
-      {isStaff && (
-        <div className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm ${previewCampaign ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-gold/5 border-gold/10 text-ink/40'}`}>
-          <Eye className="w-4 h-4 shrink-0" />
-          <span className="label-text uppercase tracking-widest text-[10px] shrink-0">
-            {previewCampaign ? `Previewing as: ${previewCampaign.name}` : 'Preview as Campaign:'}
-          </span>
-          <div className="flex-grow max-w-[220px]">
-            <Popover>
-              <PopoverTrigger asChild>
-                <button type="button" className="flex items-center justify-between w-full h-7 px-2 rounded-md border border-gold/10 bg-background/50 hover:bg-background/80 hover:border-gold/30 transition-colors text-left text-xs font-normal">
-                  <span className="truncate">
-                    {previewCampaign ? previewCampaign.name : "None (Staff View)"}
-                  </span>
-                  <ChevronDown className="w-3 h-3 text-ink/30 shrink-0" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-56 p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search campaigns..." className="h-8" />
-                  <CommandList className="max-h-48">
-                    <CommandEmpty>No campaigns found.</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        onSelect={() => setPreviewCampaign(null)}
-                        className="flex items-center gap-2 cursor-pointer text-xs"
-                      >
-                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${!previewCampaign ? 'bg-primary border-primary' : 'border-primary/30'}`}>
-                          {!previewCampaign && <Check className="w-2.5 h-2.5 text-white" />}
-                        </div>
-                        <span>None (Staff View)</span>
-                      </CommandItem>
-                      {allCampaigns.map((c: any) => {
-                        const isSelected = previewCampaign?.id === c.id;
-                        return (
-                          <CommandItem
-                            key={c.id}
-                            onSelect={() => {
-                              setPreviewCampaign({ id: c.id, name: c.name, eraId: c.eraId ?? null });
-                            }}
-                            className="flex items-center gap-2 cursor-pointer text-xs"
-                          >
-                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-primary/30'}`}>
-                              {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
-                            </div>
-                            <span className="truncate">{c.name}</span>
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-          {previewCampaign && (
-            <button onClick={() => setPreviewCampaign(null)} className="ml-auto text-primary/60 hover:text-primary transition-colors">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      )}
+      {PreviewBanner}
+
 
       {/* Header Actions */}
       <div className="flex items-center justify-between">

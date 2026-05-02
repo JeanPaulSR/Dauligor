@@ -189,35 +189,54 @@ export default function Sidebar({
       <div className={`p-4 border-b border-gold/10 flex flex-col items-center text-center shrink-0 relative ${isCollapsed && !isOpen ? 'px-2' : ''}`}>
         {/* Removed Desktop Toggle Tab in favor of Navbar menu */}
 
-        {campaign?.imageUrl && (!isCollapsed || isOpen) ? (
-          <div className="w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24 rounded-full overflow-hidden border-2 border-gold/30 mb-3 transition-all">
-            <img src={campaign.imageUrl} alt={campaign.name} className="w-full h-full object-cover" />
-          </div>
-        ) : campaign?.imageUrl && isCollapsed && !isOpen ? (
-          <div className="w-10 h-10 rounded-full overflow-hidden border border-gold/30 mb-1">
-            <img src={campaign.imageUrl} alt={campaign.name} className="w-full h-full object-cover" />
-          </div>
-        ) : (!isCollapsed || isOpen) ? (
-          <div className="w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24 rounded-full bg-gold/10 border-2 border-gold/30 mb-3 flex items-center justify-center transition-all">
-            <Shield className="w-8 h-8 lg:w-10 lg:h-10 text-gold/50" />
-          </div>
+        {campaign ? (
+          <Link 
+            to={`/campaign/${campaign.id}`}
+            onClick={() => onClose?.()}
+            className="group flex flex-col items-center text-center transition-all w-full"
+          >
+            {campaign.imageUrl ? (
+              <div className={`rounded-full overflow-hidden border-2 border-gold/30 mb-3 flex items-center justify-center transition-all group-hover:border-gold/60 shadow-lg shadow-black/20 ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
+                <img src={campaign.imageUrl} alt={campaign.name} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className={`rounded-full bg-gold/10 border-2 border-gold/30 mb-3 flex items-center justify-center transition-all group-hover:border-gold/60 group-hover:bg-gold/20 ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
+                <Shield className={`${isCollapsed && !isOpen ? 'w-5 h-5' : 'w-8 h-8 lg:w-10 lg:h-10'} text-gold/50 transition-colors group-hover:text-gold`} />
+              </div>
+            )}
+            
+            {(!isCollapsed || isOpen) && (
+              <div className="w-full space-y-1">
+                <h2 className="font-serif font-bold text-sm lg:text-base xl:text-lg text-ink leading-tight truncate w-full group-hover:text-gold transition-colors">
+                  {campaign.name}
+                </h2>
+                <div className="flex items-center justify-center gap-1.5">
+                  <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/30'}`} />
+                  <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/40'}`}>
+                    {(userProfile?.role || 'User').replace('-', ' ')}
+                  </span>
+                </div>
+              </div>
+            )}
+          </Link>
         ) : (
-          <div className="w-10 h-10 rounded-full bg-gold/10 border border-gold/30 mb-1 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-gold/50" />
-          </div>
-        )}
-        
-        {(!isCollapsed || isOpen) && (
-          <div className="w-full space-y-1">
-            <h2 className="font-serif font-bold text-sm lg:text-base xl:text-lg text-ink leading-tight truncate w-full transition-all">
-              {campaign?.name || 'No Campaign'}
-            </h2>
-            <div className="flex items-center justify-center gap-1.5">
-              <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/30'}`} />
-              <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/40'}`}>
-                {(userProfile?.role || 'User').replace('-', ' ')}
-              </span>
+          <div className="flex flex-col items-center text-center w-full">
+            <div className={`rounded-full bg-gold/10 border-2 border-gold/30 mb-3 flex items-center justify-center transition-all ${isCollapsed && !isOpen ? 'w-10 h-10 mb-1' : 'w-16 h-16 lg:w-20 lg:h-20 xl:w-24 xl:h-24'}`}>
+              <Shield className={`${isCollapsed && !isOpen ? 'w-5 h-5' : 'w-8 h-8 lg:w-10 lg:h-10'} text-gold/50`} />
             </div>
+            {(!isCollapsed || isOpen) && (
+              <div className="w-full space-y-1">
+                <h2 className="font-serif font-bold text-sm lg:text-base xl:text-lg text-ink leading-tight truncate w-full">
+                  No Campaign
+                </h2>
+                <div className="flex items-center justify-center gap-1.5">
+                  <Shield className={`w-3 h-3 ${isStaff ? 'text-gold' : 'text-ink/30'}`} />
+                  <span className={`nav-label ${isStaff ? 'text-gold' : 'text-ink/40'}`}>
+                    {(userProfile?.role || 'User').replace('-', ' ')}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

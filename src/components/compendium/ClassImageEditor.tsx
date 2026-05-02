@@ -80,8 +80,9 @@ function ContextPanel({
     const handler = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      const newScale = parseFloat(Math.max(0.1, Math.min(5, displayRef.current.scale * factor)).toFixed(2));
-      const next = { ...displayRef.current, scale: newScale };
+      const cur = displayRef.current || DEFAULT_DISPLAY;
+      const newScale = parseFloat(Math.max(0.1, Math.min(5, cur.scale * factor)).toFixed(2));
+      const next = { ...cur, scale: newScale };
       onDisplayChangeRef.current(next);
       
       // Debounce the commit to prevent massive re-renders in the parent editor
@@ -111,7 +112,7 @@ function ContextPanel({
     const dy = e.clientY - lastPointerRef.current.y;
     lastPointerRef.current = { x: e.clientX, y: e.clientY };
 
-    const cur = displayRef.current;
+    const cur = displayRef.current || DEFAULT_DISPLAY;
     const dxPct = (dx / rect.width) * 100 / cur.scale;
     const dyPct = (dy / rect.height) * 100 / cur.scale;
 
@@ -124,14 +125,15 @@ function ContextPanel({
 
   const handlePointerUp = () => {
     if (lastPointerRef.current !== null) {
-      onDisplayCommitRef.current(displayRef.current);
+      onDisplayCommitRef.current(displayRef.current || DEFAULT_DISPLAY);
     }
     lastPointerRef.current = null;
   };
 
   const step = (delta: number) => {
-    const newScale = parseFloat(Math.max(0.1, Math.min(5, displayRef.current.scale + delta)).toFixed(2));
-    const next = { ...displayRef.current, scale: newScale };
+    const cur = displayRef.current || DEFAULT_DISPLAY;
+    const newScale = parseFloat(Math.max(0.1, Math.min(5, cur.scale + delta)).toFixed(2));
+    const next = { ...cur, scale: newScale };
     onDisplayChange(next);
     onDisplayCommit(next);
   };
