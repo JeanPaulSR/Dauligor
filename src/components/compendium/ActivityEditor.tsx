@@ -43,11 +43,47 @@ const FALLBACK_ABILITY_LABELS: Record<string, string> = {
   int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
 };
 const SPELL_PROPERTIES = ['vocal', 'somatic', 'material'];
-const RECOVERY_PERIOD_OPTIONS = ['turn', 'round', 'shortRest', 'longRest', 'day'];
+const RECOVERY_PERIOD_OPTIONS: { value: string; label: string }[] = [
+  { value: 'lr',        label: 'Long Rest' },
+  { value: 'sr',        label: 'Short Rest' },
+  { value: 'day',       label: 'Day' },
+  { value: 'dawn',      label: 'Dawn' },
+  { value: 'dusk',      label: 'Dusk' },
+  { value: 'turn',      label: 'Turn' },
+  { value: 'turnStart', label: 'Turn Start' },
+  { value: 'turnEnd',   label: 'Turn End' },
+  { value: 'round',     label: 'Round' },
+  { value: 'recharge',  label: 'Recharge' },
+  { value: 'charges',   label: 'Charges' },
+];
 const RECOVERY_TYPE_OPTIONS = ['recoverAll', 'formula', 'loseAll'];
 const TARGET_TYPE_OPTIONS = ['none', 'creature', 'ally', 'enemy', 'object', 'space'];
 const TEMPLATE_TYPE_OPTIONS = ['none', 'cone', 'cube', 'cylinder', 'line', 'sphere', 'square'];
-const CONSUMPTION_TARGET_TYPES = ['attribute', 'itemUses', 'resource', 'material', 'custom'];
+const CONSUMPTION_TARGET_TYPES: { value: string; label: string }[] = [
+  { value: 'activityUses', label: 'Activity Uses' },
+  { value: 'itemUses',     label: 'Item Uses' },
+  { value: 'material',     label: 'Material' },
+  { value: 'hitDice',      label: 'Hit Dice' },
+  { value: 'spellSlots',   label: 'Spell Slots' },
+  { value: 'attribute',    label: 'Attribute' },
+];
+const DAMAGE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'acid',        label: 'Acid' },
+  { value: 'bludgeoning', label: 'Bludgeoning' },
+  { value: 'cold',        label: 'Cold' },
+  { value: 'fire',        label: 'Fire' },
+  { value: 'force',       label: 'Force' },
+  { value: 'lightning',   label: 'Lightning' },
+  { value: 'necrotic',    label: 'Necrotic' },
+  { value: 'piercing',    label: 'Piercing' },
+  { value: 'poison',      label: 'Poison' },
+  { value: 'psychic',     label: 'Psychic' },
+  { value: 'radiant',     label: 'Radiant' },
+  { value: 'slashing',    label: 'Slashing' },
+  { value: 'thunder',     label: 'Thunder' },
+  { value: 'healing',     label: 'Healing' },
+  { value: 'temphp',      label: 'Temp HP' },
+];
 const SCALING_MODE_OPTIONS = ['', 'whole', 'half'];
 const SUMMON_OR_TRANSFORM_MODE_OPTIONS = ['', 'cr'];
 const MOVEMENT_TYPE_OPTIONS = ['walk', 'burrow', 'climb', 'fly', 'swim'];
@@ -968,8 +1004,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="__none">None</SelectItem>
-                                      {RECOVERY_PERIOD_OPTIONS.map(option => (
-                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                                      {RECOVERY_PERIOD_OPTIONS.map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                                       ))}
                                     </SelectContent>
                                   </Select>
@@ -1049,8 +1085,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                       </SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="__none">None</SelectItem>
-                                        {CONSUMPTION_TARGET_TYPES.map(option => (
-                                          <SelectItem key={option} value={option}>{option}</SelectItem>
+                                        {CONSUMPTION_TARGET_TYPES.map(opt => (
+                                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                                         ))}
                                       </SelectContent>
                                     </Select>
@@ -1324,15 +1360,27 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                       {(editingActivity.save || editingActivity.check) && (
                         <ActivitySection label={editingActivity.save ? 'SAVING THROW' : 'ABILITY CHECK'}>
                           {editingActivity.save && (
-                            <FieldRow label="Abilities" hint="Comma-separated ability keys (dex, str, etc.)">
-                              <Input
-                                value={editingActivity.save.abilities.join(', ')}
-                                onChange={e => handleUpdateActivity(editingId!, {
-                                  save: { ...editingActivity.save!, abilities: e.target.value.split(',').map(s => s.trim()) }
+                            <FieldRow label="Abilities">
+                              <div className="flex flex-wrap gap-1">
+                                {ABILITY_OPTIONS.map(ab => {
+                                  const active = (editingActivity.save!.abilities || []).includes(ab);
+                                  return (
+                                    <button
+                                      key={ab}
+                                      type="button"
+                                      onClick={() => {
+                                        const cur = editingActivity.save!.abilities || [];
+                                        handleUpdateActivity(editingId!, {
+                                          save: { ...editingActivity.save!, abilities: active ? cur.filter(a => a !== ab) : [...cur, ab] }
+                                        });
+                                      }}
+                                      className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border transition-colors ${active ? 'bg-gold/20 border-gold/50 text-ink/90' : 'bg-transparent border-gold/15 text-ink/35 hover:border-gold/30'}`}
+                                    >
+                                      {ab}
+                                    </button>
+                                  );
                                 })}
-                                className="field-input border-gold/15 font-mono text-xs"
-                                placeholder="dex, str, etc."
-                              />
+                              </div>
                             </FieldRow>
                           )}
                           {editingActivity.check && (
@@ -1485,20 +1533,30 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                       placeholder="+5"
                                     />
                                   </div>
-                                  <div className="col-span-4">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Types</p>
-                                    <Input
-                                      value={(part.types || []).join(', ')}
-                                      onChange={e => {
-                                        const key = editingActivity.healing ? 'healing' : 'damage';
-                                        const obj = editingActivity[key] as any;
-                                        const newParts = [...obj.parts];
-                                        newParts[idx] = { ...part, types: e.target.value.split(',').map((s: string) => s.trim()) };
-                                        handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                      }}
-                                      className="h-8 bg-background/40 border-gold/10 text-[9px] uppercase font-bold"
-                                      placeholder="fire, radiant"
-                                    />
+                                  <div className="col-span-12 mt-1">
+                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1.5">Damage Types</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {DAMAGE_TYPE_OPTIONS.map(dt => {
+                                        const active = (part.types || []).includes(dt.value);
+                                        return (
+                                          <button
+                                            key={dt.value}
+                                            type="button"
+                                            onClick={() => {
+                                              const dmgKey = editingActivity.healing ? 'healing' : 'damage';
+                                              const obj = editingActivity[dmgKey] as any;
+                                              const newParts = [...obj.parts];
+                                              const cur = part.types || [];
+                                              newParts[idx] = { ...part, types: active ? cur.filter((t: string) => t !== dt.value) : [...cur, dt.value] };
+                                              handleUpdateActivity(editingId!, { [dmgKey]: { ...obj, parts: newParts } });
+                                            }}
+                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide border transition-colors ${active ? 'bg-gold/20 border-gold/50 text-ink/90' : 'bg-transparent border-gold/10 text-ink/30 hover:border-gold/25'}`}
+                                          >
+                                            {dt.label}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-3 border-t border-gold/5 pt-2.5">

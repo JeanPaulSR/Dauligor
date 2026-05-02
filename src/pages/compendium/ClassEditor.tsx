@@ -4,6 +4,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
+import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { doc, getDoc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, addDoc, deleteDoc, where, deleteField } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
@@ -37,6 +38,39 @@ const FEATURE_TYPES = [
   { id: 'gift', name: 'Supernatural Gift' },
   { id: 'vehicle', name: 'Vehicle Feature' }
 ];
+
+const CLASS_FEATURE_SUBTYPES = [
+  { id: '', name: 'None' },
+  { id: 'arcaneShot', name: 'Arcane Shot' },
+  { id: 'artificerInfusion', name: 'Artificer Infusion' },
+  { id: 'artificerPlan', name: 'Artificer Plan' },
+  { id: 'channelDivinity', name: 'Channel Divinity' },
+  { id: 'defensiveTactic', name: 'Defensive Tactic' },
+  { id: 'eldritchInvocation', name: 'Eldritch Invocation' },
+  { id: 'elementalDiscipline', name: 'Elemental Discipline' },
+  { id: 'fightingStyle', name: 'Fighting Style' },
+  { id: 'huntersPrey', name: "Hunter's Prey" },
+  { id: 'ki', name: 'Ki Ability' },
+  { id: 'maneuver', name: 'Maneuver' },
+  { id: 'metamagic', name: 'Metamagic Option' },
+  { id: 'multiattack', name: 'Multiattack' },
+  { id: 'pactBoon', name: 'Pact Boon' },
+  { id: 'psionicPower', name: 'Psionic Power' },
+  { id: 'rune', name: 'Rune' },
+  { id: 'superiorHuntersDefense', name: "Superior Hunter's Defense" }
+];
+
+const normalizeFeaturePropertiesForEditor = (properties: any[] = []) => {
+  const mapped = (Array.isArray(properties) ? properties : [])
+    .map((property) => {
+      if (property === 'magical') return 'mgc';
+      if (property === 'passive') return 'trait';
+      return String(property || '').trim();
+    })
+    .filter(Boolean);
+
+  return Array.from(new Set(mapped));
+};
 
 const SPELLCASTING_FORMULA_GUIDANCE = [
   'Dauligor spellcasting shortcuts are contextual in this field.',
@@ -459,6 +493,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [editingFeature, setEditingFeature] = useState<any>(null);
   const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
   const [featureTab, setFeatureTab] = useState('description');
+  const [showFeatureSource, setShowFeatureSource] = useState(false);
 
   // Groups for selection
   const [allOptionGroups, setAllOptionGroups] = useState<any[]>([]);
@@ -475,10 +510,39 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     }) as Advancement[]
   ), [hitDie]);
 
-  const normalizeFeatureForEditor = useCallback((feature: any) => ({
-    ...feature,
-    advancements: normalizeEditorAdvancements(feature?.advancements || [], Number(feature?.level || 1) || 1)
-  }), [normalizeEditorAdvancements]);
+  const normalizeFeatureForEditor = useCallback((feature: any) => {
+    const prerequisites = feature?.prerequisites || {};
+    const configuration = feature?.configuration || {};
+    const uses = feature?.uses || feature?.usage || {};
+    return {
+      ...feature,
+      identifier: feature?.identifier || slugify(feature?.name || ''),
+      source: {
+        custom: feature?.source?.custom || '',
+        book: feature?.source?.book || '',
+        page: feature?.source?.page || '',
+        license: feature?.source?.license || '',
+        rules: feature?.source?.rules || '',
+        revision: feature?.source?.revision ?? 1
+      },
+      requirements: feature?.requirements || '',
+      subtype: feature?.subtype || '',
+      prerequisites: {
+        level: prerequisites.level ?? (configuration.requiredLevel && configuration.requiredLevel > 1 ? configuration.requiredLevel : null),
+        items: Array.isArray(prerequisites.items) && prerequisites.items.length
+          ? prerequisites.items
+          : (configuration.requiredIds || []),
+        repeatable: prerequisites.repeatable ?? configuration.repeatable ?? false
+      },
+      properties: normalizeFeaturePropertiesForEditor(feature?.properties || []),
+      uses: {
+        spent: Number(uses.spent || 0) || 0,
+        max: uses.max || '',
+        recovery: Array.isArray(uses.recovery) ? uses.recovery : []
+      },
+      advancements: normalizeEditorAdvancements(feature?.advancements || [], Number(feature?.level || 1) || 1)
+    };
+  }, [normalizeEditorAdvancements]);
 
   // Unique Options Management
   const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
@@ -900,12 +964,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
     try {
       let parsedActivities = {};
-      let parsedEffects = [];
       try {
         if (editingFeature.activitiesStr) parsedActivities = JSON.parse(editingFeature.activitiesStr);
-        if (editingFeature.effectsStr) parsedEffects = JSON.parse(editingFeature.effectsStr);
       } catch (err) {
-        toast.error("Invalid JSON in Activities or Effects");
+        toast.error("Invalid JSON in Activities");
         return;
       }
 
@@ -914,20 +976,54 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         parentId: id,
         parentType: 'class',
         advancements: normalizeEditorAdvancements(editingFeature.advancements || [], Number(editingFeature.level || 1) || 1),
+        identifier: editingFeature.identifier || slugify(editingFeature.name || ''),
+        requirements: editingFeature.requirements || '',
+        source: {
+          custom: editingFeature.source?.custom || '',
+          book: editingFeature.source?.book || '',
+          page: editingFeature.source?.page || '',
+          license: editingFeature.source?.license || '',
+          rules: editingFeature.source?.rules || '',
+          revision: Number(editingFeature.source?.revision || 1) || 1
+        },
+        subtype: editingFeature.subtype || '',
+        prerequisites: {
+          level: editingFeature.prerequisites?.level ? Number(editingFeature.prerequisites.level) : null,
+          items: (editingFeature.prerequisites?.items || []).map((item: string) => String(item || '').trim()).filter(Boolean),
+          repeatable: !!editingFeature.prerequisites?.repeatable
+        },
+        properties: normalizeFeaturePropertiesForEditor(editingFeature.properties || []),
+        uses: {
+          spent: Number(editingFeature.uses?.spent || 0) || 0,
+          max: editingFeature.uses?.max || '',
+          recovery: Array.isArray(editingFeature.uses?.recovery) ? editingFeature.uses.recovery : []
+        },
+        usage: {
+          spent: Number(editingFeature.uses?.spent || 0) || 0,
+          max: editingFeature.uses?.max || '',
+          recovery: Array.isArray(editingFeature.uses?.recovery) ? editingFeature.uses.recovery : []
+        },
+        configuration: {
+          ...editingFeature.configuration,
+          requiredLevel: editingFeature.prerequisites?.level ? Number(editingFeature.prerequisites.level) : (Number(editingFeature.level || 1) || 1),
+          requiredIds: (editingFeature.prerequisites?.items || []).map((item: string) => String(item || '').trim()).filter(Boolean),
+          repeatable: !!editingFeature.prerequisites?.repeatable
+        },
         quantityColumnId: editingFeature.quantityColumnId || '',
         scalingColumnId: editingFeature.scalingColumnId || '',
         automation: {
-          activities: Array.isArray(editingFeature.activities) 
-            ? editingFeature.activities 
+          activities: Array.isArray(editingFeature.activities)
+            ? editingFeature.activities
             : Object.values(editingFeature.activities || {}),
-          effects: parsedEffects
+          effects: Array.isArray(editingFeature.effects) ? editingFeature.effects : []
         },
         updatedAt: new Date().toISOString()
       };
       
       delete featureData.activitiesStr;
-      delete featureData.effectsStr;
+      delete featureData.effects;
       delete featureData.activities;
+      delete featureData.__usesRecoveryDraft;
 
       if (editingFeature.id) {
         await setDoc(doc(db, 'features', editingFeature.id), {
@@ -2526,21 +2622,39 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       level: 1, 
                       isSubclassFeature: false,
                       type: 'class',
+                      subtype: '',
+                      identifier: '',
+                      requirements: '',
+                      sourceId: sourceId || '',
+                      source: {
+                        custom: '',
+                        book: '',
+                        page: '',
+                        license: '',
+                        rules: '',
+                        revision: 1
+                      },
                       configuration: {
                         requiredLevel: 1,
                         requiredIds: [],
                         repeatable: false
                       },
+                      prerequisites: {
+                        level: null,
+                        items: [],
+                        repeatable: false
+                      },
                       properties: ['passive'],
-                      usage: {
+                      uses: {
                         spent: 0,
-                        max: ''
+                        max: '',
+                        recovery: []
                       },
                       quantityColumnId: '',
                       scalingColumnId: '',
                       uniqueOptionGroupIds: [],
                       activities: {},
-                      effectsStr: '[]',
+                      effects: [],
                       advancements: []
                     }));
                     setIsFeatureModalOpen(true);
@@ -2567,13 +2681,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             requiredIds: [],
                             repeatable: false
                           },
-                          properties: feature.properties || ['passive'],
-                          usage: feature.usage || {
-                            spent: 0,
-                            max: ''
-                          },
                           activities: feature.automation?.activities || {},
-                          effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
+                          effects: feature.automation?.effects || [],
                           advancements: feature.advancements || []
                         })); 
                         setIsFeatureModalOpen(true); 
@@ -3839,176 +3948,243 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   </div>
                 )}
 
-                {featureTab === 'details' && (
-                  <div className="space-y-6">
-                    <div className="space-y-4 pt-2">
-                       <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Feature Details</h4>
-                       <div className="p-4 border border-gold/10 bg-gold/5 rounded-md space-y-4">
-                          <div className="grid gap-4">
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] uppercase text-ink/80 font-bold">Type</label>
-                              <Select 
-                                value={editingFeature.type || 'class'} 
-                                onValueChange={val => setEditingFeature({...editingFeature, type: val})}
-                              >
-                                <SelectTrigger className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {FEATURE_TYPES.map(t => (
-                                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] uppercase text-ink/80 font-bold">Required Level</label>
-                              <Input 
-                                type="number"
-                                value={editingFeature.configuration?.requiredLevel || editingFeature.level || 1}
-                                onChange={e => setEditingFeature({
-                                  ...editingFeature, 
-                                  configuration: { ...editingFeature.configuration, requiredLevel: parseInt(e.target.value) }
-                                })}
-                                className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
-                              />
-                              <p className="text-[10px] text-ink/40">Character or class level required to select this feature when levelling up.</p>
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-[10px] uppercase text-ink/80 font-bold">Required Items</label>
-                              <Input 
-                                value={editingFeature.configuration?.requiredIds?.join(', ') || ''} 
-                                onChange={e => setEditingFeature({
-                                  ...editingFeature, 
-                                  configuration: { 
-                                    ...editingFeature.configuration, 
-                                    requiredIds: e.target.value.split(',').map(s => s.trim()).filter(Boolean) 
-                                  }
-                                })}
-                                placeholder="item-identifier-1, item-identifier-2"
-                                className="h-8 text-xs bg-background/50 border-gold/10 focus:border-gold"
-                              />
-                              <p className="text-[10px] text-ink/40">Identifiers for items that the character must have before selecting this item.</p>
-                            </div>
-                            
-                            <div className="flex items-center justify-between pt-2">
-                              <label htmlFor="feat-repeatable" className="text-[11px] text-ink/80 font-black cursor-pointer">Repeatable</label>
-                              <Checkbox 
-                                id="feat-repeatable"
-                                className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white"
-                                checked={editingFeature.configuration?.repeatable || false}
-                                onCheckedChange={checked => setEditingFeature({
-                                  ...editingFeature, 
-                                  configuration: { ...editingFeature.configuration, repeatable: !!checked }
-                                })}
-                              />
-                            </div>
-                            <p className="text-[10px] text-ink/40 mt-[-8px]">This feature can be chosen more than once.</p>
+                {featureTab === 'details' && (() => {
+                  const recovery: any[] = editingFeature.uses?.recovery || [];
+                  const setRecovery = (rows: any[]) =>
+                    setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, recovery: rows } });
+                  const addRecovery = () =>
+                    setRecovery([...recovery, { period: 'lr', type: 'recoverAll' }]);
+                  const removeRecovery = (i: number) =>
+                    setRecovery(recovery.filter((_: any, ri: number) => ri !== i));
+                  const patchRecovery = (i: number, patch: any) =>
+                    setRecovery(recovery.map((r: any, ri: number) => ri === i ? { ...r, ...patch } : r));
 
-                            <div className="space-y-2 pt-2">
-                               <label className="text-[11px] text-ink/80 font-black">Feature Properties</label>
-                               <div className="flex items-center gap-6">
-                                  <div className="flex items-center gap-2">
-                                    <Checkbox 
-                                      id="feat-magical"
-                                      className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white"
-                                      checked={editingFeature.properties?.includes('magical') || false}
-                                      onCheckedChange={checked => {
-                                        const props = editingFeature.properties || [];
-                                        if (checked) {
-                                          setEditingFeature({...editingFeature, properties: [...props, 'magical']});
-                                        } else {
-                                          setEditingFeature({...editingFeature, properties: props.filter(p => p !== 'magical')});
-                                        }
-                                      }}
-                                    />
-                                    <label htmlFor="feat-magical" className="text-[10px] text-ink/60 font-medium cursor-pointer">Magical</label>
+                  const hasSourceContent = !!(editingFeature.sourceId || editingFeature.source?.page || editingFeature.source?.custom);
+
+                  return (
+                    <div className="divide-y divide-gold/10 pt-1">
+
+                      {/* ── FEATURE DETAILS ─────────────────────────────── */}
+                      <div className="py-3 space-y-0 divide-y divide-gold/5">
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 pb-2 select-none">Feature Details</p>
+
+                        {/* Type */}
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Type</label>
+                          <Select value={editingFeature.type || 'class'} onValueChange={val => setEditingFeature({ ...editingFeature, type: val })}>
+                            <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue /></SelectTrigger>
+                            <SelectContent>{FEATURE_TYPES.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Subtype */}
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Subtype</label>
+                          {editingFeature.type === 'class' ? (
+                            <Select value={editingFeature.subtype || ''} onValueChange={val => setEditingFeature({ ...editingFeature, subtype: val })}>
+                              <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue placeholder="None" /></SelectTrigger>
+                              <SelectContent>{CLASS_FEATURE_SUBTYPES.map(o => <SelectItem key={o.id || 'none'} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                          ) : (
+                            <Input value={editingFeature.subtype || ''} onChange={e => setEditingFeature({ ...editingFeature, subtype: e.target.value })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                          )}
+                        </div>
+
+                        {/* Identifier */}
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <div className="shrink-0 w-36">
+                            <p className="text-xs font-semibold text-ink/70">Identifier</p>
+                          </div>
+                          <Input value={editingFeature.identifier || ''} onChange={e => setEditingFeature({ ...editingFeature, identifier: slugify(e.target.value) })} placeholder={slugify(editingFeature.name || 'feature')} className="h-7 text-xs flex-1 font-mono bg-background/50 border-gold/10 focus:border-gold" />
+                        </div>
+
+                        {/* Requirements */}
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Requirements</label>
+                          <Input value={editingFeature.requirements || ''} onChange={e => setEditingFeature({ ...editingFeature, requirements: e.target.value })} placeholder="Barbarian 1" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                        </div>
+
+                        {/* Required Level */}
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <div className="shrink-0 w-36">
+                            <p className="text-xs font-semibold text-ink/70">Required Level</p>
+                            <p className="text-[10px] text-ink/40">Character or class level to select this feature when levelling up.</p>
+                          </div>
+                          <Input type="number" value={editingFeature.prerequisites?.level ?? ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, level: e.target.value ? parseInt(e.target.value) || null : null } })} placeholder="—" className="h-7 text-xs w-24 shrink-0 bg-background/50 border-gold/10 focus:border-gold" />
+                        </div>
+
+                        {/* Required Items */}
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <div className="shrink-0 w-36">
+                            <p className="text-xs font-semibold text-ink/70">Required Items</p>
+                            <p className="text-[10px] text-ink/40">Identifiers the character must have before selecting this.</p>
+                          </div>
+                          <Input value={editingFeature.prerequisites?.items?.join(', ') || ''} onChange={e => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, items: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } })} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                        </div>
+
+                        {/* Repeatable */}
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <div className="shrink-0 w-36">
+                            <p className="text-xs font-semibold text-ink/70">Repeatable</p>
+                            <p className="text-[10px] text-ink/40">This feature can be chosen more than once.</p>
+                          </div>
+                          <Checkbox id="feat-repeatable" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.prerequisites?.repeatable || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, prerequisites: { ...editingFeature.prerequisites, repeatable: !!checked } })} />
+                        </div>
+
+                        {/* Feature Properties */}
+                        <div className="py-2">
+                          <p className="text-xs font-semibold text-ink/70 mb-2">Feature Properties</p>
+                          <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-2">
+                              <Checkbox id="feat-magical" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('mgc') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'mgc'])) : props.filter((p: string) => p !== 'mgc') }); }} />
+                              <label htmlFor="feat-magical" className="text-xs text-ink/70 cursor-pointer">Magical</label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Checkbox id="feat-passive" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('trait') || false} onCheckedChange={checked => { const props = normalizeFeaturePropertiesForEditor(editingFeature.properties || []); setEditingFeature({ ...editingFeature, properties: checked ? Array.from(new Set([...props, 'trait'])) : props.filter((p: string) => p !== 'trait') }); }} />
+                              <label htmlFor="feat-passive" className="text-xs text-ink/70 cursor-pointer">Passive Trait</label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Checkbox id="isSubclassFeature" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature?.isSubclassFeature || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, isSubclassFeature: !!checked })} />
+                              <label htmlFor="isSubclassFeature" className="text-xs text-ink/70 cursor-pointer">Subclass Choice Point</label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── SOURCE (collapsible) ─────────────────────────── */}
+                      <div className="py-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowFeatureSource(v => !v)}
+                          className="flex items-center gap-2 w-full text-left group"
+                        >
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Source</p>
+                          {hasSourceContent && !showFeatureSource && (
+                            <span className="text-[10px] text-ink/50 font-mono">
+                              {sources.find((s: any) => s.id === editingFeature.sourceId)?.abbreviation || editingFeature.source?.book || ''}
+                              {editingFeature.source?.page ? ` p.${editingFeature.source.page}` : ''}
+                            </span>
+                          )}
+                          <span className="ml-auto text-ink/30 text-xs">{showFeatureSource ? '▲' : '▼'}</span>
+                        </button>
+                        {showFeatureSource && (
+                          <div className="mt-2 space-y-0 divide-y divide-gold/5">
+                            <div className="flex items-center justify-between py-2 gap-4">
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Book</label>
+                              <select value={editingFeature.sourceId || ''} onChange={e => { const match = sources.find((s: any) => s.id === e.target.value); setEditingFeature({ ...editingFeature, sourceId: e.target.value, source: { ...editingFeature.source, book: match?.abbreviation || match?.name || editingFeature.source?.book || '' } }); }} className="h-7 flex-1 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink">
+                                <option value="">Inherit class source</option>
+                                {sources.map((entry: any) => <option key={entry.id} value={entry.id}>{entry.name}{entry.abbreviation ? ` (${entry.abbreviation})` : ''}</option>)}
+                              </select>
+                            </div>
+                            <div className="flex items-center justify-between py-2 gap-4">
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Page</label>
+                              <Input value={editingFeature.source?.page || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, page: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                            </div>
+                            <div className="flex items-center justify-between py-2 gap-4">
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Rules</label>
+                              <Input value={editingFeature.source?.rules || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, rules: e.target.value } })} placeholder="2014, 2024" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                            </div>
+                            <div className="flex items-center justify-between py-2 gap-4">
+                              <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Custom Note</label>
+                              <Input value={editingFeature.source?.custom || ''} onChange={e => setEditingFeature({ ...editingFeature, source: { ...editingFeature.source, custom: e.target.value } })} className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ── USAGE ───────────────────────────────────────── */}
+                      <div className="py-3 space-y-0 divide-y divide-gold/5">
+                        <div className="flex items-center justify-between pb-2">
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Usage</p>
+                          <ReferenceSyntaxHelp title="Usage Formula References" description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape." buttonLabel="Usage Help" value={editingFeature.uses?.max || ''} context={classReferenceContext} />
+                        </div>
+                        <div className="flex items-center gap-4 py-2">
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Limited Uses</label>
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Spent</span>
+                              <Input type="number" value={editingFeature.uses?.spent || 0} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, spent: parseInt(e.target.value) || 0 } })} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                            </div>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Max</span>
+                              <Input value={editingFeature.uses?.max || ''} onChange={e => setEditingFeature({ ...editingFeature, uses: { ...editingFeature.uses, max: e.target.value } })} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── RECOVERY ────────────────────────────────────── */}
+                      <div className="py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Recovery</p>
+                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/60 hover:text-gold transition-colors px-1">+ ADD</button>
+                        </div>
+                        {recovery.length === 0 && (
+                          <p className="text-xs text-ink/30 italic py-1">No recovery rules. Click + ADD to add one.</p>
+                        )}
+                        <div className="space-y-1.5">
+                          {recovery.map((row: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2">
+                              {/* Period */}
+                              <div className="flex flex-col gap-0.5 flex-1">
+                                {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Period</span>}
+                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                  <option value="lr">Long Rest</option>
+                                  <option value="sr">Short Rest</option>
+                                  <option value="day">Daily</option>
+                                  <option value="dawn">Dawn</option>
+                                  <option value="dusk">Dusk</option>
+                                  <option value="initiative">Initiative</option>
+                                  <option value="turnStart">Turn Start</option>
+                                  <option value="turnEnd">Turn End</option>
+                                  <option value="turn">Each Turn</option>
+                                  <option value="recharge">Recharge</option>
+                                </select>
+                              </div>
+                              {/* Recovery type or Recharge value */}
+                              {row.period === 'recharge' ? (
+                                <div className="flex flex-col gap-0.5 flex-1">
+                                  {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Value</span>}
+                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                    <option value="6">Recharge 6</option>
+                                    <option value="5">Recharge 5–6</option>
+                                    <option value="4">Recharge 4–6</option>
+                                    <option value="3">Recharge 3–6</option>
+                                    <option value="2">Recharge 2–6</option>
+                                  </select>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex flex-col gap-0.5 flex-1">
+                                    {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Recovery</span>}
+                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                      <option value="recoverAll">Recover All Uses</option>
+                                      <option value="loseAll">Lose All Uses</option>
+                                      <option value="formula">Custom Formula</option>
+                                    </select>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Checkbox 
-                                      id="feat-passive"
-                                      className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white"
-                                      checked={editingFeature.properties?.includes('passive') || false}
-                                      onCheckedChange={checked => {
-                                        const props = editingFeature.properties || [];
-                                        if (checked) {
-                                          setEditingFeature({...editingFeature, properties: [...props, 'passive']});
-                                        } else {
-                                          setEditingFeature({...editingFeature, properties: props.filter(p => p !== 'passive')});
-                                        }
-                                      }}
-                                    />
-                                    <label htmlFor="feat-passive" className="text-[10px] text-ink/60 font-medium cursor-pointer">Passive Trait</label>
-                                  </div>
-                               </div>
+                                  {row.type === 'formula' && (
+                                    <div className="flex flex-col gap-0.5 flex-1">
+                                      {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Formula</span>}
+                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold" />
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              {/* Remove */}
+                              <div className={i === 0 ? 'pt-3.5' : ''}>
+                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/30 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
+                                  <span className="text-sm leading-none">−</span>
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                       </div>
-                    </div>
+                          ))}
+                        </div>
+                      </div>
 
-                    <div className="space-y-4 pt-2">
-                       <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Usage</h4>
-                       <div className="p-4 border border-gold/10 bg-gold/5 rounded-md space-y-4">
-                          <div className="section-header">
-                            <label className="text-[11px] text-ink/80 font-black">Limited Uses</label>
-                            <ReferenceSyntaxHelp
-                              title="Usage Formula References"
-                              description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape."
-                              buttonLabel="Usage Help"
-                              value={editingFeature.usage?.max || ''}
-                              context={classReferenceContext}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-4">
-                             <div className="space-y-1">
-                              <label className="text-[9px] uppercase text-ink/60 font-black">Spent</label>
-                              <Input 
-                                type="number"
-                                value={editingFeature.usage?.spent || 0}
-                                onChange={e => setEditingFeature({
-                                  ...editingFeature, 
-                                  usage: { ...editingFeature.usage, spent: parseInt(e.target.value) || 0 }
-                                })}
-                                className="h-8 text-center text-xs bg-background/50 border-gold/10 focus:border-gold w-20"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[9px] uppercase text-ink/60 font-black">Max</label>
-                              <Input 
-                                value={editingFeature.usage?.max || ''}
-                                onChange={e => setEditingFeature({
-                                  ...editingFeature, 
-                                  usage: { ...editingFeature.usage, max: e.target.value }
-                                })}
-                                placeholder="Value or formula"
-                                className="h-8 text-center text-xs bg-background/50 border-gold/10 focus:border-gold w-32"
-                              />
-                            </div>
-                          </div>
-                          </div>
-                       </div>
                     </div>
-
-                    <div className="space-y-4 pt-2">
-                       <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Dauligor Extensions</h4>
-                       <div className="p-4 border border-gold/10 bg-gold/5 rounded-md space-y-4">
-                         <div className="flex items-center gap-2 pb-2 border-b border-gold/10">
-                          <input 
-                            type="checkbox" 
-                            id="isSubclassFeature"
-                            checked={editingFeature?.isSubclassFeature || false}
-                            onChange={e => setEditingFeature({...editingFeature, isSubclassFeature: e.target.checked})}
-                            className="w-4 h-4 rounded border-gold/20 text-gold focus:ring-gold"
-                          />
-                          <label htmlFor="isSubclassFeature" className="label-text text-ink/60">
-                            Subclass Choice Point
-                          </label>
-                         </div>
-                       </div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {featureTab === 'activities' && (
                   <div className="pt-2">
@@ -4020,13 +4196,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 )}
 
                 {featureTab === 'effects' && (
-                  <div className="space-y-4 pt-2">
-                    <h4 className="label-text text-gold uppercase tracking-widest text-[10px]">Effects (JSON Array)</h4>
-                    <textarea
-                      value={editingFeature.effectsStr || ''}
-                      onChange={e => setEditingFeature({ ...editingFeature, effectsStr: e.target.value })}
-                      className="w-full h-64 p-4 text-xs font-mono bg-background/50 border border-gold/10 rounded focus:border-gold outline-none"
-                      placeholder='[ { "name": "EffectName" } ]'
+                  <div className="pt-2">
+                    <ActiveEffectEditor
+                      effects={editingFeature.effects || []}
+                      onChange={fx => setEditingFeature({ ...editingFeature, effects: fx })}
                     />
                   </div>
                 )}

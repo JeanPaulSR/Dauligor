@@ -174,6 +174,36 @@ Latest implemented details:
 - Fix: removed the `!isWYSIWYG` guard. `{ emitUpdate: false }` on `setContent` prevents feedback loops.
 - This affects any editor field that loads async data (e.g., Firestore group description).
 
+## Current Feature Details Tab Layout
+
+Both `ClassEditor.tsx` and `SubclassEditor.tsx` feature modal Details tabs have been redesigned to match Foundry's horizontal field-row layout:
+
+- **Feature Details** section: single-column horizontal rows (label left `w-36`, control right) for Type, Subtype, Identifier, Requirements, Required Level, Required Items, Repeatable, Feature Properties checkboxes (Magical, Passive Trait, Subclass Choice Point).
+- **Source** (ClassEditor only): collapsed by default. Shows a summary line (book + page) when closed. Expands to Book dropdown, Page, Rules, Custom Note fields. Opens automatically if source content exists.
+- **Usage** section: horizontal "Limited Uses" row with Spent and Max inline.
+- **Recovery** section: `+ ADD` button in section header. Each row: Period select | Recovery type select (or Recharge value select if period=recharge) | Formula input (if type=formula) | `−` remove button. Column labels only on the first row. Recharge period locks type to `recoverAll` and shows a value select (2–6).
+
+Recovery data shape (matches Foundry `system.uses.recovery`):
+```json
+{ "period": "lr", "type": "recoverAll" }
+{ "period": "lr", "type": "formula", "formula": "2 + @class.level" }
+{ "period": "recharge", "type": "recoverAll", "formula": "6" }
+```
+
+**State path difference**: ClassEditor uses `editingFeature.uses.recovery`; SubclassEditor uses `editingFeature.usage.recovery`. This is a pre-existing inconsistency in the two editors — not introduced here. The export in SubclassEditor spreads `editingFeature` directly so `usage.recovery` is preserved as-is.
+
+## Current Active Effect Editor
+
+- `src/components/compendium/ActiveEffectEditor.tsx` — fully rewritten to match Foundry's `ActiveEffectConfig` layout with Dauligor styling.
+- **List view**: bordered container with "Passive Effects | SOURCE" column header. Each row: icon (Zap fallback), name, "actor" badge (`transfer !== false`), "suspended" badge (`disabled`), change key+mode summary. Hover reveals edit/trash. Small `+` button in bottom-right bordered footer bar.
+- **Dialog header**: 12×12 rounded icon box + large borderless name input (no form field wrapper). Underline-style tabs (not pills).
+- **Details tab** (`divide-y` horizontal rows): Icon Tint Color (hex input + color swatch picker), Effect Description (textarea), Effect Suspended checkbox (right-aligned), Apply Effect to Actor checkbox + hint text, Icon Path.
+- **Duration tab**: two `border border-gold/10 rounded-md` grouped boxes: Group 1 (Seconds, Start Time), Group 2 (Combat: Rounds + Turns inline; Start: Round + Turn inline).
+- **Changes tab**: column header row (search-icon spacer | Attribute Key + `?` wiki link | Change Mode | Value | Priority | `+` add button). Each row: Search icon (decorative) | key (mono `flex-[2]`) | mode select (no numeric prefix) | value (mono `flex-1`) | priority (greyed placeholder = `defaultPriorityForMode(mode)`) | trash.
+- Effect modes: 0=Custom(0), 1=Multiply(10), 2=Add(20), 3=Downgrade(30), 4=Upgrade(40), 5=Override(50) — priority numbers are defaults shown as placeholder only.
+- Replaced `effectsStr` JSON textarea in both `ClassEditor.tsx` and `SubclassEditor.tsx`. Both use `effects: any[]` state. Save writes `automation.effects` as a Foundry-compatible array.
+- **Open**: `statuses` strings pass through unchanged — no UI to author status conditions yet.
+
 ## Current App / Foundry Integration Areas
 
 Implemented or substantially working:
@@ -222,6 +252,9 @@ Implemented or substantially working:
 
 Still active or likely follow-up areas:
 
+- **activities tab parity pass** — apply the same Foundry-parity approach to `ActivityEditor.tsx` using the captured Foundry activity window JSONs in `E:/DnD/Professional/Foundry-JSON/windows/`
+- **ActiveEffectEditor statuses** — `statuses` strings pass through unchanged; no UI yet to author status conditions on an effect
+- **uses vs usage path inconsistency** — `ClassEditor` uses `editingFeature.uses.recovery`; `SubclassEditor` uses `editingFeature.usage.recovery`; pre-existing, worth reconciling in a cleanup pass
 - multiclassing verification with more class examples beyond the verified Artificer/Sorcerer case
 - verify the new Dauligor ASI prompt in live Foundry, especially multi-level imports that cross an ASI level and feat selection from a real Dauligor feat catalog
 - verify multiclass HP behavior in live Foundry after the max-override fix, especially second-class imports and damaged actors
@@ -269,7 +302,95 @@ Latest Foundry window-structure capture details:
   - static template metadata such as `PARTS`, `TABS`, and default options when exposed by the app class
 - this was added specifically to let us capture real spell / feat / item / activity window structures for Dauligor parity work
 - it now also covers standalone `ActiveEffect` config windows
+- exported reference captures are currently being saved under:
+  - `E:/DnD/Professional/Foundry-JSON/windows`
+- the current reference set now includes:
+  - spell item shell
+  - feat/feature item shell
+  - standalone `ActiveEffectConfig`
+  - activity windows for `attack`, `cast` (with and without override), `check`, `damage`, `enchant`, `forward`, `heal`, `summon`, `transform`, and `utility`
+- this is enough to start designing the shared item/activity/effect editor architecture in Dauligor with real Foundry-backed context, though one `save` activity export would still complete the activity-type coverage if needed later
 - this debug export button should be removed later after enough reference captures have been saved
+
+## Current Window-Editor Priority
+
+This is the active workstream and should take priority over other app improvements for now.
+
+Work in this order:
+
+1. Fix the Class Feature Editor window first
+   - source file:
+     - `E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/ClassEditor.tsx`
+   - current state:
+     - the modal shell is usable
+     - the broad tab structure already matches Foundry reasonably well:
+       - `description`
+       - `details`
+       - `activities`
+       - `effects`
+       - Dauligor-only `advancement`
+     - the main mismatch is that `details` is still Dauligor-first instead of Foundry-first
+     - the feature editor still mixes item metadata, progression metadata, and Dauligor-only authoring helpers in one details surface
+   - immediate goal:
+     - make the feature editor window structurally follow the captured Foundry feature/item window more closely before deeper sub-editors are rebuilt
+   - latest implemented step:
+     - the Class Feature Editor `details` tab in `ClassEditor.tsx` has now been reorganized into a more Foundry-first layout
+     - it now groups:
+       - source
+       - classification
+       - identifier and requirements
+       - prerequisites
+       - uses / recovery
+       - properties
+       - Dauligor-only subclass-choice toggle
+     - save logic now mirrors these Foundry-style editor fields back into the older compatibility fields we still use elsewhere:
+       - `configuration`
+       - `usage`
+       - normalized feature `properties`
+
+2. Then fix effects and Active Effect components
+   - the current effects tab in the feature editor is still just raw JSON textarea input
+   - the new reference source for this work is:
+     - `E:/DnD/Professional/Foundry-JSON/windows/activeeffect-base-active-effect-unarmored-defense.json`
+   - use this to build:
+     - item-side effect list handling
+     - Active Effect create/edit UI structure
+     - details / duration / changes style grouping
+   - JSON fallback is acceptable temporarily, but raw JSON should no longer be the primary effects authoring experience
+
+3. Then move onto activities
+   - current activity editor source:
+     - `E:/DnD/Professional/Dev/Dauligor/src/components/compendium/ActivityEditor.tsx`
+   - current state:
+     - activity type coverage is already broad
+     - it is a useful foundation
+     - but it is still a custom semantic editor rather than a closer Foundry-parity editor
+   - use the exported activity windows in:
+     - `E:/DnD/Professional/Foundry-JSON/windows`
+   - current captured activity references include:
+     - `attack`
+     - `cast` with and without override
+     - `check`
+     - `damage`
+     - `enchant`
+     - `forward`
+     - `heal`
+     - `summon`
+     - `transform`
+     - `utility`
+   - the remaining optional capture is a `save` activity, but that is not required before starting the activity rebuild
+
+### Handoff Note
+
+For the next agent:
+
+- keep the current focus narrow
+- do not drift into unrelated builder, spell-list, exporter, or broader compendium cleanup unless it directly blocks this work
+- the current target is editor-parity work in this order:
+  - class feature editor shell/details
+  - effects / Active Effect editor
+  - activities
+- treat other open items as later follow-up unless they are required to complete this editor workstream
   - section headers styled like class filter groups
   - `Include All | Clear` controls in the section header row
   - `filter-tag` / `btn-gold` button styling for options

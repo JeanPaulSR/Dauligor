@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "updatedAt": "2026-04-30",
+  "version": 6,
+  "updatedAt": "2026-04-28",
   "paths": {
     "appRepo": "E:/DnD/Professional/Dev/Dauligor",
     "moduleDev": "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing",
@@ -123,7 +123,67 @@
       "future effects/reference work should review Foundry wiki guidance and Midi-QOL effect conventions"
       ,
       "the Foundry module now adds a temporary GM-only header export button to item, activity-style, and standalone ActiveEffect config windows so we can capture document envelopes, prepared context, rendered HTML, and static template metadata for parity work",
+      "window-structure reference captures are currently being saved under E:/DnD/Professional/Foundry-JSON/windows and now cover the spell item shell, feat/feature item shell, standalone ActiveEffectConfig, and activity windows for attack, cast, check, damage, enchant, forward, heal, summon, transform, and utility",
+      "one save-activity export would still complete the activity-type coverage if we decide we need every Foundry activity subtype captured",
       "that temporary Foundry window export button should be removed later after enough spell, feat, item, and activity reference captures have been saved"
+    ]
+  },
+  "featureDetailsTab": {
+    "layout": "Foundry-style single-column horizontal rows (label w-36 left, control right)",
+    "sections": ["featureDetails", "source", "usage", "recovery"],
+    "sourceCollapsible": true,
+    "sourceDefaultCollapsed": true,
+    "recoveryShape": "array of { period, type, formula? } matching Foundry system.uses.recovery",
+    "recoveryPeriods": ["lr", "sr", "day", "dawn", "dusk", "initiative", "turnStart", "turnEnd", "turn", "recharge"],
+    "recoveryTypes": ["recoverAll", "loseAll", "formula"],
+    "rechargeValues": ["6", "5", "4", "3", "2"],
+    "classEditorRecoveryPath": "editingFeature.uses.recovery",
+    "subclassEditorRecoveryPath": "editingFeature.usage.recovery",
+    "knownInconsistency": "ClassEditor uses editingFeature.uses, SubclassEditor uses editingFeature.usage — pre-existing, not introduced here"
+  },
+  "activeEffectEditor": {
+    "component": "src/components/compendium/ActiveEffectEditor.tsx",
+    "visualDesign": "Foundry-parity rewrite matching Foundry's ActiveEffectConfig window layout with Dauligor styling",
+    "tabs": ["details", "duration", "changes"],
+    "listView": {
+      "header": "Passive Effects | SOURCE column header row",
+      "rows": "icon + name, actor badge if transfer!==false, suspended badge if disabled, change key+mode summary",
+      "footer": "bottom-right + button in a bordered footer bar"
+    },
+    "dialogHeader": "icon (12x12 rounded, Zap fallback) + large borderless name input — not a form field",
+    "tabStyle": "underline tabs (not pill tabs)",
+    "detailsTab": {
+      "layout": "divide-y horizontal rows",
+      "rows": ["Icon Tint Color (hex + color picker)", "Effect Description (textarea)", "Effect Suspended (checkbox right)", "Apply Effect to Actor (checkbox right + hint text)", "Icon Path"]
+    },
+    "durationTab": {
+      "layout": "two grouped bordered boxes",
+      "group1": ["Effect Duration (Seconds)", "Effect Start Time"],
+      "group2": ["Effect Duration Combat (Rounds + Turns inline)", "Effect Start (Round + Turn inline)"]
+    },
+    "changesTab": {
+      "layout": "column headers row + per-row table",
+      "headers": ["(search icon spacer)", "Attribute Key (+ ? wiki link)", "Change Mode", "Value", "Priority", "+ add button"],
+      "rowFields": ["Search icon (decorative)", "key (mono font, flex-[2])", "mode select (no numeric prefix)", "value (mono font, flex-1)", "priority (greyed placeholder = defaultPriorityForMode(mode))", "trash button"],
+      "wikiLink": "https://github.com/foundryvtt/dnd5e/wiki/Active-Effect-Guide"
+    },
+    "effectModes": {
+      "0": {"label": "Custom", "defaultPriority": 0},
+      "1": {"label": "Multiply", "defaultPriority": 10},
+      "2": {"label": "Add", "defaultPriority": 20},
+      "3": {"label": "Downgrade", "defaultPriority": 30},
+      "4": {"label": "Upgrade", "defaultPriority": 40},
+      "5": {"label": "Override", "defaultPriority": 50}
+    },
+    "stateKey": "effects",
+    "replacedRawJsonTextarea": true,
+    "affectedEditors": ["ClassEditor.tsx", "SubclassEditor.tsx"],
+    "exportPath": "automation.effects",
+    "exportShapeFoundryCompatible": true,
+    "statusesNotYetEditable": true,
+    "openItems": [
+      "statuses array is pass-through — no UI to author status conditions yet",
+      "activities tab next parity pass not yet started"
     ]
   },
   "uniqueOptionGroupEditor": {
@@ -188,6 +248,67 @@
     "deprecatedPreparationModeWritten": false,
     "acceptedShorthandFormulaExample": "WIS + Level",
     "preferredNativeFormulaExample": "@abilities.wis.mod + @classes.druid.levels"
+  },
+  "currentEditorPriority": {
+    "activeWorkstream": "Foundry-parity editor work for feature, effect, and activity windows",
+    "orderedGoals": [
+      "fix the Class Feature Editor window first",
+      "then fix effects and Active Effect components",
+      "then rebuild activities toward the captured Foundry activity windows"
+    ],
+    "focusRule": "treat other app and module tasks as later follow-up unless they directly block this editor workstream",
+    "featureEditor": {
+      "primaryFile": "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/ClassEditor.tsx",
+      "currentState": [
+        "the modal shell is usable",
+        "the broad tab structure already aligns reasonably well with Foundry: description, details, activities, effects, and a Dauligor-only advancement tab",
+        "the details tab has now been reorganized into a more Foundry-first layout, but deeper effects and activities parity still remain",
+        "the current details tab mixes item metadata, progression metadata, and Dauligor-only authoring helpers in one surface"
+      ],
+      "goal": "continue making the Class Feature Editor window structurally follow the captured Foundry feature/item window before rebuilding deeper sub-editors",
+      "latestImplementedStep": [
+        "the details tab now groups source, classification, identifier, requirements, prerequisites, uses/recovery, properties, and the Dauligor-only subclass-choice toggle",
+        "save logic now mirrors these Foundry-style editor fields back into the older compatibility fields we still use elsewhere such as configuration and usage"
+      ]
+    },
+    "effects": {
+      "currentState": [
+        "ActiveEffectEditor.tsx has been fully rewritten to match Foundry's ActiveEffectConfig layout",
+        "list view matches Foundry: Passive Effects header, SOURCE column, hover edit/trash, + button in footer bar",
+        "dialog header: large icon + borderless name input (not a form field), underline tabs",
+        "Details tab: tint color, description, suspended, transfer/apply-to-actor, icon path — all as horizontal divide-y rows",
+        "Duration tab: two grouped bordered boxes for seconds/startTime and combat rounds/turns",
+        "Changes tab: column headers, Search icon per row, mode select without numeric prefix, greyed priority placeholder",
+        "effectsStr JSON textarea removed from ClassEditor and SubclassEditor; both now use effects: any[] state",
+        "export writes automation.effects as Foundry-compatible array"
+      ],
+      "referenceFile": "E:/DnD/Professional/Foundry-JSON/windows/activeeffect-base-active-effect-unarmored-defense.json",
+      "goal": "DONE — Foundry-parity visual redesign complete. Remaining: statuses authoring UI, activity tab parity pass"
+    },
+    "activities": {
+      "primaryFile": "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/ActivityEditor.tsx",
+      "currentState": [
+        "activity type coverage is already broad",
+        "the current editor is a useful foundation",
+        "it is still a custom semantic editor rather than a closer Foundry-parity editor"
+      ],
+      "referenceFolder": "E:/DnD/Professional/Foundry-JSON/windows",
+      "capturedTypes": [
+        "attack",
+        "cast-with-override",
+        "cast-without-override",
+        "check",
+        "damage",
+        "enchant",
+        "forward",
+        "heal",
+        "summon",
+        "transform",
+        "utility"
+      ],
+      "optionalRemainingCapture": "save"
+    },
+    "handoffNote": "keep the next pass narrow: class feature editor shell/details first, then effects/Active Effect editor, then activities; avoid drifting into unrelated builder, spell-list, exporter, or broader compendium work unless directly required"
   },
   "characterBuilderSheetAlignment": {
     "sheetSubtabs": [
@@ -532,6 +653,8 @@
       "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/SubclassEditor.tsx",
       "E:/DnD/Professional/Dev/Dauligor/src/pages/compendium/UniqueOptionGroupEditor.tsx",
       "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/AdvancementManager.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/ActiveEffectEditor.tsx",
+      "E:/DnD/Professional/Dev/Dauligor/src/components/compendium/ActivityEditor.tsx",
       "E:/DnD/Professional/Dev/Dauligor/src/components/MarkdownEditor.tsx"
     ],
     "module": [
@@ -547,6 +670,9 @@
     ]
   },
   "activeFollowups": [
+    "activities tab parity pass — apply the same Foundry-parity approach to ActivityEditor using the captured Foundry activity window JSONs in E:/DnD/Professional/Foundry-JSON/windows/",
+    "add statuses (status condition strings) editing UI to ActiveEffectEditor Details tab when a creator needs to author status conditions on an effect",
+    "reconcile editingFeature.uses (ClassEditor) vs editingFeature.usage (SubclassEditor) path inconsistency in a future cleanup pass so both editors use the same state shape",
     "extend the new reference helper surface into more formula-bearing editors such as activity formulas and remaining character-sheet fields",
     "expand the future reference sheet to cover core information, attributes, skills, class features, class columns, and later effects",
     "research Foundry wiki and Midi-QOL effect declaration patterns for the later effects/reference pass",

@@ -17,6 +17,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
+import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -388,14 +389,6 @@ export default function SubclassEditor() {
     }
 
     try {
-      let parsedEffects = [];
-      try {
-        if (editingFeature.effectsStr) parsedEffects = JSON.parse(editingFeature.effectsStr);
-      } catch (err) {
-        toast.error("Invalid JSON in Effects");
-        return;
-      }
-
       const featureData: any = {
         ...editingFeature,
         parentId: id,
@@ -406,16 +399,16 @@ export default function SubclassEditor() {
         quantityColumnId: editingFeature.quantityColumnId || '',
         scalingColumnId: editingFeature.scalingColumnId || '',
         automation: {
-          activities: Array.isArray(editingFeature.activities) 
-            ? editingFeature.activities 
+          activities: Array.isArray(editingFeature.activities)
+            ? editingFeature.activities
             : Object.values(editingFeature.activities || {}),
-          effects: parsedEffects
+          effects: Array.isArray(editingFeature.effects) ? editingFeature.effects : []
         },
         updatedAt: serverTimestamp()
       };
-      
+
       delete featureData.activitiesStr;
-      delete featureData.effectsStr;
+      delete featureData.effects;
       delete featureData.activities;
 
       if (editingFeature.id) {
@@ -864,7 +857,7 @@ export default function SubclassEditor() {
                                     scalingColumnId: '',
                                     uniqueOptionGroupIds: [],
                                     activities: {},
-                                    effectsStr: '[]'
+                                    effects: []
                                   }));
                                   setIsFeatureModalOpen(true);
                                 }}
@@ -894,7 +887,7 @@ export default function SubclassEditor() {
                                           max: ''
                                         },
                                         activities: feature.automation?.activities || {},
-                                        effectsStr: feature.automation?.effects ? JSON.stringify(feature.automation.effects, null, 2) : '[]',
+                                        effects: feature.automation?.effects || [],
                                         advancements: feature.advancements || []
                                       })); 
                                       setIsFeatureModalOpen(true); 
@@ -1194,144 +1187,160 @@ export default function SubclassEditor() {
                   </div>
                 )}
 
-                {featureTab === 'details' && (
-                  <div className="space-y-8 pt-2">
-                    <div className="space-y-4">
-                      <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Feature Configuration</h4>
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] uppercase text-ink/60 font-bold">Type</label>
-                          <Select 
-                            value={editingFeature.type || 'class'} 
-                            onValueChange={val => setEditingFeature({...editingFeature, type: val})}
-                          >
-                            <SelectTrigger className="h-10 bg-background/50 border-gold/10 text-sm">
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {FEATURE_TYPES.map(t => (
-                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                              ))}
-                            </SelectContent>
+                {featureTab === 'details' && (() => {
+                  const recovery: any[] = editingFeature.usage?.recovery || [];
+                  const setRecovery = (rows: any[]) =>
+                    setEditingFeature({ ...editingFeature, usage: { ...editingFeature.usage, recovery: rows } });
+                  const addRecovery = () =>
+                    setRecovery([...recovery, { period: 'lr', type: 'recoverAll' }]);
+                  const removeRecovery = (i: number) =>
+                    setRecovery(recovery.filter((_: any, ri: number) => ri !== i));
+                  const patchRecovery = (i: number, patch: any) =>
+                    setRecovery(recovery.map((r: any, ri: number) => ri === i ? { ...r, ...patch } : r));
+                  return (
+                    <div className="divide-y divide-gold/10 pt-1">
+
+                      {/* ── FEATURE DETAILS ─────────────────────────────── */}
+                      <div className="py-3 space-y-0 divide-y divide-gold/5">
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 pb-2 select-none">Feature Details</p>
+
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Type</label>
+                          <Select value={editingFeature.type || 'class'} onValueChange={val => setEditingFeature({ ...editingFeature, type: val })}>
+                            <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"><SelectValue /></SelectTrigger>
+                            <SelectContent>{FEATURE_TYPES.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1 opacity-80">
-                          <label className="text-[10px] uppercase text-ink/60 font-bold">Required Level</label>
-                          <Input 
-                            type="number"
-                            value={editingFeature.configuration?.requiredLevel || editingFeature.level || 1}
-                            readOnly
-                            className="h-10 text-sm bg-background/20 border-gold/5 pointer-events-none select-none text-ink/50"
-                          />
+
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <div className="shrink-0 w-36">
+                            <p className="text-xs font-semibold text-ink/70">Required Level</p>
+                            <p className="text-[10px] text-ink/40">Set by the feature level above.</p>
+                          </div>
+                          <Input type="number" value={editingFeature.configuration?.requiredLevel || editingFeature.level || 1} readOnly className="h-7 text-xs w-20 shrink-0 text-center bg-background/20 border-gold/5 pointer-events-none select-none text-ink/50" />
+                        </div>
+
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <div className="shrink-0 w-36">
+                            <p className="text-xs font-semibold text-ink/70">Required Items</p>
+                            <p className="text-[10px] text-ink/40">Identifiers the character must have before selecting this.</p>
+                          </div>
+                          <Input value={editingFeature.configuration?.requiredIds?.join(', ') || ''} onChange={e => setEditingFeature({ ...editingFeature, configuration: { ...editingFeature.configuration, requiredIds: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean) } })} placeholder="item-identifier-1, item-identifier-2" className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold" />
+                        </div>
+
+                        <div className="flex items-center justify-between py-2 gap-4">
+                          <div className="shrink-0 w-36">
+                            <p className="text-xs font-semibold text-ink/70">Repeatable</p>
+                            <p className="text-[10px] text-ink/40">This feature can be chosen more than once.</p>
+                          </div>
+                          <Checkbox id="feat-repeatable" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.configuration?.repeatable || false} onCheckedChange={checked => setEditingFeature({ ...editingFeature, configuration: { ...editingFeature.configuration, repeatable: !!checked } })} />
+                        </div>
+
+                        <div className="py-2">
+                          <p className="text-xs font-semibold text-ink/70 mb-2">Feature Properties</p>
+                          <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-2">
+                              <Checkbox id="feat-magical" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('magical') || false} onCheckedChange={checked => { const props = editingFeature.properties || []; setEditingFeature({ ...editingFeature, properties: checked ? [...props, 'magical'] : props.filter((p: string) => p !== 'magical') }); }} />
+                              <label htmlFor="feat-magical" className="text-xs text-ink/70 cursor-pointer">Magical</label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Checkbox id="feat-passive" className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white" checked={editingFeature.properties?.includes('passive') || false} onCheckedChange={checked => { const props = editingFeature.properties || []; setEditingFeature({ ...editingFeature, properties: checked ? [...props, 'passive'] : props.filter((p: string) => p !== 'passive') }); }} />
+                              <label htmlFor="feat-passive" className="text-xs text-ink/70 cursor-pointer">Passive Trait</label>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase text-ink/60 font-bold">Required Items (Identifiers)</label>
-                        <Input 
-                          value={editingFeature.configuration?.requiredIds?.join(', ') || ''} 
-                          onChange={e => setEditingFeature({
-                            ...editingFeature, 
-                            configuration: { 
-                              ...editingFeature.configuration, 
-                              requiredIds: e.target.value.split(',').map(s => s.trim()).filter(Boolean) 
-                            }
-                          })}
-                          placeholder="item-identifier-1, item-identifier-2"
-                          className="h-10 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                        />
+                      {/* ── USAGE ───────────────────────────────────────── */}
+                      <div className="py-3 space-y-0 divide-y divide-gold/5">
+                        <div className="flex items-center justify-between pb-2">
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Usage</p>
+                          <ReferenceSyntaxHelp title="Usage Formula References" description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape." buttonLabel="Usage Help" value={editingFeature.usage?.max || ''} context={subclassReferenceContext} />
+                        </div>
+                        <div className="flex items-center gap-4 py-2">
+                          <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Limited Uses</label>
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Spent</span>
+                              <Input type="number" value={editingFeature.usage?.spent || 0} onChange={e => setEditingFeature({ ...editingFeature, usage: { ...editingFeature.usage, spent: parseInt(e.target.value) || 0 } })} className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                            </div>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Max</span>
+                              <Input value={editingFeature.usage?.max || ''} onChange={e => setEditingFeature({ ...editingFeature, usage: { ...editingFeature.usage, max: e.target.value } })} placeholder="—" className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold" />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-4">
-                       <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Traits & Usage</h4>
-                       <div className="grid grid-cols-2 gap-8">
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                              <Checkbox 
-                                id="feat-repeatable"
-                                className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white"
-                                checked={editingFeature.configuration?.repeatable || false}
-                                onCheckedChange={checked => setEditingFeature({
-                                  ...editingFeature, 
-                                  configuration: { ...editingFeature.configuration, repeatable: !!checked }
-                                })}
-                              />
-                              <label htmlFor="feat-repeatable" className="text-[10px] uppercase text-ink/60 font-bold cursor-pointer">Repeatable</label>
+                      {/* ── RECOVERY ────────────────────────────────────── */}
+                      <div className="py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Recovery</p>
+                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/60 hover:text-gold transition-colors px-1">+ ADD</button>
+                        </div>
+                        {recovery.length === 0 && (
+                          <p className="text-xs text-ink/30 italic py-1">No recovery rules. Click + ADD to add one.</p>
+                        )}
+                        <div className="space-y-1.5">
+                          {recovery.map((row: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <div className="flex flex-col gap-0.5 flex-1">
+                                {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Period</span>}
+                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                  <option value="lr">Long Rest</option>
+                                  <option value="sr">Short Rest</option>
+                                  <option value="day">Daily</option>
+                                  <option value="dawn">Dawn</option>
+                                  <option value="dusk">Dusk</option>
+                                  <option value="initiative">Initiative</option>
+                                  <option value="turnStart">Turn Start</option>
+                                  <option value="turnEnd">Turn End</option>
+                                  <option value="turn">Each Turn</option>
+                                  <option value="recharge">Recharge</option>
+                                </select>
+                              </div>
+                              {row.period === 'recharge' ? (
+                                <div className="flex flex-col gap-0.5 flex-1">
+                                  {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Value</span>}
+                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                    <option value="6">Recharge 6</option>
+                                    <option value="5">Recharge 5–6</option>
+                                    <option value="4">Recharge 4–6</option>
+                                    <option value="3">Recharge 3–6</option>
+                                    <option value="2">Recharge 2–6</option>
+                                  </select>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex flex-col gap-0.5 flex-1">
+                                    {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Recovery</span>}
+                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                      <option value="recoverAll">Recover All Uses</option>
+                                      <option value="loseAll">Lose All Uses</option>
+                                      <option value="formula">Custom Formula</option>
+                                    </select>
+                                  </div>
+                                  {row.type === 'formula' && (
+                                    <div className="flex flex-col gap-0.5 flex-1">
+                                      {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Formula</span>}
+                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold" />
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              <div className={i === 0 ? 'pt-3.5' : ''}>
+                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/30 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
+                                  <span className="text-sm leading-none">−</span>
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Checkbox 
-                                id="feat-magical"
-                                className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white"
-                                checked={editingFeature.properties?.includes('magical') || false}
-                                onCheckedChange={checked => {
-                                  const props = editingFeature.properties || [];
-                                  if (checked) {
-                                    setEditingFeature({...editingFeature, properties: [...props, 'magical']});
-                                  } else {
-                                    setEditingFeature({...editingFeature, properties: props.filter((p: string) => p !== 'magical')});
-                                  }
-                                }}
-                              />
-                              <label htmlFor="feat-magical" className="text-[10px] uppercase text-ink/60 font-bold cursor-pointer">Magical</label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Checkbox 
-                                id="feat-passive"
-                                className="border-gold/30 data-[state=checked]:bg-gold data-[state=checked]:text-white"
-                                checked={editingFeature.properties?.includes('passive') || false}
-                                onCheckedChange={checked => {
-                                  const props = editingFeature.properties || [];
-                                  if (checked) {
-                                    setEditingFeature({...editingFeature, properties: [...props, 'passive']});
-                                  } else {
-                                    setEditingFeature({...editingFeature, properties: props.filter((p: string) => p !== 'passive')});
-                                  }
-                                }}
-                              />
-                              <label htmlFor="feat-passive" className="text-[10px] uppercase text-ink/60 font-bold cursor-pointer">Passive Trait</label>
-                            </div>
-                          </div>
+                          ))}
+                        </div>
+                      </div>
 
-                          <div className="space-y-4">
-                            <div className="flex justify-end">
-                              <ReferenceSyntaxHelp
-                              title="Usage Formula References"
-                              description="Use semantic references for feature uses on the site. The helper previews the Foundry-native target shape."
-                              buttonLabel="Usage Help"
-                              value={editingFeature.usage?.max || ''}
-                              context={subclassReferenceContext}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[9px] uppercase text-ink/60 font-black">Spent</label>
-                              <Input 
-                                type="number"
-                                value={editingFeature.usage?.spent || 0}
-                                onChange={e => setEditingFeature({
-                                  ...editingFeature, 
-                                  usage: { ...editingFeature.usage, spent: parseInt(e.target.value) || 0 }
-                                })}
-                                className="h-8 text-center text-xs bg-background/50 border-gold/10 focus:border-gold w-20"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[9px] uppercase text-ink/60 font-black">Max</label>
-                              <Input 
-                                value={editingFeature.usage?.max || ''}
-                                onChange={e => setEditingFeature({
-                                  ...editingFeature, 
-                                  usage: { ...editingFeature.usage, max: e.target.value }
-                                })}
-                                placeholder="Value or formula"
-                                className="h-8 text-center text-xs bg-background/50 border-gold/10 focus:border-gold w-32"
-                              />
-                            </div>
-                          </div>
-                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {featureTab === 'activities' && (
                   <div className="pt-2">
@@ -1343,13 +1352,10 @@ export default function SubclassEditor() {
                 )}
 
                 {featureTab === 'effects' && (
-                  <div className="space-y-4 pt-2">
-                    <h4 className="label-text text-gold uppercase tracking-widest text-[10px]">Effects (JSON Array)</h4>
-                    <textarea
-                      value={editingFeature.effectsStr || ''}
-                      onChange={e => setEditingFeature({ ...editingFeature, effectsStr: e.target.value })}
-                      className="w-full h-64 p-4 text-xs font-mono bg-background/50 border border-gold/10 rounded focus:border-gold outline-none"
-                      placeholder='[ { "name": "EffectName" } ]'
+                  <div className="pt-2">
+                    <ActiveEffectEditor
+                      effects={editingFeature.effects || []}
+                      onChange={fx => setEditingFeature({ ...editingFeature, effects: fx })}
                     />
                   </div>
                 )}
