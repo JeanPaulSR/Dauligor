@@ -133,7 +133,7 @@ export function IconPickerModal({
     setUploading(true);
     try {
       const targetSize = imageType === 'token' ? { width: 400, height: 400 } : { width: 126, height: 126 };
-      const converted = await convertToWebP(file, 0.85, targetSize);
+      const converted = await convertToWebP(file, 1.0, targetSize);
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
       const uploadPath = uploadToTemp
         ? `${rootFolder}/_temp/${fileName}`

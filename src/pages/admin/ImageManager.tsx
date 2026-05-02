@@ -715,7 +715,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
           prev.map((q) => q.id === itemId ? { ...q, status: 'uploading' } : q),
         );
         try {
-          const converted = await convertToWebP(file, 0.85, { width: 126, height: 126 });
+          const converted = await convertToWebP(file, 1.0, { width: 126, height: 126 });
           const parts = relativePath.split('/');
           const isNested = parts.length > 1;
           const dirPath = isNested ? parts.slice(0, -1).join('/') + '/' : '';

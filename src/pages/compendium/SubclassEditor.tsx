@@ -32,12 +32,14 @@ import {
   Info,
   Zap,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  Sliders
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { ImageUpload } from '../../components/ui/ImageUpload';
+import { ClassImageEditor, ImageDisplay, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { slugify } from '../../lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { ScrollArea } from '../../components/ui/scroll-area';
@@ -141,6 +143,13 @@ export default function SubclassEditor() {
   const [description, setDescription] = useState('');
   const [lore, setLore] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imageDisplay, setImageDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
+  const [cardImageUrl, setCardImageUrl] = useState('');
+  const [cardDisplay, setCardDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
+  const [previewDisplay, setPreviewDisplay] = useState<ImageDisplay>(DEFAULT_DISPLAY);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+
   const [tagIds, setTagIds] = useState<string[]>([]);
 
   // Spellcasting
@@ -249,6 +258,12 @@ export default function SubclassEditor() {
           setDescription(data.description || '');
           setLore(data.lore || '');
           setImageUrl(data.imageUrl || '');
+          setImageDisplay(data.imageDisplay || DEFAULT_DISPLAY);
+          setCardImageUrl(data.cardImageUrl || '');
+          setCardDisplay(data.cardDisplay || DEFAULT_DISPLAY);
+          setPreviewImageUrl(data.previewImageUrl || '');
+          setPreviewDisplay(data.previewDisplay || DEFAULT_DISPLAY);
+          
           setTagIds(data.tagIds || []);
           setAdvancements(normalizeEditorAdvancements(data.advancements || [], 1));
           setSpellcasting(normalizeSubclassSpellcastingForEditor(data.spellcasting));
@@ -348,6 +363,11 @@ export default function SubclassEditor() {
       description,
       lore,
       imageUrl,
+      imageDisplay,
+      cardImageUrl,
+      cardDisplay,
+      previewImageUrl,
+      previewDisplay,
       tagIds,
       excludedOptionIds,
       advancements: canonicalSubclassProgression.customAdvancements,
@@ -541,7 +561,59 @@ export default function SubclassEditor() {
                   storagePath={`images/classes/${parentClass?.id || classId || 'unknown'}/subclasses/${id || 'new'}/`}
                   onUpload={setImageUrl}
                 />
+                {imageUrl && (
+                  <div className="space-y-2 mt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full btn-gold gap-2"
+                      onClick={() => setImageDialogOpen(true)}
+                    >
+                      <Sliders className="w-3 h-3" /> Edit Display
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="w-full h-8 text-xs text-blood/60 hover:text-blood hover:bg-blood/10 border border-blood/20 gap-2"
+                      onClick={() => setImageUrl('')}
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete Image
+                    </Button>
+                  </div>
+                )}
               </div>
+
+              {/* Edit Display Dialog */}
+              <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+                <DialogContent className="dialog-content sm:max-w-5xl w-[95vw]">
+                  <DialogHeader className="dialog-header">
+                    <DialogTitle className="dialog-title">Edit Image Display</DialogTitle>
+                  </DialogHeader>
+                  <div className="dialog-body max-h-[80vh] overflow-y-auto custom-scrollbar">
+                    <ClassImageEditor
+                      imageUrl={imageUrl}
+                      onImageUrlChange={setImageUrl}
+                      imageDisplay={imageDisplay}
+                      onImageDisplayChange={setImageDisplay}
+                      cardImageUrl={cardImageUrl}
+                      onCardImageUrlChange={setCardImageUrl}
+                      cardDisplay={cardDisplay}
+                      onCardDisplayChange={setCardDisplay}
+                      previewImageUrl={previewImageUrl}
+                      onPreviewImageUrlChange={setPreviewImageUrl}
+                      previewDisplay={previewDisplay}
+                      onPreviewDisplayChange={setPreviewDisplay}
+                      storagePath={`images/classes/${parentClass?.id || classId || 'unknown'}/subclasses/${id || 'new'}/`}
+                    />
+                  </div>
+                  <DialogFooter className="dialog-footer">
+                    <Button variant="ghost" onClick={() => setImageDialogOpen(false)} className="btn-gold-solid">
+                      <Check className="w-4 h-4 mr-2" /> Done
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <div className="flex-1 space-y-4 h-fit">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1">

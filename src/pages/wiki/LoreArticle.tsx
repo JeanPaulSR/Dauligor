@@ -16,7 +16,7 @@ import {
   Biohazard, Swords, Scroll, Footprints, Languages,
   Coins, Layers, Flame, Scale, ListChecks, Hammer,
   Quote, Crown, Wand2, FlaskConical, Heart, BookOpen,
-  ChevronDown
+  ChevronDown, Link as LinkIcon
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -68,6 +68,12 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const [campaigns, setCampaigns] = useState<any[]>([]);
 
   const [parentArticle, setParentArticle] = useState<any>(null);
+  const [mentions, setMentions] = useState<any[]>([]);
+  
+  const [hoveredArticleId, setHoveredArticleId] = useState<string | null>(null);
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  const [hoveredArticleData, setHoveredArticleData] = useState<any>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
 
@@ -159,10 +165,19 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     };
     fetchEras();
 
+    let unsubscribeMentions = () => {};
+    const mentionsQuery = query(collection(db, 'lore'), where('linkedArticleIds', 'array-contains', id));
+    unsubscribeMentions = onSnapshot(mentionsQuery, (snapshot) => {
+      setMentions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => {
+      console.error("Error fetching mentions:", error);
+    });
+
     return () => {
       unsubscribeArticle();
       unsubscribeNotes();
       unsubscribeSecrets();
+      unsubscribeMentions();
     };
   }, [id, isStaff]);
 
@@ -382,6 +397,25 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                     </Card>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Mentions Section */}
+          {mentions.length > 0 && (
+            <div className="mt-8 space-y-4">
+              <h2 className="label-text text-gold flex items-center gap-2">
+                <LinkIcon className="w-4 h-4" /> Mentioned In
+              </h2>
+              <div className="flex flex-col gap-2 border-l-2 border-gold/20 pl-4">
+                {mentions.map((mention) => (
+                  <Link key={mention.id} to={`/wiki/article/${mention.id}`} className="text-gold hover:underline flex items-center gap-2">
+                    <span className="font-serif italic">{mention.title}</span>
+                    <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px] scale-75 transform origin-left">
+                      {mention.category}
+                    </Badge>
+                  </Link>
+                ))}
               </div>
             </div>
           )}

@@ -693,7 +693,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         {/* Header - Full Width */}
         <div className="flex flex-col md:flex-row gap-8 border-b border-gold/10 pb-8">
           {classData.imageUrl && (
-            <div className="w-full md:w-64 h-64 shrink-0 rounded-lg overflow-hidden border border-gold/20 shadow-lg">
+            <div 
+              className="w-full md:w-64 h-64 shrink-0 rounded-lg overflow-hidden border border-gold/20 shadow-lg cursor-pointer transition-transform hover:scale-[1.02]"
+              onClick={() => navigate(`/images/view?url=${encodeURIComponent(classData.imageUrl!)}`)}
+            >
               <img
                 src={classData.imageUrl}
                 alt={classData.name}
@@ -926,7 +929,10 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
                     <div className="flex flex-col md:flex-row gap-6">
                       {selectedSubclass.imageUrl && (
-                        <div className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/20 shadow-md">
+                        <div 
+                          className="w-full md:w-48 h-48 shrink-0 rounded-md overflow-hidden border border-gold/20 shadow-md cursor-pointer transition-transform hover:scale-[1.02]"
+                          onClick={() => navigate(`/images/view?url=${encodeURIComponent(selectedSubclass.imageUrl!)}`)}
+                        >
                           <img
                             src={selectedSubclass.imageUrl}
                             alt={selectedSubclass.name}

@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, doc, getDoc, setDoc, addDoc, updateDoc, getDocs, query, orderBy, deleteDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, addDoc, updateDoc, getDocs, query, orderBy, deleteDoc, where, onSnapshot } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
 import { ImageUpload } from '@/components/ui/ImageUpload';
 import { 
   Users, MapPin, Sparkles, History, Shield, 
@@ -82,6 +84,9 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
   const [editingSecretId, setEditingSecretId] = useState<string | null>(null);
   const [editSecretData, setEditSecretData] = useState({ content: '', eraIds: [] as string[] });
   
+  const [tagGroups, setTagGroups] = useState<any[]>([]);
+  const [allTags, setAllTags] = useState<any[]>([]);
+
   const [formData, setFormData] = useState<any>({
     title: '',
     excerpt: '',
@@ -91,7 +96,12 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
     parentId: '',
     status: 'draft',
     imageUrl: '',
-    tags: '',
+    imageDisplay: null,
+    cardImageUrl: '',
+    cardDisplay: null,
+    previewImageUrl: '',
+    previewDisplay: null,
+    tags: [] as string[],
     metadata: {
       age: '',
       race: '',
@@ -154,6 +164,14 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
     };
     fetchAllArticles();
 
+    const unsubscribeTagGroups = onSnapshot(query(collection(db, 'tagGroups'), where('classifications', 'array-contains', 'lore')), (snap) => {
+      setTagGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubscribeTags = onSnapshot(collection(db, 'tags'), (snap) => {
+      setAllTags(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     if (id) {
       const fetchPage = async () => {
         try {
@@ -163,7 +181,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
             const data = docSnap.data();
             setFormData({
               ...data,
-              tags: data.tags?.join(', ') || '',
+              tags: Array.isArray(data.tags) ? data.tags : [],
               metadata: {
                 ...formData.metadata,
                 ...(data.metadata || {})
@@ -190,7 +208,12 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
       };
       fetchPage();
     }
-  }, [id]);
+
+    return () => {
+      unsubscribeTagGroups();
+      unsubscribeTags();
+    };
+  }, [id, isStaff]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.ctrlKey && e.code === 'Space') {
@@ -320,10 +343,24 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
       return;
     }
 
+    // Extract linked article IDs from content
+    const linkRegex = /\[url=\/wiki\/article\/([^\]]+)\]/gi;
+    const linkedIds = new Set<string>();
+    let match;
+    while ((match = linkRegex.exec(formData.content)) !== null) {
+      linkedIds.add(match[1]);
+    }
+    // Also check standard markdown links
+    const mdLinkRegex = /\]\(\/wiki\/article\/([^\)]+)\)/gi;
+    while ((match = mdLinkRegex.exec(formData.content)) !== null) {
+      linkedIds.add(match[1]);
+    }
+
     setSaving(true);
     const payload = {
       ...formData,
-      tags: formData.tags.split(',').map((t: string) => t.trim()).filter((t: string) => t),
+      tags: formData.tags || [],
+      linkedArticleIds: Array.from(linkedIds),
       updatedAt: new Date().toISOString(),
       authorId: userProfile?.uid,
       createdAt: formData.createdAt || new Date().toISOString()
@@ -436,9 +473,15 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+      <Tabs defaultValue="content" className="space-y-6">
+        <TabsList className="bg-gold/5 border border-gold/10 p-1 flex overflow-x-auto custom-scrollbar">
+          <TabsTrigger value="content" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Content</TabsTrigger>
+          <TabsTrigger value="metadata" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Metadata</TabsTrigger>
+          <TabsTrigger value="notes" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Storyteller Notes</TabsTrigger>
+          <TabsTrigger value="secrets" className="data-[state=active]:bg-gold/20 data-[state=active]:text-gold">Secrets</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="content" className="space-y-6">
           <Card className="border-gold/10">
             <CardContent className="p-6 space-y-6">
               <div className="space-y-2">
@@ -548,7 +591,13 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 )}
               </div>
 
-              <div className="pt-8 border-t border-gold/10 space-y-4">
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notes" className="space-y-6">
+          <Card className="border-gold/10">
+            <CardContent className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="label-text text-gold flex items-center gap-2">
                     <Lock className="w-4 h-4" /> Storyteller Notes (Private)
@@ -564,10 +613,15 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   className="bg-gold/5"
                   label="DM Notes"
                 />
-              </div>
 
               {/* Secrets Section */}
-              <div className="pt-8 border-t border-gold/10 space-y-6">
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="secrets" className="space-y-6">
+          <Card className="border-gold/10">
+            <CardContent className="p-6 space-y-6">
                 <div className="flex items-center justify-between">
                   <h2 className="label-text text-gold flex items-center gap-2">
                     <Sparkles className="w-4 h-4" /> Secrets & Revelations
@@ -718,15 +772,13 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                         </div>
                       </div>
                     </div>
-                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
-        </div>
+        </TabsContent>
 
-        {/* Sidebar / Metadata */}
-        <div className="space-y-6">
+        <TabsContent value="metadata" className="space-y-6">
           <Card className="border-gold/10 bg-gold/5">
             <CardHeader>
               <CardTitle className="label-text text-gold flex items-center gap-2">
@@ -734,27 +786,69 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <label className="label-text text-ink/40 flex items-center gap-2">
-                  <ImageIcon className="w-3 h-3" /> Header Image
+                  <ImageIcon className="w-3 h-3" /> Image Display Settings
                 </label>
-                <ImageUpload 
-                  currentImageUrl={formData.imageUrl}
-                  storagePath={`images/lore/${id || 'new'}/`}
-                  onUpload={(url) => setFormData({ ...formData, imageUrl: url })}
-                />
+                <div className="bg-background rounded-lg border border-gold/10 overflow-hidden">
+                  <ClassImageEditor
+                    imageUrl={formData.imageUrl || ''}
+                    onImageUrlChange={(val) => setFormData({...formData, imageUrl: val})}
+                    imageDisplay={formData.imageDisplay}
+                    onImageDisplayChange={(val) => setFormData({...formData, imageDisplay: val})}
+                    cardImageUrl={formData.cardImageUrl || ''}
+                    onCardImageUrlChange={(val) => setFormData({...formData, cardImageUrl: val})}
+                    cardDisplay={formData.cardDisplay}
+                    onCardDisplayChange={(val) => setFormData({...formData, cardDisplay: val})}
+                    previewImageUrl={formData.previewImageUrl || ''}
+                    onPreviewImageUrlChange={(val) => setFormData({...formData, previewImageUrl: val})}
+                    previewDisplay={formData.previewDisplay}
+                    onPreviewDisplayChange={(val) => setFormData({...formData, previewDisplay: val})}
+                    storagePath={`images/lore/${id || 'new'}`}
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="label-text text-ink/40 flex items-center gap-2">
-                  <Tags className="w-3 h-3" /> Tags
+              <div className="space-y-6 pt-4 border-t border-gold/10">
+                <label className="label-text text-ink/40 flex items-center gap-2 mb-2">
+                  <Tags className="w-3 h-3" /> Lore Tags
                 </label>
-                <Input 
-                  value={formData.tags} 
-                  onChange={e => setFormData({ ...formData, tags: e.target.value })}
-                  placeholder="magic, war, ancient"
-                  className="h-8 text-xs border-gold/10"
-                />
+                {tagGroups.map(group => {
+                  const groupTags = allTags.filter(t => t.groupId === group.id);
+                  if (groupTags.length === 0) return null;
+
+                  return (
+                    <div key={group.id} className="space-y-2">
+                      <label className="label-text text-ink/60 uppercase tracking-widest">{group.name}</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {groupTags.map(tag => {
+                          const isSelected = formData.tags?.includes(tag.id);
+                          return (
+                            <button
+                              key={tag.id}
+                              onClick={() => {
+                                const newTags = isSelected
+                                  ? (formData.tags || []).filter((id: string) => id !== tag.id)
+                                  : [...(formData.tags || []), tag.id];
+                                setFormData({ ...formData, tags: newTags });
+                              }}
+                              className={`px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors border ${
+                                isSelected 
+                                  ? 'bg-gold text-white border-gold shadow-[0_0_10px_rgba(212,175,55,0.3)] scale-105' 
+                                  : 'bg-background/50 text-ink/60 border-gold/20 hover:border-gold/50'
+                              }`}
+                            >
+                              {tag.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+                {tagGroups.length === 0 && (
+                  <p className="muted-text italic">No lore tags defined.</p>
+                )}
               </div>
 
               <div className="pt-4 border-t border-gold/10 space-y-4">
@@ -867,8 +961,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

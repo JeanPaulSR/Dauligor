@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { ImageUpload } from '../ui/ImageUpload';
 import { Button } from '../ui/button';
-import { Image as ImageIcon, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Image as ImageIcon, X, ZoomIn, ZoomOut, Info } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { ImageMetadataModal } from '../ui/ImageMetadataModal';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,7 @@ function ContextPanel({
 }: ContextPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const dragDistance = useRef(0);
 
   // Keep refs to latest values so the wheel listener (added once) can read them
   const displayRef = useRef(display);
@@ -69,6 +71,8 @@ function ContextPanel({
   const canOverride = !!onOverrideChange;
   const hasOverride = !!overrideImageUrl;
 
+  const wheelTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Non-passive wheel listener for zoom
   useEffect(() => {
     const el = containerRef.current;
@@ -76,13 +80,21 @@ function ContextPanel({
     const handler = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      const newScale = parseFloat(Math.max(1, Math.min(5, displayRef.current.scale * factor)).toFixed(2));
+      const newScale = parseFloat(Math.max(0.1, Math.min(5, displayRef.current.scale * factor)).toFixed(2));
       const next = { ...displayRef.current, scale: newScale };
       onDisplayChangeRef.current(next);
-      onDisplayCommitRef.current(next);
+      
+      // Debounce the commit to prevent massive re-renders in the parent editor
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+      wheelTimeoutRef.current = setTimeout(() => {
+        onDisplayCommitRef.current(next);
+      }, 500);
     };
     el.addEventListener('wheel', handler, { passive: false });
-    return () => el.removeEventListener('wheel', handler);
+    return () => {
+      el.removeEventListener('wheel', handler);
+      if (wheelTimeoutRef.current) clearTimeout(wheelTimeoutRef.current);
+    };
   }, []);
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -118,7 +130,7 @@ function ContextPanel({
   };
 
   const step = (delta: number) => {
-    const newScale = parseFloat(Math.max(1, Math.min(5, displayRef.current.scale + delta)).toFixed(2));
+    const newScale = parseFloat(Math.max(0.1, Math.min(5, displayRef.current.scale + delta)).toFixed(2));
     const next = { ...displayRef.current, scale: newScale };
     onDisplayChange(next);
     onDisplayCommit(next);
@@ -197,15 +209,17 @@ function ContextPanel({
       {/* zoom controls */}
       {image && (
         <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(-0.1)}>
-            <ZoomOut className="w-3 h-3" />
-          </Button>
-          <span className="label-text text-ink/40 flex-1 text-center">
-            {Math.round(display.scale * 100)}%
-          </span>
-          <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(0.1)}>
-            <ZoomIn className="w-3 h-3" />
-          </Button>
+          <div className="flex items-center gap-1 bg-background/50 rounded-md border border-gold/10 px-1 py-0.5">
+            <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(-0.1)}>
+              <ZoomOut className="w-3 h-3" />
+            </Button>
+            <span className="label-text text-ink/40 w-8 text-center text-[10px]">
+              {Math.round(display.scale * 100)}%
+            </span>
+            <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(0.1)}>
+              <ZoomIn className="w-3 h-3" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -227,6 +241,7 @@ function ContextPanel({
 
 export interface ClassImageEditorProps {
   imageUrl: string;
+  onImageUrlChange?: (url: string) => void;
   imageDisplay: ImageDisplay;
   onImageDisplayChange: (d: ImageDisplay) => void;
 
@@ -245,7 +260,7 @@ export interface ClassImageEditorProps {
 }
 
 export function ClassImageEditor({
-  imageUrl,
+  imageUrl, onImageUrlChange,
   imageDisplay: propImageDisplay, onImageDisplayChange,
   cardImageUrl: propCardImageUrl, onCardImageUrlChange,
   cardDisplay: propCardDisplay, onCardDisplayChange,
@@ -270,6 +285,8 @@ export function ClassImageEditor({
   const cardImg = cardImageUrl || imageUrl;
   const prevImg = previewImageUrl || imageUrl;
 
+  const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
+
   return (
     <div className={cn('space-y-2', className)}>
       <p className="label-text text-ink/40">
@@ -286,6 +303,9 @@ export function ClassImageEditor({
           display={imageDisplay}
           onDisplayChange={setImageDisplay}
           onDisplayCommit={onImageDisplayChange}
+          overrideImageUrl={imageUrl}
+          onOverrideChange={onImageUrlChange}
+          storagePath={storagePath}
         />
 
         {/* Card View */}
@@ -336,6 +356,37 @@ export function ClassImageEditor({
         />
 
       </div>
+
+      {/* Metadata Buttons Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+        <div>
+          {imageUrl && (
+            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/10 text-gold/60 hover:text-gold hover:border-gold/30" onClick={() => setModalImageUrl(imageUrl)}>
+              <Info className="w-3 h-3 mr-1.5" /> Edit Metadata
+            </Button>
+          )}
+        </div>
+        <div>
+          {cardImg && (
+            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/10 text-gold/60 hover:text-gold hover:border-gold/30" onClick={() => setModalImageUrl(cardImg)}>
+              <Info className="w-3 h-3 mr-1.5" /> Edit Metadata
+            </Button>
+          )}
+        </div>
+        <div>
+          {prevImg && (
+            <Button type="button" size="sm" variant="ghost" className="w-full h-8 text-xs border border-gold/10 text-gold/60 hover:text-gold hover:border-gold/30" onClick={() => setModalImageUrl(prevImg)}>
+              <Info className="w-3 h-3 mr-1.5" /> Edit Metadata
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <ImageMetadataModal
+        isOpen={!!modalImageUrl}
+        onClose={() => setModalImageUrl(null)}
+        imageUrl={modalImageUrl!}
+      />
     </div>
   );
 }

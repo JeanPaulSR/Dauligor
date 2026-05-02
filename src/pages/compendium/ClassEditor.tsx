@@ -19,6 +19,7 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Checkbox } from '../../components/ui/checkbox';
 import MarkdownEditor from '../../components/MarkdownEditor';
+import Markdown from 'react-markdown';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import { slugify, cn } from '../../lib/utils';
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
@@ -404,6 +405,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [description, setDescription] = useState('');
   const [lore, setLore] = useState('');
   const [sourceId, setSourceId] = useState('');
+  const [category, setCategory] = useState<'core' | 'alternate' | 'new'>('core');
   const [hitDie, setHitDie] = useState(8);
   const [savingThrows, setSavingThrows] = useState<string[]>([]);
   const [proficiencies, setProficiencies] = useState<any>({
@@ -710,6 +712,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             setDescription(data.description || '');
             setLore(data.lore || '');
             setSourceId(data.sourceId || '');
+            setCategory(data.category || 'core');
             setHitDie(data.hitDie || 8);
             const loadedSavingThrows = (data.savingThrows || []).map((s: string) => s.toUpperCase());
             setSavingThrows(loadedSavingThrows);
@@ -1105,6 +1108,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         description,
         lore,
         sourceId,
+        category,
         hitDie,
         savingThrows: normalizedProficiencies.savingThrows?.fixedIds || [],
         proficiencies: normalizedProficiencies,
@@ -1320,14 +1324,25 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   onUpload={setImageUrl}
                 />
                 {imageUrl && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full btn-gold gap-2"
-                    onClick={() => setImageDialogOpen(true)}
-                  >
-                    <Sliders className="w-3 h-3" /> Edit Display
-                  </Button>
+                  <div className="space-y-2 mt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full btn-gold gap-2"
+                      onClick={() => setImageDialogOpen(true)}
+                    >
+                      <Sliders className="w-3 h-3" /> Edit Display
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="w-full h-8 text-xs text-blood/60 hover:text-blood hover:bg-blood/10 border border-blood/20 gap-2"
+                      onClick={() => setImageUrl('')}
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete Image
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -1340,6 +1355,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <div className="dialog-body max-h-[80vh]">
                     <ClassImageEditor
                       imageUrl={imageUrl}
+                      onImageUrlChange={setImageUrl}
                       imageDisplay={imageDisplay}
                       onImageDisplayChange={setImageDisplay}
                       cardImageUrl={cardImageUrl}
@@ -1399,6 +1415,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   </div>
                 </div>
                 <div className="space-y-1">
+                  <label className="label-text">Category</label>
+                  <select 
+                    value={category} 
+                    onChange={e => setCategory(e.target.value as any)}
+                    className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                  >
+                    <option value="core">Core Class</option>
+                    <option value="alternate">Alternate Class</option>
+                    <option value="new">New Class</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
                   <label className="label-text">ASI Levels (csv)</label>
                   <Input 
                     value={asiLevelsInput}
@@ -1415,13 +1443,35 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               </div>
             </div>
             <div className="space-y-4">
-              <MarkdownEditor
-                value={preview}
-                onChange={setPreview}
-                placeholder="A short flavourful teaser shown on the class card and at the top of the class page..."
-                minHeight="60px"
-                label="Class Preview"
-              />
+              <div className="flex flex-col md:flex-row gap-6 items-start">
+                <div className="flex-1 w-full">
+                  <MarkdownEditor
+                    value={preview}
+                    onChange={setPreview}
+                    placeholder="A short flavourful teaser shown on the class card and at the top of the class page..."
+                    minHeight="144px"
+                    label="Class Preview"
+                  />
+                </div>
+                <div className="w-full md:w-[320px] shrink-0 space-y-1">
+                  <label className="label-text">Card List Cutoff Preview</label>
+                  <div className="relative rounded-lg overflow-hidden border border-gold/20 shadow-lg bg-black/40 h-[320px] flex flex-col justify-end">
+                    {/* Simulated Background */}
+                    {imageUrl && (
+                      <div className="absolute inset-0 z-0">
+                        <img src={imageUrl} className="w-full h-full object-cover opacity-50" alt="" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                      </div>
+                    )}
+                    <div className="relative z-10 p-4 border-t border-gold/20 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center">
+                      <div className="text-white/80 text-xs italic line-clamp-6 overflow-hidden w-full font-serif leading-relaxed">
+                        <Markdown>{preview || description || "No preview description available."}</Markdown>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-ink/40 leading-tight pt-1">This simulates how the text fits into the class selection cards. If it cuts off with ellipses, shorten it!</p>
+                </div>
+              </div>
               <MarkdownEditor
                 value={description}
                 onChange={setDescription}

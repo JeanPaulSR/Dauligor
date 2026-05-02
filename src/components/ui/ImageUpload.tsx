@@ -68,7 +68,8 @@ export function ImageUpload({
 
     try {
       const target = TYPE_SIZES[effectiveType] ?? undefined;
-      const converted = await convertToWebP(file, 0.85, target);
+      const quality = effectiveType === 'icon' || effectiveType === 'token' ? 1.0 : 0.85;
+      const converted = await convertToWebP(file, quality, target);
 
       if (converted.size > 5 * 1024 * 1024) {
         setError('Image is too large even after compression. Please use a smaller file.');

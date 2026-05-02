@@ -540,6 +540,67 @@ export function ClassList({
     return max;
   }, [previewSpellcasting]);
 
+  const renderClassGrid = (classList: any[]) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      {classList.map((cls) => (
+        <div 
+          key={cls.id} 
+          onClick={() => setSelectedClass(cls)}
+          className="group relative aspect-[4/3] sm:aspect-square md:aspect-[4/5] bg-card border border-gold/20 hover:border-gold hover:shadow-lg hover:shadow-gold/10 hover:-translate-y-1 transition-all overflow-hidden cursor-pointer flex flex-col rounded-xl"
+        >
+          {cls.imageUrl ? (
+            <img
+              src={cls.cardImageUrl || cls.imageUrl}
+              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              style={ClassImageStyle({ display: cls.cardDisplay || cls.imageDisplay || DEFAULT_DISPLAY })}
+              referrerPolicy="no-referrer"
+              draggable={false}
+              alt=""
+            />
+          ) : (
+            <div className="absolute inset-0 bg-ink/5 flex items-center justify-center">
+              <Shield className="w-16 h-16 text-gold/10" />
+            </div>
+          )}
+          <div className={`absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none transition-opacity ${cls.imageUrl ? 'opacity-80 group-hover:opacity-100' : 'opacity-20 group-hover:opacity-30'}`} />
+          
+          <div className="relative z-10 p-4 pt-6 text-center">
+            <h3
+              className="h3-title text-gold group-hover:text-white transition-colors block text-3xl group-hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]"
+              style={{ textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000' }}
+            >
+              {cls.name}
+            </h3>
+            <p
+              className="label-text text-gold/80 block mt-1 text-sm"
+              style={{ textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000' }}
+            >
+              {sources[cls.sourceId]?.abbreviation || sources[cls.sourceId]?.name || 'Unknown'}
+            </p>
+          </div>
+
+          <div className="mt-auto relative z-10 p-4 border-t border-gold/20 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center group-hover:bg-black/30 group-hover:-translate-y-2 transition-all duration-300">
+            <div className="text-white/80 text-xs italic line-clamp-6 overflow-hidden w-full font-serif leading-relaxed">
+              <Markdown>{cls.preview || cls.description || "No preview description available."}</Markdown>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={(e) => handleDeleteClass(e, cls.id, cls.name)}
+              className="absolute top-2 right-2 h-8 w-8 p-0 text-white/50 hover:text-white hover:bg-blood/80 z-20 transition-colors"
+              title="Delete Class"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -658,63 +719,25 @@ export function ClassList({
           ))}
         </div>
       ) : filteredClasses.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredClasses.map((cls) => (
-            <div 
-              key={cls.id} 
-              onClick={() => setSelectedClass(cls)}
-              className="group relative aspect-[4/3] sm:aspect-square md:aspect-[4/5] bg-card border border-gold/20 hover:border-gold hover:shadow-lg hover:shadow-gold/10 hover:-translate-y-1 transition-all overflow-hidden cursor-pointer flex flex-col rounded-xl"
-            >
-              {cls.imageUrl ? (
-                <img
-                  src={cls.cardImageUrl || cls.imageUrl}
-                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                  style={ClassImageStyle({ display: cls.cardDisplay || cls.imageDisplay || DEFAULT_DISPLAY })}
-                  referrerPolicy="no-referrer"
-                  draggable={false}
-                  alt=""
-                />
-              ) : (
-                <div className="absolute inset-0 bg-ink/5 flex items-center justify-center">
-                  <Shield className="w-16 h-16 text-gold/10" />
-                </div>
-              )}
-              <div className={`absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent pointer-events-none transition-opacity ${cls.imageUrl ? 'opacity-80 group-hover:opacity-100' : 'opacity-20 group-hover:opacity-30'}`} />
-              
-              <div className="relative z-10 p-4 pt-6 text-center">
-                <h3
-                  className="h3-title text-gold group-hover:text-white transition-colors block text-3xl group-hover:drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]"
-                  style={{ textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000' }}
-                >
-                  {cls.name}
-                </h3>
-                <p
-                  className="label-text text-gold/80 block mt-1 text-sm"
-                  style={{ textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000' }}
-                >
-                  {sources[cls.sourceId]?.abbreviation || sources[cls.sourceId]?.name || 'Unknown'}
-                </p>
-              </div>
-
-              <div className="mt-auto relative z-10 p-4 border-t border-gold/20 bg-black/10 backdrop-blur-md h-[45%] flex flex-col items-center text-center group-hover:bg-black/30 group-hover:-translate-y-2 transition-all duration-300">
-                <div className="text-white/80 text-xs italic line-clamp-4 overflow-hidden w-full font-serif leading-relaxed">
-                  <Markdown>{cls.preview || cls.description || "No preview description available."}</Markdown>
-                </div>
-              </div>
-
-              {isAdmin && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={(e) => handleDeleteClass(e, cls.id, cls.name)}
-                  className="absolute top-2 right-2 h-8 w-8 p-0 text-white/50 hover:text-white hover:bg-blood/80 z-20 transition-colors"
-                  title="Delete Class"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
+        <div className="space-y-16">
+          {filteredClasses.filter(c => !c.category || c.category === 'core').length > 0 && (
+            <div className="space-y-6">
+              <h2 className="h2-title text-gold border-b border-gold/20 pb-2">Core Classes</h2>
+              {renderClassGrid(filteredClasses.filter(c => !c.category || c.category === 'core'))}
             </div>
-          ))}
+          )}
+          {filteredClasses.filter(c => c.category === 'alternate').length > 0 && (
+            <div className="space-y-6">
+              <h2 className="h2-title text-gold border-b border-gold/20 pb-2">Alternate Classes</h2>
+              {renderClassGrid(filteredClasses.filter(c => c.category === 'alternate'))}
+            </div>
+          )}
+          {filteredClasses.filter(c => c.category === 'new').length > 0 && (
+            <div className="space-y-6">
+              <h2 className="h2-title text-gold border-b border-gold/20 pb-2">New Classes</h2>
+              {renderClassGrid(filteredClasses.filter(c => c.category === 'new'))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-center py-20 bg-card rounded-3xl border border-dashed border-gold/20">
