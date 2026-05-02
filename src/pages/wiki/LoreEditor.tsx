@@ -25,7 +25,7 @@ import {
   FileCode, Languages as LangIcon, Gem, Layers as FormationIcon,
   Flame as MythIcon, Atom, ClipboardList, Hammer as ProfIcon,
   Quote as ProseIcon, Award, Sparkle, FlaskConical as TechIcon,
-  Heart as TradIcon, BookOpen as SessionIcon, Edit
+  Heart as TradIcon, BookOpen as SessionIcon, Edit, X
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -102,6 +102,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
     previewImageUrl: '',
     previewDisplay: null,
     tags: [] as string[],
+    visibilityEraIds: [] as string[],
+    visibilityCampaignIds: [] as string[],
     metadata: {
       age: '',
       race: '',
@@ -591,6 +593,64 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 )}
               </div>
 
+              {/* Editor hints row */}
+              <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                <span className="text-[10px] text-ink/30 flex items-center gap-1">
+                  <LinkIcon className="w-2.5 h-2.5" />
+                  Press <kbd className="mx-1 px-1.5 py-0.5 text-[9px] bg-ink/5 border border-ink/10 rounded font-mono">Ctrl+Space</kbd> inside the editor to insert an article link
+                </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="xs" className="h-6 border-gold/20 text-gold/60 hover:text-gold text-[10px] gap-1.5">
+                      <Globe className="w-2.5 h-2.5" /> Insert Era/Campaign Block
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-3 space-y-3" align="end">
+                    <p className="label-text text-[10px] text-ink/40">Wraps selected text in a conditional block. Only players in the matching era/campaign will see this content.</p>
+                    {eras.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[9px] uppercase font-bold tracking-widest text-gold/50">Era Blocks</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {eras.map((era: any) => (
+                            <button key={era.id} type="button"
+                              className="px-2 py-1 rounded border border-gold/20 text-[10px] text-ink/70 hover:bg-gold/10 hover:text-gold transition-colors"
+                              onClick={() => {
+                                const textarea = contentRef.current;
+                                if (!textarea) return;
+                                const start = textarea.selectionStart, end = textarea.selectionEnd;
+                                const selected = textarea.value.substring(start, end) || 'Content visible in this era...';
+                                const tag = `[era id="${era.id}"]\n${selected}\n[/era]`;
+                                setFormData({ ...formData, content: textarea.value.substring(0, start) + tag + textarea.value.substring(end) });
+                              }}
+                            >{era.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {campaigns.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[9px] uppercase font-bold tracking-widest text-primary/50">Campaign Blocks</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {campaigns.map((camp: any) => (
+                            <button key={camp.id} type="button"
+                              className="px-2 py-1 rounded border border-primary/20 text-[10px] text-ink/70 hover:bg-primary/10 hover:text-primary transition-colors"
+                              onClick={() => {
+                                const textarea = contentRef.current;
+                                if (!textarea) return;
+                                const start = textarea.selectionStart, end = textarea.selectionEnd;
+                                const selected = textarea.value.substring(start, end) || 'Content visible in this campaign...';
+                                const tag = `[campaign id="${camp.id}"]\n${selected}\n[/campaign]`;
+                                setFormData({ ...formData, content: textarea.value.substring(0, start) + tag + textarea.value.substring(end) });
+                              }}
+                            >{camp.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
+
             </CardContent>
           </Card>
         </TabsContent>
@@ -779,34 +839,176 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         </TabsContent>
 
         <TabsContent value="metadata" className="space-y-6">
-          <Card className="border-gold/10 bg-gold/5">
-            <CardHeader>
+
+          {/* Visibility Scope */}
+          <Card className="border-gold/10 bg-card/60">
+            <CardHeader className="pb-2">
               <CardTitle className="label-text text-gold flex items-center gap-2">
-                <Info className="w-4 h-4" /> Quick Info
+                <Globe className="w-4 h-4" /> Visibility Scope
               </CardTitle>
+              <p className="text-xs text-ink/40 mt-0.5">
+                Leave empty to show this article to all players. Select eras or campaigns to restrict access.
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <label className="label-text text-ink/40 flex items-center gap-2">
-                  <ImageIcon className="w-3 h-3" /> Image Display Settings
+
+              {/* Era Scope — searchable multi-select */}
+              <div className="space-y-2">
+                <label className="label-text text-xs text-ink/50 flex items-center gap-1.5">
+                  <Globe className="w-3 h-3" /> Era Scope
+                  <span className="font-normal text-ink/30">— visible to campaigns in these eras</span>
                 </label>
-                <div className="bg-background rounded-lg border border-gold/10 overflow-hidden">
-                  <ClassImageEditor
-                    imageUrl={formData.imageUrl || ''}
-                    onImageUrlChange={(val) => setFormData({...formData, imageUrl: val})}
-                    imageDisplay={formData.imageDisplay}
-                    onImageDisplayChange={(val) => setFormData({...formData, imageDisplay: val})}
-                    cardImageUrl={formData.cardImageUrl || ''}
-                    onCardImageUrlChange={(val) => setFormData({...formData, cardImageUrl: val})}
-                    cardDisplay={formData.cardDisplay}
-                    onCardDisplayChange={(val) => setFormData({...formData, cardDisplay: val})}
-                    previewImageUrl={formData.previewImageUrl || ''}
-                    onPreviewImageUrlChange={(val) => setFormData({...formData, previewImageUrl: val})}
-                    previewDisplay={formData.previewDisplay}
-                    onPreviewDisplayChange={(val) => setFormData({...formData, previewDisplay: val})}
-                    storagePath={`images/lore/${id || 'new'}`}
-                  />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left">
+                      <Globe className="w-3.5 h-3.5 text-ink/30 mt-0.5 shrink-0" />
+                      {(formData.visibilityEraIds?.length ?? 0) === 0 ? (
+                        <span className="text-xs text-ink/30 italic">All eras (no restriction)</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {formData.visibilityEraIds.map((eId: string) => {
+                            const era = eras.find((e: any) => e.id === eId);
+                            return era ? (
+                              <span key={eId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 border border-gold/30 text-gold text-[10px] font-medium">
+                                {era.name}
+                                <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, visibilityEraIds: formData.visibilityEraIds.filter((i: string) => i !== eId) }); }} className="hover:text-blood">
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search eras..." className="h-8" />
+                      <CommandList className="max-h-48">
+                        <CommandEmpty>No eras found.</CommandEmpty>
+                        <CommandGroup>
+                          {eras.map((era: any) => {
+                            const selected = formData.visibilityEraIds?.includes(era.id);
+                            return (
+                              <CommandItem key={era.id} onSelect={() => {
+                                const curr = formData.visibilityEraIds || [];
+                                setFormData({ ...formData, visibilityEraIds: selected ? curr.filter((i: string) => i !== era.id) : [...curr, era.id] });
+                              }} className="flex items-center gap-2 cursor-pointer">
+                                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-gold border-gold' : 'border-gold/30'}`}>
+                                  {selected && <Check className="w-2.5 h-2.5 text-white" />}
+                                </div>
+                                <span className="text-xs">{era.name}</span>
+                              </CommandItem>
+                            );
+                          })}
+                          {eras.length === 0 && <CommandItem disabled>No eras defined yet</CommandItem>}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Campaign Scope — searchable multi-select */}
+              <div className="space-y-2">
+                <label className="label-text text-xs text-ink/50 flex items-center gap-1.5">
+                  <Shield className="w-3 h-3" /> Campaign Scope
+                  <span className="font-normal text-ink/30">— visible only to these campaigns</span>
+                </label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left">
+                      <Shield className="w-3.5 h-3.5 text-ink/30 mt-0.5 shrink-0" />
+                      {(formData.visibilityCampaignIds?.length ?? 0) === 0 ? (
+                        <span className="text-xs text-ink/30 italic">All campaigns (no restriction)</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {formData.visibilityCampaignIds.map((cId: string) => {
+                            const camp = campaigns.find((c: any) => c.id === cId);
+                            return camp ? (
+                              <span key={cId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/30 text-primary text-[10px] font-medium">
+                                {camp.name}
+                                <button type="button" onClick={(e) => { e.stopPropagation(); setFormData({ ...formData, visibilityCampaignIds: formData.visibilityCampaignIds.filter((i: string) => i !== cId) }); }} className="hover:text-blood">
+                                  <X className="w-2.5 h-2.5" />
+                                </button>
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      )}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search campaigns..." className="h-8" />
+                      <CommandList className="max-h-48">
+                        <CommandEmpty>No campaigns found.</CommandEmpty>
+                        <CommandGroup>
+                          {campaigns.map((camp: any) => {
+                            const selected = formData.visibilityCampaignIds?.includes(camp.id);
+                            return (
+                              <CommandItem key={camp.id} onSelect={() => {
+                                const curr = formData.visibilityCampaignIds || [];
+                                setFormData({ ...formData, visibilityCampaignIds: selected ? curr.filter((i: string) => i !== camp.id) : [...curr, camp.id] });
+                              }} className="flex items-center gap-2 cursor-pointer">
+                                <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected ? 'bg-primary border-primary' : 'border-primary/30'}`}>
+                                  {selected && <Check className="w-2.5 h-2.5 text-white" />}
+                                </div>
+                                <span className="text-xs">{camp.name}</span>
+                              </CommandItem>
+                            );
+                          })}
+                          {campaigns.length === 0 && <CommandItem disabled>No campaigns defined yet</CommandItem>}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Summary banner */}
+              {(formData.visibilityEraIds?.length > 0 || formData.visibilityCampaignIds?.length > 0) && (
+                <div className="text-xs bg-gold/5 border border-gold/10 rounded-md px-3 py-2 text-ink/60 flex items-start gap-2">
+                  <Eye className="w-3 h-3 text-gold mt-0.5 shrink-0" />
+                  <span>
+                    {formData.visibilityCampaignIds?.length > 0
+                      ? `Campaign-restricted — visible to ${formData.visibilityCampaignIds.length} campaign(s).`
+                      : `Era-restricted — visible in ${formData.visibilityEraIds.length} era(s).`}
+                  </span>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-gold/10 bg-card/60">
+            <CardHeader className="pb-2">
+              <CardTitle className="label-text text-gold flex items-center gap-2">
+                <ImageIcon className="w-4 h-4" /> Article Images
+              </CardTitle>
+              <p className="text-xs text-ink/40 mt-0.5">Adjust how each image is cropped and positioned across different views.</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-background/60 rounded-lg border border-gold/10 overflow-hidden p-4">
+                <ClassImageEditor
+                  imageUrl={formData.imageUrl || ''}
+                  onImageUrlChange={(val) => setFormData({...formData, imageUrl: val})}
+                  imageDisplay={formData.imageDisplay}
+                  onImageDisplayChange={(val) => setFormData({...formData, imageDisplay: val})}
+                  cardImageUrl={formData.cardImageUrl || ''}
+                  onCardImageUrlChange={(val) => setFormData({...formData, cardImageUrl: val})}
+                  cardDisplay={formData.cardDisplay}
+                  onCardDisplayChange={(val) => setFormData({...formData, cardDisplay: val})}
+                  previewImageUrl={formData.previewImageUrl || ''}
+                  onPreviewImageUrlChange={(val) => setFormData({...formData, previewImageUrl: val})}
+                  previewDisplay={formData.previewDisplay}
+                  onPreviewDisplayChange={(val) => setFormData({...formData, previewDisplay: val})}
+                  storagePath={`images/lore/${id || 'new'}`}
+                  panelLabels={{
+                    detail:  { label: 'Article Header', subtitle: 'Full article page' },
+                    card:    { label: 'Wiki Card',       subtitle: 'Wiki grid listing' },
+                    preview: { label: 'Hover Preview',  subtitle: 'Quick-peek popover' },
+                  }}
+                />
               </div>
 
               <div className="space-y-6 pt-4 border-t border-gold/10">

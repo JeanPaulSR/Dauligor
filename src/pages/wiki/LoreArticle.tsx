@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
 import { collection, doc, onSnapshot, deleteDoc, query, where, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
+import { useWikiPreview } from '@/lib/wikiPreviewContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,14 +17,20 @@ import {
   Biohazard, Swords, Scroll, Footprints, Languages,
   Coins, Layers, Flame, Scale, ListChecks, Hammer,
   Quote, Crown, Wand2, FlaskConical, Heart, BookOpen,
-  ChevronDown, Link as LinkIcon
+  ChevronDown, Link as LinkIcon, Eye, Globe, X
 } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Check } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'generic', label: 'Generic', icon: Library },
@@ -69,13 +76,31 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
 
   const [parentArticle, setParentArticle] = useState<any>(null);
   const [mentions, setMentions] = useState<any[]>([]);
+  const [allCampaigns, setAllCampaigns] = useState<any[]>([]);
+  const [activeCampaignEraId, setActiveCampaignEraId] = useState<string | null>(null);
   
   const [hoveredArticleId, setHoveredArticleId] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [hoveredArticleData, setHoveredArticleData] = useState<any>(null);
-  const contentRef = React.useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { previewCampaign, setPreviewCampaign } = useWikiPreview();
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
+
+  // Resolve view context: preview campaign takes priority for staff, else use player's active campaign
+  const viewContext = (() => {
+    if (isStaff && previewCampaign) {
+      return { eraId: previewCampaign.eraId, campaignId: previewCampaign.id, isStaff: false };
+    }
+    if (isStaff) return { isStaff: true, eraId: null, campaignId: null };
+    return {
+      eraId: activeCampaignEraId,
+      campaignId: userProfile?.activeCampaignId ?? null,
+      isStaff: false
+    };
+  })();
 
   useEffect(() => {
     if (!id) return;
@@ -143,11 +168,18 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
       });
     }
 
-    // Fetch Campaigns for labeling
+    // Fetch Campaigns for labeling and context resolution
     const fetchCampaigns = async () => {
       try {
         const snap = await getDocs(collection(db, 'campaigns'));
-        setCampaigns(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const all = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setCampaigns(all);
+        setAllCampaigns(all);
+        // Resolve the active player campaign's eraId
+        if (!isStaff && userProfile?.activeCampaignId) {
+          const active = all.find((c: any) => c.id === userProfile.activeCampaignId);
+          setActiveCampaignEraId(active?.eraId ?? null);
+        }
       } catch (error) {
         console.error("Error fetching campaigns in lore article:", error);
       }
@@ -218,6 +250,48 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     }
   }, [article]);
 
+  // Fetch hovered article data for quick-preview popover
+  useEffect(() => {
+    if (!hoveredArticleId) {
+      setHoveredArticleData(null);
+      return;
+    }
+    let cancelled = false;
+    getDoc(doc(db, 'lore', hoveredArticleId))
+      .then(snap => {
+        if (!cancelled && snap.exists()) {
+          setHoveredArticleData({ id: snap.id, ...snap.data() });
+        }
+      })
+      .catch(() => setHoveredArticleData(null));
+    return () => { cancelled = true; };
+  }, [hoveredArticleId]);
+
+  // Event delegation: detect hovering over internal wiki anchor tags
+  const handleContentMouseOver = (e: React.MouseEvent<HTMLDivElement>) => {
+    const anchor = (e.target as HTMLElement).closest('a[href*="/wiki/article/"]') as HTMLAnchorElement | null;
+    if (anchor) {
+      const href = anchor.getAttribute('href') || '';
+      const match = href.match(/\/wiki\/article\/([^/]+)/);
+      if (match) {
+        if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = setTimeout(() => {
+          setHoveredArticleId(match[1]);
+          setHoverPos({ x: e.clientX, y: e.clientY });
+        }, 400);
+      }
+    }
+  };
+
+  const handleContentMouseOut = (e: React.MouseEvent<HTMLDivElement>) => {
+    const anchor = (e.target as HTMLElement).closest('a[href*="/wiki/article/"]');
+    if (anchor) {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      // Small delay so cursor can move onto the popover
+      hoverTimeoutRef.current = setTimeout(() => setHoveredArticleId(null), 200);
+    }
+  };
+
   const handleDelete = async () => {
     if (!id) return;
     if (confirm('Are you sure you want to delete this article? This cannot be undone.')) {
@@ -234,18 +308,134 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   if (loading) return <div className="text-center py-20 font-serif italic">Consulting the scrolls...</div>;
   if (!article) return <div className="text-center py-20 font-serif italic">This article has been lost to time.</div>;
 
+  // Article-level visibility check for players (staff always see everything)
+  if (!isStaff || previewCampaign) {
+    const effectiveEraId = isStaff && previewCampaign ? previewCampaign.eraId : activeCampaignEraId;
+    const effectiveCampaignId = isStaff && previewCampaign ? previewCampaign.id : (userProfile?.activeCampaignId ?? null);
+
+    const hasEraScope = article.visibilityEraIds?.length > 0;
+    const hasCampaignScope = article.visibilityCampaignIds?.length > 0;
+
+    if (hasCampaignScope && !article.visibilityCampaignIds.includes(effectiveCampaignId)) {
+      return (
+        <div className="text-center py-32 space-y-4">
+          <Globe className="w-16 h-16 text-gold/10 mx-auto" />
+          <h2 className="font-serif text-xl text-ink/40 italic">This article is not available in your current campaign.</h2>
+        </div>
+      );
+    }
+    if (hasEraScope && effectiveEraId && !article.visibilityEraIds.includes(effectiveEraId)) {
+      return (
+        <div className="text-center py-32 space-y-4">
+          <Globe className="w-16 h-16 text-gold/10 mx-auto" />
+          <h2 className="font-serif text-xl text-ink/40 italic">This article belongs to a different era.</h2>
+        </div>
+      );
+    }
+  }
+
   const CategoryIcon = CATEGORIES.find(c => c.id === article.category)?.icon || HelpCircle;
   const canEdit = isStaff;
 
   // Filter secrets based on visibility and user campaign
   const visibleSecrets = secrets.filter(secret => {
-    if (isStaff) return true;
-    // Check if user's active campaign is in the revealed list for this secret
-    return userProfile?.activeCampaignId && secret.revealedCampaignIds?.includes(userProfile.activeCampaignId);
+    if (isStaff && !previewCampaign) return true;
+    const activeCid = previewCampaign?.id ?? userProfile?.activeCampaignId;
+    return activeCid && secret.revealedCampaignIds?.includes(activeCid);
   });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+    <div className="max-w-6xl mx-auto space-y-8 pb-20 relative">
+
+      {/* Hover Quick-Preview Popover */}
+      {hoveredArticleId && hoveredArticleData && (
+        <div
+          className="fixed z-[9999] w-72 bg-card border border-gold/20 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-150"
+          style={{ left: Math.min(hoverPos.x + 16, window.innerWidth - 300), top: hoverPos.y - 10 }}
+        >
+          {hoveredArticleData.imageUrl && (
+            <div className="h-28 overflow-hidden">
+              <img
+                src={hoveredArticleData.imageUrl}
+                alt={hoveredArticleData.title}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          )}
+          <div className="p-4 space-y-1">
+            <p className="label-text text-gold text-[10px] uppercase tracking-widest">{hoveredArticleData.category}</p>
+            <p className="font-serif font-semibold text-ink leading-tight">{hoveredArticleData.title}</p>
+            {hoveredArticleData.excerpt && (
+              <p className="text-xs text-ink/60 italic line-clamp-3 mt-1">{hoveredArticleData.excerpt}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Staff Campaign Preview Banner */}
+      {isStaff && (
+        <div className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border text-sm ${previewCampaign ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-gold/5 border-gold/10 text-ink/40'}`}>
+          <Eye className="w-4 h-4 shrink-0" />
+          <span className="label-text uppercase tracking-widest text-[10px] shrink-0">
+            {previewCampaign ? `Previewing as: ${previewCampaign.name}` : 'Preview as Campaign:'}
+          </span>
+          <div className="flex-grow max-w-[220px]">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" className="flex items-center justify-between w-full h-7 px-2 rounded-md border border-gold/10 bg-background/50 hover:bg-background/80 hover:border-gold/30 transition-colors text-left text-xs font-normal">
+                  <span className="truncate">
+                    {previewCampaign ? previewCampaign.name : "None (Staff View)"}
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-ink/30 shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search campaigns..." className="h-8" />
+                  <CommandList className="max-h-48">
+                    <CommandEmpty>No campaigns found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        onSelect={() => setPreviewCampaign(null)}
+                        className="flex items-center gap-2 cursor-pointer text-xs"
+                      >
+                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${!previewCampaign ? 'bg-primary border-primary' : 'border-primary/30'}`}>
+                          {!previewCampaign && <Check className="w-2.5 h-2.5 text-white" />}
+                        </div>
+                        <span>None (Staff View)</span>
+                      </CommandItem>
+                      {allCampaigns.map((c: any) => {
+                        const isSelected = previewCampaign?.id === c.id;
+                        return (
+                          <CommandItem
+                            key={c.id}
+                            onSelect={() => {
+                              setPreviewCampaign({ id: c.id, name: c.name, eraId: c.eraId ?? null });
+                            }}
+                            className="flex items-center gap-2 cursor-pointer text-xs"
+                          >
+                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-primary border-primary' : 'border-primary/30'}`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                            </div>
+                            <span className="truncate">{c.name}</span>
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+          {previewCampaign && (
+            <button onClick={() => setPreviewCampaign(null)} className="ml-auto text-primary/60 hover:text-primary transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Header Actions */}
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={() => navigate('/wiki')} className="text-ink/60">
@@ -319,7 +509,13 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
             </div>
           )}
 
-          <BBCodeRenderer content={article.content} />
+          <div
+            ref={contentRef}
+            onMouseOver={handleContentMouseOver}
+            onMouseOut={handleContentMouseOut}
+          >
+            <BBCodeRenderer content={article.content} viewContext={viewContext} />
+          </div>
 
           {/* DM Notes Section (Staff Only) */}
           {isStaff && dmNotes && (

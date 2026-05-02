@@ -239,6 +239,18 @@ function ContextPanel({
 
 // ── main export ───────────────────────────────────────────────────────────────
 
+export interface PanelLabels {
+  detail: { label: string; subtitle: string };
+  card: { label: string; subtitle: string };
+  preview: { label: string; subtitle: string };
+}
+
+const DEFAULT_PANEL_LABELS: PanelLabels = {
+  detail:  { label: 'Detail View',     subtitle: 'ClassView page'   },
+  card:    { label: 'Card View',        subtitle: 'ClassList grid'   },
+  preview: { label: 'Preview Header',  subtitle: 'Quick-view panel' },
+};
+
 export interface ClassImageEditorProps {
   imageUrl: string;
   onImageUrlChange?: (url: string) => void;
@@ -256,6 +268,7 @@ export interface ClassImageEditorProps {
   onPreviewDisplayChange: (d: ImageDisplay) => void;
 
   storagePath: string;
+  panelLabels?: PanelLabels;
   className?: string;
 }
 
@@ -266,7 +279,7 @@ export function ClassImageEditor({
   cardDisplay: propCardDisplay, onCardDisplayChange,
   previewImageUrl: propPreviewImageUrl, onPreviewImageUrlChange,
   previewDisplay: propPreviewDisplay, onPreviewDisplayChange,
-  storagePath, className,
+  storagePath, panelLabels, className,
 }: ClassImageEditorProps) {
   // Local state for interactive editing — only commits to parent on pointer-up / wheel tick
   const [imageDisplay, setImageDisplay] = useState(propImageDisplay);
@@ -285,6 +298,8 @@ export function ClassImageEditor({
   const cardImg = cardImageUrl || imageUrl;
   const prevImg = previewImageUrl || imageUrl;
 
+  const labels = { ...DEFAULT_PANEL_LABELS, ...panelLabels };
+
   const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
 
   return (
@@ -296,8 +311,8 @@ export function ClassImageEditor({
 
         {/* Detail View (primary, no override) */}
         <ContextPanel
-          label="Detail View"
-          subtitle="ClassView page"
+          label={labels.detail.label}
+          subtitle={labels.detail.subtitle}
           aspectClass="aspect-square"
           image={imageUrl}
           display={imageDisplay}
@@ -310,8 +325,8 @@ export function ClassImageEditor({
 
         {/* Card View */}
         <ContextPanel
-          label="Card View"
-          subtitle="ClassList grid"
+          label={labels.card.label}
+          subtitle={labels.card.subtitle}
           aspectClass="aspect-[4/5]"
           image={cardImg}
           display={cardDisplay}
@@ -333,8 +348,8 @@ export function ClassImageEditor({
 
         {/* Preview Header */}
         <ContextPanel
-          label="Preview Header"
-          subtitle="Quick-view panel"
+          label={labels.preview.label}
+          subtitle={labels.preview.subtitle}
           aspectClass="aspect-[3/1]"
           image={prevImg}
           display={previewDisplay}

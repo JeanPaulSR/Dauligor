@@ -7,6 +7,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { auth, db, onAuthStateChanged, User } from './lib/firebase';
 import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
 import Navbar from './components/Navbar';
 import Home from './pages/core/Home';
 import Wiki from './pages/wiki/Wiki';
@@ -58,6 +59,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState(false);
+  const [previewCampaign, setPreviewCampaign] = useState<WikiPreviewCampaign | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -180,6 +182,7 @@ export default function App() {
   }
 
   return (
+    <WikiPreviewContext.Provider value={{ previewCampaign, setPreviewCampaign }}>
     <TooltipProvider>
       <Router>
         <div className="min-h-screen flex">
@@ -272,5 +275,6 @@ export default function App() {
         </div>
       </Router>
     </TooltipProvider>
+    </WikiPreviewContext.Provider>
   );
 }

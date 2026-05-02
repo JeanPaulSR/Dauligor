@@ -229,6 +229,18 @@
   .prose u   { @apply underline decoration-gold/40; }
   .prose sub, .prose sup { @apply text-[0.7em] text-gold/60; }
 
+  /* Conditional era/campaign content blocks (staff view) */
+  .prose .conditional-block {
+    @apply my-4 rounded-lg border-l-4 border-gold/40 bg-gold/5 overflow-hidden;
+  }
+  .prose .conditional-block.era-block { @apply border-gold/40 bg-gold/5; }
+  .prose .conditional-block.campaign-block { @apply border-primary/40 bg-primary/5; }
+  .prose .conditional-block-label {
+    @apply text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 text-gold/70 bg-gold/10 border-b border-gold/10;
+  }
+  .prose .campaign-block .conditional-block-label { @apply text-primary/70 bg-primary/10 border-primary/10; }
+  .prose .conditional-block > *:not(.conditional-block-label) { @apply px-4 py-3; }
+
   /* ── TipTap / ProseMirror editor surface ────────────────────── */
   .ProseMirror { @apply outline-none min-h-full; }
   .ProseMirror p.is-editor-empty:first-child::before {

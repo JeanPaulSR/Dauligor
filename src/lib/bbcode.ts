@@ -2,12 +2,54 @@
  * A simple BBCode to HTML converter for the RPG Archive.
  * Supports standard tags and some custom ones inspired by World Anvil.
  */
-export function bbcodeToHtml(text: string): string {
+
+export interface BbcodeViewContext {
+  eraId?: string | null;
+  campaignId?: string | null;
+  isStaff?: boolean;
+}
+
+export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string {
   if (!text) return '';
 
   let html = text;
 
-  // Escape HTML to prevent XSS before processing BBCode
+  // --- Conditional Era/Campaign Block Processing ---
+  // Process [era id="..."] blocks
+  html = html.replace(/\[era\s+id=["']([^"']+)["']\]([\s\S]*?)\[\/era\]/gi, (match, eraId, content) => {
+    const trimmedContent = content.trim();
+    if (context?.isStaff) {
+      // Staff: show all blocks with a label
+      return `<div class="conditional-block era-block" data-era-id="${eraId}">
+        <div class="conditional-block-label">🌐 Era: ${eraId}</div>
+        ${trimmedContent}
+      </div>`;
+    }
+    if (context?.eraId && context.eraId === eraId) {
+      // Matching era: show content, no wrapper
+      return trimmedContent;
+    }
+    // Non-matching era or no context: hide
+    return '';
+  });
+
+  // Process [campaign id="..."] blocks
+  html = html.replace(/\[campaign\s+id=["']([^"']+)["']\]([\s\S]*?)\[\/campaign\]/gi, (match, campaignId, content) => {
+    const trimmedContent = content.trim();
+    if (context?.isStaff) {
+      return `<div class="conditional-block campaign-block" data-campaign-id="${campaignId}">
+        <div class="conditional-block-label">⚔️ Campaign-Specific</div>
+        ${trimmedContent}
+      </div>`;
+    }
+    if (context?.campaignId && context.campaignId === campaignId) {
+      return trimmedContent;
+    }
+    return '';
+  });
+  // -------------------------------------------------
+
+  // Escape HTML to prevent XSS before processing remaining BBCode
   html = html
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
