@@ -45,7 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
 import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
 import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
-import { buildSpellFormulaShortcutRows, normalizeSpellFormulaShortcuts } from '../../lib/referenceSyntax';
+import { buildSpellFormulaShortcutRows } from '../../lib/referenceSyntax';
 import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } from '../../lib/advancementState';
 import { buildCanonicalSubclassProgression } from '../../lib/classProgression';
 import {
@@ -480,10 +480,6 @@ export default function SubclassEditor() {
   };
 
   const spellFormulaShortcuts = buildSpellFormulaShortcutRows(subclassReferenceContext);
-  const spellFormulaPreview = normalizeSpellFormulaShortcuts(
-    spellcasting.spellsKnownFormula,
-    subclassReferenceContext,
-  );
 
   if (loading) return <div className="p-8 text-center text-gold animate-pulse">Loading Subclass Editor...</div>;
 
@@ -542,7 +538,7 @@ export default function SubclassEditor() {
                 <label className="label-text mb-2 block text-xs uppercase tracking-widest text-gold/60">Subclass Art / Icon</label>
                 <ImageUpload 
                   currentImageUrl={imageUrl}
-                  storagePath={`images/subclasses/${id || 'new'}/`}
+                  storagePath={`images/classes/${parentClass?.id || classId || 'unknown'}/subclasses/${id || 'new'}/`}
                   onUpload={setImageUrl}
                 />
               </div>
@@ -644,7 +640,7 @@ export default function SubclassEditor() {
                       <option value="full">Full Caster</option>
                       <option value="half">Half Caster</option>
                       <option value="third">Third Caster</option>
-                      <option value="pact">Pact Magic</option>
+                      <option value="pact">Custom / Pact</option>
                       <option value="artificer">Artificer</option>
                     </select>
                   </div>
@@ -669,74 +665,66 @@ export default function SubclassEditor() {
                   </div>
                 </div>
 
-                <fieldset className="config-fieldset bg-background/20">
-                  <legend className="section-label text-sky-500/60 px-1">Spells Known Formula</legend>
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                    <div className="space-y-1.5">
-                      <label className="field-label">Formula</label>
-                      <Input
-                        value={spellcasting.spellsKnownFormula}
-                        onChange={e => setSpellcasting({...spellcasting, spellsKnownFormula: e.target.value})}
-                        placeholder="Preferred: @abilities.wis.mod + @classes.druid.levels"
-                        className="field-input text-xs"
-                      />
-                      <div className="space-y-1">
-                        {SPELLCASTING_FORMULA_GUIDANCE.map((line) => (
-                          <p key={line} className="field-hint">
-                            {line}
-                          </p>
-                        ))}
-                      </div>
-                      <div className="rounded-md border border-gold/10 bg-background/30 px-3 py-2 space-y-2">
-                        <p className="label-text text-gold/70">Dauligor Shortcuts</p>
-                        <div className="grid gap-1 md:grid-cols-2">
-                          {spellFormulaShortcuts.map((row) => (
-                            <div key={row.authoring} className="rounded border border-gold/10 bg-card/40 px-2 py-2">
-                              <p className="text-[10px] font-black text-ink/75">{row.label}</p>
-                              <code className="mt-1 block text-[10px] text-gold">{row.authoring}</code>
-                              <p className="mt-1 text-[10px] text-ink/45 break-all">{row.preview}</p>
-                            </div>
+                {['prepared', 'spellbook'].includes(spellcasting.type) && (
+                  <fieldset className="config-fieldset bg-background/20">
+                    <legend className="section-label text-sky-500/60 px-1">Spells Known Formula</legend>
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <label className="field-label">Formula</label>
+                        <Input
+                          value={spellcasting.spellsKnownFormula}
+                          onChange={e => setSpellcasting({...spellcasting, spellsKnownFormula: e.target.value})}
+                          placeholder="Preferred: @abilities.wis.mod + @classes.druid.levels"
+                          className="field-input text-xs"
+                        />
+                        <div className="space-y-1">
+                          {SPELLCASTING_FORMULA_GUIDANCE.map((line) => (
+                            <p key={line} className="field-hint">
+                              {line}
+                            </p>
                           ))}
                         </div>
-                        {spellcasting.spellsKnownFormula ? (
-                          <p className="field-hint">
-                            Preview: <code className="text-gold break-all">{spellFormulaPreview}</code>
-                          </p>
-                        ) : null}
                       </div>
-                    </div>
-                    <div className="flex justify-start lg:justify-end">
                       <ReferenceSyntaxHelp
                         title="Spell Formula References"
-                        buttonLabel="Formula Help"
+                        description="Dauligor spellcasting shortcuts are contextual in this field."
+                        buttonLabel="Shortcuts"
                         value={spellcasting.spellsKnownFormula}
+                        examples={spellFormulaShortcuts.map(row => ({
+                          label: row.label,
+                          semantic: row.authoring,
+                          native: row.preview,
+                          description: row.description
+                        }))}
                         context={subclassReferenceContext}
                       />
                     </div>
-                  </div>
-                </fieldset>
+                  </fieldset>
+                )}
 
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="label-text">Slot Progression</label>
-                    <div className="flex gap-1">
-                      <select 
-                        value={spellcasting.progressionId} 
-                        onChange={e => setSpellcasting({...spellcasting, progressionId: e.target.value})}
-                        className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
-                      >
-                        <option value="">None</option>
-                        {progressionScalings.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                      <Link to="/compendium/spellcasting-scaling/new">
-                        <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
-                          <Plus className="w-3 h-3" />
-                        </Button>
-                      </Link>
+                  {spellcasting.progression === 'pact' && (
+                    <div className="space-y-1">
+                      <label className="label-text">Alternative Progression (Pact / Focus Slots)</label>
+                      <div className="flex gap-1">
+                        <select 
+                          value={spellcasting.progressionId} 
+                          onChange={e => setSpellcasting({...spellcasting, progressionId: e.target.value})}
+                          className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink"
+                        >
+                          <option value="">None</option>
+                          {progressionScalings.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                        <Link to="/compendium/spellcasting-scaling/new">
+                          <Button variant="outline" size="sm" className="h-8 w-8 border-gold/10 text-gold hover:bg-gold/5 p-0">
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </Link>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="space-y-1">
                     <label className="label-text">Spells Known Scaling</label>

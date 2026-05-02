@@ -11,7 +11,19 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
-import { Node, mergeAttributes } from '@tiptap/core';
+import Underline from '@tiptap/extension-underline';
+import Link from '@tiptap/extension-link';
+import { Node, Mark, mergeAttributes } from '@tiptap/core';
+
+const SpoilerExtension = Mark.create({
+  name: 'spoiler',
+  parseHTML() {
+    return [{ tag: 'span.spoiler' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { class: 'spoiler', title: 'Click to reveal' }), 0];
+  },
+});
 
 const IndentExtension = Node.create({
   name: 'indentBlock',
@@ -63,6 +75,8 @@ export default function MarkdownEditor({
   const contentRef = useRef<HTMLDivElement>(null);
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef || internalRef;
+  const internalUpdateRef = useRef(false);
+  const editorRef = useRef<any>(null);
 
   const lastHeightRef = useRef<number>(0);
 
@@ -143,6 +157,12 @@ export default function MarkdownEditor({
     extensions: [
       StarterKit,
       IndentExtension,
+      SpoilerExtension,
+      Underline,
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+      }),
       Subscript,
       Superscript,
       Table.configure({
@@ -171,6 +191,7 @@ export default function MarkdownEditor({
         const html = editor.getHTML();
         const bbcode = htmlToBbcode(html);
         if (bbcode !== value) {
+          internalUpdateRef.current = true;
           setTimeout(() => {
             onChange(bbcode);
           }, 0);
@@ -184,6 +205,25 @@ export default function MarkdownEditor({
       }
     },
     editorProps: {
+      attributes: {
+        class: 'tiptap custom-scrollbar flex-grow outline-none p-4 overflow-y-auto',
+      },
+      handlePaste: (view, event) => {
+        const plainText = event.clipboardData?.getData('text/plain') || '';
+        // Option C: Auto-parse pasted BBCode
+        if (plainText && plainText.match(/\[(b|i|u|s|h[1-4]|left|center|right|justify|indent|li|ul|ol|quote|code|table|tr|th|td|url|spoiler)(?:=.*?)?\]/i)) {
+          event.preventDefault();
+          const convertedHtml = bbcodeToHtml(plainText);
+          setTimeout(() => {
+            editorRef.current?.commands.insertContent(convertedHtml);
+          }, 0);
+          return true;
+        }
+        
+        // Option B: Sanitized HTML paste is naturally handled by TipTap's schema 
+        // dropping unsupported tags since we now have exactly the extensions we need.
+        return false;
+      },
       handleKeyDown: (view, event) => {
         if (event.key === 'Tab') {
           if (editor?.isActive('bulletList') || editor?.isActive('orderedList')) {
@@ -207,9 +247,17 @@ export default function MarkdownEditor({
     },
   });
 
+  editorRef.current = editor;
+
   // Sync TipTap content when BBCode changes externally or when switching modes
   useEffect(() => {
     if (!editor) return;
+    
+    if (internalUpdateRef.current) {
+      internalUpdateRef.current = false;
+      return;
+    }
+
     const currentHtml = editor.getHTML();
     const newHtml = bbcodeToHtml(value);
     if (currentHtml !== newHtml) {
@@ -282,18 +330,18 @@ export default function MarkdownEditor({
       
       <div 
         ref={resizableRef}
-        className="flex-grow resize-y overflow-hidden flex flex-col" 
+        className="flex-grow resize-y overflow-hidden flex flex-col min-h-0" 
         style={{ height: currentHeight, minHeight, maxHeight }}
         onMouseDown={handleMouseDown}
       >
         {isWYSIWYG ? (
           <div 
             ref={contentRef}
-            className="prose prose-sm max-w-none flex-grow overflow-auto custom-scrollbar cursor-text flex flex-col" 
+            className="prose prose-sm max-w-none cursor-text flex-grow flex flex-col min-h-0" 
           >
             <EditorContent 
               editor={editor}
-              className="flex-grow flex flex-col overflow-hidden [&>.tiptap]:flex-grow [&>.tiptap]:outline-none [&>.tiptap]:p-4" 
+              className="flex-grow flex flex-col overflow-hidden min-h-0" 
             />
           </div>
         ) : (

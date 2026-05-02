@@ -11,7 +11,6 @@ export interface ReferenceSheetRow {
   label: string;
   authoring: string;
   foundry: string;
-  description: string;
 }
 
 export interface ReferenceSheetSection {
@@ -20,6 +19,7 @@ export interface ReferenceSheetSection {
   description: string;
   rows: ReferenceSheetRow[];
   notes?: string[];
+  isDropdown?: boolean;
 }
 
 export interface ReferenceColumnExample {
@@ -297,67 +297,51 @@ export function buildReferenceSheetSections(
           label: "Proficiency Bonus",
           authoring: "@prof",
           foundry: "@prof",
-          description: "Actor proficiency bonus.",
         },
         {
           label: "Total Character Level",
           authoring: "@level",
           foundry: "@details.level",
-          description: "Overall character level across every class.",
         },
         {
           label: "Current Class Level",
           authoring: `@class.${classIdentifier}.level`,
           foundry: `@classes.${classIdentifier}.levels`,
-          description: `Uses the stable class identifier for ${classLabel}.`,
         },
         {
           label: "Current Subclass Level",
           authoring: `@subclass.${subclassIdentifier}.level`,
           foundry: `@subclasses.${subclassIdentifier}.levels`,
-          description: `Uses the stable subclass identifier for ${subclassLabel}.`,
         },
         {
           label: "Current HP",
           authoring: "@attr.hp.value",
           foundry: "@attributes.hp.value",
-          description: "Current hit points.",
         },
         {
           label: "Max HP",
           authoring: "@attr.hp.max",
           foundry: "@attributes.hp.max",
-          description: "Maximum hit points.",
         },
         {
           label: "Class Hit Die",
           authoring: `@class.${classIdentifier}.hit-die`,
           foundry: `@classes.${classIdentifier}.hd.denomination`,
-          description: "Returns the die denomination such as d8 or d10.",
-        },
-        {
-          label: "Hit Die Faces",
-          authoring: `@class.${classIdentifier}.hit-die-faces`,
-          foundry: "derived from @classes.<identifier>.hd.denomination",
-          description: "Semantic helper for the numeric face count like 8 or 10.",
         },
         {
           label: "Spell Save DC",
           authoring: "@attributes.spell.dc",
           foundry: "@attributes.spell.dc",
-          description: "Native Foundry roll-data path. Use directly until a semantic alias is introduced.",
         },
         {
           label: "Spell Attack",
           authoring: "@attributes.spell.attack",
           foundry: "@attributes.spell.attack",
-          description: "Native Foundry roll-data path for spell attack bonus.",
         },
         {
-          label: `${spellcastingAbility.toUpperCase()} Modifier`,
-          authoring: `@ability.${spellcastingAbility}.mod`,
-          foundry: `@abilities.${spellcastingAbility}.mod`,
-          description: "Default spellcasting and limited-use modifier example.",
+          label: "Spellcasting Modifier",
+          authoring: `@spell.mod`,
+          foundry: `@attributes.spell.mod`,
         },
       ],
       notes: [
@@ -368,70 +352,119 @@ export function buildReferenceSheetSections(
       id: "attributes",
       title: "Attributes",
       description:
-        "These are the most common ability and attribute references authors will use in formulas and usage fields.",
+        "The following are the reference to each attribute. You can reference the score and modifier to each one with the following formulas. Replace [ATTR] with the 3-letter ability identifier.",
       rows: [
-        ...ABILITY_ORDER.map((ability) => ({
-          label: `${ABILITY_LABELS[ability]} Score`,
-          authoring: `@ability.${ability}.score`,
-          foundry: `@abilities.${ability}.value`,
-          description: "Raw ability score.",
-        })),
         {
-          label: "Dexterity Modifier",
-          authoring: "@ability.dex.mod",
-          foundry: "@abilities.dex.mod",
-          description: "Common initiative, AC, and weapon modifier.",
+          label: "Ability Identifiers",
+          authoring: "str, dex, con, int, wis, cha",
+          foundry: "str, dex, con, int, wis, cha",
         },
         {
-          label: "Constitution Modifier",
-          authoring: "@ability.con.mod",
-          foundry: "@abilities.con.mod",
-          description: "HP-related and concentration-related modifier.",
+          label: "Ability Score",
+          authoring: "@ability.[ATTR].score",
+          foundry: "@abilities.[ATTR].value",
+        },
+        {
+          label: "Ability Modifier",
+          authoring: "@ability.[ATTR].mod",
+          foundry: "@abilities.[ATTR].mod",
         },
         {
           label: "Armor Class",
           authoring: "@attributes.ac.value",
           foundry: "@attributes.ac.value",
-          description: "Native Foundry AC path.",
+        },
+        {
+          label: "Natural Armor",
+          authoring: "@attributes.ac.base",
+          foundry: "@attributes.ac.base",
         },
       ],
     },
     {
       id: "skills",
       title: "Skills",
-      description:
-        "Skill references currently follow Foundry-native roll-data paths. These are safe to display and author directly.",
+      description: "Skill references currently follow Foundry-native roll-data paths.",
+      isDropdown: true,
+      isSplit: true,
       rows: [
-        {
-          label: "Arcana Total",
-          authoring: "@skills.arc.total",
-          foundry: "@skills.arc.total",
-          description: "Total Arcana bonus.",
-        },
-        {
-          label: "Perception Passive",
-          authoring: "@skills.prc.passive",
-          foundry: "@skills.prc.passive",
-          description: "Passive Perception score.",
-        },
-        {
-          label: "Stealth Total",
-          authoring: "@skills.ste.total",
-          foundry: "@skills.ste.total",
-          description: "Total Stealth bonus.",
-        },
-        {
-          label: "Insight Total",
-          authoring: "@skills.ins.total",
-          foundry: "@skills.ins.total",
-          description: "Total Insight bonus.",
-        },
-        {
-          label: "Tool Total",
-          authoring: "@tools.thief.total",
-          foundry: "@tools.thief.total",
-          description: "Native tool total example.",
-        },
+        { label: "Acrobatics", authoring: "@skills.acr.total", foundry: "@skills.acr.total" },
+        { label: "Animal Handling", authoring: "@skills.ani.total", foundry: "@skills.ani.total" },
+        { label: "Arcana", authoring: "@skills.arc.total", foundry: "@skills.arc.total" },
+        { label: "Athletics", authoring: "@skills.ath.total", foundry: "@skills.ath.total" },
+        { label: "Deception", authoring: "@skills.dec.total", foundry: "@skills.dec.total" },
+        { label: "History", authoring: "@skills.his.total", foundry: "@skills.his.total" },
+        { label: "Insight", authoring: "@skills.ins.total", foundry: "@skills.ins.total" },
+        { label: "Intimidation", authoring: "@skills.itm.total", foundry: "@skills.itm.total" },
+        { label: "Investigation", authoring: "@skills.inv.total", foundry: "@skills.inv.total" },
+        { label: "Medicine", authoring: "@skills.med.total", foundry: "@skills.med.total" },
+        { label: "Nature", authoring: "@skills.nat.total", foundry: "@skills.nat.total" },
+        { label: "Perception", authoring: "@skills.prc.total", foundry: "@skills.prc.total" },
+        { label: "Performance", authoring: "@skills.prf.total", foundry: "@skills.prf.total" },
+        { label: "Persuasion", authoring: "@skills.per.total", foundry: "@skills.per.total" },
+        { label: "Religion", authoring: "@skills.rel.total", foundry: "@skills.rel.total" },
+        { label: "Sleight of Hand", authoring: "@skills.slt.total", foundry: "@skills.slt.total" },
+        { label: "Stealth", authoring: "@skills.ste.total", foundry: "@skills.ste.total" },
+        { label: "Survival", authoring: "@skills.sur.total", foundry: "@skills.sur.total" },
+      ],
+    },
+    {
+      id: "tools",
+      title: "Tools",
+      description: "Tool references follow Foundry-native roll-data paths.",
+      isDropdown: true,
+      isSplit: true,
+      rows: [
+        { label: "Alchemist's Supplies", authoring: "@tools.alch.total", foundry: "@tools.alch.total" },
+        { label: "Brewer's Supplies", authoring: "@tools.brew.total", foundry: "@tools.brew.total" },
+        { label: "Calligrapher's Supplies", authoring: "@tools.call.total", foundry: "@tools.call.total" },
+        { label: "Carpenter's Tools", authoring: "@tools.carp.total", foundry: "@tools.carp.total" },
+        { label: "Cartographer's Tools", authoring: "@tools.cart.total", foundry: "@tools.cart.total" },
+        { label: "Cobbler's Tools", authoring: "@tools.cobb.total", foundry: "@tools.cobb.total" },
+        { label: "Cook's Utensils", authoring: "@tools.cook.total", foundry: "@tools.cook.total" },
+        { label: "Disguise Kit", authoring: "@tools.disg.total", foundry: "@tools.disg.total" },
+        { label: "Forgery Kit", authoring: "@tools.forg.total", foundry: "@tools.forg.total" },
+        { label: "Glassblower's Tools", authoring: "@tools.glas.total", foundry: "@tools.glas.total" },
+        { label: "Herbalism Kit", authoring: "@tools.herb.total", foundry: "@tools.herb.total" },
+        { label: "Jeweler's Tools", authoring: "@tools.jewl.total", foundry: "@tools.jewl.total" },
+        { label: "Land Vehicles", authoring: "@tools.land.total", foundry: "@tools.land.total" },
+        { label: "Leatherworker's Tools", authoring: "@tools.leat.total", foundry: "@tools.leat.total" },
+        { label: "Mason's Tools", authoring: "@tools.maso.total", foundry: "@tools.maso.total" },
+        { label: "Navigator's Tools", authoring: "@tools.navg.total", foundry: "@tools.navg.total" },
+        { label: "Painter's Supplies", authoring: "@tools.pain.total", foundry: "@tools.pain.total" },
+        { label: "Poisoner's Kit", authoring: "@tools.pois.total", foundry: "@tools.pois.total" },
+        { label: "Potter's Tools", authoring: "@tools.pott.total", foundry: "@tools.pott.total" },
+        { label: "Smith's Tools", authoring: "@tools.smit.total", foundry: "@tools.smit.total" },
+        { label: "Thieves' Tools", authoring: "@tools.thie.total", foundry: "@tools.thie.total" },
+        { label: "Tinker's Tools", authoring: "@tools.tink.total", foundry: "@tools.tink.total" },
+        { label: "Water Vehicles", authoring: "@tools.watr.total", foundry: "@tools.watr.total" },
+        { label: "Weaver's Tools", authoring: "@tools.weav.total", foundry: "@tools.weav.total" },
+        { label: "Woodcarver's Tools", authoring: "@tools.wood.total", foundry: "@tools.wood.total" },
+      ],
+    },
+    {
+      id: "languages",
+      title: "Languages",
+      description: "Language knowledge references.",
+      isDropdown: true,
+      isSplit: true,
+      rows: [
+        { label: "Abyssal", authoring: "@traits.languages.value.abyssal", foundry: "@traits.languages.value.abyssal" },
+        { label: "Celestial", authoring: "@traits.languages.value.celestial", foundry: "@traits.languages.value.celestial" },
+        { label: "Common", authoring: "@traits.languages.value.common", foundry: "@traits.languages.value.common" },
+        { label: "Deep Speech", authoring: "@traits.languages.value.deep", foundry: "@traits.languages.value.deep" },
+        { label: "Draconic", authoring: "@traits.languages.value.draconic", foundry: "@traits.languages.value.draconic" },
+        { label: "Dwarvish", authoring: "@traits.languages.value.dwarvish", foundry: "@traits.languages.value.dwarvish" },
+        { label: "Elvish", authoring: "@traits.languages.value.elvish", foundry: "@traits.languages.value.elvish" },
+        { label: "Giant", authoring: "@traits.languages.value.giant", foundry: "@traits.languages.value.giant" },
+        { label: "Gnomish", authoring: "@traits.languages.value.gnomish", foundry: "@traits.languages.value.gnomish" },
+        { label: "Goblin", authoring: "@traits.languages.value.goblin", foundry: "@traits.languages.value.goblin" },
+        { label: "Halfling", authoring: "@traits.languages.value.halfling", foundry: "@traits.languages.value.halfling" },
+        { label: "Infernal", authoring: "@traits.languages.value.infernal", foundry: "@traits.languages.value.infernal" },
+        { label: "Orc", authoring: "@traits.languages.value.orc", foundry: "@traits.languages.value.orc" },
+        { label: "Primordial", authoring: "@traits.languages.value.primordial", foundry: "@traits.languages.value.primordial" },
+        { label: "Sylvan", authoring: "@traits.languages.value.sylvan", foundry: "@traits.languages.value.sylvan" },
+        { label: "Undercommon", authoring: "@traits.languages.value.undercommon", foundry: "@traits.languages.value.undercommon" },
       ],
     },
     {
@@ -441,28 +474,24 @@ export function buildReferenceSheetSections(
         "Entity references should stay semantic in authoring and become UUID links during import when matching documents exist.",
       rows: [
         {
-          label: "Class Link",
-          authoring: `@class[class-${classIdentifier}]{${classLabel}}`,
+          label: "Feature Skeleton",
+          authoring: `@feature[identifier]{Name}`,
           foundry: "@UUID[...]",
-          description: "Semantic class link that can become a Foundry UUID link later.",
         },
         {
-          label: "Subclass Link",
-          authoring: `@subclass[subclass-${subclassIdentifier}]{${subclassLabel}}`,
+          label: "Feature Example",
+          authoring: `@feature[wild-shape]{Wild Shape}`,
           foundry: "@UUID[...]",
-          description: "Semantic subclass link.",
         },
         {
-          label: "Feature Link",
-          authoring: "@feature[class-feature-sample]{Feature Name}",
+          label: "Option Skeleton",
+          authoring: `@option[identifier]{Name}`,
           foundry: "@UUID[...]",
-          description: "Use stable semantic source ids for features, not local database ids.",
         },
         {
-          label: "Option Link",
-          authoring: "@option[class-option-sample]{Option Name}",
+          label: "Option Example",
+          authoring: `@option[infusion-enhanced-defense]{Enhanced Defense}`,
           foundry: "@UUID[...]",
-          description: "Use for option items such as infusions, invocations, or metamagic choices.",
         },
       ],
       notes: [
@@ -509,12 +538,10 @@ function buildClassColumnRows(
       const identifier = getColumnIdentifier(column);
       if (!identifier) return null;
       const displayName = String(column.name || identifier).trim() || identifier;
-      const parentScope = column.parentType ? `${startCaseIdentifier(column.parentType)} column` : "Class column";
       return {
         label: displayName,
         authoring: `@scale.${classIdentifier}.${identifier}`,
         foundry: `@scale.${classIdentifier}.${identifier}`,
-        description: `${parentScope} resolved by identifier "${identifier}", not only by the visible label "${displayName}".`,
       };
     })
     .filter(Boolean) as ReferenceSheetRow[];
@@ -529,19 +556,16 @@ function buildDefaultClassColumnRows(
       label: "Column Value",
       authoring: `@scale.${classIdentifier}.${scaleIdentifier}`,
       foundry: `@scale.${classIdentifier}.${scaleIdentifier}`,
-      description: "Base ScaleValue reference for a class or subclass column.",
     },
     {
       label: "Column Number",
       authoring: `@scale.${classIdentifier}.${scaleIdentifier}.number`,
       foundry: `@scale.${classIdentifier}.${scaleIdentifier}.number`,
-      description: "Numeric scale result when the value is number-shaped.",
     },
     {
       label: "Column Die Faces",
       authoring: `@scale.${classIdentifier}.${scaleIdentifier}.faces`,
       foundry: `@scale.${classIdentifier}.${scaleIdentifier}.faces`,
-      description: "Die face count for die-based scale columns.",
     },
   ];
 }

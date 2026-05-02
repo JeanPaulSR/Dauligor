@@ -41,16 +41,9 @@ const SYSTEM_SECTIONS = [
     prefix: 'images/classes/',
     col: 'classes',
     nameField: 'name',
-    description: 'Class artwork, card and preview images',
+    description: 'Class and Subclass artwork, card and preview images',
   },
-  {
-    key: 'subclasses',
-    label: 'Subclasses',
-    prefix: 'images/subclasses/',
-    col: 'subclasses',
-    nameField: 'name',
-    description: 'Subclass artwork',
-  },
+
   {
     key: 'lore',
     label: 'Article Headers',
@@ -130,7 +123,24 @@ function formatBytes(bytes: number): string {
 async function fetchNameMap(col: string, nameField: string): Promise<Map<string, string>> {
   try {
     const snap = await getDocs(collection(db, col));
-    return new Map(snap.docs.map((d) => [d.id, (d.data()[nameField] as string) || d.id]));
+    const map = new Map(snap.docs.map((d) => {
+      const data = d.data();
+      let name = data[nameField] as string;
+      if (col === 'users') name = data.displayName || data.username || data.handle;
+      return [d.id, name || d.id];
+    }));
+
+    if (col === 'classes') {
+      const subSnap = await getDocs(collection(db, 'subclasses'));
+      subSnap.docs.forEach((d) => {
+        const data = d.data();
+        map.set(d.id, data.name || d.id);
+      });
+      // Add a literal mapping for the word "subclasses" itself to titlecase
+      map.set('subclasses', 'Subclasses');
+    }
+
+    return map;
   } catch {
     return new Map();
   }

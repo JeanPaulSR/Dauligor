@@ -136,72 +136,48 @@ export default function ReferenceSheetDialog({
               </Button>
             </div>
 
-            <div className="dialog-body h-[calc(100%-4.5rem)] space-y-5 overflow-y-auto">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-                <fieldset className="config-fieldset bg-background/20">
-                  <legend className="section-label text-gold/60 px-1">How To Read This</legend>
-                  <div className="space-y-2">
-                    <p className="body-text text-sm text-ink/75">
-                      Prefer the authoring reference in Dauligor. The Foundry column shows the
-                      roll-data path or UUID-style result the module expects to target during
-                      import.
-                    </p>
-                    <p className="field-hint">
-                      Semantic references are safest when we have a Dauligor syntax for them.
-                      Native Foundry paths are still shown whenever that terminology is already
-                      important to creators.
-                    </p>
-                  </div>
-                </fieldset>
-
-                <fieldset className="config-fieldset bg-background/20">
-                  <legend className="section-label text-sky-500/60 px-1">Important Rules</legend>
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                      <Crosshair className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold" />
-                      <p className="text-sm text-ink/75">
-                        Class references resolve by stable identifier, not by the display name shown
-                        on the sheet. Duplicate names are safe when identifiers stay distinct.
-                      </p>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Crosshair className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold" />
-                      <p className="text-sm text-ink/75">
-                        Class columns should resolve from their linked scaling or ScaleValue
-                        identifier, not only from the label visible in the UI.
-                      </p>
-                    </div>
-                  </div>
-                </fieldset>
+            <div className="dialog-body h-[calc(100%-4.5rem)] space-y-5 overflow-y-auto custom-scrollbar">
+              <div className="rounded-md border border-gold/20 bg-gold/5 p-4">
+                <p className="text-sm font-bold text-gold">
+                  This reference sheet is meant to be used for Foundry correct formulas. Use the Dauligor formula, as the Import Module will handle the conversion.
+                </p>
               </div>
 
-              {sections.map((section) => (
-                <fieldset key={section.id} className="config-fieldset">
-                  <legend className="section-label text-gold/60 px-1">{section.title}</legend>
-                  <div className="space-y-3">
-                    <p className="field-hint">{section.description}</p>
-
-                    <div className="data-table">
-                      <div className="data-table-head grid grid-cols-[11rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
-                        <span className="data-table-th">Use Case</span>
-                        <span className="data-table-th">Authoring</span>
-                        <span className="data-table-th">Foundry</span>
-                        <span className="data-table-th">Notes</span>
-                      </div>
-                      <div className="data-table-body max-h-[22rem]">
-                        {section.rows.map((row) => (
-                          <div
-                            key={`${section.id}-${row.label}-${row.authoring}`}
-                            className="data-table-row grid grid-cols-[11rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] items-start gap-3"
-                          >
-                            <span className="text-xs font-black text-ink/85">{row.label}</span>
-                            <code className="text-[10px] text-gold break-all">{row.authoring}</code>
-                            <code className="text-[10px] text-gold/80 break-all">{row.foundry}</code>
-                            <p className="text-[10px] leading-relaxed text-ink/55">{row.description}</p>
-                          </div>
-                        ))}
-                      </div>
+              {sections.map((section) => {
+                const renderTable = (rows: typeof section.rows) => (
+                  <div className="data-table flex-1">
+                    <div className="data-table-head grid grid-cols-[11rem_minmax(0,1fr)_minmax(0,1fr)]">
+                      <span className="data-table-th">Name</span>
+                      <span className="data-table-th">Dauligor</span>
+                      <span className="data-table-th">Foundry</span>
                     </div>
+                    <div className="data-table-body">
+                      {rows.map((row) => (
+                        <div
+                          key={`${section.id}-${row.label}-${row.authoring}`}
+                          className="data-table-row grid grid-cols-[11rem_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 py-1.5"
+                        >
+                          <span className="text-xs font-black text-ink/85">{row.label}</span>
+                          <code className="text-[10px] text-gold break-all">{row.authoring}</code>
+                          <code className="text-[10px] text-gold/80 break-all">{row.foundry}</code>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+
+                const content = (
+                  <div className="space-y-4 mt-4">
+                    {section.description && <p className="field-hint">{section.description}</p>}
+                    
+                    {section.isSplit ? (
+                      <div className="flex gap-4 items-start">
+                        {renderTable(section.rows.slice(0, Math.ceil(section.rows.length / 2)))}
+                        {renderTable(section.rows.slice(Math.ceil(section.rows.length / 2)))}
+                      </div>
+                    ) : (
+                      renderTable(section.rows)
+                    )}
 
                     {section.notes && section.notes.length > 0 && (
                       <div className="rounded-md border border-gold/10 bg-background/30 p-3">
@@ -213,8 +189,26 @@ export default function ReferenceSheetDialog({
                       </div>
                     )}
                   </div>
-                </fieldset>
-              ))}
+                );
+
+                if (section.isDropdown) {
+                  return (
+                    <details key={section.id} className="config-fieldset group">
+                      <summary className="text-sm font-black uppercase tracking-widest text-gold px-1 cursor-pointer hover:text-gold/80 outline-none list-item">
+                        {section.title}
+                      </summary>
+                      {content}
+                    </details>
+                  );
+                }
+
+                return (
+                  <fieldset key={section.id} className="config-fieldset pt-3">
+                    <legend className="text-sm font-black uppercase tracking-widest text-gold px-1">{section.title}</legend>
+                    {content}
+                  </fieldset>
+                );
+              })}
             </div>
           </div>,
           document.body,

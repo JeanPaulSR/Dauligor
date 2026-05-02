@@ -164,7 +164,7 @@ export function htmlToBbcode(html: string): string {
   bbcode = bbcode.replace(/<sup>([\s\S]*?)<\/sup>/gi, '[sup]$1[/sup]');
   
   // Links
-  bbcode = bbcode.replace(/<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (match, url, text) => {
+  bbcode = bbcode.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (match, url, text) => {
     if (url === text) return `[url]${url}[/url]`;
     return `[url=${url}]${text}[/url]`;
   });
