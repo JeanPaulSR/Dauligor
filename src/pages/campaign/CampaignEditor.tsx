@@ -10,6 +10,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
 import { ChevronLeft, Save, Sparkles, LayoutGrid, ImageIcon, Calendar, FileText, MapPin, Scroll, Users, History, Check, X } from 'lucide-react';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 
 export default function CampaignEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -33,7 +34,8 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
     cardImageUrl: '',
     cardDisplay: undefined as any,
     previewImageUrl: '',
-    previewDisplay: undefined as any
+    previewDisplay: undefined as any,
+    backgroundImageUrl: ''
   });
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
@@ -73,7 +75,8 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
             cardImageUrl: data.cardImageUrl || '',
             cardDisplay: data.cardDisplay || undefined,
             previewImageUrl: data.previewImageUrl || '',
-            previewDisplay: data.previewDisplay || undefined
+            previewDisplay: data.previewDisplay || undefined,
+            backgroundImageUrl: data.backgroundImageUrl || ''
           });
         }
       } catch (err) {
@@ -278,8 +281,18 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
                       </select>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                   <div className="space-y-2 pt-2 border-t border-gold/10">
+                     <label className="field-label flex items-center gap-1.5">
+                       <ImageIcon className="w-3.5 h-3.5 text-gold shrink-0" /> Custom Background Image
+                     </label>
+                     <ImageUpload 
+                       currentImageUrl={formData.backgroundImageUrl || ''} 
+                       onUpload={url => setFormData({ ...formData, backgroundImageUrl: url })} 
+                       storagePath="images/campaigns"
+                     />
+                   </div>
+                 </CardContent>
+               </Card>
 
               {/* Improved Player Assignment Design with Users Grid/Tags */}
               <Card className="border-gold/10 bg-card/60 shadow-xl backdrop-blur-sm rounded">

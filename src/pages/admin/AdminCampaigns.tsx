@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, onSnapshot, query, orderBy, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, addDoc, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Plus, Trash2, LayoutGrid, Calendar, Users, Sparkles } from 'lucide-react';
+import { ImageUpload } from '../../components/ui/ImageUpload';
 
 export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const [campaigns, setCampaigns] = useState<any[]>([]);
@@ -17,7 +18,8 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEraOpen, setIsEraOpen] = useState(false);
   const [newCampaign, setNewCampaign] = useState({ name: '', description: '', eraId: '' });
-  const [newEra, setNewEra] = useState({ name: '', description: '', order: 0 });
+  const [newEra, setNewEra] = useState({ name: '', description: '', order: 0, backgroundImageUrl: '' });
+  const [wikiSettings, setWikiSettings] = useState<{ defaultBackgroundImageUrl?: string }>({});
 
   useEffect(() => {
     if (userProfile?.role !== 'admin' && userProfile?.role !== 'co-dm') return;
@@ -50,11 +52,18 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       handleFirestoreError(err, OperationType.LIST, 'lore');
     });
 
+    const unsubscribeSettings = onSnapshot(doc(db, 'config', 'wiki_settings'), (docSnap) => {
+      if (docSnap.exists()) {
+        setWikiSettings(docSnap.data());
+      }
+    });
+
     return () => {
       unsubscribeCampaigns();
       unsubscribeUsers();
       unsubscribeLore();
       unsubscribeEras();
+      unsubscribeSettings();
     };
   }, [userProfile]);
 
@@ -78,7 +87,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         ...newEra,
         createdAt: new Date().toISOString()
       });
-      setNewEra({ name: '', description: '', order: eras.length });
+      setNewEra({ name: '', description: '', order: eras.length, backgroundImageUrl: '' });
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'eras');
     }
@@ -138,6 +147,29 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
           <p className="text-ink/60">Organize your players into adventure groups and historical eras.</p>
         </div>
 
+        <Card className="border-gold/15 bg-[#111118]/80 backdrop-blur-md p-4 max-w-sm w-full">
+          <CardHeader className="p-0 pb-2 border-b border-gold/10">
+            <CardTitle className="text-sm font-serif text-gold flex items-center gap-2">
+              <Sparkles className="w-4 h-4 shrink-0" /> Default Wiki Fallback Background
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pt-2">
+            <ImageUpload 
+              currentImageUrl={wikiSettings.defaultBackgroundImageUrl || ''}
+              storagePath="images/wiki/background"
+              onUpload={async (url) => {
+                try {
+                  await setDoc(doc(db, 'config', 'wiki_settings'), {
+                    defaultBackgroundImageUrl: url
+                  }, { merge: true });
+                } catch (error) {
+                  console.error("Error setting default background image:", error);
+                }
+              }}
+            />
+          </CardContent>
+        </Card>
+
         <div className="flex gap-2">
           <Dialog open={isEraOpen} onOpenChange={setIsEraOpen}>
             <DialogTrigger render={
@@ -151,28 +183,58 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                 <CardDescription>Define the time periods of your world.</CardDescription>
               </DialogHeader>
               <div className="space-y-6 py-4">
-                <div className="grid grid-cols-3 gap-2 items-end p-4 rounded-lg bg-gold/5 border border-gold/10">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase">Era Name</label>
-                    <Input value={newEra.name} onChange={e => setNewEra({...newEra, name: e.target.value})} placeholder="e.g. The Second Age" className="h-8 text-xs" />
+                <div className="p-4 rounded-lg bg-gold/5 border border-gold/10 space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase">Era Name</label>
+                      <Input value={newEra.name} onChange={e => setNewEra({...newEra, name: e.target.value})} placeholder="e.g. The Second Age" className="h-8 text-xs" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase">Order</label>
+                      <Input type="number" value={newEra.order} onChange={e => setNewEra({...newEra, order: parseInt(e.target.value)})} className="h-8 text-xs" />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase">Order</label>
-                    <Input type="number" value={newEra.order} onChange={e => setNewEra({...newEra, order: parseInt(e.target.value)})} className="h-8 text-xs" />
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase block">Background Image</label>
+                    <div className="flex gap-4 items-end">
+                      <div className="flex-grow">
+                        <ImageUpload 
+                          currentImageUrl={newEra.backgroundImageUrl || ''}
+                          storagePath="images/wiki/eras"
+                          onUpload={(url) => setNewEra({...newEra, backgroundImageUrl: url})}
+                        />
+                      </div>
+                      <Button onClick={handleCreateEra} className="h-10 bg-gold text-white text-xs px-4">Add Era</Button>
+                    </div>
                   </div>
-                  <Button onClick={handleCreateEra} className="h-8 bg-gold text-white text-xs">Add Era</Button>
                 </div>
 
-                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
                   {eras.map(era => (
-                    <div key={era.id} className="flex items-center justify-between p-3 rounded-md border border-gold/10 bg-card">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="text-gold border-gold/20 font-mono">{era.order}</Badge>
-                        <span className="font-serif font-bold">{era.name}</span>
+                    <div key={era.id} className="p-3 rounded-md border border-gold/10 bg-card space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="text-gold border-gold/20 font-mono">{era.order}</Badge>
+                          <span className="font-serif font-bold">{era.name}</span>
+                        </div>
+                        <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteEra(era.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteEra(era.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="pt-2 border-t border-gold/5 space-y-1">
+                        <label className="text-[9px] text-ink/40 uppercase tracking-wider block">Background Image</label>
+                        <ImageUpload
+                          currentImageUrl={era.backgroundImageUrl || ''}
+                          storagePath="images/wiki/eras"
+                          onUpload={async (url) => {
+                            try {
+                              await updateDoc(doc(db, 'eras', era.id), { backgroundImageUrl: url });
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>

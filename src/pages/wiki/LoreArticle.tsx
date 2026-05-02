@@ -5,6 +5,7 @@ import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
 import { collection, doc, onSnapshot, deleteDoc, query, where, getDocs, updateDoc, getDoc } from 'firebase/firestore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { useWikiPreview } from '@/lib/wikiPreviewContext';
+import { ClassImageStyle, DEFAULT_DISPLAY } from '@/components/compendium/ClassImageEditor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,6 +83,8 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const [hoveredArticleId, setHoveredArticleId] = useState<string | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [hoveredArticleData, setHoveredArticleData] = useState<any>(null);
+  const [wikiSettings, setWikiSettings] = useState<{ defaultBackgroundImageUrl?: string }>({});
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -101,6 +104,15 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
       isStaff: false
     };
   })();
+
+  useEffect(() => {
+    const unsubscribeSettings = onSnapshot(doc(db, 'config', 'wiki_settings'), (docSnap) => {
+      if (docSnap.exists()) {
+        setWikiSettings(docSnap.data());
+      }
+    });
+    return () => unsubscribeSettings();
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -412,274 +424,337 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     return activeCid && secret.revealedCampaignIds?.includes(activeCid);
   });
 
+  // Resolve Background Image:
+  let backgroundImageUrl = wikiSettings.defaultBackgroundImageUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000&auto=format&fit=crop';
+  
+  const effectiveCampaignId = isStaff && previewCampaign ? previewCampaign.id : (userProfile?.activeCampaignId ?? null);
+  const activeCamp = allCampaigns.find((c: any) => c.id === effectiveCampaignId);
+  const activeEraId = activeCamp ? activeCamp.eraId : (isStaff && previewCampaign ? previewCampaign.eraId : activeCampaignEraId);
+  const activeEra = eras.find((e: any) => e.id === activeEraId);
+
+  if (activeCamp?.backgroundImageUrl) {
+    backgroundImageUrl = activeCamp.backgroundImageUrl;
+  } else if (activeEra?.backgroundImageUrl) {
+    backgroundImageUrl = activeEra.backgroundImageUrl;
+  }
+
+  const hasMetadata = article.metadata && Object.values(article.metadata).some(val => !!val);
+  const hasTags = article.tags && article.tags.length > 0;
+  const hasCardImage = !!article.cardImageUrl;
+  const hasSidebarContent = hasTags || hasCardImage;
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20 relative">
+    <div className="relative min-h-screen">
+      {/* Page Background Layer */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat bg-fixed opacity-20 pointer-events-none z-0 select-none"
+        style={{ backgroundImage: `url(${backgroundImageUrl})` }}
+      />
 
-      {/* Hover Quick-Preview Popover */}
-      {hoveredArticleId && hoveredArticleData && (
-        <div
-          className="fixed z-[9999] w-72 bg-card border border-gold/20 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-150"
-          style={{ left: Math.min(hoverPos.x + 16, window.innerWidth - 300), top: hoverPos.y - 10 }}
-        >
-          {hoveredArticleData.imageUrl && (
-            <div className="h-28 overflow-hidden">
-              <img
-                src={hoveredArticleData.imageUrl}
-                alt={hoveredArticleData.title}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          )}
-          <div className="p-4 space-y-1">
-            <p className="label-text text-gold text-[10px] uppercase tracking-widest">{hoveredArticleData.category}</p>
-            <p className="font-serif font-semibold text-ink leading-tight">{hoveredArticleData.title}</p>
-            {hoveredArticleData.excerpt && (
-              <p className="text-xs text-ink/60 italic line-clamp-3 mt-1">{hoveredArticleData.excerpt}</p>
+      <div className="relative z-10 max-w-5xl mx-auto px-4 py-8 space-y-6">
+
+        {/* Hover Quick-Preview Popover */}
+        {hoveredArticleId && hoveredArticleData && (
+          <div
+            className="fixed z-[9999] w-72 bg-card border border-gold/20 rounded-xl shadow-2xl overflow-hidden pointer-events-none animate-in fade-in zoom-in-95 duration-150"
+            style={{ left: Math.min(hoverPos.x + 16, window.innerWidth - 300), top: hoverPos.y - 10 }}
+          >
+            {hoveredArticleData.imageUrl && (
+              <div className="h-28 overflow-hidden">
+                <img
+                  src={hoveredArticleData.imageUrl}
+                  alt={hoveredArticleData.title}
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
             )}
+            <div className="p-4 space-y-1">
+              <p className="label-text text-gold text-[10px] uppercase tracking-widest">{hoveredArticleData.category}</p>
+              <p className="font-serif font-semibold text-ink leading-tight">{hoveredArticleData.title}</p>
+              {hoveredArticleData.excerpt && (
+                <p className="text-xs text-ink/60 italic line-clamp-3 mt-1">{hoveredArticleData.excerpt}</p>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Staff Campaign Preview Banner */}
-      {PreviewBanner}
+        {/* Staff Campaign Preview Banner */}
+        {PreviewBanner}
 
-
-      {/* Header Actions */}
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" onClick={() => navigate('/wiki')} className="text-ink/60">
-          <ChevronLeft className="w-4 h-4 mr-2" /> Back to Lore
-        </Button>
-
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="text-ink/40 hover:text-primary" onClick={() => window.print()}>
-            <Printer className="w-4 h-4" />
+        {/* Header Actions */}
+        <div className="flex items-center justify-between bg-card/80 backdrop-blur-md border border-gold/15 p-3 rounded-xl shadow-lg">
+          <Button variant="ghost" onClick={() => navigate('/wiki')} className="text-ink/60">
+            <ChevronLeft className="w-4 h-4 mr-2" /> Back to Lore
           </Button>
-          <Button variant="ghost" size="icon" className="text-ink/40 hover:text-gold">
-            <Share2 className="w-4 h-4" />
-          </Button>
-          {canEdit && (
-            <>
-              <Button variant="outline" onClick={() => navigate(`/wiki/edit/${id}`)} className="border-gold/20 text-gold hover:bg-gold/5">
-                <Edit className="w-4 h-4 mr-2" /> Edit Article
-              </Button>
-              {(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') && (
-                <Button variant="ghost" size="icon" className="btn-danger" onClick={handleDelete}>
-                  <Trash2 className="w-4 h-4" />
+
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="text-ink/40 hover:text-primary" onClick={() => window.print()}>
+              <Printer className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-ink/40 hover:text-gold">
+              <Share2 className="w-4 h-4" />
+            </Button>
+            {canEdit && (
+              <>
+                <Button variant="outline" onClick={() => navigate(`/wiki/edit/${id}`)} className="border-gold/20 text-gold hover:bg-gold/5">
+                  <Edit className="w-4 h-4 mr-2" /> Edit Article
                 </Button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Article Layout */}
-      <div className="grid lg:grid-cols-3 gap-12">
-        {/* Main Body */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <CategoryIcon className="w-4 h-4 text-gold" />
-              <span className="label-text text-gold">{article.category}</span>
-              {article.folder && (
-                <>
-                  <span className="text-ink/30 text-xs">/</span>
-                  <span className="label-text text-ink/60">{article.folder}</span>
-                </>
-              )}
-              {parentArticle && (
-                <>
-                  <span className="text-ink/30 text-xs">/</span>
-                  <Link to={`/wiki/article/${parentArticle.id}`} className="label-text text-gold hover:underline">
-                    {parentArticle.title}
-                  </Link>
-                </>
-              )}
-              {article.status === 'draft' && (
-                <Badge variant="outline" className="border-gold/40 text-gold bg-gold/5 text-[10px] ml-2">DRAFT</Badge>
-              )}
-            </div>
-            <h1 className="h1-title leading-tight">{article.title}</h1>
-            {article.excerpt && (
-              <p className="description-text text-xl italic border-l-4 border-gold/20 pl-6 py-2">
-                {article.excerpt}
-              </p>
+                {(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') && (
+                  <Button variant="ghost" size="icon" className="btn-danger" onClick={handleDelete}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </>
             )}
           </div>
+        </div>
 
+        {/* Centered World Anvil Container */}
+        <div className="w-full bg-card/95 backdrop-blur-md border border-gold/15 rounded-xl shadow-2xl overflow-hidden animate-in fade-in duration-300">
           {article.imageUrl && (
-            <div className="rounded-2xl overflow-hidden border border-gold/10 shadow-2xl">
+            <div className="w-full h-[360px] relative overflow-hidden border-b border-gold/15">
               <img 
                 src={article.imageUrl} 
                 alt={article.title} 
-                className="w-full h-auto max-h-[500px] object-cover"
+                className="w-full h-full object-cover"
+                style={ClassImageStyle({ display: article.imageDisplay })}
                 referrerPolicy="no-referrer"
               />
             </div>
           )}
 
-          <div
-            ref={contentRef}
-            onMouseOver={handleContentMouseOver}
-            onMouseOut={handleContentMouseOut}
-          >
-            <BBCodeRenderer content={article.content} viewContext={viewContext} />
-          </div>
-
-          {/* DM Notes Section (Staff Only) */}
-          {isStaff && dmNotes && (
-            <div className="mt-12 p-8 rounded-2xl border border-primary/20 bg-primary/5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="label-text text-primary flex items-center gap-2">
-                  <Lock className="w-4 h-4" /> Storyteller Notes
-                </h2>
-                <Badge variant="outline" className="border-primary/20 text-primary/60 text-[10px]">PRIVATE</Badge>
+          <div className="p-6 md:p-10 space-y-8">
+            {/* Title & Header Section */}
+            <div className="space-y-4 text-center pb-6 border-b border-gold/10">
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                <CategoryIcon className="w-4 h-4 text-gold" />
+                <span className="label-text text-gold text-xs">{article.category}</span>
+                {article.folder && (
+                  <>
+                    <span className="text-ink/30 text-xs">/</span>
+                    <span className="label-text text-ink/50 text-xs">{article.folder}</span>
+                  </>
+                )}
+                {parentArticle && (
+                  <>
+                    <span className="text-ink/30 text-xs">/</span>
+                    <Link to={`/wiki/article/${parentArticle.id}`} className="label-text text-gold hover:underline text-xs">
+                      {parentArticle.title}
+                    </Link>
+                  </>
+                )}
+                {article.status === 'draft' && (
+                  <Badge variant="outline" className="border-gold/40 text-gold bg-gold/5 text-[10px] ml-2">DRAFT</Badge>
+                )}
               </div>
-              <BBCodeRenderer content={dmNotes.content} className="prose-sm italic" />
+
+              <h1 className="text-4xl md:text-5xl font-serif font-bold text-center tracking-wide text-gold/90 drop-shadow-sm">{article.title}</h1>
+              {article.excerpt && (
+                <p className="text-lg md:text-xl font-serif italic text-ink/70 text-center max-w-2xl mx-auto leading-relaxed border-t border-b border-gold/10 py-3 mt-4">
+                  "{article.excerpt}"
+                </p>
+              )}
             </div>
-          )}
 
-          {/* Revealed Secrets Section */}
-          {visibleSecrets.length > 0 && (
-            <div className="mt-8 space-y-4">
-              <h2 className="label-text text-primary flex items-center gap-2">
-                <Sparkles className="w-4 h-4" /> Revelations
-              </h2>
-              <div className="grid gap-4">
-                {visibleSecrets.map((secret) => {
-                  const linkedEras = eras.filter(e => secret.eraIds?.includes(e.id));
-                  const isRevealedToMe = userProfile?.activeCampaignId && secret.revealedCampaignIds?.includes(userProfile.activeCampaignId);
-                  const eligibleCampaigns = campaigns.filter(c => secret.eraIds?.includes(c.eraId));
-                  
-                  return (
-                    <Card key={secret.id} className="border-primary/20 bg-primary/5 border-l-4 border-l-primary">
-                      <CardContent className="p-4 space-y-4">
-                        <div className="flex items-start gap-4">
-                          <div className="mt-1">
-                            {isRevealedToMe || isStaff ? <Unlock className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-ink/40" />}
-                          </div>
-                          <div className="flex-grow space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {linkedEras.map(era => (
-                                <span key={era.id} className="label-text text-primary">
-                                  {era.name}
-                                </span>
-                              ))}
-                            </div>
-                            <p className="description-text text-sm italic">"{secret.content}"</p>
-                          </div>
-                        </div>
-
-                        {isStaff && (
-                          <div className="pt-4 border-t border-primary/10">
-                            <p className="label-text text-primary/40 mb-2">Manage Revelations</p>
-                            <div className="flex flex-wrap gap-2">
-                              {eligibleCampaigns.map(campaign => {
-                                const isRevealed = secret.revealedCampaignIds?.includes(campaign.id);
-                                const isAdmin = userProfile?.role === 'admin';
-                                const isAssignedCoDM = userProfile?.role === 'co-dm' && userProfile?.campaignIds?.includes(campaign.id);
-                                const canToggle = isAdmin || isAssignedCoDM;
-
-                                return (
-                                  <Button
-                                    key={campaign.id}
-                                    variant="outline"
-                                    size="xs"
-                                    disabled={!canToggle}
-                                    onClick={() => handleToggleSecretReveal(secret, campaign.id)}
-                                    className={`h-7 text-[10px] gap-1 transition-all duration-200 ${isRevealed ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-primary/10 text-primary/40 hover:bg-primary/5'}`}
-                                  >
-                                    {isRevealed ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                                    {campaign.name}
-                                    {!canToggle && <Shield className="w-2 h-2 ml-1 opacity-50" />}
-                                  </Button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Mentions Section */}
-          {mentions.length > 0 && (
-            <div className="mt-8 space-y-4">
-              <h2 className="label-text text-gold flex items-center gap-2">
-                <LinkIcon className="w-4 h-4" /> Mentioned In
-              </h2>
-              <div className="flex flex-col gap-2 border-l-2 border-gold/20 pl-4">
-                {mentions.map((mention) => (
-                  <Link key={mention.id} to={`/wiki/article/${mention.id}`} className="text-gold hover:underline flex items-center gap-2">
-                    <span className="font-serif italic">{mention.title}</span>
-                    <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px] scale-75 transform origin-left">
-                      {mention.category}
-                    </Badge>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="pt-12 border-t border-gold/10 flex flex-wrap gap-2">
-            {article.tags?.map((tag: string) => (
-              <Badge key={tag} variant="outline" className="bg-ink/5 border-transparent text-ink/40 hover:bg-ink/10 cursor-default">
-                <Tag className="w-3 h-3 mr-1" /> {tag}
-              </Badge>
-            ))}
-          </div>
-
-          {/* Moved Quick Reference to bottom */}
-          <div className="pt-12">
-            <Card className="border-gold/20 bg-gold/5 shadow-xl">
-              <CardHeader className="border-b border-gold/10 pb-4">
-                <CardTitle className="label-text text-gold flex items-center gap-2">
-                  <Info className="w-4 h-4" /> Quick Reference
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 divide-x divide-y divide-gold/10">
-                  {/* Dynamic Metadata Fields */}
-                  {article.metadata && Object.entries(article.metadata).map(([key, value]) => {
-                    if (!value) return null;
-                    return (
-                      <div key={key} className="px-6 py-4 flex flex-col gap-1">
-                        <span className="label-text text-ink/40">{key.replace(/([A-Z])/g, ' $1')}</span>
-                        <span className="body-text text-sm">{value as string}</span>
-                      </div>
-                    );
-                  })}
-
-                  {/* System Metadata */}
-                  <div className="px-6 py-4 flex flex-col gap-1">
-                    <span className="label-text text-ink/40 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> Updated
-                    </span>
-                    <span className="body-text text-sm">
-                      {new Date(article.updatedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="px-6 py-4 flex flex-col gap-1">
-                    <span className="label-text text-ink/40 flex items-center gap-1">
-                      <User className="w-3 h-3" /> Chronicler
-                    </span>
-                    <span className="body-text text-sm">
-                      {article.authorId === userProfile?.uid ? 'You' : 'Archive Staff'}
-                    </span>
-                  </div>
+            {/* Dynamic sidebar collapse layout */}
+            <div className={`grid ${hasSidebarContent ? 'lg:grid-cols-3 gap-10' : 'grid-cols-1'}`}>
+              <div className={hasSidebarContent ? 'lg:col-span-2 space-y-8' : 'space-y-8'}>
+                <div
+                  ref={contentRef}
+                  onMouseOver={handleContentMouseOver}
+                  onMouseOut={handleContentMouseOut}
+                  className="prose prose-invert max-w-none prose-gold leading-relaxed font-sans text-ink/90"
+                >
+                  <BBCodeRenderer content={article.content} viewContext={viewContext} />
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
 
-        {/* Sidebar removed or repurposed */}
-        <div className="hidden lg:block space-y-8">
-          {/* Related Links / Hierarchy could go here */}
+                {/* Storyteller Notes */}
+                {isStaff && dmNotes && (
+                  <div className="mt-12 p-6 rounded-2xl border border-primary/20 bg-primary/5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="label-text text-primary flex items-center gap-2">
+                        <Lock className="w-4 h-4" /> Storyteller Notes
+                      </h2>
+                      <Badge variant="outline" className="border-primary/20 text-primary/60 text-[10px]">PRIVATE</Badge>
+                    </div>
+                    <BBCodeRenderer content={dmNotes.content} className="prose-sm italic" />
+                  </div>
+                )}
+
+                {/* Revelations Section */}
+                {visibleSecrets.length > 0 && (
+                  <div className="mt-8 space-y-4">
+                    <h2 className="label-text text-primary flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" /> Revelations
+                    </h2>
+                    <div className="grid gap-4">
+                      {visibleSecrets.map((secret) => {
+                        const linkedEras = eras.filter(e => secret.eraIds?.includes(e.id));
+                        const isRevealedToMe = userProfile?.activeCampaignId && secret.revealedCampaignIds?.includes(userProfile.activeCampaignId);
+                        const eligibleCampaigns = campaigns.filter(c => secret.eraIds?.includes(c.eraId));
+                        
+                        return (
+                          <Card key={secret.id} className="border-primary/20 bg-primary/5 border-l-4 border-l-primary">
+                            <CardContent className="p-4 space-y-4">
+                              <div className="flex items-start gap-4">
+                                <div className="mt-1">
+                                  {isRevealedToMe || isStaff ? <Unlock className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-ink/40" />}
+                                </div>
+                                <div className="flex-grow space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {linkedEras.map(era => (
+                                      <span key={era.id} className="label-text text-primary">
+                                        {era.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className="description-text text-sm italic">"{secret.content}"</p>
+                                </div>
+                              </div>
+
+                              {isStaff && (
+                                <div className="pt-4 border-t border-primary/10">
+                                  <p className="label-text text-primary/40 mb-2">Manage Revelations</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {eligibleCampaigns.map(campaign => {
+                                      const isRevealed = secret.revealedCampaignIds?.includes(campaign.id);
+                                      const isAdmin = userProfile?.role === 'admin';
+                                      const isAssignedCoDM = userProfile?.role === 'co-dm' && userProfile?.campaignIds?.includes(campaign.id);
+                                      const canToggle = isAdmin || isAssignedCoDM;
+
+                                      return (
+                                        <Button
+                                          key={campaign.id}
+                                          variant="outline"
+                                          size="xs"
+                                          disabled={!canToggle}
+                                          onClick={() => handleToggleSecretReveal(secret, campaign.id)}
+                                          className={`h-7 text-[10px] gap-1 transition-all duration-200 ${isRevealed ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-primary/10 text-primary/40 hover:bg-primary/5'}`}
+                                        >
+                                          {isRevealed ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                                          {campaign.name}
+                                          {!canToggle && <Shield className="w-2 h-2 ml-1 opacity-50" />}
+                                        </Button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mentions Section */}
+                {mentions.length > 0 && (
+                  <div className="mt-8 space-y-4">
+                    <h2 className="label-text text-gold flex items-center gap-2">
+                      <LinkIcon className="w-4 h-4" /> Mentioned In
+                    </h2>
+                    <div className="flex flex-col gap-2 border-l-2 border-gold/20 pl-4">
+                      {mentions.map((mention) => (
+                        <Link key={mention.id} to={`/wiki/article/${mention.id}`} className="text-gold hover:underline flex items-center gap-2">
+                          <span className="font-serif italic">{mention.title}</span>
+                          <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px] scale-75 transform origin-left">
+                            {mention.category}
+                          </Badge>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Unified Metadata / Details Card at the bottom of main column */}
+                {(hasMetadata || article.updatedAt || article.authorId) && (
+                  <div className="mt-12">
+                    <Card className="border-gold/20 bg-gold/5 shadow-xl rounded">
+                      <CardHeader className="p-0 border-b border-gold/10">
+                        <Button 
+                          variant="ghost" 
+                          onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+                          className="w-full flex items-center justify-between p-4 hover:bg-gold/5 rounded-t text-left"
+                        >
+                          <span className="label-text text-gold flex items-center gap-2 font-serif">
+                            <Info className="w-4 h-4" /> Quick Reference & Metadata
+                          </span>
+                          <ChevronDown className={`w-4 h-4 text-gold/60 transition-transform duration-200 ${isMetadataExpanded ? '' : '-rotate-90'}`} />
+                        </Button>
+                      </CardHeader>
+                      {isMetadataExpanded && (
+                        <CardContent className="p-0">
+                          <div className="grid md:grid-cols-2 lg:grid-cols-3 divide-x divide-y divide-gold/10 animate-in fade-in duration-200">
+                            {/* Dynamic Metadata Fields */}
+                            {article.metadata && Object.entries(article.metadata).map(([key, value]) => {
+                              if (!value) return null;
+                              return (
+                                <div key={key} className="px-6 py-4 flex flex-col gap-1">
+                                  <span className="label-text text-[10px] tracking-wider uppercase text-ink/40">{key.replace(/([A-Z])/g, ' $1')}</span>
+                                  <span className="body-text text-sm text-ink/80">{value as string}</span>
+                                </div>
+                              );
+                            })}
+
+                            {/* System Metadata */}
+                            <div className="px-6 py-4 flex flex-col gap-1">
+                              <span className="label-text text-ink/40 flex items-center gap-1">
+                                <Calendar className="w-3 h-3" /> Updated
+                              </span>
+                              <span className="body-text text-sm text-ink/80">
+                                {new Date(article.updatedAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="px-6 py-4 flex flex-col gap-1">
+                              <span className="label-text text-ink/40 flex items-center gap-1">
+                                <User className="w-3 h-3" /> Chronicler
+                              </span>
+                              <span className="body-text text-sm text-ink/80">
+                                {article.authorId === userProfile?.uid ? 'You' : 'Archive Staff'}
+                              </span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      )}
+                    </Card>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Sidebar Column - collapsing if there's no info */}
+              {hasSidebarContent && (
+                <div className="lg:col-span-1 space-y-6 bg-card/60 backdrop-blur-md p-5 rounded-xl border border-gold/10 h-fit select-none">
+                  {/* Card Image */}
+                  {article.cardImageUrl && (
+                    <div className="rounded-lg overflow-hidden border border-gold/10 shadow-lg">
+                      <img 
+                        src={article.cardImageUrl} 
+                        alt={article.title} 
+                        className="w-full h-auto object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  )}
+
+                  {/* Tag Cloud */}
+                  {hasTags && (
+                    <div className="pt-2 space-y-2">
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Tags</h4>
+                      <div className="flex flex-wrap gap-1.5">
+                        {article.tags?.map((tag: string) => (
+                          <Badge key={tag} variant="outline" className="bg-ink/5 border-transparent text-ink/40 hover:bg-ink/10 cursor-default text-[10px]">
+                            <Tag className="w-3 h-3 mr-1" /> {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
