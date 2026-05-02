@@ -60,9 +60,11 @@ function ContextPanel({
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const dragDistance = useRef(0);
 
+  const validDisplay = display || DEFAULT_DISPLAY;
+
   // Keep refs to latest values so the wheel listener (added once) can read them
-  const displayRef = useRef(display);
-  displayRef.current = display;
+  const displayRef = useRef(validDisplay);
+  displayRef.current = validDisplay;
   const onDisplayChangeRef = useRef(onDisplayChange);
   onDisplayChangeRef.current = onDisplayChange;
   const onDisplayCommitRef = useRef(onDisplayCommit);
@@ -217,7 +219,7 @@ function ContextPanel({
               <ZoomOut className="w-3 h-3" />
             </Button>
             <span className="label-text text-ink/40 w-8 text-center text-[10px]">
-              {Math.round(display.scale * 100)}%
+              {Math.round(validDisplay.scale * 100)}%
             </span>
             <Button type="button" size="sm" variant="ghost" className="h-6 w-6 p-0 btn-gold" onClick={() => step(0.1)}>
               <ZoomIn className="w-3 h-3" />
