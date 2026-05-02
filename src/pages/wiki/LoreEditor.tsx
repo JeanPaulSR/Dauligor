@@ -601,9 +601,9 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 </span>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" size="xs" className="h-6 border-gold/20 text-gold/60 hover:text-gold text-[10px] gap-1.5">
+                    <span role="button" tabIndex={0} className="inline-flex items-center justify-center rounded-lg border bg-background hover:bg-muted h-6 gap-1 px-2 border-gold/20 text-gold/60 hover:text-gold text-[10px] gap-1.5 transition-all select-none cursor-pointer">
                       <Globe className="w-2.5 h-2.5" /> Insert Era/Campaign Block
-                    </Button>
+                    </span>
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-3 space-y-3" align="end">
                     <p className="label-text text-[10px] text-ink/40">Wraps selected text in a conditional block. Only players in the matching era/campaign will see this content.</p>
@@ -860,7 +860,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 </label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <button type="button" className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left">
+                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left select-none cursor-pointer">
                       <Globe className="w-3.5 h-3.5 text-ink/30 mt-0.5 shrink-0" />
                       {(formData.visibilityEraIds?.length ?? 0) === 0 ? (
                         <span className="text-xs text-ink/30 italic">All eras (no restriction)</span>
@@ -879,7 +879,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                           })}
                         </div>
                       )}
-                    </button>
+                    </div>
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-0" align="start">
                     <Command>
@@ -917,7 +917,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 </label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <button type="button" className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left">
+                    <div role="button" tabIndex={0} className="w-full flex items-start gap-2 min-h-9 px-3 py-2 rounded-md border border-gold/10 bg-background/60 hover:border-gold/30 transition-colors text-left select-none cursor-pointer">
                       <Shield className="w-3.5 h-3.5 text-ink/30 mt-0.5 shrink-0" />
                       {(formData.visibilityCampaignIds?.length ?? 0) === 0 ? (
                         <span className="text-xs text-ink/30 italic">All campaigns (no restriction)</span>
@@ -936,7 +936,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                           })}
                         </div>
                       )}
-                    </button>
+                    </div>
                   </PopoverTrigger>
                   <PopoverContent className="w-72 p-0" align="start">
                     <Command>

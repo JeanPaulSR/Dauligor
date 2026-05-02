@@ -22,12 +22,13 @@ interface ClassImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src: string;
   display: ImageDisplay;
 }
-export function ClassImageStyle({ display }: { display: ImageDisplay }): React.CSSProperties {
+export function ClassImageStyle({ display }: { display?: ImageDisplay | null }): React.CSSProperties {
+  const cur = display || DEFAULT_DISPLAY;
   return {
-    objectPosition: `${display.x}% ${display.y}%`,
-    ...(display.scale !== 1 && {
-      transform: `scale(${display.scale})`,
-      transformOrigin: `${display.x}% ${display.y}%`,
+    objectPosition: `${cur.x}% ${cur.y}%`,
+    ...(cur.scale !== 1 && {
+      transform: `scale(${cur.scale})`,
+      transformOrigin: `${cur.x}% ${cur.y}%`,
     }),
   };
 }
