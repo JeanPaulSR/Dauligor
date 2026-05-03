@@ -52,7 +52,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       handleFirestoreError(err, OperationType.LIST, 'lore');
     });
 
-    const unsubscribeSettings = onSnapshot(doc(db, 'config', 'wiki_settings'), (docSnap) => {
+    const unsubscribeSettings = onSnapshot(doc(db, 'eras', 'wiki_settings'), (docSnap) => {
       if (docSnap.exists()) {
         setWikiSettings(docSnap.data());
       }
@@ -159,7 +159,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
               storagePath="images/wiki/background"
               onUpload={async (url) => {
                 try {
-                  await setDoc(doc(db, 'config', 'wiki_settings'), {
+                  await setDoc(doc(db, 'eras', 'wiki_settings'), {
                     defaultBackgroundImageUrl: url
                   }, { merge: true });
                 } catch (error) {

@@ -106,7 +106,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   })();
 
   useEffect(() => {
-    const unsubscribeSettings = onSnapshot(doc(db, 'config', 'wiki_settings'), (docSnap) => {
+    const unsubscribeSettings = onSnapshot(doc(db, 'eras', 'wiki_settings'), (docSnap) => {
       if (docSnap.exists()) {
         setWikiSettings(docSnap.data());
       }
