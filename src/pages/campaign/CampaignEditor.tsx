@@ -119,11 +119,14 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
     if (!id || !isStaff) return;
     setSaving(true);
     try {
+      // Strip undefined values - Firestore rejects them
+      const cleanData = Object.fromEntries(
+        Object.entries({ ...formData, updatedAt: new Date().toISOString() })
+          .filter(([, v]) => v !== undefined)
+      );
+
       // 1. Save the campaign
-      await updateDoc(doc(db, 'campaigns', id), {
-        ...formData,
-        updatedAt: new Date().toISOString()
-      });
+      await updateDoc(doc(db, 'campaigns', id), cleanData);
 
       // 2. Add/Remove campaign ID in each user's profile
       for (const user of allUsers) {

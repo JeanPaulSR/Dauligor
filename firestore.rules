@@ -119,7 +119,12 @@ service cloud.firestore {
       return data.keys().hasAll(['name']) &&
              data.name is string && data.name.size() > 0 &&
              (!('description' in data) || data.description is string) &&
-             (!('order' in data) || data.order is number);
+             (!('order' in data) || data.order is number) &&
+             (!('backgroundImageUrl' in data) || data.backgroundImageUrl is string);
+    }
+
+    function isValidConfig(data) {
+      return (!('defaultBackgroundImageUrl' in data) || data.defaultBackgroundImageUrl == null || data.defaultBackgroundImageUrl is string);
     }
 
     function isValidLore(data) {
@@ -629,6 +634,12 @@ service cloud.firestore {
     match /attributes/{id} {
       allow read: if true;
       allow create, update: if isAdmin() && isValidSimpleProperty(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /config/{configId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidConfig(request.resource.data);
       allow delete: if isAdmin();
     }
 
