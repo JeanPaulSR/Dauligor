@@ -574,11 +574,7 @@ export function buildClassImportWorkflow(payload, {
   const toolChoices = buildToolChoiceConfig(proficiencySource);
 
   const allAdvancements = [
-    ...Object.values(normalizeAdvancementStructure(classItem?.system?.advancement)),
-    ...Object.values(normalizeAdvancementStructure(selectedSubclassItem?.system?.advancement)),
-    ...desiredClassFeatureItems.flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement))),
-    ...desiredSubclassFeatureItems.flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement))),
-    ...selectedOptionItems.flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement)))
+    ...Object.values(normalizeAdvancementStructure(classItem?.system?.advancement))
   ].filter(Boolean);
 
   const extraSkills = collectTraitAdvancementChoices(allAdvancements, "skills");

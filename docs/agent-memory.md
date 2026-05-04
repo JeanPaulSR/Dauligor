@@ -807,19 +807,37 @@ App:
 
 Module:
 
-- `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/class-import-service.js`
-- `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/main.js`
-- `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/importer-app.js`
+- `module/dauligor-pairing/scripts/class-import-service.js`
+- `module/dauligor-pairing/scripts/main.js`
+- `module/dauligor-pairing/scripts/importer-app.js`
+- `module/dauligor-pairing/scripts/importer-base-features.js`
+- `module/dauligor-pairing/scripts/update-character.js`
 
 Module docs:
 
-- `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-import-and-advancement-guide.md`
-- `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-import-contract.md`
-- `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-semantic-export-notes.md`
+- `module/dauligor-pairing/docs/class-import-and-advancement-guide.md`
+- `module/dauligor-pairing/docs/class-import-contract.md`
+- `module/dauligor-pairing/docs/class-semantic-export-notes.md`
 
 App / integration notes:
 
-- `E:/DnD/Professional/Dev/Dauligor/docs/foundry-dnd5e-character-reference-sheet.md`
+- `docs/foundry-dnd5e-character-reference-sheet.md`
+- `docs/agent-memory.md`
+- `docs/agent-memory.json`
+
+## Current Sequential Advancement Importer (Beta)
+
+- Finalizing a decoupled, sequential advancement import workflow that bypasses Foundry's native advancement system in favor of a custom `CharacterUpdater`.
+- Staging all changes (HP, traits, proficiencies) in a `tempData` object for a single atomic commit to the Foundry actor at the end of the wizard sequence.
+- Implemented `DauligorSequencePromptApp` for mandatory, interactive windows for all 11 core advancement categories (Skills, Tools, Saving Throws, Armor, Weapons, Languages, Resistances, Immunities, Vulnerabilities, Condition Immunities) for testing.
+- Unified trait label normalization using `formatFoundryLabel` and `CONFIG.DND5E` lookups in `importer-base-features.js`.
+- Added `updateDamageTraits` to `CharacterUpdater` to manage staging of damage/condition traits.
+- The importer now forces all trait windows to show during the testing phase, even if empty, to ensure stability and visibility of guaranteed advancements.
+
+## Dynamic Catalog Loading
+
+- The `/api/module` endpoint is being refactored to prioritize dynamic Firestore lookups over static disk files when a catalog or class record is requested.
+- This ensures that classes created or updated in the Dauligor App are immediately available in the Foundry Importer without manual JSON exports.
 
 ## Session Update Rule
 
@@ -832,9 +850,10 @@ When a meaningful decision or milestone happens, update:
 
 If starting a new chat, tell the next agent to read these first:
 
-1. `E:/DnD/Professional/Dev/Dauligor/docs/agent-memory.md`
-2. `E:/DnD/Professional/Dev/Dauligor/docs/agent-memory.json`
-3. `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/class-import-service.js`
-4. `E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-import-and-advancement-guide.md`
+1. `docs/agent-memory.md`
+2. `docs/agent-memory.json`
+3. `module/dauligor-pairing/scripts/class-import-service.js`
+4. `module/dauligor-pairing/docs/class-import-and-advancement-guide.md`
 
 Then continue from the follow-up list instead of re-discovering the existing integration decisions.
+

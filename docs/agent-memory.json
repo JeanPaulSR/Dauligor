@@ -694,12 +694,23 @@
     "revisit and polish the Dauligor ASI UI after beta-critical functionality is stable",
     "continue activities verification",
     "expand feats/items/spells Foundry import coverage",
-    "use option-group-derived feature type labels for future sheet sorting"
+    "use option-group-derived feature type labels for future sheet sorting",
+    "Refactor /api/module to prioritize dynamic Firestore catalog/class loading"
   ],
   "freshChatReadOrder": [
-    "E:/DnD/Professional/Dev/Dauligor/docs/agent-memory.md",
-    "E:/DnD/Professional/Dev/Dauligor/docs/agent-memory.json",
-    "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/scripts/class-import-service.js",
-    "E:/DnD/Professional/Dev/Dauligor/module/dauligor-pairing/docs/class-import-and-advancement-guide.md"
-  ]
+    "docs/agent-memory.md",
+    "docs/agent-memory.json",
+    "module/dauligor-pairing/scripts/class-import-service.js",
+    "module/dauligor-pairing/docs/class-import-and-advancement-guide.md"
+  ],
+  "sequentialAdvancementImporter": {
+    "status": "beta",
+    "features": [
+      "decoupled workflow bypassing native advancement",
+      "staged updates via CharacterUpdater",
+      "11 mandatory advancement windows for testing",
+      "unified trait normalization via CONFIG.DND5E"
+    ]
+  }
 }
+

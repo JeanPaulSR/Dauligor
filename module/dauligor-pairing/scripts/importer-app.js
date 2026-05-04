@@ -10,6 +10,8 @@ import {
 import { buildClassImportWorkflow, fetchClassCatalog, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
 import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
 import { log, notifyWarn } from "./utils.js";
+import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
+import { CharacterUpdater } from "./update-character.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -74,31 +76,18 @@ const CLASS_VARIANT_PRIORITY = {
   "foundry.item.class": 2
 };
 
-function clampLevel(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 1;
-  return Math.min(20, Math.max(1, Math.round(numeric)));
-}
-
-function normalizeSelectionIds(ids) {
-  return Array.isArray(ids)
-    ? [...new Set(ids.filter(Boolean))]
-    : [];
-}
-
-function normalizeSourceTypeIds(ids, fallbackId = undefined) {
-  const raw = Array.isArray(ids)
-    ? ids
-    : (ids ? [ids] : (fallbackId ? [fallbackId] : []));
-  return [...new Set(raw.map((id) => String(id ?? "").trim()).filter(Boolean))];
-}
-
-function normalizeCatalogUrls(urls, fallbackUrl = undefined) {
-  const raw = Array.isArray(urls)
-    ? urls
-    : (urls ? [urls] : (fallbackUrl ? [fallbackUrl] : []));
-  return [...new Set(raw.map((url) => String(url ?? "").trim()).filter(Boolean))];
-}
+import {
+  clampLevel,
+  normalizeSelectionIds,
+  normalizeSourceTypeIds,
+  normalizeCatalogUrls,
+  normalizeImportTypeId,
+  getDefaultSourceTypeId,
+  ensureArray,
+  slugify,
+  stripHtml,
+  summarizeHtml
+} from "./importer-utils.js";
 
 export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
@@ -186,7 +175,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       sourceTypeId: normalizedSourceTypeIds[0] ?? getDefaultSourceTypeId(importTypeId),
       selectedSourceIds: normalizedSourceTypeIds,
       sourceSearch: "",
-      sourceCatalogUrl: (function() {
+      sourceCatalogUrl: (function () {
         const mode = game.settings.get(MODULE_ID, SETTINGS.apiEndpointMode) || "local";
         const host = mode === "production" ? "https://www.dauligor.com" : "http://localhost:3000";
         return `${host}/api/module/sources`;
@@ -1403,7 +1392,7 @@ class DauligorImportProgressApp extends HandlebarsApplicationMixin(ApplicationV2
   }
 }
 
-class DauligorSequencePromptApp extends HandlebarsApplicationMixin(ApplicationV2) {
+export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(config = {}) {
     super({
       id: `${MODULE_ID}-sequence-prompt-${foundry.utils.randomID()}`,
@@ -2189,6 +2178,75 @@ class DauligorClassOptionsApp extends HandlebarsApplicationMixin(ApplicationV2) 
   }
 }
 
+async function runBaseClassAdvancementsStep({ workflow, sequence, progress }) {
+  const result = baseClassHandler(workflow);
+  const stepId = "base-advancements";
+  progress.markStep(stepId, "active", "Displaying base class advancements.");
+  progress.setStatus("Waiting for confirmation of base class advancements...");
+
+  const html = `
+    <div class="dauligor-class-options__body" style="height: 100%; min-height: 0; overflow-y: auto; padding: 4px;">
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        ${result.advancements.map(adv => {
+    let guaranteedText = "None";
+    let choicesText = "None";
+
+    if (adv.id === 'base-hp') {
+      const die = adv.adv?.configuration?.hitDie || 8;
+      guaranteedText = `1d${die} + Con modifier`;
+      choicesText = "Average or Manual Roll";
+    } else {
+      if (adv.fixed?.length > 0) {
+        guaranteedText = adv.fixed.map(val => formatFoundryLabel(val)).join(', ');
+      }
+      if (adv.options?.length > 0) {
+        choicesText = adv.options.map(val => formatFoundryLabel(val)).join(', ');
+      }
+    }
+
+    const choiceLabel = adv.choiceCount > 0 ? `Choice Options: ${adv.choiceCount}` : "Choice Options";
+
+    return `
+            <div class="dauligor-class-options__section" style="border: 1px solid var(--dauligor-border); border-radius: 6px; padding: 12px; background: rgba(255, 255, 255, 0.02); margin-bottom: 4px;">
+              <div class="dauligor-class-options__section-head">
+                <h3 style="color: var(--dauligor-accent-strong); text-transform: uppercase; margin: 0 0 8px 0; font-size: 13px;">${adv.title}</h3>
+                <div style="margin-bottom: 6px;">
+                  <span style="font-size: 11px; color: var(--dauligor-text-muted); text-transform: uppercase; display: block;">Guaranteed Options:</span>
+                  <span style="font-size: 12px; line-height: 1.4; color: var(--dauligor-text); display: block;">${guaranteedText}</span>
+                </div>
+                <div>
+                  <span style="font-size: 11px; color: var(--dauligor-text-muted); text-transform: uppercase; display: block;">${choiceLabel}</span>
+                  <span style="font-size: 12px; line-height: 1.4; color: var(--dauligor-text); display: block;">${choicesText}</span>
+                </div>
+              </div>
+            </div>
+          `;
+  }).join('')}
+      </div>
+    </div>
+  `;
+
+  const promptResult = await DauligorSequencePromptApp.prompt({
+    title: "Base Class Advancements Preview",
+    subtitle: "Preview of advancements strictly tied to the base class or multiclass.",
+    width: 650,
+    height: 520,
+    state: {},
+    renderBody: () => html,
+    onRenderBody: () => {},
+    actions: [
+      { id: "confirm", label: "OK", primary: true },
+      { id: "cancel", label: "Cancel" }
+    ],
+    onAction: (app, actionId) => {
+      if (actionId === "cancel") return { status: "cancelled" };
+      return { status: "confirmed" };
+    }
+  });
+
+  return promptResult.status === "cancelled" ? "cancelled" : "confirmed";
+}
+
 class DauligorImportSequenceCancelledError extends Error {
   constructor(message = "The Dauligor import was cancelled.") {
     super(message);
@@ -2260,6 +2318,16 @@ async function runDauligorClassImportSequence({
     throwIfSequenceCancelled(sequence);
 
     if (actor) {
+      const characterUpdater = new CharacterUpdater(actor);
+      sequence.characterUpdater = characterUpdater;
+      const characterJson = characterUpdater.getCharacterJson();
+      if (characterJson) {
+        console.log(`${MODULE_ID} | CharacterUpdater: Successfully read character JSON.`);
+        console.log(`${MODULE_ID} | Character JSON BEFORE advancements:`, JSON.parse(JSON.stringify(characterJson)));
+      } else {
+        console.warn(`${MODULE_ID} | CharacterUpdater: Failed to read character JSON.`);
+      }
+
       const selectedLevel = await runLevelSelectionStep({ workflow, sequence, progress });
       if (selectedLevel === "cancelled") throw new DauligorImportSequenceCancelledError();
       state.targetLevel = selectedLevel;
@@ -2269,120 +2337,152 @@ async function runDauligorClassImportSequence({
     progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
     throwIfSequenceCancelled(sequence);
 
-    if (actor) {
-      const hpMode = await runHpModeStep({ workflow, sequence, progress });
-      if (hpMode === "cancelled") throw new DauligorImportSequenceCancelledError();
-      if (hpMode !== undefined) {
-        state.hpMode = hpMode.hpMode ?? state.hpMode;
-        state.hpCustomFormula = hpMode.hpCustomFormula ?? state.hpCustomFormula;
+    const previewResult = await runBaseClassAdvancementsStep({ workflow, sequence, progress });
+    if (previewResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+
+    // --- PHASE 2: SEQUENTIAL BASE CLASS ADVANCEMENTS ---
+    // We iterate through all core advancements (HP, Skills, Tools, Saves, Armor, Weapons, Languages)
+    // and show specialized selection windows for each.
+    const baseFeatures = baseClassHandler(workflow);
+
+    for (const adv of baseFeatures.advancements) {
+      throwIfSequenceCancelled(sequence);
+
+      // 1. Hit Points Advancement
+      if (adv.id === 'base-hp') {
+        if (actor) {
+          const hpModeResult = await runHpModeStep({ workflow, sequence, progress });
+          if (hpModeResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (hpModeResult !== undefined) {
+            state.hpMode = hpModeResult.hpMode ?? state.hpMode;
+            state.hpCustomFormula = hpModeResult.hpCustomFormula ?? state.hpCustomFormula;
+            
+            const die = adv.adv?.configuration?.hitDie || 8;
+            let increase = 0;
+            if (state.hpMode === "average") increase = Math.floor(die / 2) + 1;
+            else if (state.hpMode === "maximum") increase = die;
+            else if (state.hpMode === "minimum") increase = 1;
+            
+            if (increase > 0) {
+              sequence.characterUpdater.updateHp(increase);
+            }
+          }
+        }
+      } 
+      
+      // 2. Skill Proficiencies Advancement
+      else if (adv.id === 'base-skills') {
+        let selectedSkills = [];
+        // Show window if there are choices to make OR fixed proficiencies to display
+        if (actor && (adv.choiceCount > 0 || (adv.fixed?.length ?? 0) > 0)) {
+          const skillSelections = await runSkillSelectionStep({ workflow, sequence, progress, advancement: adv });
+          if (skillSelections === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (skillSelections) {
+            state.skillSelections = skillSelections;
+            selectedSkills = skillSelections;
+          }
+        } else {
+          progress.markStep("skills", "skipped", "No skill data to display.");
+        }
+        
+        if (actor) {
+          const allSkills = [...(adv.fixed || []), ...selectedSkills];
+          sequence.characterUpdater.updateSkills(allSkills);
+        }
+      } 
+      
+      // 3. Tool Proficiencies Advancement
+      else if (adv.id === 'base-tools') {
+        let selectedTools = [];
+        // Show window if there are choices to make OR fixed tools to display
+        if (actor && (adv.choiceCount > 0 || (adv.fixed?.length ?? 0) > 0)) {
+          const toolSelections = await runToolSelectionStep({ workflow, sequence, progress, advancement: adv });
+          if (toolSelections === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (toolSelections) {
+            state.toolSelections = toolSelections;
+            selectedTools = toolSelections;
+          }
+        } else {
+          progress.markStep("tools", "skipped", "No tool data to display.");
+        }
+
+        if (actor) {
+          const allTools = [...(adv.fixed || []), ...selectedTools];
+          sequence.characterUpdater.updateTraitProficiencies("toolProf", allTools);
+        }
+      } 
+      
+      // 4. Other Trait Advancements (Saves, Armor, Weapons, Languages, Resistances)
+      else {
+        let selections = [];
+        // ALWAYS show the window if there is any data (fixed or options) OR if it's a mandatory testing category
+        const isMandatory = [
+          'base-saves', 'base-armor', 'base-weapons', 'base-languages', 
+          'base-resistances', 'base-immunities', 'base-vulnerabilities', 'base-condition-immunities'
+        ].includes(adv.id);
+        if (actor && ((adv.options?.length ?? 0) > 0 || (adv.fixed?.length ?? 0) > 0 || isMandatory)) {
+          const res = await runTraitSelectionStep({
+            title: adv.title,
+            fieldName: adv.id,
+            advancement: adv,
+            workflow,
+            sequence,
+            progress
+          });
+          if (res === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (res && res !== "skipped") {
+            state.traitSelections = state.traitSelections || {};
+            state.traitSelections[adv.id] = res;
+            selections = res;
+          }
+        }
+
+        if (actor) {
+          const allItems = [...(adv.fixed || []), ...selections];
+          if (adv.id === "base-saves") {
+            sequence.characterUpdater.updateSaves(allItems);
+          } else if (adv.id === "base-armor") {
+            sequence.characterUpdater.updateTraitProficiencies("armorProf", allItems);
+          } else if (adv.id === "base-weapons") {
+            sequence.characterUpdater.updateTraitProficiencies("weaponProf", allItems);
+          } else if (adv.id === "base-languages") {
+            sequence.characterUpdater.updateTraitProficiencies("languages", allItems);
+          } else if (adv.id === "base-resistances") {
+            sequence.characterUpdater.updateDamageTraits("dr", allItems);
+          } else if (adv.id === "base-immunities") {
+            sequence.characterUpdater.updateDamageTraits("di", allItems);
+          } else if (adv.id === "base-vulnerabilities") {
+            sequence.characterUpdater.updateDamageTraits("dv", allItems);
+          } else if (adv.id === "base-condition-immunities") {
+            sequence.characterUpdater.updateDamageTraits("ci", allItems);
+          }
+        }
       }
-    }
 
-    workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
-    progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
-    throwIfSequenceCancelled(sequence);
 
-    if (actor && workflow.skillChoices?.choiceCount > 0 && workflow.skillChoices?.allOptions?.length) {
-      const skillSelections = await runSkillSelectionStep({ workflow, sequence, progress });
-      if (skillSelections === "cancelled") throw new DauligorImportSequenceCancelledError();
-      if (skillSelections) state.skillSelections = skillSelections;
-    } else {
-      progress.markStep("skills", "skipped", "No class skill choices are available.");
-    }
 
-    workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
-    progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
-    throwIfSequenceCancelled(sequence);
-
-    console.log("Dauligor tool choices check:", {
-      actorPresent: !!actor,
-      toolChoicesPresent: !!workflow.toolChoices,
-      choiceCount: workflow.toolChoices?.choiceCount,
-      allOptionsLength: workflow.toolChoices?.allOptions?.length
-    });
-
-    if (actor && workflow.toolChoices?.choiceCount > 0 && workflow.toolChoices?.allOptions?.length) {
-      const toolSelections = await runToolSelectionStep({ workflow, sequence, progress });
-      if (toolSelections === "cancelled") throw new DauligorImportSequenceCancelledError();
-      if (toolSelections) state.toolSelections = toolSelections;
-    } else {
-      progress.markStep("tools", "skipped", "No class tool choices are available.");
-    }
-
-    workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
-    progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
-    throwIfSequenceCancelled(sequence);
-
-    for (const group of workflow.optionGroups.filter((candidate) => candidate.options.length && candidate.maxSelections > 0)) {
-      const selectedSourceIds = await runOptionGroupStep({ workflow, group, sequence, progress });
-      if (selectedSourceIds === "cancelled") throw new DauligorImportSequenceCancelledError();
-      if (selectedSourceIds) {
-        if (selectedSourceIds.length) state.optionSelections[group.sourceId] = selectedSourceIds;
-        else delete state.optionSelections[group.sourceId];
-      }
-
+      // Refresh workflow state after each step for progress tracking
       workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
       progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
-      throwIfSequenceCancelled(sequence);
     }
 
-    if (actor && workflow.hasSpellcasting) {
-      const spellResult = await runSpellPlaceholderStep({ workflow, sequence, progress });
-      if (spellResult === "cancelled") throw new DauligorImportSequenceCancelledError();
-    } else {
-      progress.markStep("spells", "skipped", "Spell choices are not required here.");
+
+
+    if (actor && sequence.characterUpdater) {
+      // We are NOT committing to the database yet. 
+      // Just logging the temporary state we've built up.
+      const stagingState = sequence.characterUpdater.tempData || {};
+      console.log(`${MODULE_ID} | Character JSON AFTER advancements (STAGING):`, JSON.parse(JSON.stringify(stagingState)));
     }
 
-    if (actor && workflow.startingEquipment) {
-      const equipmentResult = await runEquipmentPlaceholderStep({ workflow, sequence, progress });
-      if (equipmentResult === "cancelled") throw new DauligorImportSequenceCancelledError();
-    } else {
-      progress.markStep("equipment", "skipped", "Starting equipment is not part of this import.");
-    }
 
-    throwIfSequenceCancelled(sequence);
-    progress.markStep("import", "active", `Importing ${workflow.classItem.name}...`);
-    progress.setStatus(`Importing ${workflow.classItem.name}...`);
 
-    const result = await importClassPayloadToWorld(payload, {
-      entry,
-      folderPath,
-      actor,
-      targetLevel: state.targetLevel,
-      importSelection: {
-        includeSubclass: state.includeSubclass,
-        subclassSourceId: state.subclassSourceId,
-        optionSelections: state.optionSelections,
-        hpMode: state.hpMode,
-        hpCustomFormula: state.hpCustomFormula,
-        spellMode: state.spellMode,
-        skillSelections: state.skillSelections,
-        toolSelections: state.toolSelections,
-        savingThrowSelections: state.savingThrowSelections,
-        languageSelections: state.languageSelections,
-        traitSelections: state.traitSelections
-      }
-    });
-
-    if (result) {
-      progress.markStep("import", "complete", `Imported ${workflow.classItem.name}.`);
-      progress.setStatus(`Imported ${workflow.classItem.name}.`, "success");
-      progress.setFinished(true);
-      await pause(350);
-      await progress.close();
-      if (actor?.documentName === "Actor") {
-        await maybeOfferSpellPointsSupport({
-          actor,
-          importedClassItem: result
-        });
-      }
-      return result;
-    }
-
-    progress.markStep("import", "error", `Import failed for ${workflow.classItem.name}.`);
-    progress.setStatus(`Import failed for ${workflow.classItem.name}.`, "danger");
+    progress.setStatus("All advancements selected. Workflow complete.", "success");
     progress.setFinished(true);
+    await pause(500);
+    await progress.close();
     return null;
+
   } catch (error) {
     if (error instanceof DauligorImportSequenceCancelledError || sequence.cancelled) {
       progress.setStatus("Import cancelled.", "danger");
@@ -2493,6 +2593,7 @@ function buildImportSequenceSteps(workflow, { actor = null } = {}) {
     }
   }
 
+/*
   for (const group of ensureArray(workflow?.optionGroups).filter((candidate) => candidate.options.length && candidate.maxSelections > 0)) {
     steps.push({
       id: `option:${group.sourceId}`,
@@ -2507,6 +2608,7 @@ function buildImportSequenceSteps(workflow, { actor = null } = {}) {
   if (actor && workflow?.startingEquipment) {
     steps.push({ id: "equipment", label: "Review starting equipment" });
   }
+*/
 
   steps.push({ id: "import", label: "Import class" });
   return steps;
@@ -2620,6 +2722,88 @@ async function runSubclassStep({ workflow, sequence, progress }) {
 
   const selectedName = workflow.subclassItems.find((item) => (item.flags?.[MODULE_ID]?.sourceId ?? null) === result.value)?.name ?? "Subclass";
   progress.markStep(stepId, "complete", `${selectedName} selected.`);
+  return result.value;
+}
+
+
+async function runTraitSelectionStep({ title, fieldName, advancement, workflow, sequence, progress }) {
+  const stepId = `advancement:${fieldName}`;
+  progress.markStep(stepId, "active", `Advancement step for ${title}.`);
+  progress.setStatus(`Waiting for ${title} choices...`);
+
+  const fixed = advancement.fixed || [];
+  const options = advancement.options || [];
+  const choiceCount = advancement.choiceCount || 0;
+
+  const result = await DauligorSequencePromptApp.prompt({
+    title: title,
+    subtitle: `Choose ${numberToWord(choiceCount)} option(s). Fixed: ${fixed.map(val => formatFoundryLabel(val)).join(', ') || 'None'}`,
+    width: 650,
+    height: 450,
+    state: {
+      selections: []
+    },
+    renderBody: (app) => `
+      <div class="dauligor-class-options__choice-list">
+        ${options.map((slug) => {
+          const isChecked = app._state.selections.includes(slug);
+          const label = formatFoundryLabel(slug);
+          const abilityMatch = slug.match(/^(saves):([a-z]{3})$/i);
+          const metaLabel = abilityMatch ? formatAbilityAbbreviation(abilityMatch[2]) : "";
+          
+          return `
+            <label class="dauligor-class-options__checkbox">
+              <input type="checkbox" data-action="toggle-item" data-slug="${foundry.utils.escapeHTML(slug)}" ${isChecked ? "checked" : ""}>
+              <span class="dauligor-class-options__checkbox-copy">
+                <span class="dauligor-class-options__checkbox-title">${foundry.utils.escapeHTML(label)}</span>
+                ${metaLabel ? `<span class="dauligor-class-options__checkbox-meta">${foundry.utils.escapeHTML(metaLabel)}</span>` : ""}
+              </span>
+            </label>
+          `;
+        }).join("")}
+      </div>
+    `,
+    onRenderBody: (app, root) => {
+      root.querySelectorAll(`[data-action="toggle-item"]`).forEach((input) => {
+        input.addEventListener("change", () => {
+          const slug = input.dataset.slug;
+          const current = new Set(app._state.selections || []);
+          if (input.checked) current.add(slug);
+          else current.delete(slug);
+
+          if (current.size > choiceCount) {
+            notifyWarn(`You can only choose ${choiceCount} option(s).`);
+            input.checked = false;
+            return;
+          }
+          app.updateState({ selections: [...current] });
+        });
+      });
+    },
+    actions: [
+      { id: "confirm", label: "OK", primary: true },
+      { id: "cancel", label: "Cancel" },
+      { id: "skip", label: "Skip" }
+    ],
+    onAction: async (app, actionId) => {
+      if (actionId === "cancel") return { status: "cancelled" };
+      if (actionId === "skip") return { status: "skipped" };
+
+      if (choiceCount > 0 && (app._state.selections?.length ?? 0) !== choiceCount) {
+        notifyWarn(`Choose exactly ${choiceCount} option(s).`);
+        return false;
+      }
+
+      return { status: "confirmed", value: app._state.selections };
+    }
+  }, sequence);
+
+  if (result.status === "cancelled") return "cancelled";
+  if (result.status === "skipped") {
+    progress.markStep(stepId, "skipped", `Skipped ${title} selection.`);
+    return [];
+  }
+  progress.markStep(stepId, "complete", `Selected ${result.value.length} ${title} option(s).`);
   return result.value;
 }
 
@@ -2809,29 +2993,45 @@ async function runHpModeStep({ workflow, sequence, progress }) {
   return result.value;
 }
 
-async function runSkillSelectionStep({ workflow, sequence, progress }) {
+async function runSkillSelectionStep({ workflow, sequence, progress, advancement = null }) {
   const stepId = "skills";
   progress.markStep(stepId, "active", "Choose the class skill proficiency options.");
   progress.setStatus("Waiting for skill proficiency choices...");
-  const fixedSkills = new Set(workflow.skillChoices.fixed);
+
+  const choices = advancement ? {
+    fixed: advancement.fixed || [],
+    allOptions: [...new Set([...(advancement.fixed || []), ...(advancement.options || [])])],
+    choiceCount: advancement.choiceCount || 0
+  } : workflow.skillChoices;
+
+
+  const fixedSkills = new Set(choices.fixed);
 
   const result = await DauligorSequencePromptApp.prompt({
     title: "Skill Proficiencies",
-    subtitle: `Choose ${numberToWord(workflow.skillChoices.choiceCount)} skill proficienc${workflow.skillChoices.choiceCount === 1 ? "y" : "ies"}.`,
+    subtitle: `Choose ${numberToWord(choices.choiceCount)} skill proficienc${choices.choiceCount === 1 ? "y" : "ies"}.`,
     width: 660,
     height: 520,
     state: {
-      selectedSkills: [...workflow.selection.skillSelections]
+      selectedSkills: [...(advancement ? [] : workflow.selection.skillSelections)]
     },
     renderBody: (app) => `
       <div class="dauligor-class-options__choice-list">
-        ${workflow.skillChoices.allOptions.map((slug) => {
-      const skill = CONFIG.DND5E.skills?.[slug] ?? {};
+        ${choices.allOptions.map((slug) => {
       const isFixed = fixedSkills.has(slug);
-      const isChecked = app._state.selectedSkills.includes(slug);
-      const skillLabel = getConfigLabel(skill.label, slug);
-      const abilityLabel = formatAbilityAbbreviation(skill.ability);
+      const isChecked = app._state.selectedSkills.includes(slug) || isFixed;
+
+      const skillLabel = formatFoundryLabel(slug);
+      
+      // Attempt to get ability meta info from CONFIG if possible
+      let abilityLabel = "";
+      if (typeof CONFIG !== 'undefined' && CONFIG.DND5E?.skills) {
+        const skillConfig = CONFIG.DND5E.skills[slug.replace(/^skills:/, "")] ?? {};
+        if (skillConfig.ability) abilityLabel = formatAbilityAbbreviation(skillConfig.ability);
+      }
+
       return `
+
             <label class="dauligor-class-options__checkbox ${isFixed ? "dauligor-class-options__checkbox--disabled" : ""}">
               <input
                 type="checkbox"
@@ -2861,8 +3061,8 @@ async function runSkillSelectionStep({ workflow, sequence, progress }) {
           else current.delete(slug);
 
           const chosen = [...current].filter((selected) => !fixed.has(selected));
-          if (chosen.length > workflow.skillChoices.choiceCount) {
-            notifyWarn(`Choose only ${workflow.skillChoices.choiceCount} skill proficiency option(s).`);
+          if (chosen.length > choices.choiceCount) {
+            notifyWarn(`Choose only ${choices.choiceCount} skill proficiency option(s).`);
             input.checked = false;
             return;
           }
@@ -2881,8 +3081,8 @@ async function runSkillSelectionStep({ workflow, sequence, progress }) {
       if (actionId === "skip") return { status: "skipped" };
 
       const chosen = [...new Set(app._state.selectedSkills ?? [])].filter((selected) => !fixedSkills.has(selected));
-      if (chosen.length !== workflow.skillChoices.choiceCount) {
-        notifyWarn(`Choose exactly ${workflow.skillChoices.choiceCount} skill proficiency option(s).`);
+      if (chosen.length !== choices.choiceCount) {
+        notifyWarn(`Choose exactly ${choices.choiceCount} skill proficiency option(s).`);
         return false;
       }
 
@@ -2899,35 +3099,50 @@ async function runSkillSelectionStep({ workflow, sequence, progress }) {
   return result.value;
 }
 
-async function runToolSelectionStep({ workflow, sequence, progress }) {
+async function runToolSelectionStep({ workflow, sequence, progress, advancement = null }) {
   const stepId = "tools";
   progress.markStep(stepId, "active", "Choose the class tool proficiency options.");
   progress.setStatus("Waiting for tool proficiency choices...");
-  const fixedTools = new Set(workflow.toolChoices.fixed);
+
+  const choices = advancement ? {
+    fixed: advancement.fixed || [],
+    allOptions: [...new Set([...(advancement.fixed || []), ...(advancement.options || [])])],
+    choiceCount: advancement.choiceCount || 0
+  } : workflow.toolChoices;
+
+
+  const fixedTools = new Set(choices.fixed);
   console.log("runToolSelectionStep trace:", {
     fixedTools: [...fixedTools],
-    allOptions: workflow.toolChoices.allOptions,
-    selectedTools: [...workflow.selection.toolSelections],
-    choiceCount: workflow.toolChoices.choiceCount
+    allOptions: choices.allOptions,
+    selectedTools: [...(advancement ? [] : workflow.selection.toolSelections)],
+    choiceCount: choices.choiceCount
   });
 
   const result = await DauligorSequencePromptApp.prompt({
     title: "Tool Proficiencies",
-    subtitle: `Choose ${numberToWord(workflow.toolChoices.choiceCount)} tool proficienc${workflow.toolChoices.choiceCount === 1 ? "y" : "ies"}.`,
+    subtitle: `Choose ${numberToWord(choices.choiceCount)} tool proficienc${choices.choiceCount === 1 ? "y" : "ies"}.`,
     width: 660,
     height: 520,
     state: {
-      selectedTools: [...workflow.selection.toolSelections]
+      selectedTools: [...(advancement ? [] : workflow.selection.toolSelections)]
     },
     renderBody: (app) => `
       <div class="dauligor-class-options__choice-list">
-        ${workflow.toolChoices.allOptions.map((slug) => {
-      const tool = CONFIG.DND5E.tools?.[slug] ?? {};
+        ${choices.allOptions.map((slug) => {
       const isFixed = fixedTools.has(slug);
-      const isChecked = app._state.selectedTools.includes(slug);
-      const toolLabel = getConfigLabel(tool.label, slug);
-      const abilityLabel = formatAbilityAbbreviation(tool.ability);
+      const isChecked = app._state.selectedTools.includes(slug) || isFixed;
+
+      const toolLabel = formatFoundryLabel(slug);
+      
+      let abilityLabel = "";
+      if (typeof CONFIG !== 'undefined' && CONFIG.DND5E?.tools) {
+        const toolConfig = CONFIG.DND5E.tools[slug.replace(/^tools:/, "")] ?? {};
+        if (toolConfig.ability) abilityLabel = formatAbilityAbbreviation(toolConfig.ability);
+      }
+
       return `
+
             <label class="dauligor-class-options__checkbox ${isFixed ? "dauligor-class-options__checkbox--disabled" : ""}">
               <input
                 type="checkbox"
@@ -2963,10 +3178,10 @@ async function runToolSelectionStep({ workflow, sequence, progress }) {
             fixed: [...fixed],
             current: [...current],
             chosen,
-            maxCount: workflow.toolChoices.choiceCount
+            maxCount: choices.choiceCount
           });
-          if (chosen.length > workflow.toolChoices.choiceCount) {
-            notifyWarn(`Choose only ${workflow.toolChoices.choiceCount} tool proficiency option(s).`);
+          if (chosen.length > choices.choiceCount) {
+            notifyWarn(`Choose only ${choices.choiceCount} tool proficiency option(s).`);
             input.checked = false;
             return;
           }
@@ -2985,8 +3200,8 @@ async function runToolSelectionStep({ workflow, sequence, progress }) {
       if (actionId === "skip") return { status: "skipped" };
 
       const chosen = [...new Set(app._state.selectedTools ?? [])].filter((selected) => !fixedTools.has(selected));
-      if (chosen.length !== workflow.toolChoices.choiceCount) {
-        notifyWarn(`Choose exactly ${workflow.toolChoices.choiceCount} tool proficiency option(s).`);
+      if (chosen.length !== choices.choiceCount) {
+        notifyWarn(`Choose exactly ${choices.choiceCount} tool proficiency option(s).`);
         return false;
       }
 
@@ -3204,19 +3419,7 @@ function getImportType(importTypeId) {
   return IMPORT_TYPES.find((type) => type.id === importTypeId) ?? IMPORT_TYPES[0];
 }
 
-function normalizeImportTypeId(importTypeId, modeId = undefined) {
-  const normalized = importTypeId ?? modeId ?? "classes-subclasses";
-  if (normalized === "classes") return "classes-subclasses";
-  return normalized;
-}
 
-function getSourceTypes(importTypeId) {
-  return SOURCE_TYPES[importTypeId] ?? SOURCE_TYPES["classes-subclasses"];
-}
-
-function getDefaultSourceTypeId(importTypeId) {
-  return getSourceTypes(importTypeId)[0]?.id ?? "srd";
-}
 
 function buildClassModels(entryPayloads) {
   const grouped = new Map();
@@ -3333,30 +3536,7 @@ function variantPriority(payloadKind) {
   return CLASS_VARIANT_PRIORITY[payloadKind] ?? 99;
 }
 
-function summarizeHtml(value) {
-  const plain = stripHtml(value);
-  if (!plain) return "";
-  return plain.length > 220 ? `${plain.slice(0, 217)}...` : plain;
-}
 
-function stripHtml(value) {
-  return String(value ?? "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function ensureArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function slugify(value) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 function deriveSourceLabel(value) {
   const normalized = String(value ?? "").trim();
