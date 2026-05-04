@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/module/(.*)",
+      "destination": "/api/module"
+    },
+    {
+      "source": "/api/module",
+      "destination": "/api/module"
+    }
+  ]
+}
