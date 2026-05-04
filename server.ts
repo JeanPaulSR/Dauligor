@@ -93,6 +93,10 @@ async function startServer() {
   // without service account keys.
   // However, we can provide the static sample for now as a proof of concept endpoint.
   app.get("/api/characters/:id/json", (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
     // This is a placeholder that correctly sets content-type for the foundry module
     res.json({
       error: "Authentication required via Archive interface. Use 'View JSON' in Character Builder.",
@@ -174,6 +178,36 @@ async function startServer() {
 
   app.post("/api/r2/upload", (req, res) => {
     void handleR2Upload(req, res);
+  });
+
+  // Serve the data sources from the module directory dynamically via REST
+  app.get(["/api/module", "/api/module/*"], (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    const subpath = req.params[0] || "";
+    let cleanSubpath = subpath;
+    if (cleanSubpath === "sources") {
+      cleanSubpath = "";
+    } else if (cleanSubpath.startsWith("sources/")) {
+      cleanSubpath = cleanSubpath.slice("sources/".length);
+    }
+    let filePath = path.join(__dirname, "module/dauligor-pairing/data/sources", cleanSubpath);
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+      filePath = path.join(filePath, "catalog.json");
+    } else if (!filePath.endsWith(".json")) {
+      if (fs.existsSync(filePath + ".json")) {
+        filePath = filePath + ".json";
+      } else if (fs.existsSync(path.join(filePath, "catalog.json"))) {
+        filePath = path.join(filePath, "catalog.json");
+      }
+    }
+    if (fs.existsSync(filePath)) {
+      res.setHeader("Content-Type", "application/json");
+      return res.sendFile(filePath);
+    }
+    return res.status(404).json({ error: `Source not found at: ${subpath}` });
   });
 
   // Serve static files from the module directory if needed for documentation

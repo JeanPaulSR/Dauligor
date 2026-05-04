@@ -57,6 +57,19 @@ function registerSettings() {
     type: String,
     default: "Classes"
   });
+
+  game.settings.register(MODULE_ID, SETTINGS.apiEndpointMode, {
+    name: "API Endpoint Mode",
+    hint: "Choose between local development or production servers.",
+    scope: "world",
+    config: true,
+    type: String,
+    choices: {
+      "local": "Local Development (http://localhost:3000)",
+      "production": "Production (https://www.dauligor.com)"
+    },
+    default: "local"
+  });
 }
 
 function isAbsoluteHttpUrl(value) {

@@ -330,6 +330,9 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     hpMode: workflow.selection.hpMode,
     hpCustomFormula: workflow.selection.hpCustomFormula,
     skillSelections: workflow.selection.skillSelections,
+    toolSelections: workflow.selection.toolSelections,
+    savingThrowSelections: workflow.selection.savingThrowSelections,
+    languageSelections: workflow.selection.languageSelections,
     hpResolution,
     referencedDocs: importedSupportDocs
   });
@@ -349,13 +352,19 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   }
   const appliedClassTraits = workflow.isMulticlassImport
     ? await applyActorTraitProfile(targetActor, workflow.semanticClassData?.multiclassProficiencies, {
-      skillSelections: workflow.selection.skillSelections
+      skillSelections: workflow.selection.skillSelections,
+      toolSelections: workflow.selection.toolSelections
     })
     : await applyActorTraitAdvancements(targetActor, syncedClassDoc ?? actorClassDoc);
   const appliedSubclassTraits = syncedSubclassDoc
     ? await applyActorTraitAdvancements(targetActor, syncedSubclassDoc)
     : 0;
+  let appliedFeatureTraits = 0;
+  for (const featureDoc of [...importedFeatures, ...importedSubclassFeatures, ...importedOptionItems].filter(Boolean)) {
+    appliedFeatureTraits += await applyActorTraitAdvancements(targetActor, featureDoc);
+  }
   const appliedSkillChoices = await applyActorSkillSelections(targetActor, workflow.selection.skillSelections);
+  const appliedToolChoices = await applyActorToolSelections(targetActor, workflow.selection.toolSelections);
   const appliedHpIncrease = await applyActorHitPointIncrease(targetActor, syncedClassDoc ?? actorClassDoc, {
     existingClassLevel: workflow.existingClassLevel,
     targetLevel: classLevel,
@@ -391,6 +400,7 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     + `${appliedHpIncrease ? ` Applied ${appliedHpIncrease} hit point(s).` : ""}`
     + `${appliedClassTraits ? ` Applied ${appliedClassTraits} class trait advancement change(s).` : ""}`
     + `${appliedSubclassTraits ? ` Applied ${appliedSubclassTraits} subclass trait advancement change(s).` : ""}`
+    + `${appliedFeatureTraits ? ` Applied ${appliedFeatureTraits} feature trait advancement change(s).` : ""}`
     + `${appliedSkillChoices ? ` Applied ${appliedSkillChoices} skill proficiency selection(s).` : ""}`
     + `${removedFeatures ? ` Removed ${removedFeatures} class feature item(s).` : ""}`
     + `${removedSubclassFeatures ? ` Removed ${removedSubclassFeatures} subclass feature item(s).` : ""}`
@@ -524,6 +534,11 @@ export function buildClassImportWorkflow(payload, {
       classData: proficiencySource,
       requestedSelections,
       existingSelections
+    }),
+    toolSelections: getInitialToolSelections({
+      classData: proficiencySource,
+      requestedSelections,
+      existingSelections
     })
   };
 
@@ -556,6 +571,45 @@ export function buildClassImportWorkflow(payload, {
   const selectedOptionSourceIds = new Set(Object.values(normalizedSelection.optionSelections).flat());
   const selectedOptionItems = optionItems.filter((item) => selectedOptionSourceIds.has(item.flags?.[MODULE_ID]?.sourceId ?? ""));
   const skillChoices = buildSkillChoiceConfig(proficiencySource);
+  const toolChoices = buildToolChoiceConfig(proficiencySource);
+
+  const allAdvancements = [
+    ...Object.values(normalizeAdvancementStructure(classItem?.system?.advancement)),
+    ...Object.values(normalizeAdvancementStructure(selectedSubclassItem?.system?.advancement)),
+    ...desiredClassFeatureItems.flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement))),
+    ...desiredSubclassFeatureItems.flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement))),
+    ...selectedOptionItems.flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement)))
+  ].filter(Boolean);
+
+  const extraSkills = collectTraitAdvancementChoices(allAdvancements, "skills");
+  console.log("[Dauligor Importer] extraSkills collected:", extraSkills);
+  if (extraSkills.choiceCount > 0) {
+    skillChoices.choiceCount += extraSkills.choiceCount;
+    for (const opt of extraSkills.options) {
+      if (!skillChoices.options.includes(opt)) {
+        skillChoices.options.push(opt);
+      }
+      if (!skillChoices.allOptions.includes(opt)) {
+        skillChoices.allOptions.push(opt);
+      }
+      skillChoices.availableSet.add(opt);
+    }
+  }
+
+  const extraTools = collectTraitAdvancementChoices(allAdvancements, "tools");
+  console.log("[Dauligor Importer] extraTools collected:", extraTools);
+  if (extraTools.choiceCount > 0) {
+    toolChoices.choiceCount += extraTools.choiceCount;
+    for (const opt of extraTools.options) {
+      if (!toolChoices.options.includes(opt)) {
+        toolChoices.options.push(opt);
+      }
+      if (!toolChoices.allOptions.includes(opt)) {
+        toolChoices.allOptions.push(opt);
+      }
+      toolChoices.availableSet.add(opt);
+    }
+  }
   const importClassFeatureItems = desiredClassFeatureItems.filter((item) =>
     shouldImportProgressionItem(item, {
       actor: targetActor,
@@ -632,12 +686,41 @@ export function buildClassImportWorkflow(payload, {
     hasSpellcasting: classItem.system?.spellcasting?.progression !== "none",
     hasSubclassSupport,
     skillChoices,
+    toolChoices,
     levelRows,
     spellcastingRows,
     importClassFeatureItems,
     importSubclassFeatureItems,
     importOptionItems,
-    startingEquipment: semanticClassData?.startingEquipment ?? ""
+    startingEquipment: semanticClassData?.startingEquipment ?? "",
+    choiceAdvancements: (function () {
+      const featureAdvancements = [
+        ...desiredClassFeatureItems,
+        ...desiredSubclassFeatureItems,
+        ...selectedOptionItems
+      ].flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement)));
+      const advancements = [
+        ...Object.values(normalizeAdvancementStructure(classItem?.system?.advancement)),
+        ...Object.values(normalizeAdvancementStructure(selectedSubclassItem?.system?.advancement)),
+        ...featureAdvancements
+      ].filter(Boolean);
+      return advancements.filter(adv => {
+        if (adv?.type !== "Trait" && adv?.type !== "ItemChoice") return false;
+        const level = Number(adv.level ?? 1) || 1;
+        if (level > normalizedTargetLevel) return false;
+        if (adv.type === "Trait") {
+          const choices = Array.isArray(adv.configuration?.choices) ? adv.configuration.choices : [];
+          if (choices.some(c => c.count > 0 && Array.isArray(c.pool) && c.pool.length > 0)) return true;
+          if (adv.configuration?.type && Number(adv.configuration?.choiceCount) > 0 && Array.isArray(adv.configuration?.options) && adv.configuration.options.length > 0) return true;
+          return false;
+        }
+        if (adv.type === "ItemChoice") {
+          const choices = Array.isArray(adv.configuration?.choices) ? adv.configuration.choices : [];
+          return choices.some(c => c.count > 0 && Array.isArray(c.pool) && c.pool.length > 0);
+        }
+        return false;
+      });
+    })()
   };
 }
 
@@ -709,7 +792,11 @@ function sanitizeClassImportSelection(selection) {
     hpMode: trimString(selection?.hpMode) || null,
     hpCustomFormula: trimString(selection?.hpCustomFormula) || null,
     spellMode: trimString(selection?.spellMode) || null,
-    skillSelections: [...new Set(ensureArray(selection?.skillSelections).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))]
+    skillSelections: [...new Set(ensureArray(selection?.skillSelections).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))],
+    toolSelections: [...new Set(ensureArray(selection?.toolSelections).map((slug) => normalizeToolSlug(slug)).filter(Boolean))],
+    savingThrowSelections: [...new Set(ensureArray(selection?.savingThrowSelections).map((code) => normalizeAbilityCode(code)).filter(Boolean))],
+    languageSelections: [...new Set(ensureArray(selection?.languageSelections).map((slug) => slugify(trimString(slug))).filter(Boolean))],
+    traitSelections: typeof selection?.traitSelections === "object" ? foundry.utils.deepClone(selection.traitSelections) : {}
   };
 }
 
@@ -729,6 +816,23 @@ function getInitialSkillSelections({ classData = null, requestedSelections = {},
   return [...selected];
 }
 
+function getInitialToolSelections({ classData = null, requestedSelections = {}, existingSelections = {} } = {}) {
+  const toolConfig = buildToolChoiceConfig(classData);
+  const requested = requestedSelections.toolSelections?.length ? requestedSelections.toolSelections : existingSelections.toolSelections ?? [];
+  const selected = new Set(toolConfig.fixed);
+  for (const slug of requested) {
+    if (toolConfig.availableSet.has(slug)) selected.add(slug);
+  }
+  return [...selected];
+}
+
+function normalizeToolSlug(slug) {
+  const s = slugify(trimString(slug));
+  if (!s) return null;
+  if (s === "thief") return "thieves";
+  return s;
+}
+
 function getClassImportProficiencySource(classData, { isMulticlassImport = false } = {}) {
   if (!classData || typeof classData !== "object") return null;
   if (!isMulticlassImport) return classData;
@@ -741,6 +845,54 @@ function getClassImportProficiencySource(classData, { isMulticlassImport = false
   };
 }
 
+function collectTraitAdvancementChoices(advancements, traitType) {
+  let choiceCount = 0;
+  const options = [];
+
+  for (const adv of ensureArray(advancements)) {
+    if (adv?.type !== "Trait") continue;
+
+    // Format 1: choices array with pool containing prefixed strings
+    const choices = ensureArray(adv.configuration?.choices);
+    if (choices.length > 0) {
+      for (const c of choices) {
+        if (c.count > 0 && Array.isArray(c.pool) && c.pool.length > 0) {
+          const isMatch = c.pool.some(entry => {
+            if (typeof entry !== "string") return false;
+            if (traitType === "skills" && entry.startsWith("skill:")) return true;
+            if (traitType === "tools" && entry.startsWith("tool:")) return true;
+            return false;
+          });
+          if (isMatch) {
+            choiceCount += Number(c.count) || 0;
+            for (const entry of c.pool) {
+              if (typeof entry !== "string") continue;
+              if (traitType === "skills" && entry.startsWith("skill:")) {
+                options.push(entry.replace("skill:", ""));
+              } else if (traitType === "tools" && entry.startsWith("tool:")) {
+                options.push(entry.replace("tool:", ""));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Format 2: Direct trait configuration type matches the requested traitType
+    if (adv.configuration?.type === traitType && Number(adv.configuration?.choiceCount) > 0) {
+      console.log(`[Dauligor Importer] Found direct trait choice matching format 2: id=${adv._id}, title=${adv.title}, type=${adv.configuration.type}, choiceCount=${adv.configuration.choiceCount}`);
+      choiceCount += Number(adv.configuration.choiceCount) || 0;
+      const opts = ensureArray(adv.configuration.options);
+      for (const opt of opts) {
+        if (typeof opt === "string" && opt) {
+          options.push(opt);
+        }
+      }
+    }
+  }
+  return { choiceCount, options };
+}
+
 function buildSkillChoiceConfig(classData) {
   const skills = classData?.proficiencies?.skills ?? classData?.skills ?? {};
   const fixed = [...new Set(ensureArray(skills.fixed ?? skills.fixedIds).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))];
@@ -750,6 +902,22 @@ function buildSkillChoiceConfig(classData) {
 
   return {
     choiceCount: Math.max(0, Number(skills.choiceCount ?? 0) || 0),
+    fixed,
+    options,
+    allOptions,
+    availableSet
+  };
+}
+
+function buildToolChoiceConfig(classData) {
+  const tools = classData?.proficiencies?.tools ?? classData?.tools ?? {};
+  const fixed = [...new Set(ensureArray(tools.fixed ?? tools.fixedIds).map((slug) => normalizeToolSlug(slug)).filter(Boolean))];
+  const options = [...new Set(ensureArray(tools.options ?? tools.optionIds).map((slug) => normalizeToolSlug(slug)).filter(Boolean))];
+  const allOptions = [...new Set([...fixed, ...options])];
+  const availableSet = new Set(allOptions);
+
+  return {
+    choiceCount: Math.max(0, Number(tools.choiceCount ?? 0) || 0),
     fixed,
     options,
     allOptions,
@@ -1044,6 +1212,56 @@ function normalizeSemanticClassExportToBundle(payload, { entry = null } = {}) {
   const classData = payload.class ?? {};
   const subclasses = ensureArray(payload.subclasses);
   const features = ensureArray(payload.features);
+
+  console.log("===[Advancement Import Tracing]===");
+  console.log("All root class advancements count:", ensureArray(classData?.advancements).length);
+  console.log("All subclasses advancements count:", subclasses.flatMap(sub => ensureArray(sub?.advancements)).length);
+  console.log("All root class advancements details:", classData?.advancements);
+  console.log("All subclass advancements details:", subclasses.flatMap(sub => ensureArray(sub?.advancements)));
+  console.log("All individual feature advancements details:", features.flatMap(f => ensureArray(f?.advancements).map(adv => ({ featName: f.name, adv }))));
+
+  const isFeatureAttachedAdvancement = (adv) => {
+    const id = trimString(adv?._id);
+    const featSourceId = trimString(adv?.featureSourceId);
+    return featSourceId && !id.startsWith("inherent-");
+  };
+
+  const featureAttachedAdvancements = [
+    ...ensureArray(classData?.advancements).filter(isFeatureAttachedAdvancement),
+    ...subclasses.flatMap(sub => ensureArray(sub?.advancements).filter(isFeatureAttachedAdvancement))
+  ];
+
+  console.log("Identified feature-attached advancements:", featureAttachedAdvancements.map(a => ({ id: a?._id, type: a?.type, featId: a?.featureSourceId })));
+
+  const featureAdvancementsBySourceId = new Map();
+  for (const adv of featureAttachedAdvancements) {
+    const featSourceId = trimString(adv?.featureSourceId);
+    if (!featureAdvancementsBySourceId.has(featSourceId)) {
+      featureAdvancementsBySourceId.set(featSourceId, []);
+    }
+    featureAdvancementsBySourceId.get(featSourceId).push(adv);
+  }
+
+  // Keep feature attached advancements on class/subclass so Foundry can store and use them properly
+  const normalizedFeatures = features.map(feature => {
+    const featureSourceId = feature?.sourceId ?? buildSemanticSourceId(
+      feature?.featureKind === "subclassFeature" ? "subclass-feature" : "class-feature",
+      feature
+    );
+    if (featureAdvancementsBySourceId.has(featureSourceId)) {
+      console.log(`Distributing advancements to feature [${feature.name} / ${featureSourceId}]:`, featureAdvancementsBySourceId.get(featureSourceId).map(a => a?._id));
+      return {
+        ...feature,
+        advancements: [
+          ...ensureArray(feature.advancements),
+          ...featureAdvancementsBySourceId.get(featureSourceId)
+        ]
+      };
+    }
+    return feature;
+  });
+  console.log("===================================");
+
   const scalingColumns = ensureArray(payload.scalingColumns);
   const uniqueOptionGroups = ensureArray(payload.uniqueOptionGroups);
   const uniqueOptionItems = ensureArray(payload.uniqueOptionItems);
@@ -1056,7 +1274,7 @@ function normalizeSemanticClassExportToBundle(payload, { entry = null } = {}) {
     entry,
     classData,
     subclasses,
-    features,
+    features: normalizedFeatures,
     scalingColumns,
     uniqueOptionGroups,
     uniqueOptionItems,
@@ -1064,8 +1282,8 @@ function normalizeSemanticClassExportToBundle(payload, { entry = null } = {}) {
     sourceBookId,
     classSourceId,
     classIdentifier: normalizeSemanticIdentifier(classData.identifier ?? classData.name ?? classData.id, "class"),
-    featuresById: indexBy(features, "id"),
-    featuresBySourceId: indexBy(features, "sourceId"),
+    featuresById: indexBy(normalizedFeatures, "id"),
+    featuresBySourceId: indexBy(normalizedFeatures, "sourceId"),
     subclassesById: indexBy(subclasses, "id"),
     subclassesBySourceId: indexBy(subclasses, "sourceId"),
     scalingColumnsById: indexBy(scalingColumns, "id"),
@@ -1074,11 +1292,11 @@ function normalizeSemanticClassExportToBundle(payload, { entry = null } = {}) {
     optionGroupsBySourceId: indexBy(uniqueOptionGroups, "sourceId")
   };
 
-  const classFeatures = features
+  const classFeatures = normalizedFeatures
     .filter((feature) => shouldTreatAsClassGrantFeature(feature, context))
     .map((feature) => createSemanticFeatureItem(feature, context, { sourceType: "classFeature" }));
 
-  const subclassFeatures = features
+  const subclassFeatures = normalizedFeatures
     .filter((feature) => feature?.featureKind === "subclassFeature")
     .map((feature) => createSemanticFeatureItem(feature, context, { sourceType: "subclassFeature" }));
 
@@ -1283,8 +1501,10 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
   const activities = normalizeSemanticActivityCollection(feature?.automation?.activities);
   if (activities && Object.keys(activities).length) system.activities = activities;
 
-  const advancement = normalizeSemanticFeatureAdvancements(feature, context);
-  if (advancement && Object.keys(advancement).length) system.advancement = advancement;
+  // Advancements only natively belong to Class, Subclass, and Background items in Foundry.
+  // Including them on a feature (feat type) throws validation errors if the IDs aren't 16 chars.
+  // const advancement = normalizeSemanticFeatureAdvancements(feature, context);
+  // if (advancement && Object.keys(advancement).length) system.advancement = advancement;
 
   return {
     name: buildSemanticFeatureName(feature),
@@ -1356,8 +1576,10 @@ function createSemanticOptionItem(optionItem, context) {
   const activities = normalizeSemanticActivityCollection(optionItem?.automation?.activities);
   if (activities && Object.keys(activities).length) system.activities = activities;
 
-  const advancement = normalizeSemanticFeatureAdvancements(optionItem, context);
-  if (advancement && Object.keys(advancement).length) system.advancement = advancement;
+  // Advancements only natively belong to Class, Subclass, and Background items in Foundry.
+  // Including them on a feature (feat type) throws validation errors if the IDs aren't 16 chars.
+  // const advancement = normalizeSemanticFeatureAdvancements(optionItem, context);
+  // if (advancement && Object.keys(advancement).length) system.advancement = advancement;
 
   return {
     name: trimString(optionItem?.name) || "Class Option",
@@ -1595,20 +1817,7 @@ function normalizeSemanticRootItemChoiceAdvancement(base, advancement, context) 
 }
 
 function normalizeSemanticRootTraitAdvancement(base, advancement, context) {
-  const normalized = normalizeSemanticFeatureTraitAdvancement(base, advancement, context);
-  if (!normalized) return null;
-
-  const traitType = trimString(advancement?.configuration?.type);
-  if (traitType === "skills") {
-    normalized.flags[MODULE_ID] ??= {};
-    normalized.flags[MODULE_ID].advancementKind = "skills";
-  }
-  if (traitType === "saves") {
-    normalized.flags[MODULE_ID] ??= {};
-    normalized.flags[MODULE_ID].advancementKind = "savingThrows";
-  }
-
-  return normalized;
+  return normalizeSemanticFeatureTraitAdvancement(base, advancement, context);
 }
 
 function normalizeSemanticFeatureItemGrantAdvancement(base, advancement, context) {
@@ -1690,6 +1899,8 @@ function normalizeSemanticFeatureScaleAdvancement(base, advancement, context) {
 
 function normalizeSemanticFeatureTraitAdvancement(base, advancement, context) {
   const configuration = advancement?.configuration ?? {};
+  const traitType = trimString(configuration?.type);
+
   if (Array.isArray(configuration?.choices) && Array.isArray(configuration?.grants)) {
     base.configuration = {
       mode: trimString(configuration?.mode) || "default",
@@ -1703,6 +1914,7 @@ function normalizeSemanticFeatureTraitAdvancement(base, advancement, context) {
         .filter((choice) => choice.count > 0 && choice.pool.length)
     };
     if (!base.value || typeof base.value !== "object") base.value = {};
+    applyTraitAdvancementKindTag(base, traitType);
     return base;
   }
 
@@ -1730,7 +1942,17 @@ function normalizeSemanticFeatureTraitAdvancement(base, advancement, context) {
       : []
   };
   if (!base.value || typeof base.value !== "object") base.value = {};
+  applyTraitAdvancementKindTag(base, traitType);
   return base;
+}
+
+function applyTraitAdvancementKindTag(base, traitType) {
+  const kindMap = { skills: "skills", saves: "savingThrows", tools: "tools", languages: "languages" };
+  const kind = kindMap[traitType];
+  if (!kind) return;
+  base.flags ??= {};
+  base.flags[MODULE_ID] ??= {};
+  base.flags[MODULE_ID].advancementKind = kind;
 }
 
 function normalizeItemChoiceChoices(configuration, level, context) {
@@ -3135,8 +3357,16 @@ function rekeyEmbeddedActorAdvancements(advancement, { existingItem = null } = {
     clone.flags[MODULE_ID].sourceAdvancementId = sourceAdvancementId;
 
     const existingAdvancement = existingAdvancements.get(sourceAdvancementId);
-    if (existingAdvancement?.value !== undefined) {
-      clone.value = foundry.utils.deepClone(existingAdvancement.value);
+    if (existingAdvancement?.value !== undefined && clone.type !== "Subclass") {
+      if (clone.type === "Trait") {
+        clone.value ??= {};
+        clone.value.chosen = [...new Set([
+          ...ensureArray(existingAdvancement.value?.chosen),
+          ...ensureArray(clone.value?.chosen)
+        ])].filter(Boolean);
+      } else {
+        clone.value = foundry.utils.deepClone(existingAdvancement.value);
+      }
     }
 
     remapped[newId] = clone;
@@ -3217,14 +3447,54 @@ async function applyActorSkillSelections(actor, skillSelections = []) {
   const targetActor = resolveTargetActor(actor);
   if (!targetActor) return 0;
 
+  console.log("applyActorSkillSelections input:", {
+    actorName: targetActor.name,
+    skillSelections
+  });
+
   const updates = {};
   let applied = 0;
   for (const slug of [...new Set(ensureArray(skillSelections).map((value) => normalizeSkillSlug(value)).filter(Boolean))]) {
     const currentValue = Number(targetActor.system?.skills?.[slug]?.value ?? 0);
+    console.log(`Checking skill ${slug}: current value = ${currentValue}`);
     if (currentValue >= 1) continue;
     updates[`system.skills.${slug}.value`] = 1;
     applied += 1;
   }
+
+  console.log("applyActorSkillSelections generated updates:", updates);
+
+  if (!applied) return 0;
+  await targetActor.update(updates);
+  return applied;
+}
+
+async function applyActorToolSelections(actor, toolSelections = []) {
+  const targetActor = resolveTargetActor(actor);
+  if (!targetActor) return 0;
+
+  console.log("applyActorToolSelections input:", {
+    actorName: targetActor.name,
+    toolSelections
+  });
+
+  const updates = {};
+  let applied = 0;
+  for (const slug of [...new Set(ensureArray(toolSelections).map((value) => normalizeToolSlug(value)).filter(Boolean))]) {
+    const currentValue = Number(targetActor.system?.tools?.[slug]?.value ?? 0);
+    console.log(`Checking tool ${slug}: current value = ${currentValue}`);
+    if (currentValue >= 1) continue;
+    updates[`system.tools.${slug}.value`] = 1;
+
+    const abilityPath = `system.tools.${slug}.ability`;
+    const existingAbility = updates[abilityPath] ?? foundry.utils.getProperty(targetActor, abilityPath);
+    const defaultAbility = CONFIG.DND5E?.tools?.[slug]?.ability;
+    if (!existingAbility && defaultAbility) updates[abilityPath] = defaultAbility;
+
+    applied += 1;
+  }
+
+  console.log("applyActorToolSelections generated updates:", updates);
 
   if (!applied) return 0;
   await targetActor.update(updates);
@@ -3237,7 +3507,11 @@ async function syncActorClassAdvancements(actor, actorClassItem, sourceAdvanceme
   existingClassLevel = 0,
   hpMode = null,
   hpCustomFormula = null,
-  skillSelections = [],
+  skillSelections = null,
+  toolSelections = null,
+  savingThrowSelections = null,
+  languageSelections = null,
+  traitSelections = null,
   hpResolution = null,
   referencedDocs = []
 } = {}) {
@@ -3246,12 +3520,18 @@ async function syncActorClassAdvancements(actor, actorClassItem, sourceAdvanceme
 
   const currentClassItem = targetActor.items.get(actorClassItem.id) ?? actorClassItem;
   const importSelections = sanitizeClassImportSelection(currentClassItem.getFlag?.(MODULE_ID, "importSelections") ?? {});
+  const resolvedSkillSelections = skillSelections ?? importSelections.skillSelections;
+  const resolvedToolSelections = toolSelections ?? importSelections.toolSelections;
+  const resolvedSavingThrowSelections = savingThrowSelections ?? importSelections.savingThrowSelections;
+  const resolvedLanguageSelections = languageSelections ?? importSelections.languageSelections;
+  const resolvedTraitSelections = traitSelections ?? importSelections.traitSelections;
   const resolvedAdvancement = buildEmbeddedActorAdvancementStructure(sourceAdvancement, {
     actor: targetActor,
     classSourceId,
     targetLevel,
     selectedSubclassSourceId: importSelections.subclassSourceId,
-    optionSelections: importSelections.optionSelections
+    optionSelections: importSelections.optionSelections,
+    traitSelections: resolvedTraitSelections
   });
   if (referencedDocs.length) {
     const docsBySourceId = new Map();
@@ -3274,7 +3554,19 @@ async function syncActorClassAdvancements(actor, actorClassItem, sourceAdvanceme
     hpResolution
   });
   applySkillSelectionsToAdvancements(advancementMeta.advancement, {
-    skillSelections
+    skillSelections: resolvedSkillSelections
+  });
+  applyToolSelectionsToAdvancements(advancementMeta.advancement, {
+    toolSelections: resolvedToolSelections
+  });
+  applySavingThrowSelectionsToAdvancements(advancementMeta.advancement, {
+    savingThrowSelections: resolvedSavingThrowSelections
+  });
+  applyLanguageSelectionsToAdvancements(advancementMeta.advancement, {
+    languageSelections: resolvedLanguageSelections
+  });
+  applyTraitSelectionsToAdvancements(advancementMeta.advancement, {
+    traitSelections: resolvedTraitSelections
   });
   log("Prepared actor class advancement update", {
     actorName: targetActor.name,
@@ -3317,9 +3609,11 @@ async function applyActorTraitAdvancements(actor, item) {
   const updates = {};
   let changed = 0;
 
-  for (const advancementEntry of Object.values(normalizeAdvancementStructure(item.system?.advancement))) {
-    if (!advancementEntry || advancementEntry.type !== "Trait") continue;
+  const advancements = Object.values(normalizeAdvancementStructure(item.system?.advancement))
+    .filter(adv => adv && adv.type === "Trait")
+    .sort((a, b) => (Number(a?.level ?? 0) - Number(b?.level ?? 0)));
 
+  for (const advancementEntry of advancements) {
     const chosen = new Set([
       ...ensureArray(advancementEntry?.configuration?.grants),
       ...ensureArray(advancementEntry?.value?.chosen)
@@ -3335,18 +3629,19 @@ async function applyActorTraitAdvancements(actor, item) {
   return changed;
 }
 
-async function applyActorTraitProfile(actor, profile, { skillSelections = [] } = {}) {
+async function applyActorTraitProfile(actor, profile, { skillSelections = [], toolSelections = [] } = {}) {
   const targetActor = resolveTargetActor(actor);
   if (!targetActor || !profile || typeof profile !== "object") return 0;
 
   const updates = {};
   let changed = 0;
   const selectedSkills = [...new Set(ensureArray(skillSelections).map((value) => normalizeSkillSlug(value)).filter(Boolean))];
+  const selectedTools = [...new Set(ensureArray(toolSelections).map((value) => slugify(trimString(value))).filter(Boolean))];
   const traitKeys = [
     ...buildTraitKeysFromProfileBlock("savingThrows", profile?.savingThrows),
     ...buildTraitKeysFromProfileBlock("armor", profile?.armor),
     ...buildTraitKeysFromProfileBlock("weapons", profile?.weapons),
-    ...buildTraitKeysFromProfileBlock("tools", profile?.tools),
+    ...buildTraitKeysFromProfileBlock("tools", profile?.tools, { selectedOptionIds: selectedTools }),
     ...buildTraitKeysFromProfileBlock("languages", profile?.languages),
     ...buildTraitKeysFromProfileBlock("skills", profile?.skills, { selectedOptionIds: selectedSkills })
   ];
@@ -3369,7 +3664,8 @@ function buildTraitKeysFromProfileBlock(type, block, { selectedOptionIds = [] } 
     ...ensureArray(block.categoryIds),
     ...ensureArray(block.fixedIds),
     ...implicitOptionIds,
-    ...(type === "skills" ? selectedOptionIds : [])
+    ...(type === "skills" ? selectedOptionIds : []),
+    ...(type === "tools" ? selectedOptionIds : [])
   ];
 
   return [...new Set(values
@@ -3465,7 +3761,8 @@ function buildEmbeddedActorAdvancementStructure(sourceAdvancement, {
   classSourceId = null,
   targetLevel = 1,
   selectedSubclassSourceId = null,
-  optionSelections = {}
+  optionSelections = {},
+  traitSelections = {}
 } = {}) {
   const actorFeaturesBySourceId = buildActorFeatureSourceMap(actor, { classSourceId });
   const actorSubclassesBySourceId = buildActorItemSourceMap(actor, {
@@ -3557,6 +3854,16 @@ function buildEmbeddedActorAdvancementStructure(sourceAdvancement, {
       clone.value ??= {};
       clone.value.document = actorSubclass?.id ?? null;
       clone.value.uuid = actorSubclass?.uuid ?? null;
+    }
+    else if (clone.type === "Trait") {
+      const selections = ensureArray(traitSelections?.[id] ?? traitSelections?.[clone._id]);
+      if (selections.length) {
+        clone.value ??= {};
+        clone.value.chosen = [...new Set([
+          ...ensureArray(clone.value?.chosen),
+          ...selections
+        ])].filter(Boolean);
+      }
     }
 
     resolved[id] = clone;
@@ -4259,11 +4566,84 @@ function applySkillSelectionsToAdvancements(advancement, { skillSelections = [] 
   const normalizedSelections = [...new Set(ensureArray(skillSelections).map((value) => normalizeSkillSlug(value)).filter(Boolean))];
   for (const advancementEntry of Object.values(advancement)) {
     if (advancementEntry?.type !== "Trait") continue;
+    const mode = advancementEntry?.configuration?.mode || "default";
+    if (mode !== "default") continue;
     const advancementKind = advancementEntry?.flags?.[MODULE_ID]?.advancementKind ?? null;
-    if (advancementKind !== "skills") continue;
+    const configType = advancementEntry?.configuration?.type ?? null;
+    if (advancementKind !== "skills" && configType !== "skills") continue;
 
     advancementEntry.value ??= {};
     advancementEntry.value.chosen = normalizedSelections.map((slug) => `skills:${slug}`);
+  }
+}
+
+function applyToolSelectionsToAdvancements(advancement, { toolSelections = [] } = {}) {
+  if (!advancement || typeof advancement !== "object") return;
+  const normalizedSelections = [...new Set(ensureArray(toolSelections).map((slug) => normalizeToolSlug(slug)).filter(Boolean))];
+  if (!normalizedSelections.length) return;
+  for (const advancementEntry of Object.values(advancement)) {
+    if (advancementEntry?.type !== "Trait") continue;
+    const mode = advancementEntry?.configuration?.mode || "default";
+    if (mode !== "default") continue;
+    const advancementKind = advancementEntry?.flags?.[MODULE_ID]?.advancementKind ?? null;
+    const configType = advancementEntry?.configuration?.type ?? null;
+    if (advancementKind !== "tools" && configType !== "tools") continue;
+
+    advancementEntry.value ??= {};
+    advancementEntry.value.chosen = normalizedSelections.map((slug) => `tool:${slug}`);
+  }
+}
+
+function applySavingThrowSelectionsToAdvancements(advancement, { savingThrowSelections = [] } = {}) {
+  if (!advancement || typeof advancement !== "object") return;
+  const normalizedSelections = [...new Set(ensureArray(savingThrowSelections).map((code) => normalizeAbilityCode(code)).filter(Boolean))];
+  if (!normalizedSelections.length) return;
+  for (const advancementEntry of Object.values(advancement)) {
+    if (advancementEntry?.type !== "Trait") continue;
+    const mode = advancementEntry?.configuration?.mode || "default";
+    if (mode !== "default") continue;
+    if (advancementEntry?.flags?.[MODULE_ID]?.advancementKind !== "savingThrows") continue;
+
+    advancementEntry.value ??= {};
+    advancementEntry.value.chosen = normalizedSelections.map((ability) => `saves:${ability}`);
+  }
+}
+
+function applyLanguageSelectionsToAdvancements(advancement, { languageSelections = [] } = {}) {
+  if (!advancement || typeof advancement !== "object") return;
+  const normalizedSelections = [...new Set(ensureArray(languageSelections).map((slug) => slugify(trimString(slug))).filter(Boolean))];
+  if (!normalizedSelections.length) return;
+  for (const advancementEntry of Object.values(advancement)) {
+    if (advancementEntry?.type !== "Trait") continue;
+    const mode = advancementEntry?.configuration?.mode || "default";
+    if (mode !== "default") continue;
+    if (advancementEntry?.flags?.[MODULE_ID]?.advancementKind !== "languages") continue;
+
+    advancementEntry.value ??= {};
+    advancementEntry.value.chosen = normalizedSelections.map((slug) => `languages:${slug}`);
+  }
+}
+
+function applyTraitSelectionsToAdvancements(advancement, { traitSelections = {} } = {}) {
+  if (!advancement || typeof advancement !== "object") return;
+  for (const [id, advancementEntry] of Object.entries(advancement)) {
+    if (advancementEntry?.type !== "Trait" && advancementEntry?.type !== "ItemChoice") continue;
+    const originalAdvancementId = advancementEntry?.flags?.[MODULE_ID]?.sourceAdvancementId || advancementEntry?.flags?.[MODULE_ID]?.semanticAdvancementId || id;
+    const selections = ensureArray(traitSelections?.[id] ?? traitSelections?.[originalAdvancementId]);
+    if (selections.length) {
+      advancementEntry.value ??= {};
+      if (advancementEntry.type === "Trait") {
+        advancementEntry.value.chosen = [...new Set([
+          ...ensureArray(advancementEntry.value?.chosen),
+          ...selections
+        ])].filter(Boolean);
+      } else if (advancementEntry.type === "ItemChoice") {
+        advancementEntry.value.added ??= {};
+        for (const sel of selections) {
+          advancementEntry.value.added[sel] = sel;
+        }
+      }
+    }
   }
 }
 

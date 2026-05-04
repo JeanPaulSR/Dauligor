@@ -3,7 +3,8 @@ export const MODULE_ID = "dauligor-pairing";
 export const SETTINGS = {
   defaultImportUrl: "default-import-url",
   defaultClassCatalogUrl: "default-class-catalog-url",
-  defaultClassFolderPath: "default-class-folder-path"
+  defaultClassFolderPath: "default-class-folder-path",
+  apiEndpointMode: "api-endpoint-mode"
 };
 
 export const SAMPLE_FILE = "modules/dauligor-pairing/data/sample-character.json";

@@ -123,6 +123,14 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       this._instance.setSelectedEntryIds(selectedEntryIds);
       if (targetLevel !== undefined) this._instance.setTargetLevel(targetLevel);
       if (status !== undefined) this._instance.setStatus(status, statusLevel);
+
+      const mode = game.settings.get(MODULE_ID, SETTINGS.apiEndpointMode) || "local";
+      const host = mode === "production" ? "https://www.dauligor.com" : "http://localhost:3000";
+      this._instance._state.sourceCatalogUrl = `${host}/api/module/sources`;
+
+      this._instance._sourcesLoaded = false;
+      this._instance._sourcesLoading = false;
+
       this._instance.render({ force: true });
       this._instance.maximize?.();
       return this._instance;
@@ -173,24 +181,28 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
     this._template = IMPORTER_TEMPLATE;
     this._actor = actor ?? null;
-      this._state = {
-        importTypeId,
-        sourceTypeId: normalizedSourceTypeIds[0] ?? getDefaultSourceTypeId(importTypeId),
-        selectedSourceIds: normalizedSourceTypeIds,
-        sourceSearch: "",
-        sourceCatalogUrl: SOURCE_LIBRARY_FILE,
-        catalogUrl: game.settings.get(MODULE_ID, SETTINGS.defaultClassCatalogUrl) || CLASS_CATALOG_FILE,
-        folderPath: game.settings.get(MODULE_ID, SETTINGS.defaultClassFolderPath) || "Classes",
-        targetLevel: clampLevel(targetLevel ?? 1),
-        selectedEntryIds: normalizeSelectionIds(selectedEntryIds),
-        status: status ?? "",
-        statusLevel: statusLevel ?? ""
-      };
-      this._sourceCatalog = null;
-      this._sourceEntries = [];
-      this._sourcesLoaded = false;
-      this._sourcesLoading = false;
-    }
+    this._state = {
+      importTypeId,
+      sourceTypeId: normalizedSourceTypeIds[0] ?? getDefaultSourceTypeId(importTypeId),
+      selectedSourceIds: normalizedSourceTypeIds,
+      sourceSearch: "",
+      sourceCatalogUrl: (function() {
+        const mode = game.settings.get(MODULE_ID, SETTINGS.apiEndpointMode) || "local";
+        const host = mode === "production" ? "https://www.dauligor.com" : "http://localhost:3000";
+        return `${host}/api/module/sources`;
+      })(),
+      catalogUrl: game.settings.get(MODULE_ID, SETTINGS.defaultClassCatalogUrl) || CLASS_CATALOG_FILE,
+      folderPath: game.settings.get(MODULE_ID, SETTINGS.defaultClassFolderPath) || "Classes",
+      targetLevel: clampLevel(targetLevel ?? 1),
+      selectedEntryIds: normalizeSelectionIds(selectedEntryIds),
+      status: status ?? "",
+      statusLevel: statusLevel ?? ""
+    };
+    this._sourceCatalog = null;
+    this._sourceEntries = [];
+    this._sourcesLoaded = false;
+    this._sourcesLoading = false;
+  }
 
   _configureRenderParts() {
     return {
@@ -287,13 +299,24 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     if (this._sourcesLoading) return;
     if (this._sourcesLoaded && !force) return;
 
+    const sourceUrl = this._state.sourceCatalogUrl;
+    if (!sourceUrl || !/^https?:\/\//i.test(sourceUrl)) {
+      this._sourcesLoading = false;
+      this._sourcesLoaded = false;
+      this._state.status = "No source library URL configured. Set one in Module Settings → Dauligor Pairing → Source library URL.";
+      this._state.statusLevel = "warn";
+      this._renderSourceTypesPanel();
+      this._renderFooterPanel();
+      return;
+    }
+
     this._sourcesLoading = true;
     this._state.status = force ? "Reloading source library..." : "Loading source library...";
     this._state.statusLevel = "";
     this._renderSourceTypesPanel();
     this._renderFooterPanel();
 
-    const catalog = await fetchSourceCatalog(this._state.sourceCatalogUrl);
+    const catalog = await fetchSourceCatalog(sourceUrl);
     this._sourceCatalog = catalog;
     this._sourceEntries = ensureArray(catalog?.entries)
       .filter((entry) => ensureArray(entry.supportedImportTypes).includes("classes-subclasses") || entry.classCatalogUrl)
@@ -361,20 +384,20 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       </section>
     `;
 
-      this._panelTypes.querySelectorAll(`[data-action="select-import-type"]`).forEach((button) => {
-        button.addEventListener("click", async () => {
-          const importTypeId = button.dataset.importTypeId;
-          if (!importTypeId) return;
-          this._state.importTypeId = importTypeId;
-          this._state.sourceTypeId = getDefaultSourceTypeId(importTypeId);
-          this._state.selectedSourceIds = importTypeId === "classes-subclasses"
-            ? []
-            : normalizeSourceTypeIds(this._state.sourceTypeId);
-          this._state.sourceSearch = "";
-          this._renderPanels();
-          await this._ensureWizardSourcesLoaded();
-        });
+    this._panelTypes.querySelectorAll(`[data-action="select-import-type"]`).forEach((button) => {
+      button.addEventListener("click", async () => {
+        const importTypeId = button.dataset.importTypeId;
+        if (!importTypeId) return;
+        this._state.importTypeId = importTypeId;
+        this._state.sourceTypeId = getDefaultSourceTypeId(importTypeId);
+        this._state.selectedSourceIds = importTypeId === "classes-subclasses"
+          ? []
+          : normalizeSourceTypeIds(this._state.sourceTypeId);
+        this._state.sourceSearch = "";
+        this._renderPanels();
+        await this._ensureWizardSourcesLoaded();
       });
+    });
   }
 
   _renderSourceTypesPanel() {
@@ -399,7 +422,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     const rowsHtml = this._state.importTypeId === "classes-subclasses" && this._sourcesLoading
       ? `<div class="dauligor-wizard__empty">Loading available sources...</div>`
       : this._state.importTypeId === "classes-subclasses" && visibleSources.length
-      ? `
+        ? `
         <div class="dauligor-wizard__source-table">
           <div class="dauligor-wizard__source-header">
             <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--select">
@@ -418,9 +441,9 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
           </div>
           <div class="dauligor-wizard__source-body">
             ${visibleSources.map((source) => {
-              const isSelected = selectedSourceIds.has(source.id);
-              const isReady = source.status === "ready";
-              return `
+          const isSelected = selectedSourceIds.has(source.id);
+          const isReady = source.status === "ready";
+          return `
                 <label class="dauligor-wizard__source-row ${isSelected ? "dauligor-wizard__source-row--selected" : ""} ${!isReady ? "dauligor-wizard__source-row--disabled" : ""}">
                   <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--select">
                     <input
@@ -441,12 +464,12 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
                   <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--count">${foundry.utils.escapeHTML(String(source.count ?? 0))}</span>
                 </label>
               `;
-            }).join("")}
+        }).join("")}
           </div>
         </div>
       `
-      : visibleSources.length
-      ? visibleSources.map((source) => `
+        : visibleSources.length
+          ? visibleSources.map((source) => `
         <button
           type="button"
         class="dauligor-wizard__choice ${source.id === this._state.sourceTypeId ? "dauligor-wizard__choice--active" : ""} ${source.status !== "ready" ? "dauligor-wizard__choice--disabled" : ""}"
@@ -468,7 +491,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
           ` : ""}
         </button>
       `).join("")
-      : `<div class="dauligor-wizard__empty">${this._state.importTypeId === "classes-subclasses" ? "No sources matched the current search." : "No source types match the current search."}</div>`;
+          : `<div class="dauligor-wizard__empty">${this._state.importTypeId === "classes-subclasses" ? "No sources matched the current search." : "No source types match the current search."}</div>`;
 
     this._panelSources.innerHTML = `
       <section class="dauligor-wizard__section">
@@ -488,8 +511,8 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
                 spellcheck="false"
               >
               ${this._state.importTypeId === "classes-subclasses"
-                ? `<button type="button" class="dauligor-wizard__toolbar-button" data-action="source-reload">Reload</button>`
-                : ""}
+        ? `<button type="button" class="dauligor-wizard__toolbar-button" data-action="source-reload">Reload</button>`
+        : ""}
               <button type="button" class="dauligor-wizard__toolbar-button" data-action="reset-source-search">Reset</button>
             </div>
             <div class="dauligor-wizard__choice-list dauligor-wizard__choice-list--compact dauligor-wizard__choice-list--scroll">${rowsHtml}</div>
@@ -606,10 +629,17 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     }
 
     if (this._state.importTypeId === "classes-subclasses") {
-      const catalogUrls = [...new Set(selectedSources.map((source) => source.classCatalogUrl).filter(Boolean))];
+      const mode = game.settings.get(MODULE_ID, SETTINGS.apiEndpointMode) || "local";
+      const host = mode === "production" ? "https://www.dauligor.com" : "http://localhost:3000";
+      const catalogUrls = [...new Set(selectedSources.map((source) => source.classCatalogUrl).filter(Boolean))].map((url) => {
+        if (!/^https?:\/\//i.test(url)) {
+          return `${host}/api/module/${url}`;
+        }
+        return url;
+      });
       await openDauligorClassBrowser({
         actor: this._actor,
-        catalogUrl: catalogUrls[0] ?? sourceType?.classCatalogUrl ?? this._state.catalogUrl,
+        catalogUrl: catalogUrls[0] ?? `${host}/api/module/uah/classes/catalog.json`,
         catalogUrls,
         folderPath: this._state.folderPath,
         targetLevel: this._state.targetLevel,
@@ -958,8 +988,8 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       <div class="dauligor-class-browser__footer-bar">
         <div class="dauligor-class-browser__status ${this._state.statusLevel ? `dauligor-class-browser__status--${this._state.statusLevel}` : ""}">
           ${this._state.status ? foundry.utils.escapeHTML(this._state.status) : (selectedClass
-            ? `Selected ${foundry.utils.escapeHTML(selectedClass.name)}${selectedSubclass ? ` / ${foundry.utils.escapeHTML(selectedSubclass.name)}` : ""}.`
-            : "Select a class to continue.")}
+        ? `Selected ${foundry.utils.escapeHTML(selectedClass.name)}${selectedSubclass ? ` / ${foundry.utils.escapeHTML(selectedSubclass.name)}` : ""}.`
+        : "Select a class to continue.")}
         </div>
         <div class="dauligor-class-browser__controls">
           ${destinationHtml}
@@ -1690,7 +1720,11 @@ class DauligorClassOptionsApp extends HandlebarsApplicationMixin(ApplicationV2) 
         optionSelections: this._state?.optionSelections ?? {},
         hpMode: this._state?.hpMode ?? null,
         spellMode: this._state?.spellMode ?? null,
-        skillSelections: this._state?.skillSelections ?? []
+        skillSelections: this._state?.skillSelections ?? [],
+        toolSelections: this._state?.toolSelections ?? [],
+        savingThrowSelections: this._state?.savingThrowSelections ?? [],
+        languageSelections: this._state?.languageSelections ?? [],
+        traitSelections: this._state?.traitSelections ?? {}
       }
     });
   }
@@ -1760,15 +1794,15 @@ class DauligorClassOptionsApp extends HandlebarsApplicationMixin(ApplicationV2) 
           </header>
           <div class="dauligor-class-options__choice-list">
             ${workflow.subclassItems.map((item) => {
-              const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
-              const isChecked = workflow.selection.subclassSourceId === sourceId;
-              return `
+        const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
+        const isChecked = workflow.selection.subclassSourceId === sourceId;
+        return `
                 <label class="dauligor-class-options__radio ${workflow.selection.includeSubclass ? "" : "dauligor-class-options__radio--disabled"}">
                   <input type="radio" name="subclass-source-id" value="${foundry.utils.escapeHTML(sourceId)}" ${isChecked ? "checked" : ""} ${workflow.selection.includeSubclass ? "" : "disabled"}>
                   <span>${foundry.utils.escapeHTML(item.name)}</span>
                 </label>
               `;
-            }).join("")}
+      }).join("")}
           </div>
         </section>
       `
@@ -1847,15 +1881,15 @@ class DauligorClassOptionsApp extends HandlebarsApplicationMixin(ApplicationV2) 
           </header>
           <div class="dauligor-class-options__choice-list">
             ${workflow.skillChoices.allOptions.map((slug) => {
-              const skill = CONFIG.DND5E.skills?.[slug] ?? {};
-              const isFixed = workflow.skillChoices.fixed.includes(slug);
-              const isChecked = workflow.selection.skillSelections.includes(slug);
-              const currentChosen = workflow.selection.skillSelections.filter((selected) => !workflow.skillChoices.fixed.includes(selected));
-              const optionLimitReached = !isFixed
-                && !isChecked
-                && workflow.skillChoices.choiceCount > 0
-                && currentChosen.length >= workflow.skillChoices.choiceCount;
-              return `
+        const skill = CONFIG.DND5E.skills?.[slug] ?? {};
+        const isFixed = workflow.skillChoices.fixed.includes(slug);
+        const isChecked = workflow.selection.skillSelections.includes(slug);
+        const currentChosen = workflow.selection.skillSelections.filter((selected) => !workflow.skillChoices.fixed.includes(selected));
+        const optionLimitReached = !isFixed
+          && !isChecked
+          && workflow.skillChoices.choiceCount > 0
+          && currentChosen.length >= workflow.skillChoices.choiceCount;
+        return `
                 <label class="dauligor-class-options__checkbox ${(isFixed || optionLimitReached) ? "dauligor-class-options__checkbox--disabled" : ""}">
                   <input
                     type="checkbox"
@@ -1870,7 +1904,7 @@ class DauligorClassOptionsApp extends HandlebarsApplicationMixin(ApplicationV2) 
                   </span>
                 </label>
               `;
-            }).join("")}
+      }).join("")}
           </div>
         </section>
       `
@@ -2137,7 +2171,11 @@ class DauligorClassOptionsApp extends HandlebarsApplicationMixin(ApplicationV2) 
         optionSelections: this._state.optionSelections,
         hpMode: this._state.hpMode,
         spellMode: this._state.spellMode,
-        skillSelections: this._state.skillSelections
+        skillSelections: this._state.skillSelections,
+        toolSelections: this._state.toolSelections,
+        savingThrowSelections: this._state.savingThrowSelections,
+        languageSelections: this._state.languageSelections,
+        traitSelections: this._state.traitSelections
       }
     });
 
@@ -2256,6 +2294,25 @@ async function runDauligorClassImportSequence({
     progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
     throwIfSequenceCancelled(sequence);
 
+    console.log("Dauligor tool choices check:", {
+      actorPresent: !!actor,
+      toolChoicesPresent: !!workflow.toolChoices,
+      choiceCount: workflow.toolChoices?.choiceCount,
+      allOptionsLength: workflow.toolChoices?.allOptions?.length
+    });
+
+    if (actor && workflow.toolChoices?.choiceCount > 0 && workflow.toolChoices?.allOptions?.length) {
+      const toolSelections = await runToolSelectionStep({ workflow, sequence, progress });
+      if (toolSelections === "cancelled") throw new DauligorImportSequenceCancelledError();
+      if (toolSelections) state.toolSelections = toolSelections;
+    } else {
+      progress.markStep("tools", "skipped", "No class tool choices are available.");
+    }
+
+    workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+    progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
+    throwIfSequenceCancelled(sequence);
+
     for (const group of workflow.optionGroups.filter((candidate) => candidate.options.length && candidate.maxSelections > 0)) {
       const selectedSourceIds = await runOptionGroupStep({ workflow, group, sequence, progress });
       if (selectedSourceIds === "cancelled") throw new DauligorImportSequenceCancelledError();
@@ -2299,7 +2356,11 @@ async function runDauligorClassImportSequence({
         hpMode: state.hpMode,
         hpCustomFormula: state.hpCustomFormula,
         spellMode: state.spellMode,
-        skillSelections: state.skillSelections
+        skillSelections: state.skillSelections,
+        toolSelections: state.toolSelections,
+        savingThrowSelections: state.savingThrowSelections,
+        languageSelections: state.languageSelections,
+        traitSelections: state.traitSelections
       }
     });
 
@@ -2350,7 +2411,11 @@ function createImportSequenceState(workflow, initialTargetLevel = 1, preferredSu
     hpCustomFormula: resolveHpCustomFormulaForWorkflow(workflow?.selection?.hpCustomFormula, workflow),
     spellMode: workflow?.selection?.spellMode ?? (workflow?.hasSpellcasting ? "placeholder" : null),
     optionSelections: foundry.utils.deepClone(workflow?.selection?.optionSelections ?? {}),
-    skillSelections: foundry.utils.deepClone(workflow?.selection?.skillSelections ?? [])
+    skillSelections: foundry.utils.deepClone(workflow?.selection?.skillSelections ?? []),
+    toolSelections: foundry.utils.deepClone(workflow?.selection?.toolSelections ?? []),
+    savingThrowSelections: foundry.utils.deepClone(workflow?.selection?.savingThrowSelections ?? []),
+    languageSelections: foundry.utils.deepClone(workflow?.selection?.languageSelections ?? []),
+    traitSelections: foundry.utils.deepClone(workflow?.selection?.traitSelections ?? {})
   };
 }
 
@@ -2403,7 +2468,11 @@ function buildWorkflowFromSequenceState(payload, { entry = null, actor = null, s
       hpMode: state.hpMode,
       hpCustomFormula: state.hpCustomFormula,
       spellMode: state.spellMode,
-      skillSelections: state.skillSelections
+      skillSelections: state.skillSelections,
+      toolSelections: state.toolSelections,
+      savingThrowSelections: state.savingThrowSelections,
+      languageSelections: state.languageSelections,
+      traitSelections: state.traitSelections
     }
   });
 }
@@ -2418,6 +2487,9 @@ function buildImportSequenceSteps(workflow, { actor = null } = {}) {
     steps.push({ id: "hp", label: "Choose hit point mode" });
     if (workflow?.skillChoices?.choiceCount > 0 && workflow?.skillChoices?.allOptions?.length) {
       steps.push({ id: "skills", label: "Choose skill proficiencies" });
+    }
+    if (workflow?.toolChoices?.choiceCount > 0 && workflow?.toolChoices?.allOptions?.length) {
+      steps.push({ id: "tools", label: "Choose tool proficiencies" });
     }
   }
 
@@ -2509,9 +2581,9 @@ async function runSubclassStep({ workflow, sequence, progress }) {
     renderBody: (app) => `
       <div class="dauligor-class-options__choice-list">
         ${workflow.subclassItems.map((item) => {
-          const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
-          const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
-          return `
+      const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
+      const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
+      return `
             <label class="dauligor-class-options__radio">
               <input type="radio" name="subclass-source-id" value="${foundry.utils.escapeHTML(sourceId)}" ${app._state.subclassSourceId === sourceId ? "checked" : ""}>
               <span class="dauligor-sequence__choice-copy">
@@ -2520,7 +2592,7 @@ async function runSubclassStep({ workflow, sequence, progress }) {
               </span>
             </label>
           `;
-        }).join("")}
+    }).join("")}
       </div>
     `,
     onRenderBody: (app, root) => {
@@ -2754,12 +2826,12 @@ async function runSkillSelectionStep({ workflow, sequence, progress }) {
     renderBody: (app) => `
       <div class="dauligor-class-options__choice-list">
         ${workflow.skillChoices.allOptions.map((slug) => {
-          const skill = CONFIG.DND5E.skills?.[slug] ?? {};
-          const isFixed = fixedSkills.has(slug);
-          const isChecked = app._state.selectedSkills.includes(slug);
-          const skillLabel = getConfigLabel(skill.label, slug);
-          const abilityLabel = formatAbilityAbbreviation(skill.ability);
-          return `
+      const skill = CONFIG.DND5E.skills?.[slug] ?? {};
+      const isFixed = fixedSkills.has(slug);
+      const isChecked = app._state.selectedSkills.includes(slug);
+      const skillLabel = getConfigLabel(skill.label, slug);
+      const abilityLabel = formatAbilityAbbreviation(skill.ability);
+      return `
             <label class="dauligor-class-options__checkbox ${isFixed ? "dauligor-class-options__checkbox--disabled" : ""}">
               <input
                 type="checkbox"
@@ -2774,7 +2846,7 @@ async function runSkillSelectionStep({ workflow, sequence, progress }) {
               </span>
             </label>
           `;
-        }).join("")}
+    }).join("")}
       </div>
     `,
     onRenderBody: (app, root) => {
@@ -2827,6 +2899,110 @@ async function runSkillSelectionStep({ workflow, sequence, progress }) {
   return result.value;
 }
 
+async function runToolSelectionStep({ workflow, sequence, progress }) {
+  const stepId = "tools";
+  progress.markStep(stepId, "active", "Choose the class tool proficiency options.");
+  progress.setStatus("Waiting for tool proficiency choices...");
+  const fixedTools = new Set(workflow.toolChoices.fixed);
+  console.log("runToolSelectionStep trace:", {
+    fixedTools: [...fixedTools],
+    allOptions: workflow.toolChoices.allOptions,
+    selectedTools: [...workflow.selection.toolSelections],
+    choiceCount: workflow.toolChoices.choiceCount
+  });
+
+  const result = await DauligorSequencePromptApp.prompt({
+    title: "Tool Proficiencies",
+    subtitle: `Choose ${numberToWord(workflow.toolChoices.choiceCount)} tool proficienc${workflow.toolChoices.choiceCount === 1 ? "y" : "ies"}.`,
+    width: 660,
+    height: 520,
+    state: {
+      selectedTools: [...workflow.selection.toolSelections]
+    },
+    renderBody: (app) => `
+      <div class="dauligor-class-options__choice-list">
+        ${workflow.toolChoices.allOptions.map((slug) => {
+      const tool = CONFIG.DND5E.tools?.[slug] ?? {};
+      const isFixed = fixedTools.has(slug);
+      const isChecked = app._state.selectedTools.includes(slug);
+      const toolLabel = getConfigLabel(tool.label, slug);
+      const abilityLabel = formatAbilityAbbreviation(tool.ability);
+      return `
+            <label class="dauligor-class-options__checkbox ${isFixed ? "dauligor-class-options__checkbox--disabled" : ""}">
+              <input
+                type="checkbox"
+                data-action="toggle-tool"
+                data-tool-slug="${foundry.utils.escapeHTML(slug)}"
+                ${isChecked ? "checked" : ""}
+                ${isFixed ? "disabled" : ""}
+              >
+              <span class="dauligor-class-options__checkbox-copy">
+                <span class="dauligor-class-options__checkbox-title">${foundry.utils.escapeHTML(toolLabel)}</span>
+                <span class="dauligor-class-options__checkbox-meta">${foundry.utils.escapeHTML(abilityLabel)}${isFixed ? " - Fixed" : ""}</span>
+              </span>
+            </label>
+          `;
+    }).join("")}
+      </div>
+    `,
+    onRenderBody: (app, root) => {
+      root.querySelectorAll(`[data-action="toggle-tool"]`).forEach((input) => {
+        input.addEventListener("change", () => {
+          const slug = input.dataset.toolSlug;
+          if (!slug) return;
+
+          const fixed = new Set(workflow.toolChoices.fixed);
+          const current = new Set(app._state.selectedTools ?? []);
+          if (input.checked) current.add(slug);
+          else current.delete(slug);
+
+          const chosen = [...current].filter((selected) => !fixed.has(selected));
+          console.log("toggle-tool trace:", {
+            slug,
+            inputChecked: input.checked,
+            fixed: [...fixed],
+            current: [...current],
+            chosen,
+            maxCount: workflow.toolChoices.choiceCount
+          });
+          if (chosen.length > workflow.toolChoices.choiceCount) {
+            notifyWarn(`Choose only ${workflow.toolChoices.choiceCount} tool proficiency option(s).`);
+            input.checked = false;
+            return;
+          }
+
+          app.updateState({ selectedTools: [...current] });
+        });
+      });
+    },
+    actions: [
+      { id: "confirm", label: "OK", primary: true },
+      { id: "cancel", label: "Cancel" },
+      { id: "skip", label: "Skip" }
+    ],
+    onAction: async (app, actionId) => {
+      if (actionId === "cancel") return { status: "cancelled" };
+      if (actionId === "skip") return { status: "skipped" };
+
+      const chosen = [...new Set(app._state.selectedTools ?? [])].filter((selected) => !fixedTools.has(selected));
+      if (chosen.length !== workflow.toolChoices.choiceCount) {
+        notifyWarn(`Choose exactly ${workflow.toolChoices.choiceCount} tool proficiency option(s).`);
+        return false;
+      }
+
+      return { status: "confirmed", value: [...new Set(app._state.selectedTools ?? [])] };
+    }
+  }, sequence);
+
+  if (result.status === "cancelled") return "cancelled";
+  if (result.status === "skipped") {
+    progress.markStep(stepId, "skipped", "Kept the current tool selections.");
+    return undefined;
+  }
+  progress.markStep(stepId, "complete", `Selected ${result.value.length} tool proficiency option(s).`);
+  return result.value;
+}
+
 async function runOptionGroupStep({ workflow, group, sequence, progress }) {
   const stepId = `option:${group.sourceId}`;
   progress.markStep(stepId, "active", `Choose ${group.maxSelections} option(s) from ${group.name || group.featureName || "this pool"}.`);
@@ -2842,9 +3018,9 @@ async function runOptionGroupStep({ workflow, group, sequence, progress }) {
     renderBody: (app) => `
       <div class="dauligor-sequence__option-list">
         ${group.options.map((item) => {
-          const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
-          const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
-          return `
+      const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
+      const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
+      return `
             <label class="dauligor-sequence__option-row">
               <span class="dauligor-sequence__option-check">
                 <input
@@ -2858,7 +3034,7 @@ async function runOptionGroupStep({ workflow, group, sequence, progress }) {
               <span class="dauligor-sequence__option-source">${foundry.utils.escapeHTML(sourceLabel)}</span>
             </label>
           `;
-        }).join("")}
+    }).join("")}
       </div>
     `,
     onRenderBody: (app, root) => {
