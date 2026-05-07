@@ -1,28 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { auth, db, updateProfile, updatePassword, updateEmail, OperationType, handleFirestoreError } from '../../lib/firebase';
+import { auth, updateProfile, updatePassword, updateEmail, OperationType, reportClientError } from '../../lib/firebase';
 import { usernameToEmail } from '../../lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { useSearchParams } from 'react-router-dom';
+import { fetchCollection, upsertDocument, queryD1 } from '../../lib/d1';
+import { useWikiPreview } from '../../lib/wikiPreviewContext';
 import { Button } from '../../components/ui/button';
+
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Separator } from '../../components/ui/separator';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { User, Shield, Key, Palette, UserCircle, Save, CheckCircle2, AlertCircle, CheckCircle2 as CheckCircle, Palette as PaletteIcon, Key as KeyIcon, UserCircle as UserIcon, Save as SaveIcon, AlertCircle as AlertIcon } from 'lucide-react';
+import { User, Shield, Key, Palette, UserCircle, Save, CheckCircle2, AlertCircle, CheckCircle2 as CheckCircle, Palette as PaletteIcon, Key as KeyIcon, UserCircle as UserIcon, Save as SaveIcon, AlertCircle as AlertIcon, Wrench, AlertTriangle, Trash2, RefreshCw } from 'lucide-react';
 
 export default function Settings({ user, userProfile }: { user: any, userProfile: any }) {
-  const [activeSection, setActiveSection] = useState<'profile' | 'security' | 'appearance'>('profile');
-  const [displayName, setDisplayName] = useState(userProfile?.displayName || '');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const { refreshProfile } = useWikiPreview();
+  
+  const [activeSection, setActiveSection] = useState<'profile' | 'security' | 'appearance' | 'maintenance'>(
+    (tabParam === 'maintenance' && userProfile?.role === 'admin') ? 'maintenance' : 'profile'
+  );
+  const [displayName, setDisplayName] = useState(userProfile?.display_name || '');
   const [pronouns, setPronouns] = useState(userProfile?.pronouns || '');
   const [bio, setBio] = useState(userProfile?.bio || '');
-  const [avatarUrl, setAvatarUrl] = useState(userProfile?.avatarUrl || '');
+  const [avatarUrl, setAvatarUrl] = useState(userProfile?.avatar_url || '');
   const [theme, setTheme] = useState(userProfile?.theme || 'parchment');
-  const [accentColor, setAccentColor] = useState(userProfile?.accentColor || '#c5a059');
+  const [accentColor, setAccentColor] = useState(userProfile?.accent_color || '#c5a059');
   
   const [username, setUsername] = useState(userProfile?.username || '');
-  const [hideUsername, setHideUsername] = useState(userProfile?.hideUsername || false);
-  const [isPrivate, setIsPrivate] = useState(userProfile?.isPrivate || false);
-  const [recoveryEmail, setRecoveryEmail] = useState(userProfile?.recoveryEmail || '');
+  const [hideUsername, setHideUsername] = useState(userProfile?.hide_username || false);
+  const [isPrivate, setIsPrivate] = useState(userProfile?.is_private || false);
+  const [recoveryEmail, setRecoveryEmail] = useState(userProfile?.recovery_email || '');
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -30,19 +39,32 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  
+  // Maintenance State
+  const [safetyLock, setSafetyLock] = useState('');
+  const [isPurging, setIsPurging] = useState(false);
+  const [purgeStatus, setPurgeStatus] = useState('');
+
+  const isAdmin = userProfile?.role === 'admin';
+
+  useEffect(() => {
+    if (tabParam === 'maintenance' && isAdmin) {
+      setActiveSection('maintenance');
+    }
+  }, [tabParam, isAdmin]);
 
   useEffect(() => {
     if (userProfile) {
-      setDisplayName(userProfile.displayName || '');
+      setDisplayName(userProfile.display_name || '');
       setPronouns(userProfile.pronouns || '');
       setBio(userProfile.bio || '');
-      setAvatarUrl(userProfile.avatarUrl || '');
+      setAvatarUrl(userProfile.avatar_url || '');
       setTheme(userProfile.theme || 'parchment');
-      setAccentColor(userProfile.accentColor || (userProfile.theme === 'parchment' ? '#c5a059' : '#3b82f6'));
+      setAccentColor(userProfile.accent_color || (userProfile.theme === 'parchment' ? '#c5a059' : '#3b82f6'));
       setUsername(userProfile.username || '');
-      setHideUsername(userProfile.hideUsername || false);
-      setIsPrivate(userProfile.isPrivate || false);
-      setRecoveryEmail(userProfile.recoveryEmail || '');
+      setHideUsername(userProfile.hide_username || false);
+      setIsPrivate(userProfile.is_private || false);
+      setRecoveryEmail(userProfile.recovery_email || '');
     }
   }, [userProfile]);
 
@@ -91,28 +113,27 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
         }
       }
 
-      // Update Firestore Profile
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        displayName,
+      // Update D1 Profile
+      await upsertDocument('users', user.uid, {
+        display_name: displayName,
         pronouns,
         bio,
-        avatarUrl,
+        avatar_url: avatarUrl,
         theme,
-        accentColor,
+        accent_color: accentColor,
         username,
-        hideUsername,
-        isPrivate,
-        recoveryEmail
+        hide_username: hideUsername,
+        is_private: isPrivate,
+        recovery_email: recoveryEmail,
+        updated_at: new Date().toISOString()
       });
 
+      // Refresh the app-wide profile state
+      await refreshProfile();
       setSuccess('Profile updated successfully!');
     } catch (err: any) {
       console.error('Update profile error:', err);
       setError(err.message || 'Failed to update profile');
-      if (err.message !== 'For security, please log out and log back in before changing your username.') {
-        handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
-      }
     } finally {
       setLoading(false);
     }
@@ -192,6 +213,14 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
             icon={<Key className="w-4 h-4" />} 
             label="Security" 
           />
+          {isAdmin && (
+            <SettingsNavButton 
+              active={activeSection === 'maintenance'} 
+              onClick={() => setActiveSection('maintenance')}
+              icon={<Wrench className="w-4 h-4" />} 
+              label="Maintenance" 
+            />
+          )}
         </div>
 
         <div className="md:col-span-3 space-y-8">
@@ -234,7 +263,7 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
                           <label className="label-text text-ink/60">Avatar</label>
                           <ImageUpload
                             currentImageUrl={avatarUrl}
-                            storagePath={`images/users/${userProfile?.uid || 'avatar'}/`}
+                            storagePath={`images/users/${userProfile?.id || 'avatar'}/`}
                             onUpload={(url) => setAvatarUrl(url)}
                           />
                           <p className="muted-text italic">Provide a direct link to an image or upload one. Leave empty for no avatar.</p>
@@ -489,6 +518,85 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
               </Card>
             </div>
           )}
+          
+          {activeSection === 'maintenance' && isAdmin && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <Card className="border-gold/20 bg-card shadow-xl relative overflow-hidden">
+                <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/paper-fibers.png')]" />
+                
+                <CardHeader className="border-b border-gold/10 pb-6">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="h2-title flex items-center gap-3">
+                      <Wrench className="text-gold w-8 h-8" /> Maintenance
+                    </CardTitle>
+                    <Badge variant="outline" className="border-blood text-blood bg-blood/5 gap-1.5 px-3 py-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Admin Only
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-8 space-y-8">
+                  <div className="bg-blood/5 border border-blood/20 p-6 rounded-2xl space-y-4">
+                    <div className="flex items-start gap-4">
+                      <div className="bg-blood/10 p-3 rounded-full">
+                        <AlertTriangle className="text-blood w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="font-serif text-xl font-bold text-blood">Danger Zone Safety Lock</h3>
+                        <p className="text-sm text-ink/60 italic">These actions are irreversible and will permanently delete data from the archive. You must type <strong>PURGE</strong> to unlock the tools below.</p>
+                      </div>
+                    </div>
+                    
+                    <div className="max-w-xs">
+                      <Input 
+                        value={safetyLock}
+                        onChange={e => setSafetyLock(e.target.value)}
+                        placeholder="Type PURGE to unlock"
+                        className={`h-12 text-center font-mono font-black tracking-[0.5em] transition-all ${safetyLock === 'PURGE' ? 'border-blood bg-blood/10 text-blood' : 'border-gold/10 bg-background/50'}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-6">
+                    <MaintenanceCard
+                      title="Spells"
+                      description="Deletes all spell records. Use this before a full spell re-import."
+                      onPurge={() => handlePurge('spells', ['spells'])}
+                      disabled={safetyLock !== 'PURGE' || isPurging}
+                    />
+                    <MaintenanceCard 
+                      title="Tags & Taxonomy" 
+                      description="Deletes all tags and tag groups. This will disconnect tags from all existing items."
+                      onPurge={() => handlePurge('tags', ['tags', 'tagGroups'])}
+                      disabled={safetyLock !== 'PURGE' || isPurging}
+                    />
+                    <MaintenanceCard 
+                      title="Classes & Subclasses" 
+                      description="Deletes all class and subclass data. Linked features will be orphaned."
+                      onPurge={() => handlePurge('classes', ['classes', 'features', 'scalingColumns'])}
+                      disabled={safetyLock !== 'PURGE' || isPurging}
+                    />
+                    <MaintenanceCard 
+                      title="Sources & Documents" 
+                      description="Deletes all source metadata and book entries. This is the nuclear option."
+                      onPurge={() => handlePurge('sources', ['sources'])}
+                      disabled={safetyLock !== 'PURGE' || isPurging}
+                    />
+                  </div>
+
+                  {isPurging && (
+                    <div className="p-6 bg-gold/5 border border-gold/20 rounded-2xl flex flex-col items-center gap-4 animate-pulse">
+                      <RefreshCw className="w-8 h-8 text-gold animate-spin" />
+                      <div className="text-center">
+                        <p className="font-bold text-gold">Purge in Progress...</p>
+                        <p className="text-xs text-ink/60 mt-1">{purgeStatus}</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Status Messages */}
           <div className="fixed bottom-8 right-8 z-50 space-y-2">
@@ -507,6 +615,48 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
           </div>
         </div>
       </div>
+    </div>
+  );
+
+  async function handlePurge(label: string, collections: string[]) {
+    if (!window.confirm(`FINAL WARNING: This will permanently delete ALL ${label} data from D1. Are you sure?`)) return;
+    
+    setIsPurging(true);
+    setSuccess('');
+    setError('');
+    
+    try {
+      for (const collectionName of collections) {
+        setPurgeStatus(`Purging ${collectionName}...`);
+        // We use a direct DELETE query for the entire table
+        // D1 table names are resolved via getTableName in our lib, but here we can just use the mapped ones or snake_case
+        const tableName = collectionName.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        await queryD1(`DELETE FROM ${tableName}`, []);
+      }
+      setSuccess(`Archive Purge Complete: All ${label} data has been removed from D1.`);
+      setSafetyLock('');
+    } catch (err: any) {
+      console.error(`Purge failed for ${label}:`, err);
+      setError(`Purge failed: ${err.message}`);
+    } finally {
+      setIsPurging(false);
+      setPurgeStatus('');
+    }
+  }
+}
+
+function MaintenanceCard({ title, description, onPurge, disabled }: { title: string, description: string, onPurge: () => void, disabled: boolean }) {
+  return (
+    <div className={`p-6 rounded-2xl border transition-all ${disabled ? 'opacity-50 grayscale border-gold/5 bg-card/20' : 'border-gold/10 bg-card hover:border-blood/30'}`}>
+      <h4 className="font-serif text-lg font-bold text-ink mb-2">{title}</h4>
+      <p className="text-xs text-ink/60 mb-6 leading-relaxed italic">{description}</p>
+      <Button 
+        onClick={onPurge} 
+        disabled={disabled}
+        className="w-full btn-danger gap-2 h-10 border border-blood/20"
+      >
+        <Trash2 className="w-4 h-4" /> Purge Collection
+      </Button>
     </div>
   );
 }

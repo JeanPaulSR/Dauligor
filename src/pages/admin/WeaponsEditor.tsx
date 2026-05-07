@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { db } from '../../lib/firebase';
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc
-} from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
@@ -19,16 +8,20 @@ import {
   Plus, 
   Trash2, 
   Edit, 
-  Crosshair
+  Crosshair,
+  Database,
+  CloudOff
 } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 
 export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const [weapons, setWeapons] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [allProperties, setAllProperties] = useState<any[]>([]);
+  const [attributes, setAttributes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUsingD1, setIsUsingD1] = useState(false);
   
   // Form State
   const [editingWeapon, setEditingWeapon] = useState<any>(null);
@@ -47,50 +40,32 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
   const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'weapons'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setWeapons(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Error in Weapons snapshot:", err);
-        setLoading(false);
-      }
-    );
+    const loadAll = async () => {
+      setLoading(true);
+      try {
+        const [categoriesData, propsData, weaponsData, attrsData] = await Promise.all([
+          fetchCollection('weaponCategories', { orderBy: 'name ASC' }),
+          fetchCollection('weaponProperties', { orderBy: 'name ASC' }),
+          fetchCollection('weapons', { orderBy: 'name ASC' }),
+          fetchCollection('attributes', { orderBy: '"order" ASC' }),
+        ]);
 
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'weaponCategories'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        if (!editingWeapon && !categoryId && snapshot.docs.length > 0) {
-          setCategoryId(snapshot.docs[0].id);
+        setCategories(categoriesData);
+        if (categoriesData.length > 0 && !categoryId) {
+          setCategoryId((categoriesData[0] as any).id);
         }
-      },
-      (err) => {
-        console.error("Error in Weapon Categories snapshot:", err);
+        setAllProperties(propsData);
+        setWeapons(weaponsData);
+        setAttributes(attrsData);
+        setIsUsingD1(weaponsData.length > 0);
+      } catch (err) {
+        console.error("Error loading weapons data:", err);
+      } finally {
+        setLoading(false);
       }
-    );
+    };
 
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'weaponProperties'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setAllProperties(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      },
-      (err) => {
-        console.error("Error in Weapon Properties snapshot:", err);
-      }
-    );
-
-    return () => unsubscribe();
+    loadAll();
   }, []);
 
     const handleSave = async (e: React.FormEvent) => {
@@ -102,35 +77,40 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
         return;
       }
   
+      const abilityId = (attributes as any[]).find((a: any) => a.identifier === ability)?.id || null;
+
       try {
-        const weaponData = {
+        const d1Data = {
           name,
           identifier: identifier.trim() || slugify(name),
-          categoryId: effectiveCategoryId,
-          weaponType,
-          propertyIds,
-          foundryAlias: foundryAlias.trim(),
+          category_id: effectiveCategoryId,
+          weapon_type: weaponType,
+          property_ids: propertyIds,
+          foundry_alias: foundryAlias.trim(),
           source,
-          ability,
+          ability_id: abilityId,
           page: page === '' ? null : Number(page),
-          basicRules,
+          basic_rules: basicRules ? 1 : 0,
           description,
-          updatedAt: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         };
 
-      if (editingWeapon) {
-        await updateDoc(doc(db, 'weapons', editingWeapon.id), weaponData);
-        toast.success('Weapon updated');
-      } else {
-        await addDoc(collection(db, 'weapons'), weaponData);
-        toast.success('Weapon created');
-      }
+        const targetId = editingWeapon?.id || crypto.randomUUID();
+        await upsertDocument('weapons', targetId, d1Data);
 
-      resetForm();
+        const stateItem = { id: targetId, ...d1Data, ability, categoryId: effectiveCategoryId, weaponType, propertyIds, foundryAlias, basicRules };
+        if (editingWeapon) {
+          setWeapons(prev => prev.map(w => w.id === targetId ? stateItem : w));
+          toast.success('Weapon updated');
+        } else {
+          setWeapons(prev => [...prev, stateItem].sort((a, b) => a.name.localeCompare(b.name)));
+          toast.success('Weapon created');
+        }
+
+        resetForm();
       } catch (error) {
         console.error("Error saving weapon:", error);
         toast.error('Failed to save weapon');
-        handleFirestoreError(error, OperationType.WRITE, 'weapons');
       }
     };
 
@@ -152,12 +132,12 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
   const handleDelete = async (id: string) => {
     if (window.confirm('Delete this weapon?')) {
       try {
-        await deleteDoc(doc(db, 'weapons', id));
+        await deleteDocument('weapons', id);
+        setWeapons(prev => prev.filter(w => w.id !== id));
         toast.success('Weapon deleted');
       } catch (error) {
         console.error("Error deleting weapon:", error);
         toast.error('Failed to delete weapon');
-        handleFirestoreError(error, OperationType.DELETE, 'weapons');
       }
     }
   };
@@ -171,7 +151,20 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
       {!hideHeader && (
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-2">
-            <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Weapon Manager</h1>
+            <div className="flex items-center justify-between">
+              <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Weapon Manager</h1>
+              {isUsingD1 ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  <Database className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
+                </div>
+              )}
+            </div>
             <p className="text-ink/60 font-serif italic">Define the weapons available in your game system.</p>
           </div>
         </div>
@@ -362,23 +355,25 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                             {weapon.identifier}
                           </span>
                         )}
-                        {(weapon.categoryId || weapon.category) && (
+                        {(weapon.category_id || weapon.categoryId || weapon.category) && (
                           <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
-                            {categories.find(c => c.id === weapon.categoryId)?.name || weapon.category}
+                            {categories.find((c: any) => c.id === (weapon.category_id || weapon.categoryId))?.name || weapon.category}
                           </span>
                         )}
-                        {weapon.weaponType && (
-                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.weaponType}</span>
+                        {(weapon.weapon_type || weapon.weaponType) && (
+                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.weapon_type || weapon.weaponType}</span>
                         )}
-                        {weapon.ability && (
-                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.ability}</span>
+                        {(weapon.ability || weapon.ability_id) && (
+                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">
+                            {weapon.ability || (attributes as any[]).find((a: any) => a.id === weapon.ability_id)?.identifier}
+                          </span>
                         )}
                         {weapon.source && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/40 text-background rounded-full font-medium shadow-sm">{weapon.source}{weapon.page ? ` p.${weapon.page}` : ''}</span>
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {weapon.propertyIds?.map((pid: string) => {
+                        {(weapon.property_ids || weapon.propertyIds || []).map((pid: string) => {
                           const prop = allProperties.find(p => p.id === pid);
                           if (!prop) return null;
                           return (
@@ -399,19 +394,18 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                         setEditingWeapon(weapon);
                         setName(weapon.name);
                         setIdentifier(weapon.identifier || '');
-                        setFoundryAlias(weapon.foundryAlias || '');
-                        
-                        // Try to derive categoryId from category name if missing
-                        const cid = weapon.categoryId || categories.find((c: any) => c.name === weapon.category)?.id || '';
+                        setFoundryAlias(weapon.foundry_alias || weapon.foundryAlias || '');
+
+                        const cid = weapon.category_id || weapon.categoryId || categories.find((c: any) => c.name === weapon.category)?.id || '';
                         setCategoryId(cid);
-                        
-                        setWeaponType(weapon.weaponType || 'Melee');
-                        setPropertyIds(weapon.propertyIds || []);
-                        setAbility(weapon.ability || 'STR');
+
+                        setWeaponType(weapon.weapon_type || weapon.weaponType || 'Melee');
+                        setPropertyIds(weapon.property_ids || weapon.propertyIds || []);
+                        setAbility(weapon.ability || (attributes as any[]).find((a: any) => a.id === weapon.ability_id)?.identifier || 'STR');
                         setDescription(weapon.description || '');
                         setSource(weapon.source || '');
                         setPage(weapon.page || '');
-                        setBasicRules(weapon.basicRules || false);
+                        setBasicRules(!!(weapon.basic_rules || weapon.basicRules));
                       }} className="h-8 w-8 p-0 text-gold"><Edit className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(weapon.id)} className="h-8 w-8 p-0 text-blood"><Trash2 className="w-4 h-4" /></Button>
                     </div>

@@ -1,25 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { db } from '../../lib/firebase';
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc
-} from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
 import { slugify } from '../../lib/utils';
 import { Plus, Trash2, Edit, Calculator } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 
 export default function SpellcastingTypeEditor({ userProfile }: { userProfile: any }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Form State
   const [editingItem, setEditingItem] = useState<any>(null);
   const [name, setName] = useState('');
@@ -28,26 +19,17 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
   const [formula, setFormula] = useState('');
 
   const isAdmin = userProfile?.role === 'admin';
-  const collectionName = 'spellcastingTypes';
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, collectionName),
-      (snapshot) => {
-        setItems(
-          snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')))
-        );
+    fetchCollection('spellcastingTypes', { orderBy: 'name ASC' })
+      .then(data => {
+        setItems(data);
         setLoading(false);
-      },
-      (err) => {
-        console.error(`Error in ${collectionName} snapshot:`, err);
+      })
+      .catch(err => {
+        console.error('Error loading spellcasting types:', err);
         setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
+      });
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -55,25 +37,30 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
     if (!name) return;
 
     try {
-      const itemData = {
+      const d1Data = {
         name,
         identifier: identifier.trim() || slugify(name),
-        foundryName: foundryName.trim(),
+        foundry_name: foundryName.trim(),
         formula: formula.trim(),
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
+      const targetId = editingItem?.id || crypto.randomUUID();
+      await upsertDocument('spellcastingTypes', targetId, d1Data);
+
+      const stateItem = { id: targetId, ...d1Data, foundryName };
       if (editingItem) {
-        await updateDoc(doc(db, collectionName, editingItem.id), itemData);
-        toast.success(`Spellcasting type updated`);
+        setItems(prev => prev.map(it => it.id === targetId ? stateItem : it));
+        toast.success('Spellcasting type updated');
       } else {
-        await addDoc(collection(db, collectionName), itemData);
-        toast.success(`Spellcasting type created`);
+        setItems(prev => [...prev, stateItem].sort((a, b) => a.name.localeCompare(b.name)));
+        toast.success('Spellcasting type created');
       }
 
       resetForm();
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, collectionName);
+      console.error('Error saving spellcasting type:', error);
+      toast.error('Failed to save spellcasting type');
     }
   };
 
@@ -89,18 +76,20 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
     setEditingItem(item);
     setName(item.name);
     setIdentifier(item.identifier || '');
-    setFoundryName(item.foundryName || '');
+    setFoundryName(item.foundry_name || item.foundryName || '');
     setFormula(item.formula || '');
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!isAdmin || !window.confirm(`Are you sure you want to delete this spellcasting type?`)) return;
+    if (!isAdmin || !window.confirm('Are you sure you want to delete this spellcasting type?')) return;
     try {
-      await deleteDoc(doc(db, collectionName, id));
-      toast.success(`Spellcasting type deleted`);
+      await deleteDocument('spellcastingTypes', id);
+      setItems(prev => prev.filter(it => it.id !== id));
+      toast.success('Spellcasting type deleted');
     } catch (error) {
-       handleFirestoreError(error, OperationType.DELETE, collectionName);
+      console.error('Error deleting spellcasting type:', error);
+      toast.error('Failed to delete spellcasting type');
     }
   };
 
@@ -117,7 +106,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
         <form onSubmit={handleSave} className="space-y-4 bg-card/50 p-6 rounded-lg border border-gold/10">
           <div className="space-y-2">
             <label className="field-label">Display Name</label>
-            <Input 
+            <Input
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Full-Caster"
@@ -128,7 +117,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
 
           <div className="space-y-2">
             <label className="field-label">Identifier</label>
-            <Input 
+            <Input
               value={identifier}
               onChange={e => setIdentifier(e.target.value)}
               placeholder={slugify(name)}
@@ -138,7 +127,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
 
           <div className="space-y-2">
             <label className="field-label">Foundry Flat Name</label>
-            <Input 
+            <Input
               value={foundryName}
               onChange={e => setFoundryName(e.target.value)}
               placeholder="e.g. full, half"
@@ -148,7 +137,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
 
           <div className="space-y-2">
             <label className="field-label">Scaling Formula</label>
-            <Input 
+            <Input
               value={formula}
               onChange={e => setFormula(e.target.value)}
               placeholder="e.g. 1 * level, floor(0.5 * level)"
@@ -173,8 +162,8 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
       <div className="lg:col-span-2">
         <div className="grid sm:grid-cols-2 gap-4">
           {items.map(item => (
-            <Card 
-              key={item.id} 
+            <Card
+              key={item.id}
               className={`border-gold/10 bg-card/40 hover:bg-card/60 transition-all cursor-pointer group ${editingItem?.id === item.id ? 'ring-1 ring-gold shadow-sm' : ''}`}
               onClick={() => startEdit(item)}
             >
@@ -182,7 +171,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
                 <div className="w-10 h-10 rounded border border-gold/10 bg-background flex items-center justify-center shrink-0">
                   <Calculator className="w-4 h-4 text-gold/60" />
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="h3-title text-ink font-bold truncate">{item.name}</h3>
@@ -194,7 +183,7 @@ export default function SpellcastingTypeEditor({ userProfile }: { userProfile: a
                   </div>
                   <div className="mt-1 flex flex-col gap-1">
                     <div className="flex items-center gap-1.5 font-mono text-[9px] text-gold/70">
-                      <span className="text-ink/40">Foundry:</span> {item.foundryName || '-'}
+                      <span className="text-ink/40">Foundry:</span> {item.foundry_name || item.foundryName || '-'}
                     </div>
                     <div className="flex items-center gap-1.5 font-mono text-[9px] text-gold/70">
                       <span className="text-ink/40">Formula:</span> {item.formula || '-'}

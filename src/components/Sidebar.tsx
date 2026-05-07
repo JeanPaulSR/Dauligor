@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { db } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { fetchDocument } from '../lib/d1';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { 
@@ -44,10 +43,9 @@ export default function Sidebar({
     const fetchCampaign = async () => {
       try {
         if (userProfile?.activeCampaignId) {
-          const docRef = doc(db, 'campaigns', userProfile.activeCampaignId);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setCampaign({ id: docSnap.id, ...docSnap.data() });
+          const data = await fetchDocument<any>('campaigns', userProfile.activeCampaignId);
+          if (data) {
+            setCampaign(data);
           }
         } else {
           setCampaign(null);

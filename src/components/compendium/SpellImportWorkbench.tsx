@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { AlertTriangle, BookOpen, Download, FileJson, Layers3, Search, Sparkles, Tag, Upload, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { adminImportSpellBatch, adminUpsertSpell } from '../../lib/spellAdminApi';
+import { reportClientError, OperationType } from '../../lib/firebase';
+import { upsertSpell, upsertSpellBatch } from '../../lib/compendium';
+import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { buildSpellImportCandidates, formatFoundrySpellDescriptionForDisplay, type FoundrySpellFolderExport, type SpellImportCandidate } from '../../lib/spellImport';
-import { subscribeSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
+import { type SpellSummaryRecord } from '../../lib/spellSummary';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -76,33 +76,42 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
 
   useEffect(() => {
     if (!isAdmin) return;
+    let cancelled = false;
 
-    const unsubscribeSources = onSnapshot(
-      query(collection(db, 'sources'), orderBy('name', 'asc')),
-      (snapshot) => setSources(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
-    );
+    (async () => {
+      try {
+        const [sourcesData, tagGroupsData, tagsData, spellsData] = await Promise.all([
+          fetchCollection<any>('sources', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tagGroups'),
+          fetchCollection<any>('tags', { orderBy: 'name ASC' }),
+          fetchCollection<any>('spells', { orderBy: 'name ASC' }),
+        ]);
+        if (cancelled) return;
 
-    const unsubscribeSpells = subscribeSpellSummaries(
-      (records) => setExistingEntries(records),
-      (error) => console.error('Error loading spell summaries:', error)
-    );
+        setSources(sourcesData);
+        // tagGroups carries `classifications` as a JSON array (auto-parsed by queryD1).
+        // The Firestore query previously filtered server-side; D1 has only a few rows
+        // so client-side filtering for the 'spell' classification is the simpler call.
+        setTagGroups(tagGroupsData.filter((g: any) => Array.isArray(g.classifications) && g.classifications.includes('spell')));
+        setAllTags(tagsData);
 
-    const unsubscribeTagGroups = onSnapshot(
-      query(collection(db, 'tagGroups'), where('classifications', 'array-contains', 'spell')),
-      (snapshot) => setTagGroups(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
-    );
+        // Map D1 spell rows (snake_case) to camelCase the workbench expects.
+        const mappedSpells = spellsData.map((row: any) => ({
+          ...row,
+          sourceId: row.source_id,
+          imageUrl: row.image_url,
+          level: Number(row.level || 0),
+          school: row.school,
+          preparationMode: row.preparation_mode,
+          tagIds: Array.isArray(row.tags) ? row.tags : []
+        }));
+        setExistingEntries(mappedSpells);
+      } catch (error) {
+        console.error('SpellImportWorkbench load error:', error);
+      }
+    })();
 
-    const unsubscribeTags = onSnapshot(
-      query(collection(db, 'tags'), orderBy('name', 'asc')),
-      (snapshot) => setAllTags(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
-    );
-
-    return () => {
-      unsubscribeSources();
-      unsubscribeSpells();
-      unsubscribeTagGroups();
-      unsubscribeTags();
-    };
+    return () => { cancelled = true; };
   }, [isAdmin]);
 
   const candidates = useMemo(() => (
@@ -285,11 +294,11 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
         tagIds: candidateTagIds[candidate.candidateId] || [],
         createdAt: existingEntries.find((entry) => entry.id === candidate.existingEntryId)?.createdAt || new Date().toISOString()
       };
-      await adminUpsertSpell(candidate.existingEntryId, updatedPayload);
+      await upsertSpell(candidate.existingEntryId, updatedPayload);
       return 'updated';
     }
 
-    await adminUpsertSpell(null, {
+    await upsertSpell(crypto.randomUUID(), {
       ...payload,
       tagIds: candidateTagIds[candidate.candidateId] || [],
       createdAt: new Date().toISOString()
@@ -311,7 +320,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
     } catch (error) {
       console.error('Error importing spell:', error);
       toast.error(`Failed to import ${selectedCandidate.name}.`);
-      handleFirestoreError(
+      reportClientError(
         error,
         selectedCandidate.existingEntryId ? OperationType.UPDATE : OperationType.CREATE,
         `spells/${selectedCandidate.existingEntryId || '(new)'}`
@@ -345,16 +354,20 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
 
         return {
           id: candidate.existingEntryId || null,
-          payload
+          data: payload
         };
       });
 
-      const result = await adminImportSpellBatch(entries);
-      toast.success(`Imported ${result.total} spells (${result.created} new, ${result.updated} updated).`);
+      const results = await upsertSpellBatch(entries);
+      
+      const createdCount = entries.filter(e => !e.id).length;
+      const updatedCount = entries.filter(e => !!e.id).length;
+      
+      toast.success(`Imported ${entries.length} spells (${createdCount} new, ${updatedCount} updated).`);
     } catch (error) {
       console.error('Error importing visible spells:', error);
       toast.error('Failed to import visible spells.');
-      handleFirestoreError(error, OperationType.CREATE, 'spells/(batch import)');
+      reportClientError(error, OperationType.CREATE, 'spells/(batch import)');
     } finally {
       setSaving(false);
     }

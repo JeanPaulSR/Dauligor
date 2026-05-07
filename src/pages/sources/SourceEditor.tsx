@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { OperationType, reportClientError } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -11,6 +10,8 @@ import { Badge } from '../../components/ui/badge';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { ChevronLeft, Save, Trash2, Image as ImageIcon, Link as LinkIcon, Book } from 'lucide-react';
 import { Checkbox } from '../../components/ui/checkbox';
+import { fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
+import { Database, CloudOff } from 'lucide-react';
 
 const AVAILABLE_TAGS = ["Bestiary", "Classes", "Items", "Spells", "Feats"];
 
@@ -24,13 +25,14 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
     name: '',
     abbreviation: '',
     slug: '',
-    rules: '2014',
+    rules_version: '2014',
     status: 'ready',
     description: '',
-    url: '',
+    external_url: '',
     imageUrl: '',
     tags: [] as string[]
   });
+  const [isUsingD1, setIsUsingD1] = useState(false);
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
 
@@ -42,24 +44,26 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
 
     if (id) {
       const fetchSource = async () => {
+        setLoading(true);
         try {
-          const docSnap = await getDoc(doc(db, 'sources', id));
-          if (docSnap.exists()) {
-            const data = docSnap.data();
+          const data = await fetchDocument<any>('sources', id);
+
+          if (data) {
+            setIsUsingD1(true);
             setFormData({
               name: data.name || '',
               abbreviation: data.abbreviation || '',
               slug: data.slug || '',
-              rules: data.rules || '2014',
+              rules_version: data.rules_version || data.rules || '2014',
               status: data.status || 'ready',
               description: data.description || '',
-              url: data.url || '',
+              external_url: data.external_url || data.url || '',
               imageUrl: data.imageUrl || '',
               tags: data.tags || []
             });
           }
         } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `sources/${id}`);
+          console.error("Error loading source:", error);
         } finally {
           setLoading(false);
         }
@@ -77,31 +81,54 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
     }));
   };
 
+  const handleDelete = async () => {
+    if (!id || !window.confirm(`Are you sure you want to delete "${formData.name}"? This action is permanent.`)) return;
+
+    setSaving(true);
+    try {
+      await deleteDocument('sources', id);
+      navigate('/sources');
+    } catch (error) {
+      reportClientError(error, OperationType.DELETE, `sources/${id}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.description) return;
 
     setSaving(true);
     try {
+      const now = new Date().toISOString();
       const sourceData = {
-        ...formData,
-        updatedAt: new Date().toISOString(),
-        createdAt: formData.name ? (id ? undefined : new Date().toISOString()) : new Date().toISOString()
+        name: formData.name,
+        abbreviation: formData.abbreviation,
+        slug: formData.slug,
+        rules_version: formData.rules_version,
+        status: formData.status,
+        description: formData.description,
+        external_url: formData.external_url,
+        image_url: formData.imageUrl,
+        tags: formData.tags,
+        updated_at: now,
       };
 
-      // Remove undefined fields
-      Object.keys(sourceData).forEach(key => (sourceData as any)[key] === undefined && delete (sourceData as any)[key]);
+      const targetId = id || crypto.randomUUID();
+      if (!id) {
+        (sourceData as any).created_at = now;
+      }
 
-      if (id) {
-        await setDoc(doc(db, 'sources', id), sourceData, { merge: true });
-      } else {
-        const docRef = await addDoc(collection(db, 'sources'), sourceData);
-        navigate(`/sources/view/${docRef.id}`);
+      await upsertDocument('sources', targetId, sourceData);
+
+      if (!id) {
+        navigate(`/sources/view/${targetId}`);
         return;
       }
       navigate(`/sources/view/${id}`);
     } catch (error) {
-      handleFirestoreError(error, id ? OperationType.UPDATE : OperationType.CREATE, 'sources');
+      reportClientError(error, id ? OperationType.UPDATE : OperationType.CREATE, 'sources');
     } finally {
       setSaving(false);
     }
@@ -126,9 +153,24 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
         >
           <ChevronLeft className="w-4 h-4" /> Cancel
         </Button>
-        <h1 className="text-3xl font-serif font-bold text-ink">
-          {id ? 'Edit Source' : 'New Source'}
-        </h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-serif font-bold text-ink">
+            {id ? 'Edit Source' : 'New Source'}
+          </h1>
+          {id && (
+            isUsingD1 ? (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3 h-3 text-emerald-500" />
+                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">D1 Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3 h-3 text-amber-500" />
+                <span className="text-[9px] font-bold text-amber-500 uppercase tracking-tighter">Legacy Firebase</span>
+              </div>
+            )
+          )}
+        </div>
       </div>
 
       <form onSubmit={handleSave} className="grid md:grid-cols-3 gap-8">
@@ -176,11 +218,11 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="rules">Rules Version</Label>
+                  <Label htmlFor="rules_version">Rules Version</Label>
                   <select 
-                    id="rules"
-                    value={formData.rules}
-                    onChange={e => setFormData({...formData, rules: e.target.value})}
+                    id="rules_version"
+                    value={formData.rules_version}
+                    onChange={e => setFormData({...formData, rules_version: e.target.value})}
                     className="w-full h-10 px-3 py-2 bg-card/50 border border-gold/10 rounded-md text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="2014">2014 Core</option>
@@ -219,14 +261,14 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="url" className="flex items-center gap-2">
+                <Label htmlFor="external_url" className="flex items-center gap-2">
                   <LinkIcon className="w-3 h-3 text-gold" /> Webpage URL
                 </Label>
                 <Input 
-                  id="url"
+                  id="external_url"
                   type="url"
-                  value={formData.url}
-                  onChange={e => setFormData({...formData, url: e.target.value})}
+                  value={formData.external_url}
+                  onChange={e => setFormData({...formData, external_url: e.target.value})}
                   placeholder="https://..."
                   className="bg-card/50 border-gold/10"
                 />
@@ -285,7 +327,7 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
                 type="button" 
                 variant="ghost" 
                 className="w-full text-blood hover:bg-blood/5 gap-2"
-                onClick={() => {/* Add delete logic if needed */}}
+                onClick={handleDelete}
               >
                 <Trash2 className="w-4 h-4" /> Delete Source
               </Button>

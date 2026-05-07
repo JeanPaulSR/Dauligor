@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { db } from '../../lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, getDoc, where } from 'firebase/firestore';
+import { fetchCollection, fetchDocument, deleteDocument } from '../../lib/d1';
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -22,11 +21,13 @@ import {
   Check,
   Trash2,
   AlertTriangle,
-  Upload
+  Database,
+  CloudOff,
+  Upload,
+  Edit
 } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/firebase';
 import { cn } from '../../lib/utils';
-import { deleteDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
@@ -73,11 +74,10 @@ export function ClassList({
   const [allAttributes, setAllAttributes] = useState<any[]>([]);
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
   const [loadingStates, setLoadingStates] = useState({
     classes: true,
-    sources: true,
-    tagGroups: true,
-    tags: true
+    foundation: true
   });
   const [search, setSearch] = useState('');
   
@@ -111,107 +111,116 @@ export function ClassList({
   const [selectedPreviewFeatureId, setSelectedPreviewFeatureId] = useState<string | null>(null);
 
   const isAdmin = userProfile?.role === 'admin' && !selectionMode;
-  const isLoading = Object.values(loadingStates).some(state => state);
+  const isLoading = loadingStates.classes || loadingStates.foundation;
 
   useEffect(() => {
-    const q = query(collection(db, 'classes'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const classData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setClasses(classData);
-      setLoadingStates(prev => ({ ...prev, classes: false }));
-    });
+    const loadClasses = async () => {
+      try {
+        const classData = await fetchCollection('classes', { 
+          select: 'id, name, source_id, category, tag_ids, image_url, card_image_url, preview_image_url, card_display, image_display, preview_display, preview, description',
+          orderBy: 'name ASC' 
+        });
+        
+        // Remap underscored fields to camelCase for the UI
+        const mappedClasses = classData.map((c: any) => ({
+          ...c,
+          sourceId: c.source_id || c.sourceId,
+          tagIds: typeof c.tag_ids === 'string' ? JSON.parse(c.tag_ids) : (c.tagIds || c.tag_ids || []),
+          imageUrl: c.image_url || c.imageUrl,
+          cardImageUrl: c.card_image_url || c.cardImageUrl,
+          previewImageUrl: c.preview_image_url || c.previewImageUrl,
+          cardDisplay: typeof c.card_display === 'string' ? JSON.parse(c.card_display) : (c.cardDisplay || c.card_display),
+          imageDisplay: typeof c.image_display === 'string' ? JSON.parse(c.image_display) : (c.imageDisplay || c.image_display),
+          previewDisplay: typeof c.preview_display === 'string' ? JSON.parse(c.preview_display) : (c.previewDisplay || c.preview_display)
+        }));
 
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    // Fetch Sources
-    const unsubscribeSources = onSnapshot(query(collection(db, 'sources')), (snap) => {
-      const sourceMap: Record<string, any> = {};
-      snap.docs.forEach(doc => {
-        sourceMap[doc.id] = { id: doc.id, ...doc.data() };
-      });
-      setSources(sourceMap);
-      setLoadingStates(prev => ({ ...prev, sources: false }));
-    });
-
-    // Fetch Tag Groups for Classes
-    const unsubscribeTagGroups = onSnapshot(query(collection(db, 'tagGroups'), where('classifications', 'array-contains', 'class')), (snap) => {
-      setTagGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoadingStates(prev => ({ ...prev, tagGroups: false }));
-    });
-
-    // Fetch All Tags
-    const unsubscribeTags = onSnapshot(query(collection(db, 'tags')), (snap) => {
-      setAllTags(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoadingStates(prev => ({ ...prev, tags: false }));
-    });
-
-    const unsubscribeSkills = onSnapshot(collection(db, 'skills'), (snap) => {
-      setAllSkills(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeTools = onSnapshot(collection(db, 'tools'), (snap) => {
-      setAllTools(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeToolCategories = onSnapshot(collection(db, 'toolCategories'), (snap) => {
-      setAllToolCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeWeaponCategories = onSnapshot(collection(db, 'weaponCategories'), (snap) => {
-      setAllWeaponCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeArmorCategories = onSnapshot(collection(db, 'armorCategories'), (snap) => {
-      setAllArmorCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeArmor = onSnapshot(collection(db, 'armor'), (snap) => {
-      setAllArmor(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeWeapons = onSnapshot(collection(db, 'weapons'), (snap) => {
-      setAllWeapons(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeAttributes = onSnapshot(collection(db, 'attributes'), (snap) => {
-      const attrs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const uniqueAttrsMap = new Map();
-      attrs.forEach((item: any) => {
-        const key = (item.identifier || item.id).toUpperCase();
-        if (!uniqueAttrsMap.has(key) || item.identifier) {
-          uniqueAttrsMap.set(key, item);
-        }
-      });
-      const uniqueAttrs = Array.from(uniqueAttrsMap.values());
-      setAllAttributes(uniqueAttrs);
-    });
-
-    const unsubscribeTypes = onSnapshot(collection(db, 'spellcastingTypes'), (snap) => {
-      setSpellcastingTypes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeMaster = onSnapshot(doc(db, 'standardMulticlassProgression', 'master'), (snap) => {
-      if (snap.exists()) setMasterMulticlassChart(snap.data());
-    });
-
-    return () => {
-      unsubscribeSources();
-      unsubscribeTagGroups();
-      unsubscribeTags();
-      unsubscribeSkills();
-      unsubscribeTools();
-      unsubscribeToolCategories();
-      unsubscribeWeaponCategories();
-      unsubscribeArmorCategories();
-      unsubscribeArmor();
-      unsubscribeWeapons();
-      unsubscribeAttributes();
-      unsubscribeTypes();
-      unsubscribeMaster();
+        setClasses(mappedClasses);
+        setLoadingStates(prev => ({ ...prev, classes: false }));
+      } catch (err) {
+        console.error("Error loading classes:", err);
+        setLoadingStates(prev => ({ ...prev, classes: false }));
+      }
     };
-  }, []);
+
+    const loadFoundation = async () => {
+      try {
+        const [
+          sourcesData,
+          tagGroupsData,
+          tagsData,
+          skillsData,
+          toolsData,
+          toolCatsData,
+          weaponCatsData,
+          armorCatsData,
+          armorData,
+          weaponsData,
+          attrsData,
+          typesData,
+          masterChartData
+        ] = await Promise.all([
+          fetchCollection('sources', { orderBy: 'name ASC' }),
+          fetchCollection('tagGroups', { where: "classifications LIKE '%class%'" }),
+          fetchCollection('tags'),
+          fetchCollection('skills'),
+          fetchCollection('tools'),
+          fetchCollection('toolCategories'),
+          fetchCollection('weaponCategories'),
+          fetchCollection('armorCategories'),
+          fetchCollection('armor'),
+          fetchCollection('weapons'),
+          fetchCollection('attributes'),
+          fetchCollection('spellcastingTypes'),
+          fetchDocument('standardMulticlassProgression', 'master')
+        ]);
+
+        const sourceMap: Record<string, any> = {};
+        sourcesData.forEach(s => sourceMap[s.id] = s);
+        setSources(sourceMap);
+        setTagGroups(tagGroupsData.map((tg: any) => ({
+          ...tg,
+          classifications: typeof tg.classifications === 'string' ? JSON.parse(tg.classifications) : (tg.classifications || [])
+        })));
+        setAllTags(tagsData);
+        setAllSkills(skillsData);
+        setAllTools(toolsData);
+        setAllToolCategories(toolCatsData);
+        setAllWeaponCategories(weaponCatsData);
+        setAllArmorCategories(armorCatsData);
+        setAllArmor(armorData);
+        setAllWeapons(weaponsData.map((w: any) => ({
+          ...w,
+          propertyIds: typeof w.property_ids === 'string' ? JSON.parse(w.property_ids) : (w.property_ids || w.propertyIds || [])
+        })));
+
+        const uniqueAttrsMap = new Map();
+        attrsData.forEach((item: any) => {
+          const key = (item.identifier || item.id).toUpperCase();
+          if (!uniqueAttrsMap.has(key) || item.identifier) {
+            uniqueAttrsMap.set(key, item);
+          }
+        });
+        setAllAttributes(Array.from(uniqueAttrsMap.values()));
+        
+        setSpellcastingTypes(typesData);
+        
+        const chart = masterChartData ? {
+          ...masterChartData,
+          levels: typeof masterChartData.levels === 'string' ? JSON.parse(masterChartData.levels) : (masterChartData.levels || [])
+        } : null;
+        setMasterMulticlassChart(chart);
+        
+        setLoadingStates(prev => ({ ...prev, foundation: false }));
+        setIsFoundationUsingD1(true);
+      } catch (err) {
+        console.error("Error loading foundation data for ClassList:", err);
+        setLoadingStates(prev => ({ ...prev, foundation: false }));
+        setIsFoundationUsingD1(false);
+      }
+    };
+      loadFoundation();
+      loadClasses();
+    }, []);
 
   const cycleTagState = (tagId: string) => {
     setTagStates(prev => {
@@ -341,7 +350,7 @@ export function ClassList({
     console.log(`[ClassList] Confirmed deletion of class: ${classToDelete.name} (${classToDelete.id})`);
     
     try {
-      await deleteDoc(doc(db, 'classes', classToDelete.id));
+      await deleteDocument('classes', classToDelete.id);
       console.log(`[ClassList] Class deleted successfully: ${classToDelete.id}`);
       setDeleteConfirmOpen(false);
       setClassToDelete(null);
@@ -350,7 +359,7 @@ export function ClassList({
       }
     } catch (error) {
       console.error(`[ClassList] Error deleting class ${classToDelete.id}:`, error);
-      handleFirestoreError(error, OperationType.DELETE, `classes/${classToDelete.id}`);
+      reportClientError(error, OperationType.DELETE, `classes/${classToDelete.id}`);
     } finally {
       setIsDeleting(false);
     }
@@ -387,91 +396,150 @@ export function ClassList({
   useEffect(() => {
     if (selectedClass) {
       setPreviewLoading(true);
-      const featuresQ = query(
-        collection(db, 'features'),
-        where('parentId', '==', selectedClass.id),
-        where('parentType', '==', 'class'),
-        orderBy('level', 'asc')
-      );
-      
-      const scalingsQ = query(
-        collection(db, 'scalingColumns'),
-        where('parentId', '==', selectedClass.id),
-        where('parentType', '==', 'class'),
-        orderBy('name', 'asc')
-      );
 
-      const allGroupIds = (selectedClass.uniqueOptionMappings || [])
-        .map((m: any) => m.groupId)
-        .filter((v: any, i: number, a: any[]) => v && a.indexOf(v) === i);
+      const loadData = async () => {
+        try {
+          // 1. If we only have the "thin" version, fetch the full document
+          let currentClass = selectedClass;
+          if (!selectedClass.proficiencies) {
+            const fullDoc = await fetchDocument('classes', selectedClass.id);
 
-      // We'll use a promise-based approach for non-snapshot data to coordinate loading
-      const loadingPromises: Promise<any>[] = [];
-
-      // Always reset first so stale data from the previous class never bleeds through
-      setPreviewSpellcasting(null);
-      setPreviewAltSpellcasting(null);
-      setPreviewSpellsKnown(null);
-
-      if (selectedClass.spellcasting?.hasSpellcasting) {
-        const sc = selectedClass.spellcasting;
-        if (sc.manualProgressionId) {
-          loadingPromises.push(getDoc(doc(db, 'spellcastingScalings', sc.manualProgressionId)).then(s => setPreviewSpellcasting(s.exists() ? s.data() : null)));
-        } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
-          const type = spellcastingTypes.find(t => t.id === sc.progressionId);
-          if (type) {
-            const virtualLevels: Record<string, any> = {};
-            for (let level = 1; level <= 20; level++) {
-              const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
-              const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
-              virtualLevels[level.toString()] = { slots };
-            }
-            setPreviewSpellcasting({ name: type.name, levels: virtualLevels });
+            // Ensure JSON parsing for D1 fields if we got a full doc
+            currentClass = {
+              ...fullDoc,
+              sourceId: fullDoc.source_id || fullDoc.sourceId,
+              tagIds: typeof fullDoc.tag_ids === 'string' ? JSON.parse(fullDoc.tag_ids) : (fullDoc.tagIds || fullDoc.tag_ids || []),
+              imageUrl: fullDoc.image_url || fullDoc.imageUrl,
+              cardImageUrl: fullDoc.card_image_url || fullDoc.cardImageUrl,
+              previewImageUrl: fullDoc.preview_image_url || fullDoc.previewImageUrl,
+              cardDisplay: typeof fullDoc.card_display === 'string' ? JSON.parse(fullDoc.card_display) : (fullDoc.cardDisplay || fullDoc.card_display),
+              imageDisplay: typeof fullDoc.image_display === 'string' ? JSON.parse(fullDoc.image_display) : (fullDoc.imageDisplay || fullDoc.image_display),
+              previewDisplay: typeof fullDoc.preview_display === 'string' ? JSON.parse(fullDoc.preview_display) : (fullDoc.previewDisplay || fullDoc.preview_display),
+              proficiencies: typeof fullDoc.proficiencies === 'string' ? JSON.parse(fullDoc.proficiencies) : (fullDoc.proficiencies || {}),
+              spellcasting: typeof fullDoc.spellcasting === 'string' ? JSON.parse(fullDoc.spellcasting) : (fullDoc.spellcasting || {}),
+              advancements: typeof fullDoc.advancements === 'string' ? JSON.parse(fullDoc.advancements) : (fullDoc.advancements || []),
+              primaryAbility: typeof fullDoc.primary_ability === 'string' ? JSON.parse(fullDoc.primary_ability) : (fullDoc.primaryAbility || fullDoc.primary_ability || []),
+              primaryAbilityChoice: typeof fullDoc.primary_ability_choice === 'string' ? JSON.parse(fullDoc.primary_ability_choice) : (fullDoc.primaryAbilityChoice || fullDoc.primary_ability_choice || []),
+              savingThrows: typeof fullDoc.saving_throws === 'string' ? JSON.parse(fullDoc.saving_throws) : (fullDoc.savingThrows || fullDoc.saving_throws || []),
+              subclassFeatureLevels: typeof fullDoc.subclass_feature_levels === 'string' ? JSON.parse(fullDoc.subclass_feature_levels) : (fullDoc.subclassFeatureLevels || fullDoc.subclass_feature_levels || []),
+              subclassTitle: fullDoc.subclass_title || fullDoc.subclassTitle || 'Subclass'
+            };
+            setSelectedClass(currentClass);
+            return; // Effect will re-trigger with full class
           }
+
+          // 2. Load Features & Scalings
+          const featuresPromise = fetchCollection<any>('features', { 
+            where: 'parent_id = ? AND parent_type = ?', 
+            params: [currentClass.id, 'class'],
+            orderBy: 'level ASC'
+          });
+
+          const scalingsPromise = fetchCollection<any>('scaling_columns', { 
+            where: 'parent_id = ? AND parent_type = ?', 
+            params: [currentClass.id, 'class'],
+            orderBy: 'name ASC'
+          });
+
+          const [featuresData, scalingsData] = await Promise.all([featuresPromise, scalingsPromise]);
+          
+          setPreviewFeatures(featuresData.map(row => ({
+            ...row,
+            parentId: row.parent_id || row.parentId,
+            parentType: row.parent_type || row.parentType,
+            imageUrl: row.image_url || row.imageUrl,
+            isSubclassFeature: row.parent_type === 'subclass' || row.is_subclass_feature === 1 || row.isSubclassFeature === true,
+            advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : (row.advancements || [])
+          })));
+
+          setPreviewScalings(scalingsData.map(row => ({
+            ...row,
+            parentId: row.parent_id || row.parentId,
+            parentType: row.parent_type || row.parentType,
+            values: typeof row.values === 'string' ? JSON.parse(row.values) : (row.values || {})
+          })));
+
+          // 3. Load Spellcasting progression data
+          const allPromises: Promise<any>[] = [];
+          setPreviewSpellcasting(null);
+          setPreviewAltSpellcasting(null);
+          setPreviewSpellsKnown(null);
+
+          if (currentClass.spellcasting?.hasSpellcasting) {
+            const sc = currentClass.spellcasting;
+            const parseLevels = (data: any) => {
+              if (!data) return null;
+              return {
+                ...data,
+                levels: typeof data.levels === 'string' ? JSON.parse(data.levels) : (data.levels || [])
+              };
+            };
+
+            if (sc.manualProgressionId) {
+              allPromises.push(
+                fetchDocument('spellcastingScalings', sc.manualProgressionId).then(data => setPreviewSpellcasting(parseLevels(data)))
+              );
+            } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
+              const type = spellcastingTypes.find(t => t.id === sc.progressionId);
+              if (type) {
+                const virtualLevels: Record<string, any> = {};
+                for (let level = 1; level <= 20; level++) {
+                  const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
+                  const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
+                  virtualLevels[level.toString()] = { slots };
+                }
+                setPreviewSpellcasting({ name: type.name, levels: virtualLevels });
+              }
+            }
+            if (sc.altProgressionId) {
+              allPromises.push(
+                fetchDocument('pactMagicScalings', sc.altProgressionId).then(data => setPreviewAltSpellcasting(parseLevels(data)))
+              );
+            }
+            if (sc.spellsKnownId) {
+              allPromises.push(
+                fetchDocument('spellsKnownScalings', sc.spellsKnownId).then(data => setPreviewSpellsKnown(parseLevels(data)))
+              );
+            }
+          }
+
+          // 4. Load Unique Options from advancements
+          const allGroupIds = [
+            ...(currentClass.advancements || []).flatMap((a: any) => a.optionGroupIds || []),
+            ...(featuresData || []).flatMap((f: any) => (f.advancements || []).flatMap((a: any) => a.optionGroupIds || []))
+          ].filter((id, index, self) => id && self.indexOf(id) === index);
+
+          if (allGroupIds.length > 0) {
+            const cappedIds = allGroupIds.slice(0, 30);
+            allPromises.push(
+              fetchCollection<any>('unique_option_groups', {
+                where: `id IN (${cappedIds.map(() => '?').join(',')})`,
+                params: cappedIds
+              }).then(setPreviewOptionGroups)
+            );
+            
+            allPromises.push(
+              fetchCollection<any>('unique_option_items', {
+                where: `group_id IN (${cappedIds.map(() => '?').join(',')})`,
+                params: cappedIds,
+                orderBy: 'name ASC'
+              }).then(setPreviewOptionItems)
+            );
+          }
+
+          await Promise.all(allPromises);
+          
+          // Small timeout to allow state updates to settle
+          setTimeout(() => setPreviewLoading(false), 300);
+        } catch (err) {
+          console.error("Error loading preview details:", err);
+          setPreviewLoading(false);
         }
-        if (sc.altProgressionId) {
-          loadingPromises.push(getDoc(doc(db, 'pactMagicScalings', sc.altProgressionId)).then(s => setPreviewAltSpellcasting(s.exists() ? s.data() : null)));
-        }
-        if (sc.spellsKnownId) {
-          loadingPromises.push(getDoc(doc(db, 'spellsKnownScalings', sc.spellsKnownId)).then(s => setPreviewSpellsKnown(s.exists() ? s.data() : null)));
-        }
-      }
-
-      const unsubFeatures = onSnapshot(featuresQ, (snap) => {
-        setPreviewFeatures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-      const unsubScalings = onSnapshot(scalingsQ, (snap) => {
-        setPreviewScalings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      });
-
-      let unsubGroups = () => {};
-      let unsubItems = () => {};
-
-      if (allGroupIds.length > 0) {
-        const cappedIds = allGroupIds.slice(0, 30);
-        unsubGroups = onSnapshot(query(collection(db, 'uniqueOptionGroups'), where('__name__', 'in', cappedIds)), (snap) => {
-          setPreviewOptionGroups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-        unsubItems = onSnapshot(query(collection(db, 'uniqueOptionItems'), where('groupId', 'in', cappedIds), orderBy('name', 'asc')), (snap) => {
-          setPreviewOptionItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-      }
-
-      // Final synchronization to stop loading
-      Promise.all(loadingPromises).then(() => {
-        // Simple delay to ensure snapshots also arrive
-        setTimeout(() => setPreviewLoading(false), 300);
-      });
-
-      return () => {
-        unsubFeatures();
-        unsubScalings();
-        unsubGroups();
-        unsubItems();
       };
+
+      loadData();
     }
-  }, [selectedClass?.id, spellcastingTypes.length, !!masterMulticlassChart]);
+  }, [selectedClass, spellcastingTypes.length, !!masterMulticlassChart]);
 
   useEffect(() => {
     // Reset selections on class change
@@ -575,7 +643,7 @@ export function ClassList({
               className="label-text text-gold/80 block mt-1 text-sm"
               style={{ textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000' }}
             >
-              {sources[cls.sourceId]?.abbreviation || sources[cls.sourceId]?.name || 'Unknown'}
+              {sources[cls.source_id || cls.sourceId]?.abbreviation || sources[cls.source_id || cls.sourceId]?.name || 'Unknown'}
             </p>
           </div>
 
@@ -619,7 +687,20 @@ export function ClassList({
                )
              )}
           </div>
-          <h1 className="h2-title uppercase">{selectionMode ? 'Select a Class' : 'Classes'}</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="h2-title uppercase">{selectionMode ? 'Select a Class' : 'Classes'}</h1>
+            {isFoundationUsingD1 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -785,7 +866,7 @@ export function ClassList({
                 <div className="relative p-6 px-8 flex items-center justify-between z-10">
                   <div>
                     <h2 className="h1-title text-gold drop-shadow-md text-4xl">{selectedClass.name}</h2>
-                    <p className="label-text text-gold/60 mt-1">{sources[selectedClass.sourceId]?.name || 'Unknown Source'}</p>
+                    <p className="label-text text-gold/60 mt-1">{sources[selectedClass.source_id || selectedClass.sourceId]?.name || 'Unknown Source'}</p>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <div className="flex items-center gap-3">
@@ -802,11 +883,20 @@ export function ClassList({
                            </Button>
                         </div>
                       ) : (
-                        <Link to={`/compendium/classes/view/${selectedClass.id}`}>
-                          <Button size="sm" className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
-                            View Class Page
-                          </Button>
-                        </Link>
+                        <div className="flex gap-2">
+                          <Link to={`/compendium/classes/view/${selectedClass.id}`}>
+                            <Button size="sm" className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
+                              View Page
+                            </Button>
+                          </Link>
+                          {isAdmin && (
+                            <Link to={`/compendium/classes/edit/${selectedClass.id}`}>
+                              <Button size="sm" variant="outline" className="border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8">
+                                <Edit className="w-3.5 h-3.5 mr-1" /> Edit
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

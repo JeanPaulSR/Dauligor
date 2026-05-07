@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, doc, onSnapshot, deleteDoc, query, where, getDocs, updateDoc, getDoc } from 'firebase/firestore';
+import { OperationType, reportClientError } from '../../lib/firebase';
+import { fetchCollection, fetchDocument, queryD1, getSystemMetadata } from '../../lib/d1';
+import { fetchLoreArticle, upsertLoreSecret, deleteLoreArticle } from '../../lib/lore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { useWikiPreview } from '@/lib/wikiPreviewContext';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '@/components/compendium/ClassImageEditor';
@@ -31,7 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Check } from 'lucide-react';
+import { Check, Database, CloudOff } from 'lucide-react';
 
 const CATEGORIES = [
   { id: 'generic', label: 'Generic', icon: Library },
@@ -84,6 +85,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [hoveredArticleData, setHoveredArticleData] = useState<any>(null);
   const [wikiSettings, setWikiSettings] = useState<{ defaultBackgroundImageUrl?: string }>({});
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
   const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,129 +102,159 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     if (isStaff) return { isStaff: true, eraId: null, campaignId: null };
     return {
       eraId: activeCampaignEraId,
-      campaignId: userProfile?.activeCampaignId ?? null,
+      campaignId: userProfile?.active_campaign_id ?? null,
       isStaff: false
     };
   })();
 
   useEffect(() => {
-    const unsubscribeSettings = onSnapshot(doc(db, 'config', 'wiki_settings'), (docSnap) => {
-      if (docSnap.exists()) {
-        setWikiSettings(docSnap.data());
+    const loadSettings = async () => {
+      try {
+        const data = await getSystemMetadata<{ defaultBackgroundImageUrl?: string }>('wiki_settings');
+        if (data) setWikiSettings(data);
+      } catch (e) {
+        console.error("Failed to load wiki settings", e);
       }
-    });
-    return () => unsubscribeSettings();
+    };
+    loadSettings();
   }, []);
 
   useEffect(() => {
     if (!id) return;
 
-    const unsubscribeArticle = onSnapshot(doc(db, 'lore', id), async (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setArticle({ id: docSnap.id, ...data });
-        
-        // Fetch parent article if it exists
-        if (data.parentId) {
-          try {
-            const parentRef = doc(db, 'lore', data.parentId);
-            const parentSnap = await getDoc(parentRef);
-            if (parentSnap.exists()) {
-              setParentArticle({ id: parentSnap.id, ...parentSnap.data() });
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // 1. Fetch main article
+        const articleData = await fetchDocument<any>('lore', id);
+
+        if (articleData) {
+          // Normalize field names from SQL (snake_case to camelCase if needed, or just use as is)
+          // The fetchDocument helper returns what SQL gives. SQL has parent_id, dm_notes.
+          const normalizedArticle = {
+            ...articleData,
+            parentId: articleData.parent_id,
+            dmNotes: articleData.dm_notes,
+            imageUrl: articleData.image_url,
+            imageDisplay: typeof articleData.image_display === 'string' ? JSON.parse(articleData.image_display) : articleData.image_display,
+            cardImageUrl: articleData.card_image_url,
+            cardDisplay: typeof articleData.card_display === 'string' ? JSON.parse(articleData.card_display) : articleData.card_display,
+            previewImageUrl: articleData.preview_image_url,
+            previewDisplay: typeof articleData.preview_display === 'string' ? JSON.parse(articleData.preview_display) : articleData.preview_display,
+            createdAt: articleData.created_at,
+            updatedAt: articleData.updated_at,
+            authorId: articleData.author_id,
+          };
+
+          // Fetch specialized metadata based on category
+          let metadata: any = {};
+          if (normalizedArticle.category === 'character' || normalizedArticle.category === 'deity') {
+            const metaRows = await queryD1<any>(`SELECT * FROM lore_meta_characters WHERE article_id = ?`, [id]);
+            if (metaRows.length > 0) {
+              const m = metaRows[0];
+              metadata = { ...metadata, ...m, lifeStatus: m.life_status, birthDate: m.birth_date, deathDate: m.death_date };
             }
-          } catch (e) {
-            console.error("Failed to fetch parent article", e);
+            if (normalizedArticle.category === 'deity') {
+              const deityRows = await queryD1<any>(`SELECT * FROM lore_meta_deities WHERE article_id = ?`, [id]);
+              if (deityRows.length > 0) metadata = { ...metadata, ...deityRows[0], holySymbol: deityRows[0].holy_symbol };
+            }
+          } else if (['building', 'settlement', 'geography', 'country'].includes(normalizedArticle.category)) {
+            const metaRows = await queryD1<any>(`SELECT * FROM lore_meta_locations WHERE article_id = ?`, [id]);
+            if (metaRows.length > 0) {
+              const m = metaRows[0];
+              metadata = { ...metadata, ...m, locationType: m.location_type, parentLocation: m.parent_location, owningOrganization: m.owning_organization, foundingDate: m.founding_date };
+            }
+          } else if (['organization', 'religion'].includes(normalizedArticle.category)) {
+            const metaRows = await queryD1<any>(`SELECT * FROM lore_meta_organizations WHERE article_id = ?`, [id]);
+            if (metaRows.length > 0) {
+              const m = metaRows[0];
+              metadata = { ...metadata, ...m, foundingDate: m.founding_date };
+            }
+            if (normalizedArticle.category === 'religion') {
+              const deityRows = await queryD1<any>(`SELECT * FROM lore_meta_deities WHERE article_id = ?`, [id]);
+              if (deityRows.length > 0) metadata = { ...metadata, ...deityRows[0], holySymbol: deityRows[0].holy_symbol };
+            }
+          }
+
+          // Fetch Tags
+          const tagRows = await queryD1<any>(`SELECT tag_id FROM lore_article_tags WHERE article_id = ?`, [id]);
+          const tags = tagRows.map(r => r.tag_id);
+
+          // Visibility Junctions
+          const eraRows = await queryD1<any>(`SELECT era_id FROM lore_article_eras WHERE article_id = ?`, [id]);
+          const campaignRows = await queryD1<any>(`SELECT campaign_id FROM lore_article_campaigns WHERE article_id = ?`, [id]);
+
+          setArticle({
+            ...normalizedArticle,
+            metadata,
+            tags,
+            visibilityEraIds: eraRows.map(r => r.era_id),
+            visibilityCampaignIds: campaignRows.map(r => r.campaign_id),
+          });
+
+          if (normalizedArticle.parentId) {
+            const parent = await fetchDocument<any>('lore', normalizedArticle.parentId);
+            setParentArticle(parent);
+          }
+
+          if (isStaff && normalizedArticle.dmNotes) {
+            setDmNotes({ content: normalizedArticle.dmNotes });
           }
         } else {
-          setParentArticle(null);
+          setArticle(null);
         }
-      } else {
-        setArticle(null);
-      }
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `lore/${id}`);
-      setLoading(false);
-    });
 
-    // Fetch DM Notes if staff
-    let unsubscribeNotes = () => {};
-    if (isStaff) {
-      unsubscribeNotes = onSnapshot(doc(db, 'lore', id, 'dmData', 'notes'), (docSnap) => {
-        if (docSnap.exists()) {
-          setDmNotes(docSnap.data());
+        // 2. Fetch Secrets
+        const secretsRows = await queryD1<any>(`
+          SELECT s.*, 
+                 (SELECT GROUP_CONCAT(era_id) FROM lore_secret_eras WHERE secret_id = s.id) as era_ids,
+                 (SELECT GROUP_CONCAT(campaign_id) FROM lore_secret_campaigns WHERE secret_id = s.id) as revealed_campaign_ids
+          FROM lore_secrets s 
+          WHERE s.article_id = ?
+        `, [id]);
+        
+        setSecrets(secretsRows.map(s => ({
+          ...s,
+          eraIds: s.era_ids ? s.era_ids.split(',') : [],
+          revealedCampaignIds: s.revealed_campaign_ids ? s.revealed_campaign_ids.split(',') : [],
+          createdAt: s.created_at,
+          updatedAt: s.updated_at
+        })));
+
+        // 3. Fetch Mentions
+        const mentionsRows = await queryD1<any>(`
+          SELECT a.* FROM lore_articles a
+          JOIN lore_links l ON a.id = l.article_id
+          WHERE l.target_id = ?
+        `, [id]);
+        setMentions(mentionsRows.map(m => ({ ...m, title: m.title, category: m.category })));
+
+        // 4. Foundation Data
+        const [campaignsData, erasData] = await Promise.all([
+          fetchCollection<any>('campaigns'),
+          fetchCollection<any>('eras', { orderBy: '"order" ASC' })
+        ]);
+
+
+        setCampaigns(campaignsData);
+        setAllCampaigns(campaignsData);
+        setEras(erasData);
+        setIsFoundationUsingD1(true);
+
+        if (!isStaff && userProfile?.active_campaign_id) {
+          const active = campaignsData.find((c: any) => c.id === userProfile.active_campaign_id);
+          setActiveCampaignEraId(active?.era_id ?? null);
         }
-      }, (error) => {
-        handleFirestoreError(error, OperationType.GET, `lore/${id}/dmData/notes`);
-      });
-    }
 
-    // Fetch Secrets
-    let secretsQuery: any;
-    if (isStaff) {
-      secretsQuery = collection(db, 'lore', id, 'secrets');
-    } else if (userProfile?.activeCampaignId) {
-      secretsQuery = query(
-        collection(db, 'lore', id, 'secrets'),
-        where('revealedCampaignIds', 'array-contains', userProfile.activeCampaignId)
-      );
-    }
-
-    let unsubscribeSecrets = () => {};
-    if (secretsQuery) {
-      unsubscribeSecrets = onSnapshot(secretsQuery, (snapshot: any) => {
-        setSecrets(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() })));
-      }, (error: any) => {
-        // Only log if it's not a permission error for players (which is expected if they have no campaign)
-        if (isStaff || userProfile?.activeCampaignId) {
-          handleFirestoreError(error, OperationType.LIST, `lore/${id}/secrets`);
-        }
-      });
-    }
-
-    // Fetch Campaigns for labeling and context resolution
-    const fetchCampaigns = async () => {
-      try {
-        const snap = await getDocs(collection(db, 'campaigns'));
-        const all = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setCampaigns(all);
-        setAllCampaigns(all);
-        // Resolve the active player campaign's eraId
-        if (!isStaff && userProfile?.activeCampaignId) {
-          const active = all.find((c: any) => c.id === userProfile.activeCampaignId);
-          setActiveCampaignEraId(active?.eraId ?? null);
-        }
-      } catch (error) {
-        console.error("Error fetching campaigns in lore article:", error);
+      } catch (err) {
+        console.error("Error loading lore article data:", err);
+        setIsFoundationUsingD1(false);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchCampaigns();
 
-    // Fetch Eras for labeling
-    const fetchEras = async () => {
-      try {
-        const snap = await getDocs(collection(db, 'eras'));
-        setEras(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) {
-        console.error("Error fetching eras in lore article:", error);
-      }
-    };
-    fetchEras();
-
-    let unsubscribeMentions = () => {};
-    const mentionsQuery = query(collection(db, 'lore'), where('linkedArticleIds', 'array-contains', id));
-    unsubscribeMentions = onSnapshot(mentionsQuery, (snapshot) => {
-      setMentions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-      console.error("Error fetching mentions:", error);
-    });
-
-    return () => {
-      unsubscribeArticle();
-      unsubscribeNotes();
-      unsubscribeSecrets();
-      unsubscribeMentions();
-    };
+    loadData();
   }, [id, isStaff]);
 
   const [eras, setEras] = useState<any[]>([]);
@@ -230,19 +262,21 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const handleToggleSecretReveal = async (secret: any, campaignId: string) => {
     if (!id) return;
     try {
-      const secretRef = doc(db, 'lore', id, 'secrets', secret.id);
       const isRevealed = secret.revealedCampaignIds.includes(campaignId);
       const newRevealed = isRevealed 
         ? secret.revealedCampaignIds.filter((cid: string) => cid !== campaignId)
         : [...secret.revealedCampaignIds, campaignId];
       
-      await updateDoc(secretRef, { 
-        revealedCampaignIds: newRevealed, 
-        updatedAt: new Date().toISOString() 
-      });
-      // Local state update is handled by onSnapshot
+      const secretData = {
+        ...secret,
+        revealedCampaignIds: newRevealed,
+        updatedAt: new Date().toISOString()
+      };
+      await upsertLoreSecret(id, secret.id, secretData);
+      setSecrets(prev => prev.map(s => s.id === secret.id ? { ...s, revealedCampaignIds: newRevealed } : s));
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `lore/${id}/secrets`);
+      console.error("Error toggling secret reveal:", error);
+      toast.error('Failed to update revelation');
     }
   };
 
@@ -269,10 +303,10 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
       return;
     }
     let cancelled = false;
-    getDoc(doc(db, 'lore', hoveredArticleId))
-      .then(snap => {
-        if (!cancelled && snap.exists()) {
-          setHoveredArticleData({ id: snap.id, ...snap.data() });
+    fetchLoreArticle(hoveredArticleId)
+      .then(article => {
+        if (!cancelled && article) {
+          setHoveredArticleData(article);
         }
       })
       .catch(() => setHoveredArticleData(null));
@@ -308,11 +342,12 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     if (!id) return;
     if (confirm('Are you sure you want to delete this article? This cannot be undone.')) {
       try {
-        await deleteDoc(doc(db, 'lore', id));
+        await deleteLoreArticle(id);
         toast.success('Article deleted');
         navigate('/wiki');
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `lore/${id}`);
+        console.error("Error deleting article:", error);
+        toast.error('Failed to delete article');
       }
     }
   };
@@ -328,13 +363,11 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
       </span>
       <div className="flex-grow max-w-[220px]">
         <Popover>
-          <PopoverTrigger asChild>
-            <button type="button" className="flex items-center justify-between w-full h-7 px-2 rounded border border-gold/10 bg-background/50 hover:bg-background/80 hover:border-gold/30 transition-colors text-left text-xs font-normal">
-              <span className="truncate">
-                {previewCampaign ? previewCampaign.name : "None (Staff View)"}
-              </span>
-              <ChevronDown className="w-3 h-3 text-ink/30 shrink-0" />
-            </button>
+          <PopoverTrigger className="flex items-center justify-between w-full h-7 px-2 rounded border border-gold/10 bg-background/50 hover:bg-background/80 hover:border-gold/30 transition-colors text-left text-xs font-normal">
+            <span className="truncate">
+              {previewCampaign ? previewCampaign.name : "None (Staff View)"}
+            </span>
+            <ChevronDown className="w-3 h-3 text-ink/30 shrink-0" />
           </PopoverTrigger>
           <PopoverContent className="w-56 p-0" align="start">
             <Command>
@@ -420,16 +453,16 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   // Filter secrets based on visibility and user campaign
   const visibleSecrets = secrets.filter(secret => {
     if (isStaff && !previewCampaign) return true;
-    const activeCid = previewCampaign?.id ?? userProfile?.activeCampaignId;
+    const activeCid = previewCampaign?.id ?? userProfile?.active_campaign_id;
     return activeCid && secret.revealedCampaignIds?.includes(activeCid);
   });
 
   // Resolve Background Image:
   let backgroundImageUrl = wikiSettings.defaultBackgroundImageUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=2000&auto=format&fit=crop';
   
-  const effectiveCampaignId = isStaff && previewCampaign ? previewCampaign.id : (userProfile?.activeCampaignId ?? null);
+  const effectiveCampaignId = isStaff && previewCampaign ? previewCampaign.id : (userProfile?.active_campaign_id ?? null);
   const activeCamp = allCampaigns.find((c: any) => c.id === effectiveCampaignId);
-  const activeEraId = activeCamp ? activeCamp.eraId : (isStaff && previewCampaign ? previewCampaign.eraId : activeCampaignEraId);
+  const activeEraId = activeCamp ? activeCamp.era_id : (isStaff && previewCampaign ? previewCampaign.eraId : activeCampaignEraId);
   const activeEra = eras.find((e: any) => e.id === activeEraId);
 
   if (activeCamp?.backgroundImageUrl) {
@@ -591,7 +624,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                     <div className="grid gap-4">
                       {visibleSecrets.map((secret) => {
                         const linkedEras = eras.filter(e => secret.eraIds?.includes(e.id));
-                        const isRevealedToMe = userProfile?.activeCampaignId && secret.revealedCampaignIds?.includes(userProfile.activeCampaignId);
+                        const isRevealedToMe = userProfile?.active_campaign_id && secret.revealedCampaignIds?.includes(userProfile.active_campaign_id);
                         const eligibleCampaigns = campaigns.filter(c => secret.eraIds?.includes(c.eraId));
                         
                         return (
@@ -620,7 +653,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                                     {eligibleCampaigns.map(campaign => {
                                       const isRevealed = secret.revealedCampaignIds?.includes(campaign.id);
                                       const isAdmin = userProfile?.role === 'admin';
-                                      const isAssignedCoDM = userProfile?.role === 'co-dm' && userProfile?.campaignIds?.includes(campaign.id);
+                                      const isAssignedCoDM = userProfile?.role === 'co-dm' && userProfile?.campaign_ids?.includes(campaign.id);
                                       const canToggle = isAdmin || isAssignedCoDM;
 
                                       return (

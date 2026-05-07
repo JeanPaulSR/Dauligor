@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { db } from '../../lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { fetchCollection } from '../../lib/d1';
 import { r2List, r2Delete, r2Rename, r2Upload, r2MoveFolder } from '../../lib/r2';
 import { convertToWebP } from '../../lib/imageUtils';
 import {
@@ -48,7 +47,7 @@ const SYSTEM_SECTIONS = [
     key: 'lore',
     label: 'Article Headers',
     prefix: 'images/lore/',
-    col: 'loreArticles',
+    col: 'lore',
     nameField: 'title',
     description: 'Lore article header / cover images',
   },
@@ -122,20 +121,18 @@ function formatBytes(bytes: number): string {
 
 async function fetchNameMap(col: string, nameField: string): Promise<Map<string, string>> {
   try {
-    const snap = await getDocs(collection(db, col));
-    const map = new Map(snap.docs.map((d) => {
-      const data = d.data();
-      let name = data[nameField] as string;
-      if (col === 'users') name = data.displayName || data.username || data.handle;
-      return [d.id, name || d.id];
+    // D1 columns are snake_case; map common camelCase aliases used here.
+    const snakeField = nameField === 'displayName' ? 'display_name' : nameField;
+    const rows = await fetchCollection<any>(col);
+    const map = new Map<string, string>(rows.map((r: any) => {
+      let name: string = r[snakeField];
+      if (col === 'users') name = r.display_name || r.username || r.handle;
+      return [r.id, name || r.id];
     }));
 
     if (col === 'classes') {
-      const subSnap = await getDocs(collection(db, 'subclasses'));
-      subSnap.docs.forEach((d) => {
-        const data = d.data();
-        map.set(d.id, data.name || d.id);
-      });
+      const subRows = await fetchCollection<any>('subclasses');
+      subRows.forEach((r: any) => map.set(r.id, r.name || r.id));
       // Add a literal mapping for the word "subclasses" itself to titlecase
       map.set('subclasses', 'Subclasses');
     }

@@ -1,17 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
-import { db } from '../../lib/firebase';
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc
-} from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
@@ -22,16 +11,20 @@ import {
   Edit, 
   ChevronLeft,
   Hammer,
-  Wrench
+  Wrench,
+  Database,
+  CloudOff
 } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 
 export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const navigate = useNavigate();
   const [tools, setTools] = useState<any[]>([]);
   const [toolCategories, setToolCategories] = useState<any[]>([]);
+  const [attributes, setAttributes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUsingD1, setIsUsingD1] = useState(false);
   
   // Form State
   const [editingTool, setEditingTool] = useState<any>(null);
@@ -48,42 +41,31 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
   const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'tools'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setTools(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      },
-      (err) => {
-        console.error("Error in Tools snapshot:", err);
-      }
-    );
+    const loadAll = async () => {
+      setLoading(true);
+      try {
+        const [categoriesData, toolsData, attrsData] = await Promise.all([
+          fetchCollection('toolCategories', { orderBy: 'name ASC' }),
+          fetchCollection('tools', { orderBy: 'name ASC' }),
+          fetchCollection('attributes', { orderBy: '"order" ASC' }),
+        ]);
 
-      // Fetch All Option Groups
-      const unsubscribeCategories = onSnapshot(
-        query(collection(db, 'toolCategories'), orderBy('name', 'asc')),
-        (snapshot) => {
-          const cats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setToolCategories(cats);
-          
-          // If we are NOT editing and don't have a categoryId yet, default to the first one
-          setCategoryId(prev => {
-            if (prev) return prev;
-            return cats.length > 0 ? cats[0].id : '';
-          });
-          
-          setLoading(false);
-        },
-        (err) => {
-          console.error("Error in toolCategories snapshot:", err);
-          setLoading(false);
+        setToolCategories(categoriesData);
+        if (categoriesData.length > 0 && !categoryId) {
+          setCategoryId((categoriesData[0] as any).id);
         }
-      );
+        setTools(toolsData);
+        setAttributes(attrsData);
+        setIsUsingD1(toolsData.length > 0);
+      } catch (err) {
+        console.error("Error loading tools/categories:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-      return () => {
-        unsubscribe();
-        unsubscribeCategories();
-      };
-    }, []);
+    loadAll();
+  }, []);
 
     const handleSave = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -94,34 +76,39 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
         return;
       }
 
+      const abilityId = (attributes as any[]).find((a: any) => a.identifier === ability)?.id || null;
+
       try {
-        const toolData = {
+        const d1Data = {
           name,
           identifier: identifier.trim() || slugify(name),
-          categoryId: effectiveCategoryId,
-          foundryAlias: foundryAlias.trim(),
+          category_id: effectiveCategoryId,
+          foundry_alias: foundryAlias.trim(),
           source,
-          ability,
+          ability_id: abilityId,
           page: page === '' ? null : Number(page),
-          basicRules,
+          basic_rules: basicRules ? 1 : 0,
           description,
-          updatedAt: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         };
 
-      if (editingTool) {
-        await updateDoc(doc(db, 'tools', editingTool.id), toolData);
-        toast.success('Tool updated');
-      } else {
-        await addDoc(collection(db, 'tools'), toolData);
-        toast.success('Tool created');
-      }
+        const targetId = editingTool?.id || crypto.randomUUID();
+        await upsertDocument('tools', targetId, d1Data);
 
-      resetForm();
-    } catch (error) {
-      console.error("Error saving tool:", error);
-      toast.error('Failed to save tool');
-      handleFirestoreError(error, OperationType.WRITE, 'tools');
-    }
+        const stateItem = { id: targetId, ...d1Data, ability, categoryId: effectiveCategoryId, foundryAlias, basicRules };
+        if (editingTool) {
+          setTools(prev => prev.map(t => t.id === targetId ? stateItem : t));
+          toast.success('Tool updated');
+        } else {
+          setTools(prev => [...prev, stateItem].sort((a, b) => a.name.localeCompare(b.name)));
+          toast.success('Tool created');
+        }
+
+        resetForm();
+      } catch (error) {
+        console.error("Error saving tool:", error);
+        toast.error('Failed to save tool');
+      }
   };
 
   const resetForm = () => {
@@ -140,12 +127,12 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
   const handleDelete = async (id: string) => {
     if (window.confirm('Delete this tool?')) {
       try {
-        await deleteDoc(doc(db, 'tools', id));
+        await deleteDocument('tools', id);
+        setTools(prev => prev.filter(t => t.id !== id));
         toast.success('Tool deleted');
       } catch (error) {
         console.error("Error deleting tool:", error);
         toast.error('Failed to delete tool');
-        handleFirestoreError(error, OperationType.DELETE, 'tools');
       }
     }
   };
@@ -172,7 +159,20 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                   </Button>
                 </Link>
               </div>
-              <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Tool Manager</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Tool Manager</h1>
+                {isUsingD1 ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                    <Database className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                    <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
+                  </div>
+                )}
+              </div>
               <p className="text-ink/60 font-serif italic">Define the tools and instruments available in your game system.</p>
             </div>
           </div>
@@ -323,10 +323,12 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                           </span>
                         )}
                         <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
-                          {toolCategories.find(c => c.id === tool.categoryId)?.name || 'Other'}
+                          {toolCategories.find((c: any) => c.id === (tool.category_id || tool.categoryId))?.name || 'Other'}
                         </span>
-                        {tool.ability && (
-                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{tool.ability}</span>
+                        {(tool.ability || tool.ability_id) && (
+                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">
+                            {tool.ability || (attributes as any[]).find((a: any) => a.id === tool.ability_id)?.identifier}
+                          </span>
                         )}
                         {tool.source && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/40 text-background rounded-full font-medium shadow-sm">{tool.source}{tool.page ? ` p.${tool.page}` : ''}</span>
@@ -343,17 +345,16 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                         setEditingTool(tool);
                         setName(tool.name);
                         setIdentifier(tool.identifier || '');
-                        setFoundryAlias(tool.foundryAlias || '');
-                        
-                        // Try to find categoryId, fallback to finding by name if it was old style
-                        const cid = tool.categoryId || toolCategories.find((c: any) => c.name === tool.category)?.id || '';
+                        setFoundryAlias(tool.foundry_alias || tool.foundryAlias || '');
+
+                        const cid = tool.category_id || tool.categoryId || toolCategories.find((c: any) => c.name === tool.category)?.id || '';
                         setCategoryId(cid);
-                        
-                        setAbility(tool.ability || 'DEX');
+
+                        setAbility(tool.ability || (attributes as any[]).find((a: any) => a.id === tool.ability_id)?.identifier || 'DEX');
                         setDescription(tool.description || '');
                         setSource(tool.source || '');
                         setPage(tool.page || '');
-                        setBasicRules(tool.basicRules || false);
+                        setBasicRules(!!(tool.basic_rules || tool.basicRules));
                       }} className="h-8 w-8 p-0 text-gold"><Edit className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(tool.id)} className="h-8 w-8 p-0 text-blood"><Trash2 className="w-4 h-4" /></Button>
                     </div>

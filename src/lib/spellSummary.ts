@@ -1,6 +1,10 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, writeBatch } from 'firebase/firestore';
-import { db } from './firebase';
+import { fetchCollection } from './d1';
 
+/**
+ * Lightweight summary record for the spell list. The legacy `spellSummaries`
+ * Firestore collection is decommissioned — we read directly from the `spells`
+ * D1 table and shape rows for the UI here.
+ */
 export type SpellSummaryRecord = {
   id: string;
   name?: string;
@@ -20,94 +24,39 @@ export type SpellSummaryRecord = {
   [key: string]: any;
 };
 
-export function buildSpellSummaryPayload(spell: Record<string, any>) {
-  return {
-    name: String(spell.name ?? ''),
-    identifier: String(spell.identifier ?? ''),
-    sourceId: String(spell.sourceId ?? ''),
-    imageUrl: String(spell.imageUrl ?? ''),
-    level: Number(spell.level ?? 0),
-    school: String(spell.school ?? ''),
-    tagIds: Array.isArray(spell.tagIds) ? spell.tagIds : [],
-    updatedAt: spell.updatedAt || '',
-    createdAt: spell.createdAt || '',
-    foundryImport: {
-      sourceBook: String(spell.foundryImport?.sourceBook ?? ''),
-      sourcePage: String(spell.foundryImport?.sourcePage ?? ''),
-      rules: String(spell.foundryImport?.rules ?? '')
-    }
-  };
-}
-
-function mapSpellDocsToSummaries(snapshot: any): SpellSummaryRecord[] {
-  return snapshot.docs.map((docSnap: any) => ({
-    id: docSnap.id,
-    ...buildSpellSummaryPayload({ id: docSnap.id, ...docSnap.data() })
-  }));
-}
-
 export function subscribeSpellSummaries(
   onData: (records: SpellSummaryRecord[]) => void,
   onError?: (error: unknown) => void,
-  onModeChange?: (mode: 'spellSummaries' | 'spells-fallback') => void
+  _onModeChange?: (mode: 'spellSummaries' | 'spells-fallback') => void
 ) {
-  // Client reads currently use the canonical spells collection directly.
-  // The server still maintains spellSummaries for future lightweight reads,
-  // but avoiding a direct spellSummaries listener keeps the app functional
-  // even before updated Firestore rules are deployed.
-  onModeChange?.('spells-fallback');
-  return onSnapshot(
-    query(collection(db, 'spells'), orderBy('name', 'asc')),
-    (snapshot) => onData(mapSpellDocsToSummaries(snapshot)),
-    (error) => onError?.(error)
-  );
-}
+  let active = true;
 
-export async function upsertSpellSummary(spellId: string, spell: Record<string, any>) {
-  await setDoc(doc(db, 'spellSummaries', spellId), buildSpellSummaryPayload(spell), { merge: true });
-}
+  const load = async () => {
+    try {
+      const data = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
 
-export async function deleteSpellSummary(spellId: string) {
-  await deleteDoc(doc(db, 'spellSummaries', spellId));
-}
+      if (!active) return;
 
-export async function createSpellWithSummary(spell: Record<string, any>) {
-  const created = await addDoc(collection(db, 'spells'), spell);
-  await upsertSpellSummary(created.id, spell);
-  return created.id;
-}
+      // Map D1 results (snake_case columns) back to camelCase expected by the UI
+      const mapped: SpellSummaryRecord[] = data.map(row => ({
+        ...row,
+        sourceId: row.source_id,
+        imageUrl: row.image_url,
+        foundryData: typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : row.foundry_data,
+        tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags,
+        // Ensure foundryShell/foundryDocument fallbacks for the summary view if needed
+        foundryShell: row.foundry_shell || (typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : row.foundry_data)
+      }));
 
-export async function spellSummariesExist() {
-  const snapshot = await getDocs(query(collection(db, 'spellSummaries'), orderBy('name', 'asc'), limit(1)));
-  return !snapshot.empty;
-}
-
-export async function backfillSpellSummaries() {
-  try {
-    const spellsSnapshot = await getDocs(query(collection(db, 'spells'), orderBy('name', 'asc')));
-    const docs = spellsSnapshot.docs;
-    if (!docs.length) return { count: 0 };
-
-    let count = 0;
-    for (let start = 0; start < docs.length; start += 400) {
-      const batch = writeBatch(db);
-      const chunk = docs.slice(start, start + 400);
-      for (const spellDoc of chunk) {
-        batch.set(
-          doc(db, 'spellSummaries', spellDoc.id),
-          buildSpellSummaryPayload({ id: spellDoc.id, ...spellDoc.data() }),
-          { merge: true }
-        );
-        count += 1;
-      }
-      await batch.commit();
+      onData(mapped);
+    } catch (err) {
+      if (active) onError?.(err);
     }
+  };
 
-    return { count };
-  } catch (error: any) {
-    if (error?.code === 'permission-denied') {
-      return { count: 0, skipped: true, reason: 'permission-denied' as const };
-    }
-    throw error;
-  }
+  load();
+
+  return () => {
+    active = false;
+  };
 }

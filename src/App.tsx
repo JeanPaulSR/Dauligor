@@ -5,10 +5,11 @@
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { auth, db, onAuthStateChanged, User } from './lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { auth, onAuthStateChanged, User } from './lib/firebase';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
+import { fetchDocument, upsertDocument, fetchCollection, checkFoundationUpdate, clearCache } from './lib/d1';
 import Navbar from './components/Navbar';
+
 import Home from './pages/core/Home';
 import Wiki from './pages/wiki/Wiki';
 import LoreEditor from './pages/wiki/LoreEditor';
@@ -33,7 +34,6 @@ import ClassEditor from './pages/compendium/ClassEditor';
 import SubclassEditor from './pages/compendium/SubclassEditor';
 import ScalingEditor from './pages/compendium/scaling/ScalingEditor';
 import SpellcastingScalingEditor from './pages/compendium/scaling/SpellcastingScalingEditor';
-import AlternativeSpellcastingScalingEditor from './pages/compendium/scaling/AlternativeSpellcastingScalingEditor';
 import SpellsKnownScalingEditor from './pages/compendium/scaling/SpellsKnownScalingEditor';
 import UniqueOptionGroupList from './pages/compendium/UniqueOptionGroupList';
 import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor';
@@ -88,92 +88,115 @@ export default function App() {
     }
   }, [effectiveProfile?.theme, effectiveProfile?.accentColor]);
 
+  // Global Foundation Sync Polling
+  const [lastFoundationTimestamp, setLastFoundationTimestamp] = useState<string | null>(null);
+
   useEffect(() => {
-    let unsubscribeProfile: (() => void) | null = null;
+    if (!user) return;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-        unsubscribeProfile = null;
+    // Initial check
+    checkFoundationUpdate().then(setLastFoundationTimestamp);
+
+    const interval = setInterval(async () => {
+      try {
+        const currentTimestamp = await checkFoundationUpdate();
+        if (lastFoundationTimestamp && currentTimestamp && currentTimestamp !== lastFoundationTimestamp) {
+          console.info(`[Foundation] Update detected (${currentTimestamp}). Clearing cache...`);
+          clearCache(); // Wipes in-memory and session storage
+          setLastFoundationTimestamp(currentTimestamp);
+          
+          // Optionally refresh the current profile as well if it might be affected
+          if (user) loadProfile(user);
+        } else if (!lastFoundationTimestamp && currentTimestamp) {
+          setLastFoundationTimestamp(currentTimestamp);
+        }
+      } catch (err) {
+        console.error("Failed to poll foundation update:", err);
       }
+    }, 30000); // 30 seconds
 
-      if (firebaseUser) {
-        const docRef = doc(db, 'users', firebaseUser.uid);
+    return () => clearInterval(interval);
+  }, [user, lastFoundationTimestamp]);
+
+  const loadProfile = async (firebaseUser: User) => {
+    try {
+      const data = await fetchDocument<any>('users', firebaseUser.uid);
+      
+      if (data) {
+        const email = firebaseUser.email || '';
+        const internalUsername = email.endsWith('@archive.internal') ? email.split('@')[0] : null;
+        const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
+        const isOwnerEmail = email === 'luapnaej101@gmail.com';
+        const shouldBeAdmin = isInternalAdmin || isOwnerEmail;
         
-        unsubscribeProfile = onSnapshot(docRef, async (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            const email = firebaseUser.email || '';
-            const internalUsername = email.endsWith('@archive.internal') ? email.split('@')[0] : null;
-            const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
-            const isOwnerEmail = email === 'luapnaej101@gmail.com';
-            const shouldBeAdmin = isInternalAdmin || isOwnerEmail;
-            
-            // Critical check: Only update if the role is actually different to prevent infinite write loops
-            if (shouldBeAdmin && data.role !== 'admin') {
-              const updatedProfile = { 
-                ...data, 
-                role: 'admin',
-                // Force correct username for internal admin accounts
-                username: isInternalAdmin ? (internalUsername || data.username) : data.username 
-              };
-              try {
-                await setDoc(docRef, updatedProfile);
-              } catch (err) {
-                console.error("Failed to auto-promote admin:", err);
-              }
-              // The next snapshot will trigger setUserProfile
-            } else if (isInternalAdmin && data.username !== internalUsername) {
-              try {
-                await updateDoc(docRef, { username: internalUsername });
-              } catch (err) {
-                console.error("Failed to fix internal username:", err);
-              }
-            } else {
-              // Set default activeCampaignId if missing
-              if (data.campaignIds?.length > 0 && !data.activeCampaignId) {
-                try {
-                  await updateDoc(docRef, { activeCampaignId: data.campaignIds[0] });
-                } catch (err) {
-                  console.error("Failed to set default campaign:", err);
-                }
-              }
-              setUserProfile(data);
+        if (shouldBeAdmin && data.role !== 'admin') {
+          const updatedProfile = { 
+            ...data, 
+            role: 'admin',
+            username: isInternalAdmin ? (internalUsername || data.username) : data.username 
+          };
+          await upsertDocument('users', firebaseUser.uid, updatedProfile);
+          setUserProfile(updatedProfile);
+        } else if (isInternalAdmin && data.username !== internalUsername) {
+          const updatedProfile = { ...data, username: internalUsername };
+          await upsertDocument('users', firebaseUser.uid, updatedProfile);
+          setUserProfile(updatedProfile);
+        } else {
+          // Check for active campaign if missing
+          if (!data.active_campaign_id) {
+            const memberData = await fetchCollection<any>('campaignMembers', { where: 'user_id = ?', params: [firebaseUser.uid] });
+            if (memberData.length > 0) {
+              const updatedProfile = { ...data, active_campaign_id: memberData[0].campaign_id };
+              await upsertDocument('users', firebaseUser.uid, updatedProfile);
+              setUserProfile(updatedProfile);
+              return;
             }
-          } else {
-            const email = firebaseUser.email || '';
-            const isInternal = email.endsWith('@archive.internal');
-            const internalUsername = isInternal ? email.split('@')[0] : null;
-            const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
-            const isOwnerEmail = email === 'luapnaej101@gmail.com';
-            
-            const newProfile = {
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName || (internalUsername ? internalUsername.charAt(0).toUpperCase() + internalUsername.slice(1) : 'Adventurer'),
-              username: internalUsername || firebaseUser.displayName?.toLowerCase().replace(/\s/g, '') || 'user',
-              role: (isInternalAdmin || isOwnerEmail) ? 'admin' : 'user',
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(docRef, newProfile);
-            setUserProfile(newProfile);
           }
-          setLoading(false);
-        }, (error) => {
-          console.error("Profile listener error:", error);
-          setLoading(false);
-        });
+          setUserProfile(data);
+        }
+      } else {
+        // No profile yet, create one
+        const email = firebaseUser.email || '';
+        const internalUsername = email.endsWith('@archive.internal') ? email.split('@')[0] : null;
+        const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
+        const isOwnerEmail = email === 'luapnaej101@gmail.com';
+        
+        const newProfile = {
+          id: firebaseUser.uid,
+          username: internalUsername || firebaseUser.displayName?.toLowerCase().replace(/\s+/g, '') || 'explorer',
+          display_name: firebaseUser.displayName || 'Explorer',
+          role: (isInternalAdmin || isOwnerEmail) ? 'admin' : 'user',
+          theme: 'parchment',
+          created_at: new Date().toISOString()
+        };
+        await upsertDocument('users', firebaseUser.uid, newProfile);
+        setUserProfile(newProfile);
+      }
+    } catch (err) {
+      console.error("Error loading user profile:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshProfile = async () => {
+    if (user) {
+      await loadProfile(user);
+    }
+  };
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        loadProfile(firebaseUser);
       } else {
         setUserProfile(null);
         setLoading(false);
       }
     });
 
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeProfile) unsubscribeProfile();
-    };
+    return () => unsubscribeAuth();
   }, []);
 
   if (loading) {
@@ -185,7 +208,11 @@ export default function App() {
   }
 
   return (
-    <WikiPreviewContext.Provider value={{ previewCampaign, setPreviewCampaign }}>
+    <WikiPreviewContext.Provider value={{ 
+      previewCampaign, 
+      setPreviewCampaign,
+      refreshProfile
+    }}>
     <TooltipProvider>
       <Router>
         <div className="min-h-screen flex">
@@ -239,8 +266,6 @@ export default function App() {
                   <Route path="/compendium/scaling/edit/:id" element={<ScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spellcasting-scaling/new" element={<SpellcastingScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spellcasting-scaling/edit/:id" element={<SpellcastingScalingEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/pact-scaling/new" element={<AlternativeSpellcastingScalingEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/pact-scaling/edit/:id" element={<AlternativeSpellcastingScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells-known-scaling/new" element={<SpellsKnownScalingEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells-known-scaling/edit/:id" element={<SpellsKnownScalingEditor userProfile={effectiveProfile} />} />
                   
@@ -259,7 +284,7 @@ export default function App() {
                   <Route path="/admin/statuses" element={<StatusesEditor userProfile={effectiveProfile} />} />
                   <Route path="/admin/images" element={<ImageManager userProfile={effectiveProfile} />} />
                   <Route path="/images/view" element={<ImageViewer userProfile={effectiveProfile} />} />
-                  <Route path="/settings" element={<Settings user={user} userProfile={userProfile} />} />
+                  <Route path="/settings" element={<Settings user={user} userProfile={effectiveProfile} />} />
                   <Route path="/profile/:username" element={<Profile viewerProfile={effectiveProfile} />} />
                   <Route path="/construction" element={<Construction />} />
                   <Route path="/characters" element={<CharacterList userProfile={effectiveProfile} />} />

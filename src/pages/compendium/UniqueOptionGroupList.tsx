@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { db } from '../../lib/firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Plus, Search, BookOpen, ChevronRight } from 'lucide-react';
 import { Input } from '../../components/ui/input';
+import { fetchCollection } from '../../lib/d1';
 
 export default function UniqueOptionGroupList({ userProfile }: { userProfile: any }) {
   const [groups, setGroups] = useState<any[]>([]);
@@ -14,12 +13,15 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
   const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'co-dm';
 
   useEffect(() => {
-    const q = query(collection(db, 'uniqueOptionGroups'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    fetchCollection('uniqueOptionGroups', { orderBy: 'name ASC' })
+      .then(data => {
+        setGroups(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error loading option groups:', err);
+        setLoading(false);
+      });
   }, []);
 
   const filteredGroups = groups.filter(g => 

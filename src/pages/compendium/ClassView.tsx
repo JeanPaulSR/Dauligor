@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { db } from '../../lib/firebase';
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { fetchCollection, fetchDocument } from '../../lib/d1';
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -39,6 +38,7 @@ import {
 } from '../../lib/classExport';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { toast } from 'sonner';
+import { Database, CloudOff } from 'lucide-react';
 
 export default function ClassView({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -74,6 +74,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [subclassSpellsKnown, setSubclassSpellsKnown] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(true);
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedOptionItems, setSelectedOptionItems] = useState<Record<string, string>>({});
@@ -93,72 +94,90 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       return;
     }
 
-    const unsubSub = onSnapshot(doc(db, 'subclasses', selectedSubclassId), async (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setSelectedSubclass({ id: snap.id, ...data });
+    const loadSubclassData = async () => {
+      try {
+        const subData = await fetchDocument('subclasses', selectedSubclassId);
 
-        // Fetch Spellcasting Scalings for Subclass
-        if (data.spellcasting) {
-          const sc = data.spellcasting;
-          
-          if (sc.manualProgressionId) {
-            getDoc(doc(db, 'spellcastingScalings', sc.manualProgressionId)).then(s => s.exists() && setSubclassSpellcasting(s.data()));
-          } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
-            const type = spellcastingTypes.find(t => t.id === sc.progressionId);
-            if (type) {
-              const virtualLevels: Record<string, any> = {};
-              for (let level = 1; level <= 20; level++) {
-                const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
-                const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
-                virtualLevels[level.toString()] = { slots };
+        if (subData) {
+          // Remap underscored fields to camelCase
+          const mappedSub = {
+            ...subData,
+            classId: subData.class_id || subData.classId,
+            sourceId: subData.source_id || subData.sourceId,
+            imageUrl: subData.image_url || subData.imageUrl,
+            imageDisplay: typeof subData.image_display === 'string' ? JSON.parse(subData.image_display) : (subData.imageDisplay || subData.image_display),
+            spellcasting: typeof subData.spellcasting === 'string' ? JSON.parse(subData.spellcasting) : (subData.spellcasting || {}),
+            advancements: typeof subData.advancements === 'string' ? JSON.parse(subData.advancements) : (subData.advancements || [])
+          };
+          setSelectedSubclass(mappedSub);
+
+          // Fetch Spellcasting Scalings for Subclass
+          if (mappedSub.spellcasting?.hasSpellcasting) {
+            const sc = mappedSub.spellcasting;
+            const parseLevels = (data: any) => {
+              if (!data) return null;
+              return {
+                ...data,
+                levels: typeof data.levels === 'string' ? JSON.parse(data.levels) : (data.levels || [])
+              };
+            };
+            
+            if (sc.manualProgressionId) {
+              const snap = await fetchDocument('spellcastingScalings', sc.manualProgressionId);
+              if (snap) setSubclassSpellcasting(parseLevels(snap));
+            } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
+              const type = spellcastingTypes.find(t => t.id === sc.progressionId);
+              if (type) {
+                const virtualLevels: Record<string, any> = {};
+                for (let level = 1; level <= 20; level++) {
+                  const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
+                  const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
+                  virtualLevels[level.toString()] = { slots };
+                }
+                setSubclassSpellcasting({ name: type.name, levels: virtualLevels });
               }
-              setSubclassSpellcasting({ name: type.name, levels: virtualLevels });
             }
-          } else if (sc.progressionId && !sc.manualProgressionId) {
-            getDoc(doc(db, 'spellcastingScalings', sc.progressionId)).then(s => s.exists() && setSubclassSpellcasting(s.data()));
-          }
 
-          if (sc.altProgressionId) {
-            getDoc(doc(db, 'pactMagicScalings', sc.altProgressionId)).then(s => s.exists() && setSubclassAltSpellcasting(s.data()));
-          } else {
-            setSubclassAltSpellcasting(null);
+            if (sc.altProgressionId) {
+              const snap = await fetchDocument('pactMagicScalings', sc.altProgressionId);
+              if (snap) setSubclassAltSpellcasting(parseLevels(snap));
+            } else {
+              setSubclassAltSpellcasting(null);
+            }
+            if (sc.spellsKnownId) {
+              const snap = await fetchDocument('spellsKnownScalings', sc.spellsKnownId);
+              if (snap) setSubclassSpellsKnown(parseLevels(snap));
+            } else {
+              setSubclassSpellsKnown(null);
+            }
           }
-          if (sc.spellsKnownId) {
-            getDoc(doc(db, 'spellsKnownScalings', sc.spellsKnownId)).then(s => s.exists() && setSubclassSpellsKnown(s.data()));
-          } else {
-            setSubclassSpellsKnown(null);
-          }
-        } else {
-          setSubclassSpellcasting(null);
-          setSubclassAltSpellcasting(null);
-          setSubclassSpellsKnown(null);
         }
+
+        const [subFeatures, subScalings] = await Promise.all([
+          fetchCollection('features', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId], orderBy: 'level ASC' }),
+          fetchCollection('scaling_columns', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId] })
+        ]);
+
+        setSubclassFeatures(subFeatures.map((f: any) => ({
+          ...f,
+          parentId: f.parent_id || f.parentId,
+          parentType: f.parent_type || f.parentType,
+          imageUrl: f.image_url || f.imageUrl,
+          isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1 || f.isSubclassFeature === true,
+          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : (f.advancements || [])
+        })));
+        setSubclassScalingColumns(subScalings.map((s: any) => ({
+          ...s,
+          parentId: s.parent_id || s.parentId,
+          parentType: s.parent_type || s.parentType,
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+        })));
+      } catch (err) {
+        console.error("Error loading subclass data:", err);
       }
-    });
-
-    const unsubFeat = onSnapshot(query(
-      collection(db, 'features'),
-      where('parentId', '==', selectedSubclassId),
-      where('parentType', '==', 'subclass'),
-      orderBy('level', 'asc')
-    ), (snap) => {
-      setSubclassFeatures(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubCol = onSnapshot(query(
-      collection(db, 'scalingColumns'),
-      where('parentId', '==', selectedSubclassId),
-      where('parentType', '==', 'subclass')
-    ), (snap) => {
-      setSubclassScalingColumns(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      unsubSub();
-      unsubFeat();
-      unsubCol();
     };
+
+    loadSubclassData();
   }, [selectedSubclassId, spellcastingTypes.length, !!masterMulticlassChart]);
 
   const allFeaturesWithSpellcasting = useMemo(() => {
@@ -202,127 +221,123 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
   useEffect(() => {
     if (!id) return;
-    console.log(`[ClassView] Initializing main class listener for ID: ${id}`);
-    const startTime = performance.now();
-
-    const classRef = doc(db, 'classes', id);
-    const unsubscribeClass = onSnapshot(classRef, async (docSnap) => {
-      console.log(`[ClassView] Class snapshot received. Exists: ${docSnap.exists()}`);
+    const loadMainClassData = async () => {
+      setLoading(true);
       try {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setClassData({ id: docSnap.id, ...data });
+        const classInfo = await fetchDocument('classes', id);
 
-          // Fetch Source
-          if (data.sourceId) {
-            console.log(`[ClassView] Fetching source with ID: ${data.sourceId}`);
-            try {
-              const sourceSnap = await getDoc(doc(db, 'sources', data.sourceId));
-              if (sourceSnap.exists()) {
-                setSource({ id: sourceSnap.id, ...sourceSnap.data() });
-                console.log(`[ClassView] Source loaded: ${sourceSnap.data().name}`);
-              }
-            } catch (err) {
-              console.error("[ClassView] Error fetching source:", err);
-            }
-          }
-
-          // Fetch Spellcasting Scalings
-          if (data.spellcasting) {
-            const sc = data.spellcasting;
-            
-            if (sc.manualProgressionId) {
-              getDoc(doc(db, 'spellcastingScalings', sc.manualProgressionId)).then(snap => {
-                if (snap.exists()) setSpellcasting(snap.data());
-              });
-            } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
-              const type = spellcastingTypes.find(t => t.id === sc.progressionId);
-              if (type) {
-                const virtualLevels: Record<string, any> = {};
-                for (let level = 1; level <= 20; level++) {
-                  const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
-                  const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
-                  virtualLevels[level.toString()] = { slots };
-                }
-                setSpellcasting({ name: type.name, levels: virtualLevels });
-              }
-            } else if (sc.progressionId && !sc.manualProgressionId) {
-              // Fallback/Legacy
-              getDoc(doc(db, 'spellcastingScalings', sc.progressionId)).then(snap => {
-                if (snap.exists()) setSpellcasting(snap.data());
-              });
-            }
-
-            if (sc.altProgressionId) {
-              getDoc(doc(db, 'pactMagicScalings', sc.altProgressionId)).then(snap => {
-                if (snap.exists()) setAltSpellcasting(snap.data());
-              });
-            }
-            if (sc.spellsKnownId) {
-              getDoc(doc(db, 'spellsKnownScalings', sc.spellsKnownId)).then(snap => {
-                if (snap.exists()) setSpellsKnown(snap.data());
-              });
-            }
-          }
-        } else {
-          console.warn(`[ClassView] Class document ${id} does not exist.`);
+        if (!classInfo) {
           navigate('/compendium/classes');
+          return;
         }
-      } catch (error) {
-        console.error("[ClassView] Error in class snapshot processing:", error);
-      } finally {
+
+        const mappedClass = {
+          ...classInfo,
+          sourceId: classInfo.source_id || classInfo.sourceId,
+          tagIds: typeof classInfo.tag_ids === 'string' ? JSON.parse(classInfo.tag_ids) : (classInfo.tagIds || classInfo.tag_ids || []),
+          hitDie: classInfo.hit_die || classInfo.hitDie,
+          imageUrl: classInfo.image_url || classInfo.imageUrl,
+          cardImageUrl: classInfo.card_image_url || classInfo.cardImageUrl,
+          previewImageUrl: classInfo.preview_image_url || classInfo.previewImageUrl,
+          cardDisplay: typeof classInfo.card_display === 'string' ? JSON.parse(classInfo.card_display) : (classInfo.cardDisplay || classInfo.card_display),
+          imageDisplay: typeof classInfo.image_display === 'string' ? JSON.parse(classInfo.image_display) : (classInfo.imageDisplay || classInfo.image_display),
+          previewDisplay: typeof classInfo.preview_display === 'string' ? JSON.parse(classInfo.preview_display) : (classInfo.previewDisplay || classInfo.preview_display),
+          proficiencies: typeof classInfo.proficiencies === 'string' ? JSON.parse(classInfo.proficiencies) : (classInfo.proficiencies || {}),
+          startingEquipment: classInfo.starting_equipment || classInfo.startingEquipment,
+          primaryAbility: typeof classInfo.primary_ability === 'string' ? JSON.parse(classInfo.primary_ability) : (classInfo.primaryAbility || classInfo.primary_ability || []),
+          primaryAbilityChoice: typeof classInfo.primary_ability_choice === 'string' ? JSON.parse(classInfo.primary_ability_choice) : (classInfo.primaryAbilityChoice || classInfo.primary_ability_choice || []),
+          savingThrows: typeof classInfo.saving_throws === 'string' ? JSON.parse(classInfo.saving_throws) : (classInfo.savingThrows || classInfo.saving_throws || []),
+          spellcasting: typeof classInfo.spellcasting === 'string' ? JSON.parse(classInfo.spellcasting) : (classInfo.spellcasting || {}),
+          advancements: typeof classInfo.advancements === 'string' ? JSON.parse(classInfo.advancements) : (classInfo.advancements || []),
+          subclassTitle: classInfo.subclass_title || classInfo.subclassTitle || 'Subclass',
+          subclassFeatureLevels: typeof classInfo.subclass_feature_levels === 'string' ? JSON.parse(classInfo.subclass_feature_levels) : (classInfo.subclassFeatureLevels || classInfo.subclass_feature_levels || [])
+        };
+
+        setClassData(mappedClass);
+
+        // Parallel fetch for associated data
+        const [featData, scalingsData, subsData, sourceData] = await Promise.all([
+          fetchCollection('features', { where: "parent_id = ? AND parent_type = 'class'", params: [id], orderBy: 'level ASC' }),
+          fetchCollection('scaling_columns', { where: "parent_id = ? AND parent_type = 'class'", params: [id] }),
+          fetchCollection('subclasses', { where: "class_id = ?", params: [id], orderBy: 'name ASC' }),
+          classInfo.source_id || classInfo.sourceId ? fetchDocument('sources', classInfo.source_id || classInfo.sourceId) : Promise.resolve(null)
+        ]);
+
+        setFeatures(featData.map((f: any) => ({
+          ...f,
+          parentId: f.parent_id || f.parentId,
+          parentType: f.parent_type || f.parentType,
+          imageUrl: f.image_url || f.imageUrl,
+          isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1 || f.isSubclassFeature === true,
+          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : (f.advancements || [])
+        })));
+        setScalingColumns(scalingsData.map((s: any) => ({
+          ...s,
+          parentId: s.parent_id || s.parentId,
+          parentType: s.parent_type || s.parentType,
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+        })));
+        setSubclasses(subsData.map((sub: any) => ({
+          ...sub,
+          classId: sub.class_id || sub.classId,
+          sourceId: sub.source_id || sub.sourceId,
+          imageUrl: sub.image_url || sub.imageUrl,
+          imageDisplay: typeof sub.image_display === 'string' ? JSON.parse(sub.image_display) : (sub.imageDisplay || sub.image_display),
+          spellcasting: typeof sub.spellcasting === 'string' ? JSON.parse(sub.spellcasting) : (sub.spellcasting || {}),
+          advancements: typeof sub.advancements === 'string' ? JSON.parse(sub.advancements) : (sub.advancements || [])
+        })));
+        setSource(sourceData ? {
+          ...sourceData,
+          rulesVersion: sourceData.rules_version || sourceData.rulesVersion,
+          imageUrl: sourceData.image_url || sourceData.imageUrl
+        } : null);
+
+        // Spellcasting Scalings
+        if (mappedClass.spellcasting?.hasSpellcasting) {
+          const sc = mappedClass.spellcasting;
+          const parseLevels = (data: any) => {
+            if (!data) return null;
+            return {
+              ...data,
+              levels: typeof data.levels === 'string' ? JSON.parse(data.levels) : (data.levels || [])
+            };
+          };
+
+          if (sc.manualProgressionId) {
+            const snap = await fetchDocument('spellcastingScalings', sc.manualProgressionId);
+            if (snap) setSpellcasting(parseLevels(snap));
+          } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
+            const type = spellcastingTypes.find(t => t.id === sc.progressionId);
+            if (type) {
+              const virtualLevels: Record<string, any> = {};
+              for (let level = 1; level <= 20; level++) {
+                const effectiveLevel = calculateEffectiveCastingLevel(level, type.formula);
+                const slots = getSpellSlotsForLevel(effectiveLevel, masterMulticlassChart.levels || []);
+                virtualLevels[level.toString()] = { slots };
+              }
+              setSpellcasting({ name: type.name, levels: virtualLevels });
+            }
+          }
+
+          if (sc.altProgressionId) {
+            const snap = await fetchDocument('pactMagicScalings', sc.altProgressionId);
+            if (snap) setAltSpellcasting(parseLevels(snap));
+          }
+          if (sc.spellsKnownId) {
+            const snap = await fetchDocument('spellsKnownScalings', sc.spellsKnownId);
+            if (snap) setSpellsKnown(parseLevels(snap));
+          }
+        }
+
         setLoading(false);
-        setTimeout(() => setTableLoading(false), 300);
-        console.log(`[ClassView] Main class loading complete. Total time: ${(performance.now() - startTime).toFixed(2)}ms`);
+        setTableLoading(false);
+      } catch (err) {
+        console.error("Error loading main class data:", err);
+        setLoading(false);
+        setTableLoading(false);
       }
-    }, (err) => {
-      console.error("[ClassView] Class snapshot error:", err);
-      setLoading(false);
-      setTimeout(() => setTableLoading(false), 300);
-    });
-
-    // Fetch Features
-    console.log(`[ClassView] Setting up features listener for parentId: ${id}`);
-    const featuresQuery = query(
-      collection(db, 'features'), 
-      where('parentId', '==', id),
-      where('parentType', '==', 'class'),
-      orderBy('level', 'asc')
-    );
-    const unsubscribeFeatures = onSnapshot(featuresQuery, (snapshot) => {
-      console.log(`[ClassView] Features snapshot received. Count: ${snapshot.docs.length}`);
-      setFeatures(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => console.error("[ClassView] Features listener error:", err));
-
-    // Fetch Scaling Columns
-    console.log(`[ClassView] Setting up scaling columns listener for parentId: ${id}`);
-    const scalingQuery = query(
-      collection(db, 'scalingColumns'),
-      where('parentId', '==', id),
-      where('parentType', '==', 'class')
-    );
-    const unsubscribeScaling = onSnapshot(scalingQuery, (snapshot) => {
-      console.log(`[ClassView] Scaling columns snapshot received. Count: ${snapshot.docs.length}`);
-      setScalingColumns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => console.error("[ClassView] Scaling columns listener error:", err));
-
-    // Fetch Subclasses
-    const subclassesQuery = query(
-      collection(db, 'subclasses'),
-      where('classId', '==', id),
-      orderBy('name', 'asc')
-    );
-    const unsubscribeSubclasses = onSnapshot(subclassesQuery, (snapshot) => {
-      setSubclasses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      console.log(`[ClassView] Cleaning up main listeners for ID: ${id}`);
-      unsubscribeClass();
-      unsubscribeFeatures();
-      unsubscribeScaling();
-      unsubscribeSubclasses();
     };
+    loadMainClassData();
   }, [id, navigate, spellcastingTypes.length, !!masterMulticlassChart]);
 
   const allScalingColumns = useMemo(() => {
@@ -357,137 +372,124 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
       return;
     }
 
-    console.log(`[ClassView] Setting up unique options listeners for:`, allGroupIds);
-    
-    // Firestore 'in' query limit is 10 items.
-    const chunkArray = (arr: any[], size: number) => {
-      return Array.from({ length: Math.ceil(arr.length / size) }, (v, i) =>
-        arr.slice(i * size, i * size + size)
-      );
+    const loadOptions = async () => {
+      try {
+        const [groupsData, itemsData] = await Promise.all([
+          fetchCollection('unique_option_groups', { where: `id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds }),
+          fetchCollection('unique_option_items', { where: `group_id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds })
+        ]);
+        setOptionGroups(groupsData.map((g: any) => ({
+          ...g,
+          sourceId: g.source_id || g.sourceId,
+          classIds: typeof g.class_ids === 'string' ? JSON.parse(g.class_ids) : (g.class_ids || g.classIds || [])
+        })));
+        setOptionItems(itemsData.map((i: any) => ({
+          ...i,
+          groupId: i.group_id || i.groupId,
+          sourceId: i.source_id || i.sourceId,
+          iconUrl: i.icon_url || i.iconUrl,
+          levelPrerequisite: i.level_prerequisite || i.levelPrerequisite,
+          stringPrerequisite: i.string_prerequisite || i.stringPrerequisite,
+          isRepeatable: i.is_repeatable || i.isRepeatable,
+          classIds: typeof i.class_ids === 'string' ? JSON.parse(i.class_ids) : (i.class_ids || i.classIds || [])
+        })));
+      } catch (err) {
+        console.error("Error loading options:", err);
+      }
     };
-
-    const chunks = chunkArray(allGroupIds, 10);
-    let unsubGroups: (() => void)[] = [];
-    let unsubItems: (() => void)[] = [];
-    
-    let allGroupsMap = new Map();
-    let allItemsMap = new Map();
-
-    chunks.forEach((chunkIds, index) => {
-      const groupsQuery = query(
-        collection(db, 'uniqueOptionGroups'),
-        where('__name__', 'in', chunkIds)
-      );
-      const u1 = onSnapshot(groupsQuery, (snapshot) => {
-        snapshot.docs.forEach(doc => {
-          allGroupsMap.set(doc.id, { id: doc.id, ...doc.data() });
-        });
-        setOptionGroups(Array.from(allGroupsMap.values()));
-      });
-      unsubGroups.push(u1);
-
-      const itemsQuery = query(
-        collection(db, 'uniqueOptionItems'),
-        where('groupId', 'in', chunkIds)
-        // Note: orderBy cannot be used safely with chunked maps without client-side sort
-      );
-      const u2 = onSnapshot(itemsQuery, (snapshot) => {
-        snapshot.docs.forEach(doc => {
-          allItemsMap.set(doc.id, { id: doc.id, ...doc.data() });
-        });
-        const sortedItems = Array.from(allItemsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-        setOptionItems(sortedItems);
-      });
-      unsubItems.push(u2);
-    });
-
-    return () => {
-      unsubGroups.forEach(u => u());
-      unsubItems.forEach(u => u());
-    };
+    loadOptions();
   }, [id, allGroupIds]);
 
   useEffect(() => {
-    // Fetch Tag Groups
-    const unsubscribeTagGroups = onSnapshot(query(collection(db, 'tagGroups')), (snap) => {
-      setTagGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const loadFoundation = async () => {
+      try {
+        const [
+          tagGroupsData,
+          tagsData,
+          skillsData,
+          toolsData,
+          toolCatsData,
+          weaponCatsData,
+          armorCatsData,
+          weaponsData,
+          armorData,
+          attrsData,
+          scTypesData,
+          masterData
+        ] = await Promise.all([
+          fetchCollection('tagGroups'),
+          fetchCollection('tags'),
+          fetchCollection('skills'),
+          fetchCollection('tools'),
+          fetchCollection('toolCategories'),
+          fetchCollection('weaponCategories'),
+          fetchCollection('armorCategories'),
+          fetchCollection('weapons'),
+          fetchCollection('armor'),
+          fetchCollection('attributes'),
+          fetchCollection('spellcastingTypes'),
+          fetchDocument('standardMulticlassProgression', 'master')
+        ]);
 
-    // Fetch All Tags
-    const unsubscribeTags = onSnapshot(query(collection(db, 'tags')), (snap) => {
-      setAllTags(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+        setTagGroups(tagGroupsData.map((tg: any) => ({
+          ...tg,
+          classifications: typeof tg.classifications === 'string' ? JSON.parse(tg.classifications) : (tg.classifications || [])
+        })));
+        setAllTags(tagsData);
+        setAllSkills(skillsData.map((s: any) => ({
+          ...s,
+          abilityId: s.ability_id || s.abilityId
+        })));
+        setAllTools(toolsData.map((t: any) => ({
+          ...t,
+          categoryId: t.category_id || t.categoryId,
+          abilityId: t.ability_id || t.abilityId
+        })));
+        setAllToolCategories(toolCatsData);
+        setAllWeaponCategories(weaponCatsData);
+        setAllArmorCategories(armorCatsData);
+        setAllWeapons(weaponsData.map((w: any) => ({
+          ...w,
+          categoryId: w.category_id || w.categoryId,
+          abilityId: w.ability_id || w.abilityId,
+          propertyIds: typeof w.property_ids === 'string' ? JSON.parse(w.property_ids) : (w.property_ids || w.propertyIds || [])
+        })));
+        setAllArmor(armorData.map((a: any) => ({
+          ...a,
+          categoryId: a.category_id || a.categoryId,
+          abilityId: a.ability_id || a.abilityId
+        })));
+        setSpellcastingTypes(scTypesData);
+        setMasterMulticlassChart(masterData ? {
+          ...masterData,
+          levels: typeof masterData.levels === 'string' ? JSON.parse(masterData.levels) : (masterData.levels || [])
+        } : null);
 
-    // Fetch All Skills
-    const unsubscribeSkills = onSnapshot(query(collection(db, 'skills')), (snap) => {
-      setAllSkills(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+        // Attributes unique logic
+        const uniqueAttrsMap = new Map();
+        attrsData.forEach((item: any) => {
+          const key = (item.identifier || item.id).toUpperCase();
+          if (!uniqueAttrsMap.has(key) || item.identifier) {
+            uniqueAttrsMap.set(key, item);
+          }
+        });
+        setAllAttributes(Array.from(uniqueAttrsMap.values()).sort((a: any, b: any) => {
+          const orderA = typeof a.order === 'number' ? a.order : 999;
+          const orderB = typeof b.order === 'number' ? b.order : 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.name || '').localeCompare(b.name || '');
+        }));
 
-    // Fetch All Tools
-    const unsubscribeTools = onSnapshot(query(collection(db, 'tools')), (snap) => {
-      setAllTools(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeToolCategories = onSnapshot(collection(db, 'toolCategories'), (snap) => {
-      setAllToolCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeWeaponCategories = onSnapshot(collection(db, 'weaponCategories'), (snap) => {
-      setAllWeaponCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeArmorCategories = onSnapshot(collection(db, 'armorCategories'), (snap) => {
-      setAllArmorCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeWeapons = onSnapshot(collection(db, 'weapons'), (snap) => {
-      setAllWeapons(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeArmor = onSnapshot(collection(db, 'armor'), (snap) => {
-      setAllArmor(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeAttributes = onSnapshot(query(collection(db, 'attributes')), (snapshot) => {
-      const attrs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const uniqueAttrsMap = new Map();
-      attrs.forEach((item: any) => {
-        const key = (item.identifier || item.id).toUpperCase();
-        if (!uniqueAttrsMap.has(key) || item.identifier) {
-          uniqueAttrsMap.set(key, item);
+        if (tagGroupsData.length > 0) {
+          setIsFoundationUsingD1(true);
         }
-      });
-      const uniqueAttrs = Array.from(uniqueAttrsMap.values());
-      setAllAttributes(uniqueAttrs.sort((a: any, b: any) => {
-        const orderA = typeof a.order === 'number' ? a.order : 999;
-        const orderB = typeof b.order === 'number' ? b.order : 999;
-        if (orderA !== orderB) return orderA - orderB;
-        return (a.name || '').localeCompare(b.name || '');
-      }));
-    });
-
-    const unsubscribeTypes = onSnapshot(collection(db, 'spellcastingTypes'), (snap) => {
-      setSpellcastingTypes(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeMaster = onSnapshot(doc(db, 'standardMulticlassProgression', 'master'), (snap) => {
-      if (snap.exists()) setMasterMulticlassChart(snap.data());
-    });
-
-    return () => {
-      unsubscribeTagGroups();
-      unsubscribeTags();
-      unsubscribeSkills();
-      unsubscribeTools();
-      unsubscribeToolCategories();
-      unsubscribeWeaponCategories();
-      unsubscribeArmorCategories();
-      unsubscribeWeapons();
-      unsubscribeArmor();
-      unsubscribeAttributes();
-      unsubscribeTypes();
-      unsubscribeMaster();
+      } catch (err) {
+        console.error("[ClassView] Error loading foundation data:", err);
+        setIsFoundationUsingD1(false);
+      }
     };
+
+    loadFoundation();
   }, []);
 
   const hasAnySpellsKnown = !!(spellsKnown || subclassSpellsKnown);
@@ -712,7 +714,20 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
                 {source?.name || 'Unknown Source'}
               </Badge>
             </div>
-            <h1 className="h1-title uppercase">{classData.name}</h1>
+            <div className="flex items-center gap-4">
+              <h1 className="h1-title uppercase">{classData.name}</h1>
+              {isFoundationUsingD1 ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  <Database className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+                </div>
+              )}
+            </div>
             
             <div className="flex flex-wrap gap-x-6 gap-y-2">
               {tagGroups.map(group => {

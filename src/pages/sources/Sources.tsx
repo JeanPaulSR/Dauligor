@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError, resetFirestore } from '../../lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Book, Plus, ExternalLink, Edit, Search, RefreshCw, AlertTriangle, Download, ChevronDown } from 'lucide-react';
+import { Book, Plus, ExternalLink, Edit, Search, RefreshCw, AlertTriangle, Download, ChevronDown, Database, CloudOff } from 'lucide-react';
+import { fetchCollection } from '../../lib/d1';
 import { Input } from '../../components/ui/input';
+
+// Page reload helper for the "rebuild cache" buttons. Replaces the historical
+// `resetFirestore()` which existed to clear Firestore's IndexedDB cache; with
+// Firestore gone, a plain reload achieves the same intent.
+const reloadPage = () => window.location.reload();
 import { motion, AnimatePresence } from 'motion/react';
 import { exportFullSourceLibrary, exportRawLibraryCatalogJSON } from '../../lib/classExport';
 import {
@@ -23,6 +27,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [isUsingD1, setIsUsingD1] = useState(false);
   const navigate = useNavigate();
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
@@ -43,18 +48,22 @@ export default function Sources({ userProfile }: { userProfile: any }) {
   };
 
   useEffect(() => {
-    const q = query(collection(db, 'sources'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-      setError(null);
-    }, (err) => {
-      console.error("Raw Firestore Error in Sources:", err);
-      setError(err.message);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    const loadSources = async () => {
+      try {
+        const data = await fetchCollection('sources', { orderBy: 'name ASC' });
+        
+        setSources(data);
+        setLoading(false);
+        setError(null);
+        setIsUsingD1(true);
+      } catch (err: any) {
+        console.error("Error loading sources:", err);
+        setError(err.message);
+        setLoading(false);
+        setIsUsingD1(false);
+      }
+    };
+    loadSources();
   }, []);
 
   const filteredSources = sources.filter(s => 
@@ -88,7 +97,7 @@ export default function Sources({ userProfile }: { userProfile: any }) {
               Try Simple Refresh
             </Button>
             <Button 
-              onClick={resetFirestore}
+              onClick={reloadPage}
               className="btn-gold-solid gap-2"
             >
               <RefreshCw className="w-4 h-4" /> Clear Cache & Hard Reset
@@ -105,8 +114,19 @@ export default function Sources({ userProfile }: { userProfile: any }) {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gold/20 pb-6">
-        <div>
+        <div className="flex items-center gap-4">
           <h1 className="h1-title">Sources & Documents</h1>
+          {isUsingD1 ? (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <Database className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+              <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -129,6 +149,16 @@ export default function Sources({ userProfile }: { userProfile: any }) {
                 <Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export for Foundry'}
               </Button>
               
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={reloadPage}
+                title="Clear Cache & Hard Reset"
+                className="text-gold/40 hover:text-gold hover:bg-gold/10"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+
               <Link to="/sources/new">
                 <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/20">
                   <Plus className="w-4 h-4" /> New Source

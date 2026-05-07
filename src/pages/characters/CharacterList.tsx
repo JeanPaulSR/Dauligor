@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { db } from '../../lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Plus, User, Shield, Sparkles, BookOpen, Book } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
+import { queryD1 } from '../../lib/d1';
 import {
   Dialog,
   DialogContent,
@@ -24,23 +22,28 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (!userProfile?.uid) return;
 
-    let q;
-    if (isStaff) {
-      // Staff can see all characters to assign campaigns
-      q = query(collection(db, 'characters'));
-    } else {
-      q = query(collection(db, 'characters'), where('userId', '==', userProfile.uid));
-    }
+    const loadCharacters = async () => {
+      try {
+        let sql = "SELECT * FROM characters";
+        let params: any[] = [];
+        
+        if (!isStaff) {
+          sql += " WHERE user_id = ?";
+          params = [userProfile.uid];
+        }
+        
+        sql += " ORDER BY updated_at DESC";
+        
+        const results = await queryD1<any>(sql, params);
+        setCharacters(results);
+      } catch (error) {
+        console.error("Error loading characters from D1:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setCharacters(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'characters');
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    loadCharacters();
   }, [userProfile?.uid, isStaff]);
 
   if (loading) {

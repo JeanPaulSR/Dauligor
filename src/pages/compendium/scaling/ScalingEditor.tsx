@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { db } from '../../../lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -13,6 +11,7 @@ import {
   Save,
   LayoutGrid
 } from 'lucide-react';
+import { fetchDocument, upsertDocument, deleteDocument } from '../../../lib/d1';
 
 export default function ScalingEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -20,8 +19,8 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  const parentId = searchParams.get('parentId');
-  const parentType = searchParams.get('parentType') || 'class';
+  const [parentId, setParentId] = useState(searchParams.get('parentId') || '');
+  const [parentType, setParentType] = useState(searchParams.get('parentType') || 'class');
 
   const [name, setName] = useState('');
   const [values, setValues] = useState<Record<string, string>>({});
@@ -29,11 +28,12 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (id) {
       const fetchScaling = async () => {
-        const docSnap = await getDoc(doc(db, 'scalingColumns', id));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        const data = await fetchDocument<any>('scaling_columns', id);
+        if (data) {
           setName(data.name || '');
-          setValues(data.values || {});
+          setValues(typeof data.values === 'string' ? JSON.parse(data.values) : (data.values || {}));
+          setParentId(data.parent_id || data.parentId || '');
+          setParentType(data.parent_type || data.parentType || 'class');
         }
       };
       fetchScaling();
@@ -57,22 +57,18 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
         }
       }
 
-      const scalingData = {
+      const d1Data = {
         name,
-        parentId: parentId || (id ? (await getDoc(doc(db, 'scalingColumns', id))).data()?.parentId : ''),
-        parentType: parentType || (id ? (await getDoc(doc(db, 'scalingColumns', id))).data()?.parentType : 'class'),
+        identifier: id ? undefined : undefined, // slugify name if new?
+        parent_id: parentId,
+        parent_type: parentType,
         values: finalValues,
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString()
       };
 
-      if (id) {
-        await updateDoc(doc(db, 'scalingColumns', id), scalingData);
-      } else {
-        await addDoc(collection(db, 'scalingColumns'), {
-          ...scalingData,
-          createdAt: new Date().toISOString()
-        });
-      }
+      const saveId = id || crypto.randomUUID();
+      await upsertDocument('scaling_columns', saveId, d1Data);
+      
       navigate(-1);
       toast.success('Scaling column saved');
     } catch (error) {
@@ -174,7 +170,7 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
             onClick={async () => {
               if (confirm('Delete this scaling column?')) {
                 try {
-                  await deleteDoc(doc(db, 'scalingColumns', id));
+                  await deleteDocument('scaling_columns', id);
                   toast.success('Scaling column deleted');
                   navigate(-1);
                 } catch (error) {

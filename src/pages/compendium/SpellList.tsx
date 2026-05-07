@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, doc, getDoc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { Wand2 } from 'lucide-react';
-import { db } from '../../lib/firebase';
 import { bbcodeToHtml } from '../../lib/bbcode';
+import { fetchCollection, fetchDocument } from '../../lib/d1';
+import { Database, CloudOff } from 'lucide-react';
 import {
   formatActivationLabel,
   formatComponentsLabel,
@@ -88,39 +88,54 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [levelFilters, setLevelFilters] = useState<string[]>([]);
   const [schoolFilters, setSchoolFilters] = useState<string[]>([]);
   const [tagFilterIds, setTagFilterIds] = useState<string[]>([]);
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   useEffect(() => {
-    const unsubscribeSpells = subscribeSpellSummaries(
-      (records) => {
-        setSpells(records);
+    const loadSpells = async () => {
+      setLoadingSpells(true);
+      try {
+        const records = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+        
+        const mapped = records.map(row => ({
+          ...row,
+          sourceId: row.sourceId || row.source_id,
+          imageUrl: row.imageUrl || row.image_url,
+          tagIds: Array.isArray(row.tagIds) ? row.tagIds : (typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags),
+          foundryShell: row.foundryShell || (typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : row.foundry_data)
+        }));
+
+        setSpells(mapped);
         setLoadingSpells(false);
-      },
-      (error) => {
-        console.error('Error loading spells:', error);
+      } catch (err) {
+        console.error("Error loading spells:", err);
         setLoadingSpells(false);
       }
-    );
+    };
 
-    const unsubscribeSources = onSnapshot(
-      query(collection(db, 'sources'), orderBy('name', 'asc')),
-      (snapshot) => setSources(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
-    );
+    loadSpells();
 
-    const unsubscribeTagGroups = onSnapshot(
-      query(collection(db, 'tagGroups'), where('classifications', 'array-contains', 'spell')),
-      (snapshot) => setTagGroups(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
-    );
+    const loadFoundation = async () => {
+      try {
+        const [sourcesData, tagGroupsData, tagsData] = await Promise.all([
+          fetchCollection('sources', { orderBy: 'name ASC' }),
+          fetchCollection('tagGroups', { where: "classifications LIKE '%spell%'" }),
+          fetchCollection('tags', { orderBy: 'name ASC' })
+        ]);
 
-    const unsubscribeTags = onSnapshot(
-      query(collection(db, 'tags'), orderBy('name', 'asc')),
-      (snapshot) => setAllTags(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })))
-    );
+        setSources(sourcesData);
+        setTagGroups(tagGroupsData);
+        setAllTags(tagsData);
+
+        if (sourcesData.length > 0) setIsFoundationUsingD1(true);
+      } catch (err) {
+        console.error("[SpellList] Error loading foundation data:", err);
+        setIsFoundationUsingD1(false);
+      }
+    };
+
+    loadFoundation();
 
     return () => {
-      unsubscribeSpells();
-      unsubscribeSources();
-      unsubscribeTagGroups();
-      unsubscribeTags();
     };
   }, []);
 
@@ -166,20 +181,34 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (!selectedSpellId || spellDetailsById[selectedSpellId]) return;
     let active = true;
-    setLoadingSelectedSpell(true);
-    void getDoc(doc(db, 'spells', selectedSpellId))
-      .then((snapshot) => {
-        if (!active) return;
-        if (snapshot.exists()) {
-          setSpellDetailsById((current) => ({
-            ...current,
-            [selectedSpellId]: { id: snapshot.id, ...snapshot.data() }
-          }));
-        }
-      })
-      .finally(() => {
+    const loadDetails = async () => {
+      try {
+        const data = await fetchDocument<any>('spells', selectedSpellId);
+
+        if (!active || !data) return;
+
+        const mapped = {
+          ...data,
+          sourceId: data.sourceId || data.source_id,
+          imageUrl: data.imageUrl || data.image_url,
+          tagIds: Array.isArray(data.tagIds) ? data.tagIds : (typeof data.tags === 'string' ? JSON.parse(data.tags) : data.tags),
+          foundryDocument: data.foundryDocument || (typeof data.foundry_data === 'string' ? { system: JSON.parse(data.foundry_data) } : { system: data.foundry_data }),
+          automation: data.automation || {
+            activities: typeof data.activities === 'string' ? JSON.parse(data.activities) : data.activities,
+            effects: typeof data.effects === 'string' ? JSON.parse(data.effects) : data.effects
+          }
+        };
+
+        setSpellDetailsById((current) => ({
+          ...current,
+          [selectedSpellId]: mapped
+        }));
+      } finally {
         if (active) setLoadingSelectedSpell(false);
-      });
+      }
+    };
+
+    loadDetails();
 
     return () => {
       active = false;
@@ -226,7 +255,20 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             <Wand2 className="h-6 w-6" />
             <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium</span>
           </div>
-          <h1 className="h1-title">Spell List</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="h1-title">Spell List</h1>
+            {isFoundationUsingD1 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

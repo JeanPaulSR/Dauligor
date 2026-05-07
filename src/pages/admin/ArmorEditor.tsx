@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { db } from '../../lib/firebase';
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc
-} from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
@@ -19,15 +8,19 @@ import {
   Plus, 
   Trash2, 
   Edit, 
-  ShieldCheck
+  ShieldCheck,
+  Database,
+  CloudOff
 } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 
 export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: any, hideHeader?: boolean }) {
   const [armorItems, setArmorItems] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [attributes, setAttributes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUsingD1, setIsUsingD1] = useState(false);
   
   // Form State
   const [editingArmor, setEditingArmor] = useState<any>(null);
@@ -44,36 +37,30 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
   const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'armor'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setArmorItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Error in Armor snapshot:", err);
-        setLoading(false);
-      }
-    );
+    const loadAll = async () => {
+      setLoading(true);
+      try {
+        const [categoriesData, armorData, attrsData] = await Promise.all([
+          fetchCollection('armorCategories', { orderBy: 'name ASC' }),
+          fetchCollection('armor', { orderBy: 'name ASC' }),
+          fetchCollection('attributes', { orderBy: '"order" ASC' }),
+        ]);
 
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      query(collection(db, 'armorCategories'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        if (!editingArmor && !categoryId && snapshot.docs.length > 0) {
-          setCategoryId(snapshot.docs[0].id);
+        setCategories(categoriesData);
+        if (categoriesData.length > 0 && !categoryId) {
+          setCategoryId((categoriesData[0] as any).id);
         }
-      },
-      (err) => {
-        console.error("Error in Armor Categories snapshot:", err);
+        setArmorItems(armorData);
+        setAttributes(attrsData);
+        setIsUsingD1(armorData.length > 0);
+      } catch (err) {
+        console.error("Error loading armor data:", err);
+      } finally {
+        setLoading(false);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    loadAll();
   }, []);
 
     const handleSave = async (e: React.FormEvent) => {
@@ -85,33 +72,38 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
         return;
       }
   
+      const abilityId = (attributes as any[]).find((a: any) => a.identifier === ability)?.id || null;
+
       try {
-        const armorData = {
+        const d1Data = {
           name,
           identifier: identifier.trim() || slugify(name),
-          categoryId: effectiveCategoryId,
-          foundryAlias: foundryAlias.trim(),
+          category_id: effectiveCategoryId,
+          foundry_alias: foundryAlias.trim(),
           source,
-          ability,
+          ability_id: abilityId,
           page: page === '' ? null : Number(page),
-          basicRules,
+          basic_rules: basicRules ? 1 : 0,
           description,
-          updatedAt: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         };
 
-      if (editingArmor) {
-        await updateDoc(doc(db, 'armor', editingArmor.id), armorData);
-        toast.success('Armor updated');
-      } else {
-        await addDoc(collection(db, 'armor'), armorData);
-        toast.success('Armor created');
-      }
+        const targetId = editingArmor?.id || crypto.randomUUID();
+        await upsertDocument('armor', targetId, d1Data);
 
-      resetForm();
+        const stateItem = { id: targetId, ...d1Data, ability, categoryId: effectiveCategoryId, foundryAlias, basicRules };
+        if (editingArmor) {
+          setArmorItems(prev => prev.map(a => a.id === targetId ? stateItem : a));
+          toast.success('Armor updated');
+        } else {
+          setArmorItems(prev => [...prev, stateItem].sort((a, b) => a.name.localeCompare(b.name)));
+          toast.success('Armor created');
+        }
+
+        resetForm();
       } catch (error) {
         console.error("Error saving armor:", error);
         toast.error('Failed to save armor');
-        handleFirestoreError(error, OperationType.WRITE, 'armor');
       }
     };
 
@@ -131,12 +123,12 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
   const handleDelete = async (id: string) => {
     if (window.confirm('Delete this armor?')) {
       try {
-        await deleteDoc(doc(db, 'armor', id));
+        await deleteDocument('armor', id);
+        setArmorItems(prev => prev.filter(a => a.id !== id));
         toast.success('Armor deleted');
       } catch (error) {
         console.error("Error deleting armor:", error);
         toast.error('Failed to delete armor');
-        handleFirestoreError(error, OperationType.DELETE, 'armor');
       }
     }
   };
@@ -150,7 +142,20 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
       {!hideHeader && (
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-2">
-            <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Armor Manager</h1>
+            <div className="flex items-center justify-between">
+              <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Armor Manager</h1>
+              {isUsingD1 ? (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  <Database className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
+                </div>
+              )}
+            </div>
             <p className="text-ink/60 font-serif italic">Define the armor available in your game system.</p>
           </div>
         </div>
@@ -302,13 +307,15 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                             {armor.identifier}
                           </span>
                         )}
-                        {(armor.categoryId || armor.category) && (
+                        {(armor.category_id || armor.categoryId || armor.category) && (
                           <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
-                            {categories.find(c => c.id === armor.categoryId)?.name || armor.category}
+                            {categories.find((c: any) => c.id === (armor.category_id || armor.categoryId))?.name || armor.category}
                           </span>
                         )}
-                        {armor.ability && (
-                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{armor.ability}</span>
+                        {(armor.ability || armor.ability_id) && (
+                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">
+                            {armor.ability || (attributes as any[]).find((a: any) => a.id === armor.ability_id)?.identifier}
+                          </span>
                         )}
                         {armor.source && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/40 text-background rounded-full font-medium shadow-sm">{armor.source}{armor.page ? ` p.${armor.page}` : ''}</span>
@@ -325,17 +332,16 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                         setEditingArmor(armor);
                         setName(armor.name);
                         setIdentifier(armor.identifier || '');
-                        setFoundryAlias(armor.foundryAlias || '');
-                        
-                        // Try to derive categoryId from category name if missing
-                        const cid = armor.categoryId || categories.find((c: any) => c.name === armor.category)?.id || '';
+                        setFoundryAlias(armor.foundry_alias || armor.foundryAlias || '');
+
+                        const cid = armor.category_id || armor.categoryId || categories.find((c: any) => c.name === armor.category)?.id || '';
                         setCategoryId(cid);
-                        
-                        setAbility(armor.ability || 'STR');
+
+                        setAbility(armor.ability || (attributes as any[]).find((a: any) => a.id === armor.ability_id)?.identifier || 'STR');
                         setDescription(armor.description || '');
                         setSource(armor.source || '');
                         setPage(armor.page || '');
-                        setBasicRules(armor.basicRules || false);
+                        setBasicRules(!!(armor.basic_rules || armor.basicRules));
                       }} className="h-8 w-8 p-0 text-gold"><Edit className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(armor.id)} className="h-8 w-8 p-0 text-blood"><Trash2 className="w-4 h-4" /></Button>
                     </div>

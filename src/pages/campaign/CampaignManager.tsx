@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { doc, getDoc, getDocs, collection } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { fetchDocument, fetchCollection } from '@/lib/d1';
+
 import { Shield, ChevronLeft, Calendar, Users, MapPin, Sparkles, Edit, FileText, Scroll, History, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,30 +31,37 @@ export default function CampaignManager({ userProfile }: { userProfile: any }) {
     const fetchCampaignAndArticles = async () => {
       if (!id) return;
       try {
-        const docSnap = await getDoc(doc(db, 'campaigns', id));
-        if (docSnap.exists()) {
-          const campData = { id: docSnap.id, ...docSnap.data() };
+        // Fetch campaign via D1 helper (D1-only)
+        const campData = await fetchDocument<any>('campaigns', id);
+
+        if (campData) {
           setCampaign(campData);
 
-          // Fetch linked available articles matching campaign/era scope
-          const loreSnap = await getDocs(collection(db, 'lore'));
-          const lorePages = loreSnap.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+          // Fetch all lore articles (D1-only)
+          const lorePages = await fetchCollection<any>('lore');
+
+          // Fetch visibility data from junction tables
+          const articleCampaigns = await fetchCollection<any>('loreArticleCampaigns');
+          const articleEras = await fetchCollection<any>('loreArticleEras');
 
           setArticles(lorePages.filter(page => {
             // If user is not staff, exclude draft articles
             if (!isStaff && page.status === 'draft') return false;
 
-            const hasCampaignScope = (page.visibilityCampaignIds || []).length > 0;
-            const hasEraScope = (page.visibilityEraIds || []).length > 0;
+            const visibleInCampaigns = articleCampaigns.filter(ac => ac.article_id === page.id).map(ac => ac.campaign_id);
+            const visibleInEras = articleEras.filter(ae => ae.article_id === page.id).map(ae => ae.era_id);
+
+            const hasCampaignScope = visibleInCampaigns.length > 0;
+            const hasEraScope = visibleInEras.length > 0;
 
             // General article: no specific visibility scopes at all
             if (!hasCampaignScope && !hasEraScope) return true;
 
             // Explicitly assigned to this campaign
-            if (hasCampaignScope && page.visibilityCampaignIds.includes(id)) return true;
+            if (hasCampaignScope && visibleInCampaigns.includes(id)) return true;
 
             // Assigned to the campaign's era
-            if (hasEraScope && campData.eraId && page.visibilityEraIds.includes(campData.eraId)) return true;
+            if (hasEraScope && campData.era_id && visibleInEras.includes(campData.era_id)) return true;
 
             return false;
           }));
@@ -67,7 +74,7 @@ export default function CampaignManager({ userProfile }: { userProfile: any }) {
     };
 
     fetchCampaignAndArticles();
-  }, [id]);
+  }, [id, isStaff]);
 
   if (loading) {
     return (
@@ -130,25 +137,27 @@ export default function CampaignManager({ userProfile }: { userProfile: any }) {
             <div className="space-y-6 animate-in fade-in duration-300">
               {/* Hero Header */}
               <div className="relative rounded-2xl border border-gold/20 overflow-hidden bg-card/60 shadow-xl backdrop-blur-sm">
-                {campaign.imageUrl && (
+                {campaign.image_url && (
                   <div className="absolute inset-0 h-full w-full">
                     <img 
-                      src={campaign.imageUrl} 
+                      src={campaign.image_url} 
                       alt={campaign.name} 
                       className="w-full h-full object-cover opacity-10 filter blur-sm select-none pointer-events-none" 
+                      crossOrigin="anonymous"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />
                   </div>
                 )}
 
                 <div className="relative p-6 md:p-10 flex flex-col md:flex-row gap-6 items-center">
-                  {campaign.imageUrl ? (
+                  {campaign.image_url ? (
                     <div className="w-24 h-24 md:w-32 md:h-32 rounded overflow-hidden border-2 border-gold/30 shadow-2xl flex-shrink-0 bg-background flex items-center justify-center">
                       <img 
-                        src={campaign.imageUrl} 
+                        src={campaign.image_url} 
                         alt={campaign.name} 
                         className="w-full h-full object-cover select-none pointer-events-none"
-                        style={ClassImageStyle({ display: campaign.imageDisplay || DEFAULT_DISPLAY })}
+                        style={ClassImageStyle({ display: campaign.image_display || DEFAULT_DISPLAY })}
+                        crossOrigin="anonymous"
                       />
                     </div>
                   ) : (

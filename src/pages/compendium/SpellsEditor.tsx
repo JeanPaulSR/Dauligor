@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, doc, getDoc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { ChevronLeft, Edit3, Plus, Save, Search, Trash2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
-import { auth, db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { adminDeleteSpell, adminUpsertSpell } from '../../lib/spellAdminApi';
+import { reportClientError, OperationType } from '../../lib/firebase';
+import { upsertSpell, deleteSpell, fetchSpell } from '../../lib/compendium';
+import { fetchCollection } from '../../lib/d1';
 import { slugify } from '../../lib/utils';
+import { Database, CloudOff } from 'lucide-react';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -19,7 +20,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import VirtualizedList from '../../components/ui/VirtualizedList';
-import { subscribeSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
+import type { SpellSummaryRecord } from '../../lib/spellSummary';
 
 const SPELL_SCHOOLS = [
   ['abj', 'Abjuration'],
@@ -160,33 +161,48 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
 
-    const unsubscribeEntries = subscribeSpellSummaries(
-      (records) => {
-        setEntries(records);
+    const loadEntries = async () => {
+      try {
+        const data = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+        
+        // Map D1 results to what the UI expects (camelCase)
+        const mapped = data.map(row => ({
+          ...row,
+          sourceId: row.source_id,
+          imageUrl: row.image_url,
+          level: Number(row.level || 0),
+          school: row.school,
+          preparationMode: row.preparation_mode,
+          tagIds: Array.isArray(row.tags) ? row.tags : []
+        }));
+        
+        setEntries(mapped);
         setLoading(false);
-      },
-      (error) => {
-        console.error('Error loading spells:', error);
+      } catch (err) {
+        console.error('Error loading spells from D1:', err);
         setLoading(false);
       }
-    );
-
-    const unsubscribeSources = onSnapshot(
-      query(collection(db, 'sources'), orderBy('name', 'asc')),
-      (snapshot) => {
-        const loaded = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-        setSources(loaded);
-      }
-    );
-
-    return () => {
-      unsubscribeEntries();
-      unsubscribeSources();
     };
+
+    loadEntries();
+
+    const loadSources = async () => {
+      try {
+        const data = await fetchCollection('sources', { orderBy: 'name ASC' });
+        setSources(data);
+        if (data.length > 0) setIsFoundationUsingD1(true);
+      } catch (err) {
+        console.error("[SpellsEditor] Error loading sources:", err);
+        setIsFoundationUsingD1(false);
+      }
+    };
+
+    loadSources();
   }, [isAdmin]);
 
   useEffect(() => {
@@ -249,13 +265,22 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     }
 
     let active = true;
-    void getDoc(doc(db, 'spells', editingId)).then((snapshot) => {
-      if (!active || !snapshot.exists()) return;
-      setSpellDetailsById((current) => ({
-        ...current,
-        [editingId]: { id: snapshot.id, ...snapshot.data() }
-      }));
-    });
+    const loadDetails = async () => {
+      try {
+        const data = await fetchSpell(editingId);
+
+        if (!active || !data) return;
+
+        setSpellDetailsById((current) => ({
+          ...current,
+          [editingId]: data
+        }));
+      } catch (err) {
+        console.error("Error loading spell details:", err);
+      }
+    };
+
+    loadDetails();
 
     return () => {
       active = false;
@@ -314,40 +339,38 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       });
 
       if (editingId) {
-        const response = await adminUpsertSpell(editingId, {
+        await upsertSpell(editingId, {
           ...payload,
           createdAt: formData.createdAt || new Date().toISOString()
         });
-        const resolvedId = response.id || editingId;
         toast.success('Spell updated');
-        setSpellDetailsById((current) => ({
-          ...current,
-          [resolvedId]: {
-            id: resolvedId,
-            ...payload,
-            createdAt: formData.createdAt || new Date().toISOString(),
-            tagIds: Array.isArray(formData.tagIds) ? formData.tagIds : []
-          }
-        }));
       } else {
-        const createdPayload = {
+        const createdId = crypto.randomUUID();
+        await upsertSpell(createdId, {
           ...payload,
           createdAt: new Date().toISOString()
-        };
-        const response = await adminUpsertSpell(null, createdPayload);
-        const createdId = response.id;
-        setSpellDetailsById((current) => ({
-          ...current,
-          [createdId]: { id: createdId, ...createdPayload }
-        }));
+        });
         toast.success('Spell created');
       }
 
+      // Refresh entries list
+      const updatedData = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+      const mapped = updatedData.map(row => ({
+        ...row,
+        sourceId: row.source_id,
+        imageUrl: row.image_url,
+        level: Number(row.level || 0),
+        school: row.school,
+        preparationMode: row.preparation_mode,
+        tagIds: Array.isArray(row.tags) ? row.tags : []
+      }));
+      setEntries(mapped);
+      
       resetForm();
     } catch (error) {
       console.error('Error saving spell:', error);
       toast.error('Failed to save spell');
-      handleFirestoreError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, `spells/${editingId || '(new)'}`);
+      reportClientError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, `spells/${editingId || '(new)'}`);
     } finally {
       setSaving(false);
     }
@@ -358,54 +381,30 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     if (!window.confirm('Delete this spell?')) return;
 
     try {
-      await adminDeleteSpell(editingId);
+      await deleteSpell(editingId);
       toast.success('Spell deleted');
+      
+      // Refresh entries list
+      const updatedData = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+      const mapped = updatedData.map(row => ({
+        ...row,
+        sourceId: row.source_id,
+        imageUrl: row.image_url,
+        level: Number(row.level || 0),
+        school: row.school,
+        preparationMode: row.preparation_mode,
+        tagIds: Array.isArray(row.tags) ? row.tags : []
+      }));
+      setEntries(mapped);
+      
       resetForm();
     } catch (error) {
       console.error('Error deleting spell:', error);
       toast.error('Failed to delete spell');
-      handleFirestoreError(error, OperationType.DELETE, `spells/${editingId}`);
+      reportClientError(error, OperationType.DELETE, `spells/${editingId}`);
     }
   };
 
-  const handlePurgeAllSpells = async () => {
-    if (!window.confirm('Purge all spells and spell summaries? This cannot be undone.')) return;
-    if (!window.confirm('This will delete every spell record and require a fresh reimport. Continue?')) return;
-
-    setPurging(true);
-    try {
-      if (!auth.currentUser) {
-        throw new Error('You must be signed in as an admin to purge spells.');
-      }
-
-      const idToken = await auth.currentUser.getIdToken();
-      const response = await fetch('/api/admin/spells/purge', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Spell purge endpoint not found. Restart the dev server so the new admin route is loaded.');
-        }
-        throw new Error(result.error || 'Failed to purge spells.');
-      }
-
-      setSpellDetailsById({});
-      setEntries([]);
-      resetForm();
-      toast.success(`Purged ${result.purgedSpells ?? 0} spells and ${result.purgedSummaries ?? 0} spell summaries.`);
-    } catch (error: any) {
-      console.error('Error purging spells:', error);
-      toast.error(error?.message || 'Failed to purge spells');
-    } finally {
-      setPurging(false);
-    }
-  };
 
   if (!isAdmin) {
     return <div className="text-center py-20">Access Denied. Admins only.</div>;
@@ -423,7 +422,20 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                   <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium Development</span>
                 </div>
                 <div className="space-y-2">
+                  <div className="flex items-center gap-4">
                   <h2 className="text-3xl font-serif font-bold uppercase tracking-tight text-ink">Spell Manager</h2>
+                  {isFoundationUsingD1 ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                      <Database className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                      <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+                    </div>
+                  )}
+                </div>
                   <p className="max-w-3xl font-serif italic text-ink/60">
                     Draft and refine spell records with the same selector rhythm as the importer while keeping the right pane dedicated to the actual spell editor.
                   </p>
@@ -439,16 +451,6 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                 >
                   <Plus className="h-4 w-4" />
                   New Spell
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2 border-blood/30 bg-background/40 text-blood hover:bg-blood/10"
-                  onClick={handlePurgeAllSpells}
-                  disabled={purging || saving}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {purging ? 'Purging...' : 'Purge All Spells'}
                 </Button>
               </div>
             </div>
@@ -776,6 +778,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         <ActivityEditor
                           activities={formData.activities}
                           onChange={(activities) => setFormData(prev => ({ ...prev, activities }))}
+                          context="spell"
                         />
                       </div>
 

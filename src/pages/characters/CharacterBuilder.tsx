@@ -1,18 +1,76 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardSave } from "../../hooks/useKeyboardSave";
-import { db, handleFirestoreError, OperationType } from "../../lib/firebase";
+import { reportClientError, OperationType } from "../../lib/firebase";
 import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  query,
-  getDocs,
-  where,
-  documentId,
-} from "firebase/firestore";
+  queryD1,
+  upsertDocument,
+  fetchCollection,
+  fetchDocument,
+} from "../../lib/d1";
+
+// ── D1 row → camelCase shape helpers ────────────────────────────────────────
+// CharacterBuilder reads many fields with camelCase access (`row.classId`,
+// `row.parentId`, etc.). D1 stores snake_case. These tiny helpers keep the
+// existing reads working without touching call sites all over the file.
+const denormClass = (d: any) => d ? ({ ...d, hitDie: d.hit_die ?? d.hitDie }) : d;
+const denormSubclass = (d: any) => d ? ({ ...d, classId: d.class_id ?? d.classId }) : d;
+const denormFeature = (d: any) => d ? ({
+  ...d,
+  parentId: d.parent_id ?? d.parentId,
+  parentType: d.parent_type ?? d.parentType,
+}) : d;
+const denormScalingCol = (d: any) => d ? ({
+  ...d,
+  parentId: d.parent_id ?? d.parentId,
+  parentType: d.parent_type ?? d.parentType,
+}) : d;
+const denormCategoryId = (d: any) => d ? ({
+  ...d,
+  categoryId: d.category_id ?? d.categoryId,
+}) : d;
+import { rebuildCharacterFromSql } from "../../lib/characterShared";
+import {
+  uniqueStringList,
+  getTotalCharacterLevel,
+  getProficiencyBonusForLevel,
+  getProgressionClassKey,
+  sanitizeAdvancementKeyPart,
+  isLegacyAdvancementSelectionKey,
+  buildEmptyProgressionState,
+  normalizeAdvancementSelectionEntry,
+  normalizeProgressionState,
+  buildSelectedOptionsMapFromClassPackages,
+  getClassIntroductionMode,
+  resolveHitDieFaces,
+  buildCurrentProgression,
+  buildProgressionClassGroups,
+  buildCharacterClassesFromProgression,
+  buildAdvancementSelectionsForPackage,
+  buildProgressionStateForCharacter,
+  buildAdvancementSelectionMapForPackage,
+  getSelectionsForAdvancement,
+  normalizeAdvancementList,
+  buildNamedDocLookup,
+  flattenStringArray,
+  normalizePrimaryAbilityValue,
+  buildAdvancementSourceScope,
+  buildAdvancementSourceContext,
+  buildLegacyAdvancementSelectionKey,
+  parseAdvancementSourceScope,
+  buildAdvancementSelectionKey,
+  getAdvancementSelectionValues,
+  writeAdvancementSelectionValues,
+  buildNonLegacySelectedOptionsMap,
+  buildCharacterSelectedOptionsMap,
+  updateCharacterAdvancementSelectionState,
+  dedupeOwnedStateEntries,
+  getStoredHpMax,
+  hasExplicitHpMaxOverride,
+  getEffectiveHpMax,
+  areStringListsEqual,
+  normalizeSpellcastingForExport,
+} from "../../lib/characterLogic";
 import { Button } from "../../components/ui/button";
 import {
   Card,
@@ -115,696 +173,27 @@ const TRAIT_CHARACTER_FIELDS: Record<string, string> = {
   languages: "languages",
 };
 
-function uniqueStringList(values: any[] = []) {
-  return Array.from(
-    new Set(
-      (Array.isArray(values) ? values : [])
-        .map((value) => String(value ?? "").trim())
-        .filter(Boolean),
-    ),
-  );
-}
+// uniqueStringList moved to characterLogic.ts
 
-function buildNamedDocLookup(entries: any[] = []) {
-  const lookup: Record<string, string> = {};
+// buildNamedDocLookup moved to characterLogic.ts
 
-  (Array.isArray(entries) ? entries : []).forEach((entry: any) => {
-    const label = String(
-      entry?.name || entry?.label || entry?.title || entry?.identifier || entry?.id || "",
-    ).trim();
-    if (!label) return;
+// flattenStringArray moved to characterLogic.ts
 
-    const keys = uniqueStringList([
-      entry?.id,
-      entry?.identifier,
-      entry?.sourceId,
-      entry?.slug,
-      entry?.key,
-    ]);
+// normalizePrimaryAbilityValue moved to characterLogic.ts
 
-    keys.forEach((key) => {
-      lookup[String(key)] = label;
-      lookup[String(key).toLowerCase()] = label;
-      lookup[String(key).toUpperCase()] = label;
-    });
-  });
+// normalizeSpellcastingForExport moved to characterLogic.ts
 
-  return lookup;
-}
+// Logic moved to characterLogic.ts
 
-function flattenStringArray(values: any): string[] {
-  if (!Array.isArray(values)) {
-    const single = String(values ?? "").trim();
-    return single ? [single] : [];
-  }
+// HP and String comparison helpers moved to characterLogic.ts
 
-  return values.flatMap((value) => flattenStringArray(value));
-}
+// Logic moved to characterLogic.ts
 
-function normalizePrimaryAbilityValue(values: any): string[] {
-  const valid = new Set(["str", "dex", "con", "int", "wis", "cha"]);
-  return Array.from(
-    new Set(
-      flattenStringArray(values)
-        .map((value) => String(value || "").trim().toLowerCase())
-        .filter((value) => valid.has(value)),
-    ),
-  );
-}
+// Logic moved to characterLogic.ts
 
-function normalizeSpellcastingForExport(spellcasting: any, fallbackLevel = 1) {
-  if (!spellcasting || typeof spellcasting !== "object") {
-    return {
-      progression: "none",
-      ability: "",
-      type: "",
-      level: fallbackLevel,
-      hasSpellcasting: false,
-      isRitualCaster: false,
-      description: "",
-      spellsKnownFormula: "",
-      spellsKnownId: "",
-      progressionId: "",
-      altProgressionId: "",
-    };
-  }
+// Logic moved to characterLogic.ts
 
-  const normalized = {
-    ...spellcasting,
-    ability: String(spellcasting.ability || "").trim().toUpperCase(),
-    type: String(spellcasting.type || "").trim().toLowerCase(),
-    level: Number(spellcasting.level || fallbackLevel) || fallbackLevel,
-    hasSpellcasting: Boolean(spellcasting.hasSpellcasting),
-    isRitualCaster: Boolean(spellcasting.isRitualCaster),
-  } as any;
-
-  if (!normalized.hasSpellcasting) {
-    return {
-      progression: "none",
-      ability: "",
-      type: "",
-      level: normalized.level,
-      hasSpellcasting: false,
-      isRitualCaster: false,
-      description: "",
-      spellsKnownFormula: "",
-      spellsKnownId: "",
-      progressionId: "",
-      altProgressionId: "",
-    };
-  }
-
-  return normalized;
-}
-
-function getTotalCharacterLevel(
-  progression: any[] = [],
-  fallbackLevel = 1,
-) {
-  const progressionCount = Array.isArray(progression) ? progression.length : 0;
-  if (progressionCount > 0) return progressionCount;
-  return Math.max(1, Number(fallbackLevel || 1) || 1);
-}
-
-function getProficiencyBonusForLevel(level: any) {
-  const numericLevel = Math.max(1, Number(level || 1) || 1);
-  return Math.floor((numericLevel - 1) / 4) + 2;
-}
-
-function getStoredHpMax(character: any) {
-  const rawMax = character?.hp?.max;
-  if (rawMax == null || rawMax === "") return null;
-  const numericMax = Number(rawMax);
-  return Number.isFinite(numericMax) && numericMax > 0 ? numericMax : null;
-}
-
-function hasExplicitHpMaxOverride(character: any) {
-  const storedMax = getStoredHpMax(character);
-  const derivedHpMax = Number(character?.derivedHpMax ?? 0) || 0;
-  return storedMax != null && (derivedHpMax <= 0 || storedMax !== derivedHpMax);
-}
-
-function getEffectiveHpMax(character: any) {
-  const storedMax = getStoredHpMax(character);
-  if (storedMax != null) return storedMax;
-  return Number(character?.derivedHpMax ?? 10) || 10;
-}
-
-function areStringListsEqual(left: any[] = [], right: any[] = []) {
-  const normalizedLeft = uniqueStringList(left);
-  const normalizedRight = uniqueStringList(right);
-  return (
-    normalizedLeft.length === normalizedRight.length &&
-    normalizedLeft.every((value, index) => value === normalizedRight[index])
-  );
-}
-
-function getProgressionClassKey(entry: any) {
-  return String(entry?.classId || entry?.className || "").trim();
-}
-
-function sanitizeAdvancementKeyPart(value: any, fallback = "none") {
-  const raw = String(value ?? "").trim();
-  return (raw || fallback).replace(/[|]/g, "-");
-}
-
-function buildAdvancementSourceScope({
-  parentType = "advancement",
-  classId = "",
-  className = "",
-  subclassId = "",
-  subclassName = "",
-  parentId = "",
-  parentName = "",
-  sourceId = "",
-}: {
-  parentType?: string;
-  classId?: string;
-  className?: string;
-  subclassId?: string;
-  subclassName?: string;
-  parentId?: string;
-  parentName?: string;
-  sourceId?: string;
-} = {}) {
-  return [
-    `type:${sanitizeAdvancementKeyPart(parentType, "advancement")}`,
-    `class:${sanitizeAdvancementKeyPart(classId || className, "none")}`,
-    `subclass:${sanitizeAdvancementKeyPart(subclassId || subclassName, "none")}`,
-    `parent:${sanitizeAdvancementKeyPart(parentId || sourceId || parentName, "root")}`,
-  ].join("|");
-}
-
-function buildAdvancementSourceContext({
-  parentType = "class",
-  classDocument = null,
-  subclassDocument = null,
-  parentDocument = null,
-}: {
-  parentType?: string;
-  classDocument?: any;
-  subclassDocument?: any;
-  parentDocument?: any;
-} = {}) {
-  return {
-    parentType,
-    classId: String(classDocument?.id || "").trim(),
-    className: String(classDocument?.name || "").trim(),
-    subclassId: String(subclassDocument?.id || "").trim(),
-    subclassName: String(subclassDocument?.name || "").trim(),
-    parentId: String(
-      parentDocument?.id || subclassDocument?.id || classDocument?.id || "",
-    ).trim(),
-    parentName: String(
-      parentDocument?.name || subclassDocument?.name || classDocument?.name || "",
-    ).trim(),
-    sourceId: String(
-      parentDocument
-        ? `feature-${parentDocument.id}`
-        : subclassDocument
-          ? `subclass-${subclassDocument.id}`
-          : classDocument
-            ? `class-${classDocument.id}`
-            : "",
-    ).trim(),
-  };
-}
-
-function buildLegacyAdvancementSelectionKey(
-  advancementId: any,
-  level: any,
-  choiceId?: any,
-) {
-  const advKey = String(advancementId ?? "").trim();
-  const levelKey = String(level ?? "").trim() || "0";
-  const choiceKey = String(choiceId ?? "").trim();
-  return choiceKey
-    ? `${advKey}-${choiceKey}-${levelKey}`
-    : `${advKey}-${levelKey}`;
-}
-
-function isLegacyAdvancementSelectionKey(key: any) {
-  const raw = String(key ?? "").trim();
-  if (!raw) return false;
-  return !raw.includes("|adv:") && raw.includes("-");
-}
-
-function parseAdvancementSourceScope(scope: any) {
-  return String(scope ?? "")
-    .split("|")
-    .reduce(
-      (acc: Record<string, string>, part) => {
-        const [rawKey, ...rest] = String(part || "").split(":");
-        const key = String(rawKey || "").trim();
-        if (!key) return acc;
-        acc[key] = rest.join(":").trim();
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
-}
-
-function buildAdvancementSelectionKey({
-  sourceScope = "",
-  source,
-  advancementId,
-  level,
-  choiceId,
-}: {
-  sourceScope?: string;
-  source?: Record<string, any>;
-  advancementId: any;
-  level: any;
-  choiceId?: any;
-}) {
-  const resolvedSourceScope =
-    sourceScope || buildAdvancementSourceScope(source || {});
-  const advKey = sanitizeAdvancementKeyPart(advancementId, "unknown");
-  const levelKey = sanitizeAdvancementKeyPart(level, "0");
-  const choiceKey = String(choiceId ?? "").trim();
-
-  return [
-    resolvedSourceScope,
-    `adv:${advKey}`,
-    `level:${levelKey}`,
-    ...(choiceKey
-      ? [`choice:${sanitizeAdvancementKeyPart(choiceKey, "choice")}`]
-      : []),
-  ].join("|");
-}
-
-function getAdvancementSelectionValues(
-  selectedOptions: Record<string, string[]> = {},
-  keyConfig: {
-    sourceScope?: string;
-    source?: Record<string, any>;
-    advancementId: any;
-    level: any;
-    choiceId?: any;
-  },
-) {
-  const scopedKey = buildAdvancementSelectionKey(keyConfig);
-  if (Array.isArray(selectedOptions?.[scopedKey])) {
-    return uniqueStringList(selectedOptions[scopedKey]);
-  }
-  return [];
-}
-
-function writeAdvancementSelectionValues(
-  selectedOptions: Record<string, string[]> = {},
-  keyConfig: {
-    sourceScope?: string;
-    source?: Record<string, any>;
-    advancementId: any;
-    level: any;
-    choiceId?: any;
-  },
-  nextValues: string[] = [],
-) {
-  const scopedKey = buildAdvancementSelectionKey(keyConfig);
-  const legacyKey = buildLegacyAdvancementSelectionKey(
-    keyConfig.advancementId,
-    keyConfig.level,
-    keyConfig.choiceId,
-  );
-  const normalizedValues = uniqueStringList(nextValues);
-  const nextSelectedOptions = { ...selectedOptions };
-
-  if (legacyKey in nextSelectedOptions) {
-    delete nextSelectedOptions[legacyKey];
-  }
-
-  if (normalizedValues.length > 0) {
-    nextSelectedOptions[scopedKey] = normalizedValues;
-  } else {
-    delete nextSelectedOptions[scopedKey];
-  }
-
-  return nextSelectedOptions;
-}
-
-function buildEmptyProgressionState() {
-  return {
-    classPackages: [] as any[],
-    ownedFeatures: [] as any[],
-    ownedItems: [] as any[],
-    ownedSpells: [] as any[],
-    derivedSync: {},
-  };
-}
-
-function normalizeAdvancementSelectionEntry(entry: any) {
-  return {
-    key: String(entry?.key || "").trim(),
-    parentType: String(entry?.parentType || "").trim(),
-    parentId: String(entry?.parentId || "").trim(),
-    parentSourceId: String(entry?.parentSourceId || "").trim(),
-    advancementId: String(entry?.advancementId || "").trim(),
-    level: Number(entry?.level || 0) || 0,
-    choiceId: String(entry?.choiceId || "").trim(),
-    type: String(entry?.type || "").trim(),
-    selectedIds: uniqueStringList(entry?.selectedIds || []),
-    selectedSemantic: uniqueStringList(entry?.selectedSemantic || []),
-  };
-}
-
-function normalizeProgressionState(progressState: any) {
-  const normalized = progressState && typeof progressState === "object"
-    ? progressState
-    : {};
-
-  return {
-    ...buildEmptyProgressionState(),
-    ...normalized,
-    classPackages: Array.isArray(normalized.classPackages)
-      ? normalized.classPackages.map((pkg: any) => ({
-          ...pkg,
-          advancementSelections: Array.isArray(pkg?.advancementSelections)
-            ? pkg.advancementSelections.map(normalizeAdvancementSelectionEntry)
-            : [],
-          grantedFeatureRefs: Array.isArray(pkg?.grantedFeatureRefs)
-            ? pkg.grantedFeatureRefs
-            : [],
-          grantedItemRefs: Array.isArray(pkg?.grantedItemRefs)
-            ? pkg.grantedItemRefs
-            : [],
-          spellcasting: pkg?.spellcasting && typeof pkg.spellcasting === "object"
-            ? pkg.spellcasting
-            : {},
-          hitPointHistory:
-            pkg?.hitPointHistory &&
-            typeof pkg.hitPointHistory === "object" &&
-            !Array.isArray(pkg.hitPointHistory)
-              ? pkg.hitPointHistory
-              : {},
-          scaleState:
-            pkg?.scaleState &&
-            typeof pkg.scaleState === "object" &&
-            !Array.isArray(pkg.scaleState)
-              ? pkg.scaleState
-              : {},
-        }))
-      : [],
-    ownedFeatures: Array.isArray(normalized.ownedFeatures)
-      ? normalized.ownedFeatures
-      : [],
-    ownedItems: Array.isArray(normalized.ownedItems) ? normalized.ownedItems : [],
-    ownedSpells: Array.isArray(normalized.ownedSpells) ? normalized.ownedSpells : [],
-    derivedSync:
-      normalized.derivedSync &&
-      typeof normalized.derivedSync === "object" &&
-      !Array.isArray(normalized.derivedSync)
-        ? normalized.derivedSync
-        : {},
-  };
-}
-
-function buildSelectedOptionsMapFromClassPackages(classPackages: any[] = []) {
-  const mappedEntries = (Array.isArray(classPackages) ? classPackages : []).flatMap(
-    (pkg: any) =>
-      (Array.isArray(pkg?.advancementSelections)
-        ? pkg.advancementSelections
-        : []
-      )
-        .map(normalizeAdvancementSelectionEntry)
-        .filter((entry: any) => entry.key)
-        .map((entry: any) => [entry.key, uniqueStringList(entry.selectedIds)] as const),
-  );
-
-  return Object.fromEntries(
-    mappedEntries.filter(([, value]) => Array.isArray(value) && value.length > 0),
-  ) as Record<string, string[]>;
-}
-
-function buildNonLegacySelectedOptionsMap(selectedOptions: Record<string, string[]> = {}) {
-  return Object.fromEntries(
-    Object.entries(selectedOptions || {}).filter(
-      ([key, value]) =>
-        !isLegacyAdvancementSelectionKey(key) &&
-        Array.isArray(value) &&
-        value.length > 0,
-    ),
-  ) as Record<string, string[]>;
-}
-
-function buildCharacterSelectedOptionsMap(character: any) {
-  const normalizedProgressionState = normalizeProgressionState(
-    character?.progressionState,
-  );
-  const fromPackages = buildSelectedOptionsMapFromClassPackages(
-    normalizedProgressionState.classPackages,
-  );
-  if (Object.keys(fromPackages).length > 0) {
-    return fromPackages;
-  }
-
-  return buildNonLegacySelectedOptionsMap(character?.selectedOptions || {});
-}
-
-function buildAdvancementSelectionsForPackage(
-  selectedOptions: Record<string, string[]> = {},
-  classToken = "",
-  subclassToken = "",
-  existingSelections: any[] = [],
-) {
-  const seededSelections = Array.isArray(existingSelections)
-    ? existingSelections.map(normalizeAdvancementSelectionEntry)
-    : [];
-  const nextSelections = new Map<string, any>();
-
-  seededSelections.forEach((entry) => {
-    if (entry.key) nextSelections.set(entry.key, entry);
-  });
-
-  Object.entries(selectedOptions || {}).forEach(([key, value]) => {
-    if (!key.includes("|adv:")) return;
-    const parsedScope = parseAdvancementSourceScope(key);
-    const selectionClassToken = String(parsedScope.class || "").trim();
-    const selectionSubclassToken = String(parsedScope.subclass || "").trim();
-    const classMatches =
-      selectionClassToken &&
-      (selectionClassToken === classToken || selectionClassToken === "none");
-    const subclassMatches =
-      !subclassToken ||
-      !selectionSubclassToken ||
-      selectionSubclassToken === "none" ||
-      selectionSubclassToken === subclassToken;
-
-    if (!classMatches || !subclassMatches) return;
-
-    const advSegment = key.split("|").find((segment) => segment.startsWith("adv:")) || "";
-    const levelSegment =
-      key.split("|").find((segment) => segment.startsWith("level:")) || "";
-    const choiceSegment =
-      key.split("|").find((segment) => segment.startsWith("choice:")) || "";
-
-    nextSelections.set(key, {
-      key,
-      parentType: String(parsedScope.type || "").trim(),
-      parentId: String(parsedScope.parent || "").trim(),
-      parentSourceId: "",
-      advancementId: advSegment.replace(/^adv:/, "").trim(),
-      level: Number(levelSegment.replace(/^level:/, "").trim() || 0) || 0,
-      choiceId: choiceSegment.replace(/^choice:/, "").trim(),
-      type: "",
-      selectedIds: uniqueStringList(value),
-      selectedSemantic: [],
-    });
-  });
-
-  return Array.from(nextSelections.values())
-    .map(normalizeAdvancementSelectionEntry)
-    .filter((entry: any) => entry.key && entry.selectedIds.length > 0);
-}
-
-function buildProgressionStateForCharacter(
-  character: any,
-  progressionGroups: any[] = [],
-  selectedOptions: Record<string, string[]> = {},
-  subclassCache: Record<string, any> = {},
-) {
-  const currentProgression = buildCurrentProgression(character);
-  const normalizedProgressionState = normalizeProgressionState(
-    character?.progressionState,
-  );
-  const existingPackages = new Map<string, any>();
-  normalizedProgressionState.classPackages.forEach((pkg: any) => {
-    const packageKey = String(pkg?.classId || pkg?.className || "").trim();
-    if (packageKey) existingPackages.set(packageKey, pkg);
-  });
-
-  const classPackages = progressionGroups.map((group: any) => {
-    const classDocument = group.classDocument || null;
-    const subclassDocument = group.subclassId
-      ? subclassCache[group.subclassId] || null
-      : null;
-    const packageKey = String(group.classId || group.className || "").trim();
-    const existingPackage = existingPackages.get(packageKey) || {};
-    const classToken = sanitizeAdvancementKeyPart(
-      group.classId || group.className,
-      "none",
-    );
-    const subclassToken = sanitizeAdvancementKeyPart(
-      group.subclassId ||
-        subclassDocument?.id ||
-        subclassDocument?.name ||
-        "",
-      "none",
-    );
-
-    return {
-      classId: group.classId || "",
-      classIdentifier:
-        String(classDocument?.identifier || "").trim() ||
-        String(existingPackage?.classIdentifier || "").trim(),
-      classSourceId:
-        String(classDocument?.sourceId || "").trim() ||
-        String(existingPackage?.classSourceId || "").trim() ||
-        (group.classId ? `class-${group.classId}` : ""),
-      className: group.className || "",
-      classLevel: group.classLevel || 0,
-      introductionMode: getClassIntroductionMode(
-        currentProgression,
-        group.classKey,
-      ),
-      subclassId: group.subclassId || "",
-      subclassIdentifier:
-        String(subclassDocument?.identifier || "").trim() ||
-        String(existingPackage?.subclassIdentifier || "").trim(),
-      subclassSourceId:
-        String(subclassDocument?.sourceId || "").trim() ||
-        String(existingPackage?.subclassSourceId || "").trim() ||
-        (group.subclassId ? `subclass-${group.subclassId}` : ""),
-      subclassName:
-        String(subclassDocument?.name || "").trim() ||
-        String(existingPackage?.subclassName || "").trim(),
-      advancementSelections: buildAdvancementSelectionsForPackage(
-        selectedOptions,
-        classToken,
-        subclassToken,
-        existingPackage?.advancementSelections || [],
-      ),
-      grantedFeatureRefs: Array.isArray(existingPackage?.grantedFeatureRefs)
-        ? existingPackage.grantedFeatureRefs
-        : [],
-      grantedItemRefs: Array.isArray(existingPackage?.grantedItemRefs)
-        ? existingPackage.grantedItemRefs
-        : [],
-      spellcasting: {
-        class: classDocument?.spellcasting || null,
-        subclass: subclassDocument?.spellcasting || null,
-      },
-      hitPointHistory:
-        existingPackage?.hitPointHistory &&
-        typeof existingPackage.hitPointHistory === "object" &&
-        !Array.isArray(existingPackage.hitPointHistory)
-          ? existingPackage.hitPointHistory
-          : {},
-      scaleState:
-        existingPackage?.scaleState &&
-        typeof existingPackage.scaleState === "object" &&
-        !Array.isArray(existingPackage.scaleState)
-          ? existingPackage.scaleState
-          : {},
-    };
-  });
-
-  return {
-    ...normalizedProgressionState,
-    classPackages,
-  };
-}
-
-function updateCharacterAdvancementSelectionState(
-  character: any,
-  keyConfig: {
-    sourceScope?: string;
-    source?: Record<string, any>;
-    advancementId: any;
-    level: any;
-    choiceId?: any;
-  },
-  nextValues: string[] = [],
-) {
-  const nextSelectedOptions = writeAdvancementSelectionValues(
-    character?.selectedOptions || {},
-    keyConfig,
-    nextValues,
-  );
-  const normalizedProgressionState = normalizeProgressionState(
-    character?.progressionState,
-  );
-  const scopedKey = buildAdvancementSelectionKey(keyConfig);
-  const parsedScope = parseAdvancementSourceScope(
-    keyConfig.sourceScope || buildAdvancementSourceScope(keyConfig.source || {}),
-  );
-  const classToken = String(parsedScope.class || "").trim();
-  const normalizedValues = uniqueStringList(nextValues);
-
-  const nextClassPackages = normalizedProgressionState.classPackages.map((pkg: any) => {
-    const packageClassToken = sanitizeAdvancementKeyPart(
-      pkg?.classId || pkg?.className,
-      "none",
-    );
-    if (packageClassToken !== classToken) return pkg;
-
-    const existingSelections = Array.isArray(pkg?.advancementSelections)
-      ? pkg.advancementSelections.map(normalizeAdvancementSelectionEntry)
-      : [];
-    const filteredSelections = existingSelections.filter(
-      (entry: any) => entry.key !== scopedKey,
-    );
-
-    return {
-      ...pkg,
-      advancementSelections:
-        normalizedValues.length > 0
-          ? [
-              ...filteredSelections,
-              {
-                key: scopedKey,
-                parentType: String(parsedScope.type || "").trim(),
-                parentId: String(parsedScope.parent || "").trim(),
-                parentSourceId: String(
-                  keyConfig.source?.sourceId || "",
-                ).trim(),
-                advancementId: String(keyConfig.advancementId || "").trim(),
-                level: Number(keyConfig.level || 0) || 0,
-                choiceId: String(keyConfig.choiceId || "").trim(),
-                type: "",
-                selectedIds: normalizedValues,
-                selectedSemantic: [],
-              },
-            ]
-          : filteredSelections,
-    };
-  });
-
-  return {
-    ...character,
-    selectedOptions: nextSelectedOptions,
-    progressionState: {
-      ...normalizedProgressionState,
-      classPackages: nextClassPackages,
-    },
-  };
-}
-
-function dedupeOwnedStateEntries(entries: any[] = []) {
-  const seen = new Set<string>();
-  return entries.filter((entry: any) => {
-    const key = [
-      String(entry?.ownerClassId || ""),
-      String(entry?.ownerSubclassId || ""),
-      String(entry?.sourceId || entry?.entityId || ""),
-      String(entry?.parentType || ""),
-      String(entry?.level || ""),
-    ].join(":");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
+// dedupeOwnedStateEntries moved to characterLogic.ts
 
 function buildOwnedFeaturesFromSummaries(classProgressionSummaries: any[] = []) {
   return dedupeOwnedStateEntries(
@@ -918,30 +307,7 @@ function buildOwnedItemsFromState(
   return dedupeOwnedStateEntries([...grantedItems, ...selectedOptionItems]);
 }
 
-function getClassIntroductionMode(progression: any[] = [], classKey = "") {
-  const firstIndex = progression.findIndex(
-    (entry) => getProgressionClassKey(entry) === classKey,
-  );
-  if (firstIndex < 0) return "none";
-  const hasEarlierDifferentClass = progression
-    .slice(0, firstIndex)
-    .some((entry) => {
-      const entryKey = getProgressionClassKey(entry);
-      return entryKey && entryKey !== classKey;
-    });
-  return hasEarlierDifferentClass ? "multiclass" : "primary";
-}
-
-function resolveHitDieFaces(hitDie: any) {
-  if (typeof hitDie === "number") {
-    return resolveAdvancementDefaultHitDie(hitDie);
-  }
-
-  const raw = String(hitDie ?? "").trim();
-  const match = raw.match(/\d+/);
-  const parsed = match ? parseInt(match[0], 10) : Number.NaN;
-  return resolveAdvancementDefaultHitDie(parsed);
-}
+// Functions moved to characterLogic.ts
 
 function buildTraitConfigurationFromProfileBlock(
   profileBlock: any,
@@ -1154,107 +520,7 @@ function buildEmptyClassGrantedTraits() {
   };
 }
 
-function buildCurrentProgression(character: any) {
-  if (Array.isArray(character?.progression) && character.progression.length > 0) {
-    return character.progression;
-  }
-
-  if (!character?.classId) return [];
-  return Array.from({ length: character.level || 1 }).map((_, i) => ({
-    classId: character.classId,
-    className: character.classId,
-    subclassId: character.subclassId || "",
-    level: i + 1,
-  }));
-}
-
-function resolveClassDocumentFromProgressionEntry(
-  entry: any,
-  classCache: Record<string, any>,
-) {
-  return (
-    classCache[entry?.classId || ""] ||
-    Object.values(classCache).find(
-      (candidate: any) =>
-        candidate?.id === entry?.classId || candidate?.name === entry?.className,
-    ) ||
-    null
-  );
-}
-
-function buildProgressionClassGroups(
-  progression: any[] = [],
-  classCache: Record<string, any> = {},
-  subclassCache: Record<string, any> = {},
-  legacySubclassId = "",
-) {
-  const groups = new Map<string, any>();
-
-  progression.forEach((entry: any, index: number) => {
-    const classDocument = resolveClassDocumentFromProgressionEntry(entry, classCache);
-    const classKey =
-      String(classDocument?.id || getProgressionClassKey(entry) || entry?.className || "").trim();
-    if (!classKey) return;
-
-    if (!groups.has(classKey)) {
-      groups.set(classKey, {
-        classKey,
-        classId: classDocument?.id || String(entry?.classId || "").trim(),
-        className: classDocument?.name || String(entry?.className || "").trim(),
-        classDocument,
-        classLevel: 0,
-        subclassId: "",
-        firstIndex: index,
-      });
-    }
-
-    const group = groups.get(classKey);
-    group.classLevel += 1;
-    if (index < group.firstIndex) group.firstIndex = index;
-    if (!group.classDocument && classDocument) {
-      group.classDocument = classDocument;
-      group.classId = classDocument.id;
-      group.className = classDocument.name;
-    }
-
-    const entrySubclassId = String(entry?.subclassId || "").trim();
-    if (entrySubclassId) {
-      group.subclassId = entrySubclassId;
-    }
-  });
-
-  const normalizedLegacySubclassId = String(legacySubclassId || "").trim();
-  if (normalizedLegacySubclassId && groups.size > 0) {
-    const legacySubclass = subclassCache[normalizedLegacySubclassId];
-    if (legacySubclass) {
-      const matchingGroup = Array.from(groups.values()).find(
-        (group: any) => group.classId === legacySubclass.classId,
-      );
-      if (matchingGroup && !matchingGroup.subclassId) {
-        matchingGroup.subclassId = normalizedLegacySubclassId;
-      }
-    }
-  }
-
-  return Array.from(groups.values()).sort(
-    (left: any, right: any) => left.firstIndex - right.firstIndex,
-  );
-}
-
-function buildCharacterClassesFromProgression(
-  progressionGroups: any[] = [],
-  subclassCache: Record<string, any> = {},
-) {
-  return progressionGroups.map((group: any) => ({
-    classId: group.classId,
-    className: group.className,
-    level: group.classLevel,
-    subclassId: group.subclassId || "",
-    subclassName: group.subclassId
-      ? subclassCache[group.subclassId]?.name || ""
-      : "",
-  }));
-}
+// Logic moved to characterLogic.ts
 
 function resolveSpellcastingTypeRecord(
   spellcasting: any,
@@ -1597,36 +863,31 @@ export default function CharacterBuilder({
     setAvailableOptions([]);
     try {
       if (choice.optionGroupId) {
-        const q = query(
-          collection(db, "uniqueOptionItems"),
-          where("groupId", "==", choice.optionGroupId),
-        );
-        const snapshot = await getDocs(q);
+        const rows = await fetchCollection<any>("uniqueOptionItems", {
+          where: "group_id = ?",
+          params: [choice.optionGroupId],
+        });
         const excludedOptionIds = new Set(choice.configuration?.excludedOptionIds || []);
-        const items = snapshot.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((item: any) => !excludedOptionIds.has(item.id));
+        const items = rows.filter((item: any) => !excludedOptionIds.has(item.id));
         setAvailableOptions(items);
         setOptionsCache((prev) => {
           const nc = { ...prev };
-          items.forEach((i) => (nc[i.id] = i));
+          items.forEach((i: any) => (nc[i.id] = i));
           return nc;
         });
       } else if (choice.configuration?.choiceType === "feature") {
         const pool = choice.configuration?.pool || [];
         if (pool.length > 0) {
-          // Firestore 'in' query supports up to 30 values in most recent versions, but 10 in older. 
-          // We'll slice just in case.
-          const q = query(
-            collection(db, "features"),
-            where(documentId(), "in", pool.slice(0, 30))
-          );
-          const snapshot = await getDocs(q);
-          const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const slice = pool.slice(0, 30);
+          const placeholders = slice.map(() => '?').join(',');
+          const items = await fetchCollection<any>("features", {
+            where: `id IN (${placeholders})`,
+            params: slice,
+          });
           setAvailableOptions(items);
           setOptionsCache((prev) => {
             const nc = { ...prev };
-            items.forEach((i) => (nc[i.id] = i));
+            items.forEach((i: any) => (nc[i.id] = i));
             return nc;
           });
         }
@@ -1645,39 +906,38 @@ export default function CharacterBuilder({
 
         if ((pool.length > 0 || categoryIds.length > 0) && traitCollection) {
           try {
-            const fetches: Promise<any>[] = [];
+            const fetches: Promise<any[]>[] = [];
             if (pool.length > 0) {
+              const slice = pool.slice(0, 30);
+              const placeholders = slice.map(() => '?').join(',');
               fetches.push(
-                getDocs(
-                  query(
-                    collection(db, traitCollection),
-                    where(documentId(), "in", pool.slice(0, 30)),
-                  ),
-                ).catch(() => ({ docs: [] as any[] })),
+                fetchCollection<any>(traitCollection, {
+                  where: `id IN (${placeholders})`,
+                  params: slice,
+                }).catch(() => [] as any[]),
               );
             }
             if (categoryIds.length > 0) {
+              const slice = categoryIds.slice(0, 30);
+              const placeholders = slice.map(() => '?').join(',');
               fetches.push(
-                getDocs(
-                  query(
-                    collection(db, traitCollection),
-                    where("categoryId", "in", categoryIds.slice(0, 30)),
-                  ),
-                ).catch(() => ({ docs: [] as any[] })),
+                fetchCollection<any>(traitCollection, {
+                  where: `category_id IN (${placeholders})`,
+                  params: slice,
+                }).catch(() => [] as any[]),
               );
             }
-            const snapshots = await Promise.all(fetches);
+            const allRows = await Promise.all(fetches);
+            // De-dupe by id; rows from the pool/category fetches can overlap.
             const items = Array.from(
               new Map(
-                snapshots
-                  .flatMap((snapshot: any) => snapshot.docs || [])
-                  .map((d: any) => [d.id, { id: d.id, ...d.data() }]),
+                allRows.flat().map((r: any) => [r.id, r]),
               ).values(),
             );
             setAvailableOptions(items);
             setOptionsCache((prev) => {
               const nc = { ...prev };
-              items.forEach((i) => (nc[i.id] = i));
+              items.forEach((i: any) => (nc[i.id] = i));
               return nc;
             });
           } catch (e) {
@@ -1685,21 +945,11 @@ export default function CharacterBuilder({
           }
         }
       } else {
-        const targetFeatureType =
-          choice.featureType ||
-          choice.name.toLowerCase().replace(/[^a-z0-9]/g, "-");
-        const q = query(
-          collection(db, "uniqueOptionItems"),
-          where("featureType", "==", targetFeatureType),
-        );
-        const snapshot = await getDocs(q);
-        const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setAvailableOptions(items);
-        setOptionsCache((prev) => {
-          const nc = { ...prev };
-          items.forEach((i) => (nc[i.id] = i));
-          return nc;
-        });
+        // Legacy branch: queried Firestore for `featureType` on uniqueOptionItems.
+        // That field never existed on the D1 unique_option_items schema; the
+        // Firestore version returned zero docs in practice. Preserve the
+        // no-op behavior so this code path remains a clean fall-through.
+        setAvailableOptions([]);
       }
     } catch (err) {
       console.error("Failed to load options", err);
@@ -1844,16 +1094,13 @@ export default function CharacterBuilder({
       if (missingIds.length === 0) return;
 
       try {
-        const fetchPromises = missingIds.map((id: string) =>
-          getDoc(doc(db, "uniqueOptionItems", id)),
+        const results = await Promise.all(
+          missingIds.map((id: string) => fetchDocument<any>("uniqueOptionItems", id)),
         );
-        const results = await Promise.all(fetchPromises);
         setOptionsCache((prev) => {
           const nc = { ...prev };
-          results.forEach((res) => {
-            if (res.exists()) {
-              nc[res.id] = { id: res.id, ...res.data() };
-            }
+          results.forEach((row: any) => {
+            if (row && row.id) nc[row.id] = row;
           });
           return nc;
         });
@@ -1890,11 +1137,10 @@ export default function CharacterBuilder({
         );
 
         if (missingNames.length > 0) {
-          const req = await getDocs(query(collection(db, "classes")));
-          req.docs.forEach((doc) => {
-            const data = doc.data();
-            newClassCache[doc.id] = {
-              id: doc.id,
+          const rows = await fetchCollection<any>("classes");
+          rows.forEach((raw: any) => {
+            const data = denormClass(raw);
+            newClassCache[data.id] = {
               ...data,
               advancements: normalizeProgressionAdvancements(
                 data.advancements || [],
@@ -1929,26 +1175,23 @@ export default function CharacterBuilder({
           progressionGroups.map((group: any) => group.subclassId).filter(Boolean),
         ).filter((id) => !newSubclassCache[id]);
         if (missingSubclassIds.length > 0) {
-          const scPromises = missingSubclassIds.map((id) =>
-            getDoc(doc(db, "subclasses", id)),
+          const scResults = await Promise.all(
+            missingSubclassIds.map((id) => fetchDocument<any>("subclasses", id)),
           );
-          const scResults = await Promise.all(scPromises);
-          scResults.forEach((res) => {
-            if (res.exists()) {
-              const data = res.data();
-              const subclassHitDie = Number(
-                newClassCache[String(data.classId || "")]?.hitDie || 8,
-              ) || 8;
-              newSubclassCache[res.id] = {
-                id: res.id,
-                ...data,
-                advancements: normalizeProgressionAdvancements(
-                  data.advancements || [],
-                  1,
-                  subclassHitDie,
-                ),
-              };
-            }
+          scResults.forEach((raw: any) => {
+            if (!raw) return;
+            const data = denormSubclass(raw);
+            const subclassHitDie = Number(
+              newClassCache[String(data.classId || "")]?.hitDie || 8,
+            ) || 8;
+            newSubclassCache[data.id] = {
+              ...data,
+              advancements: normalizeProgressionAdvancements(
+                data.advancements || [],
+                1,
+                subclassHitDie,
+              ),
+            };
           });
           setSubclassCache(newSubclassCache);
         }
@@ -1967,12 +1210,10 @@ export default function CharacterBuilder({
             ...missingClassIds.map((id) => ({ id, type: "class" })),
             ...missingSubclassFIds.map((id) => ({ id, type: "subclass" })),
           ].map(async ({ id, type }) => {
-            const featureQuery = query(
-              collection(db, "features"),
-              where("parentId", "==", id),
-              where("parentType", "==", type),
-            );
-            const fSnap = await getDocs(featureQuery);
+            const rows = await fetchCollection<any>("features", {
+              where: "parent_id = ? AND parent_type = ?",
+              params: [id, type],
+            });
             const parentHitDie =
               type === "class"
                 ? Number(newClassCache[id]?.hitDie || 8) || 8
@@ -1983,10 +1224,9 @@ export default function CharacterBuilder({
                   ) || 8;
             return {
               id,
-              features: fSnap.docs.map((d) => {
-                const data = d.data();
+              features: rows.map((raw: any) => {
+                const data = denormFeature(raw);
                 return {
-                  id: d.id,
                   ...data,
                   advancements: normalizeProgressionAdvancements(
                     data.advancements || [],
@@ -2016,17 +1256,16 @@ export default function CharacterBuilder({
         );
 
         if (missingScalingParentIds.length > 0) {
-          const scalingPromises = missingScalingParentIds.map(async (id) => {
-            const scalingQuery = query(
-              collection(db, "scalingColumns"),
-              where("parentId", "==", id),
-            );
-            const sSnap = await getDocs(scalingQuery);
-            return sSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          });
+          const scalingPromises = missingScalingParentIds.map((id) =>
+            fetchCollection<any>("scalingColumns", {
+              where: "parent_id = ?",
+              params: [id],
+            }),
+          );
 
           const results = await Promise.all(scalingPromises);
-          results.flat().forEach((col) => {
+          results.flat().forEach((raw: any) => {
+            const col = denormScalingCol(raw);
             newScalingCache[col.id] = col;
           });
           setScalingCache(newScalingCache);
@@ -2765,148 +2004,112 @@ export default function CharacterBuilder({
     const fetchData = async () => {
       try {
         if (id && id !== "new") {
-          const docRef = doc(db, "characters", id);
-          const snap = await getDoc(docRef);
-          if (snap.exists()) {
-            const data = snap.data();
-            const normalizedBase: Record<string, number> = {};
-            const rawBase = data.stats?.base || { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 };
-            Object.entries(rawBase).forEach(([key, val]) => {
-              normalizedBase[key.toUpperCase()] = Number(val);
-            });
+          const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows] = await Promise.all([
+            queryD1("SELECT * FROM characters WHERE id = ?", [id]),
+            queryD1("SELECT * FROM character_progression WHERE character_id = ?", [id]),
+            queryD1("SELECT * FROM character_selections WHERE character_id = ?", [id]),
+            queryD1("SELECT * FROM character_inventory WHERE character_id = ?", [id]),
+            queryD1("SELECT * FROM character_spells WHERE character_id = ?", [id]),
+            queryD1("SELECT * FROM character_proficiencies WHERE character_id = ?", [id])
+          ]);
 
-            setCharacter({
-              id: snap.id,
-              ...data,
-              progression: Array.isArray(data.progression)
-                ? data.progression.map((entry: any) => ({
-                    ...entry,
-                    subclassId: String(entry?.subclassId || "").trim(),
-                  }))
-                : buildCurrentProgression({
-                    classId: data.classId,
-                    subclassId: data.subclassId,
-                    level: data.level || 1,
-                  }),
-              hp: data.hp || { current: 10, max: 10, temp: 0 },
-              hitDie: data.hitDie || { current: 1, max: 1, type: "d10" },
-              spellPoints: data.spellPoints || { current: 0, max: 0 },
-              ac: data.ac ?? 10,
-              initiative: data.initiative ?? 0,
-              speed: data.speed ?? 30,
-              proficiencyBonus: data.proficiencyBonus ?? 2,
-              savingThrows: (data.savingThrows || []).map((s: string) => s.toUpperCase()),
-              expertiseSavingThrows: (data.expertiseSavingThrows || []).map((s: string) => s.toUpperCase()),
-              halfProficientSavingThrows: (data.halfProficientSavingThrows || []).map((s: string) => s.toUpperCase()),
-              proficientSkills: data.proficientSkills || [],
-              expertiseSkills: data.expertiseSkills || [],
-              halfProficientSkills: data.halfProficientSkills || [],
-              overriddenSkillAbilities: data.overriddenSkillAbilities || {},
-              resistances: data.resistances || [],
-              immunities: data.immunities || [],
-              vulnerabilities: data.vulnerabilities || [],
-              armorProficiencies: data.armorProficiencies || [],
-              weaponProficiencies: data.weaponProficiencies || [],
-              toolProficiencies: data.toolProficiencies || [],
-              languages: data.languages || [],
-              senses: data.senses || {
-                passivePerception: 10,
-                passiveInvestigation: 10,
-                passiveInsight: 10,
-                additional: "",
-              },
-              raceData: data.raceData || { creatureType: "", size: "" },
-              info: data.info || {
-                alignment: "",
-                gender: "",
-                eyes: "",
-                height: "",
-                hair: "",
-                skin: "",
-                age: "",
-                weight: "",
-                deity: "",
-                reverate: "",
-                scorn: "",
-                traits: "",
-                ideals: "",
-                bonds: "",
-                flaws: "",
-                appearance: "",
-              },
-              stats: {
-                ...(data.stats || { method: "point-buy" }),
-                base: normalizedBase,
-              },
-              progressionState: normalizeProgressionState(data.progressionState),
-            });
+          if (baseRows && baseRows.length > 0) {
+            const data = rebuildCharacterFromSql(
+              baseRows[0],
+              progressionRows,
+              selectionRows,
+              inventoryRows,
+              spellRows,
+              proficiencyRows
+            );
+
+            if (data) {
+              const normalizedBase: Record<string, number> = {};
+              const rawBase = data.stats?.base || { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 };
+              Object.entries(rawBase).forEach(([key, val]) => {
+                normalizedBase[key.toUpperCase()] = Number(val);
+              });
+
+              setCharacter({
+                ...data,
+                progression: Array.isArray(data.progression)
+                  ? data.progression.map((entry: any) => ({
+                      ...entry,
+                      subclassId: String(entry?.subclassId || "").trim(),
+                    }))
+                  : buildCurrentProgression({
+                      classId: data.classId,
+                      subclassId: data.subclassId,
+                      level: data.level || 1,
+                    }),
+                hp: data.hp || { current: 10, max: 10, temp: 0 },
+                stats: {
+                  ...(data.stats || { method: "point-buy" }),
+                  base: normalizedBase,
+                },
+                progressionState: normalizeProgressionState(data.progressionState),
+              });
+            }
           } else {
             navigate("/characters");
           }
         }
 
         if (isStaff) {
-          const campSnap = await getDocs(query(collection(db, "campaigns")));
-          setCampaigns(campSnap.docs.map((c) => ({ id: c.id, ...c.data() })));
+          const camps = await fetchCollection<any>("campaigns");
+          setCampaigns(camps);
         }
 
-        const skillsSnap = await getDocs(query(collection(db, "skills")));
-        setAllSkills(skillsSnap.docs.map((s) => ({ id: s.id, ...s.data() })));
+        const skills = await fetchCollection<any>("skills");
+        setAllSkills(skills);
 
         const [
-          armorSnap,
-          armorCategoriesSnap,
-          weaponsSnap,
-          weaponCategoriesSnap,
-          toolsSnap,
-          toolCategoriesSnap,
-          languagesSnap,
-          languageCategoriesSnap,
+          armor,
+          armorCategories,
+          weapons,
+          weaponCategories,
+          tools,
+          toolCategories,
+          languages,
+          languageCategories,
         ] = await Promise.all([
-          getDocs(query(collection(db, "armor"))),
-          getDocs(query(collection(db, "armorCategories"))),
-          getDocs(query(collection(db, "weapons"))),
-          getDocs(query(collection(db, "weaponCategories"))),
-          getDocs(query(collection(db, "tools"))),
-          getDocs(query(collection(db, "toolCategories"))),
-          getDocs(query(collection(db, "languages"))),
-          getDocs(query(collection(db, "languageCategories"))),
+          fetchCollection<any>("armor"),
+          fetchCollection<any>("armorCategories"),
+          fetchCollection<any>("weapons"),
+          fetchCollection<any>("weaponCategories"),
+          fetchCollection<any>("tools"),
+          fetchCollection<any>("toolCategories"),
+          fetchCollection<any>("languages"),
+          fetchCollection<any>("languageCategories"),
         ]);
 
+        // Items in armor/weapons/tools/languages reference their category via
+        // `category_id`; downstream lookup code reads `categoryId`. Remap once
+        // here so consumers don't need to know about the snake_case columns.
         setProficiencyCatalogs({
-          armor: buildNamedDocLookup(armorSnap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-          armorCategories: buildNamedDocLookup(
-            armorCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          ),
-          weapons: buildNamedDocLookup(
-            weaponsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          ),
-          weaponCategories: buildNamedDocLookup(
-            weaponCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          ),
-          tools: buildNamedDocLookup(toolsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-          toolCategories: buildNamedDocLookup(
-            toolCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          ),
-          languages: buildNamedDocLookup(
-            languagesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          ),
-          languageCategories: buildNamedDocLookup(
-            languageCategoriesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          ),
+          armor: buildNamedDocLookup(armor.map(denormCategoryId)),
+          armorCategories: buildNamedDocLookup(armorCategories),
+          weapons: buildNamedDocLookup(weapons.map(denormCategoryId)),
+          weaponCategories: buildNamedDocLookup(weaponCategories),
+          tools: buildNamedDocLookup(tools.map(denormCategoryId)),
+          toolCategories: buildNamedDocLookup(toolCategories),
+          languages: buildNamedDocLookup(languages.map(denormCategoryId)),
+          languageCategories: buildNamedDocLookup(languageCategories),
         });
 
-        const spellcastingTypesSnap = await getDocs(query(collection(db, "spellcastingTypes")));
-        setSpellcastingTypes(spellcastingTypesSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        const spellcastingTypesData = await fetchCollection<any>("spellcastingTypes");
+        setSpellcastingTypes(spellcastingTypesData);
 
-        const multiclassMasterSnap = await getDoc(doc(db, "standardMulticlassProgression", "master"));
-        if (multiclassMasterSnap.exists()) {
-          setMasterMulticlassChart(multiclassMasterSnap.data());
+        const multiclassMasterDoc = await fetchDocument<any>(
+          "standardMulticlassProgression",
+          "master",
+        );
+        if (multiclassMasterDoc) {
+          setMasterMulticlassChart(multiclassMasterDoc);
         }
 
         // Fetch Attributes
-        const attrSnap = await getDocs(query(collection(db, "attributes")));
-        const attrs = attrSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const attrs = await fetchCollection<any>("attributes");
         const uniqueAttrsMap = new Map();
         attrs.forEach((item: any) => {
           const key = (item.identifier || item.id).toUpperCase();
@@ -2922,7 +2125,7 @@ export default function CharacterBuilder({
           return (a.name || '').localeCompare(b.name || '');
         }));
       } catch (err) {
-        handleFirestoreError(err, OperationType.GET, "characters");
+        reportClientError(err, OperationType.GET, "characters");
       } finally {
         setLoading(false);
       }
@@ -3019,8 +2222,8 @@ export default function CharacterBuilder({
     setSaving(true);
     try {
       const isNew = !id || id === "new";
-      const charId = isNew ? doc(collection(db, "characters")).id : id;
-      const ref = doc(db, "characters", charId as string);
+      const charId = isNew ? crypto.randomUUID() : id;
+      
       const progression = buildCurrentProgression(character);
       const progressionGroups = buildProgressionClassGroups(
         progression,
@@ -3035,42 +2238,28 @@ export default function CharacterBuilder({
         selectedOptionsMap,
         subclassCache,
       );
-      const selectedOptions =
-        buildSelectedOptionsMapFromClassPackages(
-          progressionState.classPackages,
-        );
 
-      const payload = {
+      const finalChar = {
         ...character,
+        id: charId,
+        userId: isNew ? userProfile.uid : character.userId,
         progression,
         progressionState,
-        selectedOptions,
-        hp: {
-          current: Number(character.hp?.current ?? 10) || 10,
-          ...(hasExplicitHpMaxOverride(character)
-            ? { max: getStoredHpMax(character) }
-            : {}),
-          temp: Number(character.hp?.temp ?? 0) || 0,
-        },
-        proficiencyBonus: getProficiencyBonusForLevel(
-          getTotalCharacterLevel(progression, character.level),
-        ),
-        classes: buildCharacterClassesFromProgression(progressionGroups, subclassCache),
         classId: primaryGroup?.classId || "",
         subclassId: primaryGroup?.subclassId || "",
-        userId: isNew ? userProfile.uid : character.userId,
         updatedAt: new Date().toISOString(),
       };
-      if (isNew) payload.createdAt = payload.updatedAt;
+
+      const { generateCharacterSaveQueries } = await import("../../lib/characterShared");
+      const { batchQueryD1 } = await import("../../lib/d1");
+      const queries = generateCharacterSaveQueries(charId, finalChar);
+      await batchQueryD1(queries);
 
       if (isNew) {
-        await setDoc(ref, payload);
         navigate(`/characters/builder/${charId}`);
-      } else {
-        await updateDoc(ref, payload);
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, "characters");
+      reportClientError(err, OperationType.WRITE, "characters");
     } finally {
       setSaving(false);
     }
@@ -3593,16 +2782,14 @@ export default function CharacterBuilder({
       if (referencedIds.length === 0) return;
 
       try {
-        const refs = await Promise.all(
-          referencedIds.map((entryId) => getDoc(doc(db, "uniqueOptionItems", entryId))),
+        const rows = await Promise.all(
+          referencedIds.map((entryId) => fetchDocument<any>("uniqueOptionItems", entryId)),
         );
 
         setOptionsCache((prev) => {
           const next = { ...prev };
-          refs.forEach((snap) => {
-            if (snap.exists()) {
-              next[snap.id] = { id: snap.id, ...snap.data() };
-            }
+          rows.forEach((row: any) => {
+            if (row && row.id) next[row.id] = row;
           });
           return next;
         });
@@ -5893,27 +5080,14 @@ export default function CharacterBuilder({
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={async () => {
-                                                          const q = query(
-                                                            collection(
-                                                              db,
-                                                              "subclasses",
-                                                            ),
-                                                            where(
-                                                              "classId",
-                                                              "==",
-                                                              choice.classId,
-                                                            ),
+                                                          const rows = await fetchCollection<any>(
+                                                            "subclasses",
+                                                            {
+                                                              where: "class_id = ?",
+                                                              params: [choice.classId],
+                                                            },
                                                           );
-                                                          const snap =
-                                                            await getDocs(q);
-                                                          setAvailableSubclasses(
-                                                            snap.docs.map(
-                                                              (d) => ({
-                                                                id: d.id,
-                                                                ...d.data(),
-                                                              }),
-                                                            ),
-                                                          );
+                                                          setAvailableSubclasses(rows.map(denormSubclass));
                                                           setIsSelectingSubclass(
                                                             {
                                                               open: true,

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { doc, onSnapshot, query, collection, where, orderBy } from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { ChevronLeft, ExternalLink, Edit, Book, Calendar, Clock, Tag, Sword, Download, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ExternalLink, Edit, Book, Calendar, Clock, Tag, Sword, Download, ChevronDown, Database, CloudOff } from 'lucide-react';
+import { fetchDocument, fetchCollection } from '../../lib/d1';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import { motion } from 'motion/react';
 import { exportSourceForFoundry, exportRawSourceJSON } from '../../lib/classExport';
@@ -23,6 +22,7 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const navigate = useNavigate();
+  const [isUsingD1, setIsUsingD1] = useState(false);
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
 
@@ -44,38 +44,33 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (!id) return;
 
-    let unsubscribeClasses: (() => void) | null = null;
+    const loadSourceData = async () => {
+      try {
+        const sourceData = await fetchDocument('sources', id);
 
-    const unsubscribe = onSnapshot(doc(db, 'sources', id), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setSource({ id: docSnap.id, ...data });
-        
-        // Fetch linked classes using the Firestore document ID
-        if (unsubscribeClasses) unsubscribeClasses();
-
-        const classesQuery = query(
-          collection(db, 'classes'),
-          where('sourceId', '==', docSnap.id),
-          orderBy('name', 'asc')
-        );
-        
-        unsubscribeClasses = onSnapshot(classesQuery, (snap) => {
-          setLinkedClasses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-      } else {
-        setSource(null);
+        if (sourceData) {
+          setSource(sourceData);
+          
+          const classesData = await fetchCollection('classes', { 
+            where: `source_id = ?`, 
+            params: [id], 
+            orderBy: 'name ASC' 
+          });
+          
+          setLinkedClasses(classesData);
+          setIsUsingD1(true);
+        } else {
+          setSource(null);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading source detail:", error);
+        setLoading(false);
+        setIsUsingD1(false);
       }
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `sources/${id}`);
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribe();
-      if (unsubscribeClasses) unsubscribeClasses();
     };
+
+    loadSourceData();
   }, [id]);
 
   if (loading) {
@@ -103,14 +98,27 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
   return (
     <div className="max-w-5xl mx-auto pb-20">
       <div className="mb-8 flex items-center justify-between">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => navigate('/sources')}
-          className="text-ink/60 hover:text-gold gap-2"
-        >
-          <ChevronLeft className="w-4 h-4" /> Back to Sources
-        </Button>
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => navigate('/sources')}
+            className="text-ink/60 hover:text-gold gap-2"
+          >
+            <ChevronLeft className="w-4 h-4" /> Back to Sources
+          </Button>
+          {isUsingD1 ? (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <Database className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+              <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           {isStaff && (
             <>
@@ -171,10 +179,10 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
               </div>
             </div>
 
-            {source.url && (
+            {(source.external_url || source.url) && (
               <div className="pt-4 border-t border-gold/10">
                 <a 
-                  href={source.url} 
+                  href={source.external_url || source.url} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="w-full"

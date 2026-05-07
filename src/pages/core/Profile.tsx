@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { fetchCollection } from '../../lib/d1';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
+
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -15,28 +15,43 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+ 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const fetchProfileData = async () => {
       if (!username) return;
       setLoading(true);
       try {
-        const q = query(collection(db, 'users'), where('username', '==', username));
-        const snap = await getDocs(q);
+        // Fetch user by username (D1-only)
+        const results = await fetchCollection<any>('users', { where: 'username = ?', params: [username] });
         
-        if (!snap.empty) {
-          setProfile({ id: snap.docs[0].id, ...snap.docs[0].data() });
+        if (results.length > 0) {
+          const userProfileData = results[0];
+          setProfile(userProfileData);
+
+          // Fetch assigned campaigns from junction table
+          const memberData = await fetchCollection<any>('campaignMembers', { where: 'user_id = ?', params: [userProfileData.id] });
+          const campaignIds = memberData.map(m => m.campaign_id);
+
+          if (campaignIds.length > 0) {
+            // Fetch campaign names
+            // We can fetch all campaigns and filter, or add a fetchDocumentsByIds helper.
+            // For now, let's fetch all and filter since campaigns is usually small.
+            const allCampaigns = await fetchCollection<any>('campaigns');
+            setCampaigns(allCampaigns.filter(c => campaignIds.includes(c.id)));
+          }
         } else {
           setError('Archivist not found in the records.');
         }
       } catch (err: any) {
-        handleFirestoreError(err, OperationType.GET, `users/${username}`);
+        console.error(err);
         setError('Failed to retrieve profile.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProfile();
+    fetchProfileData();
   }, [username]);
 
   if (loading) {
@@ -59,7 +74,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
 
   const isOwner = viewerProfile?.username === profile.username;
   const isAdmin = viewerProfile?.role === 'admin';
-  const canViewFullProfile = !profile.isPrivate || isOwner || isAdmin;
+  const canViewFullProfile = !profile.is_private || isOwner || isAdmin;
 
   if (!canViewFullProfile) {
     return (
@@ -72,7 +87,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
         <Card className="border-gold/20 bg-card/80 backdrop-blur-sm shadow-2xl overflow-hidden text-center py-16">
           <CardContent className="space-y-6">
             <Lock className="w-16 h-16 text-gold/40 mx-auto" />
-            <h1 className="text-4xl font-serif font-bold text-ink">{profile.displayName || profile.username}</h1>
+            <h1 className="text-4xl font-serif font-bold text-ink">{profile.display_name || profile.username}</h1>
             <p className="text-ink/60 font-serif italic text-lg">This archivist has sealed their records.</p>
           </CardContent>
         </Card>
@@ -98,9 +113,9 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
             <div className="flex flex-col md:flex-row gap-8 items-start md:items-end -mt-16">
               <div className="relative">
                 <Avatar className="w-32 h-32 border-4 border-card shadow-xl">
-                  <AvatarImage src={profile.avatarUrl} referrerPolicy="no-referrer" />
+                  <AvatarImage src={profile.avatar_url} referrerPolicy="no-referrer" />
                   <AvatarFallback className="bg-gold text-white text-4xl font-serif">
-                    {profile.displayName?.[0] || profile.username?.[0]}
+                    {profile.display_name?.[0] || profile.username?.[0]}
                   </AvatarFallback>
                 </Avatar>
                 {profile.role === 'admin' && (
@@ -112,7 +127,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
               
               <div className="flex-grow space-y-2">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-4xl font-serif font-bold text-ink">{profile.displayName || profile.username}</h1>
+                  <h1 className="text-4xl font-serif font-bold text-ink">{profile.display_name || profile.username}</h1>
                   {profile.pronouns && (
                     <span className="text-sm text-ink/40 italic mt-2">({profile.pronouns})</span>
                   )}
@@ -120,7 +135,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
                     {profile.role === 'admin' ? 'Grand Archivist' : 'Seeker'}
                   </Badge>
                 </div>
-                {!profile.hideUsername && (
+                {!profile.hide_username && (
                   <p className="text-ink/40 font-medium">@{profile.username}</p>
                 )}
               </div>
@@ -142,7 +157,7 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
                 <div className="space-y-4">
                   <h3 className="text-sm font-bold uppercase tracking-widest text-ink/40">Archive Stats</h3>
                   <div className="space-y-3">
-                    <StatItem icon={<Calendar className="w-4 h-4" />} label="Joined" value="The Early Ages" />
+                    <StatItem icon={<Calendar className="w-4 h-4" />} label="Joined" value={profile.created_at ? new Date(profile.created_at).toLocaleDateString() : "The Early Ages"} />
                     <StatItem icon={<MapPin className="w-4 h-4" />} label="Location" value="The Great Library" />
                   </div>
                 </div>
@@ -173,12 +188,24 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-ink/40 italic text-center py-8">
-              This archivist is not currently assigned to any active campaigns.
-            </p>
+            {campaigns.length === 0 ? (
+              <p className="text-sm text-ink/40 italic text-center py-8">
+                This archivist is not currently assigned to any active campaigns.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {campaigns.map(c => (
+                  <Link key={c.id} to={`/campaign/${c.id}`} className="flex items-center justify-between p-3 border border-gold/10 rounded hover:bg-gold/5 transition-all group">
+                    <span className="font-serif font-bold text-ink group-hover:text-gold transition-colors">{c.name}</span>
+                    <Shield className="w-4 h-4 text-gold/40 group-hover:text-gold transition-colors" />
+                  </Link>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
     </motion.div>
   );
 }

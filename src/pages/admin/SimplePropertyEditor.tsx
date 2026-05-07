@@ -1,21 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { db } from '../../lib/firebase';
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc
-} from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
 import { slugify } from '../../lib/utils';
-import { Plus, Trash2, Edit } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
+import { Plus, Trash2, Edit, Database, CloudOff } from 'lucide-react';
 import MarkdownEditor from '../../components/MarkdownEditor';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 
 export default function SimpleProficiencyEditor({ 
     userProfile, 
@@ -37,6 +28,7 @@ export default function SimpleProficiencyEditor({
   const [items, setItems] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUsingD1, setIsUsingD1] = useState(false);
   
   // Form State
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -49,49 +41,35 @@ export default function SimpleProficiencyEditor({
   const isAdmin = userProfile?.role === 'admin';
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, collectionName),
-      (snapshot) => {
-        setItems(
-          snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-            .sort((a: any, b: any) => {
-              const orderA = typeof a.order === 'number' ? a.order : 999;
-              const orderB = typeof b.order === 'number' ? b.order : 999;
-              if (orderA !== orderB) return orderA - orderB;
-              return String(a.name || '').localeCompare(String(b.name || ''));
-            })
-        );
-        setLoading(false);
-      },
-      (err) => {
-        console.error(`Error in ${collectionName} snapshot:`, err);
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchCollection(collectionName, { orderBy: '"order" ASC, name ASC' });
+        setItems(data);
+        if (data.length > 0) setIsUsingD1(true);
+      } catch (err) {
+        console.error(`Error loading ${collectionName}:`, err);
+        setIsUsingD1(false);
+      } finally {
         setLoading(false);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    loadData();
   }, [collectionName]);
 
   useEffect(() => {
     if (!categoryCollectionName) return;
 
-    const unsubscribe = onSnapshot(
-      collection(db, categoryCollectionName),
-      (snapshot) => {
+    fetchCollection(categoryCollectionName, { orderBy: 'name ASC' })
+      .then(data => {
         setCategories(
-          snapshot.docs
-            .map(doc => String(doc.data().name || '').trim())
+          data
+            .map((d: any) => String(d.name || '').trim())
             .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b))
         );
-      },
-      (err) => {
-        console.error(`Error in ${categoryCollectionName} snapshot:`, err);
-      }
-    );
-
-    return () => unsubscribe();
+      })
+      .catch(err => console.error(`Error loading ${categoryCollectionName}:`, err));
   }, [categoryCollectionName]);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -99,26 +77,30 @@ export default function SimpleProficiencyEditor({
     if (!name) return;
 
     try {
-      const itemData = {
+      const itemData: Record<string, any> = {
         name,
         identifier: identifier.trim() ? (categoryCollectionName === 'attributes' ? identifier.trim().toUpperCase() : identifier.trim()) : slugify(name).toUpperCase(),
         order: order === '' ? null : Number(order),
         ...(categoryCollectionName ? { category: category.trim() } : {}),
         description,
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
+      const targetId = editingItem?.id || crypto.randomUUID();
+      await upsertDocument(collectionName, targetId, itemData);
+
       if (editingItem) {
-        await updateDoc(doc(db, collectionName, editingItem.id), itemData);
+        setItems(prev => prev.map(it => it.id === targetId ? { ...it, ...itemData } : it));
         toast.success(`${title} updated`);
       } else {
-        await addDoc(collection(db, collectionName), itemData);
+        setItems(prev => [...prev, { id: targetId, ...itemData }]);
         toast.success(`${title} created`);
       }
 
       resetForm();
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, collectionName);
+      console.error(`Error saving ${collectionName}:`, error);
+      toast.error(`Failed to save ${title}`);
     }
   };
 
@@ -144,10 +126,12 @@ export default function SimpleProficiencyEditor({
     e.stopPropagation();
     if (!isAdmin || !window.confirm(`Are you sure you want to delete this ${title.toLowerCase()}?`)) return;
     try {
-      await deleteDoc(doc(db, collectionName, id));
+      await deleteDocument(collectionName, id);
+      setItems(prev => prev.filter(it => it.id !== id));
       toast.success(`${title} deleted`);
     } catch (error) {
-       handleFirestoreError(error, OperationType.DELETE, collectionName);
+      console.error(`Error deleting ${collectionName}:`, error);
+      toast.error(`Failed to delete ${title}`);
     }
   };
 
@@ -157,7 +141,20 @@ export default function SimpleProficiencyEditor({
     <div className="grid lg:grid-cols-3 gap-8">
       <div className="lg:col-span-1 space-y-6">
         <div className="space-y-2">
-            <h2 className="label-text text-gold shrink-0">{title} Manager</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="label-text text-gold shrink-0">{title} Manager</h2>
+              {isUsingD1 ? (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  <Database className="w-3 h-3 text-emerald-500" />
+                  <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">D1 Linked</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <CloudOff className="w-3 h-3 text-amber-500" />
+                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-tighter">Legacy Firebase</span>
+                </div>
+              )}
+            </div>
             <br/>
             <p className="text-ink/60 font-serif italic">{descriptionText}</p>
         </div>

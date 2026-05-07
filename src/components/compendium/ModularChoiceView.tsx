@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import BBCodeRenderer from '../BBCodeRenderer';
 import { cn } from '../../lib/utils';
-import { db } from '../../lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
 import { BookOpen, ChevronLeft } from 'lucide-react';
+import { fetchDocument } from '../../lib/d1';
 
 export interface ModularChoiceItem {
   id: string;
@@ -49,14 +48,16 @@ export default function ModularChoiceView({
   useEffect(() => {
     if (selectedItem?.featureId && !featureDescriptions[selectedItem.featureId]) {
       setLoadingFeatures(prev => ({ ...prev, [selectedItem.featureId]: true }));
-      getDoc(doc(db, 'features', selectedItem.featureId))
-        .then(docSnap => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setFeatureDescriptions(prev => ({ ...prev, [selectedItem.featureId]: data.description || '' }));
-            if (data.advancements) {
-              setFeatureAdvancements(prev => ({ ...prev, [selectedItem.featureId]: data.advancements }));
-            }
+      fetchDocument<any>('features', selectedItem.featureId)
+        .then(data => {
+          if (data) {
+            // Remap if from D1
+            const mapped = {
+              ...data,
+              advancements: typeof data.advancements === 'string' ? JSON.parse(data.advancements) : (data.advancements || [])
+            };
+            setFeatureDescriptions(prev => ({ ...prev, [selectedItem.featureId]: mapped.description || '' }));
+            setFeatureAdvancements(prev => ({ ...prev, [selectedItem.featureId]: mapped.advancements }));
           }
         })
         .finally(() => {

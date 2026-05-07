@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { db } from '../../lib/firebase';
-import {
-  collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc,
-} from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
@@ -12,9 +8,10 @@ import {
 } from '../../components/ui/select';
 import { slugify } from '../../lib/utils';
 import { HeartPulse, Plus, Trash2, Download, Upload, X, Zap } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { ImageUpload } from '../../components/ui/ImageUpload';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
+import { Database, CloudOff } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -263,32 +260,32 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
   const [editingItem, setEditingItem] = useState<StatusCondition | null>(null);
   const [form, setForm] = useState<Omit<StatusCondition, 'id'>>(BLANK_FORM);
+  const [isUsingD1, setIsUsingD1] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin';
 
   // ── Firestore subscription ──────────────────────────────────────────────────
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, 'statuses'),
-      (snap) => {
+    const loadItems = async () => {
+      try {
+        const data = await fetchCollection('statuses');
         setItems(
-          snap.docs
-            .map(d => ({ id: d.id, ...d.data() } as StatusCondition))
-            .sort((a, b) => {
-              const oa = typeof a.order === 'number' ? a.order : 999;
-              const ob = typeof b.order === 'number' ? b.order : 999;
-              return oa !== ob ? oa - ob : a.name.localeCompare(b.name);
-            })
+          data.sort((a: any, b: any) => {
+            const oa = typeof a.order === 'number' ? a.order : 999;
+            const ob = typeof b.order === 'number' ? b.order : 999;
+            return oa !== ob ? oa - ob : a.name.localeCompare(b.name);
+          })
         );
-        setLoading(false);
-      },
-      (err) => {
+        setIsUsingD1(true);
+      } catch (err) {
         console.error('Error loading statuses:', err);
+        setIsUsingD1(false);
+      } finally {
         setLoading(false);
       }
-    );
-    return () => unsub();
+    };
+    loadItems();
   }, []);
 
   // ── CRUD ───────────────────────────────────────────────────────────────────
@@ -297,23 +294,43 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
     e.preventDefault();
     if (!form.name) return;
 
-    const data = {
-      ...form,
+    const now = new Date().toISOString();
+    const d1Data = {
       identifier: form.identifier.trim() || slugify(form.name),
-      updatedAt: new Date().toISOString(),
+      name: form.name,
+      image_url: form.img ?? null,
+      reference: form.reference,
+      description: form.description,
+      order: form.order ?? null,
+      implied_ids: form.impliedStatuses,
+      changes: form.changes,
+      source: form.source,
+      updated_at: now,
     };
 
     try {
+      const targetId = editingItem?.id || crypto.randomUUID();
+      if (!editingItem) {
+        (d1Data as any).created_at = now;
+      }
+      await upsertDocument('statuses', targetId, d1Data);
+
+      const stateItem = { id: targetId, ...form, ...d1Data };
       if (editingItem?.id) {
-        await updateDoc(doc(db, 'statuses', editingItem.id), data);
+        setItems(prev => prev.map(it => it.id === targetId ? stateItem : it));
         toast.success('Status condition updated');
       } else {
-        await addDoc(collection(db, 'statuses'), { ...data, createdAt: new Date().toISOString() });
+        setItems(prev => [...prev, stateItem].sort((a: any, b: any) => {
+          const oa = typeof a.order === 'number' ? a.order : 999;
+          const ob = typeof b.order === 'number' ? b.order : 999;
+          return oa !== ob ? oa - ob : a.name.localeCompare(b.name);
+        }));
         toast.success('Status condition created');
       }
       resetForm();
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'statuses');
+      console.error('Error saving status:', err);
+      toast.error('Failed to save status condition');
     }
   };
 
@@ -321,10 +338,12 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
     e.stopPropagation();
     if (!isAdmin || !window.confirm('Delete this status condition?')) return;
     try {
-      await deleteDoc(doc(db, 'statuses', id));
+      await deleteDocument('statuses', id);
+      setItems(prev => prev.filter(it => it.id !== id));
       toast.success('Status condition deleted');
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'statuses');
+      console.error('Error deleting status:', err);
+      toast.error('Failed to delete status condition');
     }
   };
 
@@ -337,18 +356,36 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
       return;
     }
     try {
-      await Promise.all(
-        toAdd.map(c =>
-          addDoc(collection(db, 'statuses'), {
-            ...c,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          })
-        )
+      const now = new Date().toISOString();
+      const newItems = await Promise.all(
+        toAdd.map(async c => {
+          const newId = crypto.randomUUID();
+          const d1Data = {
+            identifier: c.identifier,
+            name: c.name,
+            image_url: null,
+            reference: '',
+            description: c.description || '',
+            order: c.order ?? null,
+            implied_ids: c.impliedStatuses || [],
+            changes: c.changes || [],
+            source: c.source,
+            created_at: now,
+            updated_at: now,
+          };
+          await upsertDocument('statuses', newId, d1Data);
+          return { id: newId, ...c, ...d1Data };
+        })
       );
+      setItems(prev => [...prev, ...newItems].sort((a: any, b: any) => {
+        const oa = typeof a.order === 'number' ? a.order : 999;
+        const ob = typeof b.order === 'number' ? b.order : 999;
+        return oa !== ob ? oa - ob : a.name.localeCompare(b.name);
+      }));
       toast.success(`Added ${toAdd.length} default condition${toAdd.length !== 1 ? 's' : ''}`);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'statuses');
+      console.error('Error seeding defaults:', err);
+      toast.error('Failed to seed default conditions');
     }
   };
 
@@ -397,28 +434,34 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
     }
 
     try {
-      await Promise.all(
-        toAdd.map(c =>
-          addDoc(collection(db, 'statuses'), {
+      const now = new Date().toISOString();
+      const newItems = await Promise.all(
+        toAdd.map(async c => {
+          const newId = crypto.randomUUID();
+          const d1Data = {
             identifier: c.identifier,
             name: c.name || c.label || c.identifier,
-            img: c.img || c.icon || null,
+            image_url: (c.img || c.icon) ?? null,
             reference: c.reference || '',
             description: c.description || '',
             order: c.order ?? null,
-            impliedStatuses: [],
+            implied_ids: [],
             changes: [],
             source: 'imported',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          })
-        )
+            created_at: now,
+            updated_at: now,
+          };
+          await upsertDocument('statuses', newId, d1Data);
+          return { id: newId, ...d1Data };
+        })
       );
+      setItems(prev => [...prev, ...newItems]);
       toast.success(`Imported ${toAdd.length} status condition${toAdd.length !== 1 ? 's' : ''}`);
       setShowImport(false);
       setImportJson('');
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'statuses');
+      console.error('Error importing statuses:', err);
+      toast.error('Failed to import status conditions');
     }
   };
 
@@ -429,16 +472,16 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
     setForm(BLANK_FORM);
   };
 
-  const startEdit = (item: StatusCondition) => {
+  const startEdit = (item: any) => {
     setEditingItem(item);
     setForm({
       identifier: item.identifier || '',
       name: item.name,
-      img: item.img ?? null,
+      img: item.img ?? item.image_url ?? null,
       reference: item.reference || '',
       description: item.description || '',
       order: item.order ?? null,
-      impliedStatuses: item.impliedStatuses || [],
+      impliedStatuses: item.impliedStatuses || item.implied_ids || [],
       changes: item.changes || [],
       source: item.source || 'custom',
     });
@@ -487,9 +530,22 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
-          <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">
-            Status Conditions
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">
+              Status Conditions
+            </h1>
+            {isUsingD1 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
+              </div>
+            )}
+          </div>
           <p className="text-ink/60 font-serif italic">
             Define the status conditions available in your game — default D&amp;D 5e conditions,
             custom homebrew conditions, and imported Foundry condition types.
@@ -776,9 +832,9 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
                     {/* Icon */}
                     <div className="w-10 h-10 rounded border border-gold/10 bg-background/50 flex items-center justify-center shrink-0 overflow-hidden">
-                      {item.img ? (
+                      {(item.img || item.image_url) ? (
                         <img
-                          src={item.img}
+                          src={item.img || item.image_url}
                           alt={item.name}
                           className="w-full h-full object-contain p-1"
                         />
@@ -818,9 +874,9 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
                       {/* Meta row */}
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        {(item.impliedStatuses || []).length > 0 && (
+                        {((item.impliedStatuses || item.implied_ids) || []).length > 0 && (
                           <span className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                            → {item.impliedStatuses!.join(', ')}
+                            → {(item.impliedStatuses || item.implied_ids)!.join(', ')}
                           </span>
                         )}
                         {(item.changes || []).length > 0 && (

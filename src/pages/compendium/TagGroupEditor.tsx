@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, query, where, onSnapshot, addDoc, deleteDoc, orderBy } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { toast } from 'sonner';
-import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check } from 'lucide-react';
+import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 
 const SYSTEM_CLASSIFICATIONS = [
   'class',
@@ -31,6 +30,7 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
   const [group, setGroup] = useState<any>(null);
   const [tags, setTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUsingD1, setIsUsingD1] = useState(false);
 
   // Group Editing
   const [groupName, setGroupName] = useState('');
@@ -47,39 +47,40 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (!id || !isAdmin) return;
 
-    const fetchGroup = async () => {
+    const loadData = async () => {
+      setLoading(true);
       try {
-        const docRef = doc(db, 'tagGroups', id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = { id: docSnap.id, ...(docSnap.data() as any) };
-          setGroup(data);
-          setGroupName(data.name || '');
-          setGroupDescription(data.description || '');
-          setGroupClassifications(data.classifications || (data.category ? [data.category] : []));
+        // 1. Fetch Group
+        const groupData = await fetchDocument<any>('tagGroups', id);
+
+        if (groupData) {
+          setGroup(groupData);
+          setGroupName(groupData.name || '');
+          setGroupDescription(groupData.description || '');
+          setGroupClassifications(groupData.classifications || (groupData.category ? [groupData.category] : []));
+          setIsUsingD1(true);
         } else {
           toast.error('Tag group not found');
           navigate('/compendium/tags');
+          return;
         }
-      } catch (error) {
-        handleFirestoreError(error, OperationType.GET, `tagGroups/${id}`);
+
+        // 2. Fetch Tags
+        const tagsData = await fetchCollection('tags', {
+          where: 'group_id = ?',
+          params: [id],
+          orderBy: 'name ASC',
+        });
+
+        setTags(tagsData);
+      } catch (err) {
+        console.error("Error loading tag group data:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchGroup();
-
-    const q = query(collection(db, 'tags'), where('groupId', '==', id));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedTags = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      fetchedTags.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setTags(fetchedTags);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'tags');
-    });
-
-    return () => unsubscribe();
+    loadData();
   }, [id, navigate, isAdmin]);
 
   const handleSaveGroupInfo = async () => {
@@ -88,17 +89,19 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
       return;
     }
     try {
-      await updateDoc(doc(db, 'tagGroups', id!), {
+      const d1Data = {
         name: groupName,
         description: groupDescription,
         classifications: groupClassifications,
-        updatedAt: new Date().toISOString()
-      });
-      setGroup({ ...group, name: groupName, description: groupDescription, classifications: groupClassifications });
+        updated_at: new Date().toISOString(),
+      };
+      await upsertDocument('tagGroups', id!, d1Data);
+      setGroup({ ...group, ...d1Data });
       setIsEditingGroup(false);
       toast.success('Group updated');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tagGroups/${id}`);
+      console.error('Error saving group:', error);
+      toast.error('Failed to save group');
     }
   };
 
@@ -124,40 +127,51 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
     if (!newTagName.trim()) return;
 
     try {
-      await addDoc(collection(db, 'tags'), {
+      const newId = crypto.randomUUID();
+      const slug = newTagName.trim().toLowerCase().replace(/\s+/g, '-');
+      const d1Data = {
+        group_id: id,
         name: newTagName.trim(),
-        groupId: id,
-        updatedAt: new Date().toISOString()
-      });
+        slug,
+        updated_at: new Date().toISOString(),
+      };
+      await upsertDocument('tags', newId, d1Data);
+      setTags(prev => [...prev, { id: newId, ...d1Data }].sort((a, b) => a.name.localeCompare(b.name)));
       setNewTagName('');
       toast.success('Tag added');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'tags');
+      console.error('Error adding tag:', error);
+      toast.error('Failed to add tag');
     }
   };
 
   const handleUpdateTag = async (tagId: string) => {
     if (!editingTagName.trim()) return;
     try {
-      await updateDoc(doc(db, 'tags', tagId), {
+      const d1Data = {
         name: editingTagName.trim(),
-        updatedAt: new Date().toISOString()
-      });
+        updated_at: new Date().toISOString(),
+      };
+      await upsertDocument('tags', tagId, d1Data);
+      setTags(prev => prev.map(t => t.id === tagId ? { ...t, ...d1Data } : t));
       setEditingTagId(null);
       setEditingTagName('');
       toast.success('Tag updated');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `tags/${tagId}`);
+      console.error('Error updating tag:', error);
+      toast.error('Failed to update tag');
     }
   };
 
   const handleDeleteTag = async (tagId: string) => {
     if (window.confirm('Delete this tag?')) {
       try {
-        await deleteDoc(doc(db, 'tags', tagId));
+        await deleteDocument('tags', tagId);
+        setTags(prev => prev.filter(t => t.id !== tagId));
         toast.success('Tag deleted');
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `tags/${tagId}`);
+        console.error('Error deleting tag:', error);
+        toast.error('Failed to delete tag');
       }
     }
   };
@@ -180,8 +194,21 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
         <Button variant="ghost" onClick={() => navigate('/compendium/tags')} className="text-ink/60 hover:text-gold px-2">
           <ArrowLeft className="w-5 h-5 mr-1" /> Back
         </Button>
-        <div>
-          <h1 className="h2-title text-ink break-words">{group?.name}</h1>
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <h1 className="h2-title text-ink break-words">{group?.name}</h1>
+            {isUsingD1 ? (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3 h-3 text-emerald-500" />
+                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">D1 Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3 h-3 text-amber-500" />
+                <span className="text-[9px] font-bold text-amber-500 uppercase tracking-tighter">Legacy Firebase</span>
+              </div>
+            )}
+          </div>
           <p className="label-text text-ink/40 mt-1 uppercase tracking-widest">{groupClassifications.join(', ')}</p>
         </div>
       </div>

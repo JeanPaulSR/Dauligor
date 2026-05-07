@@ -1,15 +1,3 @@
-import { db } from './firebase';
-import { 
-  doc, 
-  getDoc, 
-  getDocs, 
-  collection, 
-  query, 
-  where, 
-  documentId,
-  setDoc,
-  serverTimestamp
-} from 'firebase/firestore';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { normalizeSpellFormulaShortcuts } from './referenceSyntax';
@@ -17,6 +5,201 @@ import {
   buildCanonicalClassProgression,
   buildCanonicalSubclassProgression
 } from './classProgression';
+import {
+  fetchCollection,
+  fetchDocument,
+  queryD1,
+  upsertDocument,
+  upsertDocumentBatch
+} from './d1';
+
+// ── D1 row → camelCase shape helpers ────────────────────────────────────────
+// The Foundry export contract is camelCase only. D1 stores snake_case. These
+// helpers map the snake_case columns to their camelCase aliases AND strip
+// every remaining snake_case key, so the export JSON does not leak D1 column
+// names like `image_url` / `created_at` / `parent_id`.
+
+// Strip every shallow key whose name contains an underscore (D1 snake_case).
+// Run after camelCase aliases are in place so nothing is lost.
+function dropSnakeKeys<T extends Record<string, any>>(obj: T): T {
+  if (!obj || typeof obj !== 'object') return obj;
+  const out: any = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (!k.includes('_')) out[k] = v;
+  }
+  return out;
+}
+
+function parseJsonField(val: any, fallback: any) {
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return fallback; }
+  }
+  return val ?? fallback;
+}
+
+function denormalizeSource(row: any) {
+  if (!row) return row;
+  const out: any = dropSnakeKeys({
+    ...row,
+    imageUrl: row.image_url ?? row.imageUrl ?? '',
+    rules: row.rules_version ?? row.rules ?? '',
+    url: row.external_url ?? row.url ?? '',
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  });
+  // `payload` is a D1-only catch-all column; not part of the export contract.
+  delete out.payload;
+  return out;
+}
+
+function denormalizeClassRow(row: any) {
+  if (!row) return row;
+  return dropSnakeKeys({
+    ...row,
+    sourceId: row.source_id ?? row.sourceId,
+    hitDie: row.hit_die ?? row.hitDie,
+    tagIds: parseJsonField(row.tag_ids, row.tagIds ?? []),
+    proficiencies: parseJsonField(row.proficiencies, {}),
+    multiclassProficiencies: parseJsonField(row.multiclass_proficiencies, row.multiclassProficiencies ?? {}),
+    savingThrows: parseJsonField(row.saving_throws, row.savingThrows ?? []),
+    spellcasting: parseJsonField(row.spellcasting, {}),
+    advancements: parseJsonField(row.advancements, []),
+    subclassTitle: row.subclass_title ?? row.subclassTitle,
+    subclassFeatureLevels: parseJsonField(row.subclass_feature_levels, row.subclassFeatureLevels ?? []),
+    asiLevels: parseJsonField(row.asi_levels, row.asiLevels ?? []),
+    primaryAbility: parseJsonField(row.primary_ability, row.primaryAbility ?? []),
+    primaryAbilityChoice: parseJsonField(row.primary_ability_choice, row.primaryAbilityChoice ?? []),
+    excludedOptionIds: parseJsonField(row.excluded_option_ids, row.excludedOptionIds ?? {}),
+    uniqueOptionMappings: parseJsonField(row.unique_option_mappings, row.uniqueOptionMappings ?? []),
+    startingEquipment: row.starting_equipment ?? row.startingEquipment,
+    imageUrl: row.image_url ?? row.imageUrl,
+    cardImageUrl: row.card_image_url ?? row.cardImageUrl,
+    previewImageUrl: row.preview_image_url ?? row.previewImageUrl,
+    imageDisplay: parseJsonField(row.image_display, row.imageDisplay),
+    cardDisplay: parseJsonField(row.card_display, row.cardDisplay),
+    previewDisplay: parseJsonField(row.preview_display, row.previewDisplay),
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  });
+}
+
+function denormalizeSubclassRow(row: any) {
+  if (!row) return row;
+  return dropSnakeKeys({
+    ...row,
+    classId: row.class_id ?? row.classId,
+    classIdentifier: row.class_identifier ?? row.classIdentifier,
+    sourceId: row.source_id ?? row.sourceId,
+    tagIds: parseJsonField(row.tag_ids, row.tagIds ?? []),
+    advancements: parseJsonField(row.advancements, []),
+    spellcasting: parseJsonField(row.spellcasting, {}),
+    excludedOptionIds: parseJsonField(row.excluded_option_ids, row.excludedOptionIds ?? {}),
+    uniqueOptionGroupIds: parseJsonField(row.unique_option_group_ids, row.uniqueOptionGroupIds ?? []),
+    imageUrl: row.image_url ?? row.imageUrl,
+    cardImageUrl: row.card_image_url ?? row.cardImageUrl,
+    previewImageUrl: row.preview_image_url ?? row.previewImageUrl,
+    // Display shapes flow through unchanged — no default. A `null` D1 value
+    // becomes undefined here, which JSON.stringify drops on output. The
+    // canonical contract only includes a display when the source had one.
+    imageDisplay: parseJsonField(row.image_display, row.imageDisplay) ?? undefined,
+    cardDisplay: parseJsonField(row.card_display, row.cardDisplay) ?? undefined,
+    previewDisplay: parseJsonField(row.preview_display, row.previewDisplay) ?? undefined,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  });
+}
+
+function denormalizeFeatureRow(row: any) {
+  if (!row) return row;
+  const out: any = dropSnakeKeys({
+    ...row,
+    parentId: row.parent_id ?? row.parentId,
+    parentType: row.parent_type ?? row.parentType,
+    featureType: row.feature_type ?? row.featureType,
+    sourceId: row.source_id ?? row.sourceId,
+    isSubclassFeature: row.parent_type === 'subclass'
+      || row.is_subclass_feature === 1
+      || row.isSubclassFeature === true,
+    imageUrl: row.image_url ?? row.imageUrl,
+    iconUrl: row.icon_url ?? row.iconUrl,
+    quantityColumnId: row.quantity_column_id ?? row.quantityColumnId,
+    scalingColumnId: row.scaling_column_id ?? row.scalingColumnId,
+    usesMax: row.uses_max ?? row.usesMax,
+    usesSpent: row.uses_spent ?? row.usesSpent,
+    usesRecovery: parseJsonField(row.uses_recovery, row.usesRecovery ?? []),
+    prerequisitesLevel: row.prerequisites_level ?? row.prerequisitesLevel,
+    prerequisitesItems: parseJsonField(row.prerequisites_items, row.prerequisitesItems ?? []),
+    advancements: parseJsonField(row.advancements, []),
+    activities: parseJsonField(row.activities, []),
+    effects: parseJsonField(row.effects, []),
+    properties: parseJsonField(row.properties, []),
+    tagIds: parseJsonField(row.tags ?? row.tag_ids, row.tagIds ?? []),
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  });
+  // `tags` is the D1 JSON column whose canonical alias is `tagIds`; drop the raw form.
+  delete out.tags;
+  return out;
+}
+
+function denormalizeScalingColumnRow(row: any) {
+  if (!row) return row;
+  return dropSnakeKeys({
+    ...row,
+    parentId: row.parent_id ?? row.parentId,
+    parentType: row.parent_type ?? row.parentType,
+    sourceId: row.source_id ?? row.sourceId,
+    values: parseJsonField(row.values, {}),
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  });
+}
+
+function denormalizeOptionGroupRow(row: any) {
+  if (!row) return row;
+  return dropSnakeKeys({
+    ...row,
+    sourceId: row.source_id ?? row.sourceId,
+    classIds: parseJsonField(row.class_ids, row.classIds ?? []),
+    scalingColumnId: row.scaling_column_id ?? row.scalingColumnId,
+    scalingId: row.scaling_id ?? row.scalingId,
+    featureId: row.feature_id ?? row.featureId,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  });
+}
+
+function denormalizeOptionItemRow(row: any) {
+  if (!row) return row;
+  return dropSnakeKeys({
+    ...row,
+    groupId: row.group_id ?? row.groupId,
+    sourceId: row.source_id ?? row.sourceId,
+    classIds: parseJsonField(row.class_ids, row.classIds ?? []),
+    iconUrl: row.icon_url ?? row.iconUrl,
+    levelPrerequisite: row.level_prerequisite ?? row.levelPrerequisite,
+    stringPrerequisite: row.string_prerequisite ?? row.stringPrerequisite,
+    isRepeatable: row.is_repeatable ?? row.isRepeatable,
+    featureId: row.feature_id ?? row.featureId,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  });
+}
+
+// Generic camelCase → snake_case shallow key converter for the import path.
+// Composite/nested values pass through; D1's upsertDocument JSON.stringifies
+// objects on the way to SQLite.
+function toSnakeKeys(obj: any): any {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out: any = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (k === 'id') continue; // id is passed separately to upsertDocument
+    if (k === 'createdAt' || k === 'updatedAt') continue; // let D1 default-stamp
+    const snake = k.replace(/[A-Z]/g, c => '_' + c.toLowerCase());
+    out[snake] = v;
+  }
+  return out;
+}
 
 export interface SourceExportBundle {
   catalog: any;
@@ -60,104 +243,61 @@ export async function importClassSemantic(data: any) {
     source = null
   } = data;
 
-  // Helper to strip internal Firestore metadata and handle Timestamps
-  const prepare = (docData: any) => {
-    const clean = { ...docData };
-    delete clean.id; // Usually stored separately
-    // If createdAt/updatedAt are objects (from JSON), we replace them with serverTimestamp or current date
-    if (clean.createdAt && typeof clean.createdAt === 'object') {
-      delete clean.createdAt;
-    }
-    if (clean.updatedAt && typeof clean.updatedAt === 'object') {
-      delete clean.updatedAt;
-    }
-    return clean;
-  };
-
-  // 1. Handle Source
+  // 1. Handle Source — only insert if it doesn't already exist
   if (source && source.id) {
-    const sourceRef = doc(db, 'sources', source.id);
-    const sourceSnap = await getDoc(sourceRef);
-    if (!sourceSnap.exists()) {
-      // Create source if it doesn't exist
-      await setDoc(sourceRef, {
-        ...prepare(source),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+    const existing = await fetchDocument<any>('sources', source.id);
+    if (!existing) {
+      await upsertDocument('sources', source.id, toSnakeKeys(source));
     }
   }
 
-  // 2. Handle Spellcasting Scalings
+  // 2. Handle Spellcasting Scalings (all three legacy collections fold into
+  // the spellcasting_progressions table — D1_TABLE_MAP routes them; the row
+  // must carry an explicit `type` so reads can filter by kind.)
   for (const id in spellcastingScalings) {
-    const sc = spellcastingScalings[id];
-    await setDoc(doc(db, 'spellcastingScalings', id), {
-      ...prepare(sc),
-      updatedAt: serverTimestamp()
+    await upsertDocument('spellcastingScalings', id, {
+      ...toSnakeKeys(spellcastingScalings[id]),
+      type: 'standard',
     });
   }
-
   for (const id in spellsKnownScalings) {
-    const sc = spellsKnownScalings[id];
-    await setDoc(doc(db, 'spellsKnownScalings', id), {
-      ...prepare(sc),
-      updatedAt: serverTimestamp()
+    await upsertDocument('spellsKnownScalings', id, {
+      ...toSnakeKeys(spellsKnownScalings[id]),
+      type: 'known',
     });
   }
-
   for (const id in alternativeSpellcastingScalings) {
-    const sc = alternativeSpellcastingScalings[id];
-    await setDoc(doc(db, 'pactMagicScalings', id), {
-      ...prepare(sc),
-      updatedAt: serverTimestamp()
+    await upsertDocument('pactMagicScalings', id, {
+      ...toSnakeKeys(alternativeSpellcastingScalings[id]),
+      type: 'pact',
     });
   }
 
   // 3. Handle Unique Option Groups
   for (const group of uniqueOptionGroups) {
-    await setDoc(doc(db, 'uniqueOptionGroups', group.id), {
-      ...prepare(group),
-      updatedAt: serverTimestamp()
-    });
+    await upsertDocument('uniqueOptionGroups', group.id, toSnakeKeys(group));
   }
 
-  // 4. Handle Unique Option Items
-  for (const item of uniqueOptionItems) {
-    await setDoc(doc(db, 'uniqueOptionItems', item.id), {
-      ...prepare(item),
-      updatedAt: serverTimestamp()
-    });
+  // 4-7. Batch the bulk child collections — fewer round-trips, same result.
+  if (uniqueOptionItems.length > 0) {
+    await upsertDocumentBatch('uniqueOptionItems',
+      uniqueOptionItems.map((item: any) => ({ id: item.id, data: toSnakeKeys(item) })));
   }
-
-  // 5. Handle Scaling Columns
-  for (const col of scalingColumns) {
-    await setDoc(doc(db, 'scalingColumns', col.id), {
-      ...prepare(col),
-      updatedAt: serverTimestamp()
-    });
+  if (scalingColumns.length > 0) {
+    await upsertDocumentBatch('scalingColumns',
+      scalingColumns.map((col: any) => ({ id: col.id, data: toSnakeKeys(col) })));
   }
-
-  // 6. Handle Subclasses
-  for (const sub of subclasses) {
-    await setDoc(doc(db, 'subclasses', sub.id), {
-      ...prepare(sub),
-      updatedAt: serverTimestamp()
-    });
+  if (subclasses.length > 0) {
+    await upsertDocumentBatch('subclasses',
+      subclasses.map((sub: any) => ({ id: sub.id, data: toSnakeKeys(sub) })));
   }
-
-  // 7. Handle Features
-  for (const feat of features) {
-    await setDoc(doc(db, 'features', feat.id), {
-      ...prepare(feat),
-      updatedAt: serverTimestamp()
-    });
+  if (features.length > 0) {
+    await upsertDocumentBatch('features',
+      features.map((feat: any) => ({ id: feat.id, data: toSnakeKeys(feat) })));
   }
 
   // 8. Handle the Class itself
-  await setDoc(doc(db, 'classes', classData.id), {
-    ...prepare(classData),
-    updatedAt: serverTimestamp()
-  });
+  await upsertDocument('classes', classData.id, toSnakeKeys(classData));
 
   return classData.id;
 }
@@ -667,56 +807,59 @@ function sortAdvancementsByLevelThenType(left: any, right: any) {
  * Fetches all data for a single class and formats it for semantic export.
  */
 export async function exportClassSemantic(classId: string) {
-  const classDoc = await getDoc(doc(db, 'classes', classId));
-  if (!classDoc.exists()) return null;
-  const classDataRaw: any = { id: classDoc.id, ...classDoc.data() };
+  const classInfo = await fetchDocument<any>('classes', classId);
+  if (!classInfo) return null;
+
+  const classDataRaw = denormalizeClassRow(classInfo);
+  if (!classDataRaw.subclassTitle) classDataRaw.subclassTitle = 'Subclass';
+
   const [
-    skillsSnap,
-    toolsSnap,
-    toolCategoriesSnap,
-    armorSnap,
-    armorCategoriesSnap,
-    weaponsSnap,
-    weaponCategoriesSnap,
-    languagesSnap,
-    languageCategoriesSnap,
-    attributesSnap,
-    tagsSnap,
-    spellcastingTypesSnap,
-    pactMagicScalingsSnap,
-    spellsKnownScalingsSnap
+    skillsData,
+    toolsData,
+    toolCategoriesData,
+    armorData,
+    armorCategoriesData,
+    weaponsData,
+    weaponCategoriesData,
+    languagesData,
+    languageCategoriesData,
+    attributesData,
+    tagsData,
+    spellcastingTypesData,
+    pactMagicScalingsData,
+    spellsKnownScalingsData
   ] = await Promise.all([
-    getDocs(collection(db, 'skills')),
-    getDocs(collection(db, 'tools')),
-    getDocs(collection(db, 'toolCategories')),
-    getDocs(collection(db, 'armor')),
-    getDocs(collection(db, 'armorCategories')),
-    getDocs(collection(db, 'weapons')),
-    getDocs(collection(db, 'weaponCategories')),
-    getDocs(collection(db, 'languages')),
-    getDocs(collection(db, 'languageCategories')),
-    getDocs(collection(db, 'attributes')),
-    getDocs(collection(db, 'tags')),
-    getDocs(collection(db, 'spellcastingTypes')),
-    getDocs(collection(db, 'pactMagicScalings')),
-    getDocs(collection(db, 'spellsKnownScalings'))
+    fetchCollection('skills'),
+    fetchCollection('tools'),
+    fetchCollection('toolCategories'),
+    fetchCollection('armor'),
+    fetchCollection('armorCategories'),
+    fetchCollection('weapons'),
+    fetchCollection('weaponCategories'),
+    fetchCollection('languages'),
+    fetchCollection('languageCategories'),
+    fetchCollection('attributes'),
+    fetchCollection('tags'),
+    fetchCollection('spellcastingTypes'),
+    fetchCollection('pactMagicScalings', { where: "type = 'pact'" }),
+    fetchCollection('spellsKnownScalings', { where: "type = 'known'" })
   ]);
 
   const refs = {
-    skillsById: buildDocMap(skillsSnap),
-    toolsById: buildDocMap(toolsSnap),
-    toolCategoriesById: buildDocMap(toolCategoriesSnap),
-    armorById: buildDocMap(armorSnap),
-    armorCategoriesById: buildDocMap(armorCategoriesSnap),
-    weaponsById: buildDocMap(weaponsSnap),
-    weaponCategoriesById: buildDocMap(weaponCategoriesSnap),
-    languagesById: buildDocMap(languagesSnap),
-    languageCategoriesById: buildDocMap(languageCategoriesSnap),
-    attributesById: buildDocMap(attributesSnap),
-    tagsById: buildDocMap(tagsSnap),
-    spellcastingTypesById: buildDocMap(spellcastingTypesSnap),
-    pactMagicScalingsById: buildDocMap(pactMagicScalingsSnap),
-    spellsKnownScalingsById: buildDocMap(spellsKnownScalingsSnap)
+    skillsById: Object.fromEntries(skillsData.map((s: any) => [s.id, { ...s, abilityId: s.ability_id || s.abilityId }])),
+    toolsById: Object.fromEntries(toolsData.map((t: any) => [t.id, { ...t, categoryId: t.category_id || t.categoryId, abilityId: t.ability_id || t.abilityId }])),
+    toolCategoriesById: Object.fromEntries(toolCategoriesData.map((c: any) => [c.id, c])),
+    armorById: Object.fromEntries(armorData.map((a: any) => [a.id, { ...a, categoryId: a.category_id || a.categoryId, abilityId: a.ability_id || a.abilityId }])),
+    armorCategoriesById: Object.fromEntries(armorCategoriesData.map((c: any) => [c.id, c])),
+    weaponsById: Object.fromEntries(weaponsData.map((w: any) => [w.id, { ...w, categoryId: w.category_id || w.categoryId, abilityId: w.ability_id || w.abilityId, propertyIds: typeof w.property_ids === 'string' ? JSON.parse(w.property_ids) : (w.property_ids || w.propertyIds || []) }])),
+    weaponCategoriesById: Object.fromEntries(weaponCategoriesData.map((c: any) => [c.id, c])),
+    languagesById: Object.fromEntries(languagesData.map((l: any) => [l.id, { ...l, categoryId: l.category_id || l.categoryId }])),
+    languageCategoriesById: Object.fromEntries(languageCategoriesData.map((c: any) => [c.id, c])),
+    attributesById: Object.fromEntries(attributesData.map((a: any) => [a.id, a])),
+    tagsById: Object.fromEntries(tagsData.map((t: any) => [t.id, t])),
+    spellcastingTypesById: Object.fromEntries(spellcastingTypesData.map((t: any) => [t.id, t])),
+    pactMagicScalingsById: Object.fromEntries(pactMagicScalingsData.map((s: any) => [s.id, { ...s, levels: typeof s.levels === 'string' ? JSON.parse(s.levels) : (s.levels || []) }])),
+    spellsKnownScalingsById: Object.fromEntries(spellsKnownScalingsData.map((s: any) => [s.id, { ...s, levels: typeof s.levels === 'string' ? JSON.parse(s.levels) : (s.levels || []) }]))
   };
 
   const sourceCache: { [id: string]: string } = {};
@@ -725,9 +868,10 @@ export async function exportClassSemantic(classId: string) {
     if (sourceCache[sid]) return sourceCache[sid];
     if (sid.startsWith('source-')) return sid;
 
-    const sourceSnap = await getDoc(doc(db, 'sources', sid));
-    if (sourceSnap.exists()) {
-      sourceCache[sid] = getSemanticSourceId(sourceSnap.data(), sid);
+    const sourceRow = await fetchDocument<any>('sources', sid);
+    const sourceSnap = denormalizeSource(sourceRow);
+    if (sourceSnap) {
+      sourceCache[sid] = getSemanticSourceId(sourceSnap, sid);
       return sourceCache[sid];
     }
     return sid;
@@ -744,28 +888,28 @@ export async function exportClassSemantic(classId: string) {
   );
   const tagIds = uniqueStrings(asArray(classDataRaw.tagIds).map((id: string) => getSemanticToken(refs.tagsById[id]) || trimString(id)));
 
-  const subclassesSnap = await getDocs(query(collection(db, 'subclasses'), where('classId', '==', classId)));
-  const subclassesRaw = subclassesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const subclassesData = await fetchCollection<any>('subclasses', { where: "class_id = ?", params: [classId] });
+  const subclassesRaw = subclassesData.map(denormalizeSubclassRow);
   const subclassIds = subclassesRaw.map((sub: any) => sub.id);
   const allParentIds = [classId, ...subclassIds];
 
   let featuresRaw: any[] = [];
   if (allParentIds.length > 0) {
-    const featuresSnap = await getDocs(query(collection(db, 'features'), where('parentId', 'in', allParentIds)));
-    featuresRaw = featuresSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const featuresData = await fetchCollection<any>('features', { where: `parent_id IN (${allParentIds.map(() => '?').join(',')})`, params: allParentIds });
+    featuresRaw = featuresData.map(denormalizeFeatureRow);
   }
 
   let scalingColumnsRaw: any[] = [];
   if (allParentIds.length > 0) {
-    const scalingSnap = await getDocs(query(collection(db, 'scalingColumns'), where('parentId', 'in', allParentIds)));
-    scalingColumnsRaw = scalingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const scalingData = await fetchCollection<any>('scalingColumns', { where: `parent_id IN (${allParentIds.map(() => '?').join(',')})`, params: allParentIds });
+    scalingColumnsRaw = scalingData.map(denormalizeScalingColumnRow);
   }
 
   const subclasses = await Promise.all(subclassesRaw.map(async (subclass: any) => {
     const identifier = subclass.identifier || slugify(subclass.name);
     const resolvedLocal = await resolveBookId(subclass.sourceId);
     const sourceBookId = (resolvedLocal && resolvedLocal.startsWith('source-')) ? resolvedLocal : resolvedClassBookId;
-    return omitKeys({
+    const out: any = omitKeys({
       ...subclass,
       id: subclass.id,
       identifier,
@@ -781,6 +925,13 @@ export async function exportClassSemantic(classId: string) {
         classIdentifierForLevelRef: classIdentifier,
       })
     }, ['classId', 'excludedOptionIds']);
+    // Empty image variants come through as `""` from migrate (Firestore
+    // didn't carry the field). Drop the pair so output matches canonical.
+    if (!out.cardImageUrl) { delete out.cardImageUrl; delete out.cardDisplay; }
+    if (!out.previewImageUrl) { delete out.previewImageUrl; delete out.previewDisplay; }
+    // imageDisplay/cardDisplay/previewDisplay drop naturally via JSON.stringify
+    // when undefined. uniqueOptionGroupIds is always included (even empty).
+    return out;
   }));
 
   const idToSourceIdMap: Record<string, string> = { [classId]: classSourceId };
@@ -817,14 +968,18 @@ export async function exportClassSemantic(classId: string) {
 
   let uniqueOptionGroups: any[] = [];
   if (allGroupIds.length > 0) {
-    const groupsSnap = await getDocs(query(collection(db, 'uniqueOptionGroups'), where(documentId(), 'in', allGroupIds)));
-    uniqueOptionGroups = groupsSnap.docs.map((d) => {
-      const data: any = d.data();
+    const placeholders = allGroupIds.map(() => '?').join(',');
+    const groupsRows = await fetchCollection<any>('uniqueOptionGroups', {
+      where: `id IN (${placeholders})`,
+      params: allGroupIds,
+    });
+    uniqueOptionGroups = groupsRows.map((row: any) => {
+      const data = denormalizeOptionGroupRow(row);
       const identifier = data.identifier || slugify(data.name || '');
       const scalingSourceId = scalingSourceIdById[data.scalingColumnId] || trimString(data.scalingId);
       return omitKeys({
         ...data,
-        id: d.id,
+        id: row.id,
         identifier,
         sourceId: `class-option-group-${identifier}`,
         sourceBookId: resolvedClassBookId,
@@ -845,11 +1000,37 @@ export async function exportClassSemantic(classId: string) {
       ? resolvedLocal
       : (idToBookIdMap[feature.parentId] || resolvedClassBookId);
 
+    // Reconstruct the canonical feature shape:
+    //   - `type` from the legacy `featureType` column
+    //   - `usage` container from flat uses_max/uses_spent/uses_recovery
+    //   - `configuration` container from flat prerequisites_*/repeatable
+    // and drop the flat versions + other fields the export contract omits.
+    const usage: Record<string, any> = {
+      max: feature.usesMax ?? '',
+      spent: Number(feature.usesSpent ?? 0) || 0,
+    };
+    if (Array.isArray(feature.usesRecovery) && feature.usesRecovery.length > 0) {
+      usage.recovery = feature.usesRecovery;
+    }
+
+    const configuration: Record<string, any> = {
+      requiredLevel: feature.prerequisitesLevel ?? (Number(feature.level || 1) || 1),
+      requiredIds: Array.isArray(feature.prerequisitesItems) ? feature.prerequisitesItems : [],
+      repeatable: !!feature.repeatable,
+    };
+
+    // imageUrl falls back to iconUrl per the canonical contract (the export
+    // historically routed both columns to the same value via resolveImageUrl).
+    // Both ship only when at least one is set; otherwise undefined and dropped.
+    const resolvedImage = resolveImageUrl(feature) || undefined;
+    const imageUrl = resolvedImage;
+    const iconUrl = feature.iconUrl || resolvedImage || undefined;
+
     return omitKeys({
       ...feature,
-      imageUrl: resolveImageUrl(feature) || undefined,
       id: feature.id,
       identifier,
+      type: feature.featureType || 'class',
       sourceId: `${parentPrefix}-feature-${identifier}`,
       sourceBookId,
       parentSourceId: idToSourceIdMap[feature.parentId] || feature.parentId,
@@ -860,13 +1041,24 @@ export async function exportClassSemantic(classId: string) {
       uniqueOptionGroupIds: uniqueStrings(asArray(feature.uniqueOptionGroupIds).map((groupId: string) => optionGroupSourceIdById[groupId] || trimString(groupId))),
       quantityColumnSourceId: scalingSourceIdById[feature.quantityColumnId] || trimString(feature.quantityColumnId) || undefined,
       scalingSourceId: scalingSourceIdById[feature.scalingColumnId] || trimString(feature.scalingColumnId) || undefined,
+      imageUrl,
+      iconUrl,
+      configuration,
+      usage,
       automation: {
         activities: Array.isArray(feature.automation?.activities)
           ? feature.automation.activities
           : Object.values(feature.automation?.activities || {}),
         effects: feature.automation?.effects || []
       }
-    }, ['parentId', 'quantityColumnId', 'scalingColumnId']);
+    }, [
+      'parentId', 'quantityColumnId', 'scalingColumnId',
+      // raw D1 fields that have a canonical container counterpart above
+      'featureType', 'subtype', 'requirements', 'repeatable', 'page',
+      'usesMax', 'usesSpent', 'usesRecovery',
+      'prerequisitesLevel', 'prerequisitesItems',
+      'activities', 'effects',
+    ]);
   }));
 
   const featuresById = Object.fromEntries(features.map((feature) => [feature.id, feature]));
@@ -904,16 +1096,20 @@ export async function exportClassSemantic(classId: string) {
 
   let uniqueOptionItems: any[] = [];
   if (allGroupIds.length > 0) {
-    const optionsSnap = await getDocs(query(collection(db, 'uniqueOptionItems'), where('groupId', 'in', allGroupIds)));
-    uniqueOptionItems = optionsSnap.docs.map((d) => {
-      const data: any = d.data();
+    const placeholders = allGroupIds.map(() => '?').join(',');
+    const itemsRows = await fetchCollection<any>('uniqueOptionItems', {
+      where: `group_id IN (${placeholders})`,
+      params: allGroupIds,
+    });
+    uniqueOptionItems = itemsRows.map((row: any) => {
+      const data = denormalizeOptionItemRow(row);
       const group = uniqueOptionGroups.find((entry) => entry.id === data.groupId);
       const identifier = data.identifier || slugify(data.name || '');
       const linkedFeature = data.featureId ? featuresById[data.featureId] : null;
       return omitKeys({
         ...data,
         imageUrl: resolveImageUrl(data) || undefined,
-        id: d.id,
+        id: row.id,
         identifier,
         sourceId: `class-option-${identifier}`,
         sourceBookId: group?.sourceBookId || resolvedClassBookId,
@@ -921,7 +1117,7 @@ export async function exportClassSemantic(classId: string) {
         featureSourceId: linkedFeature?.sourceId || group?.featureSourceId || '',
         description: cleanText(data.description),
         levelPrerequisite: Number(data.levelPrerequisite || 0) || 0
-      }, ['groupId', 'featureId']);
+      }, ['groupId', 'featureId', 'classIds', 'iconUrl', 'page']);
     });
   }
 
@@ -1031,10 +1227,10 @@ export async function exportClassSemantic(classId: string) {
     };
   });
 
-  let source = null;
+  let source: any = null;
   if (classDataRaw.sourceId) {
-    const sourceSnap = await getDoc(doc(db, 'sources', classDataRaw.sourceId));
-    if (sourceSnap.exists()) source = { id: sourceSnap.id, ...sourceSnap.data() };
+    const sourceRow = await fetchDocument<any>('sources', classDataRaw.sourceId);
+    if (sourceRow) source = denormalizeSource(sourceRow);
   }
 
   const classData = {
@@ -1093,9 +1289,9 @@ export function getSemanticSourceId(sourceData: any, originalId: string) {
  * Generates the source export bundle for a specific source.
  */
 export async function exportSourceForFoundry(sourceId: string, includePayloads: boolean = true) {
-  const sourceDoc = await getDoc(doc(db, 'sources', sourceId));
-  if (!sourceDoc.exists()) throw new Error("Source not found");
-  const sourceData: any = sourceDoc.data();
+  const sourceRow = await fetchDocument<any>('sources', sourceId);
+  if (!sourceRow) throw new Error("Source not found");
+  const sourceData: any = denormalizeSource(sourceRow);
   const slug = sourceData.slug || sourceId;
   const semanticId = getSemanticSourceId(sourceData, sourceId);
 
@@ -1133,9 +1329,12 @@ export async function exportSourceForFoundry(sourceId: string, includePayloads: 
     }
   };
 
-  // 2. Fetch Classes (using Firestore ID for DB query)
-  const classesSnap = await getDocs(query(collection(db, 'classes'), where('sourceId', '==', sourceId)));
-  const classes = classesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  // 2. Fetch Classes for this source
+  const classesRows = await fetchCollection<any>('classes', {
+    where: 'source_id = ?',
+    params: [sourceId],
+  });
+  const classes = classesRows.map((c: any) => denormalizeClassRow(c));
   sourceDetail.linkedContent.classes.count = classes.length;
 
   // 3. Class Catalog (classes/catalog.json)
@@ -1237,8 +1436,11 @@ export async function exportSourceForFoundry(sourceId: string, includePayloads: 
  * Generates a full library export containing all ready sources.
  */
 export async function exportFullSourceLibrary(includePayloads: boolean = true) {
-  const sourcesSnap = await getDocs(query(collection(db, 'sources'), where('status', '==', 'ready')));
-  const sources = sourcesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const sourcesRows = await fetchCollection<any>('sources', {
+    where: 'status = ?',
+    params: ['ready'],
+  });
+  const sources = sourcesRows.map((s: any) => denormalizeSource(s));
 
   // 5. Build ZIP
   const zip = new JSZip();
@@ -1257,9 +1459,12 @@ export async function exportFullSourceLibrary(includePayloads: boolean = true) {
     const slug = sourceData.slug || sourceId;
     const semanticId = getSemanticSourceId(sourceData, sourceId);
 
-    // Fetch Classes for this source (using Firestore ID for DB query)
-    const classesSnap = await getDocs(query(collection(db, 'classes'), where('sourceId', '==', sourceId)));
-    const classes = classesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Fetch Classes for this source
+    const classesRows = await fetchCollection<any>('classes', {
+      where: 'source_id = ?',
+      params: [sourceId],
+    });
+    const classes = classesRows.map((c: any) => denormalizeClassRow(c));
 
     // Source Detail
     const sourceDetail = {
@@ -1382,14 +1587,22 @@ export async function exportFullSourceLibrary(includePayloads: boolean = true) {
  * Specifically exports the master library catalog.json as a raw file for manual verification.
  */
 export async function exportRawLibraryCatalogJSON() {
-  const sourcesSnap = await getDocs(query(collection(db, 'sources'), where('status', '==', 'ready')));
-  const sources = sourcesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const sourcesRows = await fetchCollection<any>('sources', {
+    where: 'status = ?',
+    params: ['ready'],
+  });
+  const sources = sourcesRows.map((s: any) => denormalizeSource(s));
 
   const entries: any[] = [];
   for (const source of sources) {
     const s: any = source;
     // Fetch count for display in catalog
-    const classesSnap = await getDocs(query(collection(db, 'classes'), where('sourceId', '==', s.id)));
+    const classesRows = await fetchCollection<any>('classes', {
+      select: 'id',
+      where: 'source_id = ?',
+      params: [s.id],
+    });
+    const classCount = classesRows.length;
     const semanticId = getSemanticSourceId(s, s.id);
     
     entries.push({
@@ -1403,7 +1616,7 @@ export async function exportRawLibraryCatalogJSON() {
       tags: s.tags || [],
       supportedImportTypes: ["classes-subclasses"],
       counts: {
-        classes: classesSnap.size,
+        classes: classCount,
         spells: 0,
         items: 0,
         bestiary: 0,
@@ -1433,14 +1646,19 @@ export async function exportRawLibraryCatalogJSON() {
  * Specifically exports a single source.json as a raw file for manual verification.
  */
 export async function exportRawSourceJSON(sourceId: string) {
-  const sourceDoc = await getDoc(doc(db, 'sources', sourceId));
-  if (!sourceDoc.exists()) throw new Error("Source not found");
-  const sourceData: any = sourceDoc.data();
+  const sourceRow = await fetchDocument<any>('sources', sourceId);
+  if (!sourceRow) throw new Error("Source not found");
+  const sourceData: any = denormalizeSource(sourceRow);
   const slug = sourceData.slug || sourceId;
   const semanticId = getSemanticSourceId(sourceData, sourceId);
 
   // Fetch Classes for count
-  const classesSnap = await getDocs(query(collection(db, 'classes'), where('sourceId', '==', sourceId)));
+  const classesRows = await fetchCollection<any>('classes', {
+    select: 'id',
+    where: 'source_id = ?',
+    params: [sourceId],
+  });
+  const classCount = classesRows.length;
 
   const toISO = (val: any) => {
     if (!val) return null;
@@ -1466,7 +1684,7 @@ export async function exportRawSourceJSON(sourceId: string) {
       updatedAt: toISO(sourceData.updatedAt)
     },
     linkedContent: {
-      classes: { count: classesSnap.size, catalogUrl: "classes/catalog.json" },
+      classes: { count: classCount, catalogUrl: "classes/catalog.json" },
       spells: { count: 0, catalogUrl: null },
       items: { count: 0, catalogUrl: null },
       bestiary: { count: 0, catalogUrl: null },

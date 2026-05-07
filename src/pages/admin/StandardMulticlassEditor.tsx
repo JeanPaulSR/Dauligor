@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../lib/firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { fetchDocument, upsertDocument } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Loader2, Save, Wand2 } from 'lucide-react';
@@ -14,29 +13,21 @@ export default function StandardMulticlassEditor() {
   const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      doc(db, 'standardMulticlassProgression', 'master'), 
-      (snap) => {
-        if (snap.exists()) {
-          setData(snap.data().levels || []);
+    fetchDocument<any>('standardMulticlassProgression', 'master')
+      .then(doc => {
+        if (doc) {
+          const levels = typeof doc.levels === 'string' ? JSON.parse(doc.levels) : doc.levels;
+          setData(levels || []);
         } else {
-          // Initialize with 20 levels
-          const initialData = Array.from({ length: 20 }, (_, i) => ({
-            level: i + 1,
-            slots: Array(9).fill(0)
-          }));
-          setData(initialData);
+          setData(Array.from({ length: 20 }, (_, i) => ({ level: i + 1, slots: Array(9).fill(0) })));
         }
         setLoading(false);
-      },
-      (error) => {
-        console.error("Standard multiclass listener error:", error);
+      })
+      .catch(err => {
+        console.error('Error loading multiclass progression:', err);
+        toast.error('Failed to load multiclass progression.');
         setLoading(false);
-        toast.error("Failed to load multiclass progression.");
-      }
-    );
-
-    return () => unsub();
+      });
   }, []);
 
   const handleSlotChange = (levelIndex: number, slotIndex: number, value: string) => {
@@ -49,9 +40,9 @@ export default function StandardMulticlassEditor() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await setDoc(doc(db, 'standardMulticlassProgression', 'master'), {
-        levels: data,
-        updatedAt: new Date().toISOString()
+      await upsertDocument('standardMulticlassProgression', 'master', {
+        levels: JSON.stringify(data),
+        updated_at: new Date().toISOString(),
       });
       toast.success('Multiclass progression saved!');
     } catch (err) {

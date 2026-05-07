@@ -91,6 +91,38 @@ async function handleRequest(request, env) {
     return jsonResponse({ count, done: listed.objects.length === 0 });
   }
 
+  if (url.pathname === '/query' && request.method === 'POST') {
+    const body = await request.json();
+    
+    if (Array.isArray(body)) {
+      // Batch mode
+      try {
+        const statements = body.map(q => {
+          if (!q.sql) throw new Error('Missing sql in batch item');
+          return env.DB.prepare(q.sql).bind(...(q.params || []));
+        });
+        const results = await env.DB.batch(statements);
+        // Map to a success format similar to single query
+        return jsonResponse({
+          results,
+          success: true
+        });
+      } catch (err) {
+        return jsonResponse({ error: err.message, success: false }, 500);
+      }
+    }
+
+    const { sql, params } = body;
+    if (!sql) return jsonResponse({ error: 'Missing sql' }, 400);
+
+    try {
+      const result = await env.DB.prepare(sql).bind(...(params || [])).all();
+      return jsonResponse(result);
+    } catch (err) {
+      return jsonResponse({ error: err.message }, 500);
+    }
+  }
+
   return jsonResponse({ error: 'Not found' }, 404);
 }
 

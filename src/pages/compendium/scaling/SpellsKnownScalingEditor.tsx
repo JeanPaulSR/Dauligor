@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { db } from '../../../lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { ChevronLeft, Save, Plus, Trash2, Wand2 } from 'lucide-react';
+import { fetchDocument, fetchCollection, upsertDocument, deleteDocument } from '../../../lib/d1';
 
 export default function SpellsKnownScalingEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -18,22 +17,22 @@ export default function SpellsKnownScalingEditor({ userProfile }: { userProfile:
 
   useEffect(() => {
     // Fetch all scalings for copy functionality
-    const unsubscribe = onSnapshot(query(collection(db, 'spellsKnownScalings'), orderBy('name')), (snap) => {
-      setAllScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const loadAllScalings = async () => {
+      const data = await fetchCollection<any>('spellsKnownScalings', { where: "type = 'known'", orderBy: 'name ASC' });
+      setAllScalings(data);
+    };
+    loadAllScalings();
 
     if (id) {
       const fetchScaling = async () => {
-        const docSnap = await getDoc(doc(db, 'spellsKnownScalings', id));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        const data = await fetchDocument<any>('spellsKnownScalings', id);
+        if (data) {
           setName(data.name || '');
-          setLevels(data.levels || {});
+          setLevels(typeof data.levels === 'string' ? JSON.parse(data.levels) : (data.levels || {}));
         }
       };
       fetchScaling();
     }
-    return () => unsubscribe();
   }, [id]);
 
   const handleCopy = (scalingId: string) => {
@@ -67,20 +66,16 @@ export default function SpellsKnownScalingEditor({ userProfile }: { userProfile:
         }
       }
 
-      const scalingData = {
+      const d1Data = {
         name,
+        type: 'known',
         levels: finalLevels,
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString()
       };
 
-      if (id) {
-        await updateDoc(doc(db, 'spellsKnownScalings', id), scalingData);
-      } else {
-        await addDoc(collection(db, 'spellsKnownScalings'), {
-          ...scalingData,
-          createdAt: new Date().toISOString()
-        });
-      }
+      const saveId = id || crypto.randomUUID();
+      await upsertDocument('spellsKnownScalings', saveId, d1Data);
+      
       navigate(-1);
       toast.success('Spells Known scaling saved');
     } catch (error) {
@@ -233,7 +228,7 @@ export default function SpellsKnownScalingEditor({ userProfile }: { userProfile:
             onClick={async () => {
               if (confirm('Delete this scaling?')) {
                 try {
-                  await deleteDoc(doc(db, 'spellsKnownScalings', id));
+                  await deleteDocument('spellsKnownScalings', id);
                   toast.success('Spells Known scaling deleted');
                   navigate(-1);
                 } catch (error) {

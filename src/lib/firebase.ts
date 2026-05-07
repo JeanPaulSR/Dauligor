@@ -1,79 +1,46 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signOut, 
-  onAuthStateChanged, 
+import {
+  getAuth,
+  signOut,
+  onAuthStateChanged,
   User,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
   updatePassword,
-  updateEmail
+  updateEmail,
 } from 'firebase/auth';
-import { 
-  initializeFirestore, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  getDocFromServer,
-  memoryLocalCache,
-  memoryLruGarbageCollector,
-  CACHE_SIZE_UNLIMITED
-} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
+// Firebase Authentication is the only Firebase product Dauligor still uses.
+// All data access has migrated to Cloudflare D1 (see src/lib/d1.ts) and R2.
+// Do not reintroduce `firebase/firestore` imports — that database is gone.
 const app = initializeApp(firebaseConfig);
-const isLocalhost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
-
-// Switching to memory cache to resolve persistence-related "Unexpected state" errors 
-// which occur during rapid tab switching in the admin panel. 
-// Memory cache is safer and avoids corrupted IndexedDB states in preview environments.
-export const db = initializeFirestore(app, {
-  localCache: memoryLocalCache({
-    // Using a large memory cache but with LRU cleanup to keep state clean
-    garbageCollector: memoryLruGarbageCollector({
-      cacheSizeBytes: CACHE_SIZE_UNLIMITED
-    })
-  }),
-  // Localhost tends to play better with Firestore's default transport selection,
-  // while preview environments still benefit from long polling.
-  ...(isLocalhost
-    ? { experimentalAutoDetectLongPolling: true }
-    : { experimentalForceLongPolling: true })
-}, firebaseConfig.firestoreDatabaseId);
-
 export const auth = getAuth(app);
 
-// Helper to reset Firestore state (reloads the page to clear memory cache)
-export const resetFirestore = async () => {
-  window.location.reload();
-};
-
-// Helper to convert a username to a Firebase-compatible email
+// Username → email helper used by the auth pages (we sign users in by username
+// against a synthetic *@archive.internal address so the same email isn't tied
+// to a real inbox).
 export const usernameToEmail = (username: string) => {
   return `${username.toLowerCase().trim()}@archive.internal`;
 };
 
-export { 
+export {
   initializeApp,
   firebaseConfig,
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   updateProfile,
   updatePassword,
   updateEmail,
   signOut,
   onAuthStateChanged,
-  type User
+  type User,
 };
 
+// Operation label for client-side error reports. Historical name (was used
+// alongside the now-removed `handleFirestoreError`); kept as a small enum so
+// log entries carry a machine-readable verb.
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -83,7 +50,7 @@ export enum OperationType {
   WRITE = 'write',
 }
 
-export interface FirestoreErrorInfo {
+interface ClientErrorReport {
   error: string;
   operationType: OperationType;
   path: string | null;
@@ -99,11 +66,21 @@ export interface FirestoreErrorInfo {
       email: string | null;
       photoUrl: string | null;
     }[];
-  }
+  };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
+/**
+ * Logs a structured client-side error (with auth context) and rethrows.
+ * Replaces the old `handleFirestoreError` after the Firestore migration.
+ * The legacy alias is re-exported below for any straggling call sites until
+ * they're renamed.
+ */
+export function reportClientError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null,
+): never {
+  const report: ClientErrorReport = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
@@ -111,16 +88,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
+      providerInfo:
+        auth.currentUser?.providerData.map((provider) => ({
+          providerId: provider.providerId,
+          displayName: provider.displayName,
+          email: provider.email,
+          photoUrl: provider.photoURL,
+        })) || [],
     },
     operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+    path,
+  };
+  console.error('Client Error:', JSON.stringify(report));
+  throw new Error(JSON.stringify(report));
 }
+

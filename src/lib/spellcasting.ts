@@ -19,6 +19,7 @@ export function calculateEffectiveCastingLevel(level: number, formula: string): 
 export function getSpellSlotsForLevel(effectiveLevel: number, masterTable: any[]): number[] {
   if (effectiveLevel <= 0) return Array(9).fill(0);
   const targetLevel = Math.min(20, Math.max(1, effectiveLevel));
+  if (!Array.isArray(masterTable)) return Array(9).fill(0);
   const row = masterTable.find((r: any) => r.level === targetLevel);
   return row ? row.slots : Array(9).fill(0);
 }

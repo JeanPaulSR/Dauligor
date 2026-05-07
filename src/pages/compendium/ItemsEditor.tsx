@@ -163,10 +163,6 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           </div>
         </div>
       )}
-      normalizeBeforeSave={(formData) => ({
-        type: formData.itemType || 'loot',
-        sourceType: 'item'
-      })}
     />
   );
 }

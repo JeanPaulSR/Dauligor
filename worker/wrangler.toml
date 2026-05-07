@@ -15,3 +15,9 @@ enabled = true
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "dauligor-storage"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dauligor-db"
+database_id = "25a9d61a-29ec-42c7-9dae-8cde8d88913d"
+migrations_dir = "migrations"

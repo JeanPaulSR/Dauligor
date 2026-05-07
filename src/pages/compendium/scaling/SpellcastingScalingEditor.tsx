@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { db } from '../../../lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc, deleteDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { ChevronLeft, Save, Plus, Trash2, Wand2 } from 'lucide-react';
+import { fetchDocument, fetchCollection, upsertDocument, deleteDocument } from '../../../lib/d1';
 
 export default function SpellcastingScalingEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -18,22 +17,22 @@ export default function SpellcastingScalingEditor({ userProfile }: { userProfile
 
   useEffect(() => {
     // Fetch all scalings for copy functionality
-    const unsubscribe = onSnapshot(query(collection(db, 'spellcastingScalings'), orderBy('name')), (snap) => {
-      setAllScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const loadAllScalings = async () => {
+      const data = await fetchCollection<any>('spellcastingScalings', { where: "type = 'standard'", orderBy: 'name ASC' });
+      setAllScalings(data);
+    };
+    loadAllScalings();
 
     if (id) {
       const fetchScaling = async () => {
-        const docSnap = await getDoc(doc(db, 'spellcastingScalings', id));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        const data = await fetchDocument<any>('spellcastingScalings', id);
+        if (data) {
           setName(data.name || '');
-          setLevels(data.levels || {});
+          setLevels(typeof data.levels === 'string' ? JSON.parse(data.levels) : (data.levels || {}));
         }
       };
       fetchScaling();
     }
-    return () => unsubscribe();
   }, [id]);
 
   const handleCopy = (scalingId: string) => {
@@ -58,28 +57,22 @@ export default function SpellcastingScalingEditor({ userProfile }: { userProfile
         const currentLevelData = levels[levelStr];
         
         if (currentLevelData && currentLevelData.slots) {
-          // If this level has any slots defined, update lastSlots
-          // We check if it's explicitly defined in the state
           lastSlots = currentLevelData.slots;
         } else {
           finalLevels[levelStr] = { slots: [...lastSlots] };
         }
       }
 
-      const scalingData = {
+      const d1Data = {
         name,
+        type: 'standard',
         levels: finalLevels,
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString()
       };
 
-      if (id) {
-        await updateDoc(doc(db, 'spellcastingScalings', id), scalingData);
-      } else {
-        await addDoc(collection(db, 'spellcastingScalings'), {
-          ...scalingData,
-          createdAt: new Date().toISOString()
-        });
-      }
+      const saveId = id || crypto.randomUUID();
+      await upsertDocument('spellcastingScalings', saveId, d1Data);
+      
       navigate(-1);
       toast.success('Spellcasting scaling saved');
     } catch (error) {
@@ -246,7 +239,7 @@ export default function SpellcastingScalingEditor({ userProfile }: { userProfile
             onClick={async () => {
               if (confirm('Delete this scaling?')) {
                 try {
-                  await deleteDoc(doc(db, 'spellcastingScalings', id));
+                  await deleteDocument('spellcastingScalings', id);
                   toast.success('Spellcasting scaling deleted');
                   navigate(-1);
                 } catch (error) {

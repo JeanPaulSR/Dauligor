@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { db, auth, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { doc, getDoc, collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
+import { fetchDocument, fetchCollection } from '../../lib/d1';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Book, Map as MapIcon, Users, ChevronRight, Sparkles, ScrollText, History, Shield, Zap, Swords, Wand2, Hammer, Star, Home as HomeIcon, Plus, LogIn } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -19,7 +18,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // 1. Fetch Special Articles by Title
+        // 1. Fetch Special Articles by Title via D1 helper
         const titles = [
           "World Primer", "World History", "Rules", 
           "Divinity", "Magic", "Character Creation Rules", 
@@ -28,53 +27,37 @@ export default function Home({ userProfile }: { userProfile: any }) {
         ];
         
         const articlesMap: Record<string, any> = {};
-        for (const title of titles) {
-          const q = query(
-            collection(db, 'lore'), 
-            where('title', '==', title), 
-            where('status', '==', 'published'),
-            limit(1)
-          );
-          try {
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-              articlesMap[title] = { id: snap.docs[0].id, ...snap.docs[0].data() };
-            }
-          } catch (err) {
-            handleFirestoreError(err, OperationType.LIST, 'lore');
-          }
-        }
+        const results = await fetchCollection<any>('lore', { 
+          where: `title IN (${titles.map(() => '?').join(',')}) AND status = 'published'`, 
+          params: titles 
+        });
+
+        results.forEach(art => {
+          articlesMap[art.title] = art;
+        });
         setSpecialArticles(articlesMap);
 
-        // 2. Fetch Active Campaign and its Recommended Lore
-        if (userProfile?.activeCampaignId) {
-          try {
-            const campaignDoc = await getDoc(doc(db, 'campaigns', userProfile.activeCampaignId));
-            if (campaignDoc.exists()) {
-              const campaignData = campaignDoc.data();
-              setActiveCampaign(campaignData);
-              
-              if (campaignData.recommendedLoreId) {
-                try {
-                  const loreDoc = await getDoc(doc(db, 'lore', campaignData.recommendedLoreId));
-                  if (loreDoc.exists()) {
-                    const data = loreDoc.data();
-                    const loreData = { id: loreDoc.id, ...data } as any;
-                    // Only show if published or user is staff
-                    const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
-                    if (loreData && (loreData.status === 'published' || isStaff)) {
-                      setRecommendedLore(loreData);
-                    }
-                  }
-                } catch (err) {
-                  handleFirestoreError(err, OperationType.GET, `lore/${campaignData.recommendedLoreId}`);
+        // 2. Fetch Active Campaign and its Recommended Lore via D1 helpers
+        if (userProfile?.active_campaign_id) {
+          const campaignData = await fetchDocument<any>('campaigns', userProfile.active_campaign_id);
+
+          if (campaignData) {
+            setActiveCampaign(campaignData);
+
+            if (campaignData.recommended_lore_id) {
+              const loreData = await fetchDocument<any>('lore', campaignData.recommended_lore_id);
+
+              if (loreData) {
+                // Only show if published or user is staff
+                const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
+                if (loreData.status === 'published' || isStaff) {
+                  setRecommendedLore(loreData);
                 }
               }
             }
-          } catch (err) {
-            handleFirestoreError(err, OperationType.GET, `campaigns/${userProfile.activeCampaignId}`);
           }
         }
+
       } catch (error) {
         console.error("Error fetching home data:", error);
       } finally {
@@ -83,7 +66,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
     };
 
     fetchData();
-  }, [userProfile?.activeCampaignId, userProfile?.uid]);
+  }, [userProfile?.active_campaign_id, userProfile?.uid]);
 
   const renderArticlePreview = (title: string, icon: React.ReactNode, className?: string) => {
     const article = specialArticles[title];

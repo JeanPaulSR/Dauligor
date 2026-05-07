@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { fetchCollection, deleteDocument } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
-import { Plus, Edit, Trash2, Wand2, BookOpen, Zap, ShieldAlert, Calculator } from 'lucide-react';
+import { Plus, Edit, Trash2, Wand2, BookOpen, ShieldAlert, Calculator } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import StandardMulticlassEditor from './StandardMulticlassEditor';
@@ -10,57 +9,39 @@ import SpellcastingTypeEditor from './SpellcastingTypeEditor';
 
 export default function SpellcastingAdvancementManager({ userProfile }: { userProfile: any }) {
   const [standardScalings, setStandardScalings] = useState<any[]>([]);
-  const [pactScalings, setPactScalings] = useState<any[]>([]);
   const [knownScalings, setKnownScalings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMulticlassChart, setShowMulticlassChart] = useState(false);
   const [showTypeEditor, setShowTypeEditor] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
-    const unsubStandard = onSnapshot(
-      query(collection(db, 'spellcastingScalings'), orderBy('name')), 
-      (snap) => {
-        setStandardScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      },
-      (error) => {
-        console.error("Standard scaling listener error:", error);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [standard, known] = await Promise.all([
+          fetchCollection<any>('spellcastingScalings', { where: "type = 'standard'", orderBy: 'name' }),
+          fetchCollection<any>('spellsKnownScalings', { where: "type = 'known'", orderBy: 'name' })
+        ]);
+        if (cancelled) return;
+        setStandardScalings(standard);
+        setKnownScalings(known);
+      } catch (err) {
+        console.error("Scaling fetch error:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    );
-
-    const unsubPact = onSnapshot(
-      query(collection(db, 'pactMagicScalings'), orderBy('name')), 
-      (snap) => {
-        setPactScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      },
-      (error) => {
-        console.error("Pact scaling listener error:", error);
-      }
-    );
-
-    const unsubKnown = onSnapshot(
-      query(collection(db, 'spellsKnownScalings'), orderBy('name')), 
-      (snap) => {
-        setKnownScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Known scaling listener error:", error);
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      unsubStandard();
-      unsubPact();
-      unsubKnown();
     };
-  }, []);
+    load();
+    return () => { cancelled = true; };
+  }, [refreshTick]);
 
   const handleDelete = async (id: string, collectionName: string) => {
     if (confirm('Are you sure you want to delete this advancement template? Any classes using it may lose their progression data.')) {
       try {
-        await deleteDoc(doc(db, collectionName, id));
+        await deleteDocument(collectionName, id);
         toast.success('Advancement template deleted');
+        setRefreshTick(t => t + 1);
       } catch (err) {
         console.error(err);
         toast.error('Failed to delete template');
@@ -174,51 +155,6 @@ export default function SpellcastingAdvancementManager({ userProfile }: { userPr
           {standardScalings.length === 0 && (
             <div className="col-span-full py-8 text-center border border-dashed border-gold/10 rounded-lg text-ink/20 italic text-sm">
               No standard progressions defined.
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Pact Magic */}
-      <section className="space-y-4">
-        <div className="section-header">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-gold" />
-            <h3 className="text-sm font-bold uppercase tracking-widest text-ink/80">Alternative (Pact) Progressions</h3>
-          </div>
-          <Link to="/compendium/pact-scaling/new">
-            <Button size="sm" className="h-7 gap-1 btn-gold">
-              <Plus className="w-3 h-3" /> New Alternative
-            </Button>
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {pactScalings.map(s => (
-            <div key={s.id} className="p-4 border border-gold/10 bg-card/50 rounded-lg group hover:border-gold/30 transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="font-serif font-bold text-ink">{s.name}</h4>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Link to={`/compendium/pact-scaling/edit/${s.id}`}>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-gold hover:bg-gold/10">
-                      <Edit className="w-3.5 h-3.5" />
-                    </Button>
-                  </Link>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => handleDelete(s.id, 'pactMagicScalings')}
-                    className="h-7 w-7 p-0 btn-danger"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-              <p className="text-[10px] text-ink/40 uppercase tracking-widest font-bold">Focus Points / Pact Slots</p>
-            </div>
-          ))}
-          {pactScalings.length === 0 && (
-            <div className="col-span-full py-8 text-center border border-dashed border-gold/10 rounded-lg text-ink/20 italic text-sm">
-              No alternative progressions defined.
             </div>
           )}
         </div>

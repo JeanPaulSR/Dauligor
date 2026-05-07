@@ -1,24 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { Checkbox } from '../../components/ui/checkbox';
-import { useKeyboardSave } from '../../hooks/useKeyboardSave';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  onSnapshot,
-  orderBy,
-  serverTimestamp,
-  deleteField
-} from 'firebase/firestore';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { reportClientError, OperationType } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { 
@@ -33,7 +17,9 @@ import {
   Zap,
   AlertTriangle,
   ChevronDown,
-  Sliders
+  Sliders,
+  Database,
+  CloudOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -41,9 +27,12 @@ import MarkdownEditor from '../../components/MarkdownEditor';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { ClassImageEditor, ImageDisplay, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { slugify } from '../../lib/utils';
+import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
+import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Checkbox } from '../../components/ui/checkbox';
 import AdvancementManager, { Advancement } from '../../components/compendium/AdvancementManager';
 import ReferenceSyntaxHelp from '../../components/reference/ReferenceSyntaxHelp';
 import ReferenceSheetDialog from '../../components/reference/ReferenceSheetDialog';
@@ -57,6 +46,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../../components/ui/dialog";
+import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 
 const FEATURE_TYPES = [
   { id: 'background', name: 'Background Feature' },
@@ -164,6 +154,8 @@ export default function SubclassEditor() {
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
   const [parentScalingColumns, setParentScalingColumns] = useState<any[]>([]);
+  // Bump to trigger a re-fetch of features/scaling columns after a save/delete.
+  const [loadTick, setLoadTick] = useState(0);
 
   // Metadata
   const [sources, setSources] = useState<any[]>([]);
@@ -183,6 +175,7 @@ export default function SubclassEditor() {
   const [featureTab, setFeatureTab] = useState('description');
   const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
   const [managingGroupSearch, setManagingGroupSearch] = useState('');
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1) => (
     normalizeAdvancementListForEditor(list, {
@@ -197,43 +190,51 @@ export default function SubclassEditor() {
   }), [normalizeEditorAdvancements]);
 
   useEffect(() => {
-    const unsubSources = onSnapshot(collection(db, 'sources'), (snap) => {
-      setSources(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const loadFoundation = async () => {
+      try {
+        const [
+          sourcesData,
+          tagGroupsData,
+          tagsData,
+          optGroupsData,
+          optItemsData,
+          progData,
+          knownData
+        ] = await Promise.all([
+          fetchCollection('sources'),
+          fetchCollection('tagGroups', { where: "classifications LIKE '%subclass%'" }),
+          fetchCollection('tags'),
+          fetchCollection('uniqueOptionGroups'),
+          fetchCollection('uniqueOptionItems'),
+          fetchCollection('spellcastingScalings', { where: "type = 'standard'" }),
+          fetchCollection('spellsKnownScalings', { where: "type = 'known'" })
+        ]);
 
-    const unsubTagGroups = onSnapshot(query(collection(db, 'tagGroups'), where('classifications', 'array-contains', 'subclass')), (snap) => {
-      setTagGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+        setSources(sourcesData.map(s => denormalizeCompendiumData(s)));
+        setTagGroups(tagGroupsData.map((tg: any) => ({
+          ...tg,
+          classifications: typeof tg.classifications === 'string' ? JSON.parse(tg.classifications) : (tg.classifications || [])
+        })));
+        setAllTags(tagsData);
+        setAllOptionGroups(optGroupsData);
+        setAllOptionItems(optItemsData);
+        setProgressionScalings(progData.map((p: any) => ({
+          ...p,
+          levels: typeof p.levels === 'string' ? JSON.parse(p.levels) : (p.levels || [])
+        })));
+        setKnownScalings(knownData.map((k: any) => ({
+          ...k,
+          levels: typeof k.levels === 'string' ? JSON.parse(k.levels) : (k.levels || [])
+        })));
 
-    const unsubTags = onSnapshot(collection(db, 'tags'), (snap) => {
-      setAllTags(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubOptionGroups = onSnapshot(collection(db, 'uniqueOptionGroups'), (snap) => {
-      setAllOptionGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubOptionItems = onSnapshot(collection(db, 'uniqueOptionItems'), (snap) => {
-      setAllOptionItems(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubProgression = onSnapshot(collection(db, 'spellcastingScalings'), (snap) => {
-      setProgressionScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubKnown = onSnapshot(collection(db, 'spellsKnownScalings'), (snap) => {
-      setKnownScalings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    return () => {
-      unsubSources();
-      unsubTagGroups();
-      unsubTags();
-      unsubOptionGroups();
-      unsubOptionItems();
-      unsubProgression();
-      unsubKnown();
+        if (sourcesData.length > 0) setIsFoundationUsingD1(true);
+      } catch (err) {
+        console.error("[SubclassEditor] Error loading foundation data:", err);
+        setIsFoundationUsingD1(false);
+      }
     };
+
+    loadFoundation();
   }, []);
 
   useEffect(() => {
@@ -241,88 +242,87 @@ export default function SubclassEditor() {
       if (!id) {
         setLoading(false);
         if (classId) {
-          const classDoc = await getDoc(doc(db, 'classes', classId));
-          if (classDoc.exists()) {
-            setParentClass({ id: classDoc.id, ...classDoc.data() });
+          const classData = await fetchDocument<any>('classes', classId);
+          if (classData) {
+            setParentClass({
+              ...classData,
+              hitDie: classData.hit_die || classData.hitDie || 8
+            });
           }
         }
         return;
       }
 
       try {
-        const subclassDoc = await getDoc(doc(db, 'subclasses', id));
-        if (subclassDoc.exists()) {
-          const data = subclassDoc.data();
-          setName(data.name || '');
-          setSourceId(data.sourceId || '');
-          setDescription(data.description || '');
-          setLore(data.lore || '');
-          setImageUrl(data.imageUrl || '');
-          setImageDisplay(data.imageDisplay || DEFAULT_DISPLAY);
-          setCardImageUrl(data.cardImageUrl || '');
-          setCardDisplay(data.cardDisplay || DEFAULT_DISPLAY);
-          setPreviewImageUrl(data.previewImageUrl || '');
-          setPreviewDisplay(data.previewDisplay || DEFAULT_DISPLAY);
+        const rawSubclassData = await fetchDocument<any>('subclasses', id);
+
+        if (rawSubclassData) {
+          const subclassData = denormalizeCompendiumData(rawSubclassData);
+          const remapped = {
+            ...subclassData,
+            classId: subclassData.class_id || subclassData.classId,
+            sourceId: subclassData.source_id || subclassData.sourceId,
+            imageUrl: subclassData.image_url || subclassData.imageUrl,
+            imageDisplay: typeof subclassData.image_display === 'string' ? JSON.parse(subclassData.image_display) : (subclassData.imageDisplay || subclassData.image_display),
+            cardImageUrl: subclassData.card_image_url || subclassData.cardImageUrl,
+            cardDisplay: typeof subclassData.card_display === 'string' ? JSON.parse(subclassData.card_display) : (subclassData.cardDisplay || subclassData.card_display),
+            previewImageUrl: subclassData.preview_image_url || subclassData.previewImageUrl,
+            previewDisplay: typeof subclassData.preview_display === 'string' ? JSON.parse(subclassData.preview_display) : (subclassData.previewDisplay || subclassData.preview_display),
+            tagIds: typeof subclassData.tag_ids === 'string' ? JSON.parse(subclassData.tag_ids) : (subclassData.tagIds || subclassData.tag_ids || []),
+            advancements: typeof subclassData.advancements === 'string' ? JSON.parse(subclassData.advancements) : (subclassData.advancements || []),
+            spellcasting: typeof subclassData.spellcasting === 'string' ? JSON.parse(subclassData.spellcasting) : (subclassData.spellcasting || {}),
+            excludedOptionIds: typeof subclassData.excluded_option_ids === 'string' ? JSON.parse(subclassData.excluded_option_ids) : (subclassData.excludedOptionIds || subclassData.excluded_option_ids || {})
+          };
+
+          setName(remapped.name || '');
+          setSourceId(remapped.sourceId || '');
+          setDescription(remapped.description || '');
+          setLore(remapped.lore || '');
+          setImageUrl(remapped.imageUrl || '');
+          setImageDisplay(remapped.imageDisplay || DEFAULT_DISPLAY);
+          setCardImageUrl(remapped.cardImageUrl || '');
+          setCardDisplay(remapped.cardDisplay || DEFAULT_DISPLAY);
+          setPreviewImageUrl(remapped.previewImageUrl || '');
+          setPreviewDisplay(remapped.previewDisplay || DEFAULT_DISPLAY);
           
-          setTagIds(data.tagIds || []);
-          setAdvancements(normalizeEditorAdvancements(data.advancements || [], 1));
-          setSpellcasting(normalizeSubclassSpellcastingForEditor(data.spellcasting));
-          setExcludedOptionIds(data.excludedOptionIds || {});
+          setTagIds(remapped.tagIds);
+          setAdvancements(normalizeEditorAdvancements(remapped.advancements, 1));
+          setSpellcasting(normalizeSubclassSpellcastingForEditor(remapped.spellcasting));
+          setExcludedOptionIds(remapped.excludedOptionIds);
 
-          const actualClassId = data.classId || classId;
+          const actualClassId = remapped.classId || classId;
           if (actualClassId) {
-            const classDoc = await getDoc(doc(db, 'classes', actualClassId));
-            if (classDoc.exists()) {
-              setParentClass({ id: classDoc.id, ...classDoc.data() });
-              
-              // Fetch parent features (placeholders)
-              const pfSnap = await getDoc(doc(db, 'classes', actualClassId)); // Already have it, but let's use a query for real-time if needed
-              // Actually, let's just use a query for parent features
+            const rawClassData = await fetchDocument<any>('classes', actualClassId);
+            if (rawClassData) {
+              const classData = denormalizeCompendiumData(rawClassData);
+              setParentClass({
+                ...classData,
+                hitDie: classData.hitDie || 8
+              });
             }
+
+            // Fetch parent features (using fetchCollection)
+            const parentFeaturesData = await fetchCollection<any>('features', {
+              where: 'parent_id = ? AND parent_type = ?',
+              params: [actualClassId, 'class'],
+              orderBy: 'level ASC'
+            });
+            setParentFeatures(parentFeaturesData);
+
+            // Fetch parent scaling columns
+            const parentScalingData = await fetchCollection<any>('scaling_columns', {
+              where: 'parent_id = ? AND parent_type = ?',
+              params: [actualClassId, 'class']
+            });
+            setParentScalingColumns(parentScalingData.map(s => ({
+              ...s,
+              parentId: s.parentId || s.parent_id,
+              parentType: s.parentType || s.parent_type,
+              values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+            })));
           }
         }
-
-        let unsubParentFeatures: (() => void) | undefined;
-        let unsubParentColumns: (() => void) | undefined;
-        const actualClassId = id ? (await getDoc(doc(db, 'subclasses', id))).data()?.classId : classId;
-        if (actualClassId) {
-          unsubParentFeatures = onSnapshot(
-            query(collection(db, 'features'), where('parentId', '==', actualClassId), where('parentType', '==', 'class'), where('isSubclassFeature', '==', true), orderBy('level', 'asc')),
-            (snap) => {
-              setParentFeatures(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            }
-          );
-          unsubParentColumns = onSnapshot(
-            query(collection(db, 'scalingColumns'), where('parentId', '==', actualClassId), where('parentType', '==', 'class')),
-            (snap) => {
-              setParentScalingColumns(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            }
-          );
-        }
-
-        // Features
-        const unsubFeatures = onSnapshot(
-          query(collection(db, 'features'), where('parentId', '==', id), where('parentType', '==', 'subclass'), orderBy('level', 'asc')),
-          (snap) => {
-            setFeatures(snap.docs.map(doc => normalizeFeatureForEditor({ id: doc.id, ...doc.data() })));
-          }
-        );
-
-        // Columns
-        const unsubColumns = onSnapshot(
-          query(collection(db, 'scalingColumns'), where('parentId', '==', id), where('parentType', '==', 'subclass')),
-          (snap) => {
-            setScalingColumns(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          }
-        );
-
         setLoading(false);
-        return () => {
-          unsubFeatures();
-          unsubColumns();
-          if (unsubParentFeatures) unsubParentFeatures();
-          if (unsubParentColumns) unsubParentColumns();
-        };
       } catch (error) {
         console.error("Error fetching subclass:", error);
         toast.error("Failed to load subclass");
@@ -331,7 +331,72 @@ export default function SubclassEditor() {
     }
 
     fetchData();
+    // Subclass features and scaling columns are loaded by the dependents effect
+    // below — they refresh on `loadTick` without re-fetching the subclass row,
+    // parent class, parent features, or parent scalings.
   }, [id, classId]);
+
+  // Dependent collections — subclass features + subclass scaling columns.
+  // Bumping `loadTick` (after a feature/scaling save or delete) re-runs only
+  // this effect, leaving the subclass identity + parent caches alone so the
+  // page doesn't appear to fully reload.
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [featuresData, scalingData] = await Promise.all([
+          fetchCollection<any>('features', {
+            where: 'parent_id = ? AND parent_type = ?',
+            params: [id, 'subclass'],
+            orderBy: 'level ASC',
+          }),
+          fetchCollection<any>('scaling_columns', {
+            where: 'parent_id = ? AND parent_type = ?',
+            params: [id, 'subclass'],
+            orderBy: 'name ASC',
+          }),
+        ]);
+        if (cancelled) return;
+
+        const mappedFeatures = featuresData.map(row => ({
+          ...row,
+          parentId: row.parentId || row.parent_id,
+          parentType: row.parentType || row.parent_type,
+          featureType: row.featureType || row.feature_type,
+          subtype: row.subtype,
+          uses: row.uses || {
+            max: row.uses_max || '',
+            spent: row.uses_spent || 0,
+            recovery: typeof row.uses_recovery === 'string' ? JSON.parse(row.uses_recovery) : (row.uses_recovery || [])
+          },
+          prerequisites: row.prerequisites || {
+            level: row.prerequisites_level,
+            items: typeof row.prerequisites_items === 'string' ? JSON.parse(row.prerequisites_items) : (row.prerequisites_items || []),
+            repeatable: !!row.repeatable
+          },
+          properties: Array.isArray(row.properties) ? row.properties : (typeof row.properties === 'string' ? JSON.parse(row.properties) : []),
+          automation: row.automation || {
+            activities: typeof row.activities === 'string' ? JSON.parse(row.activities) : (row.activities || []),
+            effects: typeof row.effects === 'string' ? JSON.parse(row.effects) : (row.effects || [])
+          },
+          advancements: Array.isArray(row.advancements) ? row.advancements : (typeof row.advancements === 'string' ? JSON.parse(row.advancements) : []),
+          tagIds: Array.isArray(row.tagIds) ? row.tagIds : (typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []))
+        }));
+        setFeatures(mappedFeatures.map(f => normalizeFeatureForEditor(f)));
+
+        setScalingColumns(scalingData.map(s => ({
+          ...s,
+          parentId: s.parentId || s.parent_id,
+          parentType: s.parentType || s.parent_type,
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+        })));
+      } catch (err) {
+        console.error('[SubclassEditor] Dependents load failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, loadTick]);
 
   const handleSave = async () => {
     if (!name) {
@@ -371,27 +436,36 @@ export default function SubclassEditor() {
       tagIds,
       excludedOptionIds,
       advancements: canonicalSubclassProgression.customAdvancements,
-      updatedAt: serverTimestamp(),
+      updatedAt: new Date().toISOString(),
     };
 
-    if (!id) {
-      subclassData.createdAt = serverTimestamp();
-    }
+    const saveId = id || crypto.randomUUID();
+    const d1Data = {
+      name: subclassData.name,
+      identifier: subclassData.identifier,
+      class_identifier: subclassData.classIdentifier,
+      class_id: subclassData.classId,
+      source_id: subclassData.sourceId,
+      description: subclassData.description,
+      lore: subclassData.lore,
+      image_url: subclassData.imageUrl,
+      image_display: subclassData.imageDisplay,
+      card_image_url: subclassData.cardImageUrl,
+      card_display: subclassData.cardDisplay,
+      preview_image_url: subclassData.previewImageUrl,
+      preview_display: subclassData.previewDisplay,
+      tag_ids: subclassData.tagIds,
+      excluded_option_ids: subclassData.excludedOptionIds,
+      advancements: subclassData.advancements,
+      spellcasting: normalizedSpellcasting,
+      updated_at: new Date().toISOString()
+    };
 
     try {
-      if (id) {
-        await updateDoc(doc(db, 'subclasses', id), {
-          ...subclassData,
-          spellcasting: normalizedSpellcasting ?? deleteField()
-        });
-        toast.success("Subclass updated");
-      } else {
-        const newRef = doc(collection(db, 'subclasses'));
-        const createPayload: any = { ...subclassData };
-        if (normalizedSpellcasting) createPayload.spellcasting = normalizedSpellcasting;
-        await setDoc(newRef, createPayload);
-        toast.success("Subclass created");
-        navigate(`/compendium/subclasses/edit/${newRef.id}`);
+      await upsertDocument('subclasses', saveId, d1Data);
+      toast.success(id ? "Subclass updated" : "Subclass created");
+      if (!id) {
+        navigate(`/compendium/subclasses/edit/${saveId}`);
       }
     } catch (error) {
       console.error("Error saving subclass:", error);
@@ -424,42 +498,42 @@ export default function SubclassEditor() {
             : Object.values(editingFeature.activities || {}),
           effects: Array.isArray(editingFeature.effects) ? editingFeature.effects : []
         },
-        updatedAt: serverTimestamp()
+        sourceId: editingFeature.sourceId || '',
+        source: {
+          custom: editingFeature.source?.custom || '',
+          book: editingFeature.source?.book || '',
+          page: editingFeature.source?.page || '',
+          license: editingFeature.source?.license || '',
+          rules: editingFeature.source?.rules || '',
+          revision: Number(editingFeature.source?.revision || 1) || 1
+        },
+        updatedAt: new Date().toISOString()
       };
 
       delete featureData.activitiesStr;
       delete featureData.effects;
       delete featureData.activities;
 
-      if (editingFeature.id) {
-        await setDoc(doc(db, 'features', editingFeature.id), {
-          ...featureData,
-          createdAt: editingFeature.createdAt || serverTimestamp()
-        }, { merge: true });
-        toast.success("Feature updated");
-      } else {
-        const newRef = doc(collection(db, 'features'));
-        await setDoc(newRef, {
-          ...featureData,
-          parentId: id,
-          parentType: 'subclass',
-          createdAt: serverTimestamp()
-        });
-        toast.success("Feature added");
-      }
+      const saveId = editingFeature.id || crypto.randomUUID();
+      await upsertFeature(saveId, {
+        ...featureData,
+        createdAt: editingFeature.createdAt || new Date().toISOString(),
+      });
+      toast.success(editingFeature.id ? "Feature updated" : "Feature added");
       setIsFeatureModalOpen(false);
+      setLoadTick(t => t + 1);
     } catch (error) {
       console.error("Error saving subclass feature:", error);
       toast.error("Failed to save feature");
-      handleFirestoreError(error, editingFeature?.id ? OperationType.UPDATE : OperationType.CREATE, `features/${editingFeature?.id || '(new)'}`);
     }
   };
 
   const handleDeleteFeature = async (featureId: string) => {
     if (confirm("Delete this feature?")) {
       try {
-        await deleteDoc(doc(db, 'features', featureId));
+        await deleteDocument('features', featureId);
         toast.success("Feature deleted");
+        setLoadTick(t => t + 1);
       } catch (error) {
         toast.error("Failed to delete feature");
       }
@@ -469,8 +543,9 @@ export default function SubclassEditor() {
   const handleDeleteScaling = async (colId: string) => {
     if (confirm("Delete this column?")) {
       try {
-        await deleteDoc(doc(db, 'scalingColumns', colId));
+        await deleteDocument('scaling_columns', colId);
         toast.success("Column deleted");
+        setLoadTick(t => t + 1);
       } catch (error) {
         toast.error("Failed to delete column");
       }
@@ -512,13 +587,26 @@ export default function SubclassEditor() {
               <ChevronLeft className="w-4 h-4 mr-1" /> Back to {parentClass?.name || 'Class'}
             </Button>
           </Link>
-          <div>
+          <div className="flex flex-col">
             <h1 className="h2-title text-gold uppercase tracking-tight">
               {id ? 'Edit Subclass' : 'New Subclass'}
             </h1>
-            {parentClass && (
-              <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
-            )}
+            <div className="flex items-center gap-2">
+              {parentClass && (
+                <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
+              )}
+              {isFoundationUsingD1 ? (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  <Database className="w-3 h-3 text-emerald-500" />
+                  <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                  <CloudOff className="w-3 h-3 text-amber-500" />
+                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
@@ -867,19 +955,24 @@ export default function SubclassEditor() {
               </div>
 
               <div className="space-y-6">
-                {/* Group features by level, showing parent placeholders */}
+                {/* Group features by level. Show only:
+                   1. Levels defined in the parent class's subclassFeatureLevels
+                   2. Parent features at that level that are flagged as subclass placeholders
+                      (isSubclassFeature === true / is_subclass_feature === 1) */}
                 {(() => {
-                  const validLevels = Array.from(new Set([
-                    ...(parentClass?.subclassFeatureLevels || []),
-                    ...parentFeatures.map(f => f.level)
-                  ])).sort((a, b) => a - b);
-                  
+                  const validLevels = (parentClass?.subclassFeatureLevels || [])
+                    .slice()
+                    .sort((a: number, b: number) => a - b);
+
                   const deprecatedFeatures = features.filter(f => !validLevels.includes(f.level));
 
                   return (
                     <>
                       {validLevels.map(level => {
-                        const levelParentFeatures = parentFeatures.filter(f => f.level === level);
+                        const levelParentFeatures = parentFeatures.filter(f =>
+                          f.level === level &&
+                          (f.isSubclassFeature === true || f.is_subclass_feature === 1 || f.is_subclass_feature === true)
+                        );
                         const levelSubclassFeatures = features.filter(f => f.level === level);
 
                         return (
@@ -897,7 +990,7 @@ export default function SubclassEditor() {
                                 size="sm" 
                                 onClick={() => {
                                   setEditingFeature(normalizeFeatureForEditor({ 
-                                    id: doc(collection(db, 'features')).id,
+                                    id: crypto.randomUUID(),
                                     name: '', 
                                     description: '', 
                                     level: level, 
@@ -1082,7 +1175,7 @@ export default function SubclassEditor() {
               onClick={async () => {
                 if (id && confirm('Are you sure you want to delete this subclass? This cannot be undone.')) {
                   try {
-                    await deleteDoc(doc(db, 'subclasses', id));
+                    await deleteDocument('subclasses', id);
                     toast.success('Subclass deleted');
                     navigate(parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes');
                   } catch (error) {
@@ -1115,7 +1208,7 @@ export default function SubclassEditor() {
                     <div className="flex items-center justify-between">
                       <Input 
                         value={col.name} 
-                        onChange={e => updateDoc(doc(db, "scalingColumns", col.id), { name: e.target.value })}
+                        onChange={e => upsertDocument("scaling_columns", col.id, { name: e.target.value })}
                         className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
                       />
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, query, orderBy, onSnapshot, addDoc, setDoc, deleteDoc, doc } from 'firebase/firestore';
 import type { LucideIcon } from 'lucide-react';
-import { ChevronLeft, Edit, Plus, Save, Trash2, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
+import { normalizeCompendiumData, denormalizeCompendiumData } from '../../lib/compendium';
+import { Database, CloudOff, ChevronLeft, Edit, Plus, Save, Trash2, Wrench } from 'lucide-react';
 import { slugify } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -74,35 +74,43 @@ export default function DevelopmentCompendiumManager({
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<DevelopmentFormData>(makeInitialForm(defaultData));
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
+
+  const loadEntries = async () => {
+    try {
+      const items = await fetchCollection<any>(collectionName, { orderBy: 'name ASC' });
+
+      // Denormalize: Map snake_case to camelCase and restore automation object
+      const denormalized = items.map((item: any) => denormalizeCompendiumData(item));
+
+      setEntries(denormalized);
+      setLoading(false);
+    } catch (err) {
+      console.error(`Error loading ${collectionName}:`, err);
+      setLoading(false);
+    }
+  };
+
+  const loadSources = async () => {
+    try {
+      const data = await fetchCollection('sources', { orderBy: 'name ASC' });
+      setSources(data);
+      if (data.length > 0) setIsFoundationUsingD1(true);
+    } catch (err) {
+      console.error(`[${title}] Error loading sources:`, err);
+      setIsFoundationUsingD1(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAdmin) return;
-
-    const unsubscribeEntries = onSnapshot(
-      query(collection(db, collectionName), orderBy('name', 'asc')),
-      (snapshot) => {
-        setEntries(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
-        setLoading(false);
-      },
-      (error) => {
-        console.error(`Error loading ${collectionName}:`, error);
-        setLoading(false);
-      }
-    );
-
-    const unsubscribeSources = onSnapshot(
-      query(collection(db, 'sources'), orderBy('name', 'asc')),
-      (snapshot) => {
-        const loaded = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
-        setSources(loaded);
-      }
-    );
+    loadEntries();
+    loadSources();
 
     return () => {
-      unsubscribeEntries();
-      unsubscribeSources();
+      // No more unsubscribe needed for fetchCollection
     };
-  }, [collectionName, isAdmin]);
+  }, [collectionName, isAdmin, title]);
 
   useEffect(() => {
     if (editingId) return;
@@ -178,29 +186,24 @@ export default function DevelopmentCompendiumManager({
         ? { ...basePayload, ...normalizeBeforeSave(formData) }
         : basePayload;
 
-      Object.keys(normalizedPayload).forEach(key => {
-        if (normalizedPayload[key] === undefined) delete normalizedPayload[key];
+      // Final normalization for D1 columns (camelCase -> snake_case)
+      const d1Payload = normalizeCompendiumData(normalizedPayload);
+
+      Object.keys(d1Payload).forEach(key => {
+        if (d1Payload[key] === undefined) delete d1Payload[key];
       });
 
-      if (editingId) {
-        await setDoc(doc(db, collectionName, editingId), {
-          ...normalizedPayload,
-          createdAt: formData.createdAt || new Date().toISOString()
-        }, { merge: true });
-        toast.success(`${singularLabel} updated`);
-      } else {
-        await addDoc(collection(db, collectionName), {
-          ...normalizedPayload,
-          createdAt: new Date().toISOString()
-        });
-        toast.success(`${singularLabel} created`);
-      }
+      const entryId = editingId || crypto.randomUUID();
+      await upsertDocument(collectionName, entryId, d1Payload);
+      
+      toast.success(`${singularLabel} ${editingId ? 'updated' : 'created'}`);
 
       resetForm();
+      // Trigger a reload to show the new/updated entry
+      loadEntries();
     } catch (error) {
       console.error(`Error saving ${collectionName} entry:`, error);
       toast.error(`Failed to save ${singularLabel.toLowerCase()}`);
-      handleFirestoreError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, `${collectionName}/${editingId || '(new)'}`);
     } finally {
       setSaving(false);
     }
@@ -209,13 +212,13 @@ export default function DevelopmentCompendiumManager({
   const handleDelete = async (id: string) => {
     if (!window.confirm(`Delete this ${singularLabel.toLowerCase()}?`)) return;
     try {
-      await deleteDoc(doc(db, collectionName, id));
+      await deleteDocument(collectionName, id);
       toast.success(`${singularLabel} deleted`);
+      setEntries(prev => prev.filter(e => e.id !== id));
       if (editingId === id) resetForm();
     } catch (error) {
       console.error(`Error deleting ${collectionName} entry:`, error);
       toast.error(`Failed to delete ${singularLabel.toLowerCase()}`);
-      handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${id}`);
     }
   };
 
@@ -239,7 +242,20 @@ export default function DevelopmentCompendiumManager({
               </Button>
             </Link>
           </div>
-          <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">{title}</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">{title}</h1>
+            {isFoundationUsingD1 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+              </div>
+            )}
+          </div>
           <p className="text-ink/60 font-serif italic max-w-3xl">{description}</p>
           <p className="text-xs text-gold/80 border border-gold/10 bg-gold/5 rounded px-3 py-2 max-w-3xl">
             Admin-only development surface. These entries are for schema shaping and Foundry alignment while the workflow is still in progress.

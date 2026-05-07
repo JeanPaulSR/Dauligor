@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, onSnapshot, query, orderBy, addDoc, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
+import { auth, OperationType, reportClientError } from '../../lib/firebase';
+import { fetchCollection, upsertDocument, deleteDocument, getSystemMetadata, setSystemMetadata } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
@@ -24,114 +24,194 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (userProfile?.role !== 'admin' && userProfile?.role !== 'co-dm') return;
 
-    const qCampaigns = query(collection(db, 'campaigns'), orderBy('createdAt', 'desc'));
-    const unsubscribeCampaigns = onSnapshot(qCampaigns, (snapshot) => {
-      setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'campaigns');
+    // D1 returns snake_case columns; the rest of this page reads camelCase.
+    // Remap on load so the existing JSX/handlers don't need to change.
+    const remapCampaign = (c: any) => ({
+      ...c,
+      eraId: c.era_id,
+      dmId: c.dm_id,
+      recommendedLoreId: c.recommended_lore_id,
+      imageUrl: c.image_url,
+      previewImageUrl: c.preview_image_url,
+      cardImageUrl: c.card_image_url,
+      backgroundImageUrl: c.background_image_url,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at,
+    });
+    const remapEra = (e: any) => ({
+      ...e,
+      backgroundImageUrl: e.background_image_url,
+      createdAt: e.created_at,
+      updatedAt: e.updated_at,
+    });
+    const remapLore = (l: any) => ({
+      ...l,
+      parentId: l.parent_id,
+      authorId: l.author_id,
+      imageUrl: l.image_url,
     });
 
-    const qEras = query(collection(db, 'eras'), orderBy('order', 'asc'));
-    const unsubscribeEras = onSnapshot(qEras, (snapshot) => {
-      setEras(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'eras');
-    });
+    const loadAllAdminData = async () => {
+      try {
+        const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'created_at DESC' });
+        setCampaigns(campaignsData.map(remapCampaign));
 
-    const qUsers = query(collection(db, 'users'));
-    const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'users');
-    });
+        const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
+        setEras(erasData.map(remapEra));
 
-    const qLore = query(collection(db, 'lore'), orderBy('title'));
-    const unsubscribeLore = onSnapshot(qLore, (snapshot) => {
-      setLorePages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'lore');
-    });
+        const usersData = await fetchCollection<any>('users');
+        // Users have `display_name` etc.; the campaign-membership relation now
+        // lives in the campaign_members junction table — pull memberships once
+        // and attach them so the existing `u.campaignIds?.includes(...)` UI
+        // logic keeps working.
+        const memberRows = await fetchCollection<any>('campaignMembers');
+        const membershipsByUser = new Map<string, string[]>();
+        memberRows.forEach((m: any) => {
+          const list = membershipsByUser.get(m.user_id) || [];
+          list.push(m.campaign_id);
+          membershipsByUser.set(m.user_id, list);
+        });
+        setUsers(usersData.map((u: any) => ({
+          ...u,
+          displayName: u.display_name,
+          campaignIds: membershipsByUser.get(u.id) || [],
+        })));
 
-    const unsubscribeSettings = onSnapshot(doc(db, 'config', 'wiki_settings'), (docSnap) => {
-      if (docSnap.exists()) {
-        setWikiSettings(docSnap.data());
+        const loreData = await fetchCollection<any>('lore', { orderBy: 'title ASC' });
+        setLorePages(loreData.map(remapLore));
+
+        const settings = await getSystemMetadata<{ defaultBackgroundImageUrl?: string }>('wiki_settings');
+        if (settings) setWikiSettings(settings);
+      } catch (err) {
+        console.error("Error loading admin data:", err);
       }
-    });
-
-    return () => {
-      unsubscribeCampaigns();
-      unsubscribeUsers();
-      unsubscribeLore();
-      unsubscribeEras();
-      unsubscribeSettings();
     };
+
+    loadAllAdminData();
   }, [userProfile]);
 
   const handleCreateCampaign = async () => {
     try {
-      await addDoc(collection(db, 'campaigns'), {
-        ...newCampaign,
-        dmId: userProfile.uid,
-        createdAt: new Date().toISOString()
+      const id = crypto.randomUUID();
+      const slug = newCampaign.name.toLowerCase().replace(/\s+/g, '-');
+      await upsertDocument('campaigns', id, {
+        name: newCampaign.name,
+        description: newCampaign.description,
+        era_id: newCampaign.eraId || null,
+        slug,
+        dm_id: userProfile.uid,
+        created_at: new Date().toISOString(),
       });
       setIsAddOpen(false);
       setNewCampaign({ name: '', description: '', eraId: '' });
+      toast.success('Campaign created');
+
+      // Refresh list (snake_case rows + remap to camelCase the UI expects)
+      const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'created_at DESC' });
+      setCampaigns(campaignsData.map((c: any) => ({
+        ...c,
+        eraId: c.era_id,
+        dmId: c.dm_id,
+        recommendedLoreId: c.recommended_lore_id,
+        imageUrl: c.image_url,
+        previewImageUrl: c.preview_image_url,
+        cardImageUrl: c.card_image_url,
+        backgroundImageUrl: c.background_image_url,
+        createdAt: c.created_at,
+        updatedAt: c.updated_at,
+      })));
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'campaigns');
+      console.error(err);
+      toast.error('Failed to create campaign');
     }
   };
 
   const handleCreateEra = async () => {
     try {
-      await addDoc(collection(db, 'eras'), {
-        ...newEra,
-        createdAt: new Date().toISOString()
+      const id = crypto.randomUUID();
+      await upsertDocument('eras', id, {
+        name: newEra.name,
+        description: newEra.description,
+        order: newEra.order,
+        background_image_url: newEra.backgroundImageUrl || '',
+        created_at: new Date().toISOString(),
       });
-      setNewEra({ name: '', description: '', order: eras.length, backgroundImageUrl: '' });
+      setNewEra({ name: '', description: '', order: eras.length + 1, backgroundImageUrl: '' });
+      toast.success('Era created');
+
+      // Refresh list (with same camelCase remap so the campaign cards' eras
+      // dropdown reflects the new entry without needing a page reload).
+      const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
+      setEras(erasData.map((e: any) => ({
+        ...e,
+        backgroundImageUrl: e.background_image_url,
+        createdAt: e.created_at,
+        updatedAt: e.updated_at,
+      })));
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'eras');
+      console.error(err);
+      toast.error('Failed to create era');
     }
   };
 
   const handleDeleteEra = async (id: string) => {
     if (confirm('Are you sure? This will remove the Era but not the campaigns assigned to it.')) {
       try {
-        await deleteDoc(doc(db, 'eras', id));
+        await deleteDocument('eras', id);
         toast.success('Era deleted');
+        setEras(prev => prev.filter(e => e.id !== id));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `eras/${id}`);
+        console.error(err);
+        toast.error('Failed to delete era');
       }
     }
   };
 
   const handleSetCampaignEra = async (campaignId: string, eraId: string) => {
     try {
-      await updateDoc(doc(db, 'campaigns', campaignId), {
-        eraId: eraId
+      // Partial upsert: only the fields actually changing. The ON CONFLICT
+      // DO UPDATE SET clause leaves other columns alone, so we don't need
+      // to spread the whole campaign (which now carries camelCase aliases
+      // that aren't real D1 columns).
+      await upsertDocument('campaigns', campaignId, {
+        era_id: eraId || null,
+        updated_at: new Date().toISOString(),
       });
+      setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, era_id: eraId, eraId } : c));
+      toast.success('Campaign era updated');
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `campaigns/${campaignId}`);
+      console.error(err);
+      toast.error('Failed to update campaign era');
     }
   };
 
   const handleDeleteCampaign = async (id: string) => {
     if (confirm('Are you sure? This will not remove users from the campaign, but they will no longer be associated with it.')) {
       try {
-        await deleteDoc(doc(db, 'campaigns', id));
+        await deleteDocument('campaigns', id);
         toast.success('Campaign deleted');
+        setCampaigns(prev => prev.filter(c => c.id !== id));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `campaigns/${id}`);
+        console.error(err);
+        toast.error('Failed to delete campaign');
       }
     }
   };
 
   const handleSetRecommendedLore = async (campaignId: string, loreId: string) => {
     try {
-      await updateDoc(doc(db, 'campaigns', campaignId), {
-        recommendedLoreId: loreId
+      await upsertDocument('campaigns', campaignId, {
+        recommended_lore_id: loreId || null,
+        updated_at: new Date().toISOString(),
       });
+      setCampaigns(prev => prev.map(c => c.id === campaignId
+        ? { ...c, recommended_lore_id: loreId, recommendedLoreId: loreId }
+        : c
+      ));
+      toast.success('Recommended lore updated');
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `campaigns/${campaignId}`);
+      console.error(err);
+      toast.error('Failed to update recommended lore');
     }
   };
 
@@ -159,9 +239,9 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
               storagePath="images/wiki/background"
               onUpload={async (url) => {
                 try {
-                  await setDoc(doc(db, 'config', 'wiki_settings'), {
-                    defaultBackgroundImageUrl: url
-                  }, { merge: true });
+                  const next = { ...wikiSettings, defaultBackgroundImageUrl: url };
+                  await setSystemMetadata('wiki_settings', next);
+                  setWikiSettings(next);
                 } catch (error) {
                   console.error("Error setting default background image:", error);
                 }
@@ -228,9 +308,12 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                           storagePath="images/wiki/eras"
                           onUpload={async (url) => {
                             try {
-                              await updateDoc(doc(db, 'eras', era.id), { backgroundImageUrl: url });
+                              await upsertDocument('eras', era.id, { ...era, background_image_url: url });
+                              setEras(prev => prev.map(e => e.id === era.id ? { ...e, background_image_url: url } : e));
+                              toast.success('Era background updated');
                             } catch (err) {
                               console.error(err);
+                              toast.error('Failed to update background');
                             }
                           }}
                         />

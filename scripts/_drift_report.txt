@@ -1,0 +1,304 @@
+scanning sources → sources ... 26 docs, 11 unique fields
+scanning tagGroups → tag_groups ... 4 docs, 5 unique fields
+scanning tags → tags ... 24 docs, 3 unique fields
+scanning languageCategories → language_categories ... 3 docs, 5 unique fields
+scanning toolCategories → tool_categories ... 5 docs, 5 unique fields
+scanning weaponCategories → weapon_categories ... 6 docs, 5 unique fields
+scanning armorCategories → armor_categories ... 5 docs, 5 unique fields
+scanning attributes → attributes ... 6 docs, 5 unique fields
+scanning weaponProperties → weapon_properties ... 15 docs, 4 unique fields
+scanning damageTypes → damage_types ... 16 docs, 5 unique fields
+scanning languages → languages ... 25 docs, 6 unique fields
+scanning skills → skills ... 18 docs, 10 unique fields
+scanning tools → tools ... 38 docs, 11 unique fields
+scanning weapons → weapons ... 37 docs, 12 unique fields
+scanning armor → armor ... 13 docs, 11 unique fields
+scanning statuses → status_conditions ... 16 docs, 9 unique fields
+scanning imageMetadata → image_metadata ... 0 docs, 0 unique fields
+scanning uniqueOptionGroups → unique_option_groups ... 6 docs, 9 unique fields
+scanning uniqueOptionItems → unique_option_items ... 133 docs, 13 unique fields
+scanning spellcastingTypes → spellcasting_types ... 4 docs, 5 unique fields
+scanning spellcastingScalings → spellcasting_progressions ... 2 docs, 4 unique fields
+scanning pactMagicScalings → spellcasting_progressions ... 0 docs, 0 unique fields
+scanning spellsKnownScalings → spellcasting_progressions ... 6 docs, 4 unique fields
+scanning standardMulticlassProgression → multiclass_master_chart ... 1 docs, 2 unique fields
+scanning eras → eras ... 3 docs, 4 unique fields
+scanning users → users ... 10 docs, 18 unique fields
+scanning campaigns → campaigns ... 2 docs, 12 unique fields
+scanning lore → lore_articles ... 1 docs, 21 unique fields
+scanning classes → classes ... 82 docs, 33 unique fields
+scanning subclasses → subclasses ... 65 docs, 20 unique fields
+scanning items → items ... 0 docs, 0 unique fields
+scanning feats → feats ... 0 docs, 0 unique fields
+scanning spells → spells ... 540 docs, 38 unique fields
+scanning features → features ... 405 docs, 26 unique fields
+scanning scalingColumns → scaling_columns ... 22 docs, 6 unique fields
+scanning characters → characters ... 2 docs, 47 unique fields
+
+
+================ FIRESTORE → D1 FIELD DRIFT REPORT ================
+
+[sources → sources]  docs: 26  fs-fields: 11
+  Firestore fields with NO D1 column (silent drops):
+    - rules → rules
+    - url → url
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + rules_version
+    + external_url
+    + payload
+
+[tags → tags]  docs: 24  fs-fields: 3
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + slug
+
+[attributes → attributes]  docs: 6  fs-fields: 5
+  Firestore fields with NO D1 column (silent drops):
+    - description → description
+
+[weaponProperties → weapon_properties]  docs: 15  fs-fields: 4
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + order
+
+[languages → languages]  docs: 25  fs-fields: 6
+  Firestore fields with NO D1 column (silent drops):
+    - order → order
+    - category → category
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + category_id
+
+[skills → skills]  docs: 18  fs-fields: 10
+  Firestore fields with NO D1 column (silent drops):
+    - ability → ability
+    - srd → srd
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + ability_id
+
+[tools → tools]  docs: 38  fs-fields: 11
+  Firestore fields with NO D1 column (silent drops):
+    - category → category
+    - ability → ability
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + ability_id
+
+[weapons → weapons]  docs: 37  fs-fields: 12
+  Firestore fields with NO D1 column (silent drops):
+    - ability → ability
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + ability_id
+
+[armor → armor]  docs: 13  fs-fields: 11
+  Firestore fields with NO D1 column (silent drops):
+    - category → category
+    - ability → ability
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + ability_id
+
+[statuses → status_conditions]  docs: 16  fs-fields: 9
+  Firestore fields with NO D1 column (silent drops):
+    - impliedStatuses → implied_statuses
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + image_url
+    + reference
+    + implied_ids
+
+[imageMetadata → image_metadata]  docs: 0  fs-fields: 0
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + url
+    + storage_path
+    + filename
+    + folder
+    + creator
+    + description
+    + tags
+    + license
+    + source
+    + uploaded_by
+    + uploaded_by_name
+    + uploaded_at
+    + size
+
+[uniqueOptionGroups → unique_option_groups]  docs: 6  fs-fields: 9
+  Firestore fields with NO D1 column (silent drops):
+    - createdAt → created_at
+    - featureSourceId → feature_source_id
+    - scalingSourceId → scaling_source_id
+    - selectionCountsByLevel → selection_counts_by_level
+
+[uniqueOptionItems → unique_option_items]  docs: 133  fs-fields: 13
+  Firestore fields with NO D1 column (silent drops):
+    - createdAt → created_at
+    - groupSourceId → group_source_id
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + icon_url
+
+[spellcastingScalings → spellcasting_progressions]  docs: 2  fs-fields: 4
+  Firestore fields with NO D1 column (silent drops):
+    - createdAt → created_at
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + type
+
+[pactMagicScalings → spellcasting_progressions]  docs: 0  fs-fields: 0
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + name
+    + type
+    + levels
+
+[spellsKnownScalings → spellcasting_progressions]  docs: 6  fs-fields: 4
+  Firestore fields with NO D1 column (silent drops):
+    - createdAt → created_at
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + type
+
+[eras → eras]  docs: 3  fs-fields: 4
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + background_image_url
+
+[users → users]  docs: 10  fs-fields: 18
+  Firestore fields with NO D1 column (silent drops):
+    - uid → uid
+    - temporaryPasswordGeneratedBy → temporary_password_generated_by
+    - mustChangePassword → must_change_password
+    - temporaryPasswordGeneratedAt → temporary_password_generated_at
+
+[campaigns → campaigns]  docs: 2  fs-fields: 12
+  Firestore fields with NO D1 column (silent drops):
+    - previewImageUrl → preview_image_url
+    - cardImageUrl → card_image_url
+    - playerIds → player_ids
+    - backgroundImageUrl → background_image_url
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + slug
+    + settings
+
+[lore → lore_articles]  docs: 1  fs-fields: 21
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + slug
+    + dm_notes
+
+[classes → classes]  docs: 82  fs-fields: 33
+  Firestore fields with NO D1 column (silent drops):
+    - imageFocalPoint → image_focal_point
+
+[items → items]  docs: 0  fs-fields: 0
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + name
+    + identifier
+    + item_type
+    + rarity
+    + quantity
+    + weight
+    + price_value
+    + price_denomination
+    + attunement
+    + equipped
+    + identified
+    + magical
+    + description
+    + image_url
+    + activities
+    + effects
+    + source_id
+    + page
+    + tags
+
+[feats → feats]  docs: 0  fs-fields: 0
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + name
+    + identifier
+    + feat_type
+    + source_type
+    + requirements
+    + repeatable
+    + uses_max
+    + uses_spent
+    + description
+    + image_url
+    + activities
+    + effects
+    + source_id
+    + page
+    + tags
+
+[spells → spells]  docs: 540  fs-fields: 38
+  Firestore fields with NO D1 column (silent drops):
+    - effectsStr → effects_str
+    - foundryImport → foundry_import
+    - foundryDocument → foundry_document
+    - foundryShell → foundry_shell
+    - sourceType → source_type
+    - type → type
+    - status → status
+    - tagIds → tag_ids
+
+[features → features]  docs: 405  fs-fields: 26
+  Firestore fields with NO D1 column (silent drops):
+    - quantityColumnId → quantity_column_id
+    - configuration → configuration
+    - usage → usage
+    - type → type
+    - uniqueOptionGroupIds → unique_option_group_ids
+    - scalingColumnId → scaling_column_id
+    - iconUrl → icon_url
+    - source → source
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + feature_type
+    + image_url
+    + uses_max
+    + uses_spent
+    + uses_recovery
+    + prerequisites_level
+    + prerequisites_items
+    + repeatable
+    + activities
+    + effects
+    + page
+    + tags
+
+[characters → characters]  docs: 2  fs-fields: 47
+  Firestore fields with NO D1 column (silent drops):
+    - isLevelLocked → is_level_locked
+    - spellPoints → spell_points
+    - ac → ac
+    - initiative → initiative
+    - speed → speed
+    - stats → stats
+    - expertiseSkills → expertise_skills
+    - halfProficientSkills → half_proficient_skills
+    - halfProficientSavingThrows → half_proficient_saving_throws
+    - overriddenSkillAbilities → overridden_skill_abilities
+    - resistances → resistances
+    - immunities → immunities
+    - vulnerabilities → vulnerabilities
+    - toolProficiencies → tool_proficiencies
+    - languages → languages
+    - senses → senses
+    - raceData → race_data
+    - info → info
+    - bookmarks → bookmarks
+    - expertiseSavingThrows → expertise_saving_throws
+    - armorProficiencies → armor_proficiencies
+    - classes → classes
+    - proficiencyBonus → proficiency_bonus
+    - hp → hp
+    - progression → progression
+    - proficientSkills → proficient_skills
+    - derivedHpMax → derived_hp_max
+    - subclassId → subclass_id
+    - savingThrows → saving_throws
+    - classGrantedTraits → class_granted_traits
+    - progressionState → progression_state
+    - classId → class_id
+    - weaponProficiencies → weapon_proficiencies
+    - hitDie → hit_die
+    - selectedOptions → selected_options
+  D1 columns with no Firestore counterpart (extras / system / synthesized):
+    + current_hp
+    + temp_hp
+    + max_hp_override
+    + stats_json
+    + info_json
+    + senses_json
+    + metadata_json
+
+Total drift fields across all collections: 81
+Note: "extras" are usually FK columns or synthesized values. Investigate only if surprising.

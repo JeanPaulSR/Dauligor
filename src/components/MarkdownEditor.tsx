@@ -267,10 +267,11 @@ export default function MarkdownEditor({
 
   // Pre-process text for the preview pane
   const processedValue = useMemo(() => {
-    let text = value;
-    text = text.replace(/(\*\*|__)([\s\S]*?)(\s+)(\*\*|__)/g, '$1$2$4$3');
-    text = text.replace(/(\*|_)([\s\S]*?)(\s+)(\*|_)/g, '$1$2$4$3');
-    return bbcodeToHtml(text);
+    const text = value || '';
+    const processed = text
+      .replace(/(\*\*|__)([\s\S]*?)(\s+)(\*\*|__)/g, '$1$2$4$3')
+      .replace(/(\*|_)([\s\S]*?)(\s+)(\*|_)/g, '$1$2$4$3');
+    return bbcodeToHtml(processed);
   }, [value]);
 
   // Handle Tab key for indentation in Source mode

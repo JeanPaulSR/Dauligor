@@ -16,8 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from '../ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ActivityKind, SemanticActivity } from '../../types/activities';
-import { db } from '../../lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { fetchCollection } from '../../lib/d1';
 
 interface ActivityEditorProps {
   activities: SemanticActivity[] | Record<string, SemanticActivity>;
@@ -231,10 +230,9 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   const [attributes, setAttributes] = useState<{ id: string; identifier?: string; name: string }[]>([]);
 
   useEffect(() => {
-    getDocs(collection(db, 'attributes')).then(snap => {
-      const attrs = snap.docs.map(d => ({ id: d.id, ...d.data() } as { id: string; identifier?: string; name: string }));
-      setAttributes(attrs);
-    }).catch(() => {});
+    fetchCollection<{ id: string; identifier?: string; name: string }>('attributes')
+      .then(setAttributes)
+      .catch(() => {});
   }, []);
 
   const attrLabel = (id: string): string => {
@@ -501,7 +499,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
 
             return (
               <div
-                key={activity.id}
+                key={activity.id || `activity-${index}`}
                 className={cn(
                   'relative group flex items-center gap-2 pl-5 pr-2 py-1.5',
                   'hover:bg-gold/5 cursor-pointer transition-colors',
@@ -1369,7 +1367,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                           </p>
                         ) : (
                           <div className="space-y-1 pb-1">
-                            {availableEffects.map(fx => {
+                            {availableEffects.map((fx, index) => {
                               const linked = (editingActivity.effects || []).find(e => e._id === fx._id);
                               const toggle = () => {
                                 const cur = editingActivity.effects || [];
@@ -1386,7 +1384,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                 });
                               };
                               return (
-                                <div key={fx._id} className="flex items-center gap-2 py-1.5">
+                                <div key={fx._id || `fx-${index}`} className="flex items-center gap-2 py-1.5">
                                   <button
                                     type="button"
                                     onClick={toggle}

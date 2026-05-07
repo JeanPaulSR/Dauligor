@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { doc, getDoc, updateDoc, collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db, OperationType, handleFirestoreError } from '@/lib/firebase';
+import { OperationType, reportClientError } from '@/lib/firebase';
+import { fetchDocument, fetchCollection, upsertDocument, deleteDocuments } from '@/lib/d1';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,108 +54,104 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (!isStaff) return;
 
-    const fetchCampaignAndUsers = async () => {
-      if (!id) return;
+    const loadAllData = async () => {
       try {
-        const docSnap = await getDoc(doc(db, 'campaigns', id));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          // Merge explicit playerIds with users who have this campaign in campaignIds
-          const explicitUids = data.playerIds || [];
-          const fallbackUids = allUsers.filter(u => u.campaignIds?.includes(id)).map(u => u.id);
-          const combinedUids = Array.from(new Set([...explicitUids, ...fallbackUids]));
+        // Fetch Eras via D1 helper (D1-only)
+        const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
+        setEras(erasData);
 
-          setFormData({
-            name: data.name || '',
-            description: data.description || '',
-            eraId: data.eraId || '',
-            recommendedLoreId: data.recommendedLoreId || '',
-            playerIds: combinedUids,
-            imageUrl: data.imageUrl || '',
-            imageDisplay: data.imageDisplay || undefined,
-            cardImageUrl: data.cardImageUrl || '',
-            cardDisplay: data.cardDisplay || undefined,
-            previewImageUrl: data.previewImageUrl || '',
-            previewDisplay: data.previewDisplay || undefined,
-            backgroundImageUrl: data.backgroundImageUrl || ''
-          });
+        // Fetch Lore via D1 helper (D1-only)
+        const loreData = await fetchCollection<any>('lore', { orderBy: 'title ASC' });
+        setLorePages(loreData);
+
+        // Fetch Users via D1 helper (D1-only)
+        const usersData = await fetchCollection<any>('users');
+        setAllUsers(usersData);
+
+        // Fetch Campaign via D1 helper
+        if (id) {
+          const campData = await fetchDocument<any>('campaigns', id);
+
+          if (campData) {
+            // Fetch members from junction table
+            const membersData = await fetchCollection<any>('campaignMembers', { where: 'campaign_id = ?', params: [id] });
+            const memberUids = membersData.map(m => m.user_id);
+
+            setFormData({
+              name: campData.name || '',
+              description: campData.description || '',
+              eraId: campData.era_id || '',
+              recommendedLoreId: campData.recommended_lore_id || '',
+              playerIds: memberUids,
+              imageUrl: campData.image_url || '',
+              imageDisplay: campData.image_display || undefined,
+              cardImageUrl: campData.card_image_url || '',
+              cardDisplay: campData.card_display || undefined,
+              previewImageUrl: campData.preview_image_url || '',
+              previewDisplay: campData.preview_display || undefined,
+              backgroundImageUrl: campData.background_image_url || ''
+            });
+          }
         }
       } catch (err) {
-        console.error("Error fetching campaign data:", err);
+        console.error("Error loading editor data:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    const unsubscribeEras = onSnapshot(query(collection(db, 'eras'), orderBy('order', 'asc')), (snapshot) => {
-      setEras(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'eras');
-    });
-
-    const unsubscribeLore = onSnapshot(query(collection(db, 'lore'), orderBy('title')), (snapshot) => {
-      setLorePages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'lore');
-    });
-
-    const unsubscribeUsers = onSnapshot(query(collection(db, 'users')), (snapshot) => {
-      setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'users');
-    });
-
-    if (allUsers.length > 0) {
-      fetchCampaignAndUsers();
-    }
-
-    return () => {
-      unsubscribeEras();
-      unsubscribeLore();
-      unsubscribeUsers();
-    };
-  }, [id, isStaff, allUsers.length]);
+    loadAllData();
+  }, [id, isStaff]);
 
   const handleSave = async () => {
     if (!id || !isStaff) return;
     setSaving(true);
     try {
-      // Strip undefined values - Firestore rejects them
-      const cleanData = Object.fromEntries(
-        Object.entries({ ...formData, updatedAt: new Date().toISOString() })
-          .filter(([, v]) => v !== undefined)
-      );
-
       // 1. Save the campaign
-      await updateDoc(doc(db, 'campaigns', id), cleanData);
+      const campaignData = {
+        name: formData.name,
+        description: formData.description,
+        era_id: formData.eraId,
+        recommended_lore_id: formData.recommendedLoreId,
+        image_url: formData.imageUrl,
+        image_display: formData.imageDisplay,
+        card_image_url: formData.cardImageUrl,
+        card_display: formData.cardDisplay,
+        preview_image_url: formData.previewImageUrl,
+        preview_display: formData.previewDisplay,
+        background_image_url: formData.backgroundImageUrl,
+        updated_at: new Date().toISOString()
+      };
 
-      // 2. Add/Remove campaign ID in each user's profile
-      for (const user of allUsers) {
-        const isAssigned = formData.playerIds.includes(user.id);
-        const currentCampaignIds = user.campaignIds || [];
+      await upsertDocument('campaigns', id, campaignData);
 
-        if (isAssigned) {
-          if (!currentCampaignIds.includes(id)) {
-            await updateDoc(doc(db, 'users', user.id), {
-              campaignIds: [...currentCampaignIds, id],
-              activeCampaignId: user.activeCampaignId || id
-            });
-          }
-        } else {
-          if (currentCampaignIds.includes(id)) {
-            const newCampaignIds = currentCampaignIds.filter((cid: string) => cid !== id);
-            await updateDoc(doc(db, 'users', user.id), {
-              campaignIds: newCampaignIds,
-              activeCampaignId: user.activeCampaignId === id ? (newCampaignIds[0] || null) : user.activeCampaignId
-            });
-          }
-        }
+      // 2. Update junction table
+      // Fetch current members to see who to add/remove
+      const currentMembers = await fetchCollection<any>('campaignMembers', { where: 'campaign_id = ?', params: [id] });
+      const currentUids = currentMembers.map(m => m.user_id);
+
+      // Users to add
+      const toAdd = formData.playerIds.filter(uid => !currentUids.includes(uid));
+      for (const uid of toAdd) {
+        await upsertDocument('campaignMembers', `${id}_${uid}`, {
+          campaign_id: id,
+          user_id: uid,
+          role: 'player',
+          joined_at: new Date().toISOString()
+        });
+      }
+
+      // Users to remove
+      const toRemove = currentUids.filter(uid => !formData.playerIds.includes(uid));
+      for (const uid of toRemove) {
+        await deleteDocuments('campaignMembers', 'campaign_id = ? AND user_id = ?', [id, uid]);
       }
 
       toast.success('Campaign saved successfully');
       navigate(`/campaign/${id}`);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `campaigns/${id}`);
+      console.error(err);
+      toast.error('Failed to save campaign');
     } finally {
       setSaving(false);
     }

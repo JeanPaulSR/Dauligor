@@ -21,11 +21,13 @@ export interface WikiViewContext {
 interface WikiPreviewContextType {
   previewCampaign: WikiPreviewCampaign | null;
   setPreviewCampaign: (campaign: WikiPreviewCampaign | null) => void;
+  refreshProfile: () => Promise<void>;
 }
 
 export const WikiPreviewContext = createContext<WikiPreviewContextType>({
   previewCampaign: null,
   setPreviewCampaign: () => {},
+  refreshProfile: async () => {},
 });
 
 export function useWikiPreview() {

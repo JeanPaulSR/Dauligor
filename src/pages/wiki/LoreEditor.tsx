@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, doc, getDoc, setDoc, addDoc, updateDoc, getDocs, query, orderBy, deleteDoc, where, onSnapshot } from 'firebase/firestore';
+import { OperationType, reportClientError } from '../../lib/firebase';
+import { fetchLoreArticle, fetchLoreSecrets, upsertLoreArticle, upsertLoreSecret, deleteLoreSecret } from '../../lib/lore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,9 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ClassImageEditor } from '@/components/compendium/ClassImageEditor';
 import { ImageUpload } from '@/components/ui/ImageUpload';
-import { 
-  Users, MapPin, Sparkles, History, Shield, 
-  Package, HelpCircle, ChevronLeft, Save, 
+import {
+  Users, MapPin, Sparkles, History, Shield,
+  Package, HelpCircle, ChevronLeft, Save,
   Eye, EyeOff, Image as ImageIcon, Type,
   FileText, Tags, Info, BookOpen, Link as LinkIcon,
   Check, Library, Building, Flag, Sword, Zap, Mountain,
@@ -25,8 +25,9 @@ import {
   FileCode, Languages as LangIcon, Gem, Layers as FormationIcon,
   Flame as MythIcon, Atom, ClipboardList, Hammer as ProfIcon,
   Quote as ProseIcon, Award, Sparkle, FlaskConical as TechIcon,
-  Heart as TradIcon, BookOpen as SessionIcon, Edit, X
+  Heart as TradIcon, BookOpen as SessionIcon, Edit, X, Database, CloudOff
 } from 'lucide-react';
+import { fetchCollection } from '../../lib/d1';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import MarkdownEditor from '@/components/MarkdownEditor';
@@ -83,9 +84,10 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
   const [newSecret, setNewSecret] = useState({ content: '', eraIds: [] as string[] });
   const [editingSecretId, setEditingSecretId] = useState<string | null>(null);
   const [editSecretData, setEditSecretData] = useState({ content: '', eraIds: [] as string[] });
-  
+
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const [formData, setFormData] = useState<any>({
     title: '',
@@ -134,76 +136,64 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (!isStaff) return;
 
-    const fetchCampaigns = async () => {
+    const loadFoundation = async () => {
       try {
-        const q = query(collection(db, 'campaigns'), orderBy('name'));
-        const snap = await getDocs(q);
-        setCampaigns(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) {
-        console.error("Failed to fetch campaigns:", error);
+        const [campaignsData, erasData, groupsData, tagsData, articlesData] = await Promise.all([
+          fetchCollection('campaigns', { orderBy: 'name ASC' }),
+          fetchCollection('eras', { orderBy: '"order" ASC' }),
+          fetchCollection('tagGroups', { where: "classifications LIKE '%lore%'" }),
+          fetchCollection('tags'),
+          fetchCollection('lore', { orderBy: 'title ASC' })
+        ]);
+
+        setCampaigns(campaignsData);
+        setEras(erasData);
+        setTagGroups(groupsData);
+        setAllTags(tagsData);
+        setAllArticles(articlesData);
+        setIsFoundationUsingD1(true);
+      } catch (err) {
+        console.error("Error loading foundation data for LoreEditor:", err);
+        setIsFoundationUsingD1(false);
       }
     };
-    fetchCampaigns();
-
-    const fetchEras = async () => {
-      try {
-        const q = query(collection(db, 'eras'), orderBy('order', 'asc'));
-        const snap = await getDocs(q);
-        setEras(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) {
-        console.error("Failed to fetch eras:", error);
-      }
-    };
-    fetchEras();
-    const fetchAllArticles = async () => {
-      try {
-        const q = query(collection(db, 'lore'), orderBy('title'));
-        const snap = await getDocs(q);
-        setAllArticles(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) {
-        console.error("Failed to fetch articles for linking:", error);
-      }
-    };
-    fetchAllArticles();
-
-    const unsubscribeTagGroups = onSnapshot(query(collection(db, 'tagGroups'), where('classifications', 'array-contains', 'lore')), (snap) => {
-      setTagGroups(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-
-    const unsubscribeTags = onSnapshot(collection(db, 'tags'), (snap) => {
-      setAllTags(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    loadFoundation();
 
     if (id) {
       const fetchPage = async () => {
         try {
-          const docRef = doc(db, 'lore', id);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
+          const article = await fetchLoreArticle(id);
+          if (article) {
             setFormData({
-              ...data,
-              tags: Array.isArray(data.tags) ? data.tags : [],
+              title: article.title,
+              excerpt: article.excerpt || '',
+              content: article.content,
+              category: article.category,
+              folder: article.folder || '',
+              parentId: article.parentId || '',
+              status: article.status || 'draft',
+              imageUrl: article.imageUrl || '',
+              imageDisplay: article.imageDisplay,
+              cardImageUrl: article.cardImageUrl || '',
+              cardDisplay: article.cardDisplay,
+              previewImageUrl: article.previewImageUrl || '',
+              previewDisplay: article.previewDisplay,
+              tags: article.tags || [],
+              visibilityEraIds: article.visibilityEraIds || [],
+              visibilityCampaignIds: article.visibilityCampaignIds || [],
               metadata: {
                 ...formData.metadata,
-                ...(data.metadata || {})
-              }
+                ...(article.metadata || {})
+              },
+              createdAt: article.createdAt,
             });
+            setDmNotes(article.dmNotes || '');
 
-            // Fetch DM Notes
-            const notesRef = doc(db, 'lore', id, 'dmData', 'notes');
-            const notesSnap = await getDoc(notesRef);
-            if (notesSnap.exists()) {
-              setDmNotes(notesSnap.data().content);
-            }
-
-            // Fetch Secrets
-            const secretsRef = collection(db, 'lore', id, 'secrets');
-            const secretsSnap = await getDocs(secretsRef);
-            setSecrets(secretsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            const secretsData = await fetchLoreSecrets(id);
+            setSecrets(secretsData);
           }
         } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `lore/${id}`);
+          console.error("Error loading lore article:", error);
         } finally {
           setLoading(false);
         }
@@ -211,10 +201,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
       fetchPage();
     }
 
-    return () => {
-      unsubscribeTagGroups();
-      unsubscribeTags();
-    };
+    return () => { };
   }, [id, isStaff]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -228,14 +215,14 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
       const selectedText = textarea.value.substring(start, end);
 
       setSuggestionSearch(selectedText);
-      
+
       // Basic position estimation (not perfect for textareas but works for a simple overlay)
       const rect = textarea.getBoundingClientRect();
-      setCursorPos({ 
-        top: rect.top + (textarea.scrollHeight > textarea.clientHeight ? 0 : 20), 
-        left: rect.left + 20 
+      setCursorPos({
+        top: rect.top + (textarea.scrollHeight > textarea.clientHeight ? 0 : 20),
+        left: rect.left + 20
       });
-      
+
       setSuggestionOpen(true);
     }
   };
@@ -248,15 +235,15 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
     const end = textarea.selectionEnd;
     const text = textarea.value;
     const selectedText = text.substring(start, end) || article.title;
-    
+
     const before = text.substring(0, start);
     const after = text.substring(end);
     const link = `[${selectedText}](/wiki/article/${article.id})`;
-    
+
     const newValue = before + link + after;
     setFormData({ ...formData, content: newValue });
     setSuggestionOpen(false);
-    
+
     // Set focus back and move cursor
     setTimeout(() => {
       textarea.focus();
@@ -276,18 +263,19 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
     }
 
     try {
-      const secretsRef = collection(db, 'lore', id, 'secrets');
+      const secretId = crypto.randomUUID();
       const secretData = {
         ...newSecret,
         revealedCampaignIds: [],
-        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      const docRef = await addDoc(secretsRef, secretData);
-      setSecrets([...secrets, { id: docRef.id, ...secretData }]);
+      await upsertLoreSecret(id, secretId, secretData);
+      setSecrets([{ id: secretId, ...secretData }, ...secrets]);
       setNewSecret({ content: '', eraIds: [] });
+      toast.success('Secret added');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `lore/${id}/secrets`);
+      console.error("Error adding secret:", error);
+      toast.error('Failed to add secret');
     }
   };
 
@@ -299,44 +287,48 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
     }
 
     try {
-      const secretRef = doc(db, 'lore', id, 'secrets', secretId);
-      await updateDoc(secretRef, {
+      const secretData = {
         ...editSecretData,
         updatedAt: new Date().toISOString()
-      });
-      setSecrets(secrets.map(s => s.id === secretId ? { ...s, ...editSecretData } : s));
+      };
+      await upsertLoreSecret(id, secretId, secretData);
+      setSecrets(secrets.map(s => s.id === secretId ? { ...s, ...secretData } : s));
       setEditingSecretId(null);
+      toast.success('Secret updated');
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `lore/${id}/secrets`);
+      console.error("Error saving secret:", error);
+      toast.error('Failed to update secret');
     }
   };
 
   const handleDeleteSecret = async (secretId: string) => {
-    if (!id) return;
     try {
-      await deleteDoc(doc(db, 'lore', id, 'secrets', secretId));
+      await deleteLoreSecret(secretId);
       setSecrets(secrets.filter(s => s.id !== secretId));
+      toast.success('Secret deleted');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `lore/${id}/secrets`);
+      console.error("Error deleting secret:", error);
+      toast.error('Failed to delete secret');
     }
   };
 
   const handleToggleSecretReveal = async (secret: any, campaignId: string) => {
     if (!id) return;
     try {
-      const secretRef = doc(db, 'lore', id, 'secrets', secret.id);
       const isRevealed = secret.revealedCampaignIds.includes(campaignId);
-      const newRevealed = isRevealed 
+      const newRevealed = isRevealed
         ? secret.revealedCampaignIds.filter((cid: string) => cid !== campaignId)
         : [...secret.revealedCampaignIds, campaignId];
-      
-      await updateDoc(secretRef, { 
-        revealedCampaignIds: newRevealed, 
-        updatedAt: new Date().toISOString() 
-      });
+
+      const secretData = {
+        ...secret,
+        revealedCampaignIds: newRevealed,
+        updatedAt: new Date().toISOString()
+      };
+      await upsertLoreSecret(id, secret.id, secretData);
       setSecrets(secrets.map(s => s.id === secret.id ? { ...s, revealedCampaignIds: newRevealed } : s));
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `lore/${id}/secrets`);
+      console.error("Error toggling secret reveal:", error);
     }
   };
   const handleSave = async () => {
@@ -369,30 +361,19 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
     };
 
     try {
-      let articleId = id;
-      if (id) {
-        await updateDoc(doc(db, 'lore', id), payload);
-      } else {
-        const docRef = await addDoc(collection(db, 'lore'), payload);
-        articleId = docRef.id;
-      }
+      const articleId = id || crypto.randomUUID();
+      await upsertLoreArticle(articleId, payload, dmNotes);
 
-      // Save DM Notes
-      if (articleId) {
-        const notesRef = doc(db, 'lore', articleId, 'dmData', 'notes');
-        await setDoc(notesRef, { 
-          content: dmNotes,
-          updatedAt: new Date().toISOString()
-        });
-      }
+      toast.success(id ? 'Article updated' : 'Article created');
 
-      if (!id && articleId) {
+      if (!id) {
         navigate(`/wiki/article/${articleId}`);
         return;
       }
       navigate(`/wiki/article/${id}`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'lore');
+      console.error("Error saving lore article:", error);
+      toast.error('Failed to save article');
     } finally {
       setSaving(false);
     }
@@ -460,19 +441,30 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button 
-            variant="outline" 
-            onClick={() => setFormData({ ...formData, status: formData.status === 'published' ? 'draft' : 'published' })}
-            className={formData.status === 'draft' ? 'border-gold text-gold bg-gold/5' : 'text-ink/40'}
-          >
-            {formData.status === 'published' ? <Eye className="w-4 h-4 mr-2" /> : <EyeOff className="w-4 h-4 mr-2" />}
-            {formData.status === 'published' ? 'Published' : 'Draft'}
-          </Button>
-          <Button onClick={handleSave} disabled={saving} className="bg-gold text-white gap-2">
-            <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Article'}
-          </Button>
-        </div>
+          <div className="flex items-center gap-3">
+            {isFoundationUsingD1 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setFormData({ ...formData, status: formData.status === 'published' ? 'draft' : 'published' })}
+              className={formData.status === 'draft' ? 'border-gold text-gold bg-gold/5' : 'text-ink/40'}
+            >
+              {formData.status === 'published' ? <Eye className="w-4 h-4 mr-2" /> : <EyeOff className="w-4 h-4 mr-2" />}
+              {formData.status === 'published' ? 'Published' : 'Draft'}
+            </Button>
+            <Button onClick={handleSave} disabled={saving} className="bg-gold text-white gap-2">
+              <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Article'}
+            </Button>
+          </div>
       </div>
 
       <Tabs defaultValue="content" className="space-y-6">
@@ -490,8 +482,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 <label className="label-text text-ink/40 flex items-center gap-2">
                   <Type className="w-3 h-3" /> Article Title
                 </label>
-                <Input 
-                  value={formData.title} 
+                <Input
+                  value={formData.title}
                   onChange={e => setFormData({ ...formData, title: e.target.value })}
                   placeholder="The name of your subject..."
                   className="h3-title h-14 border-gold/10 focus:border-gold"
@@ -503,8 +495,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   <label className="label-text text-ink/40 flex items-center gap-2">
                     <Library className="w-3 h-3" /> Folder / Sub-category
                   </label>
-                  <Input 
-                    value={formData.folder || ''} 
+                  <Input
+                    value={formData.folder || ''}
                     onChange={e => setFormData({ ...formData, folder: e.target.value })}
                     placeholder="e.g. Major Cities, NPCs - Allies"
                     className="border-gold/10 focus:border-gold"
@@ -514,7 +506,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   <label className="label-text text-ink/40 flex items-center gap-2">
                     <LinkIcon className="w-3 h-3" /> Parent Article
                   </label>
-                  <select 
+                  <select
                     value={formData.parentId || ''}
                     onChange={e => setFormData({ ...formData, parentId: e.target.value })}
                     className="flex h-10 w-full rounded-md border border-gold/10 bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -531,8 +523,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 <label className="label-text text-ink/40 flex items-center gap-2">
                   <FileText className="w-3 h-3" /> Excerpt
                 </label>
-                <textarea 
-                  value={formData.excerpt} 
+                <textarea
+                  value={formData.excerpt}
                   onChange={e => setFormData({ ...formData, excerpt: e.target.value })}
                   placeholder="A short summary for previews..."
                   className="w-full h-20 p-3 rounded-md border border-gold/10 bg-background description-text text-sm italic"
@@ -540,9 +532,9 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
               </div>
 
               <div className="relative">
-                <MarkdownEditor 
+                <MarkdownEditor
                   textareaRef={contentRef}
-                  value={formData.content} 
+                  value={formData.content}
                   onChange={(val) => setFormData({ ...formData, content: val })}
                   onKeyDown={handleKeyDown}
                   placeholder="Write the history, details, and stories here..."
@@ -553,8 +545,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                 {suggestionOpen && (
                   <div className="absolute top-8 left-0 z-50 w-64 bg-card border border-gold/20 rounded-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
                     <Command className="bg-transparent">
-                      <CommandInput 
-                        placeholder="Search articles..." 
+                      <CommandInput
+                        placeholder="Search articles..."
                         value={suggestionSearch}
                         onValueChange={setSuggestionSearch}
                         className="h-9 border-none focus:ring-0"
@@ -564,8 +556,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                         <CommandEmpty>No articles found.</CommandEmpty>
                         <CommandGroup heading="Suggestions">
                           {allArticles
-                            .filter(a => 
-                              a.title.toLowerCase().includes(suggestionSearch.toLowerCase()) || 
+                            .filter(a =>
+                              a.title.toLowerCase().includes(suggestionSearch.toLowerCase()) ||
                               a.tags?.some((t: string) => t.toLowerCase().includes(suggestionSearch.toLowerCase()))
                             )
                             .slice(0, 5)
@@ -658,21 +650,21 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         <TabsContent value="notes" className="space-y-6">
           <Card className="border-gold/10">
             <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="label-text text-gold flex items-center gap-2">
-                    <Lock className="w-4 h-4" /> Storyteller Notes (Private)
-                  </h2>
-                  <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px]">STAFF ONLY</Badge>
-                </div>
-                <MarkdownEditor 
-                  textareaRef={notesRef}
-                  value={dmNotes} 
-                  onChange={setDmNotes}
-                  placeholder="General info for DMs, plot hooks, or background details..."
-                  minHeight="120px"
-                  className="bg-gold/5"
-                  label="DM Notes"
-                />
+              <div className="flex items-center justify-between">
+                <h2 className="label-text text-gold flex items-center gap-2">
+                  <Lock className="w-4 h-4" /> Storyteller Notes (Private)
+                </h2>
+                <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px]">STAFF ONLY</Badge>
+              </div>
+              <MarkdownEditor
+                textareaRef={notesRef}
+                value={dmNotes}
+                onChange={setDmNotes}
+                placeholder="General info for DMs, plot hooks, or background details..."
+                minHeight="120px"
+                className="bg-gold/5"
+                label="DM Notes"
+              />
 
               {/* Secrets Section */}
             </CardContent>
@@ -682,156 +674,156 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         <TabsContent value="secrets" className="space-y-6">
           <Card className="border-gold/10">
             <CardContent className="p-6 space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="label-text text-gold flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" /> Secrets & Revelations
-                  </h2>
-                  <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px]">CAMPAIGN SPECIFIC</Badge>
-                </div>
+              <div className="flex items-center justify-between">
+                <h2 className="label-text text-gold flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" /> Secrets & Revelations
+                </h2>
+                <Badge variant="outline" className="border-gold/20 text-gold/60 text-[10px]">CAMPAIGN SPECIFIC</Badge>
+              </div>
 
-                <div className="space-y-4">
-                  {secrets.map((secret) => {
-                    const isEditing = editingSecretId === secret.id;
-                    const linkedEras = eras.filter(e => (isEditing ? editSecretData.eraIds : secret.eraIds).includes(e.id));
-                    const eligibleCampaigns = campaigns.filter(c => (isEditing ? editSecretData.eraIds : secret.eraIds).includes(c.eraId));
-                    
-                    return (
-                      <div key={secret.id} className="p-4 rounded-lg border border-gold/10 bg-gold/5 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-wrap gap-1">
-                            {isEditing ? (
-                              eras.map(era => {
-                                const isSelected = editSecretData.eraIds.includes(era.id);
-                                return (
-                                  <Button
-                                    key={era.id}
-                                    variant="outline"
-                                    size="xs"
-                                    onClick={() => {
-                                      const newEraIds = isSelected
-                                        ? editSecretData.eraIds.filter(id => id !== era.id)
-                                        : [...editSecretData.eraIds, era.id];
-                                      setEditSecretData({ ...editSecretData, eraIds: newEraIds });
-                                    }}
-                                    className={`h-7 text-[10px] transition-all duration-200 ${isSelected ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-primary/20 text-primary/60 hover:bg-primary/5'}`}
-                                  >
-                                    {era.name}
-                                  </Button>
-                                );
-                              })
-                            ) : (
-                              linkedEras.map(era => (
-                                <Badge key={era.id} variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
+              <div className="space-y-4">
+                {secrets.map((secret) => {
+                  const isEditing = editingSecretId === secret.id;
+                  const linkedEras = eras.filter(e => (isEditing ? editSecretData.eraIds : secret.eraIds).includes(e.id));
+                  const eligibleCampaigns = campaigns.filter(c => (isEditing ? editSecretData.eraIds : secret.eraIds).includes(c.eraId));
+
+                  return (
+                    <div key={secret.id} className="p-4 rounded-lg border border-gold/10 bg-gold/5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap gap-1">
+                          {isEditing ? (
+                            eras.map(era => {
+                              const isSelected = editSecretData.eraIds.includes(era.id);
+                              return (
+                                <Button
+                                  key={era.id}
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => {
+                                    const newEraIds = isSelected
+                                      ? editSecretData.eraIds.filter(id => id !== era.id)
+                                      : [...editSecretData.eraIds, era.id];
+                                    setEditSecretData({ ...editSecretData, eraIds: newEraIds });
+                                  }}
+                                  className={`h-7 text-[10px] transition-all duration-200 ${isSelected ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-primary/20 text-primary/60 hover:bg-primary/5'}`}
+                                >
                                   {era.name}
-                                </Badge>
-                              ))
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isEditing ? (
-                              <>
-                                <Button variant="ghost" size="sm" onClick={() => setEditingSecretId(null)} className="h-8 text-xs text-ink/40">Cancel</Button>
-                                <Button size="sm" onClick={() => handleSaveSecret(secret.id)} className="h-8 bg-primary text-primary-foreground text-xs">Save</Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button variant="ghost" size="icon" onClick={() => {
-                                  setEditingSecretId(secret.id);
-                                  setEditSecretData({ content: secret.content, eraIds: secret.eraIds });
-                                }} className="h-6 w-6 text-gold/40 hover:text-gold">
-                                  <Edit className="w-3 h-3" />
                                 </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteSecret(secret.id)} className="h-6 w-6 text-blood/40 hover:text-blood">
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {isEditing ? (
-                          <textarea 
-                            value={editSecretData.content} 
-                            onChange={e => setEditSecretData({...editSecretData, content: e.target.value})}
-                            placeholder="What is the secret?"
-                            className="w-full h-24 p-3 rounded-md border border-gold/10 bg-background description-text text-sm italic focus:ring-1 focus:ring-gold/20 outline-none"
-                          />
-                        ) : (
-                          <p className="description-text text-sm italic">"{secret.content}"</p>
-                        )}
-
-                        {!isEditing && (
-                          <div className="pt-2 border-t border-gold/10">
-                            <p className="label-text text-gold/40 mb-2">Reveal to Campaigns</p>
-                            <div className="flex flex-wrap gap-2">
-                              {eligibleCampaigns.map(campaign => {
-                                const isRevealed = secret.revealedCampaignIds.includes(campaign.id);
-                                return (
-                                  <Button
-                                    key={campaign.id}
-                                    variant="outline"
-                                    size="xs"
-                                    onClick={() => handleToggleSecretReveal(secret, campaign.id)}
-                                    className={`h-7 text-[10px] gap-1 transition-all duration-200 ${isRevealed ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/10 text-gold/40 hover:bg-gold/5'}`}
-                                  >
-                                    {isRevealed ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                                    {campaign.name}
-                                  </Button>
-                                );
-                              })}
-                              {eligibleCampaigns.length === 0 && (
-                                <span className="text-[10px] text-gold/20 italic">No campaigns found for these Eras.</span>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  <div className="p-4 rounded-lg border border-dashed border-gold/20 space-y-4">
-                    <p className="label-text text-gold/60">Add New Secret</p>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="label-text text-ink/40">Link to Eras</label>
-                        <div className="flex flex-wrap gap-2">
-                          {eras.map(era => {
-                            const isSelected = newSecret.eraIds.includes(era.id);
-                            return (
-                              <Button
-                                key={era.id}
-                                variant="outline"
-                                size="xs"
-                                onClick={() => {
-                                  const newEraIds = isSelected
-                                    ? newSecret.eraIds.filter(id => id !== era.id)
-                                    : [...newSecret.eraIds, era.id];
-                                  setNewSecret({ ...newSecret, eraIds: newEraIds });
-                                }}
-                                className={`h-7 text-[10px] transition-all duration-200 ${isSelected ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/20 text-gold/60 hover:bg-gold/5'}`}
-                              >
+                              );
+                            })
+                          ) : (
+                            linkedEras.map(era => (
+                              <Badge key={era.id} variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px]">
                                 {era.name}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isEditing ? (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => setEditingSecretId(null)} className="h-8 text-xs text-ink/40">Cancel</Button>
+                              <Button size="sm" onClick={() => handleSaveSecret(secret.id)} className="h-8 bg-primary text-primary-foreground text-xs">Save</Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="icon" onClick={() => {
+                                setEditingSecretId(secret.id);
+                                setEditSecretData({ content: secret.content, eraIds: secret.eraIds });
+                              }} className="h-6 w-6 text-gold/40 hover:text-gold">
+                                <Edit className="w-3 h-3" />
                               </Button>
-                            );
-                          })}
+                              <Button variant="ghost" size="icon" onClick={() => handleDeleteSecret(secret.id)} className="h-6 w-6 text-blood/40 hover:text-blood">
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
-                      
-                      <div className="space-y-2">
-                        <label className="label-text text-ink/40">Secret Content</label>
-                        <textarea 
-                          value={newSecret.content} 
-                          onChange={e => setNewSecret({...newSecret, content: e.target.value})}
+
+                      {isEditing ? (
+                        <textarea
+                          value={editSecretData.content}
+                          onChange={e => setEditSecretData({ ...editSecretData, content: e.target.value })}
                           placeholder="What is the secret?"
                           className="w-full h-24 p-3 rounded-md border border-gold/10 bg-background description-text text-sm italic focus:ring-1 focus:ring-gold/20 outline-none"
                         />
-                        <div className="flex justify-end">
-                          <Button onClick={handleAddSecret} size="sm" className="h-8 bg-primary text-primary-foreground">
-                            <Plus className="w-3 h-3 mr-1" /> Add Secret
-                          </Button>
+                      ) : (
+                        <p className="description-text text-sm italic">"{secret.content}"</p>
+                      )}
+
+                      {!isEditing && (
+                        <div className="pt-2 border-t border-gold/10">
+                          <p className="label-text text-gold/40 mb-2">Reveal to Campaigns</p>
+                          <div className="flex flex-wrap gap-2">
+                            {eligibleCampaigns.map(campaign => {
+                              const isRevealed = secret.revealedCampaignIds.includes(campaign.id);
+                              return (
+                                <Button
+                                  key={campaign.id}
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => handleToggleSecretReveal(secret, campaign.id)}
+                                  className={`h-7 text-[10px] gap-1 transition-all duration-200 ${isRevealed ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/10 text-gold/40 hover:bg-gold/5'}`}
+                                >
+                                  {isRevealed ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                                  {campaign.name}
+                                </Button>
+                              );
+                            })}
+                            {eligibleCampaigns.length === 0 && (
+                              <span className="text-[10px] text-gold/20 italic">No campaigns found for these Eras.</span>
+                            )}
+                          </div>
                         </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="p-4 rounded-lg border border-dashed border-gold/20 space-y-4">
+                  <p className="label-text text-gold/60">Add New Secret</p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="label-text text-ink/40">Link to Eras</label>
+                      <div className="flex flex-wrap gap-2">
+                        {eras.map(era => {
+                          const isSelected = newSecret.eraIds.includes(era.id);
+                          return (
+                            <Button
+                              key={era.id}
+                              variant="outline"
+                              size="xs"
+                              onClick={() => {
+                                const newEraIds = isSelected
+                                  ? newSecret.eraIds.filter(id => id !== era.id)
+                                  : [...newSecret.eraIds, era.id];
+                                setNewSecret({ ...newSecret, eraIds: newEraIds });
+                              }}
+                              className={`h-7 text-[10px] transition-all duration-200 ${isSelected ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 z-10 font-bold ring-2 ring-primary/20' : 'border-gold/20 text-gold/60 hover:bg-gold/5'}`}
+                            >
+                              {era.name}
+                            </Button>
+                          );
+                        })}
                       </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <label className="label-text text-ink/40">Secret Content</label>
+                      <textarea
+                        value={newSecret.content}
+                        onChange={e => setNewSecret({ ...newSecret, content: e.target.value })}
+                        placeholder="What is the secret?"
+                        className="w-full h-24 p-3 rounded-md border border-gold/10 bg-background description-text text-sm italic focus:ring-1 focus:ring-gold/20 outline-none"
+                      />
+                      <div className="flex justify-end">
+                        <Button onClick={handleAddSecret} size="sm" className="h-8 bg-primary text-primary-foreground">
+                          <Plus className="w-3 h-3 mr-1" /> Add Secret
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -991,22 +983,22 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
               <div className="bg-background/60 rounded-lg border border-gold/10 overflow-hidden p-4">
                 <ClassImageEditor
                   imageUrl={formData.imageUrl || ''}
-                  onImageUrlChange={(val) => setFormData({...formData, imageUrl: val})}
+                  onImageUrlChange={(val) => setFormData({ ...formData, imageUrl: val })}
                   imageDisplay={formData.imageDisplay}
-                  onImageDisplayChange={(val) => setFormData({...formData, imageDisplay: val})}
+                  onImageDisplayChange={(val) => setFormData({ ...formData, imageDisplay: val })}
                   cardImageUrl={formData.cardImageUrl || ''}
-                  onCardImageUrlChange={(val) => setFormData({...formData, cardImageUrl: val})}
+                  onCardImageUrlChange={(val) => setFormData({ ...formData, cardImageUrl: val })}
                   cardDisplay={formData.cardDisplay}
-                  onCardDisplayChange={(val) => setFormData({...formData, cardDisplay: val})}
+                  onCardDisplayChange={(val) => setFormData({ ...formData, cardDisplay: val })}
                   previewImageUrl={formData.previewImageUrl || ''}
-                  onPreviewImageUrlChange={(val) => setFormData({...formData, previewImageUrl: val})}
+                  onPreviewImageUrlChange={(val) => setFormData({ ...formData, previewImageUrl: val })}
                   previewDisplay={formData.previewDisplay}
-                  onPreviewDisplayChange={(val) => setFormData({...formData, previewDisplay: val})}
+                  onPreviewDisplayChange={(val) => setFormData({ ...formData, previewDisplay: val })}
                   storagePath={`images/lore/${id || 'new'}`}
                   panelLabels={{
-                    detail:  { label: 'Article Header', subtitle: 'Full article page' },
-                    card:    { label: 'Wiki Card',       subtitle: 'Wiki grid listing' },
-                    preview: { label: 'Hover Preview',  subtitle: 'Quick-peek popover' },
+                    detail: { label: 'Article Header', subtitle: 'Full article page' },
+                    card: { label: 'Wiki Card', subtitle: 'Wiki grid listing' },
+                    preview: { label: 'Hover Preview', subtitle: 'Quick-peek popover' },
                   }}
                 />
               </div>
@@ -1034,11 +1026,10 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                                   : [...(formData.tags || []), tag.id];
                                 setFormData({ ...formData, tags: newTags });
                               }}
-                              className={`px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors border ${
-                                isSelected 
-                                  ? 'bg-gold text-white border-gold shadow-[0_0_10px_rgba(212,175,55,0.3)] scale-105' 
+                              className={`px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors border ${isSelected
+                                  ? 'bg-gold text-white border-gold shadow-[0_0_10px_rgba(212,175,55,0.3)] scale-105'
                                   : 'bg-background/50 text-ink/60 border-gold/20 hover:border-gold/50'
-                              }`}
+                                }`}
                             >
                               {tag.name}
                             </button>
@@ -1055,39 +1046,39 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
               <div className="pt-4 border-t border-gold/10 space-y-4">
                 <p className="label-text text-gold">Template Data</p>
-                
+
                 {/* Character Template */}
                 {(formData.category === 'character' || formData.category === 'deity') && (
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <label className="label-text text-ink/40">Race</label>
-                        <Input value={formData.metadata.race} onChange={e => setFormData({...formData, metadata: {...formData.metadata, race: e.target.value}})} className="h-8 text-xs" />
+                        <Input value={formData.metadata.race} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, race: e.target.value } })} className="h-8 text-xs" />
                       </div>
                       <div className="space-y-1">
                         <label className="label-text text-ink/40">Alignment</label>
-                        <Input value={formData.metadata.alignment} onChange={e => setFormData({...formData, metadata: {...formData.metadata, alignment: e.target.value}})} className="h-8 text-xs" />
+                        <Input value={formData.metadata.alignment} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, alignment: e.target.value } })} className="h-8 text-xs" />
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className="label-text text-ink/40">Occupation</label>
-                      <Input value={formData.metadata.occupation} onChange={e => setFormData({...formData, metadata: {...formData.metadata, occupation: e.target.value}})} className="h-8 text-xs" />
+                      <Input value={formData.metadata.occupation} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, occupation: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <label className="label-text text-ink/40">Gender</label>
-                        <Input value={formData.metadata.gender} onChange={e => setFormData({...formData, metadata: {...formData.metadata, gender: e.target.value}})} className="h-8 text-xs" />
+                        <Input value={formData.metadata.gender} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, gender: e.target.value } })} className="h-8 text-xs" />
                       </div>
                       <div className="space-y-1">
                         <label className="label-text text-ink/40">Pronouns</label>
-                        <Input value={formData.metadata.pronouns} onChange={e => setFormData({...formData, metadata: {...formData.metadata, pronouns: e.target.value}})} className="h-8 text-xs" />
+                        <Input value={formData.metadata.pronouns} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, pronouns: e.target.value } })} className="h-8 text-xs" />
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className="label-text text-ink/40">Life Status</label>
-                      <select 
-                        value={formData.metadata.lifeStatus} 
-                        onChange={e => setFormData({...formData, metadata: {...formData.metadata, lifeStatus: e.target.value}})}
+                      <select
+                        value={formData.metadata.lifeStatus}
+                        onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, lifeStatus: e.target.value } })}
                         className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background text-xs"
                       >
                         <option value="Alive">Alive</option>
@@ -1104,28 +1095,28 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   <>
                     <div className="space-y-1">
                       <label className="text-[10px] text-ink/40">Type</label>
-                      <Input value={formData.metadata.locationType} onChange={e => setFormData({...formData, metadata: {...formData.metadata, locationType: e.target.value}})} className="h-8 text-xs" placeholder="City, Ruins, etc" />
+                      <Input value={formData.metadata.locationType} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, locationType: e.target.value } })} className="h-8 text-xs" placeholder="City, Ruins, etc" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] text-ink/40">Parent Location</label>
-                      <Input value={formData.metadata.parentLocation} onChange={e => setFormData({...formData, metadata: {...formData.metadata, parentLocation: e.target.value}})} className="h-8 text-xs" placeholder="Region, Continent..." />
+                      <Input value={formData.metadata.parentLocation} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, parentLocation: e.target.value } })} className="h-8 text-xs" placeholder="Region, Continent..." />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] text-ink/40">Ruler / Owner</label>
-                      <Input value={formData.metadata.ruler} onChange={e => setFormData({...formData, metadata: {...formData.metadata, ruler: e.target.value}})} className="h-8 text-xs" />
+                      <Input value={formData.metadata.ruler} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, ruler: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] text-ink/40">Owning Organization</label>
-                      <Input value={formData.metadata.owningOrganization} onChange={e => setFormData({...formData, metadata: {...formData.metadata, owningOrganization: e.target.value}})} className="h-8 text-xs" />
+                      <Input value={formData.metadata.owningOrganization} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, owningOrganization: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1">
                         <label className="text-[10px] text-ink/40">Population</label>
-                        <Input value={formData.metadata.population} onChange={e => setFormData({...formData, metadata: {...formData.metadata, population: e.target.value}})} className="h-8 text-xs" />
+                        <Input value={formData.metadata.population} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, population: e.target.value } })} className="h-8 text-xs" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] text-ink/40">Founding Date</label>
-                        <Input value={formData.metadata.foundingDate} onChange={e => setFormData({...formData, metadata: {...formData.metadata, foundingDate: e.target.value}})} className="h-8 text-xs" />
+                        <Input value={formData.metadata.foundingDate} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, foundingDate: e.target.value } })} className="h-8 text-xs" />
                       </div>
                     </div>
                   </>
@@ -1136,25 +1127,25 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
                   <>
                     <div className="space-y-1">
                       <label className="text-[10px] text-ink/40">Leader</label>
-                      <Input value={formData.metadata.leader} onChange={e => setFormData({...formData, metadata: {...formData.metadata, leader: e.target.value}})} className="h-8 text-xs" />
+                      <Input value={formData.metadata.leader} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, leader: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] text-ink/40">Headquarters</label>
-                      <Input value={formData.metadata.headquarters} onChange={e => setFormData({...formData, metadata: {...formData.metadata, headquarters: e.target.value}})} className="h-8 text-xs" />
+                      <Input value={formData.metadata.headquarters} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, headquarters: e.target.value } })} className="h-8 text-xs" />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] text-ink/40">Motto</label>
-                      <Input value={formData.metadata.motto} onChange={e => setFormData({...formData, metadata: {...formData.metadata, motto: e.target.value}})} className="h-8 text-xs italic" />
+                      <Input value={formData.metadata.motto} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, motto: e.target.value } })} className="h-8 text-xs italic" />
                     </div>
                     {formData.category === 'religion' && (
                       <>
                         <div className="space-y-1">
                           <label className="text-[10px] text-ink/40">Domains</label>
-                          <Input value={formData.metadata.domains} onChange={e => setFormData({...formData, metadata: {...formData.metadata, domains: e.target.value}})} className="h-8 text-xs" />
+                          <Input value={formData.metadata.domains} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, domains: e.target.value } })} className="h-8 text-xs" />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] text-ink/40">Holy Symbol</label>
-                          <Input value={formData.metadata.holySymbol} onChange={e => setFormData({...formData, metadata: {...formData.metadata, holySymbol: e.target.value}})} className="h-8 text-xs" />
+                          <Input value={formData.metadata.holySymbol} onChange={e => setFormData({ ...formData, metadata: { ...formData.metadata, holySymbol: e.target.value } })} className="h-8 text-xs" />
                         </div>
                       </>
                     )}

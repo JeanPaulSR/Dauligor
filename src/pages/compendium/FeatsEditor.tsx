@@ -130,10 +130,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           </div>
         </div>
       )}
-      normalizeBeforeSave={(formData) => ({
-        sourceType: formData.sourceType || 'feat',
-        type: 'feat'
-      })}
     />
   );
 }

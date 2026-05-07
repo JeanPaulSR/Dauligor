@@ -7,8 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { db } from '../../lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { fetchCollection } from '../../lib/d1';
 import ReferenceSheetDialog from '../reference/ReferenceSheetDialog';
 import type { ReferenceContext } from '../../lib/referenceSyntax';
 import {
@@ -445,28 +444,25 @@ export default function AdvancementManager({
       else if (type === 'saves') cols = ['attributes'];
 
       if (cols.length > 0) {
-        const promises = cols.map(c => getDocs(collection(db, c)));
+        const promises: Promise<any[]>[] = cols.map(c => fetchCollection<any>(c));
         if (catCol) {
-          promises.push(getDocs(collection(db, catCol)));
+          promises.push(fetchCollection<any>(catCol));
         }
 
-        Promise.all(promises).then(snaps => {
-          const itemsSnaps = snaps.slice(0, cols.length);
-          const catSnap = catCol ? snaps[snaps.length - 1] : null;
+        Promise.all(promises).then(rowsList => {
+          const itemRowsList = rowsList.slice(0, cols.length);
+          const catRows = catCol ? rowsList[rowsList.length - 1] : null;
 
           const catMap = new Map<string, string>();
-          if (catSnap) {
-            catSnap.docs.forEach((d: any) => {
-              catMap.set(d.id, d.data().name);
-            });
+          if (catRows) {
+            catRows.forEach((r: any) => catMap.set(r.id, r.name));
           }
 
-          let items = itemsSnaps.flatMap(s => s.docs.map((d: any) => {
-            const data = d.data();
+          let items = itemRowsList.flatMap(rows => rows.map((data: any) => {
+            const categoryId = data.category_id ?? data.categoryId;
             return {
-              id: d.id,
               ...data,
-              category: (data.categoryId && catMap.has(data.categoryId)) ? catMap.get(data.categoryId) : (data.category || 'Other')
+              category: (categoryId && catMap.has(categoryId)) ? catMap.get(categoryId) : (data.category || 'Other')
             };
           }));
           
@@ -526,9 +522,9 @@ export default function AdvancementManager({
 
   useEffect(() => {
     if (!isModalOpen || allFeatures.length > 0) return;
-    getDocs(collection(db, 'features')).then(snap => {
-      setAllFeatures(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }).catch(() => {});
+    fetchCollection<any>('features')
+      .then(rows => setAllFeatures(rows))
+      .catch(() => {});
   }, [isModalOpen]);
 
 

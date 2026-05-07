@@ -1,19 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
-import { db } from '../../lib/firebase';
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc,
-  where,
-  getDocs
-} from 'firebase/firestore';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
@@ -30,8 +17,9 @@ import {
   Plus,
   Settings
 } from 'lucide-react';
-import { handleFirestoreError, OperationType } from '../../lib/firebase';
 import { cn } from '../../lib/utils';
+import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
+import { Database, CloudOff } from 'lucide-react';
 
 const SYSTEM_CLASSIFICATIONS = [
   'class',
@@ -52,6 +40,7 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
   const [tags, setTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isUsingD1, setIsUsingD1] = useState(false);
   const [selectedTab, setSelectedTab] = useState('all');
   
   // Group Form State
@@ -65,25 +54,25 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribeGroups = onSnapshot(
-      query(collection(db, 'tagGroups'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setTagGroups(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const loadAll = async () => {
+      setLoading(true);
+      try {
+        const [groupsData, tagsData] = await Promise.all([
+          fetchCollection('tagGroups', { orderBy: 'name ASC' }),
+          fetchCollection('tags', { orderBy: 'name ASC' }),
+        ]);
+        setTagGroups(groupsData);
+
+        setIsUsingD1(tagsData.length > 0 || groupsData.length > 0);
+        setTags(tagsData);
+      } catch (err) {
+        console.error("Error loading tags data:", err);
+      } finally {
         setLoading(false);
       }
-    );
-
-    const unsubscribeTags = onSnapshot(
-      query(collection(db, 'tags'), orderBy('name', 'asc')),
-      (snapshot) => {
-        setTags(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      }
-    );
-
-    return () => {
-      unsubscribeGroups();
-      unsubscribeTags();
     };
+
+    loadAll();
   }, []);
 
   const handleSaveGroup = async (e: React.FormEvent) => {
@@ -94,26 +83,30 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
     }
 
     try {
-      const groupData = {
+      const d1Data = {
         name: groupName,
-        // For backwards compatibility we still store 'category' as the first classification
         category: groupClassifications.length > 0 ? groupClassifications[0] : 'General',
         classifications: groupClassifications,
         description: groupDescription,
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
+      const targetId = editingGroup?.id || crypto.randomUUID();
+      await upsertDocument('tagGroups', targetId, d1Data);
+
+      const stateItem = { id: targetId, ...d1Data };
       if (editingGroup) {
-        await updateDoc(doc(db, 'tagGroups', editingGroup.id), groupData);
+        setTagGroups(prev => prev.map(g => g.id === targetId ? stateItem : g));
         toast.success('Tag group updated');
       } else {
-        await addDoc(collection(db, 'tagGroups'), groupData);
+        setTagGroups(prev => [...prev, stateItem].sort((a, b) => a.name.localeCompare(b.name)));
         toast.success('Tag group created');
       }
 
       resetGroupForm();
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'tagGroups');
+      console.error('Error saving tag group:', error);
+      toast.error('Failed to save tag group');
     }
   };
 
@@ -139,31 +132,21 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
     e?.stopPropagation();
     if (window.confirm('Delete this group and all its tags?')) {
       try {
-        const groupTags = tags.filter(t => t.groupId === id);
+        const groupTags = tags.filter(t => (t.group_id || t.groupId) === id);
         for (const tag of groupTags) {
-          await deleteDoc(doc(db, 'tags', tag.id));
+          await deleteDocument('tags', tag.id);
         }
-        await deleteDoc(doc(db, 'tagGroups', id));
+        await deleteDocument('tagGroups', id);
+        setTagGroups(prev => prev.filter(g => g.id !== id));
+        setTags(prev => prev.filter(t => (t.group_id || t.groupId) !== id));
         toast.success('Tag group deleted');
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, 'tagGroups');
+        console.error('Error deleting tag group:', error);
+        toast.error('Failed to delete tag group');
       }
     }
   };
 
-  const handlePurge = async (collectionName: string) => {
-    if (window.confirm(`CRITICAL: Purge ALL entries in ${collectionName}?`)) {
-      try {
-        const snap = await getDocs(collection(db, collectionName));
-        for (const d of snap.docs) {
-          await deleteDoc(doc(db, collectionName, d.id));
-        }
-        toast.success(`${collectionName} purged`);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, collectionName);
-      }
-    }
-  };
 
   const toggleClassification = (cls: string) => {
     setGroupClassifications(prev => 
@@ -192,10 +175,23 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gold/10 pb-4">
         <div>
-          <h1 className="h1-title text-ink flex items-center gap-2">
-            <TagsIcon className="w-8 h-8 text-gold" />
-            Tag Management
-          </h1>
+          <div className="flex items-center gap-4">
+            <h1 className="h1-title text-ink flex items-center gap-2">
+              <TagsIcon className="w-8 h-8 text-gold" />
+              Tag Management
+            </h1>
+            {isUsingD1 ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <Database className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
+              </div>
+            )}
+          </div>
           <p className="description-text mt-1 text-ink/60">Organize and classify the compendium.</p>
         </div>
 
@@ -305,13 +301,6 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
             </form>
           </Card>
 
-          <Card className="border-blood/30 bg-blood/5 shadow-none overflow-hidden">
-            <h2 className="label-text p-3 bg-blood/10 text-blood border-b border-blood/20">Danger Zone</h2>
-            <div className="p-3 grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" className="border-blood/30 text-blood hover:bg-blood hover:text-white" onClick={() => handlePurge('tags')}>Purge Tags</Button>
-              <Button variant="outline" size="sm" className="border-blood/30 text-blood hover:bg-blood hover:text-white" onClick={() => handlePurge('tagGroups')}>Purge Groups</Button>
-            </div>
-          </Card>
         </div>
 
         {/* Right Side: List */}
@@ -345,7 +334,7 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
           ) : (
             <div className="space-y-4">
               {filteredGroups.map(group => {
-                const groupTags = tags.filter(t => t.groupId === group.id);
+                const groupTags = tags.filter(t => (t.group_id || t.groupId) === group.id);
                 const classifications = group.classifications || (group.category ? [group.category] : []);
 
                 return (

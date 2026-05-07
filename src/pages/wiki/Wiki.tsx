@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, onSnapshot, query, orderBy, addDoc, deleteDoc, doc, where } from 'firebase/firestore';
+import { OperationType, reportClientError } from '../../lib/firebase';
+import { fetchCollection } from '../../lib/d1';
+import { deleteLoreArticle } from '../../lib/lore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Plus, BookOpen, MapPin, History, Users, Sparkles, Trash2, Shield, Package, Library, Building, Flag, Sword, Zap, Mountain, Dna, Ship, Home, Biohazard, Swords, Scroll, Footprints, Languages, Coins, Layers, Flame, Scale, ListChecks, Hammer, Quote, Crown, Wand2, FlaskConical, Heart, LayoutGrid, List, Folder, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Database, CloudOff } from 'lucide-react';
 
 export default function Wiki({ userProfile }: { userProfile: any }) {
   const navigate = useNavigate();
@@ -44,20 +46,25 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
 
-  useEffect(() => {
-    let q;
-    if (isStaff) {
-      q = query(collection(db, 'lore'), orderBy('title'));
-    } else {
-      q = query(collection(db, 'lore'), where('status', '==', 'published'), orderBy('title'));
-    }
+  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setPages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'lore');
-    });
-    return () => unsubscribe();
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const whereClause = isStaff ? undefined : "status = 'published'";
+        const data = await fetchCollection<any>('lore', { 
+          where: whereClause,
+          orderBy: 'title ASC'
+        });
+
+        setPages(data);
+        setIsFoundationUsingD1(true);
+      } catch (error) {
+        console.error("Failed to load Wiki articles:", error);
+        setIsFoundationUsingD1(false);
+      }
+    };
+    loadData();
   }, [isStaff]);
 
   const filteredPages = pages.filter(page => {
@@ -71,10 +78,12 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this page?')) {
       try {
-        await deleteDoc(doc(db, 'lore', id));
+        await deleteLoreArticle(id);
+        setPages(prev => prev.filter(p => p.id !== id));
         toast.success('Wiki entry deleted');
       } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, 'lore');
+        console.error("Error deleting wiki entry:", error);
+        toast.error('Failed to delete wiki entry');
       }
     }
   };
@@ -249,6 +258,21 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
               />
             </div>
           </div>
+        </div>
+
+        {/* D1 Connection Status Indicator */}
+        <div className="flex justify-end">
+          {isFoundationUsingD1 ? (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <Database className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
+              <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
+            </div>
+          )}
         </div>
 
         {viewMode === 'grid' ? (

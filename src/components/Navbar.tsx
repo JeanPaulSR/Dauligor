@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   auth, 
-  db,
   usernameToEmail, 
   signInWithEmailAndPassword, 
   signOut 
 } from '../lib/firebase';
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc } from 'firebase/firestore';
+import { fetchCollection, upsertDocument } from '../lib/d1';
+import { useWikiPreview } from '../lib/wikiPreviewContext';
+
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from './ui/dropdown-menu';
-import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu } from 'lucide-react';
+import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu, Wrench } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Input } from './ui/input';
@@ -37,6 +38,7 @@ export default function Navbar({
   const [error, setError] = useState('');
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [activeCampaign, setActiveCampaign] = useState<any>(null);
+  const { refreshProfile } = useWikiPreview();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -46,41 +48,43 @@ export default function Navbar({
       return;
     }
 
-    const isAdmin = userProfile.role === 'admin';
-    const isCoDM = userProfile.role === 'co-dm';
-    
-    let q;
-    if (isAdmin) {
-      q = collection(db, 'campaigns');
-    } else if (isCoDM && userProfile.campaignIds?.length > 0) {
-      q = query(collection(db, 'campaigns'), where('__name__', 'in', userProfile.campaignIds));
-    } else if (userProfile.campaignIds?.length > 0) {
-      q = query(collection(db, 'campaigns'), where('__name__', 'in', userProfile.campaignIds));
-    } else {
-      setCampaigns([]);
-      setActiveCampaign(null);
-      return;
-    }
+    const loadCampaigns = async () => {
+      try {
+        const isAdmin = userProfile.role === 'admin';
+        
+        // Fetch all campaigns (D1-only)
+        const allCampaigns = await fetchCollection<any>('campaigns');
+        
+        if (isAdmin) {
+          setCampaigns(allCampaigns);
+          const active = allCampaigns.find(c => c.id === userProfile.active_campaign_id);
+          setActiveCampaign(active || allCampaigns[0]);
+        } else {
+          // Fetch memberships for non-admins
+          const memberData = await fetchCollection<any>('campaignMembers', { where: 'user_id = ?', params: [userProfile.id] });
+          const userCampaignIds = memberData.map(m => m.campaign_id);
+          
+          const filtered = allCampaigns.filter(c => userCampaignIds.includes(c.id));
+          setCampaigns(filtered);
+          const active = filtered.find(c => c.id === userProfile.active_campaign_id);
+          setActiveCampaign(active || filtered[0]);
+        }
+      } catch (err) {
+        console.error("Error fetching campaigns in navbar:", err);
+      }
+    };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const campaignList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setCampaigns(campaignList);
-      
-      const active = campaignList.find(c => c.id === userProfile.activeCampaignId);
-      setActiveCampaign(active || campaignList[0]);
-    }, (error) => {
-      console.error("Error fetching campaigns in navbar:", error);
-    });
-
-    return () => unsubscribe();
-  }, [userProfile?.campaignIds, userProfile?.activeCampaignId, userProfile?.role, userProfile?.username]);
+    loadCampaigns();
+  }, [userProfile?.id, userProfile?.active_campaign_id, userProfile?.role]);
 
   const handleSwitchCampaign = async (campaignId: string) => {
     if (!user?.uid) return;
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        activeCampaignId: campaignId
+      await upsertDocument('users', user.uid, {
+        ...userProfile,
+        active_campaign_id: campaignId
       });
+      await refreshProfile();
     } catch (err) {
       console.error("Error switching campaign:", err);
     }
@@ -190,7 +194,7 @@ export default function Navbar({
               <DropdownMenuTrigger render={
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full border border-gold/20">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={userProfile?.avatarUrl || user.photoURL} alt={user.displayName} />
+                    <AvatarImage src={userProfile?.avatar_url || user.photoURL} alt={user.displayName} />
                     <AvatarFallback className="bg-gold/10 text-gold">{user.displayName?.[0]}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -198,7 +202,7 @@ export default function Navbar({
               <DropdownMenuContent align="end" className="w-56 p-1">
                 <div className="flex items-center justify-start gap-2 p-3 bg-background/50">
                   <div className="flex flex-col space-y-1 leading-none">
-                    <p className="font-medium">{userProfile?.displayName || user.displayName}</p>
+                    <p className="font-medium">{userProfile?.display_name || user.displayName}</p>
                     <p className="text-xs text-muted-foreground">@{userProfile?.username || 'user'}</p>
                     <div className="flex items-center gap-1 mt-1">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${(userProfile?.role === 'admin' || userProfile?.role === 'co-dm') ? 'bg-gold/20 text-gold' : 'bg-ink/10 text-ink/40'}`}>
@@ -233,6 +237,12 @@ export default function Navbar({
                       <Link to="/admin/proficiencies" className="w-full flex items-center px-2 py-1.5 cursor-pointer">
                         <BookOpen className="mr-2 h-4 w-4" />
                         <span>Manage Proficiencies</span>
+                      </Link>
+                    } />
+                    <DropdownMenuItem nativeButton={false} render={
+                      <Link to="/settings?tab=maintenance" className="w-full flex items-center px-2 py-1.5 cursor-pointer">
+                        <Wrench className="mr-2 h-4 w-4" />
+                        <span>Maintenance</span>
                       </Link>
                     } />
                     <DropdownMenuSeparator />

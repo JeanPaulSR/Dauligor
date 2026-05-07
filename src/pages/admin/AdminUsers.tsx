@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { db, auth, initializeApp, firebaseConfig, usernameToEmail, createUserWithEmailAndPassword, signOut, updateProfile, OperationType, handleFirestoreError } from '../../lib/firebase';
-import { collection, onSnapshot, query, orderBy, setDoc, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { auth, OperationType, reportClientError, firebaseConfig, usernameToEmail, createUserWithEmailAndPassword, signOut, updateProfile, initializeApp } from '../../lib/firebase';
+import { fetchCollection, upsertDocument, deleteDocument, deleteDocuments } from '../../lib/d1';
+
+
 import { getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -29,28 +31,36 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   const [passwordResetUserId, setPasswordResetUserId] = useState('');
   const [error, setError] = useState('');
 
+  const [campaignMembers, setCampaignMembers] = useState<any[]>([]);
+
   useEffect(() => {
     if (userProfile?.role !== 'admin') return;
 
-    const qUsers = query(collection(db, 'users'), orderBy('username'));
-    const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'users');
-    });
+    const loadAdminUsersData = async () => {
+      try {
+        // Fetch Users via D1 helper (D1-only)
+        const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
+        setUsers(usersData);
 
-    const qCampaigns = query(collection(db, 'campaigns'), orderBy('name'));
-    const unsubscribeCampaigns = onSnapshot(qCampaigns, (snapshot) => {
-      setCampaigns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'campaigns');
-    });
+        // Fetch Campaigns via D1 helper (D1-only)
+        const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'name ASC' });
+        setCampaigns(campaignsData);
 
-    return () => {
-      unsubscribeUsers();
-      unsubscribeCampaigns();
+        // Fetch Campaign Members (Junction Table)
+        const membersData = await fetchCollection<any>('campaignMembers');
+        setCampaignMembers(membersData);
+      } catch (err) {
+        console.error("Error loading admin users data:", err);
+      }
     };
+
+    loadAdminUsersData();
   }, [userProfile]);
+
+  // Helper to get campaign IDs for a user from the junction table
+  const getUserCampaignIds = (userId: string) => {
+    return campaignMembers.filter(m => m.user_id === userId).map(m => m.campaign_id);
+  };
 
   const handleCreateUser = async () => {
     if (!newUser.username || !newUser.displayName || !newUser.password) {
@@ -73,22 +83,38 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUser.password);
       await updateProfile(userCredential.user, { displayName: newUser.displayName });
       
-      // Create profile in Firestore
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        uid: userCredential.user.uid,
+      // Create profile in D1
+      const uid = userCredential.user.uid;
+      await upsertDocument('users', uid, {
         username: newUser.username.toLowerCase(),
-        displayName: newUser.displayName,
+        display_name: newUser.displayName,
         role: newUser.role,
-        campaignIds: newUser.campaignIds,
-        activeCampaignId: newUser.campaignIds[0] || null,
-        createdAt: new Date().toISOString()
+        active_campaign_id: newUser.campaignIds[0] || null,
+        created_at: new Date().toISOString()
       });
+
+      // Assign campaigns in junction table
+      for (const campaignId of newUser.campaignIds) {
+        await upsertDocument('campaignMembers', `${campaignId}_${uid}`, {
+          campaign_id: campaignId,
+          user_id: uid,
+          role: 'player',
+          joined_at: new Date().toISOString()
+        });
+      }
 
       // Sign out secondary app and delete it
       await signOut(secondaryAuth);
 
       setIsAddOpen(false);
       setNewUser({ username: '', password: '', displayName: '', role: 'user', campaignIds: [] });
+      toast.success('User created successfully');
+      
+      // Refresh data
+      const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
+      setUsers(usersData);
+      const membersData = await fetchCollection<any>('campaignMembers');
+      setCampaignMembers(membersData);
     } catch (err: any) {
       console.error('Failed to create user:', err);
       setError(err.message || 'Failed to create user');
@@ -98,12 +124,14 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (confirm('Are you sure? This only deletes the Firestore profile, not the Auth account (Firebase limitation).')) {
+    if (confirm('Are you sure? This only deletes the D1 profile, not the Auth account.')) {
       try {
-        await deleteDoc(doc(db, 'users', id));
+        await deleteDocument('users', id);
+        setUsers(prev => prev.filter(u => u.id !== id));
         toast.success('User profile deleted');
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `users/${id}`);
+        console.error(err);
+        toast.error('Failed to delete user');
       }
     }
   };
@@ -119,29 +147,49 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
 
   const handleToggleUserCampaign = async (userId: string, campaignId: string, currentIds: string[] = []) => {
     try {
-      const newIds = currentIds.includes(campaignId)
-        ? currentIds.filter(id => id !== campaignId)
-        : [...currentIds, campaignId];
+      const isAssigned = currentIds.includes(campaignId);
+      if (isAssigned) {
+        // Remove from junction table
+        await deleteDocuments('campaignMembers', 'campaign_id = ? AND user_id = ?', [campaignId, userId]);
+      } else {
+        await upsertDocument('campaignMembers', `${campaignId}_${userId}`, {
+          campaign_id: campaignId,
+          user_id: userId,
+          role: 'player',
+          joined_at: new Date().toISOString()
+        });
+      }
       
-      await updateDoc(doc(db, 'users', userId), {
-        campaignIds: newIds,
-        activeCampaignId: newIds.includes(campaignId) && !currentIds.includes(campaignId) ? campaignId : (newIds[0] || null)
-      });
+      // Refresh members
+      const membersData = await fetchCollection<any>('campaignMembers');
+      setCampaignMembers(membersData);
 
       if (campaignDialogOpen.isOpen && campaignDialogOpen.userId === userId) {
+        const newIds = isAssigned 
+          ? currentIds.filter(id => id !== campaignId)
+          : [...currentIds, campaignId];
         setCampaignDialogOpen(prev => ({ ...prev, currentIds: newIds }));
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+      console.error(err);
+      toast.error('Failed to update campaign assignment');
     }
   };
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     try {
-      await updateDoc(doc(db, 'users', userId), { role: newRole });
+      const user = users.find(u => u.id === userId);
+      if (!user) return;
+      await upsertDocument('users', userId, {
+        ...user,
+        role: newRole
+      });
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
       setRoleDialogOpen({ ...roleDialogOpen, isOpen: false });
+      toast.success('User role updated');
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}`);
+      console.error(err);
+      toast.error('Failed to update role');
     }
   };
 
@@ -228,14 +276,11 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
           const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, 'password123');
           await updateProfile(userCredential.user, { displayName: u.displayName });
           
-          await setDoc(doc(db, 'users', userCredential.user.uid), {
-            uid: userCredential.user.uid,
+          await upsertDocument('users', userCredential.user.uid, {
             username: u.username,
-            displayName: u.displayName,
+            display_name: u.displayName,
             role: u.role,
-            campaignIds: [],
-            activeCampaignId: null,
-            createdAt: new Date().toISOString()
+            created_at: new Date().toISOString()
           });
           await signOut(secondaryAuth);
         } catch (e: any) {
@@ -243,6 +288,8 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         }
       }
       toast.success('Test users created! Default password: password123');
+      const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
+      setUsers(usersData);
     } catch (err: any) {
       setError(err.message || 'Failed to seed users');
     } finally {
@@ -258,7 +305,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         content: '# The Silver Spire\n\nThe Silver Spire stands as the last remaining structure of the **Old Elven Empire**. It was built during the *Age of Starlight* and served as a beacon for planar travelers.\n\n## History\nLegend says the spire was grown from a single seed of pure moonlight...',
         category: 'location',
         status: 'published',
-        imageUrl: 'https://picsum.photos/seed/spire/800/600',
+        image_url: 'https://picsum.photos/seed/spire/800/600',
         metadata: {
           locationType: 'Monument',
           ruler: 'The Council of Stars',
@@ -272,7 +319,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         content: '# High King Valerius\n\nValerius was the first mortal to wear the **Crown of Thorns**. He led the human tribes against the giant lords during the *Great Migration*.\n\n## Personality\nKnown for his stoicism and tactical brilliance...',
         category: 'character',
         status: 'published',
-        imageUrl: 'https://picsum.photos/seed/king/800/600',
+        image_url: 'https://picsum.photos/seed/king/800/600',
         metadata: {
           race: 'Human',
           occupation: 'High King',
@@ -286,16 +333,20 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     setLoading(true);
     try {
       for (const lore of testLore) {
-        await addDoc(collection(db, 'lore'), {
+        const id = crypto.randomUUID();
+        const slug = lore.title.toLowerCase().replace(/\s+/g, '-');
+        await upsertDocument('lore', id, {
           ...lore,
-          authorId: userProfile?.uid,
-          updatedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString()
+          slug,
+          author_id: userProfile?.uid,
+          updated_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
         });
       }
       toast.success('Lore seeded successfully!');
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'lore');
+      console.error(err);
+      toast.error('Failed to seed lore');
     } finally {
       setLoading(false);
     }
@@ -416,7 +467,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                   <TableCell className="font-medium">
                     <div className="flex flex-col">
                       <span>{u.displayName}</span>
-                      <span className="text-[10px] text-ink/40 font-serif italic">Active: {campaigns.find(c => c.id === u.activeCampaignId)?.name || 'None'}</span>
+                      <span className="text-[10px] text-ink/40 font-serif italic">Active: {campaigns.find(c => c.id === u.active_campaign_id)?.name || 'None'}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-ink/60">@{u.username}</TableCell>
@@ -447,23 +498,31 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {campaigns.filter(c => u.campaignIds?.includes(c.id)).slice(0, 2).map(c => (
-                          <Badge key={c.id} variant="outline" className="text-[10px] border-gold/20 text-gold/60">
-                            {c.name}
-                          </Badge>
-                        ))}
-                        {(u.campaignIds?.length || 0) > 2 && (
-                          <span className="text-[10px] text-ink/40">+{u.campaignIds.length - 2} more</span>
-                        )}
-                        {(u.campaignIds?.length || 0) === 0 && (
-                          <span className="text-[10px] text-ink/20 italic">None</span>
-                        )}
+                        {(() => {
+                          const userCampaignIds = getUserCampaignIds(u.id);
+                          return (
+                            <>
+                              {campaigns.filter(c => userCampaignIds.includes(c.id)).slice(0, 2).map(c => (
+                                <Badge key={c.id} variant="outline" className="text-[10px] border-gold/20 text-gold/60">
+                                  {c.name}
+                                </Badge>
+                              ))}
+                              {userCampaignIds.length > 2 && (
+                                <span className="text-[10px] text-ink/40">+{userCampaignIds.length - 2} more</span>
+                              )}
+                              {userCampaignIds.length === 0 && (
+                                <span className="text-[10px] text-ink/20 italic">None</span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                       <Button 
                         variant="ghost" 
                         size="xs" 
                         onClick={() => {
-                          setCampaignDialogOpen({ isOpen: true, userId: u.id, currentIds: u.campaignIds || [] });
+                          const userCampaignIds = getUserCampaignIds(u.id);
+                          setCampaignDialogOpen({ isOpen: true, userId: u.id, currentIds: userCampaignIds });
                           setCampaignSearch('');
                         }}
                         className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10 ml-auto"
