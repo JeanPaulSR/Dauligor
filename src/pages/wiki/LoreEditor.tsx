@@ -356,7 +356,7 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
       tags: formData.tags || [],
       linkedArticleIds: Array.from(linkedIds),
       updatedAt: new Date().toISOString(),
-      authorId: userProfile?.uid,
+      authorId: userProfile?.id,
       createdAt: formData.createdAt || new Date().toISOString()
     };
 

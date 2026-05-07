@@ -338,7 +338,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         await upsertDocument('lore', id, {
           ...lore,
           slug,
-          author_id: userProfile?.uid,
+          author_id: userProfile?.id,
           updated_at: new Date().toISOString(),
           created_at: new Date().toISOString()
         });

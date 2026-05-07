@@ -418,7 +418,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   // Article-level visibility check for players (staff always see everything)
   if (!isStaff || previewCampaign) {
     const effectiveEraId = isStaff && previewCampaign ? previewCampaign.eraId : activeCampaignEraId;
-    const effectiveCampaignId = isStaff && previewCampaign ? previewCampaign.id : (userProfile?.activeCampaignId ?? null);
+    const effectiveCampaignId = isStaff && previewCampaign ? previewCampaign.id : (userProfile?.active_campaign_id ?? null);
 
     const hasEraScope = article.visibilityEraIds?.length > 0;
     const hasCampaignScope = article.visibilityCampaignIds?.length > 0;
@@ -745,7 +745,7 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
                                 <User className="w-3 h-3" /> Chronicler
                               </span>
                               <span className="body-text text-sm text-ink/80">
-                                {article.authorId === userProfile?.uid ? 'You' : 'Archive Staff'}
+                                {article.authorId === userProfile?.id ? 'You' : 'Archive Staff'}
                               </span>
                             </div>
                           </div>

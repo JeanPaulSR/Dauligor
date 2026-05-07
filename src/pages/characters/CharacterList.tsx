@@ -20,16 +20,16 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
   const isStaff = ['admin', 'co-dm', 'lore-writer'].includes(userProfile?.role);
 
   useEffect(() => {
-    if (!userProfile?.uid) return;
+    if (!userProfile?.id) return;
 
     const loadCharacters = async () => {
       try {
         let sql = "SELECT * FROM characters";
         let params: any[] = [];
-        
+
         if (!isStaff) {
           sql += " WHERE user_id = ?";
-          params = [userProfile.uid];
+          params = [userProfile.id];
         }
         
         sql += " ORDER BY updated_at DESC";
@@ -44,7 +44,7 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
     };
 
     loadCharacters();
-  }, [userProfile?.uid, isStaff]);
+  }, [userProfile?.id, isStaff]);
 
   if (loading) {
     return (
@@ -165,11 +165,11 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
                 </div>
               </div>
               <div className="text-xs text-ink/50 uppercase tracking-widest font-bold">
-                {char.campaignId ? 'Assigned to Campaign' : 'No Campaign'}
+                {char.campaign_id ? 'Assigned to Campaign' : 'No Campaign'}
               </div>
-              {isStaff && char.userId !== userProfile.uid && (
+              {isStaff && char.user_id !== userProfile.id && (
                 <div className="mt-2 pt-2 border-t border-gold/10 flex items-center gap-2 text-xs text-ink/40">
-                  <Shield className="w-3 h-3" /> Player ID: {char.userId.substring(0,6)}...
+                  <Shield className="w-3 h-3" /> Player ID: {String(char.user_id || '').substring(0,6)}...
                 </div>
               )}
             </div>

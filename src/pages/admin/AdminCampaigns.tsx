@@ -99,7 +99,7 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         description: newCampaign.description,
         era_id: newCampaign.eraId || null,
         slug,
-        dm_id: userProfile.uid,
+        dm_id: userProfile.id,
         created_at: new Date().toISOString(),
       });
       setIsAddOpen(false);

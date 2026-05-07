@@ -66,7 +66,7 @@ export default function Home({ userProfile }: { userProfile: any }) {
     };
 
     fetchData();
-  }, [userProfile?.active_campaign_id, userProfile?.uid]);
+  }, [userProfile?.active_campaign_id, userProfile?.id]);
 
   const renderArticlePreview = (title: string, icon: React.ReactNode, className?: string) => {
     const article = specialArticles[title];

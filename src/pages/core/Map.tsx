@@ -65,7 +65,7 @@ interface HighlightRecord {
 
 export default function Map({ userProfile }: { userProfile: any }) {
   const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
-  const activeCampaignId = userProfile?.activeCampaignId ?? userProfile?.active_campaign_id ?? null;
+  const activeCampaignId = userProfile?.active_campaign_id ?? null;
 
   const [eraId, setEraId] = useState<string | null>(null);
   const [maps, setMaps] = useState<MapRecord[]>([]);

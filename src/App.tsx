@@ -76,17 +76,17 @@ export default function App() {
     document.documentElement.classList.remove('light', 'dark', 'parchment');
     document.documentElement.classList.add(theme);
     
-    if (effectiveProfile?.accentColor) {
-      document.documentElement.style.setProperty('--gold', effectiveProfile.accentColor);
-      document.documentElement.style.setProperty('--primary', effectiveProfile.accentColor);
-      document.documentElement.style.setProperty('--ring', effectiveProfile.accentColor);
+    if (effectiveProfile?.accent_color) {
+      document.documentElement.style.setProperty('--gold', effectiveProfile.accent_color);
+      document.documentElement.style.setProperty('--primary', effectiveProfile.accent_color);
+      document.documentElement.style.setProperty('--ring', effectiveProfile.accent_color);
     } else {
       const defaultColor = theme === 'parchment' ? '#c5a059' : '#3b82f6';
       document.documentElement.style.setProperty('--gold', defaultColor);
       document.documentElement.style.setProperty('--primary', defaultColor);
       document.documentElement.style.setProperty('--ring', defaultColor);
     }
-  }, [effectiveProfile?.theme, effectiveProfile?.accentColor]);
+  }, [effectiveProfile?.theme, effectiveProfile?.accent_color]);
 
   // Global Foundation Sync Polling
   const [lastFoundationTimestamp, setLastFoundationTimestamp] = useState<string | null>(null);

@@ -2242,7 +2242,7 @@ export default function CharacterBuilder({
       const finalChar = {
         ...character,
         id: charId,
-        userId: isNew ? userProfile.uid : character.userId,
+        userId: isNew ? userProfile.id : character.userId,
         progression,
         progressionState,
         classId: primaryGroup?.classId || "",

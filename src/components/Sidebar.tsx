@@ -42,8 +42,8 @@ export default function Sidebar({
   useEffect(() => {
     const fetchCampaign = async () => {
       try {
-        if (userProfile?.activeCampaignId) {
-          const data = await fetchDocument<any>('campaigns', userProfile.activeCampaignId);
+        if (userProfile?.active_campaign_id) {
+          const data = await fetchDocument<any>('campaigns', userProfile.active_campaign_id);
           if (data) {
             setCampaign(data);
           }
@@ -55,7 +55,7 @@ export default function Sidebar({
       }
     };
     fetchCampaign();
-  }, [userProfile?.activeCampaignId]);
+  }, [userProfile?.active_campaign_id]);
 
   useEffect(() => {
     const loadHistory = () => {

@@ -496,8 +496,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
         url: selectedItem.url,
         filename: selectedItem.name,
         folder: currentPath,
-        uploadedBy: userProfile?.uid,
-        uploadedByName: userProfile?.displayName,
+        uploadedBy: userProfile?.id,
+        uploadedByName: userProfile?.display_name,
         ...editedMeta,
       });
       const refreshed = await getImageMetadataByPath(selectedItem.fullPath);
@@ -653,8 +653,8 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
         url: sysSelectedItem.url,
         filename: sysSelectedItem.name,
         folder: sysPath,
-        uploadedBy: userProfile?.uid,
-        uploadedByName: userProfile?.displayName,
+        uploadedBy: userProfile?.id,
+        uploadedByName: userProfile?.display_name,
         ...sysEditedMeta,
       });
       const refreshed = await getImageMetadataByPath(sysSelectedItem.fullPath);
