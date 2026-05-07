@@ -20,6 +20,12 @@ The Archive is a specialized DM workspace designed for high-density information 
 
 ## 4. Technical Constraints
 - No anonymous registration; users map to internal handles.
-- Server-side validation via Firestore Security Rules.
-- Client-side "Pseudo-Username" Auth to protect player PII.
-- Real-time synchronization for collaborative features.
+- Server-side authorization via Vercel/Express proxy (`requireStaffAccess`, `requireAdminAccess`); D1 rows enforce schema-level checks.
+- Client-side "Pseudo-Username" Auth (Firebase Auth + `usernameToEmail`) to protect player PII.
+- Cross-tab cache invalidation via the `system_metadata.last_foundation_update` foundation heartbeat.
+
+## 5. Stack
+- React 19 + Vite + TypeScript + Tailwind 4 + shadcn/ui + TipTap.
+- Cloudflare D1 (SQL) for data; Cloudflare R2 for media; Firebase Authentication for JWTs.
+- Vercel functions in production; Express dev server (`server.ts`) wraps Vite locally.
+- See `AGENTS.md` and `docs/` for the deep documentation tree.

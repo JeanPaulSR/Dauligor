@@ -1,182 +1,147 @@
-# Image & Icon System
+# Image Manager
 
-## 1. Overview
+Admin tool for browsing, uploading, renaming, and deleting images stored in R2. The same image-handling primitives are reused throughout the app via `ImageUpload` and `IconPickerModal`.
 
-The image system has three layers:
+For the underlying R2 bucket structure and Worker endpoints, see [../platform/r2-storage.md](../platform/r2-storage.md).
 
-| Layer | Path | Purpose |
-| :--- | :--- | :--- |
-| **Image Manager** | `/admin/images` | Admin tool — browse, upload, rename, delete, metadata |
-| **Image Viewer** | `/images/view?url=` | Public single-image page with metadata display |
-| **ImageUpload component** | `src/components/ui/ImageUpload.tsx` | Reusable upload widget used throughout editors |
-| **IconPickerModal** | `src/components/ui/IconPickerModal.tsx` | Browse-and-select modal for icon/token slots |
+## Pages
 
-Access to Image Manager is restricted to `admin`, `co-dm`, and `lore-writer` roles. Image Viewer is public.
+| Route | File | Access |
+|---|---|---|
+| `/admin/images` | [ImageManager.tsx](../../src/pages/admin/ImageManager.tsx) | Image-manager-eligible roles (admin / co-dm / lore-writer) |
+| `/images/view?url=` | [ImageViewer.tsx](../../src/pages/admin/ImageViewer.tsx) | Public — anyone with the URL |
 
----
+## Three tabs
 
-## 2. Image Manager (`src/pages/admin/ImageManager.tsx`)
-
-The manager has three tabs: **Image Library**, **System Images**, and **Icons**.
-
-### Image Library tab
-
-For freely organised content images — article inline images, battle maps, miscellaneous artwork. Starts at `images/` and hides the system subfolders (`classes/`, `subclasses/`, `lore/`, `characters/`, `sources/`, `users/`) — those live exclusively in System Images.
+### Image Library
+For freely organised content images — article inline images, battle maps, miscellaneous artwork. Browses `images/` and **hides the system subfolders** (`classes/`, `subclasses/`, `lore/`, `characters/`, `sources/`, `users/`) — those live in the System Images tab.
 
 **Toolbar:**
-- **Breadcrumb** — click any segment to navigate up; Home navigates back to `images/`
+- **Breadcrumb** — click any segment to navigate up; Home returns to `images/`
 - **Upload** toggle — expands an inline upload panel
 - **Refresh** — re-fetches the current folder
 
 **Upload panel** (when expanded):
-- Optional **filename** input — if left blank, a timestamp + random suffix is used
-- **Type selector** — Standard / Icon (126×126) / Token (400×400); determines client-side resize before upload
-- Drop zone / file picker (drag-and-drop supported)
+- Optional filename — blank uses timestamp + random suffix
+- Type selector — Standard / Icon (126×126) / Token (400×400); determines client-side resize before upload
+- Drop zone / file picker
 
-**Detail panel** (right column, appears on image select):
+**Detail panel** (right side, on selection):
 - Full preview
-- **File Info** — name, path, size, upload date
-- **Copy URL** button
-- **View** button — opens `/images/view?url=` in a new tab
-- **Rename / Move** — folder + filename inputs; "Move & Update Links" calls `r2Rename` then `updateImageReferences` to rewrite every Firestore reference automatically
-- **Metadata editor** — creator, description, license, source URL, tags (comma-separated)
-- **Danger Zone** (admin only) — scans Firestore for references before allowing deletion
+- File info — name, path, size, upload date
+- Copy URL button
+- View button (opens `/images/view?url=`)
+- Rename / Move — folder + filename inputs; **"Move & Update Links"** also rewrites every D1 row referencing the URL (see Reference scanning)
+- Metadata editor — creator, description, license, source URL, tags
+- Danger Zone (admin only) — delete; runs reference scan first
 
----
+### System Images
+Read-only browser for entity-linked image folders. Rename and delete are disabled to prevent accidental broken links.
 
-### System Images tab
-
-Read-only browser for entity-linked image paths. Rename and delete are disabled to prevent accidental broken links.
-
-**Sections:**
-
-| Section | R2 Prefix | Firestore collection | Name field |
-| :--- | :--- | :--- | :--- |
+| Section | R2 prefix | D1 table | Display name |
+|---|---|---|---|
 | Classes | `images/classes/` | `classes` | `name` |
 | Subclasses | `images/subclasses/` | `subclasses` | `name` |
-| Article Headers | `images/lore/` | `loreArticles` | `title` |
+| Article Headers | `images/lore/` | `lore_articles` | `title` |
 | Characters | `images/characters/` | `characters` | `name` |
 | Sources | `images/sources/` | `sources` | `name` |
-| Users | `images/users/` | `users` | `displayName` |
+| Users | `images/users/` | `users` | `display_name` |
 
-**Name resolution:** entity subfolders use Firestore document IDs as R2 keys. When a section is opened, the manager fetches the collection and builds an `id → name` map. Folder cards show the resolved name (e.g. "Sorcerer") with the raw ID in smaller text below. The detail panel also shows the friendly location path instead of raw IDs.
+System folders use D1 row IDs as the key segment. The manager fetches the relevant table and builds an `id → name` map so cards show "Sorcerer" with the raw ID below.
 
-**Detail panel:** preview, file info with friendly path, copy URL, metadata editor. No rename or delete controls.
+### Icons
+Browses `icons/` recursively (no breadcrumb — flat listing). Clicking an icon copies its URL.
 
----
+## Reusable components
 
-### Icons tab
+### `ImageUpload` (`src/components/ui/ImageUpload.tsx`)
 
-Browses `icons/` in R2 as a flat recursive listing. The **Load Icons** button fetches all objects. Search filters by filename and category (subfolder name). Click any icon to copy its URL.
-
----
-
-## 3. ImageUpload Component (`src/components/ui/ImageUpload.tsx`)
-
-### Props
+Used in editors throughout the app for inline image inputs. Props:
 
 | Prop | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `onUpload` | `(url: string) => void` | required | Called with the R2 public URL after upload, or `""` to clear |
-| `storagePath` | `string` | required | R2 key prefix, e.g. `images/classes/abc/` |
-| `currentImageUrl` | `string?` | — | Shows current image; X button calls `onUpload("")` |
-| `imageType` | `'standard' \| 'icon' \| 'token'` | — | Locks resize behaviour; shows a badge; no selector |
-| `allowTypeSelection` | `boolean?` | false | Renders a Standard / Icon / Token toggle (used in Image Manager) |
-| `filename` | `string?` | — | Overrides the auto-generated filename (no extension needed) |
-| `compact` | `boolean?` | false | Avatar-style square picker — used in feature icon slots |
-| `className` | `string?` | — | Extra CSS classes |
+|---|---|---|---|
+| `onUpload` | `(url: string) => void` | required | Called with R2 URL after upload (or `""` to clear) |
+| `storagePath` | `string` | required | R2 key prefix (e.g., `images/classes/abc/`) |
+| `currentImageUrl` | `string?` | — | Shows current image; X clears |
+| `imageType` | `'standard'\|'icon'\|'token'` | — | Locks resize behaviour and shows badge |
+| `allowTypeSelection` | `boolean?` | false | Renders a Standard / Icon / Token toggle (Image Manager) |
+| `filename` | `string?` | — | Override auto-generated filename |
+| `compact` | `boolean?` | false | Avatar-style square picker (feature icon slots) |
+| `className` | `string?` | — | Extra CSS |
 
-### Image types and resize
+Resize behaviour (when `imageType` is `icon` or `token`): centre-crop to target canvas before WebP conversion. Source image is never distorted.
 
-When `imageType` (or the type selector) is set to `icon` or `token`, the image is **center-cropped** to the target canvas before WebP conversion. The source image is never distorted.
+Compact mode (used in the 128px feature icon slot inside `ClassEditor` / `SubclassEditor`):
+- **Click** → opens `IconPickerModal` to browse the icons library
+- **Hover** → reveals magnifier (open picker), upload (direct), and X (clear) overlay buttons
 
-| Type | Canvas | Typical use |
-| :--- | :--- | :--- |
-| `standard` | Original | Lore headers, class artwork, portraits |
-| `icon` | 126 × 126 | Feature icons, spell icons, item icons |
-| `token` | 400 × 400 | Creature/character tokens |
+### `IconPickerModal` (`src/components/ui/IconPickerModal.tsx`)
 
-### Compact mode
-
-Used inside the 128 px icon slot in the ClassEditor and SubclassEditor feature modals.
-
-- **Click** the widget — opens `IconPickerModal` to browse the `icons/` library
-- **Hover** — reveals three overlay buttons:
-  - Magnifier — opens the picker modal
-  - Upload — direct file upload (bypasses picker, still resizes)
-  - X — clears the current image
-- `iconUrl` is saved to Firestore as part of the feature document
-
----
-
-## 4. Icon Picker Modal (`src/components/ui/IconPickerModal.tsx`)
-
-A dialog for browsing and selecting from the `icons/` (or `tokens/`) R2 folder without leaving the editor.
-
-### Props
+Dialog for browsing and selecting from R2. Props:
 
 | Prop | Type | Description |
-| :--- | :--- | :--- |
+|---|---|---|
 | `open` | `boolean` | Controls visibility |
-| `onClose` | `() => void` | Called on dismiss |
-| `onSelect` | `(url: string) => void` | Called with chosen URL; modal closes automatically |
-| `rootFolder` | `string?` | Root to browse — `'icons'` or `'tokens'` (default `'icons'`) |
-| `imageType` | `'icon' \| 'token'?` | Determines resize size on upload (default `'icon'`) |
+| `onClose` | `() => void` | Dismiss |
+| `onSelect` | `(url: string) => void` | Selection — modal closes automatically |
+| `rootFolder` | `string?` | `'icons'` or `'tokens'` (default `'icons'`) |
+| `imageType` | `'icon'\|'token'?` | Resize size on direct upload (default `'icon'`) |
 
-### Browse mode
+**Browse mode** — opens to `rootFolder`. Subfolders show as cards. Breadcrumb relative to root.
 
-Opens to `rootFolder`. Subfolders are shown as clickable cards. Breadcrumb shows the path relative to the root. Refresh button re-fetches the current folder.
+**Search mode** — non-empty search input switches to a flat recursive listing of all objects under the root, fetched once and cached for the session. Filters by filename and path.
 
-### Search mode
+**Upload panel** — toggle reveals upload form with two targets:
+- **Current folder** — saves to the browsed path
+- **Temp (`_temp`)** — saves to `{rootFolder}/_temp/` for later organisation via Image Manager rename
 
-Triggered when the search input is non-empty. On first search, a **flat recursive listing** of all objects under `rootFolder/` is fetched and cached for the session. Results are filtered client-side by filename and path.
+## Reference scanning
 
-### Upload panel (toggle)
+`scanForReferences(url)` runs parallel D1 queries across:
+`classes`, `subclasses`, `characters`, `sources`, `users`, `lore_articles` (plus their card_image_url / preview_image_url / image_url variants).
 
-- **Upload target** — "Current folder" saves to the browsed path; "Temp (_temp)" saves to `{rootFolder}/_temp/` as a staging area
-- Images uploaded via the panel appear immediately in the grid (current folder only)
-- Images in `_temp` can be moved later using **Image Manager → rename**
+If any row references the URL, the deletion or rename UI shows the list before confirmation. **"Move & Update Links"** in the detail panel rewrites every found reference automatically, then renames the R2 object.
 
----
+> **Migration note:** Today the scan and the metadata CRUD live in [src/lib/imageMetadata.ts](../../src/lib/imageMetadata.ts), which still uses Firestore. The D1 table `image_metadata` exists but the lib hasn't been switched. See [../database/README.md](../database/README.md).
 
-## 5. Image Viewer (`src/pages/admin/ImageViewer.tsx`)
+## Image life cycle (concise)
 
-Route: `/images/view?url={encodedUrl}`
+1. **Upload** — Client resizes (if icon/token) → converts to WebP → POST `/api/r2/upload`.
+2. **Reference** — URL stored in the relevant D1 row column (`image_url`, `card_image_url`, `avatar_url`, etc.).
+3. **Serve** — `<img src="https://images.dauligor.com/<key>">`.
+4. **Metadata** — Optionally enriched in Image Manager (creator, license, tags) → `image_metadata` row.
+5. **Rename** — Worker copies to new key + deletes old. References rewritten in parallel.
+6. **Delete** — Reference scan first; admin confirms; `r2Delete` + remove `image_metadata` row.
 
-Accessible to all users. Extracts the R2 key from the URL, fetches Firestore metadata, and renders:
-- Full image
-- Metadata card (creator, description, license, source link, tags) — only shown when at least one field is populated
+## Common tasks
 
----
+### Add a new system image folder (e.g., for items)
+1. Pick the convention (`images/items/<itemId>/`).
+2. In the Item editor, use `ImageUpload` with `storagePath="images/items/<id>/"` and `imageType="icon"` (or whatever fits).
+3. Add a new row to the System Images tab in `ImageManager.tsx` referencing the `items` table.
+4. Add `items` to `scanForReferences` if you want delete-warnings to cover it.
 
-## 6. Shared Utilities
+### Move an image without breaking references
+- Open Image Manager → select image → Rename / Move → "Move & Update Links". This is the only safe path.
 
-### `src/lib/r2.ts`
-Low-level Worker API calls. All functions are async and throw on non-OK responses.
+### Find orphaned images
+Currently no UI; SQL pattern:
 
-| Export | Signature | Description |
-| :--- | :--- | :--- |
-| `r2Upload` | `(file, key, onProgress?) → { url, key }` | XHR upload with progress events |
-| `r2List` | `(prefix, delimiter?) → { objects, delimitedPrefixes }` | List objects; omit delimiter for recursive flat list |
-| `r2Delete` | `(key) → void` | Delete object |
-| `r2Rename` | `(oldKey, newKey) → { url, key }` | Copy + delete (atomic from R2's perspective) |
+```sql
+-- Find image_metadata rows whose URL isn't referenced anywhere
+SELECT url FROM image_metadata WHERE url NOT IN (
+  SELECT image_url FROM classes WHERE image_url IS NOT NULL
+  UNION SELECT card_image_url FROM classes WHERE card_image_url IS NOT NULL
+  UNION SELECT image_url FROM subclasses WHERE image_url IS NOT NULL
+  UNION SELECT image_url FROM characters WHERE image_url IS NOT NULL
+  -- … etc.
+);
+```
 
-### `src/lib/imageUtils.ts`
-Client-side image processing.
+## Related docs
 
-| Export | Description |
-| :--- | :--- |
-| `convertToWebP(file, quality?, target?)` | Converts to WebP; center-crops to `target` dimensions if provided |
-
-### `src/lib/imageMetadata.ts`
-Firestore metadata CRUD.
-
-| Export | Description |
-| :--- | :--- |
-| `saveImageMetadata(storagePath, data)` | Upsert metadata doc |
-| `getImageMetadataByPath(storagePath)` | Fetch metadata by key |
-| `updateImageMetadata(storagePath, updates)` | Partial update |
-| `deleteImageMetadata(storagePath)` | Remove metadata doc |
-| `scanForReferences(url)` | Parallel scan across 6 collections for URL references |
-| `extractStoragePath(downloadUrl)` | Extracts R2 key from a public URL (handles both R2 and legacy Firebase URLs) |
-| `storagePathToDocId(storagePath)` | Encodes key as a valid Firestore doc ID |
+- [../platform/r2-storage.md](../platform/r2-storage.md) — bucket structure, Worker endpoints, image life cycle
+- [../ui/components.md](../ui/components.md) — `ImageUpload` and `IconPickerModal` patterns
+- [wiki-lore.md](wiki-lore.md) — image slots on lore articles
+- [compendium-classes.md](compendium-classes.md) — class artwork slots
+- [../database/README.md](../database/README.md) — `imageMetadata` migration status

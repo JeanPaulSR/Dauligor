@@ -2,35 +2,47 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Dauligor — the Archive
 
-This contains everything you need to run your app locally.
+A specialized D&D 5e campaign-management workspace: hierarchical lore wiki, mechanical compendium, character builder, and FoundryVTT JSON export, all wrapped in a "technical dashboard meets sword-and-sorcery" aesthetic.
 
-View your app in AI Studio: https://ai.studio/apps/74a2fef7-b2a2-4f36-a1cf-85b98eba078b
+## Stack
 
-## Run Locally
+- **Frontend**: React 19 · Vite · TypeScript · Tailwind 4 · shadcn/ui · TipTap
+- **Database**: Cloudflare D1 (SQL) via a project-owned Worker
+- **Storage**: Cloudflare R2 (served from `https://images.dauligor.com`)
+- **Auth**: Firebase Authentication (JWT layer only)
+- **Hosting**: Vercel functions; local dev uses Express (`server.ts`) that mirrors the same routes
 
-**Prerequisites:**  Node.js
+The app is mid-migration from Firestore to D1 — see [AGENTS.md](AGENTS.md) for the rules and [docs/database/README.md](docs/database/README.md) for current phase status.
 
+## Run locally
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+You need **two terminals**.
+
+**Terminal 1 — Cloudflare Worker (D1 + R2):**
+```
+cd worker
+npx wrangler dev
+```
+
+**Terminal 2 — Vite + Express:**
+```
+npm install
+npm run dev
+```
+
+The Express server reads `R2_WORKER_URL=http://localhost:8787` from `.env` and proxies D1/R2 traffic to the local Worker. Full setup details — including `.dev.vars` and Firebase Admin credentials — live in [docs/operations/local-dev.md](docs/operations/local-dev.md).
 
 ## Documentation
 
-- **[Technical Structure (MAP)](DIRECTORY_MAP.md)**: File resolution and procedure guide.
-- **[Documentation Index](docs/README.md)**: Technical specifications for Architecture, Database, Features, and Styling.
-- **[Styling Standards](docs/styling/STYLE_GUIDE.md)**: CSS class definitions and component guidelines.
-- **[BBCode Definition](docs/styling/BBCODE_REFERENCE.md)**: Tag specs for content rendering.
-- **[External Schemas](docs/external/FOUNDRY_VTT.md)**: Data structures for 3rd party integrations.
-- **[Entity Specs](schemas/)**: Interface and persistence rules for Firestore collections.
-
-## Core Architecture
-
-React-based Single Page Application (SPA) using Firebase (Firestore, Storage, Authentication).
-- **Styling**: Tailwind CSS and shadcn/ui.
-- **State Management**: Centralized React state in `src/App.tsx`.
-- **Authorization**: Role-based access (RBAC) defined in `src/App.tsx` and `firestore.rules`.
+- **[AGENTS.md](AGENTS.md)** — agent / contributor briefing. Read first.
+- **[DIRECTORY_MAP.md](DIRECTORY_MAP.md)** — file-path resolution guide.
+- **[docs/](docs/)** — full documentation index, organised by topic:
+  - [platform/](docs/platform/) — runtime, D1, R2, auth, env vars
+  - [database/](docs/database/) — D1 schema, migrations, phase status
+  - [features/](docs/features/) — wiki, compendium, characters, image manager, foundry export
+  - [ui/](docs/ui/) — style guide, theming, BBCode, content rendering
+  - [architecture/](docs/architecture/) — routing, RBAC, foundry integration, reference syntax
+  - [operations/](docs/operations/) — local dev, deployment, troubleshooting
+- **[schemas/](schemas/)** — interface and validation specs for primary entities.
