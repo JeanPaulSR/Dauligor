@@ -789,11 +789,35 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
     else delete normalized.configuration.size;
   } else if (type === 'ScaleValue') {
     const linkedScale = context.scalingById[configuration.scalingColumnId];
+    // dnd5e's ScaleValueAdvancement schema:
+    //   - the per-level map is `scale`, NOT `values`
+    //   - each entry is an object — `{ value: 2 }` for number/string/cr/distance
+    //     types; `{ number, faces, modifiers }` for dice
+    // Authoring stores raw values keyed by level (e.g. `"1": "2"`); convert
+    // here so dnd5e's roll-data layer surfaces `@scale.<class>.<id>`. With
+    // the wrong key/shape every `@scale.*` reference resolves as "missing
+    // data" on the actor sheet (Barbarian's Rage uses formula being a
+    // user-visible example).
+    const rawScale = linkedScale?.values || configuration.scale || configuration.values || {};
+    const scaleMap: Record<string, any> = {};
+    for (const [level, raw] of Object.entries(rawScale)) {
+      if (raw == null) continue;
+      // Pass through entries that are already in dnd5e-native object shape.
+      if (typeof raw === 'object' && !Array.isArray(raw)) {
+        scaleMap[level] = raw;
+      } else if (raw === '' || raw === undefined) {
+        continue;
+      } else {
+        scaleMap[level] = { value: raw };
+      }
+    }
+
     normalized.configuration = {
       ...configuration,
       identifier: trimString(configuration.identifier) || linkedScale?.identifier || slugify(normalized.title || 'scale'),
-      values: linkedScale?.values || configuration.values || {}
+      scale: scaleMap
     };
+    delete (normalized.configuration as any).values;
     if (linkedScale?.sourceId) {
       normalized.configuration.scalingColumnId = linkedScale.sourceId;
       normalized.sourceScaleId = linkedScale.sourceId;

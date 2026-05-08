@@ -797,11 +797,30 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
     else delete normalized.configuration.size;
   } else if (type === 'ScaleValue') {
     const linkedScale = context.scalingById[configuration.scalingColumnId];
+    // dnd5e's ScaleValueAdvancement schema uses `configuration.scale`,
+    // not `values`, and each entry is an object (`{ value: 2 }` for
+    // number/string/cr/distance, `{ number, faces, modifiers }` for
+    // dice). Authoring stores raw per-level values; convert here so
+    // `@scale.<class>.<id>` resolves on the actor sheet.
+    const rawScale = linkedScale?.values || configuration.scale || configuration.values || {};
+    const scaleMap: Record<string, any> = {};
+    for (const [level, raw] of Object.entries(rawScale)) {
+      if (raw == null) continue;
+      if (typeof raw === 'object' && !Array.isArray(raw)) {
+        scaleMap[level] = raw;
+      } else if (raw === '' || raw === undefined) {
+        continue;
+      } else {
+        scaleMap[level] = { value: raw };
+      }
+    }
+
     normalized.configuration = {
       ...configuration,
       identifier: trimString(configuration.identifier) || linkedScale?.identifier || slugify(normalized.title || 'scale'),
-      values: linkedScale?.values || configuration.values || {}
+      scale: scaleMap
     };
+    delete (normalized.configuration as any).values;
     if (linkedScale?.sourceId) {
       normalized.configuration.scalingColumnId = linkedScale.sourceId;
       normalized.sourceScaleId = linkedScale.sourceId;
