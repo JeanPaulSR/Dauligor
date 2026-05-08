@@ -17,23 +17,15 @@ The shared secret between the proxy and the Worker doesn't match.
 - `R2_API_SECRET` in `.env` (or Vercel env) must equal `API_SECRET` in `worker/.dev.vars` (or the Worker's secret store in prod).
 - Restart **both** processes after editing.
 
-### `[D1] Table X is empty. Falling back to Firebase.`
-The local D1 doesn't have the requested table populated, and the call site is still using a `firebaseFallback`. Either:
-
-- Run `node scripts/migrate.js` to copy from Firestore into local D1, or
-- Run the relevant `wrangler d1 execute --local --file=migrations/0XXX_*.sql` if the table doesn't even exist yet.
-
-This is **expected** during migration. Once a table is fully on D1, the call site should pass `null` as the fallback and you'll get an empty array instead of a fall-back.
+### `[D1] Table X is empty.`
+Local D1 has the table but no rows. Either run the relevant schema migration if the table itself is missing (`wrangler d1 execute --local --file=migrations/0XXX_*.sql`), or pull a fresh snapshot from remote (`wrangler d1 export … --remote --no-schema` followed by `--local --file=…`). The procedure lives in [../database/README.md#resetting-local-dev](../database/README.md#resetting-local-dev).
 
 ### Worker won't start
 - "no D1 database bound" → run `wrangler dev` from the `worker/` directory, not the repo root.
 - "binding 'BUCKET' is not declared" → confirm `worker/wrangler.toml` matches the binding referenced in `worker/index.js`.
 
 ### `INSERT OR REPLACE` failing with `FOREIGN KEY constraint failed`
-A foreign-key column points at an ID that doesn't exist in the parent table. Common during migration when child rows are written before parent rows.
-
-- For a one-off fix in local dev, add `PRAGMA foreign_keys = OFF;` at the top of your SQL, finish the writes, then turn FKs back on.
-- For migration code, ensure parent tables are populated first. `scripts/migrate.js` orders inserts to respect FKs — when adding a new table, follow the same ordering convention.
+**Don't use `INSERT OR REPLACE`.** D1 has `PRAGMA foreign_keys = ON` by default; `INSERT OR REPLACE` resolves PK conflicts by deleting and reinserting the row, which fires `ON DELETE CASCADE` on FK children — silent data loss. Use `INSERT … ON CONFLICT(<pk>) DO UPDATE SET …` instead. See [../database-memory.md#upsert-idiom--never-use-insert-or-replace](../database-memory.md#upsert-idiom--never-use-insert-or-replace).
 
 ### Cache seems stale across tabs
 The foundation heartbeat (30-second poll on `system_metadata.last_foundation_update`) is what keeps tabs in sync.
@@ -41,9 +33,6 @@ The foundation heartbeat (30-second poll on `system_metadata.last_foundation_upd
 - Confirm `system_metadata` has a `last_foundation_update` row.
 - Confirm `App.tsx` is calling `checkFoundationUpdate()` on its interval.
 - Try `clearCache()` in the browser console (exposed via `src/lib/d1.ts`).
-
-### `INTERNAL ASSERTION FAILED` (Firestore-era error)
-This used to come from a corrupted IndexedDB cache when Firestore had persistence enabled. We're now on memory-only Firestore + D1, so this should be gone — if you see it, report it.
 
 ## Authentication
 
@@ -84,7 +73,7 @@ Same root cause as the D1 503 — the proxy can't see `R2_WORKER_URL` or `R2_API
 - In local dev, the Worker emulates R2 on disk; the file is at `worker/.wrangler/state/v3/r2/<bucket>/...`.
 
 ### Image rename loses references
-The `imageMetadata.ts` side updates D1 (or Firestore during migration) references in parallel with the R2 rename. If references break:
+The `imageMetadata.ts` side updates D1 references in parallel with the R2 rename. If references break:
 
 - The Image Manager has a "Move & Update Links" button that explicitly runs `updateImageReferences`. Use it instead of plain rename.
 - If references are already broken, the URL string is the only key — search across the relevant tables for the old URL and replace.
@@ -119,25 +108,6 @@ Override the `.prose` heights in `src/index.css`. The default `prose` class has 
 ### Sidebar doesn't collapse / expand
 The `isCollapsed` prop must be wired to a state in `App.tsx`. If toggling isn't working, confirm `previewMode` isn't accidentally overriding the role-checked branch.
 
-## Migration-specific
-
-### Same data showing up twice
-A row is in both Firestore (read via fallback) and D1 (read directly), and a list view is concatenating them.
-
-- Confirm the call site uses `fetchCollection(name, fallback)` not both `fetchCollection(...)` and a separate `getDocs(...)`.
-- The fallback only fires on empty D1 results; if D1 has even one row, the fallback is skipped.
-
-### `firebaseFallback` runs every time
-D1 returned an empty result. Either the table is genuinely empty, or the `WHERE` clause didn't match anything in D1 but does match in Firestore (column name drift, case difference, etc.).
-
-- Inspect the SQL in the network tab.
-- Run the same query in `wrangler d1 execute --local --command "..."` and verify the result.
-
-### Migration script (`migrate.js`) hangs or errors
-- Confirm `firebase-service-account.json` is present and valid.
-- Confirm local D1 has the relevant schema migrations applied.
-- The script writes SQL to a temp file under the repo root and calls `wrangler d1 execute --local --file ...` per batch — the temp file is left behind on error so you can inspect what failed.
-
 ## Production-specific
 
 ### Vercel deploy succeeded but app shows blank screen
@@ -148,7 +118,7 @@ D1 returned an empty result. Either the table is genuinely empty, or the `WHERE`
 Run `npx wrangler secret put API_SECRET` from `worker/`.
 
 ### D1 remote has different data than local
-This is normal — local has data copied from Firestore at the time you ran `migrate.js`. Remote is whatever you've explicitly applied. They are not auto-synced.
+The two are independent SQLite instances. To sync local with the current production state, dump remote and load into local: `wrangler d1 export dauligor-db --remote --output=./dump.sql --no-schema && wrangler d1 execute dauligor-db --local --file=./dump.sql`. Don't go the other direction without an explicit reason — production is the source of truth.
 
 ## Related docs
 
@@ -156,4 +126,5 @@ This is normal — local has data copied from Firestore at the time you ran `mig
 - [deployment.md](deployment.md) — production deploy steps
 - [../platform/d1-architecture.md](../platform/d1-architecture.md) — query API, cache layers
 - [../platform/auth-firebase.md](../platform/auth-firebase.md) — full auth chain
-- [../database/README.md](../database/README.md) — phase status, punchlist
+- [../database/README.md](../database/README.md) — schema philosophy, migration index, reset workflow
+- [../database-memory.md](../database-memory.md) — phase registry and the upsert-idiom guardrail

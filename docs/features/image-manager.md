@@ -102,7 +102,7 @@ Dialog for browsing and selecting from R2. Props:
 
 If any row references the URL, the deletion or rename UI shows the list before confirmation. **"Move & Update Links"** in the detail panel rewrites every found reference automatically, then renames the R2 object.
 
-> **Migration note:** Today the scan and the metadata CRUD live in [src/lib/imageMetadata.ts](../../src/lib/imageMetadata.ts), which still uses Firestore. The D1 table `image_metadata` exists but the lib hasn't been switched. See [../database/README.md](../database/README.md).
+The scan and metadata CRUD live in [src/lib/imageMetadata.ts](../../src/lib/imageMetadata.ts) and write to the `image_metadata` D1 table.
 
 ## Image life cycle (concise)
 

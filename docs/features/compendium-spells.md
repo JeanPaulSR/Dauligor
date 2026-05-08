@@ -16,7 +16,7 @@ Spell list, importer, and the lightweight summary index that powers fast browsin
 | `spells` | Full spell document (level, school, components, description, activities, effects, foundry_data, image_url, source_id, page, tags) |
 | `spell_summaries` | Light index for list/search rendering (name, identifier, level, school, tagIds, image_url, source meta) |
 
-Schema: full breakdown in [../database/migration-details/phase-4-compendium.md](../database/migration-details/phase-4-compendium.md). The `spells` table mirrors Foundry's spell shape — `system.activities`, top-level `effects`, plus `foundryDocument` (the authoritative original Foundry payload kept for round-trips).
+Schema: full breakdown in [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md). The `spells` table mirrors Foundry's spell shape — `system.activities`, top-level `effects`, plus `foundryDocument` (the authoritative original Foundry payload kept for round-trips).
 
 ## Summary index pattern
 
@@ -24,7 +24,7 @@ Listing every spell would mean fetching the full row including descriptions, act
 
 Helper module: [src/lib/spellSummary.ts](../../src/lib/spellSummary.ts).
 
-> **Migration note:** `spellSummary.ts` currently still uses Firestore directly. It's on the punchlist — see [../database/README.md](../database/README.md). The plan is to either (a) maintain `spell_summaries` as a separate D1 table backfilled on `spells` mutations, or (b) build a thin SELECT view server-side. Either way the call sites continue to use the same `subscribeSpellSummaries(...)` and `saveSpellSummary(...)` helpers.
+> **Migration status:** `spellSummary.ts` is on D1; the summary index is derived on demand from the `spells` table rather than maintained as a separate `spell_summaries` table.
 
 ## Spell list (`SpellList`)
 
@@ -139,5 +139,5 @@ The importer matches by `identifier`. Re-importing updates `foundry_data` and an
 - [compendium-options.md](compendium-options.md) — tag groups and tags
 - [foundry-export.md](foundry-export.md) — round-trip back to Foundry
 - [../ui/bbcode.md](../ui/bbcode.md) — description storage format
-- [../database/structure/spells.md](../database/structure/spells.md) — table schema (if present)
+- [../../worker/migrations/0006_spells.sql](../../worker/migrations/0006_spells.sql) — `spells` table DDL (no per-table doc yet under `docs/database/structure/`)
 - [../_archive/foundry-spell-import-research.md](../_archive/foundry-spell-import-research.md) — design notes from the import research pass

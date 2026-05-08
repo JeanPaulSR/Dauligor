@@ -13,28 +13,19 @@ The app deploys to **Vercel** (frontend + functions) and **Cloudflare** (Worker 
 | R2 bucket | Cloudflare R2 | Created once; objects are mutated by the Worker |
 | Firebase Auth | Google | No deploy step — config lives in `firebase-applet-config.json` |
 
-## The migration freeze rule
-
-While the Firestore → D1 migration is in progress, **do not push to `main`**. Vercel auto-deploys on push and would publish an unfinished migration to production users.
-
-The rollback reference is `E:\DnD\Professional\Dev\Pre-Update\Dauligor-main` — a snapshot of the working Firestore-era code. If a deploy breaks production, that's the recovery point.
-
-The freeze ends when the [punchlist in docs/database/README.md](../database/README.md#remaining-firestore-cut-punchlist) is empty AND the app has been validated end-to-end against local D1.
-
 ## Frontend + Vercel functions
 
-Once the freeze lifts, deploys are straightforward:
-
-1. `git push origin main` (or merge a PR into `main`).
-2. Vercel rebuilds and ships within a few minutes.
-3. Watch Vercel's deploy logs for build errors.
+`git push origin main` (or merge a PR into `main`) triggers an auto-deploy. Vercel rebuilds and ships within a few minutes; watch the deploy logs for build errors.
 
 Required Vercel env vars (set in the project settings, **not** in source):
 
-- `R2_WORKER_URL` — `https://dauligor-storage.<account>.workers.dev` (or custom domain)
+- `R2_WORKER_URL` — `https://dauligor-storage.<account>.workers.dev` (or a custom domain)
 - `R2_API_SECRET` — must match the Worker's `API_SECRET`
-- `FIREBASE_SERVICE_ACCOUNT_JSON` — service-account JSON, all on one line
-- `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID` — only if overriding defaults
+- `FIREBASE_SERVICE_ACCOUNT_JSON` — service-account JSON, all on one line. Required by the admin endpoints in `api/admin/*` and the JWT verifier in `api/_lib/firebase-admin.ts`. (See [memory: Firebase Auth exit plan](#) for the queued JWKS-based replacement that drops this dependency.)
+
+### Vercel cross-folder bundling caveat
+
+Vercel's serverless bundler in this project does **not** reliably traverse cross-folder imports from `api/` into `src/lib/`. Two attempts at `import { exportClassSemantic } from "../src/lib/classExport.js"` from `api/module.ts` crashed the function on load with `FUNCTION_INVOCATION_FAILED`. Workaround: keep server-only deps in `api/_lib/` as siblings (e.g. `api/_lib/_classExport.ts` mirrors `src/lib/classExport.ts`). Anything imported by a Vercel function should already live under `api/`.
 
 ## Cloudflare Worker
 
@@ -52,7 +43,7 @@ npx wrangler secret put API_SECRET
 # paste the production secret value when prompted
 ```
 
-`R2_PUBLIC_URL` is in `[vars]` in `wrangler.toml` (not a secret) and will deploy with the Worker.
+`R2_PUBLIC_URL` is in `[vars]` in `wrangler.toml` (not a secret) and ships with the Worker.
 
 Bindings (`BUCKET` for R2, `DB` for D1) are also defined in `wrangler.toml` and applied on deploy.
 
@@ -68,9 +59,19 @@ npx wrangler d1 execute dauligor-db --remote --file=migrations/00NN_*.sql
 
 Once a migration has been applied to remote D1, it cannot be cleanly reversed without writing a counter-migration. Treat `--remote` as a one-way door.
 
-### Migrating data from Firestore to remote D1
+### Bulk data ops (rare)
 
-`scripts/migrate.js` writes to local D1 by default. To target remote, edit the `executeBatch` call to drop the `--local` flag — but only do this once for each table, after the schema is finalised. The migration is non-destructive (Firestore is unchanged), but re-running it on remote with a different schema can leave inconsistent rows.
+If you ever need to copy local D1 → remote (e.g. after rebuilding local from scratch and wanting remote to match):
+
+```bash
+cd worker
+npx wrangler d1 export dauligor-db --local --output=./local-dump.sql --no-schema
+# Wipe rows you want to overwrite, then:
+npx wrangler d1 execute dauligor-db --remote --file=./local-dump.sql
+rm ./local-dump.sql
+```
+
+Don't commit dumps; they're in `.gitignore` (`worker/*-dump.sql`).
 
 ## R2 bucket
 
@@ -78,43 +79,22 @@ The bucket exists once, in production. `worker/wrangler.toml` references it by n
 
 If you ever need to reorganise the bucket, do it via the Worker's `/move-folder` endpoint (called from the Image Manager UI). Direct R2 console operations bypass the metadata sync that `imageMetadata` depends on.
 
-## Order of operations for a complete deploy
-
-When you eventually ship the migration, the safe sequence is:
-
-1. **Confirm punchlist is empty** — every Firestore touchpoint is gone or behind a `firebaseFallback: null`.
-2. **Local validation** — every editor and read path works against local D1.
-3. **Apply remote D1 migrations** in order.
-4. **Run `migrate.js` against remote** to copy live Firestore data into remote D1.
-5. **Deploy the Worker** (`wrangler deploy`).
-6. **Push to `main`** — Vercel deploys the new app.
-7. **Verify production** — sign in, exercise critical paths.
-8. **Don't delete Firestore yet.** Leave it as a read-only fallback for at least a few days.
-9. **After a soak period** with no issues: delete `firestore.rules`, `firebase.json`, `firebase-blueprint.json`, `storage.rules`, the `firebase/firestore` import from `src/lib/firebase.ts`, and the legacy `migration-firebase-side/` reference folder.
-
 ## Rolling back
 
-The intended rollback is **branch-level**, not table-level:
+The intended rollback is **branch-level**:
 
-- If a deploy fails, revert the merge commit on `main`. Vercel auto-deploys the revert.
-- If D1 is corrupt, the local D1 + the Pre-Update reference are both still intact.
-- If R2 is unaffected by the deploy, no R2 rollback is needed.
-
-Per-row data loss in D1 is recoverable from the Firestore copy (during the migration window) by re-running `migrate.js`.
+- If a deploy fails, revert the offending commit on `main`. Vercel auto-deploys the revert.
+- If a Worker deploy regresses behaviour, redeploy the prior commit's `worker/index.js` (`git checkout <hash> -- worker/index.js && cd worker && npx wrangler deploy`).
+- If a remote D1 migration introduced a bad column, write a counter-migration that drops/renames it. SQLite has limited `ALTER TABLE` support; sometimes the cleanest path is a follow-up migration that creates a new table, copies rows, drops the old, and renames.
 
 ## Pre-deploy checklist
 
-For each deploy that touches the migration:
-
-- [ ] Punchlist updated and empty (or this deploy is a non-migration change)
-- [ ] All `firebaseFallback` calls reviewed for the affected feature
-- [ ] Local D1 has the latest migration applied
-- [ ] Local app exercises the affected feature without errors
-- [ ] Network tab shows `/api/d1/query` calls returning `200`, no `503` or `401`
-- [ ] `[D1]` console logs show successful reads/mutations
-- [ ] Vercel env vars present and correct (`R2_WORKER_URL` points to **prod** Worker)
-- [ ] Worker is on the latest version (`npx wrangler deploy`)
-- [ ] D1 remote has the same schema state as local
+- [ ] `npm run build` clean locally
+- [ ] `npx tsc --noEmit` count is at the documented baseline (or lower)
+- [ ] If a D1 migration is part of the change: `--local` applied + tested before `--remote`
+- [ ] If `worker/index.js` changed: `wrangler deploy` ready to run
+- [ ] If the export shape changed: both `src/lib/classExport.ts` AND `api/_lib/_classExport.ts` updated together (drift contract — see [../architecture/foundry-integration.md §6](../architecture/foundry-integration.md#6-how-the-pipeline-is-wired-today))
+- [ ] Vercel env vars confirmed (`R2_WORKER_URL` points to the **prod** Worker)
 - [ ] Production smoke test: sign in, view a class, edit a lore article, upload an image
 
 ## Related docs
@@ -122,4 +102,5 @@ For each deploy that touches the migration:
 - [local-dev.md](local-dev.md) — local setup, two-terminal workflow
 - [troubleshooting.md](troubleshooting.md) — recovery from deploy mishaps
 - [../platform/env-vars.md](../platform/env-vars.md) — every env var, prod-vs-dev values
-- [../database/README.md](../database/README.md) — punchlist and phase status
+- [../database/README.md](../database/README.md) — schema philosophy and migration index
+- [../architecture/foundry-integration.md](../architecture/foundry-integration.md) — Foundry export pipeline + drift contract

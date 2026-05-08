@@ -31,12 +31,11 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [auth-firebase.md](platform/auth-firebase.md) — what stays from Firebase (Auth only), JWT flow, RBAC server-side helpers
 - [env-vars.md](platform/env-vars.md) — every env var, where it's read, and example values
 
-### [database/](database/) — D1 schema and migration
-*The SQL data layer that replaces Firestore.*
+### [database/](database/) — D1 schema
+*The SQL data layer. Migration from Firestore is complete; that history lives under [_archive/](_archive/).*
 
-- [README.md](database/README.md) — phase status, remaining-Firestore-cut punchlist
-- [structure/](database/structure/) — one doc per table (sources, classes, characters, lore_articles, …)
-- [migration-details/](database/migration-details/) — phase-by-phase migration plans
+- [README.md](database/README.md) — schema philosophy, migration index, reset workflow
+- [structure/](database/structure/) — one doc per table (sources, classes, characters, lore_articles, …); 16 files
 
 ### [features/](features/) — domain-specific behaviour
 *One doc per feature. UI work in feature X should not require reading feature Y.*
@@ -76,14 +75,14 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 *Setup, deployment, and what to do when things break.*
 
 - [local-dev.md](operations/local-dev.md) — two-terminal setup, env vars, common gotchas
-- [deployment.md](operations/deployment.md) — Vercel deploy flow, Worker deploy, when **not** to commit
+- [deployment.md](operations/deployment.md) — Vercel deploy flow, Worker deploy, D1 schema migrations
 - [troubleshooting.md](operations/troubleshooting.md) — D1 errors, cache resets, JWT issues, permission failures
 
 ### [_archive/](_archive/) — historical / pre-migration
 *Reference only. Do not rely on these for current behaviour.*
 
-- Old Firestore schema and rules
-- Pre-migration session logs (`agent-memory.md`)
+- Pre-migration Firestore schema, rules, and session logs (`agent-memory.md`)
+- Phase-by-phase migration plans (`migration-details/`) and the Firestore-cut punchlist
 - Older versions of consolidated docs
 
 ---

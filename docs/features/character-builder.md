@@ -8,7 +8,7 @@ Multi-step character creation with Foundry-VTT-compatible export. The builder is
 |---|---|
 | `/characters/:id` | [src/pages/characters/CharacterBuilder.tsx](../../src/pages/characters/CharacterBuilder.tsx) |
 
-> **Migration note:** This page still has ~25 direct Firestore reads. It's the largest single item on the [Firestore-cut punchlist](../database/README.md#remaining-firestore-cut-punchlist).
+> **Migration status:** all read/write paths on this page are on D1. The historical migration note (this was the largest item on the now-archived Firestore-cut punchlist) is preserved for context only. The `~30` D1 calls in `CharacterBuilder.tsx` were migrated cluster-by-cluster, with the data-loading effect later split into a separate `loadTick` dependents effect to avoid full-page reloads on individual saves.
 
 ## Data layer
 
@@ -21,7 +21,7 @@ Multi-step character creation with Foundry-VTT-compatible export. The builder is
 | `character_spells` | Prepared / known spells |
 | `character_proficiencies` | Skill / save / armour / weapon / tool / language proficiencies |
 
-Schema: [../database/structure/characters.md](../database/structure/characters.md), [../database/migration-details/phase-5-characters.md](../database/migration-details/phase-5-characters.md).
+Schema: [../database/structure/characters.md](../database/structure/characters.md), [../_archive/migration-details/phase-5-characters.md](../_archive/migration-details/phase-5-characters.md).
 
 The character document also holds two derived blobs:
 - `progressionState` — the canonical progression-owned state (class packages, owned features, owned items, owned spells)
@@ -148,5 +148,5 @@ Source: [src/lib/characterExport.ts](../../src/lib/characterExport.ts). Also see
 - [compendium-spells.md](compendium-spells.md) — spell side
 - [foundry-export.md](foundry-export.md) — actor bundle export contract
 - [../architecture/reference-syntax.md](../architecture/reference-syntax.md) — `@scale.*`, `@prof`, `@level` resolution
-- [../database/structure/characters.md](../database/structure/characters.md), [../database/migration-details/phase-5-characters.md](../database/migration-details/phase-5-characters.md)
+- [../database/structure/characters.md](../database/structure/characters.md), [../_archive/migration-details/phase-5-characters.md](../_archive/migration-details/phase-5-characters.md)
 - [../_archive/class-progression-architecture.md](../_archive/class-progression-architecture.md), [../_archive/character-builder-progression-owned-state-outline.md](../_archive/character-builder-progression-owned-state-outline.md) — design notes

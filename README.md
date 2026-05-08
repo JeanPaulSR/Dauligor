@@ -14,7 +14,7 @@ A specialized D&D 5e campaign-management workspace: hierarchical lore wiki, mech
 - **Auth**: Firebase Authentication (JWT layer only)
 - **Hosting**: Vercel functions; local dev uses Express (`server.ts`) that mirrors the same routes
 
-The app is mid-migration from Firestore to D1 — see [AGENTS.md](AGENTS.md) for the rules and [docs/database/README.md](docs/database/README.md) for current phase status.
+The Firestore→D1 migration is complete; the app is live at [dauligor.com](https://www.dauligor.com). See [AGENTS.md](AGENTS.md) for the rules and [docs/database/README.md](docs/database/README.md) for the database layout.
 
 ## Run locally
 
@@ -45,4 +45,4 @@ The Express server reads `R2_WORKER_URL=http://localhost:8787` from `.env` and p
   - [ui/](docs/ui/) — style guide, theming, BBCode, content rendering
   - [architecture/](docs/architecture/) — routing, RBAC, foundry integration, reference syntax
   - [operations/](docs/operations/) — local dev, deployment, troubleshooting
-- **[schemas/](schemas/)** — interface and validation specs for primary entities.
+- **[docs/database/structure/](docs/database/structure/)** — per-table SQL schema specs.

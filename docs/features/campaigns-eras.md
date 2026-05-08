@@ -20,7 +20,7 @@ Campaign containers and world-timeline eras. Lore visibility, character context,
 
 Plus user-side: `users.active_campaign_id` records each user's last-selected campaign.
 
-Schema: [../database/structure/eras.md](../database/structure/eras.md), [../database/structure/campaigns.md](../database/structure/campaigns.md), [../database/migration-details/phase-2-identity.md](../database/migration-details/phase-2-identity.md).
+Schema: [../database/structure/eras.md](../database/structure/eras.md), [../database/structure/campaigns.md](../database/structure/campaigns.md), [../_archive/migration-details/phase-2-identity.md](../_archive/migration-details/phase-2-identity.md).
 
 ## Eras
 

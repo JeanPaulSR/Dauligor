@@ -25,7 +25,7 @@ Most editors also use shared components in `src/components/compendium/` — `Adv
 | `spellcasting_progressions` | Standard / pact / known progression tables |
 | `multiclass_master_chart` | Standard multiclass slot table |
 
-Full schema: [../database/structure/classes.md](../database/structure/classes.md) and [../database/migration-details/phase-4-compendium.md](../database/migration-details/phase-4-compendium.md).
+Full schema: [../database/structure/classes.md](../database/structure/classes.md) and [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md).
 
 ## Filtering (`ClassList`)
 

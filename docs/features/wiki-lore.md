@@ -26,7 +26,7 @@ The world-building layer: hierarchical articles, DM secrets, NPC/location/organi
 | `lore_article_tags` | Tag assignment |
 | `lore_links` | Article-to-article cross-references |
 
-Full schema: [../database/structure/lore_articles.md](../database/structure/lore_articles.md), [../database/structure/lore_meta_characters.md](../database/structure/lore_meta_characters.md), and [../database/migration-details/phase-3-wiki.md](../database/migration-details/phase-3-wiki.md).
+Full schema: [../database/structure/lore_articles.md](../database/structure/lore_articles.md), [../database/structure/lore_meta_characters.md](../database/structure/lore_meta_characters.md), and [../_archive/migration-details/phase-3-wiki.md](../_archive/migration-details/phase-3-wiki.md).
 
 Helper module: [src/lib/lore.ts](../../src/lib/lore.ts).
 
@@ -77,11 +77,13 @@ DM notes (a single `dm_notes` column on `lore_articles`) are staff-only — neve
 
 ## Map (`Map.tsx`)
 
-A geographic surface for placing markers that link back to lore articles. Currently a thin layer:
-- Markers are rows in `lore` (legacy collection name during migration); each marker references an `articleId`.
-- Click-through opens the linked article.
+A geographic surface for placing markers that link back to lore articles. Backed by relational tables added in [`worker/migrations/0017_map_markers.sql`](../../worker/migrations/0017_map_markers.sql):
 
-This page is in the punchlist for Firestore-cut — it still uses direct `onSnapshot` on the legacy `lore` collection. Switch to `lore_articles` via D1.
+- `maps` — era-scoped map images, with optional `parent_marker_id` / `parent_highlight_id` for submap navigation.
+- `map_markers` — pin entities; each can reference an `article_id` (SET NULL on article delete).
+- `map_highlights` — region overlays with the same article-link convention.
+
+Click-through opens the linked article.
 
 ## Image references and deletion
 
@@ -98,12 +100,9 @@ When deleting an image from the Image Manager, `scanForReferences(url)` queries 
 ### Make a secret visible to a campaign
 The secret editor in `LoreEditor.tsx` writes to `lore_secret_campaigns`. The reader query joins on `active_campaign_id`.
 
-### Migrate the Map page off Firestore
-- Replace `onSnapshot(query(collection(db, 'lore'), …))` with a polling D1 query, or move markers into `lore_articles` directly with a `category='map-marker'` style field.
-
 ## Related docs
 
-- [../database/structure/lore_articles.md](../database/structure/lore_articles.md), [../database/structure/lore_meta_characters.md](../database/structure/lore_meta_characters.md), [../database/migration-details/phase-3-wiki.md](../database/migration-details/phase-3-wiki.md)
+- [../database/structure/lore_articles.md](../database/structure/lore_articles.md), [../database/structure/lore_meta_characters.md](../database/structure/lore_meta_characters.md)
 - [../ui/bbcode.md](../ui/bbcode.md) — rich-text storage format
 - [../ui/content-rendering.md](../ui/content-rendering.md) — recursive entry types
 - [image-manager.md](image-manager.md) — image upload flow used by hero/card/preview slots

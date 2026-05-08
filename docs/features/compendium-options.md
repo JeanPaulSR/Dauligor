@@ -27,7 +27,7 @@ A "group" is a pool of mutually-exclusive (or stacking, depending on `is_repeata
 | `unique_option_groups` | Group identity, description, source, `class_ids` (JSON) restricting which classes see it |
 | `unique_option_items` | Items belonging to groups; `group_id` FK; level/string prerequisites; `is_repeatable` |
 
-Schema: [../database/structure/](../database/structure/), [../database/migration-details/phase-1-foundation.md](../database/migration-details/phase-1-foundation.md).
+Schema: [../database/structure/](../database/structure/), [../_archive/migration-details/phase-1-foundation.md](../_archive/migration-details/phase-1-foundation.md).
 
 ### Group-level class restriction
 `class_ids` (JSON array on `unique_option_groups`) controls which classes see the entire group in the advancement editor's option group selector. Empty = visible to every class. Restricted = only the listed classes. **This is a group-level field**, not a per-item one.
@@ -114,15 +114,13 @@ WHERE advancements LIKE '%"optionGroupId":"<group-id>"%';
 
 (JSON-LIKE is slow but tolerable for occasional admin queries.)
 
-## Migration note
+## Table mapping
 
-The `D1_TABLE_MAP` in [src/lib/d1.ts](../../src/lib/d1.ts) maps:
+The `D1_TABLE_MAP` in [src/lib/d1Tables.ts](../../src/lib/d1Tables.ts) maps:
 - `uniqueOptionGroups` → `unique_option_groups`
 - `uniqueOptionItems` → `unique_option_items`
 - `tagGroups` → `tag_groups`
 - `tags` → `tags`
-
-Several editors still have direct Firestore calls in transition. See [../database/README.md](../database/README.md) for the punchlist.
 
 ## Related docs
 

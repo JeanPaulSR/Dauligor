@@ -26,7 +26,7 @@ npx wrangler login        # only the first time
 |---|---|
 | `.env` | Server env vars for the Express dev server |
 | `worker/.dev.vars` | Worker secrets for `wrangler dev` |
-| `firebase-service-account.json` | Admin SDK credential — used by Express + `scripts/migrate.js` |
+| `firebase-service-account.json` | Firebase Admin SDK credential — used by Express to verify JWTs in admin endpoints. Required only if you exercise admin features locally; without it, the admin routes return 503 but the rest of the app works. |
 
 #### Sample `.env`
 ```
@@ -47,27 +47,28 @@ The two `*_SECRET` values must match. See [../platform/env-vars.md](../platform/
 
 ### Bootstrap the local D1 database
 
-If `worker/.wrangler/state/` doesn't already contain a populated database, run the schema migrations and copy live data into local D1:
+If `worker/.wrangler/state/` doesn't already contain a populated database, apply the full migration chain locally and pull a snapshot of remote D1's data:
 
 ```bash
+# 1. Apply the schema chain locally (skips the stillborn 0016).
 cd worker
-npx wrangler d1 execute dauligor-db --local --file=migrations/0001_phase1_foundation.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0002_phase2_identity.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0003_phase3_lore.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0004_items.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0005_feats.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0006_spells.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0007_features.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0008_classes.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0009_scalings.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0010_characters.sql
-npx wrangler d1 execute dauligor-db --local --file=migrations/0011_system_metadata.sql
+for f in migrations/0001_*.sql migrations/0002_*.sql migrations/0003_*.sql \
+         migrations/0004_*.sql migrations/0005_*.sql migrations/0006_*.sql \
+         migrations/0007_*.sql migrations/0008_*.sql migrations/0009_*.sql \
+         migrations/0010_*.sql migrations/0011_*.sql migrations/0012_*.sql \
+         migrations/0013_*.sql migrations/0014_*.sql migrations/0015_*.sql \
+         migrations/0017_*.sql; do
+  npx wrangler d1 execute dauligor-db --local --file="$f"
+done
 
+# 2. Snapshot remote → local so you have the same content as production.
+npx wrangler d1 export dauligor-db --remote --output=./remote-dump.sql --no-schema
+npx wrangler d1 execute dauligor-db --local --file=./remote-dump.sql
+rm ./remote-dump.sql
 cd ..
-node scripts/migrate.js
 ```
 
-`migrate.js` reads from Firestore and writes to **local** D1 only. It is idempotent: re-running it overwrites the local rows but never touches Firestore.
+`scripts/migrate.js` is the historical Firestore→D1 importer; it is **not** part of the regular dev loop and should not be run today. Use the remote-snapshot pattern above to refresh local data instead.
 
 ## Daily run
 
@@ -119,16 +120,30 @@ End-to-end check from the running app:
 
 ## Resetting the local DB
 
-When iterating on schema, it's faster to nuke and re-migrate than to write reversal migrations:
+When iterating on schema, it's faster to nuke and re-apply than to write reversal migrations. The full procedure (including the gotcha that `9999_cleanup.sql` only drops Phase 1+2 tables and trips FK checks) lives in [../database/README.md#resetting-local-dev](../database/README.md#resetting-local-dev). The short version is:
 
 ```bash
-cd worker
-npx wrangler d1 execute dauligor-db --local --file=migrations/9999_cleanup.sql
-# then re-apply migrations 0001 through 0011
-# then re-run node ../scripts/migrate.js from the project root
+# 1. Stop wrangler dev (it locks the sqlite file).
+# 2. Delete the local D1 sqlite file under worker/.wrangler/state/v3/d1/...
+# 3. Re-apply the migration chain (0001 → 0017, skipping 0016).
+# 4. Optionally pull a fresh snapshot from remote.
 ```
 
 **Local only.** Never run `9999_cleanup.sql` with `--remote`.
+
+## Testing the Foundry pairing module locally
+
+The module's importer can hit either the live Vercel API (`https://www.dauligor.com/api/module/sources`) or the local Express server (`http://localhost:3000/api/module/sources`). Toggle via the **API Endpoint Mode** module setting in Foundry's *Configure Settings → Module Settings → Dauligor Pairing*.
+
+For local testing:
+
+1. Start the two dev terminals as above.
+2. Make sure the Foundry module install at `<FoundryUserData>/Data/modules/dauligor-pairing/` is in sync with the repo's [module/dauligor-pairing/](../../module/dauligor-pairing/) — `scripts/main.js` and `module.json` are the files most likely to drift between repo edits and your install. (A symlink avoids manual syncing; on Windows requires Developer Mode or admin shell.)
+3. Set the module's *API Endpoint Mode* setting to `local`.
+4. Restart the Foundry world. The console should log `dauligor-pairing | Registered libWrapper for remote class/subclass image handling.` on init.
+5. Open the importer (sidebar tools button or actor-sheet header) → pick a source → pick a class → import.
+
+The local Express path uses `exportClassSemantic` from [src/lib/classExport.ts](../../src/lib/classExport.ts); production uses [api/_lib/_classExport.ts](../../api/_lib/_classExport.ts). Both must produce identical bundles — see the drift contract in [../architecture/foundry-integration.md §6](../architecture/foundry-integration.md#6-how-the-pipeline-is-wired-today).
 
 ## Common gotchas
 

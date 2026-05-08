@@ -18,7 +18,7 @@ Feats and item records share the same editor scaffolding as features in [compend
 | `feats` | `id`, `name`, `identifier`, `feat_type`, `source_type`, `requirements`, `repeatable`, `uses_max`, `uses_spent`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
 | `items` | `id`, `name`, `identifier`, `item_type`, `rarity`, `quantity`, `weight`, `price_value`, `price_denomination`, `attunement` (BOOL), `equipped`, `identified`, `magical`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
 
-Schema: [../database/structure/](../database/structure/), [../database/migration-details/phase-4-compendium.md](../database/migration-details/phase-4-compendium.md).
+Schema: [../database/structure/](../database/structure/), [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md).
 
 ## Feats
 
@@ -91,4 +91,4 @@ ORDER BY name;
 - [compendium-options.md](compendium-options.md) — tags
 - [character-builder.md](character-builder.md) — how feats and items end up on a character
 - [foundry-export.md](foundry-export.md) — feats/items in actor bundle export
-- [../database/migration-details/phase-4-compendium.md](../database/migration-details/phase-4-compendium.md)
+- [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md)

@@ -11,7 +11,7 @@ Scaling tables drive any value on a class sheet that depends on level: cantrip d
 | `multiclass_master_chart` | Standard multiclass-caster slot table |
 | `spellcasting_types` | Reference list of spellcasting types and their formulas |
 
-Schema: [../database/structure/spellcasting_progressions.md](../database/structure/spellcasting_progressions.md) and [../database/migration-details/phase-1-foundation.md](../database/migration-details/phase-1-foundation.md) (foundation), [../database/migration-details/phase-4-compendium.md](../database/migration-details/phase-4-compendium.md) (scaling columns).
+Schema: [../database/structure/spellcasting_progressions.md](../database/structure/spellcasting_progressions.md) and [../_archive/migration-details/phase-1-foundation.md](../_archive/migration-details/phase-1-foundation.md) (foundation), [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md) (scaling columns).
 
 ## Scaling columns
 
@@ -135,11 +135,9 @@ These all back onto a single `spellcasting_progressions` D1 table, discriminated
 - [src/pages/compendium/scaling/SpellsKnownScalingEditor.tsx](../../src/pages/compendium/scaling/SpellsKnownScalingEditor.tsx) — could fold in or stay separate (the data shape is genuinely different).
 - [src/pages/admin/SpellcastingAdvancementManager.tsx](../../src/pages/admin/SpellcastingAdvancementManager.tsx) — admin panel listing all progressions; needs the link cleanup and a `fetchCollection`-based reload pattern (not `onSnapshot`).
 
-## Migration note
+## Table mapping
 
-`spellcastingScalings`, `pactMagicScalings`, and `spellsKnownScalings` are all consolidated under the single `spellcasting_progressions` D1 table. The `D1_TABLE_MAP` in [src/lib/d1.ts](../../src/lib/d1.ts) routes all three legacy collection names to it.
-
-`SpellcastingAdvancementManager.tsx` still uses `onSnapshot`/`deleteDoc` on the legacy Firestore collections — see [../database/README.md](../database/README.md) for the punchlist.
+`spellcastingScalings`, `pactMagicScalings`, and `spellsKnownScalings` are all consolidated under the single `spellcasting_progressions` D1 table. The `D1_TABLE_MAP` in [src/lib/d1Tables.ts](../../src/lib/d1Tables.ts) routes all three legacy collection names to it; rows distinguish themselves by a `type` column (`standard`, `pact`, `known`).
 
 ## Related docs
 

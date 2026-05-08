@@ -2,10 +2,11 @@
 
 How CRUD currently works in the app, the four patterns in use, and the post-migration cleanup roadmap.
 
+> **Migration status:** The Firestore→D1 cut is complete. Any references to the "Firestore-cut punchlist" or `firebaseFallback` patterns in the rest of this document are historical — the linked punchlist now lives under [docs/_archive/](../_archive/). Read those notes for context, not as current TODO.
+
 > **When to read this doc:**
 > - You're adding a new editor for a new entity type → use the [Decision tree](#decision-tree).
 > - You're refactoring an existing editor → check [Post-migration cleanup roadmap](#post-migration-cleanup-roadmap).
-> - You just finished the [Firestore-cut punchlist](../database/firestore-cut-punchlist.md) → start at [Post-migration cleanup roadmap](#post-migration-cleanup-roadmap).
 
 ---
 
@@ -103,7 +104,7 @@ If your new entity has 0 junctions and just sits in a table, pick A or C. If it 
 
 ## Post-migration cleanup roadmap
 
-> **Read this when** the [Firestore-cut punchlist](../database/firestore-cut-punchlist.md) Phase E is complete (Firestore client deleted, `firestore.rules` removed, all `firebaseFallback` args are `null`).
+> **Read this when** the [Firestore-cut punchlist](../_archive/firestore-cut-punchlist.md) Phase E is complete (Firestore client deleted, `firestore.rules` removed, all `firebaseFallback` args are `null`).
 >
 > **Don't start any of this mid-migration.** Refactoring while still half-on-Firestore creates more risk than the cleanup is worth.
 
@@ -163,18 +164,22 @@ Estimated total effort: 1 focused week, broken across the priorities below.
     - `slugify` callers in editors — when an editor auto-generates an identifier from name (e.g., [src/components/compendium/DevelopmentCompendiumManager.tsx](../../src/components/compendium/DevelopmentCompendiumManager.tsx) at save time), append the source slug if the entity has a `sourceId`.
   - **Migration path for existing identifiers**: a sweep-and-rename script that scans for collision-prone identifiers, resolves the source for each, and rewrites in place. Same pattern as `scripts/rename-blade-of-disaster.js` but generalised across spells/feats/items/classes/subclasses. Prefer to run this once before final Firestore cut so D1 stays clean from the start.
 
-### Priority 7 — Final Firestore-removal cleanup
-*Pulled from the [Firestore-cut punchlist](../database/firestore-cut-punchlist.md) Phase E for completeness*
+### Priority 7 — Final Firestore-removal cleanup ✅
 
-- [ ] Delete [src/lib/firebase.ts](../../src/lib/firebase.ts) Firestore init (keep only Auth).
-- [ ] Remove `firebase/firestore` import from every file across `src/`.
-- [ ] Delete top-level `firestore.rules`, `firebase.json`, `firebase-blueprint.json`, `storage.rules`.
-- [ ] Move `migration-firebase-side/` to `docs/_archive/firestore-source-mapping/`.
-- [ ] Move `scripts/migrate.js`, `scripts/migrate_subclasses.js`, `scripts/check_firestore.js`, `scripts/cleanup-firestore-orphans.js`, `scripts/delete-replaced-sorcerer-set.js`, and `scripts/_audit-*.py` to `scripts/_archive/`.
-- [ ] Remove `firebase-admin` from `package.json` dependencies if no longer needed (the Vercel/Express proxy still uses it for JWT verification — verify before removing).
-- [ ] Update [AGENTS.md](../../AGENTS.md): drop the migration-rules section; keep "no direct Firestore" as a permanent rule against regressions.
-- [ ] Move [docs/database/firestore-cut-punchlist.md](../database/firestore-cut-punchlist.md) and [docs/database/migration-walkthrough-spellsummary.md](../database/migration-walkthrough-spellsummary.md) to `docs/_archive/`.
-- [ ] Update [docs/database/README.md](../database/README.md) — remove punchlist, mark all phases COMPLETE.
+The Firestore-cut shipped in 2026-05. This section's tasks are complete:
+
+- [x] [src/lib/firebase.ts](../../src/lib/firebase.ts) is auth-only with a guardrail comment forbidding `firebase/firestore` imports.
+- [x] Every `firebase/firestore` import is gone from `src/`, `api/`, and `server.ts`.
+- [x] `firestore.rules`, `firebase.json`, `firebase-blueprint.json`, `storage.rules` deleted.
+- [x] `migration-firebase-side/` deleted (it was field-level Firestore captures used during migration).
+- [x] [AGENTS.md](../../AGENTS.md) updated: post-migration framing throughout, no-firestore-imports kept as a permanent rule.
+- [x] [docs/_archive/firestore-cut-punchlist.md](../_archive/firestore-cut-punchlist.md) and [docs/_archive/migration-walkthrough-spellsummary.md](../_archive/migration-walkthrough-spellsummary.md) archived.
+- [x] [docs/database/README.md](../database/README.md) rewritten as a current-state document (no punchlist; all phases marked complete).
+
+Still open as a follow-up:
+
+- [ ] **Drop the Firebase Admin SDK dependency.** `api/_lib/firebase-admin.ts` and `server.ts` still call `auth.verifyIdToken()` for JWT verification. Replace with manual JWKS verification via `jose` (~1 day). Plan in memory: `~/.claude/projects/E--DnD-Professional-Dev-Dauligor/memory/project_firebase_auth_exit_plan.md`. After this, `firebase-admin` and `firebase-service-account.json` go away.
+- [ ] **Move historical migration scripts to `scripts/_archive/`** (`migrate.js`, `migrate_subclasses.js`, `check_firestore.js`, `cleanup-firestore-orphans.js`, `delete-replaced-sorcerer-set.js`, `_audit-*.py`). Optional housekeeping; they don't interfere by living in `scripts/`.
 
 ---
 
@@ -182,7 +187,7 @@ Estimated total effort: 1 focused week, broken across the priorities below.
 
 This doc is intentionally short on cross-references to keep it usable. The **single trigger to revisit it**:
 
-> When [docs/database/firestore-cut-punchlist.md](../database/firestore-cut-punchlist.md) is fully checked off (every box ticked), open this file and start at Priority 1.
+> When [docs/_archive/firestore-cut-punchlist.md](../_archive/firestore-cut-punchlist.md) is fully checked off (every box ticked), open this file and start at Priority 1.
 
 Each priority section has independent checkboxes. You can pick them off in any order, though Priority 1 (pattern consolidation) is what makes the others easier.
 
@@ -190,7 +195,7 @@ When a priority is complete, move its checkbox section into a "Completed" subsec
 
 ## Related docs
 
-- [../database/firestore-cut-punchlist.md](../database/firestore-cut-punchlist.md) — the migration we're finishing first
+- [../_archive/firestore-cut-punchlist.md](../_archive/firestore-cut-punchlist.md) — the migration we're finishing first
 - [../platform/d1-architecture.md](../platform/d1-architecture.md) — the foundation this all builds on
 - [../features/compendium-classes.md](../features/compendium-classes.md) — class-editor specifics, including the cascade-delete TODO
 - [../features/compendium-spells.md](../features/compendium-spells.md), [compendium-feats-items.md](../features/compendium-feats-items.md), [compendium-options.md](../features/compendium-options.md), [compendium-scaling.md](../features/compendium-scaling.md) — per-entity feature docs

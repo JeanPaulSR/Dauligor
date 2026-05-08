@@ -146,36 +146,15 @@ If you add a new JSON-stored column, also add it to the auto-parse list in `d1.t
 
 `upsertDocument` automatically stringifies any object value, so the write side requires no special handling.
 
-## Migration patterns
-
-### `firebaseFallback` — the migration safety net
-
-`fetchCollection` and `fetchDocument` accept a `firebaseFallback` parameter. While migrating a call site:
-
-```ts
-// Step 1 — wrap legacy code in fallback
-const rows = await fetchCollection('classes', async () => {
-  const snap = await getDocs(collection(db, 'classes'));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-});
-
-// Step 2 — once D1 is verified for this call site, pass null
-const rows = await fetchCollection('classes', null);
-```
-
-When the fallback is `null`, the helper is in **D1-only mode**: an empty result is returned as `[]` (or `null` for `fetchDocument`). When the fallback is provided, an empty D1 result triggers the fallback, with a console warning and (on error) a toast.
-
-**The migration finishes when every call site uses `null` and `firebase/firestore` imports can be removed.**
-
-### Adding a new table
+## Adding a new table
 
 1. Add the schema to a new `worker/migrations/00NN_*.sql` file.
 2. Apply locally: `cd worker && npx wrangler d1 execute dauligor-db --local --file migrations/00NN_*.sql`.
-3. Add an entry to `D1_TABLE_MAP` in `d1.ts`.
-4. If the new table holds JSON columns, add them to the auto-parse list.
+3. Add an entry to `D1_TABLE_MAP` in [src/lib/d1Tables.ts](../../src/lib/d1Tables.ts). Mirror it in [api/_lib/d1-fetchers-server.ts](../../api/_lib/d1-fetchers-server.ts) if the table is also read by server-side endpoints.
+4. If the new table holds JSON columns, add them to the auto-parse list in `src/lib/d1.ts:queryD1` (and the matching list in `api/_lib/d1-fetchers-server.ts`).
 5. Add it to `PERSISTENT_TABLES` only if it's read-mostly.
 6. Add its schema doc to [../database/structure/](../database/structure/).
-7. **Do not** apply the migration to remote D1 until local validation passes.
+7. Apply locally first; validate the affected call sites; then apply with `--remote`.
 
 ### Adding a new query path
 
