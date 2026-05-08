@@ -3,12 +3,17 @@
 // under backups/, with a SHA256 sidecar for tamper detection.
 //
 // Usage:
-//   node scripts/backup-d1.mjs                # backup remote (default)
-//   node scripts/backup-d1.mjs --local        # backup local .wrangler state
-//   node scripts/backup-d1.mjs --schema-only  # schema, no data
-//   node scripts/backup-d1.mjs --data-only    # data, no schema
+//   node scripts/backup-d1.mjs                  # backup remote (default)
+//   node scripts/backup-d1.mjs --local          # backup local .wrangler state
+//   node scripts/backup-d1.mjs --schema-only    # schema, no data
+//   node scripts/backup-d1.mjs --data-only      # data, no schema
 //   node scripts/backup-d1.mjs --prune-days 30  # also delete backups older than N days
-//   node scripts/backup-d1.mjs --push-r2      # also upload to private R2 backup bucket
+//   node scripts/backup-d1.mjs --push-r2        # also upload to private R2 backup bucket
+//   node scripts/backup-d1.mjs --skip-if-recent 20  # exit 0 (skip) if newest backup
+//                                                   # in backups/ is younger than 20h.
+//                                                   # Used by the dual-trigger scheduled
+//                                                   # task so logging in doesn't re-run
+//                                                   # a backup that already happened.
 //
 // Output: backups/dauligor-{remote|local}-YYYYMMDD-HHmm.sql (+ .sha256)
 // R2 object key (with --push-r2): backups/dauligor-{remote|local}-YYYYMMDD-HHmm.sql
@@ -33,6 +38,8 @@ const dataOnly = args.includes('--data-only');
 const pruneIdx = args.indexOf('--prune-days');
 const pruneDays = pruneIdx >= 0 ? parseInt(args[pruneIdx + 1], 10) : null;
 const pushR2 = args.includes('--push-r2');
+const skipRecentIdx = args.indexOf('--skip-if-recent');
+const skipRecentHours = skipRecentIdx >= 0 ? parseFloat(args[skipRecentIdx + 1]) : null;
 const R2_BACKUP_BUCKET = 'dauligor-backups';
 
 if (schemaOnly && dataOnly) {
@@ -41,6 +48,23 @@ if (schemaOnly && dataOnly) {
 }
 
 mkdirSync(BACKUP_DIR, { recursive: true });
+
+// --skip-if-recent guard: exit 0 (success, no-op) if the newest .sql in
+// backups/ is younger than the supplied hour count. The dual-trigger
+// scheduled task uses this so the logon trigger doesn't re-dump after
+// the daily 3am trigger already succeeded.
+if (skipRecentHours !== null && Number.isFinite(skipRecentHours) && skipRecentHours > 0) {
+  const cutoff = Date.now() - skipRecentHours * 60 * 60 * 1000;
+  const matches = readdirSync(BACKUP_DIR)
+    .filter((f) => f.endsWith('.sql'))
+    .map((f) => statSync(path.join(BACKUP_DIR, f)).mtimeMs);
+  const newest = matches.length ? Math.max(...matches) : 0;
+  if (newest > cutoff) {
+    const ageHrs = ((Date.now() - newest) / (60 * 60 * 1000)).toFixed(1);
+    console.log(`[backup] Skipping — newest backup is ${ageHrs}h old (threshold: ${skipRecentHours}h).`);
+    process.exit(0);
+  }
+}
 
 const now = new Date();
 const stamp =

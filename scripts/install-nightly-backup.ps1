@@ -41,7 +41,15 @@ if (-not (Test-Path (Join-Path $ProjectPath ".env"))) {
 }
 
 # Build the npm command line.
-$npmArgList = @("run", "backup:d1", "--", "--prune-days", $PruneDays.ToString())
+# --skip-if-recent 20 guards against the logon trigger re-running a backup
+# that the daily trigger already did. 20h is short enough that a missed
+# 3am run still fires from the next-day logon trigger, but long enough
+# that multiple logins in one day don't pile up extra backups.
+$npmArgList = @(
+  "run", "backup:d1", "--",
+  "--prune-days", $PruneDays.ToString(),
+  "--skip-if-recent", "20"
+)
 if ($PushR2) { $npmArgList += "--push-r2" }
 $npmArgString = $npmArgList -join " "
 
@@ -65,7 +73,14 @@ $action = New-ScheduledTaskAction `
   -Argument $cmdArgs `
   -WorkingDirectory $ProjectPath
 
-$trigger = New-ScheduledTaskTrigger -Daily -At $At
+# Two triggers:
+#   1. Daily at $At (3am default) — the primary nightly run.
+#   2. AtLogOn — fallback so a missed nightly (PC was off/asleep) catches
+#      up the next time you log in. The script's --skip-if-recent 20
+#      guard makes this a no-op if the daily trigger already succeeded.
+$triggerDaily = New-ScheduledTaskTrigger -Daily -At $At
+$triggerLogon = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$triggers = @($triggerDaily, $triggerLogon)
 
 $settings = New-ScheduledTaskSettingsSet `
   -StartWhenAvailable `
@@ -85,14 +100,15 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 Register-ScheduledTask `
   -TaskName $TaskName `
   -Action $action `
-  -Trigger $trigger `
+  -Trigger $triggers `
   -Settings $settings `
   -Description $desc | Out-Null
 
 Write-Host "Registered scheduled task '$TaskName'."
 Write-Host "  Working directory: $ProjectPath"
 Write-Host "  Command:           cmd.exe $cmdArgs"
-Write-Host "  Trigger:           Daily at $At"
+Write-Host "  Triggers:          Daily at $At + AtLogOn ($env:USERNAME)"
+Write-Host "                     (logon trigger no-ops if a backup ran in the last 20h)"
 Write-Host "  Hidden window:     yes (no console flash, stdin detached)"
 Write-Host "  Log file:          $logPath"
 Write-Host ""
