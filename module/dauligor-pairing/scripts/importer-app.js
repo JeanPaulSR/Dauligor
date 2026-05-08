@@ -9,7 +9,7 @@ import {
 } from "./constants.js";
 import { buildClassImportWorkflow, fetchClassCatalog, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
 import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
-import { log, notifyWarn } from "./utils.js";
+import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
 import { CharacterUpdater } from "./update-character.js";
 
@@ -2716,19 +2716,35 @@ async function runDauligorClassImportSequence({
 
 
     if (actor && sequence.characterUpdater) {
-      // We are NOT committing to the database yet. 
-      // Just logging the temporary state we've built up.
-      const stagingState = sequence.characterUpdater.tempData || {};
-      console.log(`${MODULE_ID} | Character JSON AFTER advancements (STAGING):`, JSON.parse(JSON.stringify(stagingState)));
+      // Commit the base-advancement selections (HP, skills, saves, armor /
+      // weapon / tool / language proficiencies, damage traits) to the
+      // actor's root data. This is everything `CharacterUpdater` knows how
+      // to write today — it is intentionally NOT yet embedding class or
+      // feature items. Once we confirm the actor-root state lands cleanly,
+      // the next pass will hand off to the legacy embed/grant pipeline
+      // (`importClassPayloadToWorld(payload, { actor, importSelection })`)
+      // for the feature side.
+      const stagedSnapshot = JSON.parse(JSON.stringify(sequence.characterUpdater.tempData || {}));
+      log("Committing base advancement selections to actor", { actor: actor.name, staged: stagedSnapshot });
+      try {
+        await sequence.characterUpdater.commit();
+        progress.setStatus(`Applied base class advancements to ${actor.name}.`, "success");
+        notifyInfo(`Applied base class advancements to "${actor.name}".`);
+      } catch (error) {
+        console.error(`${MODULE_ID} | Failed to commit base advancements`, error);
+        progress.setStatus(`Failed to apply base advancements: ${error?.message ?? error}`, "danger");
+        notifyWarn(`Failed to apply base advancements: ${error?.message ?? error}`);
+        progress.setFinished(true);
+        return null;
+      }
+    } else {
+      progress.setStatus("All advancements selected. Workflow complete.", "success");
     }
 
-
-
-    progress.setStatus("All advancements selected. Workflow complete.", "success");
     progress.setFinished(true);
     await pause(500);
     await progress.close();
-    return null;
+    return actor ?? true;
 
   } catch (error) {
     if (error instanceof DauligorImportSequenceCancelledError || sequence.cancelled) {
@@ -3672,7 +3688,12 @@ function buildClassModels(entryPayloads) {
   const grouped = new Map();
 
   for (const { entry, payload } of entryPayloads) {
-    if (!entry || !payload) continue;
+    // Phase C: payload may be null at browser-open time — the catalog
+    // entry already carries the fields the model needs (name, tags,
+    // subclasses[]). The full payload is fetched lazily on Import click
+    // via `_ensureVariantPayload`. Skip only if the catalog entry itself
+    // is missing or has no payloadUrl to fetch later.
+    if (!entry || !entry.payloadUrl) continue;
 
     const metadata = extractClassEntryMetadata(entry, payload);
     if (!metadata) continue;
