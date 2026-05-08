@@ -1,14 +1,11 @@
 import path from "node:path";
 import fs from "node:fs";
-import { executeD1QueryInternal } from "./_lib/d1-internal.js";
-import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
-// Sibling-folder import — works fine in Vercel's bundler. The earlier
-// attempts at `import ... from "../src/lib/classExport.js"` both crashed
-// the function on load with FUNCTION_INVOCATION_FAILED. The server copy of
-// classExport.ts lives in api/_lib/_classExport.ts (along with copies of
-// _referenceSyntax.ts and _classProgression.ts). Drift management note at
-// the top of _classExport.ts.
-import { exportClassSemantic, getSemanticSourceId } from "./_lib/_classExport.js";
+import {
+  buildClassBundleForIdentifier,
+  buildSourceClassCatalog,
+  buildTopLevelCatalog,
+  rebakeBundle,
+} from "./_lib/module-export-pipeline.js";
 import {
   classBundleKey,
   MODULE_EXPORT_CACHE_HEADER,
@@ -17,6 +14,13 @@ import {
   topLevelCatalogKey,
   writeBundle,
 } from "./_lib/module-export-store.js";
+import {
+  clearForRebake,
+  popDueEntries,
+  queueRebake,
+  type ExportEntityKind,
+} from "./_lib/module-export-queue.js";
+import { HttpError, requireStaffAccess } from "./_lib/firebase-admin.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -25,184 +29,6 @@ function serveCached(res: any, body: unknown) {
   res.setHeader("Cache-Control", MODULE_EXPORT_CACHE_HEADER);
   res.end(typeof body === "string" ? body : JSON.stringify(body));
 }
-
-const parseJson = (val: any) => (typeof val === "string" ? JSON.parse(val) : val);
-
-function denormalizeSourceRow(row: any) {
-  const data = {
-    ...row,
-    slug: row.slug,
-    abbreviation: row.abbreviation,
-    imageUrl: row.image_url,
-    rules: row.rules_version || "2014",
-    status: row.status || "ready",
-    tags: typeof row.tags === "string" ? JSON.parse(row.tags) : (row.tags || []),
-  };
-  return { id: row.id, ...data, semanticId: getSemanticSourceId(data, row.id) };
-}
-
-function denormalizeClassRow(row: any) {
-  return {
-    id: row.id,
-    ...row,
-    sourceId: row.source_id,
-    hitDie: row.hit_die,
-    subclassTitle: row.subclass_title,
-    subclassFeatureLevels: parseJson(row.subclass_feature_levels),
-    asiLevels: parseJson(row.asi_levels),
-    primaryAbility: parseJson(row.primary_ability),
-    primaryAbilityChoice: parseJson(row.primary_ability_choice),
-    proficiencies: parseJson(row.proficiencies),
-    multiclassProficiencies: parseJson(row.multiclass_proficiencies),
-    spellcasting: parseJson(row.spellcasting),
-    advancements: parseJson(row.advancements),
-    excludedOptionIds: parseJson(row.excluded_option_ids),
-    uniqueOptionMappings: parseJson(row.unique_option_mappings),
-    imageDisplay: parseJson(row.image_display),
-    cardDisplay: parseJson(row.card_display),
-    previewDisplay: parseJson(row.preview_display),
-    tagIds: parseJson(row.tag_ids),
-    imageUrl: row.image_url,
-    cardImageUrl: row.card_image_url,
-    previewImageUrl: row.preview_image_url,
-  };
-}
-
-function classMatchesSource(cls: any, source: any) {
-  const sSlug = (source.slug || "").toLowerCase();
-  const sId = String(source.id).toLowerCase();
-  const sSemanticId = (source.semanticId || "").toLowerCase();
-  const linkIds = [cls.sourceId, cls.sourceBookId, cls.sourceBook].filter(Boolean);
-  return linkIds.some((linkId) => {
-    const lId = String(linkId).toLowerCase();
-    return lId === sId || lId === sSlug || lId === sSemanticId;
-  });
-}
-
-// ── Builders (live D1) ─────────────────────────────────────────────────────
-
-async function buildTopLevelCatalog() {
-  const sourcesRes = await executeD1QueryInternal({ sql: "SELECT * FROM sources" });
-  const allSources = (sourcesRes.results || []).map(denormalizeSourceRow);
-
-  // Class counts per source. One narrow GROUP BY query instead of scanning
-  // the full classes table — class rows can be wide (lots of JSON columns).
-  const countsRes = await executeD1QueryInternal({
-    sql: "SELECT source_id, COUNT(*) AS class_count FROM classes GROUP BY source_id",
-  });
-  const classCountsBySourceId = new Map<string, number>();
-  for (const row of countsRes.results || []) {
-    classCountsBySourceId.set(String(row.source_id), Number(row.class_count) || 0);
-  }
-
-  const entries = allSources
-    .filter((s: any) => s.status === "ready" || s.status === "active")
-    .map((s: any) => {
-      const slug = s.slug || s.id;
-      return {
-        sourceId: s.semanticId,
-        slug,
-        name: s.name,
-        shortName: s.abbreviation || s.name,
-        description: s.description || "",
-        coverImage: s.imageUrl || "",
-        status: s.status || "ready",
-        rules: s.rules || "2014",
-        tags: s.tags || [],
-        counts: {
-          classes: classCountsBySourceId.get(String(s.id)) || 0,
-          spells: 0,
-          items: 0,
-          bestiary: 0,
-          journals: 0,
-        },
-        detailUrl: `${slug}/source.json`,
-        classCatalogUrl: `${slug}/classes/catalog.json`,
-      };
-    });
-
-  return {
-    kind: "dauligor.source-catalog.v1",
-    schemaVersion: 1,
-    source: {
-      system: "dauligor",
-      entity: "source-catalog",
-      id: "dynamic-d1-library",
-    },
-    entries,
-  };
-}
-
-async function buildSourceClassCatalog(sourceSlug: string) {
-  // Resolve the source by slug or id. Lower-cased compare matches the
-  // pre-existing matching behavior; we still scan all sources because a slug
-  // can also match the derived `semanticId` (rare path).
-  const sourcesRes = await executeD1QueryInternal({ sql: "SELECT * FROM sources" });
-  const allSources = (sourcesRes.results || []).map(denormalizeSourceRow);
-  const source = allSources.find((s: any) =>
-    (s.slug || "").toLowerCase() === sourceSlug
-    || String(s.id).toLowerCase() === sourceSlug
-    || (s.semanticId || "").toLowerCase() === sourceSlug
-  );
-  if (!source) return null;
-
-  // Scoped class fetch — most matches resolve via direct source_id, but the
-  // legacy linker also accepts sourceBookId / sourceBook columns. Fall back
-  // to a broader scan only if the direct match yields nothing, since for
-  // existing rows source_id is the canonical column.
-  let classesRes = await executeD1QueryInternal({
-    sql: "SELECT * FROM classes WHERE source_id = ?",
-    params: [source.id],
-  });
-  let classes = (classesRes.results || []).map(denormalizeClassRow);
-  if (!classes.length) {
-    classesRes = await executeD1QueryInternal({ sql: "SELECT * FROM classes" });
-    classes = (classesRes.results || [])
-      .map(denormalizeClassRow)
-      .filter((cls: any) => classMatchesSource(cls, source));
-  }
-
-  const entries = classes.map((cls: any) => {
-    const identifier = cls.identifier || cls.id;
-    return {
-      sourceId: `class-${identifier}`,
-      name: cls.name,
-      type: "class",
-      img: cls.imageUrl || "",
-      rules: cls.rules || source.rules || "2014",
-      description: (cls.description || "").substring(0, 200),
-      payloadKind: "dauligor.semantic.class-export",
-      payloadUrl: `${identifier}.json`,
-    };
-  });
-
-  return {
-    kind: "dauligor.class-catalog.v1",
-    schemaVersion: 1,
-    source: {
-      system: "dauligor",
-      entity: "class-catalog",
-      id: `${source.semanticId}-classes`,
-      sourceId: source.semanticId,
-    },
-    entries,
-  };
-}
-
-async function buildClassBundleForIdentifier(classIdentifier: string) {
-  // One narrow query — no preamble. The export pipeline does its own
-  // sub-fetches for refs/subclasses/features/etc. inside `exportClassSemantic`.
-  const lookup = classIdentifier.toLowerCase();
-  const classesRes = await executeD1QueryInternal({
-    sql: "SELECT * FROM classes WHERE LOWER(identifier) = ? OR LOWER(id) = ? LIMIT 1",
-    params: [lookup, lookup],
-  });
-  const row = (classesRes.results || [])[0];
-  if (!row) return null;
-  return await exportClassSemantic(row.id, SERVER_EXPORT_FETCHERS);
-}
-
-// ── Cache-aware wrappers ───────────────────────────────────────────────────
 
 async function getOrBuild<T>(
   key: string,
@@ -220,6 +46,50 @@ async function getOrBuild<T>(
     });
   }
   return fresh;
+}
+
+const VALID_KINDS: ReadonlySet<ExportEntityKind> = new Set([
+  "class", "subclass", "feature", "scalingColumn", "optionGroup", "optionItem", "source",
+]);
+
+async function readJsonBody(req: any): Promise<any> {
+  if (req.body && typeof req.body === "object") return req.body;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  return raw ? JSON.parse(raw) : {};
+}
+
+function parseEntityFromBody(body: any): { kind: ExportEntityKind; id: string } | null {
+  const kind = String(body?.kind ?? "").trim();
+  const id = String(body?.id ?? "").trim();
+  if (!kind || !id) return null;
+  if (!VALID_KINDS.has(kind as ExportEntityKind)) return null;
+  return { kind: kind as ExportEntityKind, id };
+}
+
+// Background queue processing — kicks off opportunistically on read traffic
+// without blocking the response. Vercel's runtime keeps the function alive
+// briefly after `res.end()`, which is enough for one rebake cycle.
+function processQueueOpportunistically(budget: number = 1) {
+  popDueEntries(budget)
+    .then(async (entries) => {
+      for (const entry of entries) {
+        try {
+          const written = await rebakeBundle(entry.kind, entry.id);
+          if (written.length) {
+            console.log("[module] opportunistic rebake", { kind: entry.kind, id: entry.id, written });
+          }
+        } catch (error) {
+          console.warn("[module] opportunistic rebake failed", { entry, error });
+        }
+      }
+    })
+    .catch((error) => {
+      console.warn("[module] popDueEntries failed", { error });
+    });
 }
 
 // ── Handler ────────────────────────────────────────────────────────────────
@@ -247,14 +117,67 @@ export default async function handler(req: any, res: any) {
 
   const pathParts = cleanSubpath ? cleanSubpath.split("/") : [];
 
+  // ── POST endpoints (queue + manual bake) ─────────────────────────────────
+  if (req.method === "POST") {
+    try {
+      if (cleanSubpath === "queue-rebake") {
+        await requireStaffAccess(req.headers.authorization);
+        const body = await readJsonBody(req);
+        const entry = parseEntityFromBody(body);
+        if (!entry) {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: "Body must be { kind, id } with a known entity kind." }));
+        }
+        await queueRebake(entry.kind, entry.id);
+        res.setHeader("Content-Type", "application/json");
+        return res.end(JSON.stringify({ queued: entry, scheduledFor: Date.now() + 60 * 60 * 1000 }));
+      }
+
+      if (cleanSubpath === "rebake-now") {
+        await requireStaffAccess(req.headers.authorization);
+        const body = await readJsonBody(req);
+        const entry = parseEntityFromBody(body);
+        if (!entry) {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: "Body must be { kind, id } with a known entity kind." }));
+        }
+        const written = await rebakeBundle(entry.kind, entry.id);
+        // The user explicitly chose to bake, so any pending queue entry for
+        // this exact entity is satisfied. Other classes that may also depend
+        // on this entity (e.g. an option-group cascading to multiple classes)
+        // were rebaked above; their queue entries (if any) keep their own
+        // last_edit_at and will fire normally.
+        await clearForRebake(entry.kind, entry.id);
+        res.setHeader("Content-Type", "application/json");
+        return res.end(JSON.stringify({ rebaked: entry, written }));
+      }
+    } catch (error: any) {
+      if (error instanceof HttpError) {
+        res.statusCode = error.status;
+        return res.end(JSON.stringify({ error: error.message }));
+      }
+      console.error("[module] POST handler failed", { error });
+      res.statusCode = 500;
+      return res.end(JSON.stringify({ error: error?.message ?? "Internal server error." }));
+    }
+
+    res.statusCode = 404;
+    return res.end(JSON.stringify({ error: "Unknown POST endpoint" }));
+  }
+
+  // ── GET endpoints (read-through cache) ───────────────────────────────────
+  // Kick off background queue processing — fire-and-forget; Vercel will
+  // keep the isolate alive briefly after the response completes, which is
+  // enough for one rebake. If the function is killed early, the queue
+  // entry stays for the next request.
+  processQueueOpportunistically(1);
+
   try {
-    // ── Top-level source catalog ─────────────────────────────────────
     if (!cleanSubpath || cleanSubpath === "catalog.json") {
       const result = await getOrBuild(topLevelCatalogKey(), buildTopLevelCatalog);
       if (result) return serveCached(res, result);
     }
 
-    // ── Per-source class catalog ─────────────────────────────────────
     else if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2] === "catalog.json") {
       const sourceSlug = pathParts[0].toLowerCase();
       const result = await getOrBuild(
@@ -264,7 +187,6 @@ export default async function handler(req: any, res: any) {
       if (result) return serveCached(res, result);
     }
 
-    // ── Per-class semantic bundle ────────────────────────────────────
     else if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2].endsWith(".json")) {
       const sourceSlug = pathParts[0].toLowerCase();
       const classIdentifier = pathParts[2].replace(".json", "").toLowerCase();
@@ -279,8 +201,6 @@ export default async function handler(req: any, res: any) {
   }
 
   // ── Fallback: serve static fixture files under module/dauligor-pairing ──
-  // Static fixtures don't go through the R2 cache — they're already on
-  // disk and Vercel's static asset layer handles their caching.
   let filePath = path.join(process.cwd(), "module/dauligor-pairing/data/sources", cleanSubpath);
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     filePath = path.join(filePath, "catalog.json");

@@ -11,7 +11,10 @@
 // a live D1 build.
 
 const PUBLIC_URL_FALLBACK = "https://images.dauligor.com";
-const EXPORT_PREFIX = "module-export/v1";
+// Bumped from v1 → v2 when the source-class-catalog entry shape grew
+// `tags` and `subclasses[]`. Old v1 objects are now orphaned in R2; safe
+// to delete manually if desired but they cost ~$0.0002/month to retain.
+const EXPORT_PREFIX = "module-export/v2";
 
 // 60s browser cache, 5min CDN cache, stale-while-revalidate 24h. Tuned for
 // "edits are infrequent, reads are constant". Tweaked higher than typical
