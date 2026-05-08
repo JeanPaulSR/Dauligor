@@ -1,13 +1,19 @@
 import path from "node:path";
 import fs from "node:fs";
 import { executeD1QueryInternal } from "./_lib/d1-internal.js";
-import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
-// Reuse the canonical semantic-id helper + bundle exporter so the live API
-// produces the same payload shape the client-side downloader does.
-import {
-  getSemanticSourceId,
-  exportClassSemantic,
-} from "../src/lib/classExport.js";
+
+// Inlined to avoid a cross-folder import into `src/lib/`. Vercel's serverless
+// bundler doesn't reliably traverse `src/` for api functions in this project,
+// so duplicating this 6-line helper is cheaper than chasing a bundling fix.
+// Keep this in sync with `getSemanticSourceId` in src/lib/classExport.ts.
+function getSemanticSourceId(sourceData: any, originalId: string) {
+  const slug = sourceData.slug;
+  const abbr = (sourceData.abbreviation || "").toLowerCase();
+  const rules = sourceData.rules || "2014";
+  if (abbr) return `source-${abbr.replace(/[^a-z0-9]/g, "")}-${rules}`;
+  if (slug) return `source-${slug}`;
+  return originalId;
+}
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -75,7 +81,7 @@ export default async function handler(req: any, res: any) {
       previewImageUrl: c.preview_image_url,
     }));
 
-    // 3. Group classes by source so the catalog count is right.
+    // 3. Group classes by source.
     const sourceToClasses = new Map<string, any[]>();
     allClasses.forEach((cls: any) => {
       const linkIds = new Set([cls.sourceId, cls.sourceBookId, cls.sourceBook].filter(Boolean));
@@ -179,11 +185,16 @@ export default async function handler(req: any, res: any) {
     }
 
     // ── Specific class payload (<slug>/classes/<identifier>.json) ───────────
-    // The catalog above advertises `payloadKind: dauligor.semantic.class-export`,
-    // so this MUST return the full bundle that exportClassSemantic produces:
-    // { class, subclasses, features, scalingColumns, uniqueOptionGroups,
-    //   uniqueOptionItems, spellsKnownScalings, alternativeSpellcastingScalings,
-    //   source }. Returning a flat row would silently break the importer.
+    // KNOWN ISSUE: This currently returns the flat class row only. The catalog
+    // above advertises payloadKind="dauligor.semantic.class-export", which is
+    // the full bundle (class + subclasses + features + scalingColumns + option
+    // groups + spell scalings + source). Producing the bundle here requires
+    // calling exportClassSemantic from src/lib/classExport.ts — but Vercel's
+    // serverless bundler did not reliably include the cross-folder import in
+    // an earlier attempt, crashing the whole function with FUNCTION_INVOCATION_FAILED.
+    // For now, the static fixtures under module/dauligor-pairing/data/sources/
+    // remain the source of truth for full bundles. Follow-up: either move the
+    // semantic-export logic into api/_lib/ or configure Vercel to bundle src/.
     if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2].endsWith(".json")) {
       const classIdentifier = pathParts[2].replace(".json", "").toLowerCase();
       const cls = allClasses.find((c: any) =>
@@ -191,11 +202,8 @@ export default async function handler(req: any, res: any) {
         || String(c.id).toLowerCase() === classIdentifier
       );
       if (cls) {
-        const bundle = await exportClassSemantic(cls.id, SERVER_EXPORT_FETCHERS);
-        if (bundle) {
-          res.setHeader("Content-Type", "application/json");
-          return res.end(JSON.stringify(bundle));
-        }
+        res.setHeader("Content-Type", "application/json");
+        return res.end(JSON.stringify(cls));
       }
     }
   } catch (error) {
