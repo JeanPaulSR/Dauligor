@@ -886,27 +886,43 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       return;
     }
 
+    const actorClassMap = this._getActorClassMap();
+
     const rowsHtml = visibleClasses.map((classModel) => {
       const isSelected = classModel.classSourceId === this._state.selectedClassSourceId;
       const selectedSubclassId = isSelected ? this._state.selectedSubclassSourceId : null;
       const classSource = classModel.sourceLabel || classModel.subclasses.find((subclass) => subclass.sourceLabel)?.sourceLabel || "";
+
+      // When the actor already has this class + a subclass, lock the
+      // subclass picker — only the existing subclass is selectable. Other
+      // rows render disabled with a "Locked" tag so the user can see why.
+      const actorExisting = actorClassMap.get(classModel.classSourceId) ?? null;
+      const lockedSubclassId = actorExisting?.existingSubclassSourceId ?? null;
+
       const subclassesHtml = classModel.subclasses.length
         ? `
-          ${classModel.subclasses.map((subclass) => `
-            <button
-              type="button"
-              class="dauligor-class-browser__row dauligor-class-browser__row--subclass ${selectedSubclassId === subclass.sourceId ? "dauligor-class-browser__row--selected" : ""}"
-              data-action="select-subclass"
-              data-class-source-id="${foundry.utils.escapeHTML(classModel.classSourceId)}"
-              data-subclass-source-id="${foundry.utils.escapeHTML(subclass.sourceId)}"
-            >
-              <span class="dauligor-class-browser__row-select">
-                <span class="dauligor-class-browser__radio ${selectedSubclassId === subclass.sourceId ? "dauligor-class-browser__radio--selected" : ""}"></span>
-              </span>
-              <span class="dauligor-class-browser__row-name dauligor-class-browser__row-name--subclass">&mdash; ${foundry.utils.escapeHTML(subclass.name)}</span>
-              <span class="dauligor-class-browser__row-source">${foundry.utils.escapeHTML(subclass.sourceLabel || classSource)}</span>
-            </button>
-          `).join("")}
+          ${classModel.subclasses.map((subclass) => {
+            const isLockedToOther = Boolean(lockedSubclassId) && subclass.sourceId !== lockedSubclassId;
+            const isExistingPick = Boolean(lockedSubclassId) && subclass.sourceId === lockedSubclassId;
+            const isRowSelected = isExistingPick || selectedSubclassId === subclass.sourceId;
+            const meta = isExistingPick ? "Already chosen" : (isLockedToOther ? "Locked" : "");
+            return `
+              <button
+                type="button"
+                class="dauligor-class-browser__row dauligor-class-browser__row--subclass ${isRowSelected ? "dauligor-class-browser__row--selected" : ""} ${isLockedToOther ? "dauligor-class-browser__row--disabled" : ""}"
+                data-action="select-subclass"
+                data-class-source-id="${foundry.utils.escapeHTML(classModel.classSourceId)}"
+                data-subclass-source-id="${foundry.utils.escapeHTML(subclass.sourceId)}"
+                ${isLockedToOther ? "disabled" : ""}
+              >
+                <span class="dauligor-class-browser__row-select">
+                  <span class="dauligor-class-browser__radio ${isRowSelected ? "dauligor-class-browser__radio--selected" : ""}"></span>
+                </span>
+                <span class="dauligor-class-browser__row-name dauligor-class-browser__row-name--subclass">&mdash; ${foundry.utils.escapeHTML(subclass.name)}${meta ? ` <span style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.6;">· ${foundry.utils.escapeHTML(meta)}</span>` : ""}</span>
+                <span class="dauligor-class-browser__row-source">${foundry.utils.escapeHTML(subclass.sourceLabel || classSource)}</span>
+              </button>
+            `;
+          }).join("")}
         `
         : "";
 
@@ -1059,6 +1075,31 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     this._renderBrowser();
   }
 
+  /**
+   * Scan the target actor for existing Dauligor-imported classes and
+   * return a Map<classSourceId, { existingLevel, existingSubclassSourceId }>.
+   * The class browser uses this to (1) lock the subclass picker to the
+   * already-chosen subclass for a given class, and (2) default the
+   * import level to (existingLevel + 1) when the user picks that class
+   * for level-up.
+   */
+  _getActorClassMap() {
+    const result = new Map();
+    if (!this._actor?.items) return result;
+    for (const item of this._actor.items) {
+      if (item.type !== "class") continue;
+      const sourceId = item.getFlag?.(MODULE_ID, "sourceId");
+      if (!sourceId) continue;
+      const existingLevel = clampLevel(item.system?.levels ?? 0);
+      const subclassItem = this._actor.items.find((subItem) =>
+        subItem.type === "subclass"
+        && subItem.getFlag?.(MODULE_ID, "classSourceId") === sourceId);
+      const existingSubclassSourceId = subclassItem?.getFlag?.(MODULE_ID, "sourceId") ?? null;
+      result.set(sourceId, { existingLevel, existingSubclassSourceId });
+    }
+    return result;
+  }
+
   _applyPreferredSelection() {
     if (!this._classModels.length) {
       this._state.selectedClassSourceId = null;
@@ -1137,7 +1178,30 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
   _selectClass(classSourceId, subclassSourceId = null) {
     this._state.selectedClassSourceId = classSourceId ?? null;
-    this._state.selectedSubclassSourceId = subclassSourceId ?? null;
+
+    // When the actor already has this class:
+    //   - default the subclass to whatever they previously chose (no
+    //     point asking again, and the subclass picker locks it anyway)
+    //   - bump the target level to existing+1 unless the user has
+    //     manually picked something higher
+    let resolvedSubclassId = subclassSourceId ?? null;
+    if (classSourceId) {
+      const actorClassMap = this._getActorClassMap();
+      const existing = actorClassMap.get(classSourceId);
+      if (existing) {
+        if (existing.existingSubclassSourceId && !resolvedSubclassId) {
+          resolvedSubclassId = existing.existingSubclassSourceId;
+        }
+        if (existing.existingLevel > 0) {
+          const nextLevel = clampLevel(existing.existingLevel + 1);
+          if (this._state.targetLevel <= existing.existingLevel) {
+            this._state.targetLevel = nextLevel;
+          }
+        }
+      }
+    }
+    this._state.selectedSubclassSourceId = resolvedSubclassId;
+
     this._renderList();
     this._renderFooter();
   }
@@ -2743,7 +2807,7 @@ async function runDauligorClassImportSequence({
         && (workflow.subclassItems?.length ?? 0) > 0;
 
       if (subclassNeeded && !subclassSourceId) {
-        const subclassResult = await runSubclassStep({ workflow, sequence, progress });
+        const subclassResult = await runSubclassStep({ workflow, sequence, progress, entry });
         if (subclassResult === "cancelled") throw new DauligorImportSequenceCancelledError();
         if (subclassResult) {
           subclassSourceId = subclassResult;
@@ -3154,10 +3218,25 @@ async function runImportModeStep({ workflow, sequence, progress }) {
   return Boolean(result.value);
 }
 
-async function runSubclassStep({ workflow, sequence, progress }) {
+async function runSubclassStep({ workflow, sequence, progress, entry = null }) {
   const stepId = "subclass";
   progress.markStep(stepId, "active", "Choose the subclass to import alongside the base class.");
   progress.setStatus("Waiting for subclass selection...");
+
+  // The catalog ships an explicit `shortName` per subclass entry — that's the
+  // canonical book label (e.g. "TCoE", "XGE"). The Foundry-shaped subclass
+  // item the bundle gives us instead carries `system.source.book` derived
+  // from the *parent class's* source record (the bundle only exposes one
+  // top-level source), so deriveSourceLabel(item.system.source.book) ends
+  // up showing "PHB" for every subclass even when the subclass was
+  // published in a different book. Build a sourceId → shortName map from
+  // the catalog entry once and prefer it.
+  const catalogShortNameBySubclassSourceId = new Map();
+  for (const sub of ensureArray(entry?.subclasses)) {
+    if (sub?.sourceId && sub?.shortName) {
+      catalogShortNameBySubclassSourceId.set(sub.sourceId, sub.shortName);
+    }
+  }
 
   const result = await DauligorSequencePromptApp.prompt({
     title: "Choose Subclass",
@@ -3171,7 +3250,8 @@ async function runSubclassStep({ workflow, sequence, progress }) {
       <div class="dauligor-class-options__choice-list">
         ${workflow.subclassItems.map((item) => {
       const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
-      const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
+      const sourceLabel = catalogShortNameBySubclassSourceId.get(sourceId)
+        || deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
       return `
             <label class="dauligor-class-options__radio">
               <input type="radio" name="subclass-source-id" value="${foundry.utils.escapeHTML(sourceId)}" ${app._state.subclassSourceId === sourceId ? "checked" : ""}>
