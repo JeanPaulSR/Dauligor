@@ -626,7 +626,11 @@ export function buildClassImportWorkflow(payload, {
     subclassFeatures,
     selectedSubclassSourceId: selectedSubclassItem?.flags?.[MODULE_ID]?.sourceId ?? null,
     includeSubclass: normalizedSelection.includeSubclass,
-    minimumLevel: Math.max(existingClassLevel, 1),
+    // Lock every level up to and including the actor's current class
+    // level — those are already imported. With existingClassLevel=3,
+    // pass minimumLevel=4 so `locked: level < minimumLevel` marks 1-3
+    // as locked rows; level 4+ remain selectable.
+    minimumLevel: existingClassLevel > 0 ? existingClassLevel + 1 : 1,
     targetLevel: normalizedTargetLevel
   });
   const spellcastingRows = buildCurrentSpellcastingProgressionRows(supportedPayload, semanticClassData);

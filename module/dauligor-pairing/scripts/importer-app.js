@@ -2658,8 +2658,23 @@ async function runDauligorClassImportSequence({
     // and show specialized selection windows for each.
     const baseFeatures = baseClassHandler(workflow);
 
+    const existingClassLevelForSkip = Number(workflow.existingClassLevel ?? 0) || 0;
     for (const adv of baseFeatures.advancements) {
       throwIfSequenceCancelled(sequence);
+
+      // Skip non-HP base advancements already granted at a previous class
+      // level — proficiencies (skills, tools, saves, armor, weapons,
+      // languages, etc.) are starting-level slots that must not be
+      // re-prompted on level-up. HP keeps running because its handler
+      // does the per-level diff calculation (previousLevels + 1 → target).
+      const advLevel = Number(adv?.adv?.level ?? 1) || 1;
+      if (adv.id !== 'base-hp' && advLevel <= existingClassLevelForSkip) {
+        const skipStepId = adv.id === 'base-skills' ? 'skills'
+          : adv.id === 'base-tools' ? 'tools'
+          : `advancement:${adv.id.replace('base-', '')}`;
+        progress.markStep(skipStepId, "skipped", `Already applied at level ${advLevel}.`);
+        continue;
+      }
 
       // 1. Hit Points Advancement
       if (adv.id === 'base-hp') {
@@ -2887,6 +2902,11 @@ async function runDauligorClassImportSequence({
       for (const adv of ensureArray(workflow.choiceAdvancements)) {
         if (adv?.type !== "Trait") continue;
         if (!adv?._id || baseAdvancementIds.has(adv._id)) continue;
+        // Skip choice advancements that fired at a previous class level —
+        // their feature was already granted on a prior import and the
+        // user already made (or should have made) the choice then.
+        const choiceLevel = Number(adv?.level ?? 1) || 1;
+        if (choiceLevel <= existingClassLevelForSkip) continue;
         const traitChoice = extractFeatureTraitChoice(adv);
         if (!traitChoice) continue;
 
@@ -3379,18 +3399,23 @@ async function runTraitSelectionStep({ title, fieldName, advancement, workflow, 
 
 async function runLevelSelectionStep({ workflow, sequence, progress }) {
   const stepId = "levels";
-  const minimumLevel = Math.max(1, Number(workflow.existingClassLevel ?? workflow.existingClassItem?.system?.levels ?? 0) || 1);
-  const hasExistingLevels = minimumLevel > 1;
+  // The actor's actual current class level (used for status text — "Current
+  // class level: 3"). 0 on a fresh import.
+  const existingLevel = Number(workflow.existingClassLevel ?? workflow.existingClassItem?.system?.levels ?? 0) || 0;
+  // The lowest level the user can pick: existing+1 on level-up (since 1..existing
+  // are locked rows), or 1 on a fresh import. Used by the click-handler clamp.
+  const minimumLevel = existingLevel > 0 ? Math.min(20, existingLevel + 1) : 1;
+  const hasExistingLevels = existingLevel > 0;
   const levelWindowTitle = workflow.selection.includeSubclass ? "Select Class and Subclass Levels" : "Select Class Levels";
   progress.markStep(stepId, "active", hasExistingLevels
-    ? `Continue leveling from class level ${minimumLevel}.`
+    ? `Continue leveling from class level ${existingLevel}.`
     : "Choose the highest class level to import.");
   progress.setStatus("Waiting for class level selection...");
 
   const result = await DauligorSequencePromptApp.prompt({
     title: levelWindowTitle,
     subtitle: hasExistingLevels
-      ? `Current class level: ${minimumLevel}. Select the ending level for this import.`
+      ? `Current class level: ${existingLevel}. Select the ending level for this import.`
       : "Select the ending class level for this import.",
     width: 600,
     height: 540,
