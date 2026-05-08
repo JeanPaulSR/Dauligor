@@ -76,32 +76,31 @@ function isAbsoluteHttpUrl(value) {
   return typeof value === "string" && /^https?:\/\//i.test(value.trim());
 }
 
+/**
+ * dnd5e's BaseActorSheet._prepareItemFeature normally runs `img` through
+ * `foundry.utils.getRoute`, which prefixes a leading slash and breaks absolute
+ * `https://images.dauligor.com/...` URLs we ship for class/subclass items.
+ * Wrap it via libWrapper so we cooperate with any other module that wraps
+ * the same method instead of clobbering its prototype.
+ */
 function patchDnd5eRemoteItemImages() {
-  const sheetGroups = CONFIG.Actor?.sheetClasses ?? {};
-  const patched = new Set();
-
-  for (const group of Object.values(sheetGroups)) {
-    for (const entry of Object.values(group ?? {})) {
-      const sheetClass = entry?.cls;
-      if (!sheetClass?.prototype || patched.has(sheetClass)) continue;
-
-      const original = sheetClass.prototype._prepareItemFeature;
-      if (typeof original !== "function") continue;
-
-      sheetClass.prototype._prepareItemFeature = async function(item, ctx, ...args) {
-        const result = await original.call(this, item, ctx, ...args);
-        if (["class", "subclass"].includes(item?.type) && isAbsoluteHttpUrl(item?.img)) {
-          ctx.prefixedImage = item.img.trim();
-        }
-        return result;
-      };
-
-      patched.add(sheetClass);
-    }
+  if (typeof libWrapper === "undefined") {
+    notifyWarn("libWrapper is not available; remote class/subclass image rewrite is disabled.");
+    return;
   }
 
-  if (patched.size) {
-    log(`Patched remote class/subclass image handling for ${patched.size} actor sheet class(es).`);
+  const target = "dnd5e.applications.actor.BaseActorSheet.prototype._prepareItemFeature";
+  try {
+    libWrapper.register(MODULE_ID, target, async function (wrapped, item, ctx, ...args) {
+      const result = await wrapped(item, ctx, ...args);
+      if (["class", "subclass"].includes(item?.type) && isAbsoluteHttpUrl(item?.img)) {
+        ctx.prefixedImage = item.img.trim();
+      }
+      return result;
+    }, "WRAPPER");
+    log("Registered libWrapper for remote class/subclass image handling.");
+  } catch (error) {
+    console.error(`[${MODULE_ID}] libWrapper registration failed for ${target}:`, error);
   }
 }
 

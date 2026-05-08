@@ -1,18 +1,13 @@
-import { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import fs from "node:fs";
 import { executeD1QueryInternal } from "./_lib/d1-internal.js";
-
-// Helper to match the semantic ID generation in src/lib/classExport.ts
-function getSemanticSourceId(sourceData: any, originalId: string) {
-  const slug = sourceData.slug;
-  const abbr = (sourceData.abbreviation || "").toLowerCase();
-  const rules = sourceData.rules || "2014";
-  
-  if (abbr) return `source-${abbr.replace(/[^a-z0-9]/g, '')}-${rules}`;
-  if (slug) return `source-${slug}`;
-  return originalId;
-}
+import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
+// Reuse the canonical semantic-id helper + bundle exporter so the live API
+// produces the same payload shape the client-side downloader does.
+import {
+  getSemanticSourceId,
+  exportClassSemantic,
+} from "../src/lib/classExport.js";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -54,7 +49,7 @@ export default async function handler(req: any, res: any) {
     // 2. Fetch all classes from D1, with the JSON columns parsed and
     // snake_case fields aliased to the camelCase the Foundry contract uses.
     const classesRes = await executeD1QueryInternal({ sql: "SELECT * FROM classes" });
-    const parse = (val: any) => typeof val === "string" ? JSON.parse(val) : val;
+    const parse = (val: any) => (typeof val === "string" ? JSON.parse(val) : val);
     const allClasses = (classesRes.results || []).map((c: any) => ({
       id: c.id,
       ...c,
@@ -80,45 +75,35 @@ export default async function handler(req: any, res: any) {
       previewImageUrl: c.preview_image_url,
     }));
 
-    // 3. Group classes by source with extensive matching
-    const sourceToClasses = new Map();
+    // 3. Group classes by source so the catalog count is right.
+    const sourceToClasses = new Map<string, any[]>();
     allClasses.forEach((cls: any) => {
-      // Possible link fields
-      const linkIds = new Set([
-        cls.sourceId,
-        cls.sourceBookId,
-        cls.sourceBook,
-        cls.sourceId?.replace("source-", "") // Try without prefix
-      ].filter(Boolean));
-
-      // Find the source this class belongs to
-      const matchingSource = allSources.find(s => {
+      const linkIds = new Set([cls.sourceId, cls.sourceBookId, cls.sourceBook].filter(Boolean));
+      const matchingSource = allSources.find((s: any) => {
         const sSlug = (s.slug || "").toLowerCase();
-        const sId = s.id.toLowerCase();
+        const sId = String(s.id).toLowerCase();
         const sSemanticId = (s.semanticId || "").toLowerCase();
-
-        return Array.from(linkIds).some(linkId => {
+        return Array.from(linkIds).some((linkId) => {
           const lId = String(linkId).toLowerCase();
           return lId === sId || lId === sSlug || lId === sSemanticId;
         });
       });
-
       if (matchingSource) {
         if (!sourceToClasses.has(matchingSource.id)) sourceToClasses.set(matchingSource.id, []);
-        sourceToClasses.get(matchingSource.id).push(cls);
+        sourceToClasses.get(matchingSource.id)!.push(cls);
       }
     });
 
-    // Handle catalog.json (Source Library)
+    // ── Source Library catalog (top-level catalog.json) ─────────────────────
     if (!cleanSubpath || cleanSubpath === "catalog.json") {
       const entries = allSources
-        .filter((s: any) => s.status === "ready" || s.status === "active" || s.id)
+        .filter((s: any) => s.status === "ready" || s.status === "active")
         .map((s: any) => {
           const slug = s.slug || s.id;
           const classes = sourceToClasses.get(s.id) || [];
           return {
-            sourceId: s.semanticId, // Use semantic ID for the library catalog
-            slug: slug,
+            sourceId: s.semanticId,
+            slug,
             name: s.name,
             shortName: s.abbreviation || s.name,
             description: s.description || "",
@@ -131,10 +116,10 @@ export default async function handler(req: any, res: any) {
               spells: 0,
               items: 0,
               bestiary: 0,
-              journals: 0
+              journals: 0,
             },
             detailUrl: `${slug}/source.json`,
-            classCatalogUrl: `${slug}/classes/catalog.json`
+            classCatalogUrl: `${slug}/classes/catalog.json`,
           };
         });
 
@@ -145,35 +130,36 @@ export default async function handler(req: any, res: any) {
         source: {
           system: "dauligor",
           entity: "source-catalog",
-          id: "dynamic-d1-library"
+          id: "dynamic-d1-library",
         },
-        entries
+        entries,
       }));
     }
 
-    // 4. Class Catalog for a Source
     const pathParts = cleanSubpath.split("/");
+
+    // ── Class catalog for a source (<slug>/classes/catalog.json) ────────────
     if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2] === "catalog.json") {
       const sourceSlug = pathParts[0].toLowerCase();
-      const source = allSources.find((s: any) => 
-        (s.slug || "").toLowerCase() === sourceSlug || 
-        s.id.toLowerCase() === sourceSlug ||
-        s.semanticId.toLowerCase() === sourceSlug
+      const source = allSources.find((s: any) =>
+        (s.slug || "").toLowerCase() === sourceSlug
+        || String(s.id).toLowerCase() === sourceSlug
+        || (s.semanticId || "").toLowerCase() === sourceSlug
       );
-      
+
       if (source) {
         const classes = sourceToClasses.get(source.id) || [];
         const entries = classes.map((cls: any) => {
           const identifier = cls.identifier || cls.id;
           return {
-            sourceId: `class-${identifier}`, // Match semantic naming
+            sourceId: `class-${identifier}`,
             name: cls.name,
             type: "class",
             img: cls.imageUrl || "",
             rules: cls.rules || source.rules || "2014",
             description: (cls.description || "").substring(0, 200),
             payloadKind: "dauligor.semantic.class-export",
-            payloadUrl: `${identifier}.json`
+            payloadUrl: `${identifier}.json`,
           };
         });
 
@@ -185,30 +171,38 @@ export default async function handler(req: any, res: any) {
             system: "dauligor",
             entity: "class-catalog",
             id: `${source.semanticId}-classes`,
-            sourceId: source.semanticId
+            sourceId: source.semanticId,
           },
-          entries
+          entries,
         }));
       }
     }
 
-    // 5. Specific Class Data
+    // ── Specific class payload (<slug>/classes/<identifier>.json) ───────────
+    // The catalog above advertises `payloadKind: dauligor.semantic.class-export`,
+    // so this MUST return the full bundle that exportClassSemantic produces:
+    // { class, subclasses, features, scalingColumns, uniqueOptionGroups,
+    //   uniqueOptionItems, spellsKnownScalings, alternativeSpellcastingScalings,
+    //   source }. Returning a flat row would silently break the importer.
     if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2].endsWith(".json")) {
       const classIdentifier = pathParts[2].replace(".json", "").toLowerCase();
-      const cls = allClasses.find((c: any) => 
-        (c.identifier || "").toLowerCase() === classIdentifier || 
-        c.id.toLowerCase() === classIdentifier
+      const cls = allClasses.find((c: any) =>
+        (c.identifier || "").toLowerCase() === classIdentifier
+        || String(c.id).toLowerCase() === classIdentifier
       );
       if (cls) {
-        res.setHeader("Content-Type", "application/json");
-        return res.end(JSON.stringify(cls));
+        const bundle = await exportClassSemantic(cls.id, SERVER_EXPORT_FETCHERS);
+        if (bundle) {
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify(bundle));
+        }
       }
     }
   } catch (error) {
     console.error("Dynamic Module API Error:", error);
   }
 
-  // Fallback: Static File Logic
+  // ── Fallback: serve static fixture files under module/dauligor-pairing ──
   let filePath = path.join(process.cwd(), "module/dauligor-pairing/data/sources", cleanSubpath);
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     filePath = path.join(filePath, "catalog.json");

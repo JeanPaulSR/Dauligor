@@ -2,6 +2,7 @@
  * Shared utility for rebuilding character state from SQL results.
  * This logic is used by both the client (CharacterBuilder/Export) and the server (Pairing API).
  */
+import { denormalizeClassRow, denormalizeSubclassRow } from "./classExport";
 
 export function rebuildCharacterFromSql(
   baseRow: any,
@@ -320,8 +321,12 @@ export async function buildCharacterExport(
       : Promise.resolve([])
   ]);
 
-  const classDocsById = Object.fromEntries(classRows.map(r => [r.id, r]));
-  const subclassDocsById = Object.fromEntries(subclassRows.map(r => [r.id, r]));
+  // D1 rows are snake_case with JSON columns as strings; the export code below
+  // reads camelCase fields and expects parsed JSON (`hitDie`, `imageUrl`,
+  // `spellcasting`, `advancements`, `primaryAbility`, etc.). Run every row
+  // through the canonical denormalizers so the actor shape is correct.
+  const classDocsById = Object.fromEntries(classRows.map(r => [r.id, denormalizeClassRow(r)]));
+  const subclassDocsById = Object.fromEntries(subclassRows.map(r => [r.id, denormalizeSubclassRow(r)]));
 
   // Shared Logic Imports (assumed available in scope or via imports)
   const {

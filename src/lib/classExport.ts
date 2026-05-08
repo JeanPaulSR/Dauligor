@@ -1,17 +1,40 @@
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+// Side-effect-free imports only at the top level — keeps this module
+// importable from server contexts (Vercel functions) without dragging in
+// `firebase`, `jszip`, or `file-saver`. Anything client-only is loaded via
+// dynamic `import()` inside the function that needs it.
 import { normalizeSpellFormulaShortcuts } from './referenceSyntax';
 import {
   buildCanonicalClassProgression,
   buildCanonicalSubclassProgression
 } from './classProgression';
-import {
-  fetchCollection,
-  fetchDocument,
-  queryD1,
-  upsertDocument,
-  upsertDocumentBatch
-} from './d1';
+
+/**
+ * Pluggable fetchers so this module can run from server contexts that don't
+ * have access to the client-side `fetchCollection`/`fetchDocument` (which
+ * authenticate via Firebase JWT through `/api/d1/query`).
+ *
+ * The Vercel API endpoint that exposes class detail to the Foundry module
+ * passes server-side fetchers backed by `executeD1QueryInternal`. The client
+ * passes the default helpers from `./d1` via `getDefaultExportFetchers()`.
+ */
+export interface ExportFetchers {
+  fetchCollection: <T = any>(
+    collectionName: string,
+    options?: { select?: string; where?: string; params?: any[]; orderBy?: string },
+  ) => Promise<T[]>;
+  fetchDocument: <T = any>(collectionName: string, id: string) => Promise<T | null>;
+}
+
+let cachedDefaultFetchers: ExportFetchers | null = null;
+async function getDefaultExportFetchers(): Promise<ExportFetchers> {
+  if (cachedDefaultFetchers) return cachedDefaultFetchers;
+  const d1 = await import('./d1');
+  cachedDefaultFetchers = {
+    fetchCollection: d1.fetchCollection,
+    fetchDocument: d1.fetchDocument,
+  };
+  return cachedDefaultFetchers;
+}
 
 // ── D1 row → camelCase shape helpers ────────────────────────────────────────
 // The Foundry export contract is camelCase only. D1 stores snake_case. These
@@ -52,7 +75,7 @@ function denormalizeSource(row: any) {
   return out;
 }
 
-function denormalizeClassRow(row: any) {
+export function denormalizeClassRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
@@ -83,7 +106,7 @@ function denormalizeClassRow(row: any) {
   });
 }
 
-function denormalizeSubclassRow(row: any) {
+export function denormalizeSubclassRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
@@ -221,12 +244,16 @@ function resolveImageUrl(record: any) {
 }
 
 /**
- * Imports a class semantic export bundle into Firestore.
+ * Imports a class semantic export bundle into D1. Client-only — pulls in
+ * `./d1` for the upsert helpers via dynamic import so this module stays
+ * loadable from the server.
  */
 export async function importClassSemantic(data: any) {
   if (!data.class || !data.class.id) {
     throw new Error("Invalid class export data: missing class information");
   }
+
+  const { fetchDocument, upsertDocument, upsertDocumentBatch } = await import('./d1');
 
   const {
     class: classData,
@@ -804,7 +831,11 @@ function sortAdvancementsByLevelThenType(left: any, right: any) {
 /**
  * Fetches all data for a single class and formats it for semantic export.
  */
-export async function exportClassSemantic(classId: string) {
+export async function exportClassSemantic(
+  classId: string,
+  fetchers?: ExportFetchers,
+) {
+  const { fetchCollection, fetchDocument } = fetchers ?? await getDefaultExportFetchers();
   const classInfo = await fetchDocument<any>('classes', classId);
   if (!classInfo) return null;
 
@@ -843,21 +874,25 @@ export async function exportClassSemantic(classId: string) {
     fetchCollection('spellsKnownScalings', { where: "type = 'known'" })
   ]);
 
+  // D1 returns snake_case columns; the export code reads camelCase. Build
+  // alias maps once here so the rest of the orchestration is shape-agnostic.
+  const parseLevels = (s: any) => (typeof s.levels === 'string' ? JSON.parse(s.levels) : (s.levels || []));
+  const parsePropertyIds = (w: any) => (typeof w.property_ids === 'string' ? JSON.parse(w.property_ids) : (w.property_ids || []));
   const refs = {
-    skillsById: Object.fromEntries(skillsData.map((s: any) => [s.id, { ...s, abilityId: s.ability_id || s.abilityId }])),
-    toolsById: Object.fromEntries(toolsData.map((t: any) => [t.id, { ...t, categoryId: t.category_id || t.categoryId, abilityId: t.ability_id || t.abilityId }])),
+    skillsById: Object.fromEntries(skillsData.map((s: any) => [s.id, { ...s, abilityId: s.ability_id }])),
+    toolsById: Object.fromEntries(toolsData.map((t: any) => [t.id, { ...t, categoryId: t.category_id, abilityId: t.ability_id }])),
     toolCategoriesById: Object.fromEntries(toolCategoriesData.map((c: any) => [c.id, c])),
-    armorById: Object.fromEntries(armorData.map((a: any) => [a.id, { ...a, categoryId: a.category_id || a.categoryId, abilityId: a.ability_id || a.abilityId }])),
+    armorById: Object.fromEntries(armorData.map((a: any) => [a.id, { ...a, categoryId: a.category_id, abilityId: a.ability_id }])),
     armorCategoriesById: Object.fromEntries(armorCategoriesData.map((c: any) => [c.id, c])),
-    weaponsById: Object.fromEntries(weaponsData.map((w: any) => [w.id, { ...w, categoryId: w.category_id || w.categoryId, abilityId: w.ability_id || w.abilityId, propertyIds: typeof w.property_ids === 'string' ? JSON.parse(w.property_ids) : (w.property_ids || w.propertyIds || []) }])),
+    weaponsById: Object.fromEntries(weaponsData.map((w: any) => [w.id, { ...w, categoryId: w.category_id, abilityId: w.ability_id, propertyIds: parsePropertyIds(w) }])),
     weaponCategoriesById: Object.fromEntries(weaponCategoriesData.map((c: any) => [c.id, c])),
-    languagesById: Object.fromEntries(languagesData.map((l: any) => [l.id, { ...l, categoryId: l.category_id || l.categoryId }])),
+    languagesById: Object.fromEntries(languagesData.map((l: any) => [l.id, { ...l, categoryId: l.category_id }])),
     languageCategoriesById: Object.fromEntries(languageCategoriesData.map((c: any) => [c.id, c])),
     attributesById: Object.fromEntries(attributesData.map((a: any) => [a.id, a])),
     tagsById: Object.fromEntries(tagsData.map((t: any) => [t.id, t])),
     spellcastingTypesById: Object.fromEntries(spellcastingTypesData.map((t: any) => [t.id, t])),
-    pactMagicScalingsById: Object.fromEntries(pactMagicScalingsData.map((s: any) => [s.id, { ...s, levels: typeof s.levels === 'string' ? JSON.parse(s.levels) : (s.levels || []) }])),
-    spellsKnownScalingsById: Object.fromEntries(spellsKnownScalingsData.map((s: any) => [s.id, { ...s, levels: typeof s.levels === 'string' ? JSON.parse(s.levels) : (s.levels || []) }]))
+    pactMagicScalingsById: Object.fromEntries(pactMagicScalingsData.map((s: any) => [s.id, { ...s, levels: parseLevels(s) }])),
+    spellsKnownScalingsById: Object.fromEntries(spellsKnownScalingsData.map((s: any) => [s.id, { ...s, levels: parseLevels(s) }])),
   };
 
   const sourceCache: { [id: string]: string } = {};
@@ -1287,6 +1322,11 @@ export function getSemanticSourceId(sourceData: any, originalId: string) {
  * Generates the source export bundle for a specific source.
  */
 export async function exportSourceForFoundry(sourceId: string, includePayloads: boolean = true) {
+  const [{ default: JSZip }, { saveAs }, { fetchDocument, fetchCollection }] = await Promise.all([
+    import('jszip'),
+    import('file-saver'),
+    import('./d1'),
+  ]);
   const sourceRow = await fetchDocument<any>('sources', sourceId);
   if (!sourceRow) throw new Error("Source not found");
   const sourceData: any = denormalizeSource(sourceRow);
@@ -1434,6 +1474,11 @@ export async function exportSourceForFoundry(sourceId: string, includePayloads: 
  * Generates a full library export containing all ready sources.
  */
 export async function exportFullSourceLibrary(includePayloads: boolean = true) {
+  const [{ default: JSZip }, { saveAs }, { fetchCollection }] = await Promise.all([
+    import('jszip'),
+    import('file-saver'),
+    import('./d1'),
+  ]);
   const sourcesRows = await fetchCollection<any>('sources', {
     where: 'status = ?',
     params: ['ready'],
@@ -1585,6 +1630,10 @@ export async function exportFullSourceLibrary(includePayloads: boolean = true) {
  * Specifically exports the master library catalog.json as a raw file for manual verification.
  */
 export async function exportRawLibraryCatalogJSON() {
+  const [{ saveAs }, { fetchCollection }] = await Promise.all([
+    import('file-saver'),
+    import('./d1'),
+  ]);
   const sourcesRows = await fetchCollection<any>('sources', {
     where: 'status = ?',
     params: ['ready'],
@@ -1644,6 +1693,10 @@ export async function exportRawLibraryCatalogJSON() {
  * Specifically exports a single source.json as a raw file for manual verification.
  */
 export async function exportRawSourceJSON(sourceId: string) {
+  const [{ saveAs }, { fetchDocument, fetchCollection }] = await Promise.all([
+    import('file-saver'),
+    import('./d1'),
+  ]);
   const sourceRow = await fetchDocument<any>('sources', sourceId);
   if (!sourceRow) throw new Error("Source not found");
   const sourceData: any = denormalizeSource(sourceRow);

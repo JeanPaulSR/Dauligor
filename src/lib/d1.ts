@@ -1,5 +1,9 @@
 import { auth } from "./firebase";
 import { toast } from "sonner";
+import { D1_TABLE_MAP, getTableName } from "./d1Tables";
+
+// Re-export so existing imports from './d1' keep working.
+export { D1_TABLE_MAP, getTableName };
 
 const QUERY_CACHE: Record<string, { data: any, timestamp: number }> = {};
 const INFLIGHT_REQUESTS: Record<string, Promise<any>> = {};
@@ -96,72 +100,6 @@ async function getAuthHeaders() {
     Authorization: `Bearer ${idToken}`,
     'Content-Type': 'application/json',
   };
-}
-
-const D1_TABLE_MAP: Record<string, string> = {
-  'conditions': 'status_conditions',
-  'spellcasting': 'spellcasting_progressions',
-  'languageCategories': 'language_categories',
-  'toolCategories': 'tool_categories',
-  'weaponCategories': 'weapon_categories',
-  'weaponProperties': 'weapon_properties',
-  'armorCategories': 'armor_categories',
-  'damageTypes': 'damage_types',
-  'statuses': 'status_conditions',
-  'conditionCategories': 'condition_categories',
-  'standardMulticlassProgression': 'multiclass_master_chart',
-  'attributes': 'attributes',
-  'skills': 'skills',
-  'tools': 'tools',
-  'weapons': 'weapons',
-  'armor': 'armor',
-  'sources': 'sources',
-  'spells': 'spells',
-  'lore': 'lore_articles',
-  'loreMetaCharacters': 'lore_meta_characters',
-  'loreMetaLocations': 'lore_meta_locations',
-  'loreMetaOrganizations': 'lore_meta_organizations',
-  'loreMetaDeities': 'lore_meta_deities',
-  'loreSecrets': 'lore_secrets',
-  'loreArticleEras': 'lore_article_eras',
-  'loreArticleCampaigns': 'lore_article_campaigns',
-  'loreSecretEras': 'lore_secret_eras',
-  'loreSecretCampaigns': 'lore_secret_campaigns',
-  'loreArticleTags': 'lore_article_tags',
-  'loreLinks': 'lore_links',
-  'campaigns': 'campaigns',
-  'items': 'items',
-  'feats': 'feats',
-  'features': 'features',
-  'users': 'users',
-  'eras': 'eras',
-  'tagGroups': 'tag_groups',
-  'tags': 'tags',
-  'scalingColumns': 'scaling_columns',
-  'uniqueOptionGroups': 'unique_option_groups',
-  'uniqueOptionItems': 'unique_option_items',
-  'spellcastingScalings': 'spellcasting_progressions',
-  'pactMagicScalings': 'spellcasting_progressions',
-  'spellsKnownScalings': 'spellcasting_progressions',
-  'classes': 'classes',
-  'subclasses': 'subclasses',
-  'characters': 'characters',
-  'characterProgression': 'character_progression',
-  'characterSelections': 'character_selections',
-  'characterInventory': 'character_inventory',
-  'characterSpells': 'character_spells',
-  'characterProficiencies': 'character_proficiencies',
-  'campaignMembers': 'campaign_members',
-  'systemMetadata': 'system_metadata',
-  'maps': 'maps',
-  'mapMarkers': 'map_markers',
-  'mapHighlights': 'map_highlights'
-};
-
-function getTableName(collectionName: string): string {
-  if (D1_TABLE_MAP[collectionName]) return D1_TABLE_MAP[collectionName];
-  // Fallback to snake_case conversion
-  return collectionName.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 }
 
 export interface D1Response<T> {

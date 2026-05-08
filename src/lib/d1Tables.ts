@@ -1,0 +1,71 @@
+// Standalone collection-name → table-name map. Lives in its own file (with no
+// imports) so it can be shared between the client-side d1.ts and server-side
+// API code that talks to the worker via executeD1QueryInternal.
+//
+// Keep this list in sync with the actual D1 schema. When you add a new table:
+// pick a camelCase collection alias here, point it at the snake_case table.
+export const D1_TABLE_MAP: Record<string, string> = {
+  conditions: 'status_conditions',
+  spellcasting: 'spellcasting_progressions',
+  languageCategories: 'language_categories',
+  toolCategories: 'tool_categories',
+  weaponCategories: 'weapon_categories',
+  weaponProperties: 'weapon_properties',
+  armorCategories: 'armor_categories',
+  damageTypes: 'damage_types',
+  statuses: 'status_conditions',
+  conditionCategories: 'condition_categories',
+  standardMulticlassProgression: 'multiclass_master_chart',
+  attributes: 'attributes',
+  skills: 'skills',
+  tools: 'tools',
+  weapons: 'weapons',
+  armor: 'armor',
+  sources: 'sources',
+  spells: 'spells',
+  lore: 'lore_articles',
+  loreMetaCharacters: 'lore_meta_characters',
+  loreMetaLocations: 'lore_meta_locations',
+  loreMetaOrganizations: 'lore_meta_organizations',
+  loreMetaDeities: 'lore_meta_deities',
+  loreSecrets: 'lore_secrets',
+  loreArticleEras: 'lore_article_eras',
+  loreArticleCampaigns: 'lore_article_campaigns',
+  loreSecretEras: 'lore_secret_eras',
+  loreSecretCampaigns: 'lore_secret_campaigns',
+  loreArticleTags: 'lore_article_tags',
+  loreLinks: 'lore_links',
+  campaigns: 'campaigns',
+  items: 'items',
+  feats: 'feats',
+  features: 'features',
+  users: 'users',
+  eras: 'eras',
+  tagGroups: 'tag_groups',
+  tags: 'tags',
+  scalingColumns: 'scaling_columns',
+  uniqueOptionGroups: 'unique_option_groups',
+  uniqueOptionItems: 'unique_option_items',
+  spellcastingScalings: 'spellcasting_progressions',
+  pactMagicScalings: 'spellcasting_progressions',
+  spellsKnownScalings: 'spellcasting_progressions',
+  classes: 'classes',
+  subclasses: 'subclasses',
+  characters: 'characters',
+  characterProgression: 'character_progression',
+  characterSelections: 'character_selections',
+  characterInventory: 'character_inventory',
+  characterSpells: 'character_spells',
+  characterProficiencies: 'character_proficiencies',
+  campaignMembers: 'campaign_members',
+  systemMetadata: 'system_metadata',
+  maps: 'maps',
+  mapMarkers: 'map_markers',
+  mapHighlights: 'map_highlights',
+};
+
+export function getTableName(collectionName: string): string {
+  if (D1_TABLE_MAP[collectionName]) return D1_TABLE_MAP[collectionName];
+  // Fallback: naive camelCase → snake_case (matches the pre-extract behavior).
+  return collectionName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
