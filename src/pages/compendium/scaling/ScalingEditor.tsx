@@ -59,7 +59,6 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
 
       const d1Data = {
         name,
-        identifier: id ? undefined : undefined, // slugify name if new?
         parent_id: parentId,
         parent_type: parentType,
         values: finalValues,

@@ -343,13 +343,24 @@ export async function fetchDocument<T>(
 // universally.
 const q = (col: string) => `"${col.replace(/"/g, '""')}"`;
 
+// Drop entries whose value is `undefined`. Callers occasionally pass
+// `field: undefined` as a placeholder for "skip this field"; without
+// this filter we'd build SQL referencing a column that may not exist
+// in the schema and SQLite errors with `no such column`.
+//
+// `null` is preserved — that's a legitimate "set this column to NULL"
+// signal and the caller intends it.
+function dropUndefined(entries: [string, any][]): [string, any][] {
+  return entries.filter(([, val]) => val !== undefined);
+}
+
 export async function upsertDocument(
   collectionName: string,
   id: string,
   data: Record<string, any>
 ): Promise<void> {
   const tableName = getTableName(collectionName);
-  const entries = Object.entries(data);
+  const entries = dropUndefined(Object.entries(data));
   const columns = ['id', ...entries.map(([key]) => key)];
   const values = [id, ...entries.map(([, val]) => typeof val === 'object' && val !== null ? JSON.stringify(val) : val)];
   const placeholders = columns.map(() => '?').join(', ');
@@ -380,7 +391,7 @@ export async function upsertDocumentBatch(collectionName: string, entries: { id:
 
   for (const { id, data } of entries) {
     const resolvedId = id || crypto.randomUUID();
-    const entryData = Object.entries(data);
+    const entryData = dropUndefined(Object.entries(data));
     const columns = ['id', ...entryData.map(([key]) => key)];
     const values = [resolvedId, ...entryData.map(([, val]) => typeof val === 'object' && val !== null ? JSON.stringify(val) : val)];
     const placeholders = columns.map(() => '?').join(', ');
