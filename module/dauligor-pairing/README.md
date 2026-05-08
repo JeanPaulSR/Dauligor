@@ -232,6 +232,33 @@ Copy this folder into your Foundry modules directory as:
 
 `FoundryVTT/Data/modules/dauligor-pairing`
 
+### Live development sync (recommended for module work)
+
+If you are actively editing the module, replace the copy with a directory junction (Windows) or symlink (macOS/Linux) so changes to the repo are picked up by Foundry on next reload without re-copying. **Agents working on the module should check whether this junction already exists before copying files** — if it does, editing the repo source is enough.
+
+Windows (PowerShell):
+
+```powershell
+# Adjust the source path to your repo / worktree root
+$src = "<repo-or-worktree-root>\module\dauligor-pairing"
+$dst = "$env:LOCALAPPDATA\FoundryVTT\Data\modules\dauligor-pairing"
+if (Test-Path $dst) { Rename-Item $dst "$($dst).bak-$(Get-Date -Format yyyyMMdd-HHmmss)" }
+cmd /c mklink /J $dst $src
+```
+
+To verify what an existing install path points at:
+
+```powershell
+Get-Item "$env:LOCALAPPDATA\FoundryVTT\Data\modules\dauligor-pairing" |
+  Select-Object FullName, LinkType, Target
+```
+
+Caveats when the junction targets a git worktree:
+
+- Switching branches inside the linked location immediately changes what Foundry sees on next reload — useful for testing, surprising if you forget.
+- Removing the underlying worktree (`git worktree remove …`) leaves the junction dangling. Re-point it at the main repo or another worktree before testing again.
+- Module settings persisted by Foundry live in the world's settings DB, not in the module folder, so deleting and re-creating the junction is safe.
+
 ## Test flow
 
 1. Enable the module.

@@ -1497,6 +1497,13 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
   _renderToolbar() {
     if (!this._toolbarRegion) return;
 
+    if (this._config.hideToolbar) {
+      this._toolbarRegion.innerHTML = "";
+      this._toolbarRegion.style.display = "none";
+      return;
+    }
+    this._toolbarRegion.style.removeProperty("display");
+
     this._toolbarRegion.innerHTML = `
       <div class="dauligor-sequence__toolbar">
         <div>
@@ -2179,64 +2186,102 @@ class DauligorClassOptionsApp extends HandlebarsApplicationMixin(ApplicationV2) 
 }
 
 async function runBaseClassAdvancementsStep({ workflow, sequence, progress }) {
-  const result = baseClassHandler(workflow);
+  const baseFeatures = baseClassHandler(workflow);
   const stepId = "base-advancements";
-  progress.markStep(stepId, "active", "Displaying base class advancements.");
+  progress.markStep(stepId, "active", "Reviewing base class advancements and granted features.");
   progress.setStatus("Waiting for confirmation of base class advancements...");
 
-  const html = `
-    <div class="dauligor-class-options__body" style="height: 100%; min-height: 0; overflow-y: auto; padding: 4px;">
-      <div style="display: flex; flex-direction: column; gap: 12px;">
-        ${result.advancements.map(adv => {
-    let guaranteedText = "None";
-    let choicesText = "None";
+  const visibleAdvancements = baseFeatures.advancements.filter((adv) => {
+    if (adv.id === "base-hp") return true;
+    return (adv.fixed?.length ?? 0) > 0
+      || (adv.options?.length ?? 0) > 0
+      || (adv.choiceCount ?? 0) > 0;
+  });
+  const grantedItems = collectOverviewFeatureItems(workflow);
+  const selectionState = { selectedKey: grantedItems[0]?.key ?? null };
 
-    if (adv.id === 'base-hp') {
-      const die = adv.adv?.configuration?.hitDie || 8;
-      guaranteedText = `1d${die} + Con modifier`;
-      choicesText = "Average or Manual Roll";
-    } else {
-      if (adv.fixed?.length > 0) {
-        guaranteedText = adv.fixed.map(val => formatFoundryLabel(val)).join(', ');
-      }
-      if (adv.options?.length > 0) {
-        choicesText = adv.options.map(val => formatFoundryLabel(val)).join(', ');
-      }
-    }
-
-    const choiceLabel = adv.choiceCount > 0 ? `Choice Options: ${adv.choiceCount}` : "Choice Options";
-
-    return `
-            <div class="dauligor-class-options__section" style="border: 1px solid var(--dauligor-border); border-radius: 6px; padding: 12px; background: rgba(255, 255, 255, 0.02); margin-bottom: 4px;">
-              <div class="dauligor-class-options__section-head">
-                <h3 style="color: var(--dauligor-accent-strong); text-transform: uppercase; margin: 0 0 8px 0; font-size: 13px;">${adv.title}</h3>
-                <div style="margin-bottom: 6px;">
-                  <span style="font-size: 11px; color: var(--dauligor-text-muted); text-transform: uppercase; display: block;">Guaranteed Options:</span>
-                  <span style="font-size: 12px; line-height: 1.4; color: var(--dauligor-text); display: block;">${guaranteedText}</span>
-                </div>
-                <div>
-                  <span style="font-size: 11px; color: var(--dauligor-text-muted); text-transform: uppercase; display: block;">${choiceLabel}</span>
-                  <span style="font-size: 12px; line-height: 1.4; color: var(--dauligor-text); display: block;">${choicesText}</span>
-                </div>
-              </div>
-            </div>
-          `;
-  }).join('')}
+  const advancementColumnHtml = `
+    <div class="dauligor-overview__panel">
+      <div class="dauligor-overview__panel-head">Base Advancement Information</div>
+      <div class="dauligor-overview__panel-body">
+        ${visibleAdvancements.map((adv) => renderOverviewAdvancementCard(adv)).join("")}
       </div>
     </div>
   `;
 
+  const featureColumnHtml = `
+    <div class="dauligor-overview__panel">
+      <div class="dauligor-overview__panel-head">Class Features List</div>
+      <div class="dauligor-overview__panel-body" data-region="overview-features">
+        ${renderOverviewFeatureList(grantedItems, selectionState.selectedKey)}
+      </div>
+    </div>
+  `;
+
+  const detailColumnHtml = `
+    <div class="dauligor-overview__panel">
+      <div class="dauligor-overview__panel-head">Selected Class Feature Information</div>
+      <div class="dauligor-overview__panel-body" data-region="overview-detail">
+        ${renderOverviewFeatureDetail(grantedItems.find((item) => item.key === selectionState.selectedKey) ?? null)}
+      </div>
+    </div>
+  `;
+
+  const html = `
+    <div class="dauligor-overview">
+      ${advancementColumnHtml}
+      ${featureColumnHtml}
+      ${detailColumnHtml}
+    </div>
+  `;
+
   const promptResult = await DauligorSequencePromptApp.prompt({
-    title: "Base Class Advancements Preview",
-    subtitle: "Preview of advancements strictly tied to the base class or multiclass.",
-    width: 650,
-    height: 520,
+    title: "Class Import Overview",
+    hideToolbar: true,
+    width: 1080,
+    height: 620,
     state: {},
     renderBody: () => html,
-    onRenderBody: () => {},
+    onRenderBody: (app, root) => {
+      // Let the overview grid fill the body region and cap scrolling to each column.
+      root.style.overflow = "hidden";
+      root.style.padding = "0";
+      const seqBody = root.querySelector(".dauligor-sequence__body");
+      if (seqBody) {
+        seqBody.style.height = "100%";
+        seqBody.style.minHeight = "0";
+        seqBody.style.gap = "0";
+      }
+
+      const featuresRegion = root.querySelector(`[data-region="overview-features"]`);
+      const detailRegion = root.querySelector(`[data-region="overview-detail"]`);
+      if (!featuresRegion || !detailRegion) return;
+
+      const resetDetailScroll = () => {
+        detailRegion.scrollTop = 0;
+        detailRegion.querySelector(".dauligor-overview__detail-body")?.scrollTo?.({ top: 0 });
+      };
+
+      const bindFeatureRows = (region) => {
+        region.querySelectorAll(`[data-feature-key]`).forEach((row) => {
+          row.addEventListener("click", () => {
+            selectionState.selectedKey = row.dataset.featureKey ?? null;
+            featuresRegion.innerHTML = renderOverviewFeatureList(grantedItems, selectionState.selectedKey);
+            detailRegion.innerHTML = renderOverviewFeatureDetail(
+              grantedItems.find((item) => item.key === selectionState.selectedKey) ?? null
+            );
+            bindFeatureRows(featuresRegion);
+            resetDetailScroll();
+          });
+        });
+      };
+
+      bindFeatureRows(featuresRegion);
+      resetDetailScroll();
+    },
     actions: [
-      { id: "confirm", label: "OK", primary: true },
-      { id: "cancel", label: "Cancel" }
+      { id: "cancel", label: "Cancel" },
+      { id: "confirm", label: "Accept", primary: true }
     ],
     onAction: (app, actionId) => {
       if (actionId === "cancel") return { status: "cancelled" };
@@ -2245,6 +2290,160 @@ async function runBaseClassAdvancementsStep({ workflow, sequence, progress }) {
   });
 
   return promptResult.status === "cancelled" ? "cancelled" : "confirmed";
+}
+
+function collectOverviewFeatureItems(workflow) {
+  if (!workflow) return [];
+
+  const classFeatures = ensureArray(workflow.importClassFeatureItems).map((item, index) => ({
+    key: `class:${item?.flags?.[MODULE_ID]?.sourceId ?? index}`,
+    kind: "class",
+    name: item?.name ?? "Class Feature",
+    level: getOverviewFeatureLevel(item),
+    description: getOverviewFeatureDescription(item),
+    subtype: getOverviewFeatureSubtypeLabel(item)
+  }));
+
+  const subclassFeatures = ensureArray(workflow.importSubclassFeatureItems).map((item, index) => ({
+    key: `subclass:${item?.flags?.[MODULE_ID]?.sourceId ?? index}`,
+    kind: "subclass",
+    name: item?.name ?? "Subclass Feature",
+    level: getOverviewFeatureLevel(item),
+    description: getOverviewFeatureDescription(item),
+    subtype: getOverviewFeatureSubtypeLabel(item)
+  }));
+
+  const all = [...classFeatures, ...subclassFeatures];
+  all.sort((left, right) => {
+    if (left.level !== right.level) return left.level - right.level;
+    if (left.kind !== right.kind) return left.kind === "class" ? -1 : 1;
+    return left.name.localeCompare(right.name);
+  });
+  return all;
+}
+
+function getOverviewFeatureLevel(item) {
+  return Number(
+    item?.flags?.[MODULE_ID]?.level
+    ?? item?.flags?.[MODULE_ID]?.levelPrerequisite
+    ?? item?.system?.level
+    ?? 1
+  ) || 1;
+}
+
+function getOverviewFeatureSubtypeLabel(item) {
+  const flag = item?.flags?.[MODULE_ID]?.featureTypeLabel;
+  if (typeof flag === "string" && flag.trim()) return flag.trim();
+  return "";
+}
+
+function getOverviewFeatureDescription(item) {
+  const candidates = [
+    item?.system?.description?.value,
+    item?.system?.description?.chat,
+    typeof item?.system?.description === "string" ? item.system.description : null
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate;
+  }
+  return "";
+}
+
+function renderOverviewAdvancementCard(adv) {
+  const isHp = adv.id === "base-hp";
+  const fixedText = isHp
+    ? `1d${adv.adv?.configuration?.hitDie || 8} + Con modifier`
+    : (adv.fixed?.length ? adv.fixed.map((val) => formatFoundryLabel(val)).join(", ") : "");
+  const choiceText = isHp
+    ? "Average / Maximum / Manual roll"
+    : (adv.options?.length ? adv.options.map((val) => formatFoundryLabel(val)).join(", ") : "");
+  const choiceLabel = adv.choiceCount > 0 ? `Choice (${adv.choiceCount})` : "Choice";
+
+  const rows = [];
+  if (fixedText) {
+    rows.push(`
+      <p class="dauligor-overview__adv-row">
+        <span class="dauligor-overview__adv-label">Guaranteed</span>
+        <span class="dauligor-overview__adv-value">${foundry.utils.escapeHTML(fixedText)}</span>
+      </p>
+    `);
+  }
+  if (choiceText) {
+    rows.push(`
+      <p class="dauligor-overview__adv-row">
+        <span class="dauligor-overview__adv-label">${foundry.utils.escapeHTML(choiceLabel)}</span>
+        <span class="dauligor-overview__adv-value">${foundry.utils.escapeHTML(choiceText)}</span>
+      </p>
+    `);
+  }
+
+  return `
+    <div class="dauligor-overview__adv">
+      <h3 class="dauligor-overview__adv-title">${foundry.utils.escapeHTML(adv.title)}</h3>
+      ${rows.join("")}
+    </div>
+  `;
+}
+
+function renderOverviewFeatureList(items, selectedKey) {
+  if (!items.length) {
+    return `<div class="dauligor-overview__placeholder">No new features will be granted.</div>`;
+  }
+
+  const groupsByLevel = new Map();
+  for (const item of items) {
+    const level = item.level || 1;
+    if (!groupsByLevel.has(level)) groupsByLevel.set(level, []);
+    groupsByLevel.get(level).push(item);
+  }
+
+  const levels = [...groupsByLevel.keys()].sort((a, b) => a - b);
+
+  return levels.map((level) => {
+    const rows = groupsByLevel.get(level).map((item) => {
+      const classes = [
+        "dauligor-overview__feature",
+        item.kind === "subclass" ? "dauligor-overview__feature--subclass" : "",
+        item.key === selectedKey ? "is-selected" : ""
+      ].filter(Boolean).join(" ");
+      return `
+        <button type="button" class="${classes}" data-feature-key="${foundry.utils.escapeHTML(item.key)}">
+          <span class="dauligor-overview__feature-name">${foundry.utils.escapeHTML(item.name)}</span>
+          ${item.kind === "subclass" ? `<span class="dauligor-overview__feature-tag">Subclass</span>` : ""}
+        </button>
+      `;
+    }).join("");
+
+    return `
+      <div class="dauligor-overview__level-group">
+        <div class="dauligor-overview__level-heading">Level ${level}</div>
+        ${rows}
+      </div>
+    `;
+  }).join("");
+}
+
+function renderOverviewFeatureDetail(item) {
+  if (!item) {
+    return `<div class="dauligor-overview__placeholder">Select a class feature to view its details.</div>`;
+  }
+
+  const meta = [`Level ${item.level}`, item.kind === "subclass" ? "Subclass Feature" : "Class Feature"];
+  if (item.subtype) meta.push(item.subtype);
+
+  const body = item.description?.trim()
+    ? item.description
+    : `<p style="font-style: italic; color: var(--dauligor-text-muted);">No description provided.</p>`;
+
+  return `
+    <div class="dauligor-overview__detail">
+      <h3 class="dauligor-overview__detail-title">${foundry.utils.escapeHTML(item.name)}</h3>
+      <div class="dauligor-overview__detail-meta">
+        ${meta.map((part) => `<span>${foundry.utils.escapeHTML(part)}</span>`).join("")}
+      </div>
+      <div class="dauligor-overview__detail-body">${body}</div>
+    </div>
+  `;
 }
 
 class DauligorImportSequenceCancelledError extends Error {
@@ -2373,8 +2572,8 @@ async function runDauligorClassImportSequence({
       // 2. Skill Proficiencies Advancement
       else if (adv.id === 'base-skills') {
         let selectedSkills = [];
-        // Show window if there are choices to make OR fixed proficiencies to display
-        if (actor && (adv.choiceCount > 0 || (adv.fixed?.length ?? 0) > 0)) {
+        // Only prompt when there are real choices to make
+        if (actor && adv.choiceCount > 0 && (adv.options?.length ?? 0) > 0) {
           const skillSelections = await runSkillSelectionStep({ workflow, sequence, progress, advancement: adv });
           if (skillSelections === "cancelled") throw new DauligorImportSequenceCancelledError();
           if (skillSelections) {
@@ -2382,20 +2581,20 @@ async function runDauligorClassImportSequence({
             selectedSkills = skillSelections;
           }
         } else {
-          progress.markStep("skills", "skipped", "No skill data to display.");
+          progress.markStep("skills", "skipped", "No skill choices to make.");
         }
-        
+
         if (actor) {
           const allSkills = [...(adv.fixed || []), ...selectedSkills];
           sequence.characterUpdater.updateSkills(allSkills);
         }
-      } 
-      
+      }
+
       // 3. Tool Proficiencies Advancement
       else if (adv.id === 'base-tools') {
         let selectedTools = [];
-        // Show window if there are choices to make OR fixed tools to display
-        if (actor && (adv.choiceCount > 0 || (adv.fixed?.length ?? 0) > 0)) {
+        // Only prompt when there are real choices to make
+        if (actor && adv.choiceCount > 0 && (adv.options?.length ?? 0) > 0) {
           const toolSelections = await runToolSelectionStep({ workflow, sequence, progress, advancement: adv });
           if (toolSelections === "cancelled") throw new DauligorImportSequenceCancelledError();
           if (toolSelections) {
@@ -2403,24 +2602,20 @@ async function runDauligorClassImportSequence({
             selectedTools = toolSelections;
           }
         } else {
-          progress.markStep("tools", "skipped", "No tool data to display.");
+          progress.markStep("tools", "skipped", "No tool choices to make.");
         }
 
         if (actor) {
           const allTools = [...(adv.fixed || []), ...selectedTools];
           sequence.characterUpdater.updateTraitProficiencies("toolProf", allTools);
         }
-      } 
-      
+      }
+
       // 4. Other Trait Advancements (Saves, Armor, Weapons, Languages, Resistances)
       else {
         let selections = [];
-        // ALWAYS show the window if there is any data (fixed or options) OR if it's a mandatory testing category
-        const isMandatory = [
-          'base-saves', 'base-armor', 'base-weapons', 'base-languages', 
-          'base-resistances', 'base-immunities', 'base-vulnerabilities', 'base-condition-immunities'
-        ].includes(adv.id);
-        if (actor && ((adv.options?.length ?? 0) > 0 || (adv.fixed?.length ?? 0) > 0 || isMandatory)) {
+        // Only prompt when there are real choices to make
+        if (actor && adv.choiceCount > 0 && (adv.options?.length ?? 0) > 0) {
           const res = await runTraitSelectionStep({
             title: adv.title,
             fieldName: adv.id,
@@ -2435,6 +2630,8 @@ async function runDauligorClassImportSequence({
             state.traitSelections[adv.id] = res;
             selections = res;
           }
+        } else {
+          progress.markStep(`advancement:${adv.id.replace('base-', '')}`, "skipped", "No choices to make.");
         }
 
         if (actor) {
