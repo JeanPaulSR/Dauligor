@@ -604,7 +604,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
   const handleExportSlice = async (slice: "everything" | "skeleton" | "subclasses" | "features" | "unique-options") => {
     try {
-      const data = await exportClassSemantic(id!);
+      const data = await exportClassSemantic(id!, { fetchCollection, fetchDocument });
       if (!data) throw new Error("Data not found");
       let exportData: any = {};
       let filenameSuffix = "export";

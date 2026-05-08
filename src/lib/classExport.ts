@@ -1,7 +1,9 @@
 // Side-effect-free imports only at the top level — keeps this module
 // importable from server contexts (Vercel functions) without dragging in
-// `firebase`, `jszip`, or `file-saver`. Anything client-only is loaded via
-// dynamic `import()` inside the function that needs it.
+// `firebase`, `jszip`, `file-saver`, or `./d1`. Client-only deps are loaded
+// via dynamic `import()` inside the function that needs them; the semantic
+// export takes its fetchers as a required parameter so it never references
+// `./d1` at all.
 import { normalizeSpellFormulaShortcuts } from './referenceSyntax';
 import {
   buildCanonicalClassProgression,
@@ -13,9 +15,12 @@ import {
  * have access to the client-side `fetchCollection`/`fetchDocument` (which
  * authenticate via Firebase JWT through `/api/d1/query`).
  *
- * The Vercel API endpoint that exposes class detail to the Foundry module
- * passes server-side fetchers backed by `executeD1QueryInternal`. The client
- * passes the default helpers from `./d1` via `getDefaultExportFetchers()`.
+ * Required — callers must supply fetchers explicitly. The Vercel API
+ * endpoint that exposes class detail to the Foundry module passes server
+ * fetchers backed by `executeD1QueryInternal`; client call sites pass the
+ * helpers from `./d1`. Keeping this required means classExport.ts never
+ * imports `./d1` at runtime, which is the only way the Vercel bundler
+ * reliably leaves firebase/JSON config out of the api/module function.
  */
 export interface ExportFetchers {
   fetchCollection: <T = any>(
@@ -23,17 +28,6 @@ export interface ExportFetchers {
     options?: { select?: string; where?: string; params?: any[]; orderBy?: string },
   ) => Promise<T[]>;
   fetchDocument: <T = any>(collectionName: string, id: string) => Promise<T | null>;
-}
-
-let cachedDefaultFetchers: ExportFetchers | null = null;
-async function getDefaultExportFetchers(): Promise<ExportFetchers> {
-  if (cachedDefaultFetchers) return cachedDefaultFetchers;
-  const d1 = await import('./d1');
-  cachedDefaultFetchers = {
-    fetchCollection: d1.fetchCollection,
-    fetchDocument: d1.fetchDocument,
-  };
-  return cachedDefaultFetchers;
 }
 
 // ── D1 row → camelCase shape helpers ────────────────────────────────────────
@@ -833,9 +827,9 @@ function sortAdvancementsByLevelThenType(left: any, right: any) {
  */
 export async function exportClassSemantic(
   classId: string,
-  fetchers?: ExportFetchers,
+  fetchers: ExportFetchers,
 ) {
-  const { fetchCollection, fetchDocument } = fetchers ?? await getDefaultExportFetchers();
+  const { fetchCollection, fetchDocument } = fetchers;
   const classInfo = await fetchDocument<any>('classes', classId);
   if (!classInfo) return null;
 
@@ -1327,6 +1321,7 @@ export async function exportSourceForFoundry(sourceId: string, includePayloads: 
     import('file-saver'),
     import('./d1'),
   ]);
+  const exportFetchers = { fetchCollection, fetchDocument };
   const sourceRow = await fetchDocument<any>('sources', sourceId);
   if (!sourceRow) throw new Error("Source not found");
   const sourceData: any = denormalizeSource(sourceRow);
@@ -1450,7 +1445,7 @@ export async function exportSourceForFoundry(sourceId: string, includePayloads: 
     
     // Always include payloads in this standard export
     for (const cls of classes) {
-      const fullExport = await exportClassSemantic(cls.id);
+      const fullExport = await exportClassSemantic(cls.id, exportFetchers);
       if (fullExport) {
         classFolder.file(`${(cls as any).identifier || cls.id}.json`, JSON.stringify(fullExport, null, 2));
       }
@@ -1474,11 +1469,12 @@ export async function exportSourceForFoundry(sourceId: string, includePayloads: 
  * Generates a full library export containing all ready sources.
  */
 export async function exportFullSourceLibrary(includePayloads: boolean = true) {
-  const [{ default: JSZip }, { saveAs }, { fetchCollection }] = await Promise.all([
+  const [{ default: JSZip }, { saveAs }, { fetchCollection, fetchDocument }] = await Promise.all([
     import('jszip'),
     import('file-saver'),
     import('./d1'),
   ]);
+  const exportFetchers = { fetchCollection, fetchDocument };
   const sourcesRows = await fetchCollection<any>('sources', {
     where: 'status = ?',
     params: ['ready'],
@@ -1593,7 +1589,7 @@ export async function exportFullSourceLibrary(includePayloads: boolean = true) {
       if (classFolder) {
         classFolder.file("catalog.json", JSON.stringify(classCatalog, null, 2));
         for (const cls of classes) {
-          const fullExport = await exportClassSemantic(cls.id);
+          const fullExport = await exportClassSemantic(cls.id, exportFetchers);
           if (fullExport) {
             classFolder.file(`${(cls as any).identifier || cls.id}.json`, JSON.stringify(fullExport, null, 2));
           }
