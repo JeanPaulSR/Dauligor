@@ -135,6 +135,11 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     'effectsStr', 'id', 'automation', 'activitiesStr', 'status', 'usage',
     'configuration', 'sourceType', 'source_type', 'type', '__usesRecoveryDraft',
     'featType', 'feat_type', 'featureType', 'feature_type', 'source',
+    // `uniqueOptionGroupIds` is seeded on new features (`[]`) but the
+    // features table has no column for it — option groups link to
+    // features one-way via `unique_option_groups.feature_id`, not back
+    // through the feature row. Filter to avoid the "no such column" error.
+    'uniqueOptionGroupIds', 'unique_option_group_ids',
   ];
   forbidden.forEach(key => delete normalized[key]);
 
