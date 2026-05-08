@@ -182,6 +182,10 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
     return {
       sourceId: `class-${identifier}`,
       name: cls.name,
+      // Source abbreviation (PHB, XGE, …) so the Foundry browser can label
+      // classes by abbreviation. The legacy `deriveSourceLabel` fallback
+      // produced "2014" / "2024" when given just the rules year.
+      shortName: source.abbreviation || source.name,
       type: "class",
       img: cls.imageUrl || "",
       rules: cls.rules || source.rules || "2014",

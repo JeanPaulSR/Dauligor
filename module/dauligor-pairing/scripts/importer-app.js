@@ -2605,15 +2605,30 @@ async function runDauligorClassImportSequence({
           if (hpModeResult !== undefined) {
             state.hpMode = hpModeResult.hpMode ?? state.hpMode;
             state.hpCustomFormula = hpModeResult.hpCustomFormula ?? state.hpCustomFormula;
-            
+
+            // Compute total HP increase across the level diff. Per the
+            // 5e rules, level 1 always gets the maximum hit die value;
+            // levels 2+ use the chosen mode (average / maximum / minimum).
+            // Without this loop, fresh imports at level 1 would only get
+            // the per-level mode value (e.g. average = 5 for d8) instead
+            // of the max, which is why level 1 was reading as 0/low HP.
             const die = adv.adv?.configuration?.hitDie || 8;
-            let increase = 0;
-            if (state.hpMode === "average") increase = Math.floor(die / 2) + 1;
-            else if (state.hpMode === "maximum") increase = die;
-            else if (state.hpMode === "minimum") increase = 1;
-            
-            if (increase > 0) {
-              sequence.characterUpdater.updateHp(increase);
+            const previousLevels = Number(workflow.existingClassLevel ?? 0) || 0;
+            let totalIncrease = 0;
+            for (let lvl = previousLevels + 1; lvl <= state.targetLevel; lvl++) {
+              if (lvl === 1) {
+                totalIncrease += die;
+              } else if (state.hpMode === "average") {
+                totalIncrease += Math.floor(die / 2) + 1;
+              } else if (state.hpMode === "maximum") {
+                totalIncrease += die;
+              } else if (state.hpMode === "minimum") {
+                totalIncrease += 1;
+              }
+            }
+
+            if (totalIncrease > 0) {
+              sequence.characterUpdater.updateHp(totalIncrease);
             }
           }
         }
@@ -2715,25 +2730,132 @@ async function runDauligorClassImportSequence({
 
 
 
-    if (actor && sequence.characterUpdater) {
-      // Commit the base-advancement selections (HP, skills, saves, armor /
-      // weapon / tool / language proficiencies, damage traits) to the
-      // actor's root data. This is everything `CharacterUpdater` knows how
-      // to write today — it is intentionally NOT yet embedding class or
-      // feature items. Once we confirm the actor-root state lands cleanly,
-      // the next pass will hand off to the legacy embed/grant pipeline
-      // (`importClassPayloadToWorld(payload, { actor, importSelection })`)
-      // for the feature side.
-      const stagedSnapshot = JSON.parse(JSON.stringify(sequence.characterUpdater.tempData || {}));
-      log("Committing base advancement selections to actor", { actor: actor.name, staged: stagedSnapshot });
+    if (actor) {
+      // If the class has subclass support and the target level is at/above
+      // the subclass-feature level (Artificer 3, Sorcerer 1, etc.), prompt
+      // the user before bridging — the legacy path errors otherwise.
+      // Subclass selection is the one piece of selection-collection that
+      // wasn't already in the per-advancement loop.
+      let subclassSourceId = state.subclassSourceId ?? null;
+      let includeSubclass = Boolean(subclassSourceId);
+      const subclassNeeded = workflow.hasSubclassSupport
+        && Number(state.targetLevel || 1) >= Number(workflow.minSubclassLevel || Infinity)
+        && (workflow.subclassItems?.length ?? 0) > 0;
+
+      if (subclassNeeded && !subclassSourceId) {
+        const subclassResult = await runSubclassStep({ workflow, sequence, progress });
+        if (subclassResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+        if (subclassResult) {
+          subclassSourceId = subclassResult;
+          includeSubclass = true;
+          state.subclassSourceId = subclassSourceId;
+          state.includeSubclass = true;
+          // Rebuild workflow so option groups + features pick up the
+          // selected subclass before the option-group prompts run.
+          workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+          progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
+        }
+      }
+
+      // Option-group prompts (Choice / Grant advancements that map to
+      // dauligor's UniqueOptionGroup machinery — Sorcerer Origin pool,
+      // Fighter Style pool, Cleric Domain pool, etc.). The legacy
+      // pipeline embeds the picked option items on the actor and the
+      // dnd5e advancement framework grants their associated features.
+      // Sequence collects per-group source-ids into state.optionSelections
+      // keyed by group.sourceId; the bridge below passes the whole map
+      // through as importSelection.optionSelections.
+      state.optionSelections = state.optionSelections ?? {};
+      for (const group of ensureArray(workflow.optionGroups)) {
+        if (!group?.options?.length || !group?.maxSelections) continue;
+        // Skip if the user previously satisfied this group (e.g. resumed
+        // from a partial run).
+        if ((state.optionSelections[group.sourceId] ?? []).length === group.maxSelections) continue;
+
+        const groupResult = await runOptionGroupStep({ workflow, group, sequence, progress });
+        if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+        if (Array.isArray(groupResult)) {
+          state.optionSelections[group.sourceId] = groupResult;
+          // Refresh the workflow so subsequent group prompts see the
+          // updated selection state (some groups may filter their pool
+          // based on prior picks via group.selectionCountsByLevel).
+          workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+        }
+      }
+
+      // Hand off to the legacy import pipeline for the document-level
+      // work:
+      //   - rekey semantic advancement ids to 16-char Foundry ids
+      //   - embed the class item (and chosen subclass) on the actor
+      //   - upsert feature items granted by the class's advancement
+      //     tree at the target level (ItemGrant)
+      //   - upsert option items the user picked through the option-group
+      //     prompts (ItemChoice via UniqueOptionGroup machinery)
+      //   - prune higher-level features when re-importing at a lower level
+      //
+      // We deliberately pass *empty* proficiency-selection arrays. The
+      // legacy apply* helpers had two issues for this flow: skill slugs
+      // arrived prefixed (`skills:acr`) and were silently written to
+      // garbage paths, and HP at level 1 didn't apply. CharacterUpdater
+      // — fed by the per-advancement loop above — is the source of truth
+      // for the actor-root surface (skills / saves / tools / languages /
+      // damage traits / HP). Calling its `commit()` after the bridge
+      // applies those writes via flat dotted-key updates with proper
+      // prefix stripping.
+      //
+      // optionSelections is still passed through because the legacy path
+      // uses it to decide which option items to embed (not to apply
+      // proficiencies — those flow through CharacterUpdater).
+      const importSelection = {
+        includeSubclass,
+        subclassSourceId,
+        optionSelections: state.optionSelections ?? {},
+        hpMode: null,
+        hpCustomFormula: null,
+        skillSelections: [],
+        toolSelections: [],
+        savingThrowSelections: [],
+        languageSelections: [],
+        traitSelections: {}
+      };
+
+      log("Bridging to importClassPayloadToWorld", {
+        actor: actor.name,
+        targetLevel: state.targetLevel,
+        importSelection,
+        characterUpdaterDelta: sequence.characterUpdater?.tempData ?? null
+      });
+
       try {
-        await sequence.characterUpdater.commit();
-        progress.setStatus(`Applied base class advancements to ${actor.name}.`, "success");
-        notifyInfo(`Applied base class advancements to "${actor.name}".`);
+        const result = await importClassPayloadToWorld(payload, {
+          entry,
+          actor,
+          targetLevel: state.targetLevel,
+          importSelection,
+          folderPath
+        });
+        if (!result) {
+          progress.setStatus("Import did not complete — see console for details.", "danger");
+          progress.setFinished(true);
+          return null;
+        }
+
+        // Apply actor-root proficiencies and the HP increase via the
+        // manual delta CharacterUpdater accumulated during the loop.
+        if (sequence.characterUpdater) {
+          try {
+            await sequence.characterUpdater.commit();
+          } catch (error) {
+            console.warn(`${MODULE_ID} | CharacterUpdater commit failed (bridge already succeeded)`, error);
+            notifyWarn(`Class imported, but applying proficiencies failed: ${error?.message ?? error}`);
+          }
+        }
+
+        progress.setStatus(`Imported ${result.name ?? "class"} ${state.targetLevel} onto ${actor.name}.`, "success");
       } catch (error) {
-        console.error(`${MODULE_ID} | Failed to commit base advancements`, error);
-        progress.setStatus(`Failed to apply base advancements: ${error?.message ?? error}`, "danger");
-        notifyWarn(`Failed to apply base advancements: ${error?.message ?? error}`);
+        console.error(`${MODULE_ID} | Import failed`, error);
+        progress.setStatus(`Import failed: ${error?.message ?? error}`, "danger");
+        notifyWarn(`Import failed: ${error?.message ?? error}`);
         progress.setFinished(true);
         return null;
       }
@@ -2854,24 +2976,23 @@ function buildImportSequenceSteps(workflow, { actor = null } = {}) {
     if (workflow?.toolChoices?.choiceCount > 0 && workflow?.toolChoices?.allOptions?.length) {
       steps.push({ id: "tools", label: "Choose tool proficiencies" });
     }
+    if (workflow?.hasSubclassSupport
+      && (workflow?.subclassItems?.length ?? 0) > 0
+      && Number(workflow?.targetLevel ?? 1) >= Number(workflow?.minSubclassLevel ?? Infinity)) {
+      steps.push({ id: "subclass", label: "Choose subclass" });
+    }
+    for (const group of ensureArray(workflow?.optionGroups).filter((candidate) => candidate.options.length && candidate.maxSelections > 0)) {
+      steps.push({
+        id: `option:${group.sourceId}`,
+        label: group.name || group.featureName || "Choose class options"
+      });
+    }
   }
 
-/*
-  for (const group of ensureArray(workflow?.optionGroups).filter((candidate) => candidate.options.length && candidate.maxSelections > 0)) {
-    steps.push({
-      id: `option:${group.sourceId}`,
-      label: group.name || group.featureName || "Choose class options"
-    });
-  }
-
-  if (actor && workflow?.hasSpellcasting) {
-    steps.push({ id: "spells", label: "Review spell choices" });
-  }
-
-  if (actor && workflow?.startingEquipment) {
-    steps.push({ id: "equipment", label: "Review starting equipment" });
-  }
-*/
+  // Spells / starting-equipment placeholder steps stay disabled until the
+  // corresponding flows are wired. `runSpellPlaceholderStep` and
+  // `runEquipmentPlaceholderStep` exist as stubs but aren't called from
+  // the sequence loop yet.
 
   steps.push({ id: "import", label: "Import class" });
   return steps;
@@ -3750,18 +3871,22 @@ function extractClassEntryMetadata(entry, payload) {
   // `tags` and `subclasses[]`, which is enough to render the card grid
   // and tag filter. The full payload is fetched on Import click via
   // `_ensureVariantPayload` and the variant is re-decorated then.
+  // Source label prefers `entry.shortName` (the source abbreviation —
+  // PHB, XGE, etc.) over `deriveSourceLabel(rules)` which would render
+  // the rules year ("2014").
   if (!payload) {
+    const sourceLabel = entry?.shortName || deriveSourceLabel(entry?.rules ?? "");
     return {
       classSourceId: entry?.sourceId
         ?? (entry?.payloadUrl ? `class-${String(entry.payloadUrl).replace(/\.json$/i, "")}` : null),
       name: entry?.name ?? "Class",
       description: summarizeHtml(entry?.description ?? ""),
-      sourceLabel: deriveSourceLabel(entry?.rules ?? ""),
+      sourceLabel,
       tags: normalizeTags(entry?.tags),
       subclasses: ensureArray(entry?.subclasses).map((sub) => ({
         sourceId: sub?.sourceId ?? slugify(sub?.name ?? ""),
         name: sub?.name ?? "Subclass",
-        sourceLabel: deriveSourceLabel(entry?.rules ?? "")
+        sourceLabel
       }))
     };
   }
