@@ -12,3 +12,4 @@ worker/.dev.vars
 worker/*-dump.sql
 firebase-service-account*.json
 .claude/worktrees/
+backups/
