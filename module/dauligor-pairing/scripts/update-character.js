@@ -27,6 +27,89 @@ function stripTypePrefix(slug) {
   return s.replace(TYPE_PREFIX_RE, "");
 }
 
+/**
+ * Reports whether a slug is *already proficient* on the actor — either
+ * because the actor's current sheet has it (existing proficiency from a
+ * prior class, race, etc.) OR because an earlier prompt in this same
+ * import sequence already marked it via CharacterUpdater. The selection
+ * prompts use this to grey out checkboxes the player has effectively
+ * already chosen, so the user doesn't redundantly pick a skill they
+ * already have.
+ *
+ * `kind` accepts the synthetic ids used by `baseClassHandler`
+ * (`base-skills`, `base-saves`, `base-armor`, etc.) and the bare
+ * names (`skills`, `saves`, etc.).
+ */
+export function isAlreadyMarked(actor, characterUpdater, kind, slug) {
+  const cleaned = stripTypePrefix(slug);
+  if (!cleaned) return false;
+
+  const k = String(kind ?? "").toLowerCase();
+  const delta = characterUpdater?.delta ?? {};
+
+  const checkSkill = () =>
+    Number(actor?.system?.skills?.[cleaned]?.value ?? 0) > 0
+    || Number(delta[`system.skills.${cleaned}.value`] ?? 0) > 0;
+
+  const checkSave = () =>
+    Number(actor?.system?.abilities?.[cleaned]?.proficient ?? 0) > 0
+    || Number(delta[`system.abilities.${cleaned}.proficient`] ?? 0) > 0;
+
+  const checkTraitArray = (path) => {
+    const onActor = Array.isArray(actor?.system?.traits?.[path]?.value)
+      ? actor.system.traits[path].value
+      : [];
+    const onDelta = Array.isArray(delta[`system.traits.${path}.value`])
+      ? delta[`system.traits.${path}.value`]
+      : [];
+    return onActor.includes(cleaned) || onDelta.includes(cleaned);
+  };
+
+  const checkTool = () =>
+    Number(actor?.system?.tools?.[cleaned]?.value ?? 0) > 0
+    || checkTraitArray("toolProf");
+
+  switch (k) {
+    case "base-skills":
+    case "skills":
+    case "skill":
+      return checkSkill();
+    case "base-saves":
+    case "saves":
+    case "abilities":
+      return checkSave();
+    case "base-tools":
+    case "tools":
+    case "tool":
+      return checkTool();
+    case "base-armor":
+    case "armor":
+      return checkTraitArray("armorProf");
+    case "base-weapons":
+    case "weapons":
+    case "weapon":
+      return checkTraitArray("weaponProf");
+    case "base-languages":
+    case "languages":
+    case "language":
+      return checkTraitArray("languages");
+    case "base-resistances":
+    case "dr":
+      return checkTraitArray("dr");
+    case "base-immunities":
+    case "di":
+      return checkTraitArray("di");
+    case "base-vulnerabilities":
+    case "dv":
+      return checkTraitArray("dv");
+    case "base-condition-immunities":
+    case "ci":
+      return checkTraitArray("ci");
+    default:
+      return false;
+  }
+}
+
 function uniqueClean(values) {
   const seen = new Set();
   const out = [];
@@ -121,6 +204,13 @@ export class CharacterUpdater {
   /**
    * Apply the queued delta to the actor in one network round-trip.
    * Returns the updated Actor on success, or null if there was nothing to write.
+   *
+   * After the main delta lands, if the actor's current HP is still 0 and
+   * the new derived `hp.max` is positive (a fresh import — character
+   * sheet just rolled out of zero), fill `hp.value` to match `max` so
+   * the actor doesn't start the campaign at "0 / 8". We deliberately
+   * don't auto-heal a wounded actor: only touch `hp.value` when it's
+   * still at 0 after the delta has applied.
    */
   async commit() {
     if (!this.actor) return null;
@@ -132,6 +222,13 @@ export class CharacterUpdater {
     try {
       const result = await this.actor.update(this.delta);
       log("CharacterUpdater: commit successful");
+
+      const maxAfter = Number(this.actor?.system?.attributes?.hp?.max ?? 0) || 0;
+      const valueAfter = Number(this.actor?.system?.attributes?.hp?.value ?? 0) || 0;
+      if (maxAfter > 0 && valueAfter <= 0) {
+        log("CharacterUpdater: filling hp.value to max on fresh import", { max: maxAfter });
+        await this.actor.update({ "system.attributes.hp.value": maxAfter });
+      }
       return result;
     } catch (error) {
       console.error("Dauligor | CharacterUpdater: commit failed", error);

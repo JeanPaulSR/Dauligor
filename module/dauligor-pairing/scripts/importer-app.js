@@ -11,7 +11,7 @@ import { buildClassImportWorkflow, fetchClassCatalog, fetchJson, fetchSourceCata
 import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
-import { CharacterUpdater } from "./update-character.js";
+import { CharacterUpdater, isAlreadyMarked } from "./update-character.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -3118,6 +3118,7 @@ async function runTraitSelectionStep({ title, fieldName, advancement, workflow, 
   const fixed = advancement.fixed || [];
   const options = advancement.options || [];
   const choiceCount = advancement.choiceCount || 0;
+  const targetActor = workflow?.targetActor ?? null;
 
   const result = await DauligorSequencePromptApp.prompt({
     title: title,
@@ -3131,15 +3132,16 @@ async function runTraitSelectionStep({ title, fieldName, advancement, workflow, 
       <div class="dauligor-class-options__choice-list">
         ${options.map((slug) => {
           const isChecked = app._state.selections.includes(slug);
+          const alreadyHas = isAlreadyMarked(targetActor, sequence?.characterUpdater, fieldName, slug);
           const label = formatFoundryLabel(slug);
           const abilityMatch = slug.match(/^(saves):([a-z]{3})$/i);
           const metaLabel = abilityMatch ? formatAbilityAbbreviation(abilityMatch[2]) : "";
-          
+
           return `
-            <label class="dauligor-class-options__checkbox">
-              <input type="checkbox" data-action="toggle-item" data-slug="${foundry.utils.escapeHTML(slug)}" ${isChecked ? "checked" : ""}>
+            <label class="dauligor-class-options__checkbox ${alreadyHas ? "dauligor-class-options__checkbox--disabled" : ""}">
+              <input type="checkbox" data-action="toggle-item" data-slug="${foundry.utils.escapeHTML(slug)}" ${isChecked ? "checked" : ""} ${alreadyHas ? "disabled" : ""}>
               <span class="dauligor-class-options__checkbox-copy">
-                <span class="dauligor-class-options__checkbox-title">${foundry.utils.escapeHTML(label)}</span>
+                <span class="dauligor-class-options__checkbox-title">${foundry.utils.escapeHTML(label)}${alreadyHas ? " <span style='color:var(--dauligor-text-muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;'>· already proficient</span>" : ""}</span>
                 ${metaLabel ? `<span class="dauligor-class-options__checkbox-meta">${foundry.utils.escapeHTML(metaLabel)}</span>` : ""}
               </span>
             </label>
@@ -3150,6 +3152,7 @@ async function runTraitSelectionStep({ title, fieldName, advancement, workflow, 
     onRenderBody: (app, root) => {
       root.querySelectorAll(`[data-action="toggle-item"]`).forEach((input) => {
         input.addEventListener("change", () => {
+          if (input.disabled) return;
           const slug = input.dataset.slug;
           const current = new Set(app._state.selections || []);
           if (input.checked) current.add(slug);
@@ -3390,6 +3393,7 @@ async function runSkillSelectionStep({ workflow, sequence, progress, advancement
 
 
   const fixedSkills = new Set(choices.fixed);
+  const targetActor = workflow?.targetActor ?? null;
 
   const result = await DauligorSequencePromptApp.prompt({
     title: "Skill Proficiencies",
@@ -3403,10 +3407,12 @@ async function runSkillSelectionStep({ workflow, sequence, progress, advancement
       <div class="dauligor-class-options__choice-list">
         ${choices.allOptions.map((slug) => {
       const isFixed = fixedSkills.has(slug);
+      const alreadyHas = !isFixed && isAlreadyMarked(targetActor, sequence?.characterUpdater, "skills", slug);
       const isChecked = app._state.selectedSkills.includes(slug) || isFixed;
+      const disabled = isFixed || alreadyHas;
 
       const skillLabel = formatFoundryLabel(slug);
-      
+
       // Attempt to get ability meta info from CONFIG if possible
       let abilityLabel = "";
       if (typeof CONFIG !== 'undefined' && CONFIG.DND5E?.skills) {
@@ -3414,19 +3420,21 @@ async function runSkillSelectionStep({ workflow, sequence, progress, advancement
         if (skillConfig.ability) abilityLabel = formatAbilityAbbreviation(skillConfig.ability);
       }
 
+      const tag = isFixed ? "Fixed" : (alreadyHas ? "Already Proficient" : "");
+
       return `
 
-            <label class="dauligor-class-options__checkbox ${isFixed ? "dauligor-class-options__checkbox--disabled" : ""}">
+            <label class="dauligor-class-options__checkbox ${disabled ? "dauligor-class-options__checkbox--disabled" : ""}">
               <input
                 type="checkbox"
                 data-action="toggle-skill"
                 data-skill-slug="${foundry.utils.escapeHTML(slug)}"
                 ${isChecked ? "checked" : ""}
-                ${isFixed ? "disabled" : ""}
+                ${disabled ? "disabled" : ""}
               >
               <span class="dauligor-class-options__checkbox-copy">
                 <span class="dauligor-class-options__checkbox-title">${foundry.utils.escapeHTML(skillLabel)}</span>
-              <span class="dauligor-class-options__checkbox-meta">${foundry.utils.escapeHTML(abilityLabel)}${isFixed ? " - Fixed" : ""}</span>
+              <span class="dauligor-class-options__checkbox-meta">${foundry.utils.escapeHTML(abilityLabel)}${tag ? ` · ${tag}` : ""}</span>
               </span>
             </label>
           `;
@@ -3436,6 +3444,7 @@ async function runSkillSelectionStep({ workflow, sequence, progress, advancement
     onRenderBody: (app, root) => {
       root.querySelectorAll(`[data-action="toggle-skill"]`).forEach((input) => {
         input.addEventListener("change", () => {
+          if (input.disabled) return;
           const slug = input.dataset.skillSlug;
           if (!slug) return;
 
@@ -3496,12 +3505,7 @@ async function runToolSelectionStep({ workflow, sequence, progress, advancement 
 
 
   const fixedTools = new Set(choices.fixed);
-  console.log("runToolSelectionStep trace:", {
-    fixedTools: [...fixedTools],
-    allOptions: choices.allOptions,
-    selectedTools: [...(advancement ? [] : workflow.selection.toolSelections)],
-    choiceCount: choices.choiceCount
-  });
+  const targetActor = workflow?.targetActor ?? null;
 
   const result = await DauligorSequencePromptApp.prompt({
     title: "Tool Proficiencies",
@@ -3515,29 +3519,33 @@ async function runToolSelectionStep({ workflow, sequence, progress, advancement 
       <div class="dauligor-class-options__choice-list">
         ${choices.allOptions.map((slug) => {
       const isFixed = fixedTools.has(slug);
+      const alreadyHas = !isFixed && isAlreadyMarked(targetActor, sequence?.characterUpdater, "tools", slug);
       const isChecked = app._state.selectedTools.includes(slug) || isFixed;
+      const disabled = isFixed || alreadyHas;
 
       const toolLabel = formatFoundryLabel(slug);
-      
+
       let abilityLabel = "";
       if (typeof CONFIG !== 'undefined' && CONFIG.DND5E?.tools) {
         const toolConfig = CONFIG.DND5E.tools[slug.replace(/^tools:/, "")] ?? {};
         if (toolConfig.ability) abilityLabel = formatAbilityAbbreviation(toolConfig.ability);
       }
 
+      const tag = isFixed ? "Fixed" : (alreadyHas ? "Already Proficient" : "");
+
       return `
 
-            <label class="dauligor-class-options__checkbox ${isFixed ? "dauligor-class-options__checkbox--disabled" : ""}">
+            <label class="dauligor-class-options__checkbox ${disabled ? "dauligor-class-options__checkbox--disabled" : ""}">
               <input
                 type="checkbox"
                 data-action="toggle-tool"
                 data-tool-slug="${foundry.utils.escapeHTML(slug)}"
                 ${isChecked ? "checked" : ""}
-                ${isFixed ? "disabled" : ""}
+                ${disabled ? "disabled" : ""}
               >
               <span class="dauligor-class-options__checkbox-copy">
                 <span class="dauligor-class-options__checkbox-title">${foundry.utils.escapeHTML(toolLabel)}</span>
-                <span class="dauligor-class-options__checkbox-meta">${foundry.utils.escapeHTML(abilityLabel)}${isFixed ? " - Fixed" : ""}</span>
+                <span class="dauligor-class-options__checkbox-meta">${foundry.utils.escapeHTML(abilityLabel)}${tag ? ` · ${tag}` : ""}</span>
               </span>
             </label>
           `;
@@ -3547,6 +3555,7 @@ async function runToolSelectionStep({ workflow, sequence, progress, advancement 
     onRenderBody: (app, root) => {
       root.querySelectorAll(`[data-action="toggle-tool"]`).forEach((input) => {
         input.addEventListener("change", () => {
+          if (input.disabled) return;
           const slug = input.dataset.toolSlug;
           if (!slug) return;
 
@@ -3556,14 +3565,6 @@ async function runToolSelectionStep({ workflow, sequence, progress, advancement 
           else current.delete(slug);
 
           const chosen = [...current].filter((selected) => !fixed.has(selected));
-          console.log("toggle-tool trace:", {
-            slug,
-            inputChecked: input.checked,
-            fixed: [...fixed],
-            current: [...current],
-            chosen,
-            maxCount: choices.choiceCount
-          });
           if (chosen.length > choices.choiceCount) {
             notifyWarn(`Choose only ${choices.choiceCount} tool proficiency option(s).`);
             input.checked = false;
@@ -3886,7 +3887,11 @@ function extractClassEntryMetadata(entry, payload) {
       subclasses: ensureArray(entry?.subclasses).map((sub) => ({
         sourceId: sub?.sourceId ?? slugify(sub?.name ?? ""),
         name: sub?.name ?? "Subclass",
-        sourceLabel
+        // Each subclass can come from a different book than its parent
+        // class (e.g. PHB Sorcerer + TCE-released Aberrant Mind). Prefer
+        // the subclass's own `shortName` from the catalog; only fall
+        // back to the parent class's source label.
+        sourceLabel: sub?.shortName || sourceLabel
       }))
     };
   }

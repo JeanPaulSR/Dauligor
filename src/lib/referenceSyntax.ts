@@ -20,6 +20,8 @@ export interface ReferenceSheetSection {
   rows: ReferenceSheetRow[];
   notes?: string[];
   isDropdown?: boolean;
+  /** Skills / tools sections render their dropdown rows in two columns. */
+  isSplit?: boolean;
 }
 
 export interface ReferenceColumnExample {
