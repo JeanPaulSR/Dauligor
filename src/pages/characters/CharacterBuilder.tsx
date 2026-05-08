@@ -2060,7 +2060,38 @@ export default function CharacterBuilder({
           setCampaigns(camps);
         }
 
-        const skills = await fetchCollection<any>("skills");
+        // Attributes load first so we can map skill.ability_id → identifier
+        const attrs = await fetchCollection<any>("attributes");
+        const uniqueAttrsMap = new Map();
+        attrs.forEach((item: any) => {
+          const key = (item.identifier || item.id).toUpperCase();
+          if (!uniqueAttrsMap.has(key) || item.identifier) {
+            uniqueAttrsMap.set(key, item);
+          }
+        });
+        const uniqueAttrs = Array.from(uniqueAttrsMap.values());
+        setAllAttributes(uniqueAttrs.sort((a: any, b: any) => {
+          const orderA = typeof a.order === 'number' ? a.order : 999;
+          const orderB = typeof b.order === 'number' ? b.order : 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.name || '').localeCompare(b.name || '');
+        }));
+
+        const abilityIdToIdentifier = new Map<string, string>();
+        attrs.forEach((attr: any) => {
+          if (attr.id && (attr.identifier || attr.id)) {
+            abilityIdToIdentifier.set(attr.id, (attr.identifier || attr.id).toUpperCase());
+          }
+        });
+
+        const skillsRaw = await fetchCollection<any>("skills");
+        // Skills reference attributes via `ability_id`; downstream code reads
+        // `skill.ability` as the identifier string ("STR"/"DEX"/...). Map once
+        // on load so consumers don't need to know about the FK shape.
+        const skills = skillsRaw.map((s: any) => ({
+          ...s,
+          ability: s.ability_id ? abilityIdToIdentifier.get(s.ability_id) : s.ability,
+        }));
         setAllSkills(skills);
 
         const [
@@ -2108,22 +2139,6 @@ export default function CharacterBuilder({
           setMasterMulticlassChart(multiclassMasterDoc);
         }
 
-        // Fetch Attributes
-        const attrs = await fetchCollection<any>("attributes");
-        const uniqueAttrsMap = new Map();
-        attrs.forEach((item: any) => {
-          const key = (item.identifier || item.id).toUpperCase();
-          if (!uniqueAttrsMap.has(key) || item.identifier) {
-            uniqueAttrsMap.set(key, item);
-          }
-        });
-        const uniqueAttrs = Array.from(uniqueAttrsMap.values());
-        setAllAttributes(uniqueAttrs.sort((a: any, b: any) => {
-          const orderA = typeof a.order === 'number' ? a.order : 999;
-          const orderB = typeof b.order === 'number' ? b.order : 999;
-          if (orderA !== orderB) return orderA - orderB;
-          return (a.name || '').localeCompare(b.name || '');
-        }));
       } catch (err) {
         reportClientError(err, OperationType.GET, "characters");
       } finally {
