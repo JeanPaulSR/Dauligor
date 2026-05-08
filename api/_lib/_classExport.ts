@@ -261,6 +261,8 @@ function denormalizeScalingColumnRow(row: any) {
     parentId: row.parent_id,
     parentType: row.parent_type,
     sourceId: row.source_id,
+    type: row.type || 'number',
+    distanceUnits: row.distance_units || null,
     values: parseJsonField(row.values, {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -318,6 +320,41 @@ function resolveImageUrl(record: any) {
  */
 export function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+}
+
+/**
+ * Parse a per-level dice expression (`"1d6"`, `"d8"`, `"2d6+3"`, `"3d4-1"`)
+ * into the shape dnd5e's ScaleValueTypeDice schema expects:
+ *   `{ number: number|null, faces: number, modifiers: Set<string> }`
+ *
+ * Authoring stores raw strings — admins type "1d6" directly. dnd5e
+ * needs the parsed components so its roll-data layer can produce a
+ * rollable dice term (rather than dumping the raw string into
+ * `@scale.<class>.<id>` and breaking every formula that uses it).
+ *
+ * Returns null if the input doesn't parse — the caller should skip
+ * the level rather than ship an entry that fails validation.
+ */
+function parseDiceScaleEntry(raw: string): { number: number | null; faces: number; modifiers: string[] } | null {
+  const text = String(raw ?? '').trim();
+  if (!text) return null;
+  // Match: optional digit prefix + 'd' + digit faces + optional [+-]<modifier>
+  // examples: "1d6", "d8", "2d6+3", "3d4-1", "1d10 + 2"
+  const match = text.match(/^(\d*)d(\d+)\s*([+-].+)?$/i);
+  if (!match) return null;
+  const numberStr = match[1];
+  const faces = Number(match[2]);
+  if (!Number.isFinite(faces) || faces <= 0) return null;
+  const modifiers: string[] = [];
+  if (match[3]) {
+    const mod = match[3].replace(/\s+/g, '');
+    if (mod) modifiers.push(mod);
+  }
+  return {
+    number: numberStr === '' ? null : Number(numberStr),
+    faces,
+    modifiers
+  };
 }
 
 /**
@@ -790,34 +827,56 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
   } else if (type === 'ScaleValue') {
     const linkedScale = context.scalingById[configuration.scalingColumnId];
     // dnd5e's ScaleValueAdvancement schema:
-    //   - the per-level map is `scale`, NOT `values`
-    //   - each entry is an object — `{ value: 2 }` for number/string/cr/distance
-    //     types; `{ number, faces, modifiers }` for dice
-    // Authoring stores raw values keyed by level (e.g. `"1": "2"`); convert
-    // here so dnd5e's roll-data layer surfaces `@scale.<class>.<id>`. With
-    // the wrong key/shape every `@scale.*` reference resolves as "missing
-    // data" on the actor sheet (Barbarian's Rage uses formula being a
-    // user-visible example).
+    //   - per-level map is `scale` (not `values`)
+    //   - `type` is one of "string" | "number" | "cr" | "dice" | "distance"
+    //   - each entry's shape varies by type:
+    //       string  / number / cr / distance → `{ value }`
+    //       dice                              → `{ number, faces, modifiers }`
+    //   - `distance.units` is required on the advancement when type=distance
+    //
+    // Authoring stores the `type` on the scaling column and a raw string
+    // per level. We dispatch the per-level shape here so dnd5e's roll-data
+    // layer can surface `@scale.<class>.<id>` correctly — including dice
+    // expressions like Sneak Attack damage and Superiority Dice.
+    const scaleType = trimString(linkedScale?.type) || trimString(configuration.type) || 'number';
     const rawScale = linkedScale?.values || configuration.scale || configuration.values || {};
     const scaleMap: Record<string, any> = {};
     for (const [level, raw] of Object.entries(rawScale)) {
       if (raw == null) continue;
-      // Pass through entries that are already in dnd5e-native object shape.
+      // Pass through entries already in dnd5e-native object shape.
       if (typeof raw === 'object' && !Array.isArray(raw)) {
         scaleMap[level] = raw;
-      } else if (raw === '' || raw === undefined) {
         continue;
+      }
+      const trimmed = String(raw).trim();
+      if (!trimmed) continue;
+
+      if (scaleType === 'dice') {
+        const parsed = parseDiceScaleEntry(trimmed);
+        if (parsed) scaleMap[level] = parsed;
+        // If parse failed (malformed input — e.g. a stray "—" placeholder),
+        // skip the level rather than ship an invalid entry that dnd5e
+        // would reject during validation.
       } else {
-        scaleMap[level] = { value: raw };
+        scaleMap[level] = { value: trimmed };
       }
     }
 
     normalized.configuration = {
       ...configuration,
-      identifier: trimString(configuration.identifier) || linkedScale?.identifier || slugify(normalized.title || 'scale'),
+      type: scaleType,
+      identifier: trimString(configuration.identifier) || trimString(linkedScale?.identifier) || slugify(normalized.title || 'scale'),
       scale: scaleMap
     };
     delete (normalized.configuration as any).values;
+
+    // distance.units is only meaningful for type=distance, but dnd5e's
+    // schema declares the SchemaField unconditionally — a non-string in
+    // there fails validation. Always emit a placeholder string and let
+    // dnd5e ignore it for non-distance types.
+    const distanceUnits = trimString(linkedScale?.distanceUnits) || trimString((configuration as any)?.distance?.units) || '';
+    normalized.configuration.distance = { units: scaleType === 'distance' ? (distanceUnits || 'ft') : '' };
+
     if (linkedScale?.sourceId) {
       normalized.configuration.scalingColumnId = linkedScale.sourceId;
       normalized.sourceScaleId = linkedScale.sourceId;

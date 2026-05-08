@@ -13,12 +13,12 @@
 const PUBLIC_URL_FALLBACK = "https://images.dauligor.com";
 // Bumped v1 → v2 (catalog grew `tags`+`subclasses[]`); v2 → v3 (per-class
 // `shortName`); v3 → v4 (per-subclass `shortName`); v4 → v5 (ScaleValue
-// advancement export now writes `configuration.scale: { "<level>": { value }}`
-// instead of the wrong `configuration.values: { "<level>": "raw" }` —
-// dnd5e's roll-data layer needs the canonical shape so `@scale.<class>.<id>`
-// references resolve on the sheet (Barbarian's Rage uses formula was the
-// visible symptom). Old prefixes are orphaned in R2; safe to delete.
-const EXPORT_PREFIX = "module-export/v5";
+// `configuration.scale` shape); v5 → v6 (ScaleValue is now type-aware
+// per the column's `type` field — dice columns export
+// `{ number, faces, modifiers }` per level instead of `{ value: "1d6" }`,
+// and `distance.units` ships explicitly).
+// Old prefixes are orphaned in R2; safe to delete.
+const EXPORT_PREFIX = "module-export/v6";
 
 // 60s browser cache, 5min CDN cache, stale-while-revalidate 24h. Tuned for
 // "edits are infrequent, reads are constant". Tweaked higher than typical

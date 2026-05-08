@@ -164,6 +164,8 @@ function denormalizeScalingColumnRow(row: any) {
     parentId: row.parent_id,
     parentType: row.parent_type,
     sourceId: row.source_id,
+    type: row.type || 'number',
+    distanceUnits: row.distance_units || null,
     values: parseJsonField(row.values, {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -326,6 +328,34 @@ export async function importClassSemantic(data: any) {
  */
 export function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+}
+
+/**
+ * Parse a per-level dice expression (`"1d6"`, `"d8"`, `"2d6+3"`, `"3d4-1"`)
+ * into the shape dnd5e's ScaleValueTypeDice schema expects:
+ *   `{ number: number|null, faces: number, modifiers: string[] }`
+ *
+ * Returns null if the input doesn't parse — caller should skip the level.
+ * Mirror of `parseDiceScaleEntry` in api/_lib/_classExport.ts (drift pair).
+ */
+function parseDiceScaleEntry(raw: string): { number: number | null; faces: number; modifiers: string[] } | null {
+  const text = String(raw ?? '').trim();
+  if (!text) return null;
+  const match = text.match(/^(\d*)d(\d+)\s*([+-].+)?$/i);
+  if (!match) return null;
+  const numberStr = match[1];
+  const faces = Number(match[2]);
+  if (!Number.isFinite(faces) || faces <= 0) return null;
+  const modifiers: string[] = [];
+  if (match[3]) {
+    const mod = match[3].replace(/\s+/g, '');
+    if (mod) modifiers.push(mod);
+  }
+  return {
+    number: numberStr === '' ? null : Number(numberStr),
+    faces,
+    modifiers
+  };
 }
 
 /**
@@ -797,30 +827,45 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
     else delete normalized.configuration.size;
   } else if (type === 'ScaleValue') {
     const linkedScale = context.scalingById[configuration.scalingColumnId];
-    // dnd5e's ScaleValueAdvancement schema uses `configuration.scale`,
-    // not `values`, and each entry is an object (`{ value: 2 }` for
-    // number/string/cr/distance, `{ number, faces, modifiers }` for
-    // dice). Authoring stores raw per-level values; convert here so
-    // `@scale.<class>.<id>` resolves on the actor sheet.
+    // dnd5e's ScaleValueAdvancement schema:
+    //   - per-level map is `scale` (not `values`)
+    //   - `type` is one of "string" | "number" | "cr" | "dice" | "distance"
+    //   - dice type expects `{ number, faces, modifiers }` per level;
+    //     all other types expect `{ value }`
+    //   - `distance.units` schema field is unconditional, set "" when unused
+    // Authoring stores `type` on the scaling column; dispatch per-level
+    // shape here so `@scale.<class>.<id>` resolves correctly.
+    const scaleType = trimString(linkedScale?.type) || trimString(configuration.type) || 'number';
     const rawScale = linkedScale?.values || configuration.scale || configuration.values || {};
     const scaleMap: Record<string, any> = {};
     for (const [level, raw] of Object.entries(rawScale)) {
       if (raw == null) continue;
       if (typeof raw === 'object' && !Array.isArray(raw)) {
         scaleMap[level] = raw;
-      } else if (raw === '' || raw === undefined) {
         continue;
+      }
+      const trimmed = String(raw).trim();
+      if (!trimmed) continue;
+
+      if (scaleType === 'dice') {
+        const parsed = parseDiceScaleEntry(trimmed);
+        if (parsed) scaleMap[level] = parsed;
       } else {
-        scaleMap[level] = { value: raw };
+        scaleMap[level] = { value: trimmed };
       }
     }
 
     normalized.configuration = {
       ...configuration,
-      identifier: trimString(configuration.identifier) || linkedScale?.identifier || slugify(normalized.title || 'scale'),
+      type: scaleType,
+      identifier: trimString(configuration.identifier) || trimString(linkedScale?.identifier) || slugify(normalized.title || 'scale'),
       scale: scaleMap
     };
     delete (normalized.configuration as any).values;
+
+    const distanceUnits = trimString(linkedScale?.distanceUnits) || trimString((configuration as any)?.distance?.units) || '';
+    normalized.configuration.distance = { units: scaleType === 'distance' ? (distanceUnits || 'ft') : '' };
+
     if (linkedScale?.sourceId) {
       normalized.configuration.scalingColumnId = linkedScale.sourceId;
       normalized.sourceScaleId = linkedScale.sourceId;

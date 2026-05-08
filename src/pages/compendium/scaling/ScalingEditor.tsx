@@ -4,14 +4,33 @@ import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
-import { 
-  Plus, 
-  Trash2, 
-  ChevronLeft, 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import {
+  Plus,
+  Trash2,
+  ChevronLeft,
   Save,
   LayoutGrid
 } from 'lucide-react';
 import { fetchDocument, upsertDocument, deleteDocument } from '../../../lib/d1';
+import { slugify } from '../../../lib/utils';
+
+const SCALE_TYPES: { value: ScaleType; label: string; hint: string }[] = [
+  { value: 'number', label: 'Number', hint: 'Plain numeric value per level (Rages, Maneuvers Known, Brutal Critical Dice).' },
+  { value: 'dice', label: 'Dice', hint: 'Dice expression per level (Sneak Attack, Spirit Shield, Superiority Dice). Accepted: 1d6, 2d8, d10, 3d6+2.' },
+  { value: 'string', label: 'String', hint: 'Free-form text (Rage Damage "+2", flavor labels). Foundry will not coerce.' },
+  { value: 'cr', label: 'Challenge Rating', hint: 'Numeric CR (used by features like Polymorph that scale on CR).' },
+  { value: 'distance', label: 'Distance', hint: 'Numeric distance with units (Mage Hand range, Aura radius).' }
+];
+
+type ScaleType = 'number' | 'dice' | 'string' | 'cr' | 'distance';
+
+const DISTANCE_UNITS = [
+  { value: 'ft', label: 'Feet' },
+  { value: 'mi', label: 'Miles' },
+  { value: 'm', label: 'Metres' },
+  { value: 'km', label: 'Kilometres' }
+];
 
 export default function ScalingEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -23,6 +42,10 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
   const [parentType, setParentType] = useState(searchParams.get('parentType') || 'class');
 
   const [name, setName] = useState('');
+  const [identifier, setIdentifier] = useState('');
+  const [identifierTouched, setIdentifierTouched] = useState(false);
+  const [type, setType] = useState<ScaleType>('number');
+  const [distanceUnits, setDistanceUnits] = useState('ft');
   const [values, setValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -31,6 +54,11 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
         const data = await fetchDocument<any>('scaling_columns', id);
         if (data) {
           setName(data.name || '');
+          setIdentifier(data.identifier || '');
+          setIdentifierTouched(Boolean(data.identifier));
+          const dbType = String(data.type || 'number').toLowerCase();
+          setType((SCALE_TYPES.find((t) => t.value === dbType)?.value as ScaleType) || 'number');
+          setDistanceUnits(data.distance_units || data.distanceUnits || 'ft');
           setValues(typeof data.values === 'string' ? JSON.parse(data.values) : (data.values || {}));
           setParentId(data.parent_id || data.parentId || '');
           setParentType(data.parent_type || data.parentType || 'class');
@@ -39,6 +67,13 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
       fetchScaling();
     }
   }, [id]);
+
+  // Auto-derive identifier from name until the user manually edits it.
+  useEffect(() => {
+    if (!identifierTouched) {
+      setIdentifier(slugify(name));
+    }
+  }, [name, identifierTouched]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,17 +92,25 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
         }
       }
 
-      const d1Data = {
+      const d1Data: Record<string, any> = {
         name,
+        identifier: identifier || slugify(name),
+        type,
         parent_id: parentId,
         parent_type: parentType,
         values: finalValues,
         updated_at: new Date().toISOString()
       };
+      if (type === 'distance') {
+        d1Data.distance_units = distanceUnits || 'ft';
+      } else {
+        // Clear stale units if the type changed away from distance.
+        d1Data.distance_units = null;
+      }
 
       const saveId = id || crypto.randomUUID();
       await upsertDocument('scaling_columns', saveId, d1Data);
-      
+
       navigate(-1);
       toast.success('Scaling column saved');
     } catch (error) {
@@ -116,15 +159,64 @@ export default function ScalingEditor({ userProfile }: { userProfile: any }) {
       <div className="p-4 border border-gold/20 bg-card/50 space-y-6">
         <div className="space-y-1">
           <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Column Name</label>
-          <Input 
-            value={name} 
-            onChange={e => setName(e.target.value)} 
-            placeholder="e.g. Invocations Known, Sorcery Points" 
+          <Input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. Invocations Known, Sorcery Points"
             className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
             required
           />
           <p className="text-[9px] text-ink/30 italic">This name will appear as the header in the class table.</p>
         </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Identifier</label>
+            <Input
+              value={identifier}
+              onChange={(e) => { setIdentifier(slugify(e.target.value)); setIdentifierTouched(true); }}
+              placeholder={slugify(name) || 'auto-derived from name'}
+              className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold font-mono"
+            />
+            <p className="text-[9px] text-ink/30 italic">
+              Stable slug used in formula references (<code>@scale.&lt;class&gt;.{identifier || slugify(name) || '<id>'}</code>).
+              Auto-derived from name until you edit it.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Type</label>
+            <Select value={type} onValueChange={(v) => setType(v as ScaleType)}>
+              <SelectTrigger className="h-8 text-sm bg-background/50 border-gold/10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCALE_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[9px] text-ink/30 italic">
+              {SCALE_TYPES.find((t) => t.value === type)?.hint}
+            </p>
+          </div>
+        </div>
+
+        {type === 'distance' && (
+          <div className="space-y-1 max-w-xs">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Distance Units</label>
+            <Select value={distanceUnits} onValueChange={setDistanceUnits}>
+              <SelectTrigger className="h-8 text-sm bg-background/50 border-gold/10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DISTANCE_UNITS.map((u) => (
+                  <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="section-header">

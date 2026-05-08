@@ -1721,9 +1721,19 @@ export default function AdvancementManager({
                       <div className="space-y-3">
                         <div>
                           <p className="text-sm font-bold text-ink">{selectedScalingColumn.name}</p>
-                          {selectedScalingColumn.identifier && (
-                            <p className="mt-1 text-[10px] text-ink/45">Identifier: {selectedScalingColumn.identifier}</p>
-                          )}
+                          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-ink/45">
+                            {selectedScalingColumn.identifier && (
+                              <span>Identifier: <code className="font-mono text-ink/60">{selectedScalingColumn.identifier}</code></span>
+                            )}
+                            <span>·</span>
+                            <span>Type: <span className="font-bold text-ink/70">{selectedScalingColumn.type || 'number'}</span></span>
+                            {selectedScalingColumn.type === 'distance' && (selectedScalingColumn.distance_units || selectedScalingColumn.distanceUnits) && (
+                              <>
+                                <span>·</span>
+                                <span>Units: {selectedScalingColumn.distance_units || selectedScalingColumn.distanceUnits}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                         <div className="border border-gold/10 rounded-md overflow-hidden">
                           <div className="grid grid-cols-2 bg-background/60 border-b border-gold/10 px-3 py-2">
