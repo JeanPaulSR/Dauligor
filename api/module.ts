@@ -1,22 +1,14 @@
 import path from "node:path";
 import fs from "node:fs";
 import { executeD1QueryInternal } from "./_lib/d1-internal.js";
-
-// KNOWN: Vercel's serverless bundler in this project does not reliably
-// include cross-folder imports from api/ into src/lib/. Two attempts at
-// `import { exportClassSemantic } from "../src/lib/classExport.js"` both
-// crashed the function with FUNCTION_INVOCATION_FAILED. Until that's fixed
-// (probably by inlining the export logic into api/_lib/), the per-class
-// endpoint below returns a flat row instead of the full semantic bundle.
-// Inlining the helper keeps this file self-contained.
-function getSemanticSourceId(sourceData: any, originalId: string) {
-  const slug = sourceData.slug;
-  const abbr = (sourceData.abbreviation || "").toLowerCase();
-  const rules = sourceData.rules || "2014";
-  if (abbr) return `source-${abbr.replace(/[^a-z0-9]/g, "")}-${rules}`;
-  if (slug) return `source-${slug}`;
-  return originalId;
-}
+import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
+// Sibling-folder import — works fine in Vercel's bundler. The earlier
+// attempts at `import ... from "../src/lib/classExport.js"` both crashed
+// the function on load with FUNCTION_INVOCATION_FAILED. The server copy of
+// classExport.ts lives in api/_lib/_classExport.ts (along with copies of
+// _referenceSyntax.ts and _classProgression.ts). Drift management note at
+// the top of _classExport.ts.
+import { exportClassSemantic, getSemanticSourceId } from "./_lib/_classExport.js";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -188,11 +180,12 @@ export default async function handler(req: any, res: any) {
     }
 
     // ── Specific class payload (<slug>/classes/<identifier>.json) ───────────
-    // KNOWN ISSUE: returns the flat class row instead of the full
-    // dauligor.semantic.class-export bundle. Cross-folder import from api/ →
-    // src/lib/classExport.ts crashes Vercel on load (see comment at top).
-    // Static fixtures under module/dauligor-pairing/data/sources/ remain the
-    // canonical bundle source until the inline-into-api/_lib/ fix lands.
+    // The catalog above advertises payloadKind="dauligor.semantic.class-export",
+    // so this returns the full bundle (class + subclasses + features +
+    // scalingColumns + uniqueOptionGroups + uniqueOptionItems + spell scalings
+    // + source). Built by `exportClassSemantic` from the sibling _classExport
+    // server copy; SERVER_EXPORT_FETCHERS wraps `executeD1QueryInternal` so it
+    // works without a Firebase JWT.
     if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2].endsWith(".json")) {
       const classIdentifier = pathParts[2].replace(".json", "").toLowerCase();
       const cls = allClasses.find((c: any) =>
@@ -200,8 +193,11 @@ export default async function handler(req: any, res: any) {
         || String(c.id).toLowerCase() === classIdentifier
       );
       if (cls) {
-        res.setHeader("Content-Type", "application/json");
-        return res.end(JSON.stringify(cls));
+        const bundle = await exportClassSemantic(cls.id, SERVER_EXPORT_FETCHERS);
+        if (bundle) {
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify(bundle));
+        }
       }
     }
   } catch (error) {
