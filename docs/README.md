@@ -19,6 +19,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 | BBCode tag / TipTap extension | [ui/bbcode.md](ui/bbcode.md) |
 | FoundryVTT pairing or export | [architecture/foundry-integration.md](architecture/foundry-integration.md) |
 | Debugging an error | [operations/troubleshooting.md](operations/troubleshooting.md) |
+| Backing up or restoring D1 | [operations/backup-restore.md](operations/backup-restore.md) |
 
 ## Topic trees
 
@@ -76,6 +77,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 
 - [local-dev.md](operations/local-dev.md) — two-terminal setup, env vars, common gotchas
 - [deployment.md](operations/deployment.md) — Vercel deploy flow, Worker deploy, D1 schema migrations
+- [backup-restore.md](operations/backup-restore.md) — D1 backups, Time Travel recovery, restore workflows
 - [troubleshooting.md](operations/troubleshooting.md) — D1 errors, cache resets, JWT issues, permission failures
 
 ### [_archive/](_archive/) — historical / pre-migration
