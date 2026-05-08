@@ -56,12 +56,16 @@ const suffix = schemaOnly ? '-schema' : dataOnly ? '-data' : '';
 const filename = `dauligor-${target}-${stamp}${suffix}.sql`;
 const outPath = path.join(BACKUP_DIR, filename);
 
+// `-y` skips wrangler's "Ok to proceed?" prompt. Without it, a stray
+// keystroke during the export window can answer the prompt and abort
+// the backup — bad for unattended scheduled runs.
 const wranglerArgs = [
   'wrangler',
   'd1',
   'export',
   DB_NAME,
   isLocal ? '--local' : '--remote',
+  '-y',
   `--output=${outPath}`,
 ];
 if (schemaOnly) wranglerArgs.push('--no-data');
@@ -103,6 +107,7 @@ if (pushR2) {
         'put',
         `${R2_BACKUP_BUCKET}/${key}`,
         '--remote',
+        '-y',
         `--file=${localPath}`,
         `--content-type=${contentType}`,
       ],

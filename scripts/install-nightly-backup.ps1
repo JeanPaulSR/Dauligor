@@ -40,17 +40,29 @@ if (-not (Test-Path (Join-Path $ProjectPath ".env"))) {
   Write-Warning "(D1 backup itself uses wrangler, so it'll work without .env, but admin endpoints in the dev server won't.)"
 }
 
-$argList = @("run", "backup:d1", "--", "--prune-days", $PruneDays.ToString())
-if ($PushR2) { $argList += "--push-r2" }
-$argString = $argList -join " "
+# Build the npm command line.
+$npmArgList = @("run", "backup:d1", "--", "--prune-days", $PruneDays.ToString())
+if ($PushR2) { $npmArgList += "--push-r2" }
+$npmArgString = $npmArgList -join " "
 
 # npm.cmd is the cmd shim; reliable across PowerShell versions.
 $npm = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
 if (-not $npm) { $npm = "npm.cmd" }
 
+# Wrap the npm call in `cmd.exe /c "" ... ""` launched via `conhost.exe`
+# with no window. This way:
+#   - No console window flashes on screen mid-game.
+#   - stdin is genuinely detached, so stray keystrokes can't reach the
+#     wrangler prompt (the script also passes `-y` to wrangler now, but
+#     belt-and-suspenders).
+# `start "" /B` runs without spawning a new window in the current console.
+# We pipe stdout/stderr to a log file so failures are still recoverable.
+$logPath = Join-Path $ProjectPath "backups\nightly-backup.log"
+$cmdArgs = "/d /c `"`"$npm`" $npmArgString >> `"$logPath`" 2>&1`""
+
 $action = New-ScheduledTaskAction `
-  -Execute $npm `
-  -Argument $argString `
+  -Execute "cmd.exe" `
+  -Argument $cmdArgs `
   -WorkingDirectory $ProjectPath
 
 $trigger = New-ScheduledTaskTrigger -Daily -At $At
@@ -58,6 +70,7 @@ $trigger = New-ScheduledTaskTrigger -Daily -At $At
 $settings = New-ScheduledTaskSettingsSet `
   -StartWhenAvailable `
   -DontStopOnIdleEnd `
+  -Hidden `
   -ExecutionTimeLimit (New-TimeSpan -Minutes 30) `
   -RestartCount 2 `
   -RestartInterval (New-TimeSpan -Minutes 10)
@@ -78,12 +91,15 @@ Register-ScheduledTask `
 
 Write-Host "Registered scheduled task '$TaskName'."
 Write-Host "  Working directory: $ProjectPath"
-Write-Host "  Command:           $npm $argString"
+Write-Host "  Command:           cmd.exe $cmdArgs"
 Write-Host "  Trigger:           Daily at $At"
+Write-Host "  Hidden window:     yes (no console flash, stdin detached)"
+Write-Host "  Log file:          $logPath"
 Write-Host ""
 Write-Host "Run it once now to verify:"
 Write-Host "  Start-ScheduledTask -TaskName '$TaskName'"
 Write-Host "  Get-ScheduledTaskInfo -TaskName '$TaskName'"
+Write-Host "  Get-Content '$logPath' -Tail 20"
 Write-Host ""
 Write-Host "To remove later:"
 Write-Host "  .\scripts\uninstall-nightly-backup.ps1"
