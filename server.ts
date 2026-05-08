@@ -15,6 +15,8 @@ import {
 } from "./api/_lib/r2-proxy.js";
 import { handleD1Query } from "./api/_lib/d1-proxy.js";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./api/_lib/d1-internal.js";
+import { SERVER_EXPORT_FETCHERS } from "./api/_lib/d1-fetchers-server.js";
+import { exportClassSemantic } from "./src/lib/classExport.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -597,15 +599,19 @@ async function startServer() {
         }
       }
 
-      // 3. Specific Class Data
+      // 3. Specific Class Data — return the full semantic bundle the catalog
+      // promises (`payloadKind: dauligor.semantic.class-export`). Local-only;
+      // the Vercel-deployed `api/module.ts` cannot import classExport.ts
+      // cross-folder yet, so production still serves a flat row from there.
       if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2].endsWith(".json")) {
         const classIdentifier = pathParts[2].replace(".json", "").toLowerCase();
-        const cls = allClasses.find((c: any) => 
-          (c.identifier || "").toLowerCase() === classIdentifier || 
+        const cls = allClasses.find((c: any) =>
+          (c.identifier || "").toLowerCase() === classIdentifier ||
           c.id.toLowerCase() === classIdentifier
         );
         if (cls) {
-          return res.json(cls);
+          const bundle = await exportClassSemantic(cls.id, SERVER_EXPORT_FETCHERS);
+          return res.json(bundle ?? cls);
         }
       }
     } catch (error) {
