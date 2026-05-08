@@ -116,22 +116,22 @@ export function ClassList({
   useEffect(() => {
     const loadClasses = async () => {
       try {
-        const classData = await fetchCollection('classes', { 
+        const classData = await fetchCollection<any>('classes', { 
           select: 'id, name, source_id, category, tag_ids, image_url, card_image_url, preview_image_url, card_display, image_display, preview_display, preview, description',
           orderBy: 'name ASC' 
         });
         
-        // Remap underscored fields to camelCase for the UI
+        // Remap snake_case D1 columns to the camelCase shape the UI uses
         const mappedClasses = classData.map((c: any) => ({
           ...c,
-          sourceId: c.source_id || c.sourceId,
-          tagIds: typeof c.tag_ids === 'string' ? JSON.parse(c.tag_ids) : (c.tagIds || c.tag_ids || []),
-          imageUrl: c.image_url || c.imageUrl,
-          cardImageUrl: c.card_image_url || c.cardImageUrl,
-          previewImageUrl: c.preview_image_url || c.previewImageUrl,
-          cardDisplay: typeof c.card_display === 'string' ? JSON.parse(c.card_display) : (c.cardDisplay || c.card_display),
-          imageDisplay: typeof c.image_display === 'string' ? JSON.parse(c.image_display) : (c.imageDisplay || c.image_display),
-          previewDisplay: typeof c.preview_display === 'string' ? JSON.parse(c.preview_display) : (c.previewDisplay || c.preview_display)
+          sourceId: c.source_id,
+          tagIds: typeof c.tag_ids === 'string' ? JSON.parse(c.tag_ids) : [],
+          imageUrl: c.image_url,
+          cardImageUrl: c.card_image_url,
+          previewImageUrl: c.preview_image_url,
+          cardDisplay: typeof c.card_display === 'string' ? JSON.parse(c.card_display) : null,
+          imageDisplay: typeof c.image_display === 'string' ? JSON.parse(c.image_display) : null,
+          previewDisplay: typeof c.preview_display === 'string' ? JSON.parse(c.preview_display) : null,
         }));
 
         setClasses(mappedClasses);
@@ -159,19 +159,19 @@ export function ClassList({
           typesData,
           masterChartData
         ] = await Promise.all([
-          fetchCollection('sources', { orderBy: 'name ASC' }),
-          fetchCollection('tagGroups', { where: "classifications LIKE '%class%'" }),
-          fetchCollection('tags'),
-          fetchCollection('skills'),
-          fetchCollection('tools'),
-          fetchCollection('toolCategories'),
-          fetchCollection('weaponCategories'),
-          fetchCollection('armorCategories'),
-          fetchCollection('armor'),
-          fetchCollection('weapons'),
-          fetchCollection('attributes'),
-          fetchCollection('spellcastingTypes'),
-          fetchDocument('standardMulticlassProgression', 'master')
+          fetchCollection<any>('sources', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tagGroups', { where: "classifications LIKE '%class%'" }),
+          fetchCollection<any>('tags'),
+          fetchCollection<any>('skills'),
+          fetchCollection<any>('tools'),
+          fetchCollection<any>('toolCategories'),
+          fetchCollection<any>('weaponCategories'),
+          fetchCollection<any>('armorCategories'),
+          fetchCollection<any>('armor'),
+          fetchCollection<any>('weapons'),
+          fetchCollection<any>('attributes'),
+          fetchCollection<any>('spellcastingTypes'),
+          fetchDocument<any>('standardMulticlassProgression', 'master')
         ]);
 
         const sourceMap: Record<string, any> = {};
@@ -402,27 +402,27 @@ export function ClassList({
           // 1. If we only have the "thin" version, fetch the full document
           let currentClass = selectedClass;
           if (!selectedClass.proficiencies) {
-            const fullDoc = await fetchDocument('classes', selectedClass.id);
+            const fullDoc = await fetchDocument<any>('classes', selectedClass.id);
 
-            // Ensure JSON parsing for D1 fields if we got a full doc
+            // Parse JSON columns and remap snake_case → camelCase
             currentClass = {
               ...fullDoc,
-              sourceId: fullDoc.source_id || fullDoc.sourceId,
-              tagIds: typeof fullDoc.tag_ids === 'string' ? JSON.parse(fullDoc.tag_ids) : (fullDoc.tagIds || fullDoc.tag_ids || []),
-              imageUrl: fullDoc.image_url || fullDoc.imageUrl,
-              cardImageUrl: fullDoc.card_image_url || fullDoc.cardImageUrl,
-              previewImageUrl: fullDoc.preview_image_url || fullDoc.previewImageUrl,
-              cardDisplay: typeof fullDoc.card_display === 'string' ? JSON.parse(fullDoc.card_display) : (fullDoc.cardDisplay || fullDoc.card_display),
-              imageDisplay: typeof fullDoc.image_display === 'string' ? JSON.parse(fullDoc.image_display) : (fullDoc.imageDisplay || fullDoc.image_display),
-              previewDisplay: typeof fullDoc.preview_display === 'string' ? JSON.parse(fullDoc.preview_display) : (fullDoc.previewDisplay || fullDoc.preview_display),
-              proficiencies: typeof fullDoc.proficiencies === 'string' ? JSON.parse(fullDoc.proficiencies) : (fullDoc.proficiencies || {}),
-              spellcasting: typeof fullDoc.spellcasting === 'string' ? JSON.parse(fullDoc.spellcasting) : (fullDoc.spellcasting || {}),
-              advancements: typeof fullDoc.advancements === 'string' ? JSON.parse(fullDoc.advancements) : (fullDoc.advancements || []),
-              primaryAbility: typeof fullDoc.primary_ability === 'string' ? JSON.parse(fullDoc.primary_ability) : (fullDoc.primaryAbility || fullDoc.primary_ability || []),
-              primaryAbilityChoice: typeof fullDoc.primary_ability_choice === 'string' ? JSON.parse(fullDoc.primary_ability_choice) : (fullDoc.primaryAbilityChoice || fullDoc.primary_ability_choice || []),
-              savingThrows: typeof fullDoc.saving_throws === 'string' ? JSON.parse(fullDoc.saving_throws) : (fullDoc.savingThrows || fullDoc.saving_throws || []),
-              subclassFeatureLevels: typeof fullDoc.subclass_feature_levels === 'string' ? JSON.parse(fullDoc.subclass_feature_levels) : (fullDoc.subclassFeatureLevels || fullDoc.subclass_feature_levels || []),
-              subclassTitle: fullDoc.subclass_title || fullDoc.subclassTitle || 'Subclass'
+              sourceId: fullDoc.source_id,
+              tagIds: typeof fullDoc.tag_ids === 'string' ? JSON.parse(fullDoc.tag_ids) : [],
+              imageUrl: fullDoc.image_url,
+              cardImageUrl: fullDoc.card_image_url,
+              previewImageUrl: fullDoc.preview_image_url,
+              cardDisplay: typeof fullDoc.card_display === 'string' ? JSON.parse(fullDoc.card_display) : null,
+              imageDisplay: typeof fullDoc.image_display === 'string' ? JSON.parse(fullDoc.image_display) : null,
+              previewDisplay: typeof fullDoc.preview_display === 'string' ? JSON.parse(fullDoc.preview_display) : null,
+              proficiencies: typeof fullDoc.proficiencies === 'string' ? JSON.parse(fullDoc.proficiencies) : {},
+              spellcasting: typeof fullDoc.spellcasting === 'string' ? JSON.parse(fullDoc.spellcasting) : {},
+              advancements: typeof fullDoc.advancements === 'string' ? JSON.parse(fullDoc.advancements) : [],
+              primaryAbility: typeof fullDoc.primary_ability === 'string' ? JSON.parse(fullDoc.primary_ability) : [],
+              primaryAbilityChoice: typeof fullDoc.primary_ability_choice === 'string' ? JSON.parse(fullDoc.primary_ability_choice) : [],
+              savingThrows: typeof fullDoc.saving_throws === 'string' ? JSON.parse(fullDoc.saving_throws) : [],
+              subclassFeatureLevels: typeof fullDoc.subclass_feature_levels === 'string' ? JSON.parse(fullDoc.subclass_feature_levels) : [],
+              subclassTitle: fullDoc.subclass_title || 'Subclass',
             };
             setSelectedClass(currentClass);
             return; // Effect will re-trigger with full class
@@ -445,18 +445,18 @@ export function ClassList({
           
           setPreviewFeatures(featuresData.map(row => ({
             ...row,
-            parentId: row.parent_id || row.parentId,
-            parentType: row.parent_type || row.parentType,
-            imageUrl: row.image_url || row.imageUrl,
-            isSubclassFeature: row.parent_type === 'subclass' || row.is_subclass_feature === 1 || row.isSubclassFeature === true,
-            advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : (row.advancements || [])
+            parentId: row.parent_id,
+            parentType: row.parent_type,
+            imageUrl: row.image_url,
+            isSubclassFeature: row.parent_type === 'subclass' || row.is_subclass_feature === 1,
+            advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : [],
           })));
 
           setPreviewScalings(scalingsData.map(row => ({
             ...row,
-            parentId: row.parent_id || row.parentId,
-            parentType: row.parent_type || row.parentType,
-            values: typeof row.values === 'string' ? JSON.parse(row.values) : (row.values || {})
+            parentId: row.parent_id,
+            parentType: row.parent_type,
+            values: typeof row.values === 'string' ? JSON.parse(row.values) : {}
           })));
 
           // 3. Load Spellcasting progression data
@@ -477,7 +477,7 @@ export function ClassList({
 
             if (sc.manualProgressionId) {
               allPromises.push(
-                fetchDocument('spellcastingScalings', sc.manualProgressionId).then(data => setPreviewSpellcasting(parseLevels(data)))
+                fetchDocument<any>('spellcastingScalings', sc.manualProgressionId).then(data => setPreviewSpellcasting(parseLevels(data)))
               );
             } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
               const type = spellcastingTypes.find(t => t.id === sc.progressionId);
@@ -493,12 +493,12 @@ export function ClassList({
             }
             if (sc.altProgressionId) {
               allPromises.push(
-                fetchDocument('pactMagicScalings', sc.altProgressionId).then(data => setPreviewAltSpellcasting(parseLevels(data)))
+                fetchDocument<any>('pactMagicScalings', sc.altProgressionId).then(data => setPreviewAltSpellcasting(parseLevels(data)))
               );
             }
             if (sc.spellsKnownId) {
               allPromises.push(
-                fetchDocument('spellsKnownScalings', sc.spellsKnownId).then(data => setPreviewSpellsKnown(parseLevels(data)))
+                fetchDocument<any>('spellsKnownScalings', sc.spellsKnownId).then(data => setPreviewSpellsKnown(parseLevels(data)))
               );
             }
           }

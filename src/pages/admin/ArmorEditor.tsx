@@ -307,14 +307,14 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                             {armor.identifier}
                           </span>
                         )}
-                        {(armor.category_id || armor.categoryId || armor.category) && (
+                        {armor.category_id && (
                           <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
-                            {categories.find((c: any) => c.id === (armor.category_id || armor.categoryId))?.name || armor.category}
+                            {categories.find((c: any) => c.id === armor.category_id)?.name}
                           </span>
                         )}
-                        {(armor.ability || armor.ability_id) && (
+                        {armor.ability_id && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">
-                            {armor.ability || (attributes as any[]).find((a: any) => a.id === armor.ability_id)?.identifier}
+                            {(attributes as any[]).find((a: any) => a.id === armor.ability_id)?.identifier}
                           </span>
                         )}
                         {armor.source && (
@@ -332,16 +332,16 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
                         setEditingArmor(armor);
                         setName(armor.name);
                         setIdentifier(armor.identifier || '');
-                        setFoundryAlias(armor.foundry_alias || armor.foundryAlias || '');
+                        setFoundryAlias(armor.foundry_alias || '');
 
-                        const cid = armor.category_id || armor.categoryId || categories.find((c: any) => c.name === armor.category)?.id || '';
+                        const cid = armor.category_id || '';
                         setCategoryId(cid);
 
-                        setAbility(armor.ability || (attributes as any[]).find((a: any) => a.id === armor.ability_id)?.identifier || 'STR');
+                        setAbility((attributes as any[]).find((a: any) => a.id === armor.ability_id)?.identifier || 'STR');
                         setDescription(armor.description || '');
                         setSource(armor.source || '');
                         setPage(armor.page || '');
-                        setBasicRules(!!(armor.basic_rules || armor.basicRules));
+                        setBasicRules(!!armor.basic_rules);
                       }} className="h-8 w-8 p-0 text-gold"><Edit className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(armor.id)} className="h-8 w-8 p-0 text-blood"><Trash2 className="w-4 h-4" /></Button>
                     </div>

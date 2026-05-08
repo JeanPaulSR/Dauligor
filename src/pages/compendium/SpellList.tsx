@@ -98,10 +98,10 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         
         const mapped = records.map(row => ({
           ...row,
-          sourceId: row.sourceId || row.source_id,
-          imageUrl: row.imageUrl || row.image_url,
-          tagIds: Array.isArray(row.tagIds) ? row.tagIds : (typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags),
-          foundryShell: row.foundryShell || (typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : row.foundry_data)
+          sourceId: row.source_id,
+          imageUrl: row.image_url,
+          tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : [],
+          foundryShell: typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : null,
         }));
 
         setSpells(mapped);
@@ -117,9 +117,9 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     const loadFoundation = async () => {
       try {
         const [sourcesData, tagGroupsData, tagsData] = await Promise.all([
-          fetchCollection('sources', { orderBy: 'name ASC' }),
-          fetchCollection('tagGroups', { where: "classifications LIKE '%spell%'" }),
-          fetchCollection('tags', { orderBy: 'name ASC' })
+          fetchCollection<any>('sources', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tagGroups', { where: "classifications LIKE '%spell%'" }),
+          fetchCollection<any>('tags', { orderBy: 'name ASC' })
         ]);
 
         setSources(sourcesData);
@@ -189,14 +189,14 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
         const mapped = {
           ...data,
-          sourceId: data.sourceId || data.source_id,
-          imageUrl: data.imageUrl || data.image_url,
-          tagIds: Array.isArray(data.tagIds) ? data.tagIds : (typeof data.tags === 'string' ? JSON.parse(data.tags) : data.tags),
-          foundryDocument: data.foundryDocument || (typeof data.foundry_data === 'string' ? { system: JSON.parse(data.foundry_data) } : { system: data.foundry_data }),
-          automation: data.automation || {
-            activities: typeof data.activities === 'string' ? JSON.parse(data.activities) : data.activities,
-            effects: typeof data.effects === 'string' ? JSON.parse(data.effects) : data.effects
-          }
+          sourceId: data.source_id,
+          imageUrl: data.image_url,
+          tagIds: typeof data.tags === 'string' ? JSON.parse(data.tags) : [],
+          foundryDocument: typeof data.foundry_data === 'string' ? { system: JSON.parse(data.foundry_data) } : { system: null },
+          automation: {
+            activities: typeof data.activities === 'string' ? JSON.parse(data.activities) : [],
+            effects: typeof data.effects === 'string' ? JSON.parse(data.effects) : [],
+          },
         };
 
         setSpellDetailsById((current) => ({

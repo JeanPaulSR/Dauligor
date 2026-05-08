@@ -260,18 +260,18 @@ export default function SubclassEditor() {
           const subclassData = denormalizeCompendiumData(rawSubclassData);
           const remapped = {
             ...subclassData,
-            classId: subclassData.class_id || subclassData.classId,
-            sourceId: subclassData.source_id || subclassData.sourceId,
-            imageUrl: subclassData.image_url || subclassData.imageUrl,
-            imageDisplay: typeof subclassData.image_display === 'string' ? JSON.parse(subclassData.image_display) : (subclassData.imageDisplay || subclassData.image_display),
-            cardImageUrl: subclassData.card_image_url || subclassData.cardImageUrl,
-            cardDisplay: typeof subclassData.card_display === 'string' ? JSON.parse(subclassData.card_display) : (subclassData.cardDisplay || subclassData.card_display),
-            previewImageUrl: subclassData.preview_image_url || subclassData.previewImageUrl,
-            previewDisplay: typeof subclassData.preview_display === 'string' ? JSON.parse(subclassData.preview_display) : (subclassData.previewDisplay || subclassData.preview_display),
-            tagIds: typeof subclassData.tag_ids === 'string' ? JSON.parse(subclassData.tag_ids) : (subclassData.tagIds || subclassData.tag_ids || []),
-            advancements: typeof subclassData.advancements === 'string' ? JSON.parse(subclassData.advancements) : (subclassData.advancements || []),
-            spellcasting: typeof subclassData.spellcasting === 'string' ? JSON.parse(subclassData.spellcasting) : (subclassData.spellcasting || {}),
-            excludedOptionIds: typeof subclassData.excluded_option_ids === 'string' ? JSON.parse(subclassData.excluded_option_ids) : (subclassData.excludedOptionIds || subclassData.excluded_option_ids || {})
+            classId: subclassData.class_id,
+            sourceId: subclassData.source_id,
+            imageUrl: subclassData.image_url,
+            imageDisplay: typeof subclassData.image_display === 'string' ? JSON.parse(subclassData.image_display) : null,
+            cardImageUrl: subclassData.card_image_url,
+            cardDisplay: typeof subclassData.card_display === 'string' ? JSON.parse(subclassData.card_display) : null,
+            previewImageUrl: subclassData.preview_image_url,
+            previewDisplay: typeof subclassData.preview_display === 'string' ? JSON.parse(subclassData.preview_display) : null,
+            tagIds: typeof subclassData.tag_ids === 'string' ? JSON.parse(subclassData.tag_ids) : [],
+            advancements: typeof subclassData.advancements === 'string' ? JSON.parse(subclassData.advancements) : [],
+            spellcasting: typeof subclassData.spellcasting === 'string' ? JSON.parse(subclassData.spellcasting) : {},
+            excludedOptionIds: typeof subclassData.excluded_option_ids === 'string' ? JSON.parse(subclassData.excluded_option_ids) : {},
           };
 
           setName(remapped.name || '');
@@ -316,9 +316,9 @@ export default function SubclassEditor() {
             });
             setParentScalingColumns(parentScalingData.map(s => ({
               ...s,
-              parentId: s.parentId || s.parent_id,
-              parentType: s.parentType || s.parent_type,
-              values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+              parentId: s.parent_id,
+              parentType: s.parent_type,
+              values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
             })));
           }
         }
@@ -361,35 +361,35 @@ export default function SubclassEditor() {
 
         const mappedFeatures = featuresData.map(row => ({
           ...row,
-          parentId: row.parentId || row.parent_id,
-          parentType: row.parentType || row.parent_type,
-          featureType: row.featureType || row.feature_type,
+          parentId: row.parent_id,
+          parentType: row.parent_type,
+          featureType: row.feature_type,
           subtype: row.subtype,
-          uses: row.uses || {
+          uses: {
             max: row.uses_max || '',
             spent: row.uses_spent || 0,
-            recovery: typeof row.uses_recovery === 'string' ? JSON.parse(row.uses_recovery) : (row.uses_recovery || [])
+            recovery: typeof row.uses_recovery === 'string' ? JSON.parse(row.uses_recovery) : [],
           },
-          prerequisites: row.prerequisites || {
+          prerequisites: {
             level: row.prerequisites_level,
-            items: typeof row.prerequisites_items === 'string' ? JSON.parse(row.prerequisites_items) : (row.prerequisites_items || []),
-            repeatable: !!row.repeatable
+            items: typeof row.prerequisites_items === 'string' ? JSON.parse(row.prerequisites_items) : [],
+            repeatable: !!row.repeatable,
           },
-          properties: Array.isArray(row.properties) ? row.properties : (typeof row.properties === 'string' ? JSON.parse(row.properties) : []),
-          automation: row.automation || {
-            activities: typeof row.activities === 'string' ? JSON.parse(row.activities) : (row.activities || []),
-            effects: typeof row.effects === 'string' ? JSON.parse(row.effects) : (row.effects || [])
+          properties: typeof row.properties === 'string' ? JSON.parse(row.properties) : [],
+          automation: {
+            activities: typeof row.activities === 'string' ? JSON.parse(row.activities) : [],
+            effects: typeof row.effects === 'string' ? JSON.parse(row.effects) : [],
           },
-          advancements: Array.isArray(row.advancements) ? row.advancements : (typeof row.advancements === 'string' ? JSON.parse(row.advancements) : []),
-          tagIds: Array.isArray(row.tagIds) ? row.tagIds : (typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []))
+          advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : [],
+          tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : [],
         }));
         setFeatures(mappedFeatures.map(f => normalizeFeatureForEditor(f)));
 
         setScalingColumns(scalingData.map(s => ({
           ...s,
-          parentId: s.parentId || s.parent_id,
-          parentType: s.parentType || s.parent_type,
-          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+          parentId: s.parent_id,
+          parentType: s.parent_type,
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
         })));
       } catch (err) {
         console.error('[SubclassEditor] Dependents load failed:', err);
@@ -971,7 +971,7 @@ export default function SubclassEditor() {
                       {validLevels.map(level => {
                         const levelParentFeatures = parentFeatures.filter(f =>
                           f.level === level &&
-                          (f.isSubclassFeature === true || f.is_subclass_feature === 1 || f.is_subclass_feature === true)
+                          (f.isSubclassFeature === true || f.is_subclass_feature === 1)
                         );
                         const levelSubclassFeatures = features.filter(f => f.level === level);
 

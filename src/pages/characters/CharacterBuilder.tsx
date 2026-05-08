@@ -13,21 +13,21 @@ import {
 // CharacterBuilder reads many fields with camelCase access (`row.classId`,
 // `row.parentId`, etc.). D1 stores snake_case. These tiny helpers keep the
 // existing reads working without touching call sites all over the file.
-const denormClass = (d: any) => d ? ({ ...d, hitDie: d.hit_die ?? d.hitDie }) : d;
-const denormSubclass = (d: any) => d ? ({ ...d, classId: d.class_id ?? d.classId }) : d;
+const denormClass = (d: any) => d ? ({ ...d, hitDie: d.hit_die }) : d;
+const denormSubclass = (d: any) => d ? ({ ...d, classId: d.class_id }) : d;
 const denormFeature = (d: any) => d ? ({
   ...d,
-  parentId: d.parent_id ?? d.parentId,
-  parentType: d.parent_type ?? d.parentType,
+  parentId: d.parent_id,
+  parentType: d.parent_type,
 }) : d;
 const denormScalingCol = (d: any) => d ? ({
   ...d,
-  parentId: d.parent_id ?? d.parentId,
-  parentType: d.parent_type ?? d.parentType,
+  parentId: d.parent_id,
+  parentType: d.parent_type,
 }) : d;
 const denormCategoryId = (d: any) => d ? ({
   ...d,
-  categoryId: d.category_id ?? d.categoryId,
+  categoryId: d.category_id,
 }) : d;
 import { rebuildCharacterFromSql } from "../../lib/characterShared";
 import {

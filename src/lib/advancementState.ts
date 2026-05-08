@@ -159,7 +159,7 @@ export function normalizeAdvancementForEditor<T extends { type?: string; configu
       ...configuration,
       type: currentTraitType,
       mode: traitModeEnabledTypes.has(currentTraitType) ? currentMode : 'default',
-      allowReplacements: Boolean(configuration.allowReplacements ?? configuration.allowReplacement),
+      allowReplacements: Boolean(configuration.allowReplacements),
       choiceSource: configuration.choiceSource === 'scaling' ? 'scaling' : 'fixed',
       choiceCount: Math.max(0, Number(configuration.choiceCount || 0) || 0),
       fixed: uniqueStringEntries(configuration.fixed),

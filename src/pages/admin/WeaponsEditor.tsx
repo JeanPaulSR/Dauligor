@@ -355,17 +355,17 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                             {weapon.identifier}
                           </span>
                         )}
-                        {(weapon.category_id || weapon.categoryId || weapon.category) && (
+                        {weapon.category_id && (
                           <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
-                            {categories.find((c: any) => c.id === (weapon.category_id || weapon.categoryId))?.name || weapon.category}
+                            {categories.find((c: any) => c.id === weapon.category_id)?.name}
                           </span>
                         )}
-                        {(weapon.weapon_type || weapon.weaponType) && (
-                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.weapon_type || weapon.weaponType}</span>
+                        {weapon.weapon_type && (
+                          <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">{weapon.weapon_type}</span>
                         )}
-                        {(weapon.ability || weapon.ability_id) && (
+                        {weapon.ability_id && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">
-                            {weapon.ability || (attributes as any[]).find((a: any) => a.id === weapon.ability_id)?.identifier}
+                            {(attributes as any[]).find((a: any) => a.id === weapon.ability_id)?.identifier}
                           </span>
                         )}
                         {weapon.source && (
@@ -373,7 +373,7 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {(weapon.property_ids || weapon.propertyIds || []).map((pid: string) => {
+                        {(weapon.property_ids || []).map((pid: string) => {
                           const prop = allProperties.find(p => p.id === pid);
                           if (!prop) return null;
                           return (

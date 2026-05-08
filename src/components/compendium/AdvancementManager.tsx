@@ -459,7 +459,7 @@ export default function AdvancementManager({
           }
 
           let items = itemRowsList.flatMap(rows => rows.map((data: any) => {
-            const categoryId = data.category_id ?? data.categoryId;
+            const categoryId = data.category_id;
             return {
               ...data,
               category: (categoryId && catMap.has(categoryId)) ? catMap.get(categoryId) : (data.category || 'Other')

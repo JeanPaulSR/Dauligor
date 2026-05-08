@@ -323,11 +323,11 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                           </span>
                         )}
                         <span className="text-[10px] px-2 py-0.5 bg-gold/10 text-gold rounded-full font-bold">
-                          {toolCategories.find((c: any) => c.id === (tool.category_id || tool.categoryId))?.name || 'Other'}
+                          {toolCategories.find((c: any) => c.id === tool.category_id)?.name || 'Other'}
                         </span>
-                        {(tool.ability || tool.ability_id) && (
+                        {tool.ability_id && (
                           <span className="text-[10px] px-2 py-0.5 bg-ink/10 text-ink/70 rounded-full font-bold">
-                            {tool.ability || (attributes as any[]).find((a: any) => a.id === tool.ability_id)?.identifier}
+                            {(attributes as any[]).find((a: any) => a.id === tool.ability_id)?.identifier}
                           </span>
                         )}
                         {tool.source && (
@@ -345,16 +345,16 @@ export default function ToolsEditor({ userProfile, hideHeader }: { userProfile: 
                         setEditingTool(tool);
                         setName(tool.name);
                         setIdentifier(tool.identifier || '');
-                        setFoundryAlias(tool.foundry_alias || tool.foundryAlias || '');
+                        setFoundryAlias(tool.foundry_alias || '');
 
-                        const cid = tool.category_id || tool.categoryId || toolCategories.find((c: any) => c.name === tool.category)?.id || '';
+                        const cid = tool.category_id || '';
                         setCategoryId(cid);
 
-                        setAbility(tool.ability || (attributes as any[]).find((a: any) => a.id === tool.ability_id)?.identifier || 'DEX');
+                        setAbility((attributes as any[]).find((a: any) => a.id === tool.ability_id)?.identifier || 'DEX');
                         setDescription(tool.description || '');
                         setSource(tool.source || '');
                         setPage(tool.page || '');
-                        setBasicRules(!!(tool.basic_rules || tool.basicRules));
+                        setBasicRules(!!tool.basic_rules);
                       }} className="h-8 w-8 p-0 text-gold"><Edit className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDelete(tool.id)} className="h-8 w-8 p-0 text-blood"><Trash2 className="w-4 h-4" /></Button>
                     </div>

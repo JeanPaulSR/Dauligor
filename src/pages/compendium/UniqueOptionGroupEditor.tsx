@@ -5,11 +5,16 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import {
-  Repeat, 
-  Check, 
+  Repeat,
+  Check,
   Search,
   Database,
-  CloudOff
+  CloudOff,
+  ChevronLeft,
+  Trash2,
+  Save,
+  Plus,
+  Edit,
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import MarkdownEditor from '@/components/MarkdownEditor';
@@ -353,22 +358,22 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-bold text-ink">{item.name}</span>
-                          {(item.isRepeatable || item.is_repeatable) && (
+                          {item.is_repeatable && (
                             <Repeat className="w-3 h-3 text-gold/40" />
                           )}
                         </div>
-                        {((item.level_prerequisite || item.levelPrerequisite || 0) > 0 || (item.string_prerequisite || item.stringPrerequisite)) && (
+                        {((item.level_prerequisite || 0) > 0 || item.string_prerequisite) && (
                           <div className="text-[10px] text-ink/40">
                             <span className="font-bold uppercase tracking-wider">Prerequisites:</span>{' '}
                             {[
-                              (item.level_prerequisite || item.levelPrerequisite || 0) > 0 ? `Level ${item.level_prerequisite || item.levelPrerequisite}+` : null,
-                              item.string_prerequisite || item.stringPrerequisite || null
+                              (item.level_prerequisite || 0) > 0 ? `Level ${item.level_prerequisite}+` : null,
+                              item.string_prerequisite || null
                             ].filter(Boolean).join(' · ')}
                           </div>
                         )}
-                        {((item.class_ids || item.classIds) || []).length > 0 && (
+                        {(item.class_ids || []).length > 0 && (
                           <div className="text-[10px] text-gold/60">
-                            {(item.class_ids || item.classIds || []).map((cid: string) => classes.find((c: any) => c.id === cid)?.name).filter(Boolean).join(', ')}
+                            {(item.class_ids || []).map((cid: string) => classes.find((c: any) => c.id === cid)?.name).filter(Boolean).join(', ')}
                           </div>
                         )}
                       </div>

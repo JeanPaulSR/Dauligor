@@ -22,19 +22,26 @@ interface EffectChange {
   priority?: number | null;
 }
 
+// State item shape — includes both the D1 snake_case columns and the
+// form-friendly camelCase aliases that are folded in on save. Treated as
+// loose because state items go through { ...form, ...d1Data } merges.
 interface StatusCondition {
   id?: string;
   identifier: string;
   name: string;
-  img?: string | null;
+  // D1 snake_case columns (always present on freshly loaded rows)
+  image_url?: string | null;
+  implied_ids?: string[];
   reference?: string;
   description?: string;
   order?: number | null;
-  impliedStatuses?: string[];
   changes?: EffectChange[];
   source: 'dnd5e' | 'custom' | 'imported';
-  createdAt?: string;
-  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
+  // Form-side aliases that get spread in after a save
+  img?: string | null;
+  impliedStatuses?: string[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -269,7 +276,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     const loadItems = async () => {
       try {
-        const data = await fetchCollection('statuses');
+        const data = await fetchCollection<StatusCondition>('statuses');
         setItems(
           data.sort((a: any, b: any) => {
             const oa = typeof a.order === 'number' ? a.order : 999;
@@ -438,7 +445,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
       const newItems = await Promise.all(
         toAdd.map(async c => {
           const newId = crypto.randomUUID();
-          const d1Data = {
+          const d1Data: Omit<StatusCondition, 'id'> = {
             identifier: c.identifier,
             name: c.name || c.label || c.identifier,
             image_url: (c.img || c.icon) ?? null,
@@ -477,11 +484,11 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
     setForm({
       identifier: item.identifier || '',
       name: item.name,
-      img: item.img ?? item.image_url ?? null,
+      img: item.image_url ?? null,
       reference: item.reference || '',
       description: item.description || '',
       order: item.order ?? null,
-      impliedStatuses: item.impliedStatuses || item.implied_ids || [],
+      impliedStatuses: item.implied_ids || [],
       changes: item.changes || [],
       source: item.source || 'custom',
     });
@@ -832,9 +839,9 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
                     {/* Icon */}
                     <div className="w-10 h-10 rounded border border-gold/10 bg-background/50 flex items-center justify-center shrink-0 overflow-hidden">
-                      {(item.img || item.image_url) ? (
+                      {item.image_url ? (
                         <img
-                          src={item.img || item.image_url}
+                          src={item.image_url}
                           alt={item.name}
                           className="w-full h-full object-contain p-1"
                         />
@@ -874,9 +881,9 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
                       {/* Meta row */}
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        {((item.impliedStatuses || item.implied_ids) || []).length > 0 && (
+                        {(item.implied_ids || []).length > 0 && (
                           <span className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                            → {(item.impliedStatuses || item.implied_ids)!.join(', ')}
+                            → {item.implied_ids!.join(', ')}
                           </span>
                         )}
                         {(item.changes || []).length > 0 && (

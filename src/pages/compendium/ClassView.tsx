@@ -96,18 +96,18 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
     const loadSubclassData = async () => {
       try {
-        const subData = await fetchDocument('subclasses', selectedSubclassId);
+        const subData = await fetchDocument<any>('subclasses', selectedSubclassId);
 
         if (subData) {
-          // Remap underscored fields to camelCase
+          // Remap snake_case D1 columns to camelCase
           const mappedSub = {
             ...subData,
-            classId: subData.class_id || subData.classId,
-            sourceId: subData.source_id || subData.sourceId,
-            imageUrl: subData.image_url || subData.imageUrl,
-            imageDisplay: typeof subData.image_display === 'string' ? JSON.parse(subData.image_display) : (subData.imageDisplay || subData.image_display),
-            spellcasting: typeof subData.spellcasting === 'string' ? JSON.parse(subData.spellcasting) : (subData.spellcasting || {}),
-            advancements: typeof subData.advancements === 'string' ? JSON.parse(subData.advancements) : (subData.advancements || [])
+            classId: subData.class_id,
+            sourceId: subData.source_id,
+            imageUrl: subData.image_url,
+            imageDisplay: typeof subData.image_display === 'string' ? JSON.parse(subData.image_display) : null,
+            spellcasting: typeof subData.spellcasting === 'string' ? JSON.parse(subData.spellcasting) : {},
+            advancements: typeof subData.advancements === 'string' ? JSON.parse(subData.advancements) : [],
           };
           setSelectedSubclass(mappedSub);
 
@@ -118,12 +118,12 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               if (!data) return null;
               return {
                 ...data,
-                levels: typeof data.levels === 'string' ? JSON.parse(data.levels) : (data.levels || [])
+                levels: typeof data.levels === 'string' ? JSON.parse(data.levels) : [],
               };
             };
             
             if (sc.manualProgressionId) {
-              const snap = await fetchDocument('spellcastingScalings', sc.manualProgressionId);
+              const snap = await fetchDocument<any>('spellcastingScalings', sc.manualProgressionId);
               if (snap) setSubclassSpellcasting(parseLevels(snap));
             } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
               const type = spellcastingTypes.find(t => t.id === sc.progressionId);
@@ -139,13 +139,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             }
 
             if (sc.altProgressionId) {
-              const snap = await fetchDocument('pactMagicScalings', sc.altProgressionId);
+              const snap = await fetchDocument<any>('pactMagicScalings', sc.altProgressionId);
               if (snap) setSubclassAltSpellcasting(parseLevels(snap));
             } else {
               setSubclassAltSpellcasting(null);
             }
             if (sc.spellsKnownId) {
-              const snap = await fetchDocument('spellsKnownScalings', sc.spellsKnownId);
+              const snap = await fetchDocument<any>('spellsKnownScalings', sc.spellsKnownId);
               if (snap) setSubclassSpellsKnown(parseLevels(snap));
             } else {
               setSubclassSpellsKnown(null);
@@ -154,23 +154,23 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         }
 
         const [subFeatures, subScalings] = await Promise.all([
-          fetchCollection('features', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId], orderBy: 'level ASC' }),
-          fetchCollection('scaling_columns', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId] })
+          fetchCollection<any>('features', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId], orderBy: 'level ASC' }),
+          fetchCollection<any>('scaling_columns', { where: "parent_id = ? AND parent_type = 'subclass'", params: [selectedSubclassId] })
         ]);
 
         setSubclassFeatures(subFeatures.map((f: any) => ({
           ...f,
-          parentId: f.parent_id || f.parentId,
-          parentType: f.parent_type || f.parentType,
-          imageUrl: f.image_url || f.imageUrl,
-          isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1 || f.isSubclassFeature === true,
-          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : (f.advancements || [])
+          parentId: f.parent_id,
+          parentType: f.parent_type,
+          imageUrl: f.image_url,
+          isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1,
+          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : [],
         })));
         setSubclassScalingColumns(subScalings.map((s: any) => ({
           ...s,
-          parentId: s.parent_id || s.parentId,
-          parentType: s.parent_type || s.parentType,
-          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+          parentId: s.parent_id,
+          parentType: s.parent_type,
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
         })));
       } catch (err) {
         console.error("Error loading subclass data:", err);
@@ -224,7 +224,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     const loadMainClassData = async () => {
       setLoading(true);
       try {
-        const classInfo = await fetchDocument('classes', id);
+        const classInfo = await fetchDocument<any>('classes', id);
 
         if (!classInfo) {
           navigate('/compendium/classes');
@@ -233,63 +233,63 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
 
         const mappedClass = {
           ...classInfo,
-          sourceId: classInfo.source_id || classInfo.sourceId,
-          tagIds: typeof classInfo.tag_ids === 'string' ? JSON.parse(classInfo.tag_ids) : (classInfo.tagIds || classInfo.tag_ids || []),
-          hitDie: classInfo.hit_die || classInfo.hitDie,
-          imageUrl: classInfo.image_url || classInfo.imageUrl,
-          cardImageUrl: classInfo.card_image_url || classInfo.cardImageUrl,
-          previewImageUrl: classInfo.preview_image_url || classInfo.previewImageUrl,
-          cardDisplay: typeof classInfo.card_display === 'string' ? JSON.parse(classInfo.card_display) : (classInfo.cardDisplay || classInfo.card_display),
-          imageDisplay: typeof classInfo.image_display === 'string' ? JSON.parse(classInfo.image_display) : (classInfo.imageDisplay || classInfo.image_display),
-          previewDisplay: typeof classInfo.preview_display === 'string' ? JSON.parse(classInfo.preview_display) : (classInfo.previewDisplay || classInfo.preview_display),
-          proficiencies: typeof classInfo.proficiencies === 'string' ? JSON.parse(classInfo.proficiencies) : (classInfo.proficiencies || {}),
-          startingEquipment: classInfo.starting_equipment || classInfo.startingEquipment,
-          primaryAbility: typeof classInfo.primary_ability === 'string' ? JSON.parse(classInfo.primary_ability) : (classInfo.primaryAbility || classInfo.primary_ability || []),
-          primaryAbilityChoice: typeof classInfo.primary_ability_choice === 'string' ? JSON.parse(classInfo.primary_ability_choice) : (classInfo.primaryAbilityChoice || classInfo.primary_ability_choice || []),
-          savingThrows: typeof classInfo.saving_throws === 'string' ? JSON.parse(classInfo.saving_throws) : (classInfo.savingThrows || classInfo.saving_throws || []),
-          spellcasting: typeof classInfo.spellcasting === 'string' ? JSON.parse(classInfo.spellcasting) : (classInfo.spellcasting || {}),
-          advancements: typeof classInfo.advancements === 'string' ? JSON.parse(classInfo.advancements) : (classInfo.advancements || []),
-          subclassTitle: classInfo.subclass_title || classInfo.subclassTitle || 'Subclass',
-          subclassFeatureLevels: typeof classInfo.subclass_feature_levels === 'string' ? JSON.parse(classInfo.subclass_feature_levels) : (classInfo.subclassFeatureLevels || classInfo.subclass_feature_levels || [])
+          sourceId: classInfo.source_id,
+          tagIds: typeof classInfo.tag_ids === 'string' ? JSON.parse(classInfo.tag_ids) : [],
+          hitDie: classInfo.hit_die,
+          imageUrl: classInfo.image_url,
+          cardImageUrl: classInfo.card_image_url,
+          previewImageUrl: classInfo.preview_image_url,
+          cardDisplay: typeof classInfo.card_display === 'string' ? JSON.parse(classInfo.card_display) : null,
+          imageDisplay: typeof classInfo.image_display === 'string' ? JSON.parse(classInfo.image_display) : null,
+          previewDisplay: typeof classInfo.preview_display === 'string' ? JSON.parse(classInfo.preview_display) : null,
+          proficiencies: typeof classInfo.proficiencies === 'string' ? JSON.parse(classInfo.proficiencies) : {},
+          startingEquipment: classInfo.starting_equipment,
+          primaryAbility: typeof classInfo.primary_ability === 'string' ? JSON.parse(classInfo.primary_ability) : [],
+          primaryAbilityChoice: typeof classInfo.primary_ability_choice === 'string' ? JSON.parse(classInfo.primary_ability_choice) : [],
+          savingThrows: typeof classInfo.saving_throws === 'string' ? JSON.parse(classInfo.saving_throws) : [],
+          spellcasting: typeof classInfo.spellcasting === 'string' ? JSON.parse(classInfo.spellcasting) : {},
+          advancements: typeof classInfo.advancements === 'string' ? JSON.parse(classInfo.advancements) : [],
+          subclassTitle: classInfo.subclass_title || 'Subclass',
+          subclassFeatureLevels: typeof classInfo.subclass_feature_levels === 'string' ? JSON.parse(classInfo.subclass_feature_levels) : [],
         };
 
         setClassData(mappedClass);
 
         // Parallel fetch for associated data
         const [featData, scalingsData, subsData, sourceData] = await Promise.all([
-          fetchCollection('features', { where: "parent_id = ? AND parent_type = 'class'", params: [id], orderBy: 'level ASC' }),
-          fetchCollection('scaling_columns', { where: "parent_id = ? AND parent_type = 'class'", params: [id] }),
-          fetchCollection('subclasses', { where: "class_id = ?", params: [id], orderBy: 'name ASC' }),
-          classInfo.source_id || classInfo.sourceId ? fetchDocument('sources', classInfo.source_id || classInfo.sourceId) : Promise.resolve(null)
+          fetchCollection<any>('features', { where: "parent_id = ? AND parent_type = 'class'", params: [id], orderBy: 'level ASC' }),
+          fetchCollection<any>('scaling_columns', { where: "parent_id = ? AND parent_type = 'class'", params: [id] }),
+          fetchCollection<any>('subclasses', { where: "class_id = ?", params: [id], orderBy: 'name ASC' }),
+          classInfo.source_id ? fetchDocument<any>('sources', classInfo.source_id) : Promise.resolve(null)
         ]);
 
         setFeatures(featData.map((f: any) => ({
           ...f,
-          parentId: f.parent_id || f.parentId,
-          parentType: f.parent_type || f.parentType,
-          imageUrl: f.image_url || f.imageUrl,
-          isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1 || f.isSubclassFeature === true,
-          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : (f.advancements || [])
+          parentId: f.parent_id,
+          parentType: f.parent_type,
+          imageUrl: f.image_url,
+          isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1,
+          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : [],
         })));
         setScalingColumns(scalingsData.map((s: any) => ({
           ...s,
-          parentId: s.parent_id || s.parentId,
-          parentType: s.parent_type || s.parentType,
-          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values || {})
+          parentId: s.parent_id,
+          parentType: s.parent_type,
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
         })));
         setSubclasses(subsData.map((sub: any) => ({
           ...sub,
-          classId: sub.class_id || sub.classId,
-          sourceId: sub.source_id || sub.sourceId,
-          imageUrl: sub.image_url || sub.imageUrl,
-          imageDisplay: typeof sub.image_display === 'string' ? JSON.parse(sub.image_display) : (sub.imageDisplay || sub.image_display),
-          spellcasting: typeof sub.spellcasting === 'string' ? JSON.parse(sub.spellcasting) : (sub.spellcasting || {}),
-          advancements: typeof sub.advancements === 'string' ? JSON.parse(sub.advancements) : (sub.advancements || [])
+          classId: sub.class_id,
+          sourceId: sub.source_id,
+          imageUrl: sub.image_url,
+          imageDisplay: typeof sub.image_display === 'string' ? JSON.parse(sub.image_display) : null,
+          spellcasting: typeof sub.spellcasting === 'string' ? JSON.parse(sub.spellcasting) : {},
+          advancements: typeof sub.advancements === 'string' ? JSON.parse(sub.advancements) : [],
         })));
         setSource(sourceData ? {
           ...sourceData,
-          rulesVersion: sourceData.rules_version || sourceData.rulesVersion,
-          imageUrl: sourceData.image_url || sourceData.imageUrl
+          rulesVersion: sourceData.rules_version,
+          imageUrl: sourceData.image_url,
         } : null);
 
         // Spellcasting Scalings
@@ -304,7 +304,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           };
 
           if (sc.manualProgressionId) {
-            const snap = await fetchDocument('spellcastingScalings', sc.manualProgressionId);
+            const snap = await fetchDocument<any>('spellcastingScalings', sc.manualProgressionId);
             if (snap) setSpellcasting(parseLevels(snap));
           } else if (sc.progressionId && spellcastingTypes.length > 0 && masterMulticlassChart) {
             const type = spellcastingTypes.find(t => t.id === sc.progressionId);
@@ -320,11 +320,11 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           }
 
           if (sc.altProgressionId) {
-            const snap = await fetchDocument('pactMagicScalings', sc.altProgressionId);
+            const snap = await fetchDocument<any>('pactMagicScalings', sc.altProgressionId);
             if (snap) setAltSpellcasting(parseLevels(snap));
           }
           if (sc.spellsKnownId) {
-            const snap = await fetchDocument('spellsKnownScalings', sc.spellsKnownId);
+            const snap = await fetchDocument<any>('spellsKnownScalings', sc.spellsKnownId);
             if (snap) setSpellsKnown(parseLevels(snap));
           }
         }
@@ -375,8 +375,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
     const loadOptions = async () => {
       try {
         const [groupsData, itemsData] = await Promise.all([
-          fetchCollection('unique_option_groups', { where: `id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds }),
-          fetchCollection('unique_option_items', { where: `group_id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds })
+          fetchCollection<any>('unique_option_groups', { where: `id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds }),
+          fetchCollection<any>('unique_option_items', { where: `group_id IN (${allGroupIds.map(() => '?').join(',')})`, params: allGroupIds })
         ]);
         setOptionGroups(groupsData.map((g: any) => ({
           ...g,
@@ -417,18 +417,18 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           scTypesData,
           masterData
         ] = await Promise.all([
-          fetchCollection('tagGroups'),
-          fetchCollection('tags'),
-          fetchCollection('skills'),
-          fetchCollection('tools'),
-          fetchCollection('toolCategories'),
-          fetchCollection('weaponCategories'),
-          fetchCollection('armorCategories'),
-          fetchCollection('weapons'),
-          fetchCollection('armor'),
-          fetchCollection('attributes'),
-          fetchCollection('spellcastingTypes'),
-          fetchDocument('standardMulticlassProgression', 'master')
+          fetchCollection<any>('tagGroups'),
+          fetchCollection<any>('tags'),
+          fetchCollection<any>('skills'),
+          fetchCollection<any>('tools'),
+          fetchCollection<any>('toolCategories'),
+          fetchCollection<any>('weaponCategories'),
+          fetchCollection<any>('armorCategories'),
+          fetchCollection<any>('weapons'),
+          fetchCollection<any>('armor'),
+          fetchCollection<any>('attributes'),
+          fetchCollection<any>('spellcastingTypes'),
+          fetchDocument<any>('standardMulticlassProgression', 'master')
         ]);
 
         setTagGroups(tagGroupsData.map((tg: any) => ({

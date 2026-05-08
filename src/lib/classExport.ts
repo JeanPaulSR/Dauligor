@@ -41,11 +41,11 @@ function denormalizeSource(row: any) {
   if (!row) return row;
   const out: any = dropSnakeKeys({
     ...row,
-    imageUrl: row.image_url ?? row.imageUrl ?? '',
-    rules: row.rules_version ?? row.rules ?? '',
-    url: row.external_url ?? row.url ?? '',
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    imageUrl: row.image_url ?? '',
+    rules: row.rules_version ?? '',
+    url: row.external_url ?? '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   });
   // `payload` is a D1-only catch-all column; not part of the export contract.
   delete out.payload;
@@ -56,30 +56,30 @@ function denormalizeClassRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
-    sourceId: row.source_id ?? row.sourceId,
-    hitDie: row.hit_die ?? row.hitDie,
-    tagIds: parseJsonField(row.tag_ids, row.tagIds ?? []),
+    sourceId: row.source_id,
+    hitDie: row.hit_die,
+    tagIds: parseJsonField(row.tag_ids, []),
     proficiencies: parseJsonField(row.proficiencies, {}),
-    multiclassProficiencies: parseJsonField(row.multiclass_proficiencies, row.multiclassProficiencies ?? {}),
-    savingThrows: parseJsonField(row.saving_throws, row.savingThrows ?? []),
+    multiclassProficiencies: parseJsonField(row.multiclass_proficiencies, {}),
+    savingThrows: parseJsonField(row.saving_throws, []),
     spellcasting: parseJsonField(row.spellcasting, {}),
     advancements: parseJsonField(row.advancements, []),
-    subclassTitle: row.subclass_title ?? row.subclassTitle,
-    subclassFeatureLevels: parseJsonField(row.subclass_feature_levels, row.subclassFeatureLevels ?? []),
-    asiLevels: parseJsonField(row.asi_levels, row.asiLevels ?? []),
-    primaryAbility: parseJsonField(row.primary_ability, row.primaryAbility ?? []),
-    primaryAbilityChoice: parseJsonField(row.primary_ability_choice, row.primaryAbilityChoice ?? []),
-    excludedOptionIds: parseJsonField(row.excluded_option_ids, row.excludedOptionIds ?? {}),
-    uniqueOptionMappings: parseJsonField(row.unique_option_mappings, row.uniqueOptionMappings ?? []),
-    startingEquipment: row.starting_equipment ?? row.startingEquipment,
-    imageUrl: row.image_url ?? row.imageUrl,
-    cardImageUrl: row.card_image_url ?? row.cardImageUrl,
-    previewImageUrl: row.preview_image_url ?? row.previewImageUrl,
-    imageDisplay: parseJsonField(row.image_display, row.imageDisplay),
-    cardDisplay: parseJsonField(row.card_display, row.cardDisplay),
-    previewDisplay: parseJsonField(row.preview_display, row.previewDisplay),
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    subclassTitle: row.subclass_title,
+    subclassFeatureLevels: parseJsonField(row.subclass_feature_levels, []),
+    asiLevels: parseJsonField(row.asi_levels, []),
+    primaryAbility: parseJsonField(row.primary_ability, []),
+    primaryAbilityChoice: parseJsonField(row.primary_ability_choice, []),
+    excludedOptionIds: parseJsonField(row.excluded_option_ids, {}),
+    uniqueOptionMappings: parseJsonField(row.unique_option_mappings, []),
+    startingEquipment: row.starting_equipment,
+    imageUrl: row.image_url,
+    cardImageUrl: row.card_image_url,
+    previewImageUrl: row.preview_image_url,
+    imageDisplay: parseJsonField(row.image_display, undefined),
+    cardDisplay: parseJsonField(row.card_display, undefined),
+    previewDisplay: parseJsonField(row.preview_display, undefined),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   });
 }
 
@@ -87,25 +87,25 @@ function denormalizeSubclassRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
-    classId: row.class_id ?? row.classId,
-    classIdentifier: row.class_identifier ?? row.classIdentifier,
-    sourceId: row.source_id ?? row.sourceId,
-    tagIds: parseJsonField(row.tag_ids, row.tagIds ?? []),
+    classId: row.class_id,
+    classIdentifier: row.class_identifier,
+    sourceId: row.source_id,
+    tagIds: parseJsonField(row.tag_ids, []),
     advancements: parseJsonField(row.advancements, []),
     spellcasting: parseJsonField(row.spellcasting, {}),
-    excludedOptionIds: parseJsonField(row.excluded_option_ids, row.excludedOptionIds ?? {}),
-    uniqueOptionGroupIds: parseJsonField(row.unique_option_group_ids, row.uniqueOptionGroupIds ?? []),
-    imageUrl: row.image_url ?? row.imageUrl,
-    cardImageUrl: row.card_image_url ?? row.cardImageUrl,
-    previewImageUrl: row.preview_image_url ?? row.previewImageUrl,
+    excludedOptionIds: parseJsonField(row.excluded_option_ids, {}),
+    uniqueOptionGroupIds: parseJsonField(row.unique_option_group_ids, []),
+    imageUrl: row.image_url,
+    cardImageUrl: row.card_image_url,
+    previewImageUrl: row.preview_image_url,
     // Display shapes flow through unchanged — no default. A `null` D1 value
     // becomes undefined here, which JSON.stringify drops on output. The
     // canonical contract only includes a display when the source had one.
-    imageDisplay: parseJsonField(row.image_display, row.imageDisplay) ?? undefined,
-    cardDisplay: parseJsonField(row.card_display, row.cardDisplay) ?? undefined,
-    previewDisplay: parseJsonField(row.preview_display, row.previewDisplay) ?? undefined,
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    imageDisplay: parseJsonField(row.image_display, undefined) ?? undefined,
+    cardDisplay: parseJsonField(row.card_display, undefined) ?? undefined,
+    previewDisplay: parseJsonField(row.preview_display, undefined) ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   });
 }
 
@@ -113,29 +113,27 @@ function denormalizeFeatureRow(row: any) {
   if (!row) return row;
   const out: any = dropSnakeKeys({
     ...row,
-    parentId: row.parent_id ?? row.parentId,
-    parentType: row.parent_type ?? row.parentType,
-    featureType: row.feature_type ?? row.featureType,
-    sourceId: row.source_id ?? row.sourceId,
-    isSubclassFeature: row.parent_type === 'subclass'
-      || row.is_subclass_feature === 1
-      || row.isSubclassFeature === true,
-    imageUrl: row.image_url ?? row.imageUrl,
-    iconUrl: row.icon_url ?? row.iconUrl,
-    quantityColumnId: row.quantity_column_id ?? row.quantityColumnId,
-    scalingColumnId: row.scaling_column_id ?? row.scalingColumnId,
-    usesMax: row.uses_max ?? row.usesMax,
-    usesSpent: row.uses_spent ?? row.usesSpent,
-    usesRecovery: parseJsonField(row.uses_recovery, row.usesRecovery ?? []),
-    prerequisitesLevel: row.prerequisites_level ?? row.prerequisitesLevel,
-    prerequisitesItems: parseJsonField(row.prerequisites_items, row.prerequisitesItems ?? []),
+    parentId: row.parent_id,
+    parentType: row.parent_type,
+    featureType: row.feature_type,
+    sourceId: row.source_id,
+    isSubclassFeature: row.parent_type === 'subclass' || row.is_subclass_feature === 1,
+    imageUrl: row.image_url,
+    iconUrl: row.icon_url,
+    quantityColumnId: row.quantity_column_id,
+    scalingColumnId: row.scaling_column_id,
+    usesMax: row.uses_max,
+    usesSpent: row.uses_spent,
+    usesRecovery: parseJsonField(row.uses_recovery, []),
+    prerequisitesLevel: row.prerequisites_level,
+    prerequisitesItems: parseJsonField(row.prerequisites_items, []),
     advancements: parseJsonField(row.advancements, []),
     activities: parseJsonField(row.activities, []),
     effects: parseJsonField(row.effects, []),
     properties: parseJsonField(row.properties, []),
-    tagIds: parseJsonField(row.tags ?? row.tag_ids, row.tagIds ?? []),
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    tagIds: parseJsonField(row.tags, []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   });
   // `tags` is the D1 JSON column whose canonical alias is `tagIds`; drop the raw form.
   delete out.tags;
@@ -146,12 +144,12 @@ function denormalizeScalingColumnRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
-    parentId: row.parent_id ?? row.parentId,
-    parentType: row.parent_type ?? row.parentType,
-    sourceId: row.source_id ?? row.sourceId,
+    parentId: row.parent_id,
+    parentType: row.parent_type,
+    sourceId: row.source_id,
     values: parseJsonField(row.values, {}),
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   });
 }
 
@@ -159,13 +157,13 @@ function denormalizeOptionGroupRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
-    sourceId: row.source_id ?? row.sourceId,
-    classIds: parseJsonField(row.class_ids, row.classIds ?? []),
-    scalingColumnId: row.scaling_column_id ?? row.scalingColumnId,
-    scalingId: row.scaling_id ?? row.scalingId,
-    featureId: row.feature_id ?? row.featureId,
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    sourceId: row.source_id,
+    classIds: parseJsonField(row.class_ids, []),
+    scalingColumnId: row.scaling_column_id,
+    scalingId: row.scaling_id,
+    featureId: row.feature_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   });
 }
 
@@ -173,16 +171,16 @@ function denormalizeOptionItemRow(row: any) {
   if (!row) return row;
   return dropSnakeKeys({
     ...row,
-    groupId: row.group_id ?? row.groupId,
-    sourceId: row.source_id ?? row.sourceId,
-    classIds: parseJsonField(row.class_ids, row.classIds ?? []),
-    iconUrl: row.icon_url ?? row.iconUrl,
-    levelPrerequisite: row.level_prerequisite ?? row.levelPrerequisite,
-    stringPrerequisite: row.string_prerequisite ?? row.stringPrerequisite,
-    isRepeatable: row.is_repeatable ?? row.isRepeatable,
-    featureId: row.feature_id ?? row.featureId,
-    createdAt: row.created_at ?? row.createdAt,
-    updatedAt: row.updated_at ?? row.updatedAt,
+    groupId: row.group_id,
+    sourceId: row.source_id,
+    classIds: parseJsonField(row.class_ids, []),
+    iconUrl: row.icon_url,
+    levelPrerequisite: row.level_prerequisite,
+    stringPrerequisite: row.string_prerequisite,
+    isRepeatable: row.is_repeatable,
+    featureId: row.feature_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   });
 }
 
@@ -716,7 +714,7 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
       mode: trimString(configuration.mode || 'default') || 'default',
       choiceCount: Number(configuration.choiceCount || 0) || 0,
       choiceSource: trimString(configuration.choiceSource || ''),
-      allowReplacements: Boolean(configuration.allowReplacements ?? configuration.allowReplacement),
+      allowReplacements: Boolean(configuration.allowReplacements),
       fixed: uniqueStrings(asArray(configuration.fixed).map((value: string) => normalizeTraitEntry(traitType, value, context.refs))),
       options: uniqueStrings(asArray(configuration.options).map((value: string) => normalizeTraitEntry(traitType, value, context.refs))),
       categoryIds: uniqueStrings(asArray(configuration.categoryIds).map((value: string) => normalizeTraitCategory(traitType, value, context.refs)))
