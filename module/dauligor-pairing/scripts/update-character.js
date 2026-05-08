@@ -40,11 +40,33 @@ function stripTypePrefix(slug) {
  * (`base-skills`, `base-saves`, `base-armor`, etc.) and the bare
  * names (`skills`, `saves`, etc.).
  */
+const KNOWN_KINDS = new Set([
+  "base-skills", "skills", "skill",
+  "base-saves", "saves", "abilities",
+  "base-tools", "tools", "tool",
+  "base-armor", "armor",
+  "base-weapons", "weapons", "weapon",
+  "base-languages", "languages", "language",
+  "base-resistances", "dr",
+  "base-immunities", "di",
+  "base-vulnerabilities", "dv",
+  "base-condition-immunities", "ci"
+]);
+
 export function isAlreadyMarked(actor, characterUpdater, kind, slug) {
   const cleaned = stripTypePrefix(slug);
   if (!cleaned) return false;
 
-  const k = String(kind ?? "").toLowerCase();
+  // Mixed-pool feature trait advancements (e.g. "choose any one skill OR
+  // language") arrive without a single canonical `kind` for the whole
+  // prompt — the type lives in each option's `<type>:` prefix. Fall back
+  // to inferring from the slug when the supplied kind isn't a known
+  // category, so already-marked options still grey out.
+  let k = String(kind ?? "").toLowerCase();
+  if (!KNOWN_KINDS.has(k)) {
+    const m = String(slug ?? "").match(/^([a-z]+):/i);
+    if (m) k = m[1].toLowerCase();
+  }
   const delta = characterUpdater?.delta ?? {};
 
   const checkSkill = () =>
@@ -199,6 +221,68 @@ export class CharacterUpdater {
     if (!Number.isFinite(amount) || amount === 0) return;
     const currentBase = Number(this.actor?.system?.attributes?.hp?.base ?? 0) || 0;
     this.delta["system.attributes.hp.base"] = currentBase + amount;
+  }
+
+  /**
+   * Apply a mixed-prefix array of slugs (`skills:acr`, `saves:str`,
+   * `tools:thief`, `armor:lgt`, `weapons:longsword`, `languages:elvish`,
+   * `dr:fire`, etc.) — each slug is dispatched to the matching writer.
+   *
+   * Used by feature-level Trait advancement prompts where the option
+   * pool can be heterogeneous (e.g. "choose one skill OR language").
+   * Slugs without a recognized prefix fall back to skill (the most
+   * common case) — keep the authoring side prefixing properly to avoid
+   * surprises.
+   */
+  applyMixedTraitSelections(slugs) {
+    const list = Array.isArray(slugs) ? slugs : (slugs ? [slugs] : []);
+    for (const raw of list) {
+      const slug = String(raw ?? "").trim();
+      if (!slug) continue;
+      const prefixMatch = slug.match(/^([a-z]+):/i);
+      const prefix = prefixMatch ? prefixMatch[1].toLowerCase() : "";
+      switch (prefix) {
+        case "skills":
+        case "skill":
+          this.updateSkills([slug]);
+          break;
+        case "saves":
+        case "abilities":
+          this.updateSaves([slug]);
+          break;
+        case "tools":
+        case "tool":
+          this.updateTraitProficiencies("toolProf", [slug]);
+          break;
+        case "armor":
+          this.updateTraitProficiencies("armorProf", [slug]);
+          break;
+        case "weapons":
+        case "weapon":
+          this.updateTraitProficiencies("weaponProf", [slug]);
+          break;
+        case "languages":
+        case "language":
+          this.updateTraitProficiencies("languages", [slug]);
+          break;
+        case "dr":
+          this.updateDamageTraits("dr", [slug]);
+          break;
+        case "di":
+          this.updateDamageTraits("di", [slug]);
+          break;
+        case "dv":
+          this.updateDamageTraits("dv", [slug]);
+          break;
+        case "ci":
+          this.updateDamageTraits("ci", [slug]);
+          break;
+        default:
+          // Unprefixed — fall back to skill, the most common category
+          // for unprefixed authoring data.
+          this.updateSkills([slug]);
+      }
+    }
   }
 
   /**

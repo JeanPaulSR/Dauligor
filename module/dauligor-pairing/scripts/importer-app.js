@@ -2765,9 +2765,29 @@ async function runDauligorClassImportSequence({
       // Sequence collects per-group source-ids into state.optionSelections
       // keyed by group.sourceId; the bridge below passes the whole map
       // through as importSelection.optionSelections.
+      //
+      // workflow.optionGroups is sourced from the class document's flags
+      // and includes groups whose owning feature lives on a *different*
+      // subclass. Filter to groups whose featureSourceId is actually being
+      // granted at the chosen level + subclass (so picking Lycanthrope
+      // doesn't surface Mutant / Battle Master / War Chief option groups).
+      // Groups with no featureSourceId (orphan / class-wide) pass through.
       state.optionSelections = state.optionSelections ?? {};
+      const grantedFeatureSourceIds = new Set([
+        ...ensureArray(workflow.desiredClassFeatureItems),
+        ...ensureArray(workflow.desiredSubclassFeatureItems)
+      ].map((f) => f?.flags?.[MODULE_ID]?.sourceId).filter(Boolean));
+
       for (const group of ensureArray(workflow.optionGroups)) {
         if (!group?.options?.length || !group?.maxSelections) continue;
+        // Filter by granted-feature set — drops other-subclass groups.
+        if (group.featureSourceId && !grantedFeatureSourceIds.has(group.featureSourceId)) {
+          log("Skipping option group — owning feature not granted", {
+            group: group.name,
+            featureSourceId: group.featureSourceId
+          });
+          continue;
+        }
         // Skip if the user previously satisfied this group (e.g. resumed
         // from a partial run).
         if ((state.optionSelections[group.sourceId] ?? []).length === group.maxSelections) continue;
@@ -2780,6 +2800,43 @@ async function runDauligorClassImportSequence({
           // updated selection state (some groups may filter their pool
           // based on prior picks via group.selectionCountsByLevel).
           workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+        }
+      }
+
+      // Feature-level Trait choice prompts — `workflow.choiceAdvancements`
+      // collects every Trait + ItemChoice advancement (across class root,
+      // subclass root, granted features, and selected option items) that
+      // has user-selectable choices at the chosen target level. The
+      // base-advancement loop above already covered the 11 universal
+      // class-root slots; iterate the rest here so a feature like
+      // Barbarian's Primal Knowledge (which adds a skill pick at level 3)
+      // gets prompted instead of silently dropped.
+      //
+      // Each prompt's selections go through CharacterUpdater's
+      // mixed-prefix writer because feature-trait pools can be
+      // heterogeneous (e.g. "choose one skill OR language"). ItemChoice
+      // advancements on features aren't wired yet — they'll need a
+      // separate prompt UI similar to runOptionGroupStep.
+      const baseAdvancementIds = new Set(
+        baseFeatures.advancements.map((entry) => entry?.adv?._id).filter(Boolean)
+      );
+      for (const adv of ensureArray(workflow.choiceAdvancements)) {
+        if (adv?.type !== "Trait") continue;
+        if (!adv?._id || baseAdvancementIds.has(adv._id)) continue;
+        const traitChoice = extractFeatureTraitChoice(adv);
+        if (!traitChoice) continue;
+
+        const result = await runTraitSelectionStep({
+          title: traitChoice.title,
+          fieldName: `feature-trait:${adv._id}`,
+          advancement: traitChoice,
+          workflow,
+          sequence,
+          progress
+        });
+        if (result === "cancelled") throw new DauligorImportSequenceCancelledError();
+        if (Array.isArray(result) && result.length) {
+          sequence.characterUpdater?.applyMixedTraitSelections(result);
         }
       }
 
@@ -2960,6 +3017,52 @@ function buildWorkflowFromSequenceState(payload, { entry = null, actor = null, s
       traitSelections: state.traitSelections
     }
   });
+}
+
+/**
+ * Coerce a feature-level Trait advancement into the
+ * `{ title, choiceCount, fixed, options }` shape `runTraitSelectionStep`
+ * expects. Handles both authoring formats: the new
+ * `configuration.choices = [{ count, pool }]` shape and the legacy
+ * `configuration: { type, choiceCount, options }` shape. Returns null
+ * when the advancement has no actionable user choice.
+ */
+function extractFeatureTraitChoice(adv) {
+  if (!adv) return null;
+  const cfg = adv.configuration ?? {};
+
+  // Pull "fixed" grants from configuration.grants (if present) — these
+  // are auto-applied alongside choices. The renderer just shows them;
+  // CharacterUpdater writes them via the same applyMixedTraitSelections
+  // path when it's the active commit point. (Currently the bridge owns
+  // root-level fixed grants on first import, so we surface them as
+  // labels only and let the user see what's auto-granted.)
+  const grantsArray = Array.isArray(cfg.grants) ? cfg.grants : [];
+  const fixed = grantsArray.filter((entry) => typeof entry === "string");
+
+  // New format
+  for (const c of (cfg.choices || [])) {
+    if (c?.count > 0 && Array.isArray(c.pool) && c.pool.length > 0) {
+      return {
+        title: adv.title || "Trait Selection",
+        choiceCount: Number(c.count) || 0,
+        fixed,
+        options: c.pool.filter((slug) => typeof slug === "string")
+      };
+    }
+  }
+
+  // Legacy format
+  if (cfg.type && Number(cfg.choiceCount) > 0 && Array.isArray(cfg.options) && cfg.options.length > 0) {
+    return {
+      title: adv.title || "Trait Selection",
+      choiceCount: Number(cfg.choiceCount),
+      fixed,
+      options: cfg.options.filter((slug) => typeof slug === "string")
+    };
+  }
+
+  return null;
 }
 
 function buildImportSequenceSteps(workflow, { actor = null } = {}) {
