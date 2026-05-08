@@ -29,6 +29,8 @@ import { ClassImageEditor, ImageDisplay, DEFAULT_DISPLAY } from '../../component
 import { slugify } from '../../lib/utils';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
+import { queueRebake } from '../../lib/moduleExport';
+import { BakeNowButton } from '../../components/compendium/BakeNowButton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -463,6 +465,10 @@ export default function SubclassEditor() {
 
     try {
       await upsertDocument('subclasses', saveId, d1Data);
+      // Subclass nests inside its parent class's bundle, so the rebake
+      // pipeline rebuilds the parent class's R2 cache (and the source's
+      // catalog, since subclasses[] in catalog entries can change).
+      queueRebake('subclass', saveId);
       toast.success(id ? "Subclass updated" : "Subclass created");
       if (!id) {
         navigate(`/compendium/subclasses/edit/${saveId}`);
@@ -519,6 +525,7 @@ export default function SubclassEditor() {
         ...featureData,
         createdAt: editingFeature.createdAt || new Date().toISOString(),
       });
+      queueRebake('feature', saveId);
       toast.success(editingFeature.id ? "Feature updated" : "Feature added");
       setIsFeatureModalOpen(false);
       setLoadTick(t => t + 1);
@@ -610,9 +617,18 @@ export default function SubclassEditor() {
           </div>
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
-          <Button onClick={handleSave} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
-            <Save className="w-4 h-4" /> Save Subclass
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleSave} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
+              <Save className="w-4 h-4" /> Save Subclass
+            </Button>
+            <BakeNowButton
+              kind="subclass"
+              id={id}
+              onSaveFirst={handleSave}
+              size="sm"
+              className="gap-2"
+            />
+          </div>
           <ReferenceSheetDialog
             title="Subclass Reference Sheet"
             triggerLabel="Open Reference Sheet"
@@ -1208,7 +1224,10 @@ export default function SubclassEditor() {
                     <div className="flex items-center justify-between">
                       <Input 
                         value={col.name} 
-                        onChange={e => upsertDocument("scaling_columns", col.id, { name: e.target.value })}
+                        onChange={e => {
+                          upsertDocument("scaling_columns", col.id, { name: e.target.value });
+                          queueRebake('scalingColumn', col.id);
+                        }}
                         className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
                       />
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

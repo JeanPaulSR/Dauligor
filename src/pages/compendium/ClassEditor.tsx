@@ -29,6 +29,8 @@ import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } fr
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
+import { queueRebake } from '../../lib/moduleExport';
+import { BakeNowButton } from '../../components/compendium/BakeNowButton';
 import { Database, CloudOff } from 'lucide-react';
 
 const FEATURE_TYPES = [
@@ -1005,12 +1007,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           ...featureData,
           createdAt: editingFeature.createdAt || new Date().toISOString()
         });
+        queueRebake('feature', editingFeature.id);
       } else {
         const newId = crypto.randomUUID();
         await upsertFeature(newId, {
           ...featureData,
           createdAt: new Date().toISOString()
         });
+        queueRebake('feature', newId);
       }
       setIsFeatureModalOpen(false);
       setEditingFeature(null);
@@ -1144,6 +1148,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       };
 
       await upsertDocument('classes', saveId, d1Data);
+      // Schedule a debounced R2 rebake for this class. Consecutive saves
+      // reset the 1h clock; manual "Bake Now" bypasses the wait.
+      queueRebake('class', saveId);
 
       if (!id) {
         navigate(`/compendium/classes/edit/${saveId}`);
@@ -1290,9 +1297,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           </div>
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
-          <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
-            <Save className="w-4 h-4" /> Save Class
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
+              <Save className="w-4 h-4" /> Save Class
+            </Button>
+            <BakeNowButton
+              kind="class"
+              id={id}
+              isDirty={isDirty}
+              onSaveFirst={handleSave}
+              size="sm"
+              className="gap-2"
+            />
+          </div>
           <ReferenceSheetDialog
             title="Class Reference Sheet"
             triggerLabel="Open Reference Sheet"
@@ -3840,7 +3857,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                   <div className="flex items-center justify-between">
                     <Input
                       value={col.name}
-                      onChange={e => upsertDocument("scaling_columns", col.id, { name: e.target.value })}
+                      onChange={e => {
+                        upsertDocument("scaling_columns", col.id, { name: e.target.value });
+                        queueRebake('scalingColumn', col.id);
+                      }}
                       className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"
                     />
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

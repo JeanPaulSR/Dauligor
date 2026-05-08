@@ -733,6 +733,11 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     this._classModels = [];
     this._availableTags = [];
     this._isLoaded = false;
+    // Lazy per-class payload cache. Populated when the user clicks Import,
+    // not when the browser opens — Phase C avoids eagerly fetching N×120KB
+    // bundles just to render a class card grid that already has every
+    // field it needs from the catalog metadata.
+    this._payloadCache = new Map();
   }
 
   _configureRenderParts() {
@@ -1034,16 +1039,21 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         return true;
       });
 
-    const entryPayloads = await Promise.all(catalogEntries.map(async (entry) => ({
-      entry,
-      payload: await fetchJson(entry.payloadUrl)
-    })));
+    // Phase C: build models from catalog metadata only — no per-class
+    // bundle fetches at browser-open time. The catalog endpoint ships
+    // `tags` and `subclasses[]` per entry, which is everything the class
+    // card grid + tag filter + subclass nesting need. Per-class payloads
+    // are lazy-loaded by `_ensureVariantPayload` when the user actually
+    // clicks Import, with results cached in `this._payloadCache` keyed
+    // by payloadUrl. A force-reload of the browser also resets the cache.
+    if (force) this._payloadCache.clear();
+    const entryPayloads = catalogEntries.map((entry) => ({ entry, payload: null }));
 
     this._classModels = buildClassModels(entryPayloads);
     this._availableTags = [...new Set(this._classModels.flatMap((classModel) => classModel.tags))].sort();
     this._applyPreferredSelection();
     this._state.isLoading = false;
-    this._state.status = `Loaded ${this._classModels.length} class option${this._classModels.length === 1 ? "" : "s"} from ${catalogEntries.length} source payload${catalogEntries.length === 1 ? "" : "s"} across ${catalogs.length} catalog${catalogs.length === 1 ? "" : "s"}.`;
+    this._state.status = `Loaded ${this._classModels.length} class option${this._classModels.length === 1 ? "" : "s"} from ${catalogEntries.length} catalog entr${catalogEntries.length === 1 ? "y" : "ies"} across ${catalogs.length} catalog${catalogs.length === 1 ? "" : "s"}.`;
     this._state.statusLevel = this._classModels.length ? "success" : "danger";
     this._isLoaded = true;
     this._renderBrowser();
@@ -1132,6 +1142,29 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     this._renderFooter();
   }
 
+  async _ensureVariantPayload(variant) {
+    if (variant?.payload) return true;
+    const url = variant?.entry?.payloadUrl;
+    if (!url) return false;
+
+    const cached = this._payloadCache.get(url);
+    if (cached) {
+      variant.payload = cached;
+      return true;
+    }
+
+    try {
+      const payload = await fetchJson(url);
+      if (!payload) return false;
+      this._payloadCache.set(url, payload);
+      variant.payload = payload;
+      return true;
+    } catch (error) {
+      log("Failed to lazy-load class payload", { url, error });
+      return false;
+    }
+  }
+
   async _importSelectedClass() {
     const selectedClass = this._getSelectedClass();
     if (!selectedClass) {
@@ -1139,8 +1172,22 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       return;
     }
     const selectedVariant = this._getSelectedVariant(selectedClass);
-    if (!selectedVariant?.payload) {
+    if (!selectedVariant) {
       notifyWarn(`The selected ${selectedClass.name} payload is no longer available.`);
+      return;
+    }
+
+    // Phase C: payload is fetched lazily on Import. Show a loading hint
+    // since this fetch can take several hundred ms on a cold R2 read.
+    this._state.status = `Loading ${selectedClass.name} payload…`;
+    this._state.statusLevel = "";
+    this._renderFooter();
+
+    const ok = await this._ensureVariantPayload(selectedVariant);
+    if (!ok) {
+      this._state.status = `Could not load ${selectedClass.name} payload.`;
+      this._state.statusLevel = "danger";
+      this._renderFooter();
       return;
     }
 
@@ -1170,9 +1217,7 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       return;
     }
 
-    this._state.status = this._actor
-      ? `Importing ${selectedClass.name} onto ${this._actor.name} at class level ${this._state.targetLevel}...`
-      : `Importing ${selectedClass.name} into the world library...`;
+    this._state.status = `Importing ${selectedClass.name} into the world library...`;
     this._state.statusLevel = "";
     this._renderFooter();
 
@@ -1184,9 +1229,7 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     });
 
     this._state.status = result
-      ? this._actor
-        ? `Imported ${selectedClass.name} onto ${this._actor.name}.`
-        : `Imported ${selectedClass.name} into the world library.`
+      ? `Imported ${selectedClass.name} into the world library.`
       : `Import failed for ${selectedClass.name}.`;
     this._state.statusLevel = result ? "success" : "danger";
     this._renderFooter();
@@ -1195,10 +1238,17 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
   async _openImportOptions(selectedClass, selectedVariant = null) {
     const variant = selectedVariant ?? this._getSelectedVariant(selectedClass);
-    if (!variant?.payload) {
+    if (!variant) {
       notifyWarn(`The selected ${selectedClass?.name ?? "class"} payload is no longer available.`);
       return;
     }
+
+    const ok = await this._ensureVariantPayload(variant);
+    if (!ok) {
+      notifyWarn(`Could not load ${selectedClass?.name ?? "class"} payload.`);
+      return;
+    }
+
     const result = await runDauligorClassImportSequence({
       actor: this._actor,
       folderPath: this._state.folderPath,
@@ -3674,6 +3724,27 @@ function buildClassModels(entryPayloads) {
 }
 
 function extractClassEntryMetadata(entry, payload) {
+  // Catalog-only path (Phase C). When the browser opens, we no longer
+  // pre-fetch per-class payloads; the catalog entry already carries
+  // `tags` and `subclasses[]`, which is enough to render the card grid
+  // and tag filter. The full payload is fetched on Import click via
+  // `_ensureVariantPayload` and the variant is re-decorated then.
+  if (!payload) {
+    return {
+      classSourceId: entry?.sourceId
+        ?? (entry?.payloadUrl ? `class-${String(entry.payloadUrl).replace(/\.json$/i, "")}` : null),
+      name: entry?.name ?? "Class",
+      description: summarizeHtml(entry?.description ?? ""),
+      sourceLabel: deriveSourceLabel(entry?.rules ?? ""),
+      tags: normalizeTags(entry?.tags),
+      subclasses: ensureArray(entry?.subclasses).map((sub) => ({
+        sourceId: sub?.sourceId ?? slugify(sub?.name ?? ""),
+        name: sub?.name ?? "Subclass",
+        sourceLabel: deriveSourceLabel(entry?.rules ?? "")
+      }))
+    };
+  }
+
   if (payload?.kind === "dauligor.class-bundle.v1") {
     const classItem = payload.classItem ?? {};
     return {
