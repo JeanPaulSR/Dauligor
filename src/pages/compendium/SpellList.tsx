@@ -100,8 +100,8 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           ...row,
           sourceId: row.source_id,
           imageUrl: row.image_url,
-          tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : [],
-          foundryShell: typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : null,
+          tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags ?? []),
+          foundryShell: typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : (row.foundry_data ?? null),
         }));
 
         setSpells(mapped);
@@ -191,11 +191,11 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           ...data,
           sourceId: data.source_id,
           imageUrl: data.image_url,
-          tagIds: typeof data.tags === 'string' ? JSON.parse(data.tags) : [],
+          tagIds: typeof data.tags === 'string' ? JSON.parse(data.tags) : (data.tags ?? []),
           foundryDocument: typeof data.foundry_data === 'string' ? { system: JSON.parse(data.foundry_data) } : { system: null },
           automation: {
-            activities: typeof data.activities === 'string' ? JSON.parse(data.activities) : [],
-            effects: typeof data.effects === 'string' ? JSON.parse(data.effects) : [],
+            activities: typeof data.activities === 'string' ? JSON.parse(data.activities) : (data.activities ?? []),
+            effects: typeof data.effects === 'string' ? JSON.parse(data.effects) : (data.effects ?? []),
           },
         };
 

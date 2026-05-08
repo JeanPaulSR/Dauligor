@@ -105,9 +105,9 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             classId: subData.class_id,
             sourceId: subData.source_id,
             imageUrl: subData.image_url,
-            imageDisplay: typeof subData.image_display === 'string' ? JSON.parse(subData.image_display) : null,
-            spellcasting: typeof subData.spellcasting === 'string' ? JSON.parse(subData.spellcasting) : {},
-            advancements: typeof subData.advancements === 'string' ? JSON.parse(subData.advancements) : [],
+            imageDisplay: typeof subData.image_display === 'string' ? JSON.parse(subData.image_display) : (subData.image_display ?? null),
+            spellcasting: typeof subData.spellcasting === 'string' ? JSON.parse(subData.spellcasting) : (subData.spellcasting ?? {}),
+            advancements: typeof subData.advancements === 'string' ? JSON.parse(subData.advancements) : (subData.advancements ?? []),
           };
           setSelectedSubclass(mappedSub);
 
@@ -118,7 +118,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               if (!data) return null;
               return {
                 ...data,
-                levels: typeof data.levels === 'string' ? JSON.parse(data.levels) : [],
+                levels: typeof data.levels === 'string' ? JSON.parse(data.levels) : (data.levels ?? []),
               };
             };
             
@@ -164,13 +164,13 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           parentType: f.parent_type,
           imageUrl: f.image_url,
           isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1,
-          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : [],
+          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : (f.advancements ?? []),
         })));
         setSubclassScalingColumns(subScalings.map((s: any) => ({
           ...s,
           parentId: s.parent_id,
           parentType: s.parent_type,
-          values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values ?? {}),
         })));
       } catch (err) {
         console.error("Error loading subclass data:", err);
@@ -234,23 +234,23 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
         const mappedClass = {
           ...classInfo,
           sourceId: classInfo.source_id,
-          tagIds: typeof classInfo.tag_ids === 'string' ? JSON.parse(classInfo.tag_ids) : [],
+          tagIds: typeof classInfo.tag_ids === 'string' ? JSON.parse(classInfo.tag_ids) : (classInfo.tag_ids ?? []),
           hitDie: classInfo.hit_die,
           imageUrl: classInfo.image_url,
           cardImageUrl: classInfo.card_image_url,
           previewImageUrl: classInfo.preview_image_url,
-          cardDisplay: typeof classInfo.card_display === 'string' ? JSON.parse(classInfo.card_display) : null,
-          imageDisplay: typeof classInfo.image_display === 'string' ? JSON.parse(classInfo.image_display) : null,
-          previewDisplay: typeof classInfo.preview_display === 'string' ? JSON.parse(classInfo.preview_display) : null,
-          proficiencies: typeof classInfo.proficiencies === 'string' ? JSON.parse(classInfo.proficiencies) : {},
+          cardDisplay: typeof classInfo.card_display === 'string' ? JSON.parse(classInfo.card_display) : (classInfo.card_display ?? null),
+          imageDisplay: typeof classInfo.image_display === 'string' ? JSON.parse(classInfo.image_display) : (classInfo.image_display ?? null),
+          previewDisplay: typeof classInfo.preview_display === 'string' ? JSON.parse(classInfo.preview_display) : (classInfo.preview_display ?? null),
+          proficiencies: typeof classInfo.proficiencies === 'string' ? JSON.parse(classInfo.proficiencies) : (classInfo.proficiencies ?? {}),
           startingEquipment: classInfo.starting_equipment,
-          primaryAbility: typeof classInfo.primary_ability === 'string' ? JSON.parse(classInfo.primary_ability) : [],
-          primaryAbilityChoice: typeof classInfo.primary_ability_choice === 'string' ? JSON.parse(classInfo.primary_ability_choice) : [],
-          savingThrows: typeof classInfo.saving_throws === 'string' ? JSON.parse(classInfo.saving_throws) : [],
-          spellcasting: typeof classInfo.spellcasting === 'string' ? JSON.parse(classInfo.spellcasting) : {},
-          advancements: typeof classInfo.advancements === 'string' ? JSON.parse(classInfo.advancements) : [],
+          primaryAbility: typeof classInfo.primary_ability === 'string' ? JSON.parse(classInfo.primary_ability) : (classInfo.primary_ability ?? []),
+          primaryAbilityChoice: typeof classInfo.primary_ability_choice === 'string' ? JSON.parse(classInfo.primary_ability_choice) : (classInfo.primary_ability_choice ?? []),
+          savingThrows: typeof classInfo.saving_throws === 'string' ? JSON.parse(classInfo.saving_throws) : (classInfo.saving_throws ?? []),
+          spellcasting: typeof classInfo.spellcasting === 'string' ? JSON.parse(classInfo.spellcasting) : (classInfo.spellcasting ?? {}),
+          advancements: typeof classInfo.advancements === 'string' ? JSON.parse(classInfo.advancements) : (classInfo.advancements ?? []),
           subclassTitle: classInfo.subclass_title || 'Subclass',
-          subclassFeatureLevels: typeof classInfo.subclass_feature_levels === 'string' ? JSON.parse(classInfo.subclass_feature_levels) : [],
+          subclassFeatureLevels: typeof classInfo.subclass_feature_levels === 'string' ? JSON.parse(classInfo.subclass_feature_levels) : (classInfo.subclass_feature_levels ?? []),
         };
 
         setClassData(mappedClass);
@@ -269,22 +269,22 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           parentType: f.parent_type,
           imageUrl: f.image_url,
           isSubclassFeature: f.parent_type === 'subclass' || f.is_subclass_feature === 1,
-          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : [],
+          advancements: typeof f.advancements === 'string' ? JSON.parse(f.advancements) : (f.advancements ?? []),
         })));
         setScalingColumns(scalingsData.map((s: any) => ({
           ...s,
           parentId: s.parent_id,
           parentType: s.parent_type,
-          values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values ?? {}),
         })));
         setSubclasses(subsData.map((sub: any) => ({
           ...sub,
           classId: sub.class_id,
           sourceId: sub.source_id,
           imageUrl: sub.image_url,
-          imageDisplay: typeof sub.image_display === 'string' ? JSON.parse(sub.image_display) : null,
-          spellcasting: typeof sub.spellcasting === 'string' ? JSON.parse(sub.spellcasting) : {},
-          advancements: typeof sub.advancements === 'string' ? JSON.parse(sub.advancements) : [],
+          imageDisplay: typeof sub.image_display === 'string' ? JSON.parse(sub.image_display) : (sub.image_display ?? null),
+          spellcasting: typeof sub.spellcasting === 'string' ? JSON.parse(sub.spellcasting) : (sub.spellcasting ?? {}),
+          advancements: typeof sub.advancements === 'string' ? JSON.parse(sub.advancements) : (sub.advancements ?? []),
         })));
         setSource(sourceData ? {
           ...sourceData,

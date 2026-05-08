@@ -125,13 +125,13 @@ export function ClassList({
         const mappedClasses = classData.map((c: any) => ({
           ...c,
           sourceId: c.source_id,
-          tagIds: typeof c.tag_ids === 'string' ? JSON.parse(c.tag_ids) : [],
+          tagIds: typeof c.tag_ids === 'string' ? JSON.parse(c.tag_ids) : (c.tag_ids ?? []),
           imageUrl: c.image_url,
           cardImageUrl: c.card_image_url,
           previewImageUrl: c.preview_image_url,
-          cardDisplay: typeof c.card_display === 'string' ? JSON.parse(c.card_display) : null,
-          imageDisplay: typeof c.image_display === 'string' ? JSON.parse(c.image_display) : null,
-          previewDisplay: typeof c.preview_display === 'string' ? JSON.parse(c.preview_display) : null,
+          cardDisplay: typeof c.card_display === 'string' ? JSON.parse(c.card_display) : (c.card_display ?? null),
+          imageDisplay: typeof c.image_display === 'string' ? JSON.parse(c.image_display) : (c.image_display ?? null),
+          previewDisplay: typeof c.preview_display === 'string' ? JSON.parse(c.preview_display) : (c.preview_display ?? null),
         }));
 
         setClasses(mappedClasses);
@@ -408,20 +408,20 @@ export function ClassList({
             currentClass = {
               ...fullDoc,
               sourceId: fullDoc.source_id,
-              tagIds: typeof fullDoc.tag_ids === 'string' ? JSON.parse(fullDoc.tag_ids) : [],
+              tagIds: typeof fullDoc.tag_ids === 'string' ? JSON.parse(fullDoc.tag_ids) : (fullDoc.tag_ids ?? []),
               imageUrl: fullDoc.image_url,
               cardImageUrl: fullDoc.card_image_url,
               previewImageUrl: fullDoc.preview_image_url,
-              cardDisplay: typeof fullDoc.card_display === 'string' ? JSON.parse(fullDoc.card_display) : null,
-              imageDisplay: typeof fullDoc.image_display === 'string' ? JSON.parse(fullDoc.image_display) : null,
-              previewDisplay: typeof fullDoc.preview_display === 'string' ? JSON.parse(fullDoc.preview_display) : null,
-              proficiencies: typeof fullDoc.proficiencies === 'string' ? JSON.parse(fullDoc.proficiencies) : {},
-              spellcasting: typeof fullDoc.spellcasting === 'string' ? JSON.parse(fullDoc.spellcasting) : {},
-              advancements: typeof fullDoc.advancements === 'string' ? JSON.parse(fullDoc.advancements) : [],
-              primaryAbility: typeof fullDoc.primary_ability === 'string' ? JSON.parse(fullDoc.primary_ability) : [],
-              primaryAbilityChoice: typeof fullDoc.primary_ability_choice === 'string' ? JSON.parse(fullDoc.primary_ability_choice) : [],
-              savingThrows: typeof fullDoc.saving_throws === 'string' ? JSON.parse(fullDoc.saving_throws) : [],
-              subclassFeatureLevels: typeof fullDoc.subclass_feature_levels === 'string' ? JSON.parse(fullDoc.subclass_feature_levels) : [],
+              cardDisplay: typeof fullDoc.card_display === 'string' ? JSON.parse(fullDoc.card_display) : (fullDoc.card_display ?? null),
+              imageDisplay: typeof fullDoc.image_display === 'string' ? JSON.parse(fullDoc.image_display) : (fullDoc.image_display ?? null),
+              previewDisplay: typeof fullDoc.preview_display === 'string' ? JSON.parse(fullDoc.preview_display) : (fullDoc.preview_display ?? null),
+              proficiencies: typeof fullDoc.proficiencies === 'string' ? JSON.parse(fullDoc.proficiencies) : (fullDoc.proficiencies ?? {}),
+              spellcasting: typeof fullDoc.spellcasting === 'string' ? JSON.parse(fullDoc.spellcasting) : (fullDoc.spellcasting ?? {}),
+              advancements: typeof fullDoc.advancements === 'string' ? JSON.parse(fullDoc.advancements) : (fullDoc.advancements ?? []),
+              primaryAbility: typeof fullDoc.primary_ability === 'string' ? JSON.parse(fullDoc.primary_ability) : (fullDoc.primary_ability ?? []),
+              primaryAbilityChoice: typeof fullDoc.primary_ability_choice === 'string' ? JSON.parse(fullDoc.primary_ability_choice) : (fullDoc.primary_ability_choice ?? []),
+              savingThrows: typeof fullDoc.saving_throws === 'string' ? JSON.parse(fullDoc.saving_throws) : (fullDoc.saving_throws ?? []),
+              subclassFeatureLevels: typeof fullDoc.subclass_feature_levels === 'string' ? JSON.parse(fullDoc.subclass_feature_levels) : (fullDoc.subclass_feature_levels ?? []),
               subclassTitle: fullDoc.subclass_title || 'Subclass',
             };
             setSelectedClass(currentClass);
@@ -449,14 +449,14 @@ export function ClassList({
             parentType: row.parent_type,
             imageUrl: row.image_url,
             isSubclassFeature: row.parent_type === 'subclass' || row.is_subclass_feature === 1,
-            advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : [],
+            advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : (row.advancements ?? []),
           })));
 
           setPreviewScalings(scalingsData.map(row => ({
             ...row,
             parentId: row.parent_id,
             parentType: row.parent_type,
-            values: typeof row.values === 'string' ? JSON.parse(row.values) : {}
+            values: typeof row.values === 'string' ? JSON.parse(row.values) : (row.values ?? {})
           })));
 
           // 3. Load Spellcasting progression data

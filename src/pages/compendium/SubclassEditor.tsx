@@ -263,15 +263,15 @@ export default function SubclassEditor() {
             classId: subclassData.class_id,
             sourceId: subclassData.source_id,
             imageUrl: subclassData.image_url,
-            imageDisplay: typeof subclassData.image_display === 'string' ? JSON.parse(subclassData.image_display) : null,
+            imageDisplay: typeof subclassData.image_display === 'string' ? JSON.parse(subclassData.image_display) : (subclassData.image_display ?? null),
             cardImageUrl: subclassData.card_image_url,
-            cardDisplay: typeof subclassData.card_display === 'string' ? JSON.parse(subclassData.card_display) : null,
+            cardDisplay: typeof subclassData.card_display === 'string' ? JSON.parse(subclassData.card_display) : (subclassData.card_display ?? null),
             previewImageUrl: subclassData.preview_image_url,
-            previewDisplay: typeof subclassData.preview_display === 'string' ? JSON.parse(subclassData.preview_display) : null,
-            tagIds: typeof subclassData.tag_ids === 'string' ? JSON.parse(subclassData.tag_ids) : [],
-            advancements: typeof subclassData.advancements === 'string' ? JSON.parse(subclassData.advancements) : [],
-            spellcasting: typeof subclassData.spellcasting === 'string' ? JSON.parse(subclassData.spellcasting) : {},
-            excludedOptionIds: typeof subclassData.excluded_option_ids === 'string' ? JSON.parse(subclassData.excluded_option_ids) : {},
+            previewDisplay: typeof subclassData.preview_display === 'string' ? JSON.parse(subclassData.preview_display) : (subclassData.preview_display ?? null),
+            tagIds: typeof subclassData.tag_ids === 'string' ? JSON.parse(subclassData.tag_ids) : (subclassData.tag_ids ?? []),
+            advancements: typeof subclassData.advancements === 'string' ? JSON.parse(subclassData.advancements) : (subclassData.advancements ?? []),
+            spellcasting: typeof subclassData.spellcasting === 'string' ? JSON.parse(subclassData.spellcasting) : (subclassData.spellcasting ?? {}),
+            excludedOptionIds: typeof subclassData.excluded_option_ids === 'string' ? JSON.parse(subclassData.excluded_option_ids) : (subclassData.excluded_option_ids ?? {}),
           };
 
           setName(remapped.name || '');
@@ -318,7 +318,7 @@ export default function SubclassEditor() {
               ...s,
               parentId: s.parent_id,
               parentType: s.parent_type,
-              values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
+              values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values ?? {}),
             })));
           }
         }
@@ -368,20 +368,20 @@ export default function SubclassEditor() {
           uses: {
             max: row.uses_max || '',
             spent: row.uses_spent || 0,
-            recovery: typeof row.uses_recovery === 'string' ? JSON.parse(row.uses_recovery) : [],
+            recovery: typeof row.uses_recovery === 'string' ? JSON.parse(row.uses_recovery) : (row.uses_recovery ?? []),
           },
           prerequisites: {
             level: row.prerequisites_level,
-            items: typeof row.prerequisites_items === 'string' ? JSON.parse(row.prerequisites_items) : [],
+            items: typeof row.prerequisites_items === 'string' ? JSON.parse(row.prerequisites_items) : (row.prerequisites_items ?? []),
             repeatable: !!row.repeatable,
           },
-          properties: typeof row.properties === 'string' ? JSON.parse(row.properties) : [],
+          properties: typeof row.properties === 'string' ? JSON.parse(row.properties) : (row.properties ?? []),
           automation: {
-            activities: typeof row.activities === 'string' ? JSON.parse(row.activities) : [],
-            effects: typeof row.effects === 'string' ? JSON.parse(row.effects) : [],
+            activities: typeof row.activities === 'string' ? JSON.parse(row.activities) : (row.activities ?? []),
+            effects: typeof row.effects === 'string' ? JSON.parse(row.effects) : (row.effects ?? []),
           },
-          advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : [],
-          tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : [],
+          advancements: typeof row.advancements === 'string' ? JSON.parse(row.advancements) : (row.advancements ?? []),
+          tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags ?? []),
         }));
         setFeatures(mappedFeatures.map(f => normalizeFeatureForEditor(f)));
 
@@ -389,7 +389,7 @@ export default function SubclassEditor() {
           ...s,
           parentId: s.parent_id,
           parentType: s.parent_type,
-          values: typeof s.values === 'string' ? JSON.parse(s.values) : {},
+          values: typeof s.values === 'string' ? JSON.parse(s.values) : (s.values ?? {}),
         })));
       } catch (err) {
         console.error('[SubclassEditor] Dependents load failed:', err);
