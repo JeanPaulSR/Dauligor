@@ -18,12 +18,94 @@
 // the bundle shape (denormalize* helpers, normalizeAdvancementForExport,
 // exportClassSemantic body, etc.) you MUST update both files. The client
 // downloader in `ClassView.tsx`'s "Export" button still uses the original.
+//
+// One intentional divergence: this file caches the static ref tables (skills,
+// tools, armor categories, etc.) at module scope with a short TTL. When the
+// `/api/module/<class>.json` endpoint sees several class-bake misses on the
+// same warm Vercel isolate (e.g. fresh deploy + several R2-cold reads in
+// flight), the cache turns N×14 ref-table fetches into 14. The client copy
+// doesn't need this — its fetch patterns are React-driven and per-page.
 // =============================================================================
 import { normalizeSpellFormulaShortcuts } from './_referenceSyntax.js';
 import {
   buildCanonicalClassProgression,
   buildCanonicalSubclassProgression
 } from './_classProgression.js';
+
+// Module-scope ref-table cache. Survives within a warm Vercel isolate for
+// REFS_TTL_MS, then forces a refresh — that's the staleness ceiling for
+// edits to skills/tools/armor/weapons/categories/spell scalings/etc. on a
+// running isolate. (Phase B's rebake pipeline will explicitly clear this
+// when those tables are edited.)
+const REFS_TTL_MS = 30 * 1000;
+let cachedRefsState: { refs: any; expiresAt: number } | null = null;
+
+export function clearExportRefsCache() {
+  cachedRefsState = null;
+}
+
+async function loadExportRefs(fetchCollection: ExportFetchers['fetchCollection']) {
+  const now = Date.now();
+  if (cachedRefsState && cachedRefsState.expiresAt > now) {
+    return cachedRefsState.refs;
+  }
+
+  const [
+    skillsData,
+    toolsData,
+    toolCategoriesData,
+    armorData,
+    armorCategoriesData,
+    weaponsData,
+    weaponCategoriesData,
+    languagesData,
+    languageCategoriesData,
+    attributesData,
+    tagsData,
+    spellcastingTypesData,
+    pactMagicScalingsData,
+    spellsKnownScalingsData
+  ] = await Promise.all([
+    fetchCollection('skills'),
+    fetchCollection('tools'),
+    fetchCollection('toolCategories'),
+    fetchCollection('armor'),
+    fetchCollection('armorCategories'),
+    fetchCollection('weapons'),
+    fetchCollection('weaponCategories'),
+    fetchCollection('languages'),
+    fetchCollection('languageCategories'),
+    fetchCollection('attributes'),
+    fetchCollection('tags'),
+    fetchCollection('spellcastingTypes'),
+    fetchCollection('pactMagicScalings', { where: "type = 'pact'" }),
+    fetchCollection('spellsKnownScalings', { where: "type = 'known'" })
+  ]);
+
+  // D1 returns snake_case columns; the export code reads camelCase. Build
+  // alias maps once here so the rest of the orchestration is shape-agnostic.
+  const parseLevels = (s: any) => (typeof s.levels === 'string' ? JSON.parse(s.levels) : (s.levels || []));
+  const parsePropertyIds = (w: any) => (typeof w.property_ids === 'string' ? JSON.parse(w.property_ids) : (w.property_ids || []));
+  const refs = {
+    skillsById: Object.fromEntries(skillsData.map((s: any) => [s.id, { ...s, abilityId: s.ability_id }])),
+    toolsById: Object.fromEntries(toolsData.map((t: any) => [t.id, { ...t, categoryId: t.category_id, abilityId: t.ability_id }])),
+    toolCategoriesById: Object.fromEntries(toolCategoriesData.map((c: any) => [c.id, c])),
+    armorById: Object.fromEntries(armorData.map((a: any) => [a.id, { ...a, categoryId: a.category_id, abilityId: a.ability_id }])),
+    armorCategoriesById: Object.fromEntries(armorCategoriesData.map((c: any) => [c.id, c])),
+    weaponsById: Object.fromEntries(weaponsData.map((w: any) => [w.id, { ...w, categoryId: w.category_id, abilityId: w.ability_id, propertyIds: parsePropertyIds(w) }])),
+    weaponCategoriesById: Object.fromEntries(weaponCategoriesData.map((c: any) => [c.id, c])),
+    languagesById: Object.fromEntries(languagesData.map((l: any) => [l.id, { ...l, categoryId: l.category_id }])),
+    languageCategoriesById: Object.fromEntries(languageCategoriesData.map((c: any) => [c.id, c])),
+    attributesById: Object.fromEntries(attributesData.map((a: any) => [a.id, a])),
+    tagsById: Object.fromEntries(tagsData.map((t: any) => [t.id, t])),
+    spellcastingTypesById: Object.fromEntries(spellcastingTypesData.map((t: any) => [t.id, t])),
+    pactMagicScalingsById: Object.fromEntries(pactMagicScalingsData.map((s: any) => [s.id, { ...s, levels: parseLevels(s) }])),
+    spellsKnownScalingsById: Object.fromEntries(spellsKnownScalingsData.map((s: any) => [s.id, { ...s, levels: parseLevels(s) }])),
+  };
+
+  cachedRefsState = { refs, expiresAt: now + REFS_TTL_MS };
+  return refs;
+}
 
 /**
  * Pluggable fetchers so this module can run from server contexts that don't
@@ -746,58 +828,7 @@ export async function exportClassSemantic(
   const classDataRaw = denormalizeClassRow(classInfo);
   if (!classDataRaw.subclassTitle) classDataRaw.subclassTitle = 'Subclass';
 
-  const [
-    skillsData,
-    toolsData,
-    toolCategoriesData,
-    armorData,
-    armorCategoriesData,
-    weaponsData,
-    weaponCategoriesData,
-    languagesData,
-    languageCategoriesData,
-    attributesData,
-    tagsData,
-    spellcastingTypesData,
-    pactMagicScalingsData,
-    spellsKnownScalingsData
-  ] = await Promise.all([
-    fetchCollection('skills'),
-    fetchCollection('tools'),
-    fetchCollection('toolCategories'),
-    fetchCollection('armor'),
-    fetchCollection('armorCategories'),
-    fetchCollection('weapons'),
-    fetchCollection('weaponCategories'),
-    fetchCollection('languages'),
-    fetchCollection('languageCategories'),
-    fetchCollection('attributes'),
-    fetchCollection('tags'),
-    fetchCollection('spellcastingTypes'),
-    fetchCollection('pactMagicScalings', { where: "type = 'pact'" }),
-    fetchCollection('spellsKnownScalings', { where: "type = 'known'" })
-  ]);
-
-  // D1 returns snake_case columns; the export code reads camelCase. Build
-  // alias maps once here so the rest of the orchestration is shape-agnostic.
-  const parseLevels = (s: any) => (typeof s.levels === 'string' ? JSON.parse(s.levels) : (s.levels || []));
-  const parsePropertyIds = (w: any) => (typeof w.property_ids === 'string' ? JSON.parse(w.property_ids) : (w.property_ids || []));
-  const refs = {
-    skillsById: Object.fromEntries(skillsData.map((s: any) => [s.id, { ...s, abilityId: s.ability_id }])),
-    toolsById: Object.fromEntries(toolsData.map((t: any) => [t.id, { ...t, categoryId: t.category_id, abilityId: t.ability_id }])),
-    toolCategoriesById: Object.fromEntries(toolCategoriesData.map((c: any) => [c.id, c])),
-    armorById: Object.fromEntries(armorData.map((a: any) => [a.id, { ...a, categoryId: a.category_id, abilityId: a.ability_id }])),
-    armorCategoriesById: Object.fromEntries(armorCategoriesData.map((c: any) => [c.id, c])),
-    weaponsById: Object.fromEntries(weaponsData.map((w: any) => [w.id, { ...w, categoryId: w.category_id, abilityId: w.ability_id, propertyIds: parsePropertyIds(w) }])),
-    weaponCategoriesById: Object.fromEntries(weaponCategoriesData.map((c: any) => [c.id, c])),
-    languagesById: Object.fromEntries(languagesData.map((l: any) => [l.id, { ...l, categoryId: l.category_id }])),
-    languageCategoriesById: Object.fromEntries(languageCategoriesData.map((c: any) => [c.id, c])),
-    attributesById: Object.fromEntries(attributesData.map((a: any) => [a.id, a])),
-    tagsById: Object.fromEntries(tagsData.map((t: any) => [t.id, t])),
-    spellcastingTypesById: Object.fromEntries(spellcastingTypesData.map((t: any) => [t.id, t])),
-    pactMagicScalingsById: Object.fromEntries(pactMagicScalingsData.map((s: any) => [s.id, { ...s, levels: parseLevels(s) }])),
-    spellsKnownScalingsById: Object.fromEntries(spellsKnownScalingsData.map((s: any) => [s.id, { ...s, levels: parseLevels(s) }])),
-  };
+  const refs = await loadExportRefs(fetchCollection);
 
   const sourceCache: { [id: string]: string } = {};
   const resolveBookId = async (sid: string | undefined) => {

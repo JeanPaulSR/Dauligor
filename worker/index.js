@@ -91,6 +91,30 @@ async function handleRequest(request, env) {
     return jsonResponse({ count, done: listed.objects.length === 0 });
   }
 
+  // Raw write — used by module-export bake pipeline. Multipart `/upload`
+  // expects FormData with a File; this lets server-side code (Vercel
+  // functions) PUT a JSON / text body directly without forging multipart.
+  // Pass `?key=<r2-key>`; the request body is stored as-is with the supplied
+  // Content-Type. Cache-Control on the request is forwarded to R2 so public
+  // reads inherit the caching policy.
+  if (url.pathname === '/raw' && request.method === 'PUT') {
+    const key = url.searchParams.get('key');
+    if (!key) return jsonResponse({ error: 'Missing key' }, 400);
+
+    const contentType = request.headers.get('content-type') ?? 'application/octet-stream';
+    const cacheControl = request.headers.get('cache-control') ?? undefined;
+
+    const body = await request.arrayBuffer();
+    await env.BUCKET.put(key, body, {
+      httpMetadata: {
+        contentType,
+        ...(cacheControl ? { cacheControl } : {}),
+      },
+    });
+
+    return jsonResponse({ url: `${env.R2_PUBLIC_URL}/${key}`, key });
+  }
+
   if (url.pathname === '/query' && request.method === 'POST') {
     const body = await request.json();
     

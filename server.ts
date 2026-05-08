@@ -15,8 +15,7 @@ import {
 } from "./api/_lib/r2-proxy.js";
 import { handleD1Query } from "./api/_lib/d1-proxy.js";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./api/_lib/d1-internal.js";
-import { SERVER_EXPORT_FETCHERS } from "./api/_lib/d1-fetchers-server.js";
-import { exportClassSemantic } from "./src/lib/classExport.js";
+import moduleHandler from "./api/module.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -416,227 +415,19 @@ async function startServer() {
     }
   });
 
-  // Serve the data sources from the module directory dynamically via REST
+  // Serve the data sources from the module directory dynamically via REST.
+  // Local dev delegates to the Vercel handler at api/module.ts so the dispatch
+  // logic, R2 read-through cache, and Cache-Control headers stay in one place.
+  // The handler reads `req.url` directly; `req.params[0]` is unused. R2 writes
+  // go through the local Worker if `R2_WORKER_URL` and `R2_API_SECRET` are
+  // set in `.env` (writes silently no-op otherwise).
   app.get(["/api/module", "/api/module/*"], async (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-    const subpath = req.params[0] || "";
-    let cleanSubpath = subpath;
-    if (cleanSubpath === "sources" || cleanSubpath === "sources/") {
-      cleanSubpath = "";
-    } else if (cleanSubpath.startsWith("sources/")) {
-      cleanSubpath = cleanSubpath.slice("sources/".length);
-    }
-
-    // Helper to match the semantic ID generation in src/lib/classExport.ts
-    function getSemanticSourceId(sourceData: any, originalId: string) {
-      const slug = sourceData.slug;
-      const abbr = (sourceData.abbreviation || "").toLowerCase();
-      const rules = sourceData.rules || "2014";
-      
-      if (abbr) return `source-${abbr.replace(/[^a-z0-9]/g, '')}-${rules}`;
-      if (slug) return `source-${slug}`;
-      return originalId;
-    }
-
-    // Handle Dynamic Catalog Requests
     try {
-      // Fetch all sources and calculate semantic IDs from D1
-      const sourcesRes = await executeD1QueryInternal({ sql: "SELECT * FROM sources" });
-      const allSources = (sourcesRes.results || []).map((s: any) => {
-        // Map D1 snake_case to JS camelCase
-        const data = {
-          ...s,
-          slug: s.slug,
-          abbreviation: s.abbreviation,
-          imageUrl: s.image_url,
-          rules: s.rules_version || "2014",
-          status: s.status || "ready",
-          tags: typeof s.tags === 'string' ? JSON.parse(s.tags) : (s.tags || [])
-        };
-        return { 
-          id: s.id, 
-          ...data,
-          semanticId: getSemanticSourceId(data, s.id)
-        };
-      });
-
-      // Fetch all classes from D1, parse JSON columns, alias snake_case → camelCase.
-      const classesRes = await executeD1QueryInternal({ sql: "SELECT * FROM classes" });
-      const parse = (val: any) => typeof val === 'string' ? JSON.parse(val) : val;
-      const allClasses = (classesRes.results || []).map((c: any) => ({
-        id: c.id,
-        ...c,
-        sourceId: c.source_id,
-        hitDie: c.hit_die,
-        subclassTitle: c.subclass_title,
-        subclassFeatureLevels: parse(c.subclass_feature_levels),
-        asiLevels: parse(c.asi_levels),
-        primaryAbility: parse(c.primary_ability),
-        primaryAbilityChoice: parse(c.primary_ability_choice),
-        proficiencies: parse(c.proficiencies),
-        multiclassProficiencies: parse(c.multiclass_proficiencies),
-        spellcasting: parse(c.spellcasting),
-        advancements: parse(c.advancements),
-        excludedOptionIds: parse(c.excluded_option_ids),
-        uniqueOptionMappings: parse(c.unique_option_mappings),
-        imageDisplay: parse(c.image_display),
-        cardDisplay: parse(c.card_display),
-        previewDisplay: parse(c.preview_display),
-        tagIds: parse(c.tag_ids),
-        imageUrl: c.image_url,
-        cardImageUrl: c.card_image_url,
-        previewImageUrl: c.preview_image_url,
-      }));
-
-      // Group classes by source with flexible matching
-      const sourceToClasses = new Map();
-      allClasses.forEach((cls: any) => {
-        const linkIds = new Set([
-          cls.sourceId,
-          cls.sourceBookId,
-          cls.sourceBook,
-          cls.sourceId?.replace("source-", "")
-        ].filter(Boolean));
-
-        const matchingSource = allSources.find(s => {
-          const sSlug = (s.slug || "").toLowerCase();
-          const sId = s.id.toLowerCase();
-          const sSemanticId = (s.semanticId || "").toLowerCase();
-
-          return Array.from(linkIds).some(linkId => {
-            const lId = String(linkId).toLowerCase();
-            return lId === sId || lId === sSlug || lId === sSemanticId;
-          });
-        });
-
-        if (matchingSource) {
-          if (!sourceToClasses.has(matchingSource.id)) sourceToClasses.set(matchingSource.id, []);
-          sourceToClasses.get(matchingSource.id).push(cls);
-        }
-      });
-
-      // 1. Source Catalog
-      if (!cleanSubpath || cleanSubpath === "catalog.json") {
-        const entries = allSources
-          .filter((s: any) => s.status === "ready" || s.status === "active" || s.id)
-          .map((s: any) => {
-            const slug = s.slug || s.id;
-            const classes = sourceToClasses.get(s.id) || [];
-            return {
-              sourceId: s.semanticId,
-              slug: slug,
-              name: s.name,
-              shortName: s.abbreviation || s.name,
-              description: s.description || "",
-              coverImage: s.imageUrl || "",
-              status: s.status || "ready",
-              rules: s.rules || "2014",
-              tags: s.tags || [],
-              counts: {
-                classes: classes.length,
-                spells: 0,
-                items: 0,
-                bestiary: 0,
-                journals: 0
-              },
-              detailUrl: `${slug}/source.json`,
-              classCatalogUrl: `${slug}/classes/catalog.json`
-            };
-          });
-
-        return res.json({
-          kind: "dauligor.source-catalog.v1",
-          schemaVersion: 1,
-          source: {
-            system: "dauligor",
-            entity: "source-catalog",
-            id: "dynamic-firestore-library"
-          },
-          entries
-        });
-      }
-
-      // 2. Class Catalog for a Source
-      const pathParts = cleanSubpath.split("/");
-      if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2] === "catalog.json") {
-        const sourceSlug = pathParts[0].toLowerCase();
-        const source = allSources.find((s: any) => 
-          (s.slug || "").toLowerCase() === sourceSlug || 
-          s.id.toLowerCase() === sourceSlug ||
-          s.semanticId.toLowerCase() === sourceSlug
-        );
-        
-        if (source) {
-          const classes = sourceToClasses.get(source.id) || [];
-          const entries = classes.map((cls: any) => {
-            const identifier = cls.identifier || cls.id;
-            return {
-              sourceId: `class-${identifier}`,
-              name: cls.name,
-              type: "class",
-              img: cls.imageUrl || "",
-              rules: cls.rules || source.rules || "2014",
-              description: (cls.description || "").substring(0, 200),
-              payloadKind: "dauligor.semantic.class-export",
-              payloadUrl: `${identifier}.json`
-            };
-          });
-
-          return res.json({
-            kind: "dauligor.class-catalog.v1",
-            schemaVersion: 1,
-            source: {
-              system: "dauligor",
-              entity: "class-catalog",
-              id: `${source.semanticId}-classes`,
-              sourceId: source.semanticId
-            },
-            entries
-          });
-        }
-      }
-
-      // 3. Specific Class Data — return the full semantic bundle the catalog
-      // promises (`payloadKind: dauligor.semantic.class-export`). Local-only;
-      // the Vercel-deployed `api/module.ts` cannot import classExport.ts
-      // cross-folder yet, so production still serves a flat row from there.
-      if (pathParts.length === 3 && pathParts[1] === "classes" && pathParts[2].endsWith(".json")) {
-        const classIdentifier = pathParts[2].replace(".json", "").toLowerCase();
-        const cls = allClasses.find((c: any) =>
-          (c.identifier || "").toLowerCase() === classIdentifier ||
-          c.id.toLowerCase() === classIdentifier
-        );
-        if (cls) {
-          const bundle = await exportClassSemantic(cls.id, SERVER_EXPORT_FETCHERS);
-          return res.json(bundle ?? cls);
-        }
-      }
+      await moduleHandler(req as any, res as any);
     } catch (error) {
-      console.error("Dynamic Module API Error (Local Server):", error);
+      console.error("Module endpoint failed (local):", error);
+      if (!res.headersSent) res.status(500).json({ error: "Module endpoint failed." });
     }
-
-
-
-
-
-    let filePath = path.join(__dirname, "module/dauligor-pairing/data/sources", cleanSubpath);
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-      filePath = path.join(filePath, "catalog.json");
-    } else if (!filePath.endsWith(".json")) {
-      if (fs.existsSync(filePath + ".json")) {
-        filePath = filePath + ".json";
-      } else if (fs.existsSync(path.join(filePath, "catalog.json"))) {
-        filePath = path.join(filePath, "catalog.json");
-      }
-    }
-    if (fs.existsSync(filePath)) {
-      res.setHeader("Content-Type", "application/json");
-      return res.sendFile(filePath);
-    }
-    return res.status(404).json({ error: `Source not found at: ${subpath}` });
   });
 
   // Serve static files from the module directory if needed for documentation
