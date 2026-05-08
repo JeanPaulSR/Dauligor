@@ -337,6 +337,12 @@ export async function fetchDocument<T>(
 /**
  * Upsert a document into D1.
  */
+// Wrap a column name in double quotes so SQLite reserved words (`values`,
+// `order`, `group`, etc.) don't collide with the parser. Double-quoted
+// identifiers are standard SQL and a no-op for plain names — safe to apply
+// universally.
+const q = (col: string) => `"${col.replace(/"/g, '""')}"`;
+
 export async function upsertDocument(
   collectionName: string,
   id: string,
@@ -349,13 +355,13 @@ export async function upsertDocument(
   const placeholders = columns.map(() => '?').join(', ');
   const updateCols = entries.map(([key]) => key);
   const updateClause = updateCols.length > 0
-    ? `DO UPDATE SET ${updateCols.map(c => `${c} = excluded.${c}`).join(', ')}`
+    ? `DO UPDATE SET ${updateCols.map(c => `${q(c)} = excluded.${q(c)}`).join(', ')}`
     : 'DO NOTHING';
 
   // Use ON CONFLICT DO UPDATE (not INSERT OR REPLACE): REPLACE deletes the
   // existing row before inserting, which fires ON DELETE CASCADE on FK
   // children (e.g. saving a class would wipe its subclasses).
-  const sql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(id) ${updateClause}`;
+  const sql = `INSERT INTO ${tableName} (${columns.map(q).join(', ')}) VALUES (${placeholders}) ON CONFLICT(id) ${updateClause}`;
 
   await queryD1(sql, values);
   const timestamp = new Date().toLocaleTimeString();
@@ -380,10 +386,10 @@ export async function upsertDocumentBatch(collectionName: string, entries: { id:
     const placeholders = columns.map(() => '?').join(', ');
     const updateCols = entryData.map(([key]) => key);
     const updateClause = updateCols.length > 0
-      ? `DO UPDATE SET ${updateCols.map(c => `${c} = excluded.${c}`).join(', ')}`
+      ? `DO UPDATE SET ${updateCols.map(c => `${q(c)} = excluded.${q(c)}`).join(', ')}`
       : 'DO NOTHING';
 
-    const sql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(id) ${updateClause}`;
+    const sql = `INSERT INTO ${tableName} (${columns.map(q).join(', ')}) VALUES (${placeholders}) ON CONFLICT(id) ${updateClause}`;
     sqls.push(sql);
     paramsList.push(values);
   }
