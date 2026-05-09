@@ -293,6 +293,7 @@ function denormalizeOptionItemRow(row: any) {
     iconUrl: row.icon_url,
     levelPrerequisite: row.level_prerequisite,
     stringPrerequisite: row.string_prerequisite,
+    requiresOptionIds: parseJsonField(row.requires_option_ids, []),
     isRepeatable: row.is_repeatable,
     featureId: row.feature_id,
     createdAt: row.created_at,
@@ -1175,12 +1176,30 @@ export async function exportClassSemantic(
         groupSourceId: group?.sourceId || trimString(data.groupId),
         featureSourceId: linkedFeature?.sourceId || group?.featureSourceId || '',
         description: cleanText(data.description),
-        levelPrerequisite: Number(data.levelPrerequisite || 0) || 0
+        levelPrerequisite: Number(data.levelPrerequisite || 0) || 0,
+        // PK list at authoring time; remapped to per-option sourceIds
+        // below once every option's sourceId is known. The module
+        // checks this against `state.optionSelections` to gate options
+        // whose prerequisite picks haven't been made yet.
+        requiresOptionIds: asArray(data.requiresOptionIds)
       }, ['groupId', 'featureId', 'classIds', 'iconUrl', 'page']);
     });
   }
 
   const optionItemSourceIdById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.sourceId]));
+
+  // Second pass: translate each option's requiresOptionIds (currently
+  // PKs from the editor) into the canonical per-option sourceIds. Drop
+  // any PK that doesn't resolve — those are stale references to deleted
+  // sibling options.
+  for (const opt of uniqueOptionItems) {
+    const remapped: string[] = [];
+    for (const pk of asArray(opt.requiresOptionIds)) {
+      const sid = optionItemSourceIdById[pk];
+      if (sid) remapped.push(sid);
+    }
+    opt.requiresOptionIds = remapped;
+  }
 
   const advancementContext = {
     refs,

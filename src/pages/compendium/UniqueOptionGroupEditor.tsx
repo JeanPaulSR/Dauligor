@@ -149,6 +149,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         string_prerequisite: editingItem?.stringPrerequisite || editingItem?.string_prerequisite || '',
         page: editingItem?.page || '',
         class_ids: Array.isArray(editingItem?.classIds) ? editingItem.classIds : (editingItem?.class_ids || []),
+        // IDs of other option items in this group that must be picked
+        // first before this option becomes available in the picker.
+        // Stored as a JSON array; the module enforces it at prompt time.
+        requires_option_ids: Array.isArray(editingItem?.requiresOptionIds)
+          ? editingItem.requiresOptionIds
+          : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []),
         updated_at: new Date().toISOString(),
       };
 
@@ -491,6 +497,54 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                 <label htmlFor="isRepeatable" className="text-xs text-ink/40 uppercase font-bold cursor-pointer">
                   Repeatable
                 </label>
+              </div>
+            </div>
+
+            {/* Required Options — multi-select of other options in this group that must be picked first */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Requires Options</label>
+              <p className="text-[10px] text-ink/40 italic">
+                This option only becomes available after the player has picked every option checked here, in the same import.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 p-2 rounded-md border border-gold/10 bg-background/30 max-h-40 overflow-y-auto">
+                {items.filter((other: any) => other.id !== editingItem?.id).length === 0 ? (
+                  <p className="text-[10px] text-ink/30 italic col-span-2">No other options in this group yet.</p>
+                ) : (
+                  items
+                    .filter((other: any) => other.id !== editingItem?.id)
+                    .map((other: any) => {
+                      // Store the row PK; the exporter remaps PK → per-option
+                      // sourceId before shipping so the module sees stable
+                      // "class-option-<slug>" identifiers in
+                      // `requiresOptionIds`.
+                      const otherId = other.id;
+                      const required: string[] = Array.isArray(editingItem?.requiresOptionIds)
+                        ? editingItem.requiresOptionIds
+                        : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []);
+                      const isChecked = required.includes(otherId);
+                      return (
+                        <label key={other.id} className="flex items-center gap-2 cursor-pointer text-xs text-ink/70 hover:text-ink">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={!otherId}
+                            onChange={e => {
+                              const next = new Set(required);
+                              if (e.target.checked) next.add(otherId);
+                              else next.delete(otherId);
+                              setEditingItem((prev: any) => ({
+                                ...(prev || {}),
+                                requiresOptionIds: Array.from(next),
+                                requires_option_ids: Array.from(next)
+                              }));
+                            }}
+                            className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                          />
+                          <span className="truncate">{other.name || '(unnamed)'}</span>
+                        </label>
+                      );
+                    })
+                )}
               </div>
             </div>
 

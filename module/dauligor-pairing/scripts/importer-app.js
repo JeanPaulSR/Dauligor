@@ -3942,6 +3942,22 @@ async function runOptionGroupStep({ workflow, group, sequence, progress }) {
   progress.markStep(stepId, "active", `Choose ${group.maxSelections} option(s) from ${group.name || group.featureName || "this pool"}.`);
   progress.setStatus(`Waiting for ${group.name || group.featureName || "class option"} choices...`);
 
+  // Source-ids the user has already picked in earlier option-group prompts
+  // this import. Combined with the in-flight selections inside this prompt
+  // they form the "satisfied" set for option prerequisites.
+  const priorSelections = new Set();
+  for (const arr of Object.values(workflow?.selection?.optionSelections ?? {})) {
+    for (const sid of ensureArray(arr)) priorSelections.add(sid);
+  }
+
+  // Build a lookup of (sourceId → name) inside this group so the disabled
+  // tooltip can list missing prereqs by name.
+  const optionNameBySourceId = new Map();
+  for (const item of group.options) {
+    const sid = item.flags?.[MODULE_ID]?.sourceId;
+    if (sid) optionNameBySourceId.set(sid, item.name);
+  }
+
   const result = await DauligorSequencePromptApp.prompt({
     title: `Choose ${group.maxSelections} Option${group.maxSelections === 1 ? "" : "s"}: ${group.name || group.featureName || "Class Options"} (Level ${workflow.targetLevel})`,
     width: 700,
@@ -3949,42 +3965,69 @@ async function runOptionGroupStep({ workflow, group, sequence, progress }) {
     state: {
       selectedSourceIds: [...(group.selectedSourceIds ?? [])]
     },
-    renderBody: (app) => `
+    renderBody: (app) => {
+      const satisfied = new Set([...priorSelections, ...(app._state.selectedSourceIds ?? [])]);
+      return `
       <div class="dauligor-sequence__option-list">
         ${group.options.map((item) => {
       const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
       const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
+      const requires = ensureArray(item.flags?.[MODULE_ID]?.requiresOptionIds);
+      const missing = requires.filter((sid) => !satisfied.has(sid));
+      const isDisabled = missing.length > 0;
+      const disabledHint = isDisabled
+        ? `Requires: ${missing.map((sid) => optionNameBySourceId.get(sid) || sid).join(', ')}`
+        : "";
       return `
-            <label class="dauligor-sequence__option-row">
+            <label class="dauligor-sequence__option-row ${isDisabled ? "dauligor-sequence__option-row--disabled" : ""}" ${disabledHint ? `title="${foundry.utils.escapeHTML(disabledHint)}"` : ""}>
               <span class="dauligor-sequence__option-check">
                 <input
                   type="checkbox"
                   data-action="toggle-option"
                   data-option-source-id="${foundry.utils.escapeHTML(sourceId)}"
                   ${app._state.selectedSourceIds.includes(sourceId) ? "checked" : ""}
+                  ${isDisabled ? "disabled" : ""}
                 >
               </span>
-              <span class="dauligor-sequence__option-name">${foundry.utils.escapeHTML(item.name)}</span>
+              <span class="dauligor-sequence__option-name">${foundry.utils.escapeHTML(item.name)}${isDisabled ? ` <span style="color:var(--dauligor-text-muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;">· ${foundry.utils.escapeHTML(disabledHint)}</span>` : ""}</span>
               <span class="dauligor-sequence__option-source">${foundry.utils.escapeHTML(sourceLabel)}</span>
             </label>
           `;
     }).join("")}
       </div>
-    `,
+    `;
+    },
     onRenderBody: (app, root) => {
       root.querySelectorAll(`[data-action="toggle-option"]`).forEach((input) => {
         input.addEventListener("change", () => {
+          if (input.disabled) return;
           const sourceId = input.dataset.optionSourceId;
           if (!sourceId) return;
           const selected = new Set(app._state.selectedSourceIds ?? []);
           if (input.checked) selected.add(sourceId);
-          else selected.delete(sourceId);
+          else {
+            selected.delete(sourceId);
+            // Cascade-uncheck dependents in this group whose prereqs
+            // are no longer all satisfied. Otherwise users could leave
+            // a dependent checked without its prereq.
+            const stillSatisfied = new Set([...priorSelections, ...selected]);
+            for (const it of group.options) {
+              const sid = it.flags?.[MODULE_ID]?.sourceId;
+              if (!sid || !selected.has(sid)) continue;
+              const reqs = ensureArray(it.flags?.[MODULE_ID]?.requiresOptionIds);
+              if (reqs.some((r) => !stillSatisfied.has(r))) {
+                selected.delete(sid);
+                stillSatisfied.delete(sid);
+              }
+            }
+          }
           if (selected.size > group.maxSelections) {
             notifyWarn(`Choose only ${group.maxSelections} option(s) from this group.`);
             input.checked = false;
             return;
           }
           app.updateState({ selectedSourceIds: [...selected] });
+          app.rerenderPrompt();
         });
       });
     },

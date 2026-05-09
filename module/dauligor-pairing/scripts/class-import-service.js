@@ -1554,6 +1554,9 @@ function createSemanticOptionItem(optionItem, context) {
   if (featureType?.subtype) flags.featureTypeSubtype = featureType.subtype;
   if (featureType?.value) flags.featureTypeValue = featureType.value;
   if (optionItem?.levelPrerequisite != null) flags.levelPrerequisite = optionItem.levelPrerequisite;
+  if (Array.isArray(optionItem?.requiresOptionIds) && optionItem.requiresOptionIds.length) {
+    flags.requiresOptionIds = [...optionItem.requiresOptionIds];
+  }
 
   if (optionItem?.automation && typeof optionItem.automation === "object") {
     flags.semanticAutomation = foundry.utils.deepClone(optionItem.automation);
