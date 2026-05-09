@@ -1569,6 +1569,15 @@ function createSemanticOptionItem(optionItem, context) {
   const feature = group?.featureSourceId
     ? context.featuresBySourceId.get(group.featureSourceId)
     : null;
+  // The option's OWN linked feature — the row in the features table that
+  // carries this option's mechanical content (activities, damage, uses,
+  // advancements). When present we inherit the feature's system + flags
+  // below, layering the option's metadata (name, level, prereqs,
+  // usesFeatureSourceId) on top. Distinct from `feature` above which is
+  // the option group's owner (used for filtering / display).
+  const linkedFeature = optionItem?.linkedFeatureSourceId
+    ? context.featuresBySourceId.get(optionItem.linkedFeatureSourceId)
+    : null;
   const featureType = buildSemanticFeatureTypeData({
     sourceType: "classOption",
     optionGroup: group,
@@ -1602,25 +1611,71 @@ function createSemanticOptionItem(optionItem, context) {
     flags.usesFeatureSourceId = optionItem.usesFeatureSourceId;
   }
 
-  if (optionItem?.automation && typeof optionItem.automation === "object") {
-    flags.semanticAutomation = foundry.utils.deepClone(optionItem.automation);
+  // Prefer the linked feature's automation/advancements when present —
+  // the option is a pointer; the feature row is the content. Only fall
+  // back to the option's own automation when there's no linked feature
+  // (legacy / stub options).
+  const automationSource = linkedFeature ? linkedFeature : optionItem;
+  const advancementsSource = linkedFeature ? linkedFeature : optionItem;
+  if (automationSource?.automation && typeof automationSource.automation === "object") {
+    flags.semanticAutomation = foundry.utils.deepClone(automationSource.automation);
   }
-  if (Array.isArray(optionItem?.advancements) && optionItem.advancements.length) {
-    flags.semanticAdvancements = foundry.utils.deepClone(optionItem.advancements);
+  if (Array.isArray(advancementsSource?.advancements) && advancementsSource.advancements.length) {
+    flags.semanticAdvancements = foundry.utils.deepClone(advancementsSource.advancements);
+  }
+
+  // When the option is backed by a linked feature, expose its sourceId
+  // on flags so consumers (debugging, analytics, future activity-author
+  // tooling) can trace back to the content row. The actor-side document
+  // identity stays the option's sourceId — the feature is the *content
+  // template*, not a separate document.
+  if (linkedFeature?.sourceId) {
+    flags.linkedFeatureSourceId = linkedFeature.sourceId;
+  }
+
+  // Inherit the linked feature's uses formula auto-fill (set on the
+  // feature via its Quantity Column link). Authors can still override
+  // by giving the option its own uses, but in the common case the
+  // option just uses what the feature defines.
+  const inheritedUsesScale = trimString(linkedFeature?.usesScaleFormula);
+  // Inherit damage scale formula from the linked feature too — used by
+  // the @scale.linked substitution in wireOptionUsesFeatures so authors
+  // can write damage as `@scale.linked` in the feature's activities.
+  const inheritedScaleFormula = trimString(linkedFeature?.scaleFormula);
+  if (inheritedScaleFormula && !flags.scaleFormula) {
+    flags.scaleFormula = inheritedScaleFormula;
   }
 
   const system = {
     description: {
-      value: normalizeHtmlBlock(optionItem?.description) || `<p>${foundry.utils.escapeHTML(trimString(optionItem?.name) || "Class Option")}</p>`,
+      value: normalizeHtmlBlock(optionItem?.description) || normalizeHtmlBlock(linkedFeature?.description) || `<p>${foundry.utils.escapeHTML(trimString(optionItem?.name) || "Class Option")}</p>`,
       chat: ""
     },
     requirements: buildSemanticOptionRequirement(optionItem, context, feature),
     type: featureType
   };
-  const uses = normalizeSemanticUses(optionItem?.usage ?? optionItem?.uses);
+  // Uses: prefer the option's own usage (lets per-option overrides win),
+  // fall back to the linked feature's usage when authoring lives on the
+  // feature row, then apply the linked feature's Quantity Column auto-
+  // fill if neither side set a Max.
+  const uses = normalizeSemanticUses(
+    optionItem?.usage
+    ?? optionItem?.uses
+    ?? linkedFeature?.usage
+    ?? linkedFeature?.uses
+  );
   if (uses) system.uses = uses;
+  if (inheritedUsesScale && !trimString(system.uses?.max)) {
+    system.uses = system.uses ?? { spent: 0 };
+    system.uses.max = inheritedUsesScale;
+  }
 
-  const activities = normalizeSemanticActivityCollection(optionItem?.automation?.activities);
+  // Activities: same priority order — option override → linked feature
+  // → empty.
+  const activities = normalizeSemanticActivityCollection(
+    optionItem?.automation?.activities
+    ?? linkedFeature?.automation?.activities
+  );
   if (activities && Object.keys(activities).length) system.activities = activities;
 
   // Advancements only natively belong to Class, Subclass, and Background items in Foundry.
@@ -3472,6 +3527,15 @@ function normalizeClassLevel(targetLevel, fallback = 1) {
   return clampValue(Math.round(normalized), 1, 20);
 }
 
+// Author-facing placeholder for "the inherited scale formula". Used in
+// authored damage / dice formulas (`@scale.linked + @mod`) so the same
+// feature can be reused across grants — e.g. the Trip Attack feature
+// shipped to a Battle Master Fighter resolves @scale.linked to
+// `@scale.fighter.superiority-dice`, while the same feature shipped via
+// a Reaver subclass grant resolves to `@scale.barbarian.superiority-dice`.
+const LINKED_SCALE_TOKEN = "@scale.linked";
+const LINKED_SCALE_RE = /@scale\.linked\b/g;
+
 /**
  * For each option item that declares `flags.<MODULE_ID>.usesFeatureSourceId`,
  * find the matching uses-feature actor item by sourceId, then:
@@ -3483,6 +3547,12 @@ function normalizeClassLevel(targetLevel, fallback = 1) {
  *   2. Copy the uses-feature's `scaleFormula` flag onto the option so
  *      a future activity-authoring pass (or the user) can write damage
  *      formulas without typing the @scale path.
+ *   3. Substitute `@scale.linked` in every damage formula, bonus, and
+ *      consumption-scaling formula with the resolved scaleFormula. The
+ *      resolved formula comes from the uses-feature's flag (set when
+ *      that feature has a Scaling Column attached) or, if absent, the
+ *      option's own scaleFormula flag (inherited from the linked
+ *      feature at export time).
  *
  * No-ops cleanly when no option declares a uses feature, when the
  * referenced feature isn't embedded on the actor, or when an option
@@ -3495,57 +3565,78 @@ async function wireOptionUsesFeatures(actor, optionDocs, candidateFeatureDocs) {
     const sid = doc?.getFlag?.(MODULE_ID, "sourceId");
     if (sid) featureBySourceId.set(sid, doc);
   }
-  if (featureBySourceId.size === 0) return;
 
   for (const optionDoc of ensureArray(optionDocs)) {
     if (!optionDoc) continue;
     const usesFeatureSourceId = optionDoc.getFlag?.(MODULE_ID, "usesFeatureSourceId");
-    if (!usesFeatureSourceId) continue;
-    const usesFeatureDoc = featureBySourceId.get(usesFeatureSourceId);
-    if (!usesFeatureDoc) {
+    const usesFeatureDoc = usesFeatureSourceId ? featureBySourceId.get(usesFeatureSourceId) : null;
+    if (usesFeatureSourceId && !usesFeatureDoc) {
       log("wireOptionUsesFeatures: uses feature not on actor", {
         optionName: optionDoc.name,
         usesFeatureSourceId
       });
-      continue;
     }
 
-    const relativeTarget = `Item.${usesFeatureDoc.id}`;
+    // Resolve which formula `@scale.linked` should expand to. Priority:
+    //   1. The uses-feature's `scaleFormula` flag (the explicit "this
+    //      option consumes from feature X" relationship).
+    //   2. The option's own `scaleFormula` flag (set in
+    //      createSemanticOptionItem from the linked-feature's
+    //      `scaleFormula` when the option points at a feature row).
+    // No-op when neither is set.
+    const resolvedScaleFormula = trimString(
+      usesFeatureDoc?.getFlag?.(MODULE_ID, "scaleFormula")
+      ?? optionDoc.getFlag?.(MODULE_ID, "scaleFormula")
+    );
+
+    const relativeTarget = usesFeatureDoc ? `Item.${usesFeatureDoc.id}` : null;
     const updates = {};
 
-    // Rewrite consumption targets across all activities. dnd5e stores
-    // activities as a Map-shaped object on `system.activities`; iterate
-    // entries and patch each activity's consumption.targets[].
+    // Walk activities once, applying both passes.
     const activities = optionDoc.system?.activities ?? {};
     const activityKeys = Object.keys(activities);
     for (const key of activityKeys) {
       const activity = activities[key];
       if (!activity) continue;
-      const targets = ensureArray(activity?.consumption?.targets);
-      const itemUsesIdx = targets.findIndex((t) => t?.type === "itemUses");
-      const nextTargets = targets.map((t) => ({ ...t }));
-      if (itemUsesIdx >= 0) {
-        nextTargets[itemUsesIdx] = {
-          ...nextTargets[itemUsesIdx],
-          target: relativeTarget,
-          value: nextTargets[itemUsesIdx].value || "1"
-        };
-      } else {
-        nextTargets.push({
-          type: "itemUses",
-          target: relativeTarget,
-          value: "1",
-          scaling: { mode: "", formula: "" }
-        });
+
+      // PASS 1 — consumption rewrite. Only when we have a uses-feature.
+      if (relativeTarget) {
+        const targets = ensureArray(activity?.consumption?.targets);
+        const itemUsesIdx = targets.findIndex((t) => t?.type === "itemUses");
+        const nextTargets = targets.map((t) => ({ ...t }));
+        if (itemUsesIdx >= 0) {
+          nextTargets[itemUsesIdx] = {
+            ...nextTargets[itemUsesIdx],
+            target: relativeTarget,
+            value: nextTargets[itemUsesIdx].value || "1"
+          };
+        } else {
+          nextTargets.push({
+            type: "itemUses",
+            target: relativeTarget,
+            value: "1",
+            scaling: { mode: "", formula: "" }
+          });
+        }
+        updates[`system.activities.${key}.consumption.targets`] = nextTargets;
       }
-      updates[`system.activities.${key}.consumption.targets`] = nextTargets;
+
+      // PASS 2 — @scale.linked substitution. Walks the activity recursively
+      // and replaces every occurrence of the placeholder in any string
+      // value. Single string-token substitution can't accidentally match
+      // anything else, so the recursive walk is safe.
+      if (resolvedScaleFormula) {
+        const substituted = substituteLinkedScale(activity, resolvedScaleFormula);
+        if (substituted !== activity) {
+          updates[`system.activities.${key}`] = substituted;
+        }
+      }
     }
 
-    // Inherit the uses feature's scale formula on the option so damage
-    // / dice formulas can pick it up — the feature owns the column link
-    // (e.g. Superiority Dice → @scale.fighter.superiority-dice) so we
-    // don't have to wire each option to the column individually.
-    const inheritedScaleFormula = usesFeatureDoc.getFlag?.(MODULE_ID, "scaleFormula");
+    // Stash the resolved formula on the option's flag for downstream
+    // tooling, when it came from the uses-feature path. (Options that
+    // already inherited via createSemanticOptionItem have it set.)
+    const inheritedScaleFormula = usesFeatureDoc?.getFlag?.(MODULE_ID, "scaleFormula");
     if (inheritedScaleFormula && !optionDoc.getFlag?.(MODULE_ID, "scaleFormula")) {
       updates[`flags.${MODULE_ID}.scaleFormula`] = inheritedScaleFormula;
     }
@@ -3553,11 +3644,11 @@ async function wireOptionUsesFeatures(actor, optionDocs, candidateFeatureDocs) {
     if (Object.keys(updates).length > 0) {
       try {
         await optionDoc.update(updates);
-        log("wireOptionUsesFeatures: linked option to uses feature", {
+        log("wireOptionUsesFeatures: linked option to uses feature / substituted scale", {
           option: optionDoc.name,
-          usesFeature: usesFeatureDoc.name,
+          usesFeature: usesFeatureDoc?.name ?? null,
           relativeTarget,
-          inheritedScaleFormula: inheritedScaleFormula || null
+          resolvedScaleFormula: resolvedScaleFormula || null
         });
       } catch (error) {
         console.warn(`${MODULE_ID} | wireOptionUsesFeatures update failed`, error, {
@@ -3567,6 +3658,40 @@ async function wireOptionUsesFeatures(actor, optionDocs, candidateFeatureDocs) {
       }
     }
   }
+}
+
+/**
+ * Recursively replace every `@scale.linked` token in string fields of
+ * `value` with `formula`. Returns a new structure when any replacement
+ * happens, otherwise returns `value` unchanged so callers can detect
+ * no-op via `===`. Handles plain objects and arrays; passes primitives
+ * through untouched.
+ */
+function substituteLinkedScale(value, formula) {
+  if (typeof value === "string") {
+    if (!value.includes(LINKED_SCALE_TOKEN)) return value;
+    return value.replace(LINKED_SCALE_RE, formula);
+  }
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((entry) => {
+      const replaced = substituteLinkedScale(entry, formula);
+      if (replaced !== entry) changed = true;
+      return replaced;
+    });
+    return changed ? next : value;
+  }
+  if (value && typeof value === "object") {
+    let changed = false;
+    const next = {};
+    for (const [k, v] of Object.entries(value)) {
+      const replaced = substituteLinkedScale(v, formula);
+      if (replaced !== v) changed = true;
+      next[k] = replaced;
+    }
+    return changed ? next : value;
+  }
+  return value;
 }
 
 async function pruneActorImportedItems(actor, {

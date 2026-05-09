@@ -1231,7 +1231,16 @@ export async function exportClassSemantic(
         sourceId: `class-option-${identifier}`,
         sourceBookId: group?.sourceBookId || resolvedClassBookId,
         groupSourceId: group?.sourceId || trimString(data.groupId),
-        featureSourceId: linkedFeature?.sourceId || group?.featureSourceId || '',
+        // Group's owner — kept around for backward compat / display.
+        // The module reads the group's owner from the group itself,
+        // so this is mostly informational on the option row.
+        featureSourceId: group?.featureSourceId || '',
+        // The option's OWN linked feature — points at the feature
+        // whose activities, damage, and advancements back this option's
+        // mechanics. Empty when the option is a pure stub. The module
+        // reads this in createSemanticOptionItem and merges the linked
+        // feature's content into the embedded item.
+        linkedFeatureSourceId: linkedFeature?.sourceId || '',
         description: cleanText(data.description),
         levelPrerequisite: Number(data.levelPrerequisite || 0) || 0,
         // PK list at authoring time; remapped to per-option sourceIds

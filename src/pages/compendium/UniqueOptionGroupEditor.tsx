@@ -40,6 +40,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
+  // Pool of features each option item can be linked to. The "linked
+  // feature" carries the actual content (activities, damage, advancements)
+  // while the option item only carries display metadata (name, level,
+  // prereqs). At import time the bridge embeds the linked feature with
+  // the option's metadata merged in as flags.
+  const [features, setFeatures] = useState<any[]>([]);
+  const [linkedFeatureSearch, setLinkedFeatureSearch] = useState('');
   const groupDescRef = useRef<HTMLTextAreaElement>(null);
   const itemDescRef = useRef<HTMLTextAreaElement>(null);
 
@@ -47,12 +54,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     const loadAll = async () => {
       setLoading(true);
       try {
-        const [sourcesData, classesData] = await Promise.all([
+        const [sourcesData, classesData, featuresData] = await Promise.all([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('classes', { orderBy: 'name ASC' }),
+          fetchCollection('features', { orderBy: 'name ASC' }),
         ]);
         setSources(sourcesData);
         setClasses(classesData);
+        setFeatures(featuresData);
 
         if (id) {
           // 3. Group
@@ -149,6 +158,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         string_prerequisite: editingItem?.stringPrerequisite || editingItem?.string_prerequisite || '',
         page: editingItem?.page || '',
         class_ids: Array.isArray(editingItem?.classIds) ? editingItem.classIds : (editingItem?.class_ids || []),
+        // The feature this option points at for actual content (activities,
+        // damage, advancements). The option itself only carries display
+        // metadata; the linked feature provides the mechanics. Empty when
+        // the option is a pure stub (no mechanical content).
+        feature_id: editingItem?.featureId || editingItem?.feature_id || null,
         // IDs of other option items in this group that must be picked
         // first before this option becomes available in the picker.
         // Stored as a JSON array; the module enforces it at prompt time.
@@ -498,6 +512,86 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   Repeatable
                 </label>
               </div>
+            </div>
+
+            {/* Linked Feature — points at the feature row that owns this option's mechanical content (activities, damage, advancements). */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Linked Feature</label>
+              <p className="text-[10px] text-ink/40 italic">
+                Points at the feature whose activities, damage, and advancements back this option. Leave <em>None</em> when the option is purely a tag — useful when authoring is deferred.
+              </p>
+              {(() => {
+                const currentId = editingItem?.featureId || editingItem?.feature_id || '';
+                const q = linkedFeatureSearch.trim().toLowerCase();
+                const groupClassIdsSet = new Set<string>(groupClassIds);
+                const filtered = features.filter((f: any) => {
+                  if (q && !(f.name || '').toLowerCase().includes(q)) return false;
+                  return true;
+                });
+                // Sort: features attached to one of the group's classes first
+                // (parent_id matches), then everything else. Inside each
+                // bucket, alpha by name.
+                const inScope: any[] = [];
+                const outOfScope: any[] = [];
+                for (const f of filtered) {
+                  const pid = f.parent_id || f.parentId;
+                  if (groupClassIdsSet.size === 0 || groupClassIdsSet.has(pid)) inScope.push(f);
+                  else outOfScope.push(f);
+                }
+                const selected = features.find((f: any) => f.id === currentId);
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={currentId}
+                        onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), featureId: e.target.value || null, feature_id: e.target.value || null }))}
+                        className="flex-1 h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                      >
+                        <option value="">None — option is a stub</option>
+                        {inScope.length > 0 && (
+                          <optgroup label="In this group's classes">
+                            {inScope.map((f: any) => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {outOfScope.length > 0 && (
+                          <optgroup label="Other classes">
+                            {outOfScope.map((f: any) => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      {currentId && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem((prev: any) => ({ ...(prev || {}), featureId: null, feature_id: null }))}
+                          className="text-ink/40 hover:text-blood text-xs px-2"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 px-2 py-1 border border-gold/10 rounded-md bg-background/30">
+                      <Search className="w-3 h-3 text-ink/40 shrink-0" />
+                      <input
+                        type="text"
+                        placeholder="Search features by name…"
+                        value={linkedFeatureSearch}
+                        onChange={e => setLinkedFeatureSearch(e.target.value)}
+                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/40 text-ink"
+                      />
+                      {linkedFeatureSearch && (
+                        <button type="button" onClick={() => setLinkedFeatureSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                      )}
+                    </div>
+                    {selected && (
+                      <p className="text-[10px] text-ink/50 italic">Linked: <span className="font-bold text-ink">{selected.name}</span></p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Required Options — multi-select of other options in this group that must be picked first */}
