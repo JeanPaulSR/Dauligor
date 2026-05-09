@@ -72,6 +72,72 @@ npm run dev
 
 The Express server reads `R2_WORKER_URL=http://localhost:8787` from `.env` and proxies `/api/d1/query` and `/api/r2/*` to the local Worker. `worker/.dev.vars` provides `API_SECRET` to the worker process. Full setup, including Firebase Admin credentials and the per-class Foundry endpoint behavior, is in [docs/operations/local-dev.md](docs/operations/local-dev.md).
 
+## Multi-agent coordination
+
+Multiple agents work this repo in parallel via worktrees under
+`.claude/worktrees/<branch-name>/`. The rules below keep merge
+conflicts mechanical instead of semantic. Update this section whenever
+branches start or finish.
+
+### Active branches & file ownership
+
+Each branch claims a primary domain. **If you're working on a file in
+another branch's domain, stop and check first** — either rebase that
+branch's work onto yours, or hand the change off via a small main-bound
+commit, or ask the user to coordinate.
+
+| Branch | Owns |
+|---|---|
+| `claude/pedantic-antonelli-ce1c7f` | Class importer + advancement system + option groups + class export pipeline (`module/dauligor-pairing/**`, `api/_lib/_classExport.ts`, `src/lib/classExport.ts`, `src/components/compendium/AdvancementManager.tsx`, `src/pages/compendium/UniqueOptionGroup*.tsx`) |
+| `claude/kind-maxwell-bfa076` | Spell list manager + spell rules + spellbook authoring (`src/pages/compendium/SpellList*.tsx`, `src/pages/compendium/SpellRules*.tsx`, `src/components/compendium/Spell*.tsx`, `src/lib/spell*.ts`, `src/hooks/useSpellFilters.ts`, `src/lib/classSpellLists.ts`, new `EntityPicker.tsx`) |
+
+### Shared utility files (append-only discipline)
+
+Both branches may add to these. Conflicts at merge are mechanical
+(same kind of entry, different lines). Treat them like log files —
+**never reorder, never collapse other branches' entries**.
+
+- `src/lib/compendium.ts` — `normalizeCompendiumData` mapping table,
+  `denormalizeCompendiumData` mapping table, forbidden list,
+  `upsertX` helpers
+- `src/lib/d1.ts` — `jsonFields` auto-parse list inside `queryD1`
+- `src/lib/d1Tables.ts` — table-name registry
+- `src/App.tsx` — route definitions
+- `src/components/Sidebar.tsx` — nav links
+
+### Migration filename convention
+
+**New migrations use timestamps, not sequential numbers.** Two agents
+running in parallel cannot collide on `0023_*.sql` vs `0023_*.sql` if
+they're both `20260512-1430_*.sql` and `20260512-1545_*.sql`.
+
+```
+worker/migrations/YYYYMMDD-HHMM_descriptive_name.sql
+```
+
+Sortable, alphabetical = chronological, collision-free across branches.
+Wrangler doesn't care about the leading number; it sorts the directory.
+
+Existing `0001..0018` stay numbered (historical). The migrations after
+0018 on `claude/pedantic-antonelli-ce1c7f` were renamed to timestamps
+in commit `<future commit>`. Going forward, every new migration on any
+branch uses `YYYYMMDD-HHMM_*.sql`.
+
+### Pre-commit rebase
+
+Before each commit, `git fetch origin main && git rebase origin/main`.
+Cheap when the branch is small. The pattern that hurts: rebasing once
+at the end after 20 commits land on main. The active branches in this
+repo already share churn on `compendium.ts`, `d1.ts`, and the
+advancement editor — fresh rebases keep the conflict surface tiny.
+
+### When you find a conflict you can't resolve cleanly
+
+Stop and tell the user. Don't paper over a semantic conflict with a
+text-merge that compiles — schema changes, advancement-shape changes,
+and Foundry-import flow changes can all silently break things if both
+sides looked plausible in isolation.
+
 ## Documentation lookup protocol
 
 1. Resolve files via [DIRECTORY_MAP.md](DIRECTORY_MAP.md).
