@@ -829,6 +829,19 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
     }
     delete normalized.configuration.usesFeatureId;
 
+    // Per-grant Damage Scaling Column. Translates editor-side D1 PK to
+    // the per-column sourceId so the module can resolve the @scale
+    // formula at embed time. Independent of the existing scalingColumnId
+    // field (which drives count-source for ItemChoice). When set, this
+    // wins over Uses-Feature-inherited scaling and over the linked
+    // feature's own scaling — letting the same shared option group
+    // resolve `@scale.linked` differently per granter.
+    if (configuration.optionScalingColumnId) {
+      const optionScalingSourceId = context.scalingSourceIdById[configuration.optionScalingColumnId] || trimString(configuration.optionScalingColumnId);
+      if (optionScalingSourceId) normalized.configuration.optionScalingSourceId = optionScalingSourceId;
+    }
+    delete normalized.configuration.optionScalingColumnId;
+
     if (Array.isArray(configuration.items)) {
       normalized.configuration.items = configuration.items.map((entry: any) => {
         const sourceId = trimString(entry?.sourceId)
@@ -1303,33 +1316,53 @@ export async function exportClassSemantic(
     opt.requiresOptionIds = remapped;
   }
 
-  // Build a map of optionGroupSourceId → usesFeatureSourceId from every
-  // ItemChoice / ItemGrant advancement that declares a Uses Feature
-  // link. Then tag each option item with the resolved sourceId so the
-  // module's post-embed pass can rewire each option's activity
-  // consumption.targets[] to consume from the matching actor item.
+  // Build per-grant maps of optionGroupSourceId → granter-specified data:
+  //   - usesFeatureByGroupSourceId: which feature's uses pool the
+  //     granted options consume from.
+  //   - optionScaleFormulaByGroupSourceId: which @scale.<class>.<col>
+  //     formula `@scale.linked` resolves to in the granted options'
+  //     damage / dice formulas. Lets one shared option group resolve
+  //     differently per granter (Reaver → @scale.barbarian.superiority-dice,
+  //     Battle Master → @scale.fighter.superiority-dice).
   // First match wins when the same group is granted by multiple
-  // advancements with different uses features (rare).
+  // advancements with conflicting links (rare).
   const usesFeatureByGroupSourceId: Record<string, string> = {};
+  const optionScaleFormulaByGroupSourceId: Record<string, string> = {};
   for (const record of [classDataRaw, ...subclassesRaw, ...featuresRaw]) {
     for (const adv of asArray(record?.advancements)) {
       const advType = trimString(adv?.type);
       if (advType !== 'ItemChoice' && advType !== 'ItemGrant') continue;
       const optionGroupId = trimString(adv?.configuration?.optionGroupId);
-      const usesFeatureId = trimString(adv?.configuration?.usesFeatureId);
-      if (!optionGroupId || !usesFeatureId) continue;
+      if (!optionGroupId) continue;
       const optionGroupSourceId = optionGroupSourceIdById[optionGroupId] || optionGroupId;
-      const usesFeatureSourceId = featureSourceIdById[usesFeatureId] || trimString(usesFeatureId);
-      if (!optionGroupSourceId || !usesFeatureSourceId) continue;
-      if (!usesFeatureByGroupSourceId[optionGroupSourceId]) {
-        usesFeatureByGroupSourceId[optionGroupSourceId] = usesFeatureSourceId;
+      if (!optionGroupSourceId) continue;
+
+      const usesFeatureId = trimString(adv?.configuration?.usesFeatureId);
+      if (usesFeatureId) {
+        const usesFeatureSourceId = featureSourceIdById[usesFeatureId] || trimString(usesFeatureId);
+        if (usesFeatureSourceId && !usesFeatureByGroupSourceId[optionGroupSourceId]) {
+          usesFeatureByGroupSourceId[optionGroupSourceId] = usesFeatureSourceId;
+        }
+      }
+
+      const optionScalingColumnId = trimString(adv?.configuration?.optionScalingColumnId);
+      if (optionScalingColumnId) {
+        const column = scalingById[optionScalingColumnId];
+        const columnIdentifier = trimString(column?.identifier);
+        if (columnIdentifier && !optionScaleFormulaByGroupSourceId[optionGroupSourceId]) {
+          optionScaleFormulaByGroupSourceId[optionGroupSourceId] = `@scale.${classIdentifier}.${columnIdentifier}`;
+        }
       }
     }
   }
   for (const opt of uniqueOptionItems) {
     const sid = trimString(opt.groupSourceId);
-    if (sid && usesFeatureByGroupSourceId[sid]) {
+    if (!sid) continue;
+    if (usesFeatureByGroupSourceId[sid]) {
       opt.usesFeatureSourceId = usesFeatureByGroupSourceId[sid];
+    }
+    if (optionScaleFormulaByGroupSourceId[sid]) {
+      opt.optionScaleFormula = optionScaleFormulaByGroupSourceId[sid];
     }
   }
 

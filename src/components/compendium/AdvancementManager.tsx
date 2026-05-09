@@ -987,6 +987,37 @@ export default function AdvancementManager({
                             <p className="text-[9px] text-ink/40 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
                           </div>
                         )}
+
+                        {editingAdv.configuration?.choiceType === 'option-group' && (
+                          <div className="space-y-1.5">
+                            <label className="field-label">Damage Scaling Column</label>
+                            <Select
+                              value={editingAdv.configuration?.optionScalingColumnId || '__none__'}
+                              onValueChange={val => setEditingAdv({
+                                ...editingAdv,
+                                configuration: {
+                                  ...editingAdv.configuration,
+                                  optionScalingColumnId: val === '__none__' ? '' : val
+                                }
+                              })}
+                            >
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                <SelectValue>
+                                  {editingAdv.configuration?.optionScalingColumnId
+                                    ? (availableScalingColumns.find((c: any) => c.id === editingAdv.configuration.optionScalingColumnId)?.name || 'Selected column')
+                                    : 'None — inherit from Uses Feature or linked feature'}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">None — inherit from Uses Feature or linked feature</SelectItem>
+                                {availableScalingColumns.map((c: any) => (
+                                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[9px] text-ink/40 italic">The scaling column the granted options' damage / dice formulas resolve to. Each granter can pick a different column even when the option group is shared — Reaver imports use Barbarian's Superiority Dice, Battle Master imports use Fighter's. Authors write <code className="text-gold/70">@scale.linked</code> in the linked feature's damage formula; the bridge substitutes per-grant. Leave <em>None</em> to fall back to the Uses Feature's scaling, then the linked feature's own scaling.</p>
+                          </div>
+                        )}
                       </div>
                     </fieldset>
 
@@ -1566,6 +1597,37 @@ export default function AdvancementManager({
                             </SelectContent>
                           </Select>
                           <p className="text-[9px] text-ink/40 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
+                        </div>
+                      )}
+
+                      {editingAdv.configuration?.choiceType === 'option-group' && (
+                        <div className="space-y-1.5 mb-3">
+                          <label className="field-label">Damage Scaling Column</label>
+                          <Select
+                            value={editingAdv.configuration?.optionScalingColumnId || '__none__'}
+                            onValueChange={val => setEditingAdv({
+                              ...editingAdv,
+                              configuration: {
+                                ...editingAdv.configuration,
+                                optionScalingColumnId: val === '__none__' ? '' : val
+                              }
+                            })}
+                          >
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectValue>
+                                {editingAdv.configuration?.optionScalingColumnId
+                                  ? (availableScalingColumns.find((c: any) => c.id === editingAdv.configuration.optionScalingColumnId)?.name || 'Selected column')
+                                  : 'None — inherit from Uses Feature or linked feature'}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">None — inherit from Uses Feature or linked feature</SelectItem>
+                              {availableScalingColumns.map((c: any) => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[9px] text-ink/40 italic">The scaling column the granted options' damage / dice formulas resolve to. Each granter can pick a different column even when the option group is shared — Reaver imports use Barbarian's Superiority Dice, Battle Master imports use Fighter's. Authors write <code className="text-gold/70">@scale.linked</code> in the linked feature's damage formula; the bridge substitutes per-grant. Leave <em>None</em> to fall back to the Uses Feature's scaling, then the linked feature's own scaling.</p>
                         </div>
                       )}
 

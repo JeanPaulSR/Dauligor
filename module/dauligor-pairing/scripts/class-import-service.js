@@ -1610,6 +1610,17 @@ function createSemanticOptionItem(optionItem, context) {
   if (trimString(optionItem?.usesFeatureSourceId)) {
     flags.usesFeatureSourceId = optionItem.usesFeatureSourceId;
   }
+  // Per-grant Damage Scaling Column the granting advancement attached
+  // to this option (advancement.optionScalingColumnId at authoring →
+  // resolved to `@scale.<class>.<column>` at export). Highest-priority
+  // input to @scale.linked substitution: when set, this wins over the
+  // uses-feature's scale and over the linked feature's own scale.
+  // Lets the same shared Trip Attack feature resolve to
+  // @scale.barbarian.superiority-dice when granted by Reaver and
+  // @scale.fighter.superiority-dice when granted by Battle Master.
+  if (trimString(optionItem?.optionScaleFormula)) {
+    flags.optionScaleFormula = optionItem.optionScaleFormula;
+  }
 
   // Prefer the linked feature's automation/advancements when present —
   // the option is a pointer; the feature row is the content. Only fall
@@ -3578,14 +3589,22 @@ async function wireOptionUsesFeatures(actor, optionDocs, candidateFeatureDocs) {
     }
 
     // Resolve which formula `@scale.linked` should expand to. Priority:
-    //   1. The uses-feature's `scaleFormula` flag (the explicit "this
-    //      option consumes from feature X" relationship).
-    //   2. The option's own `scaleFormula` flag (set in
+    //   1. The granting advancement's per-grant `optionScaleFormula`
+    //      flag (set explicitly via "Damage Scaling Column" on the
+    //      ItemChoice / ItemGrant). Wins because the granter is the
+    //      authority on which class's scaling to use — same shared
+    //      group resolves Barbarian vs Fighter superiority dice
+    //      depending on who granted the option.
+    //   2. The uses-feature's `scaleFormula` flag (implicit pairing —
+    //      "consume from this feature, scale by what that feature
+    //      scales by").
+    //   3. The option's own `scaleFormula` flag (set in
     //      createSemanticOptionItem from the linked-feature's
     //      `scaleFormula` when the option points at a feature row).
-    // No-op when neither is set.
+    // No-op when none are set.
     const resolvedScaleFormula = trimString(
-      usesFeatureDoc?.getFlag?.(MODULE_ID, "scaleFormula")
+      optionDoc.getFlag?.(MODULE_ID, "optionScaleFormula")
+      ?? usesFeatureDoc?.getFlag?.(MODULE_ID, "scaleFormula")
       ?? optionDoc.getFlag?.(MODULE_ID, "scaleFormula")
     );
 
