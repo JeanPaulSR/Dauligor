@@ -356,6 +356,14 @@ export async function upsertSpellBatch(entries: { id: string | null, data: Recor
  */
 export async function upsertFeature(id: string, data: Record<string, any>) {
   const normalized = normalizeCompendiumData(data);
+  // The features table column is `tags` (not `tag_ids` like classes /
+  // subclasses). Editors carry the loaded list as `tagIds` for
+  // cross-entity consistency, so translate on the way in to avoid the
+  // "no such column: tagIds" error.
+  if (normalized.tagIds !== undefined) {
+    normalized.tags = normalized.tagIds;
+    delete normalized.tagIds;
+  }
   return upsertDocument('features', id, normalized);
 }
 

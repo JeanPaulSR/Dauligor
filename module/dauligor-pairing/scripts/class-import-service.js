@@ -1484,6 +1484,17 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
       return group?.sourceId ?? groupId;
     });
   }
+  // Stash the pre-built `@scale.<class>.<id>` formulas authored via the
+  // feature's Quantity / Scaling Column links. `usesScaleFormula` feeds
+  // `system.uses.max` below; `scaleFormula` is metadata for activity
+  // damage/dice formulas to reference (the activity authoring layer can
+  // pick this up later, or the user can paste it manually).
+  if (trimString(feature?.usesScaleFormula)) {
+    flags.usesScaleFormula = feature.usesScaleFormula;
+  }
+  if (trimString(feature?.scaleFormula)) {
+    flags.scaleFormula = feature.scaleFormula;
+  }
   if (feature?.automation && typeof feature.automation === "object") {
     flags.semanticAutomation = foundry.utils.deepClone(feature.automation);
   }
@@ -1501,6 +1512,16 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
   };
   const uses = normalizeSemanticUses(feature?.usage ?? feature?.uses);
   if (uses) system.uses = uses;
+  // Auto-populate uses.max from the Quantity Column when the author
+  // didn't enter a Max manually. Lets a Battle Master feature with a
+  // Quantity Column linked to "Superiority Dice" come out with
+  // `system.uses.max = "@scale.fighter.superiority-dice"` without any
+  // formula typing on the editor side. We don't touch a manually-set
+  // max — authors can override the auto value by filling the field.
+  if (trimString(feature?.usesScaleFormula) && !trimString(system.uses?.max)) {
+    system.uses = system.uses ?? { spent: 0 };
+    system.uses.max = feature.usesScaleFormula;
+  }
 
   const activities = normalizeSemanticActivityCollection(feature?.automation?.activities);
   if (activities && Object.keys(activities).length) system.activities = activities;
