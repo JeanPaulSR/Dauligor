@@ -1640,7 +1640,6 @@ export default function AdvancementManager({
                         )}
                       </div>
                     </fieldset>
-                  </div>
 
                     <fieldset className="config-fieldset bg-background/20 h-full">
                       <legend className="section-label text-gold/60 px-1">
@@ -1770,6 +1769,7 @@ export default function AdvancementManager({
                         }
                       </div>
                     </fieldset>
+                  </div>
                 </div>
               )}
 
