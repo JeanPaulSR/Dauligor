@@ -192,6 +192,22 @@ export class CharacterUpdater {
   }
 
   /**
+   * Mark a tool proficient (value=1) / expert (value=2) on the granular
+   * `system.tools[id]` map. dnd5e 5.x tracks per-tool proficiency level
+   * here; the older `system.traits.toolProf.value` array is the
+   * coarse list and doesn't carry expertise. Writes to the granular
+   * map are required for expertise to actually work on the sheet.
+   * Slugs accept `tools:thief` or `thief`.
+   */
+  updateTools(toolSlugs, value = 1) {
+    for (const slug of toolSlugs ?? []) {
+      const key = stripTypePrefix(slug);
+      if (!key) continue;
+      this.delta[`system.tools.${key}.value`] = value;
+    }
+  }
+
+  /**
    * Add to a `system.traits.<traitPath>.value` array, merging with the
    * actor's current array so we don't clobber prior proficiencies.
    *
@@ -252,6 +268,7 @@ export class CharacterUpdater {
           break;
         case "tools":
         case "tool":
+          this.updateTools([slug]);
           this.updateTraitProficiencies("toolProf", [slug]);
           break;
         case "armor":
@@ -281,6 +298,67 @@ export class CharacterUpdater {
           // Unprefixed — fall back to skill, the most common category
           // for unprefixed authoring data.
           this.updateSkills([slug]);
+      }
+    }
+  }
+
+  /**
+   * Mode-aware dispatcher for feature-trait advancements. `mode` mirrors
+   * dnd5e's Trait advancement modes:
+   *   - `default`           → grant proficiency (value=1).
+   *   - `expertise`         → upgrade to expert (value=2). The dnd5e
+   *                            framework normally requires the actor to
+   *                            already be proficient; here we just write
+   *                            value=2 — callers that want the "must be
+   *                            proficient already" gate apply it
+   *                            upstream by sourcing the pool from
+   *                            actor's current proficiencies.
+   *   - `forcedExpertise`   → write value=2 even if not proficient
+   *                            (which is what value=2 already does for
+   *                            us; we keep it as a separate label for
+   *                            authoring clarity).
+   *   - `upgrade`           → bump value by 1 capped at 2 (proficient →
+   *                            expert; not proficient → proficient).
+   * Expertise applies only to `skills` and `tools` in dnd5e; on saves /
+   * languages / weapons / armor / damage-traits the mode falls back to
+   * default (the rules don't define expertise there).
+   */
+  applyTraitSelections(slugs, { mode = "default", traitType = null } = {}) {
+    const list = Array.isArray(slugs) ? slugs : (slugs ? [slugs] : []);
+    if (!list.length) return;
+    if (mode === "default" || !mode) {
+      this.applyMixedTraitSelections(list);
+      return;
+    }
+
+    for (const raw of list) {
+      const slug = String(raw ?? "").trim();
+      if (!slug) continue;
+      const prefixMatch = slug.match(/^([a-z]+):/i);
+      const prefix = (prefixMatch ? prefixMatch[1].toLowerCase() : (traitType || "")).toLowerCase();
+
+      // Skills + tools support expertise / upgrade. Other trait types
+      // don't have an expertise concept — fall back to default proficiency.
+      if (prefix === "skills" || prefix === "skill") {
+        if (mode === "upgrade") {
+          const key = stripTypePrefix(slug);
+          const cur = Number(this.actor?.system?.skills?.[key]?.value ?? 0) || 0;
+          this.updateSkills([slug], Math.min(2, cur + 1));
+        } else {
+          this.updateSkills([slug], 2);
+        }
+      } else if (prefix === "tools" || prefix === "tool") {
+        if (mode === "upgrade") {
+          const key = stripTypePrefix(slug);
+          const cur = Number(this.actor?.system?.tools?.[key]?.value ?? 0) || 0;
+          this.updateTools([slug], Math.min(2, cur + 1));
+        } else {
+          this.updateTools([slug], 2);
+        }
+        this.updateTraitProficiencies("toolProf", [slug]);
+      } else {
+        // No expertise concept — apply as default proficiency.
+        this.applyMixedTraitSelections([slug]);
       }
     }
   }

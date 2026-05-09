@@ -762,6 +762,14 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
     normalized.configuration = {
       ...configuration,
       mode: trimString(configuration.mode || 'default') || 'default',
+      // `static` (default) — pool is the authored options[] below.
+      // `proficient` — pool is derived at runtime by the module from the
+      // actor's current proficiencies of `type`. Combined with
+      // `choiceCount: 0`, the runtime auto-applies to every match
+      // without prompting (e.g. "All tools you are proficient in gain
+      // expertise"). Only `skills`/`saves`/`tools` honor non-default
+      // modes anyway, so this stays scoped to those.
+      poolSource: trimString(configuration.poolSource || 'static') || 'static',
       choiceCount: Number(configuration.choiceCount || 0) || 0,
       choiceSource: trimString(configuration.choiceSource || ''),
       allowReplacements: Boolean(configuration.allowReplacements),

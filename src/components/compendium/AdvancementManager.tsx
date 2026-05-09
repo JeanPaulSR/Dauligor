@@ -102,6 +102,18 @@ const TRAIT_MODE_LABELS: Record<string, string> = {
   default: 'Default', expertise: 'Expertise', forcedExpertise: 'Forced Expertise', upgrade: 'Upgrade',
 };
 
+// Where the runtime pulls the choice pool from. `static` uses the
+// authored `options[]` list (current behavior). `proficient` derives
+// the pool at runtime from the actor's proficient traits of this type
+// — used for "Choose one skill you are proficient in to gain expertise"
+// and "All tools you are proficient in gain expertise" patterns.
+// With `count: 0` + `proficient`, the runtime auto-applies to every
+// matching proficiency without prompting.
+const TRAIT_POOL_SOURCE_LABELS: Record<string, string> = {
+  static: 'Authored Pool',
+  proficient: "Actor's Proficiencies",
+};
+
 const ABILITY_ORDER = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const ABILITY_LABELS: Record<(typeof ABILITY_ORDER)[number], string> = {
   str: 'Strength',
@@ -322,6 +334,16 @@ export default function AdvancementManager({
       configuration: {
         ...editingAdv.configuration,
         mode: nextMode
+      }
+    });
+  };
+
+  const setTraitPoolSource = (nextSource: string) => {
+    setEditingAdv({
+      ...editingAdv,
+      configuration: {
+        ...editingAdv.configuration,
+        poolSource: nextSource
       }
     });
   };
@@ -1852,7 +1874,31 @@ export default function AdvancementManager({
                         )}
                         <p className="text-[9px] text-ink/40 italic">Gain a trait or proficiency.</p>
                       </div>
-                      <label className="flex items-start gap-2.5 cursor-pointer group">
+                      {TRAIT_MODE_ENABLED_TYPES.has(traitType) && (
+                        <div className="space-y-1.5 mt-3">
+                          <label className="field-label">Pool Source</label>
+                          <Select
+                            value={editingAdv.configuration?.poolSource || 'static'}
+                            onValueChange={setTraitPoolSource}
+                          >
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectValue>
+                                {TRAIT_POOL_SOURCE_LABELS[editingAdv.configuration?.poolSource || 'static']}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="static">Authored Pool</SelectItem>
+                              <SelectItem value="proficient">Actor's Proficiencies</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[9px] text-ink/40 italic">
+                            {(editingAdv.configuration?.poolSource || 'static') === 'proficient'
+                              ? "Pool is derived at runtime from the actor's current proficiencies. Set Number to Choose to 0 to auto-apply to every match (e.g. \"All tools you're proficient in gain expertise\")."
+                              : 'Pool comes from the authored Choices list below.'}
+                          </p>
+                        </div>
+                      )}
+                      <label className="flex items-start gap-2.5 cursor-pointer group mt-3">
                         <div className={`w-4 h-4 mt-0.5 rounded border shrink-0 flex items-center justify-center transition-all ${
                           traitAllowsReplacements ? 'bg-gold border-gold' : 'border-gold/30 group-hover:border-gold/60'
                         }`}>

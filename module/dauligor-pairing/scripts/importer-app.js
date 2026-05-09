@@ -2910,6 +2910,34 @@ async function runDauligorClassImportSequence({
         const traitChoice = extractFeatureTraitChoice(adv);
         if (!traitChoice) continue;
 
+        // Pool source = "proficient" means derive the pool from the
+        // actor's current proficient traits at prompt time. With
+        // count=0 it means "all" — auto-apply with no prompt.
+        if (traitChoice.poolSource === "proficient") {
+          const derivedPool = deriveProficientPool(actor, traitChoice.traitType);
+          if (traitChoice.choiceCount === 0) {
+            if (derivedPool.length > 0) {
+              sequence.characterUpdater?.applyTraitSelections(derivedPool, {
+                mode: traitChoice.mode,
+                traitType: traitChoice.traitType
+              });
+              progress.markStep(`advancement:feature-trait:${adv._id}`, "complete",
+                `Auto-applied to ${derivedPool.length} matching proficienc${derivedPool.length === 1 ? "y" : "ies"}.`);
+            } else {
+              progress.markStep(`advancement:feature-trait:${adv._id}`, "skipped",
+                "No matching proficiencies on the actor.");
+            }
+            continue;
+          }
+          if (derivedPool.length === 0) {
+            progress.markStep(`advancement:feature-trait:${adv._id}`, "skipped",
+              "No matching proficiencies on the actor.");
+            continue;
+          }
+          // Hydrate the pool so runTraitSelectionStep can render it.
+          traitChoice.options = derivedPool;
+        }
+
         const result = await runTraitSelectionStep({
           title: traitChoice.title,
           fieldName: `feature-trait:${adv._id}`,
@@ -2920,7 +2948,10 @@ async function runDauligorClassImportSequence({
         });
         if (result === "cancelled") throw new DauligorImportSequenceCancelledError();
         if (Array.isArray(result) && result.length) {
-          sequence.characterUpdater?.applyMixedTraitSelections(result);
+          sequence.characterUpdater?.applyTraitSelections(result, {
+            mode: traitChoice.mode,
+            traitType: traitChoice.traitType
+          });
         }
       }
 
@@ -3124,14 +3155,38 @@ function extractFeatureTraitChoice(adv) {
   const grantsArray = Array.isArray(cfg.grants) ? cfg.grants : [];
   const fixed = grantsArray.filter((entry) => typeof entry === "string");
 
-  // New format
+  const mode = String(cfg.mode || "default") || "default";
+  const poolSource = String(cfg.poolSource || "static") || "static";
+  const traitType = String(cfg.type || "") || "";
+
+  // poolSource = "proficient" means the pool is derived at runtime from
+  // the actor's proficient traits — the authored options[] is empty by
+  // design. count=0 means "auto-apply to every match" (e.g. "All tools
+  // you are proficient in gain expertise"); count>0 means "pick N from
+  // your current proficiencies".
+  if (poolSource === "proficient") {
+    return {
+      title: adv.title || "Trait Selection",
+      choiceCount: Number(cfg.choiceCount ?? cfg.choices?.[0]?.count ?? 0) || 0,
+      fixed,
+      options: [], // derived at runtime by deriveProficientPool
+      mode,
+      poolSource,
+      traitType
+    };
+  }
+
+  // New format — choice block carries pool + count
   for (const c of (cfg.choices || [])) {
     if (c?.count > 0 && Array.isArray(c.pool) && c.pool.length > 0) {
       return {
         title: adv.title || "Trait Selection",
         choiceCount: Number(c.count) || 0,
         fixed,
-        options: c.pool.filter((slug) => typeof slug === "string")
+        options: c.pool.filter((slug) => typeof slug === "string"),
+        mode,
+        poolSource,
+        traitType
       };
     }
   }
@@ -3142,11 +3197,64 @@ function extractFeatureTraitChoice(adv) {
       title: adv.title || "Trait Selection",
       choiceCount: Number(cfg.choiceCount),
       fixed,
-      options: cfg.options.filter((slug) => typeof slug === "string")
+      options: cfg.options.filter((slug) => typeof slug === "string"),
+      mode,
+      poolSource,
+      traitType
     };
   }
 
   return null;
+}
+
+/**
+ * Build the candidate pool from the actor's current proficient traits
+ * for a given trait type. Used by Trait advancements with
+ * `poolSource === "proficient"` (e.g. "Choose one skill you are
+ * proficient in to gain expertise"). Slugs are returned in the
+ * `<traitType>:<id>` form so they flow through the same writers as the
+ * authored pool.
+ */
+function deriveProficientPool(actor, traitType) {
+  if (!actor || !traitType) return [];
+  const out = [];
+  const seen = new Set();
+  const add = (prefix, id) => {
+    if (!id) return;
+    const slug = `${prefix}:${id}`;
+    if (seen.has(slug)) return;
+    seen.add(slug);
+    out.push(slug);
+  };
+
+  switch (traitType) {
+    case "skills": {
+      const skills = actor.system?.skills ?? {};
+      for (const [id, entry] of Object.entries(skills)) {
+        if (Number(entry?.value ?? 0) >= 1) add("skills", id);
+      }
+      break;
+    }
+    case "tools": {
+      const tools = actor.system?.tools ?? {};
+      for (const [id, entry] of Object.entries(tools)) {
+        if (Number(entry?.value ?? 0) >= 1) add("tools", id);
+      }
+      const traitArr = ensureArray(actor.system?.traits?.toolProf?.value);
+      for (const id of traitArr) add("tools", id);
+      break;
+    }
+    case "saves": {
+      const abilities = actor.system?.abilities ?? {};
+      for (const [id, entry] of Object.entries(abilities)) {
+        if (Number(entry?.proficient ?? 0) >= 1) add("saves", id);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  return out;
 }
 
 function buildImportSequenceSteps(workflow, { actor = null } = {}) {
@@ -3322,10 +3430,27 @@ async function runTraitSelectionStep({ title, fieldName, advancement, workflow, 
   const options = advancement.options || [];
   const choiceCount = advancement.choiceCount || 0;
   const targetActor = workflow?.targetActor ?? null;
+  // When the pool source is "proficient", every option is by definition
+  // already on the actor — being proficient is the *qualifier* for
+  // appearing in the pool, not a disqualifier. Suppress the greying so
+  // those rows stay clickable. Mode = "expertise" prompts read
+  // "Choose one to gain expertise" which is meaningful only when the
+  // actor already has the proficiency.
+  const poolSource = advancement.poolSource || "static";
+  const mode = advancement.mode || "default";
+  const skipAlreadyMarkedGate = poolSource === "proficient";
+  const subtitleSuffix = mode === "expertise" || mode === "forcedExpertise"
+    ? " Selected traits gain expertise."
+    : mode === "upgrade"
+      ? " Selected traits are upgraded one tier."
+      : "";
+  const subtitleFixed = poolSource === "proficient"
+    ? ""
+    : ` Fixed: ${fixed.map(val => formatFoundryLabel(val)).join(', ') || 'None'}.`;
 
   const result = await DauligorSequencePromptApp.prompt({
     title: title,
-    subtitle: `Choose ${numberToWord(choiceCount)} option(s). Fixed: ${fixed.map(val => formatFoundryLabel(val)).join(', ') || 'None'}`,
+    subtitle: `Choose ${numberToWord(choiceCount)} option(s).${subtitleFixed}${subtitleSuffix}`,
     width: 650,
     height: 450,
     state: {
@@ -3335,7 +3460,8 @@ async function runTraitSelectionStep({ title, fieldName, advancement, workflow, 
       <div class="dauligor-class-options__choice-list">
         ${options.map((slug) => {
           const isChecked = app._state.selections.includes(slug);
-          const alreadyHas = isAlreadyMarked(targetActor, sequence?.characterUpdater, fieldName, slug);
+          const alreadyHas = !skipAlreadyMarkedGate
+            && isAlreadyMarked(targetActor, sequence?.characterUpdater, fieldName, slug);
           const label = formatFoundryLabel(slug);
           const abilityMatch = slug.match(/^(saves):([a-z]{3})$/i);
           const metaLabel = abilityMatch ? formatAbilityAbbreviation(abilityMatch[2]) : "";
