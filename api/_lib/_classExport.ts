@@ -820,6 +820,17 @@ function normalizeAdvancementForExport(advancement: any, context: any) {
       if (scalingSourceId) normalized.configuration.scalingColumnId = scalingSourceId;
     }
 
+    // Translate the editor-side `usesFeatureId` (D1 PK) to the per-feature
+    // `usesFeatureSourceId` the module looks up at embed time. The module
+    // post-processes each granted option item's activities to consume from
+    // the matching actor item (Battle Master maneuvers → Superiority Dice
+    // pool, etc.) and inherit its damage scaling.
+    if (configuration.usesFeatureId) {
+      const usesFeatureSourceId = context.featureSourceIdById[configuration.usesFeatureId] || trimString(configuration.usesFeatureId);
+      if (usesFeatureSourceId) normalized.configuration.usesFeatureSourceId = usesFeatureSourceId;
+    }
+    delete normalized.configuration.usesFeatureId;
+
     if (Array.isArray(configuration.items)) {
       normalized.configuration.items = configuration.items.map((entry: any) => {
         const sourceId = trimString(entry?.sourceId)
@@ -1245,6 +1256,36 @@ export async function exportClassSemantic(
       if (sid) remapped.push(sid);
     }
     opt.requiresOptionIds = remapped;
+  }
+
+  // Build a map of optionGroupSourceId → usesFeatureSourceId from every
+  // ItemChoice / ItemGrant advancement that declares a Uses Feature
+  // link. Then tag each option item with the resolved sourceId so the
+  // module's post-embed pass can rewire each option's activity
+  // consumption.targets[] to consume from the matching actor item.
+  // First match wins when the same group is granted by multiple
+  // advancements with different uses features (rare).
+  const usesFeatureByGroupSourceId: Record<string, string> = {};
+  for (const record of [classDataRaw, ...subclassesRaw, ...featuresRaw]) {
+    for (const adv of asArray(record?.advancements)) {
+      const advType = trimString(adv?.type);
+      if (advType !== 'ItemChoice' && advType !== 'ItemGrant') continue;
+      const optionGroupId = trimString(adv?.configuration?.optionGroupId);
+      const usesFeatureId = trimString(adv?.configuration?.usesFeatureId);
+      if (!optionGroupId || !usesFeatureId) continue;
+      const optionGroupSourceId = optionGroupSourceIdById[optionGroupId] || optionGroupId;
+      const usesFeatureSourceId = featureSourceIdById[usesFeatureId] || trimString(usesFeatureId);
+      if (!optionGroupSourceId || !usesFeatureSourceId) continue;
+      if (!usesFeatureByGroupSourceId[optionGroupSourceId]) {
+        usesFeatureByGroupSourceId[optionGroupSourceId] = usesFeatureSourceId;
+      }
+    }
+  }
+  for (const opt of uniqueOptionItems) {
+    const sid = trimString(opt.groupSourceId);
+    if (sid && usesFeatureByGroupSourceId[sid]) {
+      opt.usesFeatureSourceId = usesFeatureByGroupSourceId[sid];
+    }
   }
 
   const advancementContext = {

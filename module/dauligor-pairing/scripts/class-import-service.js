@@ -302,6 +302,17 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     })));
   }
 
+  // Post-embed: wire option items that declare a Uses Feature to consume
+  // from the matching actor item (Battle Master maneuvers → Superiority
+  // Dice pool, etc.) and inherit that feature's damage scaling. Runs
+  // here because dnd5e's `consumption.targets[].target` uses a
+  // relativeUUID (`Item.<actor-item-id>`) which only exists after both
+  // sides are embedded.
+  await wireOptionUsesFeatures(targetActor, importedOptionItems, [
+    ...importedFeatures,
+    ...importedSubclassFeatures
+  ]);
+
   const removedFeatures = await pruneActorImportedItems(targetActor, {
     classSourceId,
     sourceType: "classFeature",
@@ -1581,6 +1592,14 @@ function createSemanticOptionItem(optionItem, context) {
   if (optionItem?.levelPrerequisite != null) flags.levelPrerequisite = optionItem.levelPrerequisite;
   if (Array.isArray(optionItem?.requiresOptionIds) && optionItem.requiresOptionIds.length) {
     flags.requiresOptionIds = [...optionItem.requiresOptionIds];
+  }
+  // Tagged at export time when the granting ItemChoice/ItemGrant
+  // advancement declares a Uses Feature. The bridge's post-embed pass
+  // looks this up and rewires the option's activity consumption.targets[]
+  // to consume from the matching actor item, plus copies that feature's
+  // scaleFormula onto this option for damage-formula authoring.
+  if (trimString(optionItem?.usesFeatureSourceId)) {
+    flags.usesFeatureSourceId = optionItem.usesFeatureSourceId;
   }
 
   if (optionItem?.automation && typeof optionItem.automation === "object") {
@@ -3451,6 +3470,103 @@ function normalizeClassLevel(targetLevel, fallback = 1) {
   const normalized = Number(targetLevel ?? fallback ?? 1);
   if (!Number.isFinite(normalized)) return 1;
   return clampValue(Math.round(normalized), 1, 20);
+}
+
+/**
+ * For each option item that declares `flags.<MODULE_ID>.usesFeatureSourceId`,
+ * find the matching uses-feature actor item by sourceId, then:
+ *
+ *   1. Rewrite each activity's `consumption.targets[]` so any
+ *      type=`itemUses` target (or, if none, a freshly-added target)
+ *      points at the uses-feature via Foundry's `Item.<id>` relative
+ *      UUID. This makes the option draw from the shared pool on use.
+ *   2. Copy the uses-feature's `scaleFormula` flag onto the option so
+ *      a future activity-authoring pass (or the user) can write damage
+ *      formulas without typing the @scale path.
+ *
+ * No-ops cleanly when no option declares a uses feature, when the
+ * referenced feature isn't embedded on the actor, or when an option
+ * has no activities. Updates are batched per option document.
+ */
+async function wireOptionUsesFeatures(actor, optionDocs, candidateFeatureDocs) {
+  if (!actor) return;
+  const featureBySourceId = new Map();
+  for (const doc of ensureArray(candidateFeatureDocs)) {
+    const sid = doc?.getFlag?.(MODULE_ID, "sourceId");
+    if (sid) featureBySourceId.set(sid, doc);
+  }
+  if (featureBySourceId.size === 0) return;
+
+  for (const optionDoc of ensureArray(optionDocs)) {
+    if (!optionDoc) continue;
+    const usesFeatureSourceId = optionDoc.getFlag?.(MODULE_ID, "usesFeatureSourceId");
+    if (!usesFeatureSourceId) continue;
+    const usesFeatureDoc = featureBySourceId.get(usesFeatureSourceId);
+    if (!usesFeatureDoc) {
+      log("wireOptionUsesFeatures: uses feature not on actor", {
+        optionName: optionDoc.name,
+        usesFeatureSourceId
+      });
+      continue;
+    }
+
+    const relativeTarget = `Item.${usesFeatureDoc.id}`;
+    const updates = {};
+
+    // Rewrite consumption targets across all activities. dnd5e stores
+    // activities as a Map-shaped object on `system.activities`; iterate
+    // entries and patch each activity's consumption.targets[].
+    const activities = optionDoc.system?.activities ?? {};
+    const activityKeys = Object.keys(activities);
+    for (const key of activityKeys) {
+      const activity = activities[key];
+      if (!activity) continue;
+      const targets = ensureArray(activity?.consumption?.targets);
+      const itemUsesIdx = targets.findIndex((t) => t?.type === "itemUses");
+      const nextTargets = targets.map((t) => ({ ...t }));
+      if (itemUsesIdx >= 0) {
+        nextTargets[itemUsesIdx] = {
+          ...nextTargets[itemUsesIdx],
+          target: relativeTarget,
+          value: nextTargets[itemUsesIdx].value || "1"
+        };
+      } else {
+        nextTargets.push({
+          type: "itemUses",
+          target: relativeTarget,
+          value: "1",
+          scaling: { mode: "", formula: "" }
+        });
+      }
+      updates[`system.activities.${key}.consumption.targets`] = nextTargets;
+    }
+
+    // Inherit the uses feature's scale formula on the option so damage
+    // / dice formulas can pick it up — the feature owns the column link
+    // (e.g. Superiority Dice → @scale.fighter.superiority-dice) so we
+    // don't have to wire each option to the column individually.
+    const inheritedScaleFormula = usesFeatureDoc.getFlag?.(MODULE_ID, "scaleFormula");
+    if (inheritedScaleFormula && !optionDoc.getFlag?.(MODULE_ID, "scaleFormula")) {
+      updates[`flags.${MODULE_ID}.scaleFormula`] = inheritedScaleFormula;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      try {
+        await optionDoc.update(updates);
+        log("wireOptionUsesFeatures: linked option to uses feature", {
+          option: optionDoc.name,
+          usesFeature: usesFeatureDoc.name,
+          relativeTarget,
+          inheritedScaleFormula: inheritedScaleFormula || null
+        });
+      } catch (error) {
+        console.warn(`${MODULE_ID} | wireOptionUsesFeatures update failed`, error, {
+          option: optionDoc.name,
+          updates
+        });
+      }
+    }
+  }
 }
 
 async function pruneActorImportedItems(actor, {

@@ -956,6 +956,37 @@ export default function AdvancementManager({
                             )}
                           </div>
                         </div>
+
+                        {editingAdv.configuration?.choiceType === 'option-group' && (
+                          <div className="space-y-1.5">
+                            <label className="field-label">Uses Feature</label>
+                            <Select
+                              value={editingAdv.configuration?.usesFeatureId || '__none__'}
+                              onValueChange={val => setEditingAdv({
+                                ...editingAdv,
+                                configuration: {
+                                  ...editingAdv.configuration,
+                                  usesFeatureId: val === '__none__' ? '' : val
+                                }
+                              })}
+                            >
+                              <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                                <SelectValue>
+                                  {editingAdv.configuration?.usesFeatureId
+                                    ? (availableFeatures.find((f: any) => f.id === editingAdv.configuration.usesFeatureId)?.name || 'Linked feature')
+                                    : 'None — each option tracks its own uses'}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">None — each option tracks its own uses</SelectItem>
+                                {availableFeatures.map((f: any) => (
+                                  <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[9px] text-ink/40 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
+                          </div>
+                        )}
                       </div>
                     </fieldset>
 
@@ -1506,6 +1537,37 @@ export default function AdvancementManager({
                           );
                         })()}
                       </div>
+
+                      {editingAdv.configuration?.choiceType === 'option-group' && (
+                        <div className="space-y-1.5 mb-3">
+                          <label className="field-label">Uses Feature</label>
+                          <Select
+                            value={editingAdv.configuration?.usesFeatureId || '__none__'}
+                            onValueChange={val => setEditingAdv({
+                              ...editingAdv,
+                              configuration: {
+                                ...editingAdv.configuration,
+                                usesFeatureId: val === '__none__' ? '' : val
+                              }
+                            })}
+                          >
+                            <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                              <SelectValue>
+                                {editingAdv.configuration?.usesFeatureId
+                                  ? (availableFeatures.find((f: any) => f.id === editingAdv.configuration.usesFeatureId)?.name || 'Linked feature')
+                                  : 'None — each option tracks its own uses'}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">None — each option tracks its own uses</SelectItem>
+                              {availableFeatures.map((f: any) => (
+                                <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[9px] text-ink/40 italic">Granted options consume from this feature's uses pool and inherit its damage scaling — e.g. Battle Master maneuvers consume Superiority Dice. Leave <em>None</em> to let each option track its own uses.</p>
+                        </div>
+                      )}
 
                       <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
                         {editingAdv.configuration?.choiceType === 'option-group' ? (
