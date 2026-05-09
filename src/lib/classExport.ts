@@ -615,15 +615,22 @@ function buildOptionGroupAdvancementMetadataMap(
   records: any[] = [],
   featuresById: Record<string, any> = {},
   scalingById: Record<string, any> = {},
-  scalingSourceIdById: Record<string, string> = {}
+  scalingSourceIdById: Record<string, string> = {},
+  // Map of `record === subclassRow` → that subclass's sourceId. Used to
+  // attribute groups referenced from a subclass-root advancement to the
+  // owning subclass so the runtime can filter them per-subclass. Class
+  // root references are unattributed and appear for every subclass.
+  subclassSourceIdByRecord: Map<any, string> = new Map()
 ) {
   const metadataByOptionGroup: Record<string, {
     featureSourceId: string;
+    subclassSourceId: string;
     scalingSourceId: string;
     selectionCountsByLevel: Record<string, number>;
   }> = {};
 
   records.forEach((record) => {
+    const ownerSubclassSourceId = subclassSourceIdByRecord.get(record) || '';
     asArray(record?.advancements).forEach((advancement) => {
       if (trimString(advancement?.type) !== 'ItemChoice') return;
 
@@ -633,6 +640,7 @@ function buildOptionGroupAdvancementMetadataMap(
 
       const entry = metadataByOptionGroup[optionGroupId] ||= {
         featureSourceId: '',
+        subclassSourceId: '',
         scalingSourceId: '',
         selectionCountsByLevel: {}
       };
@@ -642,6 +650,9 @@ function buildOptionGroupAdvancementMetadataMap(
         || '';
       if (featureSourceId && !entry.featureSourceId) {
         entry.featureSourceId = featureSourceId;
+      }
+      if (ownerSubclassSourceId && !entry.subclassSourceId) {
+        entry.subclassSourceId = ownerSubclassSourceId;
       }
 
       const scalingSourceId = scalingSourceIdById[trimString(configuration?.scalingColumnId)]
@@ -1162,16 +1173,31 @@ export async function exportClassSemantic(
   const featuresById = Object.fromEntries(features.map((feature) => [feature.id, feature]));
   const featureSourceIdById = Object.fromEntries(features.map((feature) => [feature.id, feature.sourceId]));
   const optionGroupFeatureSourceById = buildOptionGroupFeatureSourceMap([classDataRaw, ...subclassesRaw], featuresById);
+  // Subclass attribution: when an option-group is referenced from a
+  // subclass-root advancement (Battle Master Maneuvers, Eldritch Knight
+  // spell pool, etc.) its prompt must only fire when that subclass is
+  // selected. Build a record→sourceId map so the metadata builder can
+  // tag those groups for runtime filtering. Class-root references stay
+  // unattributed and appear for every subclass.
+  const subclassSourceIdByRecord = new Map<any, string>();
+  for (const subclass of subclassesRaw) {
+    const subclassResolved = subclasses.find((s: any) => s.id === subclass.id);
+    if (subclassResolved?.sourceId) {
+      subclassSourceIdByRecord.set(subclass, subclassResolved.sourceId);
+    }
+  }
   const optionGroupAdvancementMetadataById = buildOptionGroupAdvancementMetadataMap(
     [classDataRaw, ...subclassesRaw],
     featuresById,
     scalingById,
-    scalingSourceIdById
+    scalingSourceIdById,
+    subclassSourceIdByRecord
   );
 
   uniqueOptionGroups = uniqueOptionGroups.map((group) => {
     const advancementMetadata = optionGroupAdvancementMetadataById[group.id] || {
       featureSourceId: '',
+      subclassSourceId: '',
       scalingSourceId: '',
       selectionCountsByLevel: {}
     };
@@ -1185,6 +1211,9 @@ export async function exportClassSemantic(
       ...group,
       sourceBookId: associatedFeature?.sourceBookId || group.sourceBookId || resolvedClassBookId,
       featureSourceId: derivedFeatureSourceId,
+      // Empty when the group is class-root or owned by a feature
+      // (those already filter via featureSourceId / grantedFeatureSourceIds).
+      subclassSourceId: advancementMetadata.subclassSourceId || '',
       scalingSourceId: trimString(group.scalingSourceId) || advancementMetadata.scalingSourceId || undefined,
       selectionCountsByLevel: Object.keys(group.selectionCountsByLevel || {}).length
         ? group.selectionCountsByLevel

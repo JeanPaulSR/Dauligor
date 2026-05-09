@@ -1015,6 +1015,10 @@ function normalizeClassOptionGroups(groups, advancement = null) {
       return {
         sourceId,
         featureSourceId: trimString(group?.featureSourceId) || null,
+        // Forwarded from the export's metadata builder. Set when the
+        // group originates on a subclass-root advancement; the importer
+        // skips the prompt when it doesn't match the chosen subclass.
+        subclassSourceId: trimString(group?.subclassSourceId) || null,
         scalingSourceId: trimString(group?.scalingSourceId) || null,
         selectionCountsByLevel: derivedCounts,
         name: trimString(group?.name) || null
@@ -2788,6 +2792,11 @@ function buildSemanticOptionGroupMetadata(context) {
       sourceId: group?.sourceId ?? null,
       name: trimString(group?.name) || null,
       featureSourceId: group?.featureSourceId ?? feature?.sourceId ?? null,
+      // Set when the group is referenced from a subclass-root advancement
+      // (Battle Master Maneuvers, Eldritch Knight pools, etc.) so the
+      // runtime can suppress the prompt for non-matching subclasses.
+      // Empty/null for class-root and feature-owned groups.
+      subclassSourceId: trimString(group?.subclassSourceId) || null,
       scalingSourceId,
       selectionCountsByLevel: Object.keys(scalingValues).length
         ? scalingValues
