@@ -367,6 +367,12 @@ export default function SubclassEditor() {
           parentType: row.parent_type,
           featureType: row.feature_type,
           subtype: row.subtype,
+          // The feature's Quantity / Scaling Column dropdowns read these
+          // camelCase keys; without the alias the snake_case columns
+          // round-trip to D1 fine but never repopulate the dropdown on
+          // reload, making it look like the link "didn't save".
+          quantityColumnId: row.quantity_column_id ?? '',
+          scalingColumnId: row.scaling_column_id ?? '',
           uses: {
             max: row.uses_max || '',
             spent: row.uses_spent || 0,
