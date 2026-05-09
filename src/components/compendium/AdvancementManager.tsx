@@ -207,7 +207,7 @@ function PreviewPanel({
                  <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto max-h-[65vh] pl-1 pr-3 -mr-3 pb-2">{children}</div>
+            <div className="flex-1 overflow-y-auto max-h-[65vh] pl-1 pr-3 -mr-3 pb-2 custom-scrollbar">{children}</div>
           </div>
         </div>,
         document.body
@@ -934,7 +934,7 @@ export default function AdvancementManager({
                                       )}
                                     </div>
                                     {showAllOptionGroups && (
-                                      <div className="max-h-40 overflow-y-auto divide-y divide-gold/5">
+                                      <div className="max-h-40 overflow-y-auto divide-y divide-gold/5 custom-scrollbar">
                                         {searchFiltered.map(g => (
                                           <button
                                             key={g.id}
@@ -1054,7 +1054,7 @@ export default function AdvancementManager({
                                 <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
                                 <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
                               </div>
-                              <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                              <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                                 {includedOptionItems.map((item: any) => (
                                   <div key={item.id} className="grid grid-cols-[4.5rem_4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
                                     <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">
@@ -1086,7 +1086,7 @@ export default function AdvancementManager({
                             <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Optional</span>
                             <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
                           </div>
-                          <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                          <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                             {selectedPoolFeatures.map((feature: any) => (
                               <div key={feature.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
                                 <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">
@@ -1147,7 +1147,7 @@ export default function AdvancementManager({
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
                             </div>
-                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                               {selectedOptionGroup ? selectedOptionItems.map((item: any) => {
                                 const isIncluded = !excludedOptionIds.has(item.id);
                                 return (
@@ -1234,7 +1234,7 @@ export default function AdvancementManager({
                                   <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Item</span>
                                   <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-center">Optional</span>
                                 </div>
-                                <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto">
+                                <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
                                   {displayed.map(f => (
                                     <div key={f.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-center hover:bg-gold/5">
                                       <label className="flex items-center gap-2 cursor-pointer min-w-0">
@@ -1381,7 +1381,7 @@ export default function AdvancementManager({
                                   )}
                                 </div>
                                 {showAllOptionGroups && (
-                                  <div className="max-h-40 overflow-y-auto divide-y divide-gold/5">
+                                  <div className="max-h-40 overflow-y-auto divide-y divide-gold/5 custom-scrollbar">
                                     {searchFiltered.map(g => (
                                       <button
                                         key={g.id}
@@ -1535,7 +1535,7 @@ export default function AdvancementManager({
                                   <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
                                   <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
                                 </div>
-                                <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                                <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                                   {includedOptionItems.map((item: any) => (
                                     <div key={item.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
                                       <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
@@ -1564,7 +1564,7 @@ export default function AdvancementManager({
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Level</span>
                             </div>
-                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                               {selectedPoolFeatures.map((feature: any) => (
                                 <div key={feature.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-start">
                                   <span className="text-xs font-bold text-ink">{feature.name}</span>
@@ -1674,7 +1674,7 @@ export default function AdvancementManager({
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
                               <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
                             </div>
-                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto custom-scrollbar">
                               {selectedOptionGroup ? selectedOptionItems.map((item: any) => {
                                 const isIncluded = !excludedOptionIds.has(item.id);
                                 return (
@@ -1732,7 +1732,7 @@ export default function AdvancementManager({
                                 <div className="grid grid-cols-[minmax(0,1fr)] px-3 py-2 bg-gold/5 border-b border-gold/10">
                                   <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
                                 </div>
-                                <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto">
+                                <div className="divide-y divide-gold/5 max-h-[14rem] overflow-y-auto custom-scrollbar">
                                   {displayed.map(f => (
                                     <label key={f.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gold/5 group transition-colors">
                                       <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${
@@ -1899,7 +1899,7 @@ export default function AdvancementManager({
                             <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
                             <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Value</span>
                           </div>
-                          <div className="divide-y divide-gold/5 overflow-y-auto max-h-[300px]">
+                          <div className="divide-y divide-gold/5 overflow-y-auto max-h-[300px] custom-scrollbar">
                             {Object.entries(selectedScalingColumn.values || {})
                               .sort(([a], [b]) => Number(a) - Number(b))
                               .map(([level, value]) => (
@@ -2181,7 +2181,7 @@ export default function AdvancementManager({
                           <span className="text-[9px] uppercase font-black text-purple-500/60 tracking-widest text-center leading-none flex items-center justify-center">Replace</span>
                         )}
                       </div>
-                      <div className="divide-y divide-gold/5 max-h-96 overflow-y-auto">
+                      <div className="divide-y divide-gold/5 max-h-96 overflow-y-auto custom-scrollbar">
                         {GROUPED_TRAIT_TYPES.has(traitType) ? (
                           (Object.entries(groupedTraitEntries) as [string, any[]][])
                             .sort(([a], [b]) => a.localeCompare(b))
