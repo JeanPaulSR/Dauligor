@@ -88,7 +88,7 @@ commit, or ask the user to coordinate.
 
 | Branch | Owns |
 |---|---|
-| `claude/pedantic-antonelli-ce1c7f` | Class importer + advancement system + option groups + class export pipeline (`module/dauligor-pairing/**`, `api/_lib/_classExport.ts`, `src/lib/classExport.ts`, `src/components/compendium/AdvancementManager.tsx`, `src/pages/compendium/UniqueOptionGroup*.tsx`) |
+| `claude/pedantic-antonelli-ce1c7f` | Class importer + advancement system + option groups + class export pipeline (`module/dauligor-pairing/**`, `api/_lib/_classExport.ts`, `src/lib/classExport.ts`, `src/lib/advancementState.ts`, `src/components/compendium/AdvancementManager.tsx`, `src/pages/compendium/UniqueOptionGroup*.tsx`). Other branches may make small **additive, commented** edits to `AdvancementManager.tsx` and `advancementState.ts` to register new advancement types — keep them on the contributing branch through merge rather than relaying via main. |
 | `claude/kind-maxwell-bfa076` | Spell list manager + spell rules + spellbook authoring (`src/pages/compendium/SpellList*.tsx`, `src/pages/compendium/SpellRules*.tsx`, `src/components/compendium/Spell*.tsx`, `src/lib/spell*.ts`, `src/hooks/useSpellFilters.ts`, `src/lib/classSpellLists.ts`, new `EntityPicker.tsx`) |
 
 ### Shared utility files (append-only discipline)
@@ -130,6 +130,25 @@ Cheap when the branch is small. The pattern that hurts: rebasing once
 at the end after 20 commits land on main. The active branches in this
 repo already share churn on `compendium.ts`, `d1.ts`, and the
 advancement editor — fresh rebases keep the conflict surface tiny.
+
+**Do not use `git stash pop` to integrate upstream changes on shared
+files.** It silently resolves to the stashed version of conflicting
+hunks, which can wipe other branches' additions to mapping tables /
+JSON-parse lists / route registries without producing a conflict
+marker. Use `git rebase` (or `git checkout stash@{0} -- <safe-paths>`
+for surgical extraction). A "clean" stash-pop on shared utility files
+is not equivalent to a proper merge.
+
+### Migrations applied to remote D1
+
+Some migrations get applied via `wrangler d1 execute --remote --file=…`
+(bypassing the wrangler `migrations apply` tracking table) because that
+table thinks every migration is unapplied — see [docs/database/](docs/database/).
+**A migration file's presence in `worker/migrations/` is not proof
+that it has run on remote.** Conversely, **a migration's absence from
+your branch's working tree is not proof that it hasn't run on remote**
+(another branch may have applied it). Always `wrangler d1 execute
+--remote --command="PRAGMA table_info(<table>)"` when in doubt.
 
 ### When you find a conflict you can't resolve cleanly
 
