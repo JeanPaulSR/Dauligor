@@ -47,6 +47,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   // the option's metadata merged in as flags.
   const [features, setFeatures] = useState<any[]>([]);
   const [linkedFeatureSearch, setLinkedFeatureSearch] = useState('');
+  const [requiredOptionSearch, setRequiredOptionSearch] = useState('');
   const groupDescRef = useRef<HTMLTextAreaElement>(null);
   const itemDescRef = useRef<HTMLTextAreaElement>(null);
 
@@ -369,7 +370,17 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               </div>
 
               <div className="divide-y divide-gold/10">
-                {items.map((item) => (
+                {items.map((item) => {
+                  const requiredOptionIds: string[] = Array.isArray(item.requiresOptionIds)
+                    ? item.requiresOptionIds
+                    : (Array.isArray(item.requires_option_ids) ? item.requires_option_ids : []);
+                  const requiredOptionNames = requiredOptionIds
+                    .map((rid) => items.find((other) => other.id === rid)?.name)
+                    .filter(Boolean) as string[];
+                  const hasLevelReq = (item.level_prerequisite || 0) > 0;
+                  const hasOptionReq = requiredOptionNames.length > 0;
+                  const hasStringReq = !!item.string_prerequisite;
+                  return (
                   <div key={item.id} className="py-2 flex items-center justify-between group">
                     <div className="flex items-center gap-3">
                       {item.iconUrl && (
@@ -378,16 +389,20 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-bold text-ink">{item.name}</span>
-                          {item.is_repeatable && (
+                          {/* Boolean() guard: SQLite stores is_repeatable as INTEGER 0/1
+                              and `0 && X` short-circuits to 0, which JSX renders as
+                              the literal text "0" next to the name. */}
+                          {Boolean(item.is_repeatable) && (
                             <Repeat className="w-3 h-3 text-gold/40" />
                           )}
                         </div>
-                        {((item.level_prerequisite || 0) > 0 || item.string_prerequisite) && (
+                        {(hasLevelReq || hasOptionReq || hasStringReq) && (
                           <div className="text-[10px] text-ink/40">
                             <span className="font-bold uppercase tracking-wider">Prerequisites:</span>{' '}
                             {[
-                              (item.level_prerequisite || 0) > 0 ? `Level ${item.level_prerequisite}+` : null,
-                              item.string_prerequisite || null
+                              hasLevelReq ? `Level ${item.level_prerequisite}+` : null,
+                              hasOptionReq ? `Requires ${requiredOptionNames.join(', ')}` : null,
+                              hasStringReq ? item.string_prerequisite : null
                             ].filter(Boolean).join(' · ')}
                           </div>
                         )}
@@ -407,7 +422,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {items.length === 0 && (
                   <p className="py-4 text-center text-xs text-ink/30 italic">No options added yet.</p>
                 )}
@@ -594,53 +610,126 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               })()}
             </div>
 
-            {/* Required Options — multi-select of other options in this group that must be picked first */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Requires Options</label>
-              <p className="text-[10px] text-ink/40 italic">
-                This option only becomes available after the player has picked every option checked here, in the same import.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 p-2 rounded-md border border-gold/10 bg-background/30 max-h-40 overflow-y-auto">
-                {items.filter((other: any) => other.id !== editingItem?.id).length === 0 ? (
-                  <p className="text-[10px] text-ink/30 italic col-span-2">No other options in this group yet.</p>
-                ) : (
-                  items
-                    .filter((other: any) => other.id !== editingItem?.id)
-                    .map((other: any) => {
-                      // Store the row PK; the exporter remaps PK → per-option
-                      // sourceId before shipping so the module sees stable
-                      // "class-option-<slug>" identifiers in
-                      // `requiresOptionIds`.
-                      const otherId = other.id;
-                      const required: string[] = Array.isArray(editingItem?.requiresOptionIds)
-                        ? editingItem.requiresOptionIds
-                        : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []);
-                      const isChecked = required.includes(otherId);
-                      return (
-                        <label key={other.id} className="flex items-center gap-2 cursor-pointer text-xs text-ink/70 hover:text-ink">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            disabled={!otherId}
-                            onChange={e => {
-                              const next = new Set(required);
-                              if (e.target.checked) next.add(otherId);
-                              else next.delete(otherId);
-                              setEditingItem((prev: any) => ({
-                                ...(prev || {}),
-                                requiresOptionIds: Array.from(next),
-                                requires_option_ids: Array.from(next)
-                              }));
-                            }}
-                            className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
-                          />
-                          <span className="truncate">{other.name || '(unnamed)'}</span>
-                        </label>
-                      );
-                    })
-                )}
-              </div>
-            </div>
+            {/* Required Options — gated by a master checkbox so the picker
+                only opens when the option actually has prereqs. Mirrors the
+                Class Restrictions UI: chips for selected entries on top, a
+                search box, and a scrollable list of checkboxes below. */}
+            {(() => {
+              const required: string[] = Array.isArray(editingItem?.requiresOptionIds)
+                ? editingItem.requiresOptionIds
+                : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []);
+              const otherOptions = items.filter((other: any) => other.id !== editingItem?.id);
+              const hasRequiredOptions = required.length > 0;
+              return (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${hasRequiredOptions ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
+                      {hasRequiredOptions && <Check className="w-2.5 h-2.5 text-white" />}
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={hasRequiredOptions}
+                      onChange={e => {
+                        if (e.target.checked) return; // toggling on does nothing alone — user picks options below to populate
+                        // Toggling off clears any selections.
+                        setEditingItem((prev: any) => ({
+                          ...(prev || {}),
+                          requiresOptionIds: [],
+                          requires_option_ids: []
+                        }));
+                      }}
+                    />
+                    <span className="text-xs font-bold uppercase tracking-widest text-ink/40">Required Options</span>
+                  </label>
+                  <p className="text-[10px] text-ink/30 italic -mt-1">
+                    This option only becomes available after the player has picked every option checked here, in the same import. Check below to add prerequisites.
+                  </p>
+
+                  {required.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {required.map((rid) => {
+                        const other = otherOptions.find((o: any) => o.id === rid);
+                        return other ? (
+                          <span key={rid} className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gold/10 text-gold border border-gold/20 rounded">
+                            {other.name}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = required.filter((id) => id !== rid);
+                                setEditingItem((prev: any) => ({
+                                  ...(prev || {}),
+                                  requiresOptionIds: next,
+                                  requires_option_ids: next
+                                }));
+                              }}
+                              className="ml-0.5 text-gold/50 hover:text-gold leading-none"
+                            >×</button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+
+                  <div className="border border-gold/10 rounded-md bg-background/20 overflow-hidden">
+                    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10">
+                      <Search className="w-3 h-3 text-ink/30 shrink-0" />
+                      <input
+                        type="text"
+                        placeholder="Search options…"
+                        value={requiredOptionSearch}
+                        onChange={e => setRequiredOptionSearch(e.target.value)}
+                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink"
+                      />
+                      {requiredOptionSearch && (
+                        <button type="button" onClick={() => setRequiredOptionSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
+                      )}
+                    </div>
+                    <div className="max-h-36 overflow-y-auto divide-y divide-gold/5 custom-scrollbar">
+                      {otherOptions.length === 0 ? (
+                        <p className="px-3 py-3 text-[10px] text-ink/20 italic">No other options in this group yet.</p>
+                      ) : otherOptions
+                          .filter((other: any) => !requiredOptionSearch || (other.name || '').toLowerCase().includes(requiredOptionSearch.toLowerCase()))
+                          .map((other: any) => {
+                            // Store the row PK; the exporter remaps PK →
+                            // per-option sourceId before shipping so the
+                            // module sees stable "class-option-<slug>"
+                            // identifiers in `requiresOptionIds`.
+                            const otherId = other.id;
+                            const isSelected = required.includes(otherId);
+                            return (
+                              <label key={other.id} className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-gold/5 transition-colors">
+                                <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isSelected ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
+                                  {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                                </div>
+                                <input
+                                  type="checkbox"
+                                  className="hidden"
+                                  checked={isSelected}
+                                  disabled={!otherId}
+                                  onChange={e => {
+                                    const next = new Set(required);
+                                    if (e.target.checked) next.add(otherId);
+                                    else next.delete(otherId);
+                                    setEditingItem((prev: any) => ({
+                                      ...(prev || {}),
+                                      requiresOptionIds: Array.from(next),
+                                      requires_option_ids: Array.from(next)
+                                    }));
+                                  }}
+                                />
+                                <span className="text-xs text-ink">{other.name || '(unnamed)'}</span>
+                              </label>
+                            );
+                          })}
+                      {otherOptions.length > 0 && requiredOptionSearch && otherOptions.filter((o: any) => (o.name || '').toLowerCase().includes(requiredOptionSearch.toLowerCase())).length === 0 && (
+                        <p className="px-3 py-3 text-[10px] text-ink/20 italic">No options match "{requiredOptionSearch}".</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Description */}
             <MarkdownEditor
