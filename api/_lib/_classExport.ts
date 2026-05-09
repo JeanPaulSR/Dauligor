@@ -1030,15 +1030,6 @@ export async function exportClassSemantic(
 
   const scalingById = Object.fromEntries(scalingColumns.map((column) => [column.id, column]));
   const scalingSourceIdById = Object.fromEntries(scalingColumns.map((column) => [column.id, column.sourceId]));
-  // Map of column.id → @scale.<class>.<identifier> formula. The module's
-  // class-root ScaleValueAdvancement emits every column (class- or
-  // subclass-authored) under the class identifier, so the same prefix
-  // always resolves on the actor.
-  const scalingFormulaById = Object.fromEntries(
-    scalingColumns
-      .filter((column) => trimString(column.identifier))
-      .map((column) => [column.id, `@scale.${classIdentifier}.${column.identifier}`])
-  );
 
   const referencedGroupIds = collectReferencedOptionGroupIds(classDataRaw, ...subclassesRaw, ...featuresRaw);
   const allGroupIds = uniqueStrings([
@@ -1122,13 +1113,6 @@ export async function exportClassSemantic(
       uniqueOptionGroupIds: uniqueStrings(asArray(feature.uniqueOptionGroupIds).map((groupId: string) => optionGroupSourceIdById[groupId] || trimString(groupId))),
       quantityColumnSourceId: scalingSourceIdById[feature.quantityColumnId] || trimString(feature.quantityColumnId) || undefined,
       scalingSourceId: scalingSourceIdById[feature.scalingColumnId] || trimString(feature.scalingColumnId) || undefined,
-      // Pre-built `@scale.<class>.<identifier>` formulas. The module
-      // pre-fills system.uses.max from `usesScaleFormula` when the
-      // feature has no manually-authored Max, and stashes both
-      // formulas in feature flags so activity damage / dice formulas
-      // can reference them without the user typing the path manually.
-      usesScaleFormula: scalingFormulaById[feature.quantityColumnId] || undefined,
-      scaleFormula: scalingFormulaById[feature.scalingColumnId] || undefined,
       imageUrl,
       iconUrl,
       configuration,

@@ -4235,6 +4235,50 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         </div>
                       </div>
 
+                      {/* ── TABLE COLUMN LINKS ─────────────────────────── */}
+                      {/* Authoring metadata: which scaling column from this
+                          class's progression conceptually backs this
+                          feature's quantity-of-uses or scaling-value. The
+                          actor-side @scale.<class>.<identifier> reference
+                          is published by the class progression itself —
+                          the picker here is just a hint for authors so
+                          they remember which column the feature relates
+                          to, and so a future activity-authoring layer can
+                          surface the formula automatically. */}
+                      <div className="py-3 space-y-3 border-t border-gold/10">
+                        <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Table Column Links</h4>
+                        <div className="grid gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase text-ink/60 font-bold">Quantity Column</label>
+                            <select
+                              value={editingFeature?.quantityColumnId || ''}
+                              onChange={e => setEditingFeature({ ...editingFeature, quantityColumnId: e.target.value })}
+                              className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                            >
+                              <option value="">None</option>
+                              {scalingColumns.map((col: any) => (
+                                <option key={col.id} value={col.id}>{col.name}</option>
+                              ))}
+                            </select>
+                            <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the quantity of uses — e.g. the number of bardic inspiration or superiority dice the class has. Authoring metadata only; the actor-side reference (<code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code>) is published via the class progression and can be referenced manually in the Max field or activity formulas.</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] uppercase text-ink/60 font-bold">Scaling Column</label>
+                            <select
+                              value={editingFeature?.scalingColumnId || ''}
+                              onChange={e => setEditingFeature({ ...editingFeature, scalingColumnId: e.target.value })}
+                              className="w-full h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
+                            >
+                              <option value="">None</option>
+                              {scalingColumns.map((col: any) => (
+                                <option key={col.id} value={col.id}>{col.name}</option>
+                              ))}
+                            </select>
+                            <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the scaling values — e.g. the roll of a bardic inspiration or a superiority dice. Authoring metadata only; the actor-side reference (<code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code>) is published via the class progression and can be referenced manually in activity damage / dice formulas.</p>
+                          </div>
+                        </div>
+                      </div>
+
                     </div>
                   );
                 })()}

@@ -1584,7 +1584,7 @@ export default function SubclassEditor() {
                               ))}
                             </optgroup>
                           </select>
-                          <p className="text-[10px] text-ink/40 italic">Link to a column to dictate the quantity of uses, such as the number of bardic inspiration or superiority dice the class has. Pre-fills <code className="text-gold/70">system.uses.max</code> on the embedded feature with the column's <code className="text-gold/70">@scale</code> reference when no manual Max is set.</p>
+                          <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the quantity of uses — e.g. the number of bardic inspiration or superiority dice the class has. Authoring metadata only; the actor-side reference (<code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code>) is published via the class progression and can be referenced manually in the Max field or activity formulas.</p>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] uppercase text-ink/60 font-bold">Scaling Column</label>
@@ -1605,7 +1605,7 @@ export default function SubclassEditor() {
                               ))}
                             </optgroup>
                           </select>
-                          <p className="text-[10px] text-ink/40 italic">Link to a column to dictate the scaling values, such as the roll of a bardic inspiration or a superiority dice. Available as <code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code> on the actor for activity damage / dice formulas.</p>
+                          <p className="text-[10px] text-ink/40 italic">Link to a column that dictates the scaling values — e.g. the roll of a bardic inspiration or a superiority dice. Authoring metadata only; the actor-side reference (<code className="text-gold/70">@scale.&lt;class&gt;.&lt;identifier&gt;</code>) is published via the class progression and can be referenced manually in activity damage / dice formulas.</p>
                         </div>
                       </div>
                     </div>
