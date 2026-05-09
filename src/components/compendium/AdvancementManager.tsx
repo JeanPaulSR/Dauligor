@@ -1301,7 +1301,7 @@ export default function AdvancementManager({
               {editingAdv.type === 'ItemChoice' && (
                 <div className="grid xl:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] gap-5 items-start">
                   
-                  {/* Left Column: Choice Pool Settings (matches ItemGrant layout — settings live left, previews on the right) */}
+                  {/* Left Column: Choice Pool Settings + Selection Rule preview + Choice Preview */}
                   <div className="space-y-4">
                     <fieldset className="config-fieldset bg-background/20 h-full">
                       <legend className="section-label text-gold/60 px-1">Choice Pool Settings</legend>
@@ -1468,6 +1468,184 @@ export default function AdvancementManager({
                         </div>
                       )}
 
+                    </fieldset>
+
+
+                    <PreviewPanel
+                      title="Selection Rule"
+                      subtitle={choiceCountMode === 'manual'
+                        ? 'Use a fixed manual choice count for this advancement.'
+                        : 'Choice counts are read from the selected class column breakpoints.'}
+                    >
+                      {choiceCountMode === 'manual' ? (
+                        <div className="space-y-2">
+                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/60">Manual Count</p>
+                          <p className="text-2xl font-serif font-black text-ink">{editingAdv.configuration?.count || 1}</p>
+                        </div>
+                      ) : selectedScalingColumn ? (
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm font-bold text-ink">{selectedScalingColumn.name}</p>
+                            <p className="mt-1 text-[10px] text-ink/45">
+                              Only saved value changes are shown here so the choice pool keeps its space.
+                            </p>
+                          </div>
+                          {scalingBreakpointRows.length > 0 ? (
+                            <div className="flex flex-col gap-1.5 w-full">
+                              {scalingBreakpointRows.map(([level, value]) => (
+                                <div key={level} className="flex items-center gap-3 rounded-md border border-gold/10 bg-background/55 px-3 py-1.5 w-full">
+                                  <span className="text-[10px] uppercase font-black tracking-widest text-gold/60 min-w-[2.5rem] whitespace-nowrap">Lvl {level}</span>
+                                  <div className="h-px bg-gold/10 flex-1" />
+                                  <span className="text-sm font-black text-ink">{String(value)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] italic text-ink/35">This class column does not have any saved breakpoints yet.</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[10px] italic text-ink/35">Choose a class column to preview the choice count progression.</p>
+                      )}
+                    </PreviewPanel>
+
+                    <PreviewPanel
+                      title="Choice Preview"
+                      subtitle={editingAdv.configuration?.choiceType === 'option-group'
+                        ? 'Included options are listed here after exclusions are applied.'
+                        : 'Use this panel to confirm the features available to choose from.'}
+                    >
+                      <div className="space-y-4">
+                        {editingAdv.configuration?.choiceType === 'option-group' ? (
+                          selectedOptionGroup ? (
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-bold text-ink">{selectedOptionGroup.name}</p>
+                                  {selectedOptionGroup.description && (
+                                    <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
+                                  )}
+                                </div>
+                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
+                                  {includedOptionItems.length}/{selectedOptionItems.length} usable
+                                </span>
+                              </div>
+                              <div className="border border-gold/10 rounded-md overflow-hidden">
+                                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
+                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
+                                </div>
+                                <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                                  {includedOptionItems.map((item: any) => (
+                                    <div key={item.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
+                                      <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
+                                      <div>
+                                        <p className="text-xs font-bold text-ink">{item.name}</p>
+                                        {(item.featureId || item.sourceId) && (
+                                          <p className="mt-1 text-[9px] text-ink/40">
+                                            {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {includedOptionItems.length === 0 && (
+                                    <p className="px-3 py-4 text-[10px] italic text-ink/35">All options in this group are currently excluded.</p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview the usable options.</p>
+                          )
+                        ) : selectedPoolFeatures.length > 0 ? (
+                          <div className="border border-gold/10 rounded-md overflow-hidden">
+                            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-background/60 border-b border-gold/10">
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
+                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Level</span>
+                            </div>
+                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
+                              {selectedPoolFeatures.map((feature: any) => (
+                                <div key={feature.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-start">
+                                  <span className="text-xs font-bold text-ink">{feature.name}</span>
+                                  <span className="text-right text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {feature.level}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] italic text-ink/35">Select features or a unique option group to preview the choice pool.</p>
+                        )}
+                      </div>
+                    </PreviewPanel>
+                  </div>
+
+                  {/* Right Column: Number of Choices + Included Group Items */}
+                  <div className="space-y-4">
+                    <fieldset className="config-fieldset bg-background/20">
+                      <legend className="section-label text-gold/60 px-1">Number of Choices</legend>
+                      <div className="space-y-3">
+                        <Select
+                          value={choiceCountMode}
+                          onValueChange={val => {
+                            if (val === 'manual') {
+                              const nextConfiguration = { ...editingAdv.configuration };
+                              delete nextConfiguration.scalingColumnId;
+                              setEditingAdv({
+                                ...editingAdv,
+                                configuration: {
+                                  ...nextConfiguration,
+                                  countSource: 'fixed',
+                                  count: nextConfiguration.count || 1
+                                }
+                              });
+                              return;
+                            }
+
+                            setEditingAdv({
+                              ...editingAdv,
+                              configuration: {
+                                ...editingAdv.configuration,
+                                countSource: 'scaling',
+                                scalingColumnId: val
+                              }
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
+                            <SelectValue>
+                              {choiceCountMode === 'manual'
+                                ? 'Manual'
+                                : (availableScalingColumns.find(c => c.id === choiceCountMode)?.name || 'Select Column...')}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            {availableScalingColumns.map(col => (
+                              <SelectItem key={col.id} value={col.id}>{col.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {choiceCountMode === 'manual' && (
+                          <div className="space-y-1.5">
+                            <label className="field-label">Count</label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={editingAdv.configuration?.count || 1}
+                              onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, count: parseInt(e.target.value) || 1 }})}
+                              className="w-full h-9 bg-background/50 border-gold/10"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </fieldset>
+                  </div>
+
+                    <fieldset className="config-fieldset bg-background/20 h-full">
+                      <legend className="section-label text-gold/60 px-1">
+                        {editingAdv.configuration?.choiceType === 'option-group' ? 'Included Group Items' : 'Choice Features'}
+                      </legend>
                       <div className="border border-gold/10 rounded-md overflow-hidden bg-background/20">
                         {editingAdv.configuration?.choiceType === 'option-group' ? (
                           <>
@@ -1592,178 +1770,6 @@ export default function AdvancementManager({
                         }
                       </div>
                     </fieldset>
-
-                  </div>
-
-                  {/* Right Column: Number of Choices + Selection Rule + Choice Preview */}
-                  <div className="space-y-4">
-                    <fieldset className="config-fieldset bg-background/20">
-                      <legend className="section-label text-gold/60 px-1">Number of Choices</legend>
-                      <div className="space-y-3">
-                        <Select
-                          value={choiceCountMode}
-                          onValueChange={val => {
-                            if (val === 'manual') {
-                              const nextConfiguration = { ...editingAdv.configuration };
-                              delete nextConfiguration.scalingColumnId;
-                              setEditingAdv({
-                                ...editingAdv,
-                                configuration: {
-                                  ...nextConfiguration,
-                                  countSource: 'fixed',
-                                  count: nextConfiguration.count || 1
-                                }
-                              });
-                              return;
-                            }
-
-                            setEditingAdv({
-                              ...editingAdv,
-                              configuration: {
-                                ...editingAdv.configuration,
-                                countSource: 'scaling',
-                                scalingColumnId: val
-                              }
-                            });
-                          }}
-                        >
-                          <SelectTrigger className="w-full h-9 bg-background/50 border-gold/10">
-                            <SelectValue>
-                              {choiceCountMode === 'manual'
-                                ? 'Manual'
-                                : (availableScalingColumns.find(c => c.id === choiceCountMode)?.name || 'Select Column...')}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="manual">Manual</SelectItem>
-                            {availableScalingColumns.map(col => (
-                              <SelectItem key={col.id} value={col.id}>{col.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {choiceCountMode === 'manual' && (
-                          <div className="space-y-1.5">
-                            <label className="field-label">Count</label>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={editingAdv.configuration?.count || 1}
-                              onChange={e => setEditingAdv({...editingAdv, configuration: { ...editingAdv.configuration, count: parseInt(e.target.value) || 1 }})}
-                              className="w-full h-9 bg-background/50 border-gold/10"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </fieldset>
-
-                    <PreviewPanel
-                      title="Selection Rule"
-                      subtitle={choiceCountMode === 'manual'
-                        ? 'Use a fixed manual choice count for this advancement.'
-                        : 'Choice counts are read from the selected class column breakpoints.'}
-                    >
-                      {choiceCountMode === 'manual' ? (
-                        <div className="space-y-2">
-                          <p className="text-[10px] uppercase font-black tracking-widest text-gold/60">Manual Count</p>
-                          <p className="text-2xl font-serif font-black text-ink">{editingAdv.configuration?.count || 1}</p>
-                        </div>
-                      ) : selectedScalingColumn ? (
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-sm font-bold text-ink">{selectedScalingColumn.name}</p>
-                            <p className="mt-1 text-[10px] text-ink/45">
-                              Only saved value changes are shown here so the choice pool keeps its space.
-                            </p>
-                          </div>
-                          {scalingBreakpointRows.length > 0 ? (
-                            <div className="flex flex-col gap-1.5 w-full">
-                              {scalingBreakpointRows.map(([level, value]) => (
-                                <div key={level} className="flex items-center gap-3 rounded-md border border-gold/10 bg-background/55 px-3 py-1.5 w-full">
-                                  <span className="text-[10px] uppercase font-black tracking-widest text-gold/60 min-w-[2.5rem] whitespace-nowrap">Lvl {level}</span>
-                                  <div className="h-px bg-gold/10 flex-1" />
-                                  <span className="text-sm font-black text-ink">{String(value)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-[10px] italic text-ink/35">This class column does not have any saved breakpoints yet.</p>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-[10px] italic text-ink/35">Choose a class column to preview the choice count progression.</p>
-                      )}
-                    </PreviewPanel>
-
-                    <PreviewPanel
-                      title="Choice Preview"
-                      subtitle={editingAdv.configuration?.choiceType === 'option-group'
-                        ? 'Included options are listed here after exclusions are applied.'
-                        : 'Use this panel to confirm the features available to choose from.'}
-                    >
-                      <div className="space-y-4">
-                        {editingAdv.configuration?.choiceType === 'option-group' ? (
-                          selectedOptionGroup ? (
-                            <div className="space-y-3">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-bold text-ink">{selectedOptionGroup.name}</p>
-                                  {selectedOptionGroup.description && (
-                                    <p className="mt-1 text-[10px] text-ink/45">{selectedOptionGroup.description}</p>
-                                  )}
-                                </div>
-                                <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">
-                                  {includedOptionItems.length}/{selectedOptionItems.length} usable
-                                </span>
-                              </div>
-                              <div className="border border-gold/10 rounded-md overflow-hidden">
-                                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] px-3 py-2 bg-background/60 border-b border-gold/10">
-                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Level</span>
-                                  <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Option</span>
-                                </div>
-                                <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
-                                  {includedOptionItems.map((item: any) => (
-                                    <div key={item.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-3 py-2 items-start">
-                                      <span className="text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {item.levelPrerequisite || 0}+</span>
-                                      <div>
-                                        <p className="text-xs font-bold text-ink">{item.name}</p>
-                                        {(item.featureId || item.sourceId) && (
-                                          <p className="mt-1 text-[9px] text-ink/40">
-                                            {item.featureId ? `Linked feature: ${availableFeatures.find((feature: any) => feature.id === item.featureId)?.name || item.featureId}` : `Source: ${item.sourceId}`}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {includedOptionItems.length === 0 && (
-                                    <p className="px-3 py-4 text-[10px] italic text-ink/35">All options in this group are currently excluded.</p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="text-[10px] italic text-ink/35">Choose a unique option group to preview the usable options.</p>
-                          )
-                        ) : selectedPoolFeatures.length > 0 ? (
-                          <div className="border border-gold/10 rounded-md overflow-hidden">
-                            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] px-3 py-2 bg-background/60 border-b border-gold/10">
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60">Feature</span>
-                              <span className="text-[9px] uppercase font-black tracking-widest text-gold/60 text-right">Level</span>
-                            </div>
-                            <div className="divide-y divide-gold/5 max-h-[16rem] overflow-y-auto">
-                              {selectedPoolFeatures.map((feature: any) => (
-                                <div key={feature.id} className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-3 px-3 py-2 items-start">
-                                  <span className="text-xs font-bold text-ink">{feature.name}</span>
-                                  <span className="text-right text-[10px] font-black tracking-widest text-ink/45 uppercase">Lvl {feature.level}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-[10px] italic text-ink/35">Select features or a unique option group to preview the choice pool.</p>
-                        )}
-                      </div>
-                    </PreviewPanel>
-                  </div>
                 </div>
               )}
 
