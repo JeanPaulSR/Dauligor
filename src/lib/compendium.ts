@@ -205,7 +205,6 @@ export function denormalizeCompendiumData(row: any): any {
     // AdvancementManager picker silently filters every group to empty
     // ("This group has no saved unique options yet") because it reads
     // camelCase keys off raw snake_case rows.
-    feature_id: 'featureId',
     level_prerequisite: 'levelPrerequisite',
     string_prerequisite: 'stringPrerequisite',
     is_repeatable: 'isRepeatable',

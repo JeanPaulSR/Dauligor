@@ -1272,7 +1272,6 @@ export async function exportClassSemantic(
       const data = denormalizeOptionItemRow(row);
       const group = uniqueOptionGroups.find((entry) => entry.id === data.groupId);
       const identifier = data.identifier || slugify(data.name || '');
-      const linkedFeature = data.featureId ? featuresById[data.featureId] : null;
       return omitKeys({
         ...data,
         imageUrl: resolveImageUrl(data) || undefined,
@@ -1285,12 +1284,6 @@ export async function exportClassSemantic(
         // The module reads the group's owner from the group itself,
         // so this is mostly informational on the option row.
         featureSourceId: group?.featureSourceId || '',
-        // The option's OWN linked feature — points at the feature
-        // whose activities, damage, and advancements back this option's
-        // mechanics. Empty when the option is a pure stub. The module
-        // reads this in createSemanticOptionItem and merges the linked
-        // feature's content into the embedded item.
-        linkedFeatureSourceId: linkedFeature?.sourceId || '',
         description: cleanText(data.description),
         levelPrerequisite: Number(data.levelPrerequisite || 0) || 0,
         // PK list at authoring time; remapped to per-option sourceIds

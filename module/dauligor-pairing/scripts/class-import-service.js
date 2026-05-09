@@ -1569,15 +1569,6 @@ function createSemanticOptionItem(optionItem, context) {
   const feature = group?.featureSourceId
     ? context.featuresBySourceId.get(group.featureSourceId)
     : null;
-  // The option's OWN linked feature — the row in the features table that
-  // carries this option's mechanical content (activities, damage, uses,
-  // advancements). When present we inherit the feature's system + flags
-  // below, layering the option's metadata (name, level, prereqs,
-  // usesFeatureSourceId) on top. Distinct from `feature` above which is
-  // the option group's owner (used for filtering / display).
-  const linkedFeature = optionItem?.linkedFeatureSourceId
-    ? context.featuresBySourceId.get(optionItem.linkedFeatureSourceId)
-    : null;
   const featureType = buildSemanticFeatureTypeData({
     sourceType: "classOption",
     optionGroup: group,
@@ -1622,71 +1613,25 @@ function createSemanticOptionItem(optionItem, context) {
     flags.optionScaleFormula = optionItem.optionScaleFormula;
   }
 
-  // Prefer the linked feature's automation/advancements when present —
-  // the option is a pointer; the feature row is the content. Only fall
-  // back to the option's own automation when there's no linked feature
-  // (legacy / stub options).
-  const automationSource = linkedFeature ? linkedFeature : optionItem;
-  const advancementsSource = linkedFeature ? linkedFeature : optionItem;
-  if (automationSource?.automation && typeof automationSource.automation === "object") {
-    flags.semanticAutomation = foundry.utils.deepClone(automationSource.automation);
+  if (optionItem?.automation && typeof optionItem.automation === "object") {
+    flags.semanticAutomation = foundry.utils.deepClone(optionItem.automation);
   }
-  if (Array.isArray(advancementsSource?.advancements) && advancementsSource.advancements.length) {
-    flags.semanticAdvancements = foundry.utils.deepClone(advancementsSource.advancements);
-  }
-
-  // When the option is backed by a linked feature, expose its sourceId
-  // on flags so consumers (debugging, analytics, future activity-author
-  // tooling) can trace back to the content row. The actor-side document
-  // identity stays the option's sourceId — the feature is the *content
-  // template*, not a separate document.
-  if (linkedFeature?.sourceId) {
-    flags.linkedFeatureSourceId = linkedFeature.sourceId;
-  }
-
-  // Inherit the linked feature's uses formula auto-fill (set on the
-  // feature via its Quantity Column link). Authors can still override
-  // by giving the option its own uses, but in the common case the
-  // option just uses what the feature defines.
-  const inheritedUsesScale = trimString(linkedFeature?.usesScaleFormula);
-  // Inherit damage scale formula from the linked feature too — used by
-  // the @scale.linked substitution in wireOptionUsesFeatures so authors
-  // can write damage as `@scale.linked` in the feature's activities.
-  const inheritedScaleFormula = trimString(linkedFeature?.scaleFormula);
-  if (inheritedScaleFormula && !flags.scaleFormula) {
-    flags.scaleFormula = inheritedScaleFormula;
+  if (Array.isArray(optionItem?.advancements) && optionItem.advancements.length) {
+    flags.semanticAdvancements = foundry.utils.deepClone(optionItem.advancements);
   }
 
   const system = {
     description: {
-      value: normalizeHtmlBlock(optionItem?.description) || normalizeHtmlBlock(linkedFeature?.description) || `<p>${foundry.utils.escapeHTML(trimString(optionItem?.name) || "Class Option")}</p>`,
+      value: normalizeHtmlBlock(optionItem?.description) || `<p>${foundry.utils.escapeHTML(trimString(optionItem?.name) || "Class Option")}</p>`,
       chat: ""
     },
     requirements: buildSemanticOptionRequirement(optionItem, context, feature),
     type: featureType
   };
-  // Uses: prefer the option's own usage (lets per-option overrides win),
-  // fall back to the linked feature's usage when authoring lives on the
-  // feature row, then apply the linked feature's Quantity Column auto-
-  // fill if neither side set a Max.
-  const uses = normalizeSemanticUses(
-    optionItem?.usage
-    ?? optionItem?.uses
-    ?? linkedFeature?.usage
-    ?? linkedFeature?.uses
-  );
+  const uses = normalizeSemanticUses(optionItem?.usage ?? optionItem?.uses);
   if (uses) system.uses = uses;
-  if (inheritedUsesScale && !trimString(system.uses?.max)) {
-    system.uses = system.uses ?? { spent: 0 };
-    system.uses.max = inheritedUsesScale;
-  }
 
-  // Activities: same priority order — option override → linked feature
-  // → empty.
-  const activities = normalizeSemanticActivityCollection(
-    optionItem?.automation?.activities
-    ?? linkedFeature?.automation?.activities
-  );
+  const activities = normalizeSemanticActivityCollection(optionItem?.automation?.activities);
   if (activities && Object.keys(activities).length) system.activities = activities;
 
   // Advancements only natively belong to Class, Subclass, and Background items in Foundry.
