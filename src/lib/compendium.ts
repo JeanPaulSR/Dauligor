@@ -200,7 +200,17 @@ export function denormalizeCompendiumData(row: any): any {
     is_subclass_feature: 'isSubclassFeature',
     icon_url: 'iconUrl',
     quantity_column_id: 'quantityColumnId',
-    scaling_column_id: 'scalingColumnId'
+    scaling_column_id: 'scalingColumnId',
+    // unique_option_items field aliases — without these, the
+    // AdvancementManager picker silently filters every group to empty
+    // ("This group has no saved unique options yet") because it reads
+    // camelCase keys off raw snake_case rows.
+    feature_id: 'featureId',
+    level_prerequisite: 'levelPrerequisite',
+    string_prerequisite: 'stringPrerequisite',
+    is_repeatable: 'isRepeatable',
+    class_ids: 'classIds',
+    requires_option_ids: 'requiresOptionIds'
   };
 
   const denormalized: any = { ...row };

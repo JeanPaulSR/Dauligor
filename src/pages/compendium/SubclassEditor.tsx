@@ -219,7 +219,12 @@ export default function SubclassEditor() {
         })));
         setAllTags(tagsData);
         setAllOptionGroups(optGroupsData);
-        setAllOptionItems(optItemsData);
+        // The AdvancementManager picker filters items by `item.groupId`
+        // (camelCase) and renders linked-feature/source badges via
+        // `item.featureId` / `item.sourceId`. Raw rows come back snake_case,
+        // so without denormalizing the picker can't find any items in any
+        // group ("This group has no saved unique options yet").
+        setAllOptionItems(optItemsData.map((row: any) => denormalizeCompendiumData(row)));
         setProgressionScalings(progData.map((p: any) => ({
           ...p,
           levels: typeof p.levels === 'string' ? JSON.parse(p.levels) : (p.levels || [])
