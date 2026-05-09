@@ -204,7 +204,10 @@ export function denormalizeCompendiumData(row: any): any {
     // unique_option_items field aliases — without these, the
     // AdvancementManager picker silently filters every group to empty
     // ("This group has no saved unique options yet") because it reads
-    // camelCase keys off raw snake_case rows.
+    // camelCase keys off raw snake_case rows. The feat-shape columns
+    // added in migration 20260509-1356 (feature_type / image_url /
+    // uses_max / uses_spent / uses_recovery) are already covered by
+    // the features-table mapping above; reuse instead of duplicate.
     level_prerequisite: 'levelPrerequisite',
     string_prerequisite: 'stringPrerequisite',
     is_repeatable: 'isRepeatable',

@@ -140,6 +140,23 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     if (!id) return;
 
     try {
+      // Pull JSON fields off either case, default to safe empty shapes.
+      // Migration 20260509-1356 added the full feat-shape body
+      // (activities/effects/advancements/properties/tags/uses_recovery/
+      // image_url/quantity_column_id/scaling_column_id/feature_type/
+      // subtype/requirements). The form may not surface all of these
+      // yet (the tabs refactor is in flight), so the writes here are
+      // pass-through — preserving whatever's on editingItem and
+      // defaulting empty when the field hasn't been authored.
+      const usesRecovery = Array.isArray(editingItem?.usesRecovery)
+        ? editingItem.usesRecovery
+        : (Array.isArray(editingItem?.uses_recovery) ? editingItem.uses_recovery : []);
+      const properties = Array.isArray(editingItem?.properties) ? editingItem.properties : [];
+      const activities = Array.isArray(editingItem?.activities) ? editingItem.activities : [];
+      const effects = Array.isArray(editingItem?.effects) ? editingItem.effects : [];
+      const advancements = Array.isArray(editingItem?.advancements) ? editingItem.advancements : [];
+      const tags = Array.isArray(editingItem?.tags) ? editingItem.tags : [];
+
       const d1Data = {
         name: editingItem?.name || 'New Option',
         description: editingItem?.description || '',
@@ -156,6 +173,21 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         requires_option_ids: Array.isArray(editingItem?.requiresOptionIds)
           ? editingItem.requiresOptionIds
           : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []),
+        // Feat-shape body — same columns the `features` table carries.
+        feature_type: editingItem?.featureType || editingItem?.feature_type || null,
+        subtype: editingItem?.subtype || null,
+        requirements: editingItem?.requirements || null,
+        image_url: editingItem?.imageUrl || editingItem?.image_url || null,
+        uses_max: editingItem?.usesMax || editingItem?.uses_max || null,
+        uses_spent: Number(editingItem?.usesSpent ?? editingItem?.uses_spent ?? 0) || 0,
+        uses_recovery: usesRecovery,
+        properties,
+        activities,
+        effects,
+        advancements,
+        tags,
+        quantity_column_id: editingItem?.quantityColumnId || editingItem?.quantity_column_id || null,
+        scaling_column_id: editingItem?.scalingColumnId || editingItem?.scaling_column_id || null,
         updated_at: new Date().toISOString(),
       };
 
