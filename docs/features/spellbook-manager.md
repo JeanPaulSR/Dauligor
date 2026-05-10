@@ -1,12 +1,14 @@
 # Spellbook Manager (Project)
 
-> **Status:** Layers 1–4 feature-complete. Layer 1 (per-class master spell list +
-> rules), Layer 2 (GrantSpells / ExtendSpellList in both modes × both resolver
-> kinds), Layer 3 (Spell Manager + Sheet panels + caps + character effective tag
-> set + prereq gating + favourites + watchlist), and Layer 4 (sized, multi-active
-> Spell Loadouts) all shipped on the app side. Outstanding: Foundry export
-> round-trip — handed off to `claude/pedantic-antonelli-ce1c7f` (see
-> [../handoff-spellbook-to-importer.md](../handoff-spellbook-to-importer.md)).
+> **Status:** All layers shipped, including the Foundry export round-trip
+> (Layer 5). Layer 1 (per-class master spell list + rules), Layer 2
+> (GrantSpells / ExtendSpellList in both modes × both resolver kinds),
+> Layer 3 (Spell Manager + Sheet panels + caps + character effective tag
+> set + prereq gating + favourites + watchlist), Layer 4 (sized,
+> multi-active Spell Loadouts), and Layer 5 (Foundry actor export of
+> spells, loadouts, and spell-list extensions per
+> [actor-spell-flag-schema.md](../../module/dauligor-pairing/docs/actor-spell-flag-schema.md))
+> all complete. Branch ready to merge.
 
 ## Active work resume point
 
@@ -152,7 +154,7 @@ to include them.
 | 3 | Character "effective tag set" + tag-based prereq enforcement | ✅ done |
 | 4 | Spell Manager: favourites + watchlist | ✅ done |
 | 5 | Layer 4: Spell Loadouts | ✅ done |
-| **6** | **Foundry export round-trip** | **handed off to importer agent** |
+| 6 | Foundry export round-trip | ✅ done (`claude/pedantic-antonelli-ce1c7f`, [c02e00a](https://github.com/JeanPaulSR/Dauligor/commit/c02e00a)) |
 
 ### Uncommitted state warning
 
