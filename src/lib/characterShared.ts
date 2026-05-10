@@ -534,6 +534,155 @@ export async function buildCharacterExport(
     items.push(buildFeatureItemFromOwnedFeature(entry));
   });
 
+  // Spells — fetch the referenced spell rows once and build a Foundry
+  // `type: "spell"` item per ownedSpell, layering the per-character state
+  // (preparation, attribution, loadout membership, favorite/watchlist) over
+  // the spell's native shape from the compendium.
+  const ownedSpells: any[] = progressionState.ownedSpells || [];
+  const spellListExtensions: any[] = progressionState.spellListExtensions || [];
+  const spellLoadouts: any[] = progressionState.spellLoadouts || [];
+  const ownedSpellIds = uniqueStrings(ownedSpells.map((s: any) => s.id));
+  const spellContentRows = ownedSpellIds.length > 0
+    ? await queryFn<any>(
+        `SELECT * FROM spells WHERE id IN (${ownedSpellIds.map(() => '?').join(',')})`,
+        ownedSpellIds
+      )
+    : [];
+  const spellsById = Object.fromEntries(spellContentRows.map((row: any) => [row.id, row]));
+
+  // Active loadouts drive effective prepared (union with is_prepared and
+  // is_always_prepared). Per the spellbook handoff, this matches
+  // `effectivePreparedSet` in CharacterBuilder.
+  const activeLoadoutIds = new Set(
+    spellLoadouts.filter((l: any) => l.isActive).map((l: any) => l.id)
+  );
+
+  // Primary spellcasting class falls back here when ownedSpell.countsAsClassId
+  // is null. Uses the first progression class with a non-"none" spellcasting
+  // progression. Multi-class characters can still override per-spell via
+  // `countsAsClassId`.
+  const primaryClassIdentifier = (() => {
+    for (const group of progressionGroups) {
+      const classDoc = group.classDocument;
+      const progression = classDoc?.spellcasting?.progression;
+      if (classDoc && progression && progression !== 'none') {
+        return trimString(classDoc.identifier) || slugify(classDoc.name) || '';
+      }
+    }
+    return '';
+  })();
+
+  const parseJsonColumn = <T,>(raw: any, fallback: T): T => {
+    if (raw == null) return fallback;
+    if (typeof raw !== 'string') return raw as T;
+    try { return JSON.parse(raw) as T; } catch { return fallback; }
+  };
+
+  for (const owned of ownedSpells) {
+    const spell = spellsById[owned.id];
+    // Stub-favourites have an entry on character_spells but the spell row
+    // may have been deleted from the compendium since. Skip rather than
+    // ship a broken item.
+    if (!spell) continue;
+
+    const foundrySystem: any = parseJsonColumn<any>(spell.foundry_data, {});
+    const ownerClassDoc = owned.countsAsClassId ? classDocsById[owned.countsAsClassId] : null;
+    const classIdentifier = trimString(ownerClassDoc?.identifier)
+      || (ownerClassDoc?.name ? slugify(ownerClassDoc.name) : '')
+      || primaryClassIdentifier;
+    const classSourceId = ownerClassDoc
+      ? `class-${trimString(ownerClassDoc.identifier) || slugify(ownerClassDoc.name)}`
+      : null;
+
+    // listType per actor-spell-flag-schema.md.
+    // (Distinguishing "known" from "prepared" by the class's spellcasting
+    // method is left for the module to refine — this branch picks the safer
+    // default until the prepared/known semantics get a dedicated pass.)
+    let listType: 'prepared' | 'known' | 'always-prepared' | 'expanded' | 'innate' = 'prepared';
+    if (owned.isAlwaysPrepared) listType = 'always-prepared';
+    else if (owned.doesntCountAgainstKnown) listType = 'innate';
+    else if (owned.grantedByType === 'extension') listType = 'expanded';
+
+    // dnd5e preparation.mode = "always" for both inherently-always-prepared
+    // and "doesn't count against prepared" (free-prepared) — Foundry has no
+    // native concept for the latter, "always" is the closest match.
+    const prepMode = (owned.isAlwaysPrepared || owned.doesntCountAgainstPrepared)
+      ? 'always'
+      : 'prepared';
+    const memberOfActiveLoadout = (owned.loadoutMembership || []).some((id: string) => activeLoadoutIds.has(id));
+    const prepared = !!(owned.isAlwaysPrepared || owned.isPrepared || memberOfActiveLoadout);
+
+    const properties = Array.isArray(foundrySystem.properties)
+      ? foundrySystem.properties.map(String)
+      : [];
+
+    items.push({
+      name: spell.name || `Spell ${owned.id}`,
+      type: 'spell',
+      img: spell.image_url || foundrySystem.img || 'icons/svg/item-bag.svg',
+      system: {
+        level: Number(spell.level ?? foundrySystem.level ?? 0) || 0,
+        school: trimString(spell.school) || trimString(foundrySystem.school) || '',
+        description: {
+          value: spell.description || foundrySystem.description?.value || '',
+          chat: '',
+        },
+        activation: foundrySystem.activation || {},
+        range: foundrySystem.range || {},
+        target: foundrySystem.target || {},
+        duration: foundrySystem.duration || {},
+        materials: foundrySystem.materials || {
+          value: spell.components_material_text || '',
+          consumed: Boolean(spell.components_consumed),
+          cost: Number(spell.components_cost ?? 0) || 0,
+          supply: 0,
+        },
+        properties,
+        preparation: { mode: prepMode, prepared },
+        sourceClass: classIdentifier,
+        activities: parseJsonColumn<any>(spell.activities, {}),
+      },
+      effects: parseJsonColumn<any[]>(spell.effects, []),
+      flags: {
+        'dauligor-pairing': {
+          schemaVersion: 1,
+          entityKind: 'spell',
+          sourceId: spell.identifier ? `spell-${spell.identifier}` : `spell-${owned.id}`,
+          entityId: owned.id,
+          identifier: trimString(spell.identifier) || null,
+          sourceBookId: spell.source_id ? `source-${spell.source_id}` : null,
+          classIdentifier,
+          classSourceId,
+          listType,
+          favorite: Boolean(owned.isFavourite),
+          tags: parseJsonColumn<string[]>(spell.tags, []),
+          importSource: 'dauligor',
+          // Layer-2 attribution: who granted this spell (class / feature /
+          // feat), driving un-grant on level-down and which class's
+          // spellcasting mod and DC apply.
+          grantedByType: owned.grantedByType || null,
+          grantedById: owned.grantedById || null,
+          grantedByAdvancementId: owned.grantedByAdvancementId || null,
+          // Layer-3 Phase-4 user metadata.
+          watchlist: Boolean(owned.isWatchlist),
+          watchlistNote: owned.watchlistNote || '',
+          // Layer-4 loadouts. The membership is the union of loadouts this
+          // spell belongs to; active loadouts already drove `prepared`
+          // above. Module side reconstructs which loadout buttons are
+          // checked from this list.
+          loadoutMembership: Array.isArray(owned.loadoutMembership) ? owned.loadoutMembership : [],
+          // Free-known marker (Foundry has no native concept; the module
+          // can choose to display this differently — e.g. exempt from
+          // spells-known caps in its UI).
+          freeKnown: Boolean(owned.doesntCountAgainstKnown),
+          // Free-prepared marker — informational (preparation.mode="always"
+          // already enforces it on the dnd5e side).
+          freePrepared: Boolean(owned.doesntCountAgainstPrepared),
+        },
+      },
+    });
+  }
+
   const selectedOptions = buildSelectedOptionsMapFromClassPackages(classPackages);
 
   return {
@@ -585,6 +734,28 @@ export async function buildCharacterExport(
           sourceType: "actor",
           campaignId: trimString(charData.campaignId),
           selectedOptions,
+          // Per-character class-spell-list adjustments — extends a class's
+          // available pool for THIS character only. Keyed by classId so the
+          // module can scope each entry to the matching actor class item.
+          spellListExtensions: spellListExtensions.map((ext: any) => ({
+            classId: ext.classId,
+            spellId: ext.spellId,
+            grantedByType: ext.grantedByType || null,
+            grantedById: ext.grantedById || null,
+            grantedByAdvancementId: ext.grantedByAdvancementId || null,
+          })),
+          // Sized, multi-active spell loadouts. Membership is on each
+          // spell item's flag (`loadoutMembership`); active loadouts
+          // already drove the spell items' `system.preparation.prepared`
+          // above. The list here lets the module reconstruct loadout UI
+          // (size caps + active toggle) without re-deriving from spells.
+          spellLoadouts: spellLoadouts.map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            size: Number(l.size ?? 0) || 0,
+            isActive: Boolean(l.isActive),
+            sortOrder: Number(l.sortOrder ?? 0) || 0,
+          })),
         },
       },
     },
