@@ -89,13 +89,22 @@ commit, or ask the user to coordinate.
 | Branch | Owns |
 |---|---|
 | `claude/pedantic-antonelli-ce1c7f` | Class importer + advancement system + option groups + class export pipeline (`module/dauligor-pairing/**`, `api/_lib/_classExport.ts`, `src/lib/classExport.ts`, `src/lib/advancementState.ts`, `src/components/compendium/AdvancementManager.tsx`, `src/pages/compendium/UniqueOptionGroup*.tsx`). Other branches may make small **additive, commented** edits to `AdvancementManager.tsx` and `advancementState.ts` to register new advancement types — keep them on the contributing branch through merge rather than relaying via main. |
-| `claude/kind-maxwell-bfa076` | Spell list manager + spell rules + spellbook authoring (`src/pages/compendium/SpellList*.tsx`, `src/pages/compendium/SpellRules*.tsx`, `src/components/compendium/Spell*.tsx`, `src/lib/spell*.ts`, `src/lib/characterTags.ts`, `src/hooks/useSpellFilters.ts`, `src/lib/classSpellLists.ts`, new `EntityPicker.tsx`) |
 
-> **2026-05-09 — handoff for `claude/pedantic-antonelli-ce1c7f`.** Spellbook
-> Manager Layers 1–4 are feature-complete. The Foundry export round-trip is
-> the natural next step on your side. See
-> [docs/handoff-spellbook-to-importer.md](docs/handoff-spellbook-to-importer.md)
-> for the full schema diff, attribution-column semantics, and crosswalk hints.
+### Recently merged (no active owner)
+
+Domain shape preserved here so future agents picking up these files
+know the scope without re-deriving it.
+
+| Domain | Files |
+|---|---|
+| Spell list manager + spell rules + spellbook authoring (merged via `claude/kind-maxwell-bfa076`, 2026-05-09) | `src/pages/compendium/SpellList*.tsx`, `src/pages/compendium/SpellRules*.tsx`, `src/components/compendium/Spell*.tsx`, `src/lib/spell*.ts`, `src/lib/characterTags.ts`, `src/hooks/useSpellFilters.ts`, `src/lib/classSpellLists.ts`, `src/components/ui/EntityPicker.tsx` |
+
+> **Open hand-back to `claude/pedantic-antonelli-ce1c7f`:** Foundry export
+> round-trip for spells. The 6 attribution columns on `character_spells`
+> (`granted_by_*`, `counts_as_class_id`, `doesnt_count_against_*`),
+> `character_spell_list_extensions`, and `character_spell_loadouts` +
+> `loadout_membership` need to surface in the actor bundle. Schema
+> crosswalk in [docs/handoff-spellbook-to-importer.md](docs/handoff-spellbook-to-importer.md).
 
 ### Shared utility files (append-only discipline)
 
