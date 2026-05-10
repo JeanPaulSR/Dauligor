@@ -25,7 +25,7 @@ A "group" is a pool of mutually-exclusive (or stacking, depending on `is_repeata
 | Table | Role |
 |---|---|
 | `unique_option_groups` | Group identity, description, source, `class_ids` (JSON) restricting which classes see it |
-| `unique_option_items` | Items belonging to groups; `group_id` FK; level/string prerequisites; `is_repeatable` |
+| `unique_option_items` | **Full feat-shape feature documents** belonging to groups. `group_id` FK + the standard feat columns (`feature_type`, `subtype`, `requirements`, `image_url`, `uses_max/spent/recovery`, `properties`, `activities`, `effects`, `advancements`, `tags`, `quantity_column_id`, `scaling_column_id`) + option-specific extras (`level_prerequisite`, `string_prerequisite`, `is_repeatable`, `class_ids`, `requires_option_ids`). Migrations `20260508-1951_unique_option_items_requires.sql` (Required Options chain) and `20260509-1356_unique_option_items_feat_shape.sql` (the rest). |
 
 Schema: [../database/structure/](../database/structure/), [../_archive/migration-details/phase-1-foundation.md](../_archive/migration-details/phase-1-foundation.md).
 
@@ -39,22 +39,49 @@ Classes opt into option groups via `classes.advancements` (an `ItemChoice` advan
 - Whether the choice is optional
 
 ### Item editor
-Items are managed in a Dialog modal (no inline editing) consistent with the ClassEditor feature modal pattern. Per-item:
-- Name, description (BBCode)
-- Icon
-- Level prerequisite (number)
-- String prerequisite (text)
-- Class restrictions (junction)
-- Repeatable flag
-- Activities and effects (same shape as features)
+Items are managed in a Dialog modal with a five-tab layout matching the ClassEditor feature modal: **Description / Details / Activities / Effects / Advancement**. Authoring a Battle Master Maneuver / Eldritch Invocation / Artificer Infusion feels identical to authoring a class feature.
+
+| Tab | Fields |
+|---|---|
+| **Description** | Icon, Name, Markdown body |
+| **Details** | Source, Page, `Feature Type` (free-form, e.g. `"Maneuver"`/`"EldritchInvocation"`/`"Infusion"`; matches dnd5e v5.x `system.type.subtype` per [actor-spell-flag-schema.md](../../module/dauligor-pairing/docs/actor-spell-flag-schema.md)), Subtype, Requirements, Level Prereq, **Required Options** (chained sibling prereqs), String Prereq, Repeatable |
+| **Activities** | `<ActivityEditor />` — same component class features use |
+| **Effects** | `<ActiveEffectEditor />` — same |
+| **Advancement** | `<AdvancementManager />` standalone-mode — option items can have their own advancements (rare; used by Invocations granting spells via `ItemGrant`) |
+
+The Required Options picker is gated by a master checkbox so the picker stays compact when no prereqs are set. Selected sibling option IDs render as chips on top, plus a searchable scrollable list below. The picker uses the shared [`<EntityPicker />`](../../src/components/ui/EntityPicker.tsx) component.
 
 Source: [src/pages/compendium/UniqueOptionGroupEditor.tsx](../../src/pages/compendium/UniqueOptionGroupEditor.tsx).
 
+### Linked-feature concept (removed)
+A `feature_id` FK on `unique_option_items` once let an option point at a feature row for content. **Dropped** in `20260509-1356_unique_option_items_feat_shape.sql` — option items now carry their own mechanical content end-to-end (activities / effects / advancements / uses), so there's nothing to delegate. If a class feature wants to grant shared option content, it does so via the option group itself in an `ItemChoice` / `ItemGrant` advancement, not by linking a single feature row.
+
 ### Class-restriction multi-select
-Group Details has a searchable multi-select for class restrictions: chip display for selected classes + search input + scrollable filtered list with gold checkboxes.
+Group Details has a searchable multi-select for class restrictions: chip display for selected classes + search input + scrollable filtered list with gold checkboxes. (Currently inline; planned swap to `<EntityPicker />` is tracked as cleanup.)
 
 ### Cross-class option discovery
 `AdvancementManager.tsx` (the advancement editor) has an inline "Search all option groups" panel for cross-class discovery — for example, a Wizard subclass that grants access to Warlock invocations. The class restriction is then implicit on the parent group (the Warlock invocations group is `class_ids: [warlock]`, but the Wizard's advancement can still grant items from it).
+
+### Per-grant attachments on `ItemChoice` / `ItemGrant` advancements
+
+When an `ItemChoice` or `ItemGrant` advancement uses `choiceType: "option-group"` to grant from a shared group, the advancement itself carries two extra fields that drive *per-grant* runtime behavior. The same option group can resolve differently depending on who's granting it:
+
+- **`usesFeatureId`** — picks any feature in the parent class. At import the bridge wires every granted option's `consumption.targets[]` (type `itemUses`) to consume from this feature's `system.uses` pool. Example: Battle Master "Maneuvers Known" sets Uses Feature → Combat Superiority, so Trip Attack consumes from the Superiority Dice pool.
+- **`optionScalingColumnId`** — picks any scaling column in the parent class. Translated at export to `optionScalingSourceId` / a resolved `@scale.<class>.<column>` formula. Drives the `@scale.linked` substitution in damage formulas (see below). The Reaver subclass picks Barbarian's `superiority-dice` column; Battle Master picks Fighter's; the same Trip Attack feature resolves correctly under both.
+
+### `@scale.linked` placeholder
+
+Authors writing damage / dice / consumption formulas inside option-item activities can use the literal `@scale.linked` token. At import the bridge resolves it from (in priority order):
+
+1. The granting advancement's `optionScalingColumnId` (`@scale.<class>.<column>`)
+2. The Uses Feature's own `flags.scaleFormula` (set when the feature has a `scaling_column_id` attached)
+3. The option's own `flags.scaleFormula` (legacy fallback when nothing more specific is set)
+
+This is what makes a single Trip Attack feature reusable across Battle Master and Reaver — its damage formula stays `@scale.linked + @mods.str.mod`, and the granter decides which class's scaling that resolves to.
+
+### Subclass-attributed groups
+
+Option groups referenced from a *subclass-root* advancement (Battle Master Maneuvers, Eldritch Knight pools, etc.) carry `subclassSourceId` in the bundle. The runtime suppresses the prompt for non-matching subclasses — picking Champion doesn't show Maneuvers; picking Battle Master does. Class-root and feature-owned groups are unaffected and use the existing `featureSourceId` / `grantedFeatureSourceIds` filter.
 
 ## Tags
 

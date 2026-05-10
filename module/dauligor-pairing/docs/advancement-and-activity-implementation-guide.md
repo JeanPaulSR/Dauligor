@@ -542,3 +542,111 @@ That review order makes it easier to tell:
 - what the app should fix
 - what the module should implement
 - what is safe to ignore for now
+
+---
+
+## Implementation Status (2026-05-09)
+
+The bullet points below describe **the current shape**, not the
+forward-looking design above. When the two disagree, the design above
+is the target; the implementation below is what the bundle and module
+look like today.
+
+### Option items are full feat-shape feature documents
+
+Migration `20260509-1356_unique_option_items_feat_shape.sql` brought
+the `unique_option_items` row to feat-shape parity with `features`.
+Each option item carries the same authoring surface as a class
+feature: name, description, icon, source, page, `feature_type`,
+`subtype`, `requirements`, `image_url`, `uses_max/spent/recovery`,
+`properties`, `activities`, `effects`, `advancements`, `tags`,
+`quantity_column_id`, `scaling_column_id`. Plus the option-specific
+extras (`level_prerequisite`, `string_prerequisite`, `is_repeatable`,
+`class_ids`, `requires_option_ids`).
+
+The bundle ships each option item with the same shape as a feature:
+top-level `automation` object wrapping `activities` + `effects`,
+top-level `usage` for uses, top-level `advancements` for grants. The
+module's `createSemanticOptionItem` reads them identically to how
+`createSemanticFeatureItem` reads features.
+
+The previously-half-built `feature_id` link on option items (an
+option pointing at a separate feature row for content) was
+**removed**. Option items now own their content end-to-end.
+
+### Per-grant attachments on `ItemChoice` / `ItemGrant` advancements
+
+When `choiceType: "option-group"`, the advancement carries two
+runtime knobs in addition to `optionGroupId`:
+
+```json
+{
+  "type": "ItemChoice",
+  "configuration": {
+    "choiceType": "option-group",
+    "optionGroupId": "w9gFb8ga81xgWfopiZQ8",
+    "scalingColumnId": "wfKNMWJOiam3tgRMg2U4",
+    "countSource": "scaling",
+    "usesFeatureSourceId": "class-feature-savage-superiority",
+    "optionScalingSourceId": "scale-superiority-dice"
+  }
+}
+```
+
+- `usesFeatureSourceId` — the granted options' activity
+  `consumption.targets[]` get rewritten to consume from this feature's
+  `system.uses` pool (Battle Master Maneuvers consume Superiority
+  Dice; Reaver Maneuvers consume the Reaver subclass's Savage
+  Superiority pool).
+- `optionScalingSourceId` — drives `@scale.linked` substitution in
+  damage / dice formulas. The same option group resolves Barbarian's
+  superiority dice when Reaver grants it and Fighter's when Battle
+  Master grants it.
+
+Per-grant data is also tagged onto each option item at export time so
+the module can wire it without re-traversing advancements:
+`flags.<MODULE_ID>.usesFeatureSourceId` +
+`flags.<MODULE_ID>.optionScaleFormula` (resolved
+`@scale.<class>.<column>` string).
+
+### `@scale.linked` substitution
+
+Authors write `@scale.linked` literally inside an option-item
+activity's damage / dice / consumption formula. At import the bridge
+walks every activity recursively and substitutes the token with the
+resolved formula. Resolution priority:
+
+1. `flags.<MODULE_ID>.optionScaleFormula` (from advancement's
+   `optionScalingSourceId` — highest priority, the granter is the
+   authority on which class's scaling applies)
+2. The uses-feature's own `flags.<MODULE_ID>.scaleFormula` (implicit
+   pairing — "consume from this feature, scale by what that feature
+   scales by")
+3. The option's own `flags.<MODULE_ID>.scaleFormula` (set on the
+   option when its own `scaling_column_id` is attached)
+
+This is what makes a single `Trip Attack` feature reusable across
+Battle Master, Reaver, and any feat that grants from the Maneuvers
+group — the damage formula stays `@scale.linked + @mods.str.mod`,
+and each granter decides which class's scaling that resolves to.
+
+### Subclass-attributed groups
+
+Option groups referenced from a *subclass-root* advancement carry
+`subclassSourceId` in the bundle. The runtime suppresses the prompt
+for non-matching subclasses — picking Champion never shows Maneuvers,
+picking Battle Master does. Class-root and feature-owned groups stay
+unattributed and use the existing `featureSourceId` /
+`grantedFeatureSourceIds` filter.
+
+### Required Options (chained option prereqs)
+
+`requires_option_ids` on `unique_option_items` is a JSON array of
+sibling option `sourceId`s that must already be picked before this
+option becomes selectable. Authoring-side picker stores PKs; the
+exporter remaps PKs → per-option sourceIds before shipping. The
+runtime disables (and tooltips) any option whose prereqs aren't
+covered by either prior-group selections or current-prompt
+selections, and cascade-unchecks dependents when a prereq is
+unchecked. Used for option chains like Eldritch Invocations that
+require an earlier invocation to be active.
