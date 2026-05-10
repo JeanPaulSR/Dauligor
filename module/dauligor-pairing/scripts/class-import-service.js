@@ -1552,6 +1552,11 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
       ?? feature?.image,
       DEFAULT_FEATURE_ICON
     ),
+    // Item-level Active Effects authored in the feature's Effects tab.
+    // Foundry creates embedded ActiveEffect documents from this array
+    // when the item embeds; effects with transfer=true then propagate
+    // to the actor automatically.
+    effects: normalizeSemanticItemEffects(feature?.automation?.effects),
     flags: {
       [MODULE_ID]: flags
     },
@@ -1649,6 +1654,12 @@ function createSemanticOptionItem(optionItem, context) {
       ?? optionItem?.image,
       DEFAULT_OPTION_ICON
     ),
+    // Item-level Active Effects authored in the option's Effects tab —
+    // mostly used by Invocations (e.g. Agonizing Blast adds CHA to
+    // Eldritch Blast damage via a `system.bonuses.msak.damage` change
+    // with transfer=true) and Infusions (which apply effects to the
+    // infused target item rather than the infusion itself).
+    effects: normalizeSemanticItemEffects(optionItem?.automation?.effects),
     flags: {
       [MODULE_ID]: flags
     },
@@ -2318,6 +2329,73 @@ function normalizeSemanticActivityEffects(effects) {
     level: foundry.utils.deepClone(effect?.level ?? {}),
     riders: foundry.utils.deepClone(effect?.riders ?? {})
   }));
+}
+
+// Item-level Active Effects (the full document shape) — distinct from the
+// activity-level shape above which only references AEs by _id. Used for
+// "always-on while owned" patterns like Agonizing Blast: transfer=true,
+// disabled=false, and Foundry copies the effect onto the actor when the
+// feature embeds. `transfer=false` keeps the effect stored on the item
+// only; it's then a candidate for per-use application via activities.
+//
+// Canonical shape per Foundry v13:
+//   { _id, name, img, description, disabled, transfer, tint, duration,
+//     changes:[{key,value,mode (0-5),priority}], statuses, type, sort,
+//     flags }
+// dnd5e 5.x effect `type` defaults to "base"; the system may register
+// custom types ("enchantment") that we pass through verbatim.
+function normalizeSemanticItemEffects(effects) {
+  return ensureArray(effects).map((effect) => {
+    if (!effect || typeof effect !== "object") return null;
+    return {
+      _id: ensureSemanticEffectId(effect?._id),
+      name: trimString(effect?.name) || "Unnamed Effect",
+      img: trimString(effect?.img) || trimString(effect?.icon) || "icons/svg/aura.svg",
+      description: typeof effect?.description === "string" ? effect.description : "",
+      disabled: Boolean(effect?.disabled),
+      // Authoring default is true (always-on while feature is owned).
+      // Effects applied per-use via an activity should be authored with
+      // transfer=false so they stay scoped to the item.
+      transfer: effect?.transfer !== undefined ? Boolean(effect.transfer) : true,
+      tint: trimString(effect?.tint) || "#ffffff",
+      duration: {
+        seconds: effect?.duration?.seconds ?? null,
+        rounds: effect?.duration?.rounds ?? null,
+        turns: effect?.duration?.turns ?? null,
+        startTime: effect?.duration?.startTime ?? null,
+        startRound: effect?.duration?.startRound ?? null,
+        startTurn: effect?.duration?.startTurn ?? null
+      },
+      changes: ensureArray(effect?.changes).map((change) => ({
+        key: trimString(change?.key),
+        // Foundry accepts string values; numbers get coerced. Keep as string
+        // so dice formulas like "1d6" round-trip without surprise.
+        value: typeof change?.value === "string" ? change.value : String(change?.value ?? ""),
+        // CONST.ACTIVE_EFFECT_MODES: 0 Custom, 1 Multiply, 2 Add (default),
+        // 3 Downgrade, 4 Upgrade, 5 Override.
+        mode: Number.isFinite(Number(change?.mode)) ? Number(change.mode) : 2,
+        // null is legitimate (Foundry assigns a default per mode at apply
+        // time); pass through. Otherwise coerce to number.
+        priority: change?.priority == null ? null : Number(change.priority)
+      })).filter((change) => change.key),
+      statuses: Array.isArray(effect?.statuses) ? effect.statuses.map(String).filter(Boolean) : [],
+      type: trimString(effect?.type) || "base",
+      sort: Number.isFinite(Number(effect?.sort)) ? Number(effect.sort) : 0,
+      flags: effect?.flags && typeof effect.flags === "object"
+        ? foundry.utils.deepClone(effect.flags)
+        : {}
+    };
+  }).filter(Boolean);
+}
+
+function ensureSemanticEffectId(raw) {
+  // Foundry requires document IDs to be exactly 16 alphanumeric chars.
+  // The web editor's `Math.random().toString(36).slice(2, 18)` is mostly
+  // OK but can produce shorter IDs when the random float happens to be
+  // short. Regenerate when malformed.
+  const s = String(raw ?? "");
+  if (/^[A-Za-z0-9]{16}$/.test(s)) return s;
+  return foundry.utils.randomID();
 }
 
 function normalizeSemanticRange(range) {
