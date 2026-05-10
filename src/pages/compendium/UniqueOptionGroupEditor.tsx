@@ -20,6 +20,11 @@ import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { ImageUpload } from '../../components/ui/ImageUpload';
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import EntityPicker from '../../components/ui/EntityPicker';
+import ActivityEditor from '../../components/compendium/ActivityEditor';
+import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
+import AdvancementManager from '../../components/compendium/AdvancementManager';
 
 export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -41,6 +46,10 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
   const [requiredOptionSearch, setRequiredOptionSearch] = useState('');
+  // Tab state for the option-item modal — mirrors ClassEditor's feature
+  // modal so authoring an option (Maneuver / Invocation / Infusion) feels
+  // identical to authoring a class feature.
+  const [optionTab, setOptionTab] = useState<'description' | 'details' | 'activities' | 'effects' | 'advancement'>('description');
   const groupDescRef = useRef<HTMLTextAreaElement>(null);
   const itemDescRef = useRef<HTMLTextAreaElement>(null);
 
@@ -224,11 +233,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
   const openAddModal = () => {
     setEditingItem({ levelPrerequisite: 0, isRepeatable: false, classIds: [] });
+    setOptionTab('description');
     setIsItemModalOpen(true);
   };
 
   const openEditModal = (item: any) => {
     setEditingItem({ ...item });
+    setOptionTab('description');
     setIsItemModalOpen(true);
   };
 
@@ -464,221 +475,249 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           </DialogHeader>
 
           <form onSubmit={handleSaveItem} className="dialog-body space-y-4">
-            {/* Icon + Name */}
-            <div className="flex gap-4 items-start">
-              <div className="shrink-0 space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Icon</label>
-                <div className="w-16 h-16">
-                  <ImageUpload
-                    storagePath="icons/features/"
-                    imageType="icon"
-                    compact
-                    currentImageUrl={editingItem?.iconUrl || ''}
-                    onUpload={(url) => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), iconUrl: url }))}
-                    className="w-full h-full"
-                  />
-                </div>
-              </div>
-              <div className="flex-1 space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Option Name</label>
-                <Input
-                  value={editingItem?.name || ''}
-                  onChange={e => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), name: e.target.value }))}
-                  className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                  placeholder="e.g. Agonizing Blast"
-                  required={!!editingItem}
-                  autoFocus
-                />
-              </div>
-            </div>
+            {/* Tab strip — mirrors ClassEditor's feature modal so authoring
+                a Maneuver / Invocation / Infusion feels identical to
+                authoring a class feature. */}
+            <Tabs value={optionTab} onValueChange={(v) => setOptionTab(v as any)} className="w-full bg-transparent border-none">
+              <TabsList className="bg-transparent border-none h-auto p-0 flex justify-between w-full">
+                {(['description', 'details', 'activities', 'effects', 'advancement'] as const).map(tab => (
+                  <TabsTrigger
+                    key={tab}
+                    value={tab}
+                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-gold data-[state=active]:border-b-2 data-[state=active]:border-gold rounded-none h-10 px-0 label-text transition-all opacity-60 data-[state=active]:opacity-100 flex-1 hover:text-gold/80"
+                  >
+                    {tab}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
 
-            {/* Grid fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</label>
-                <select
-                  value={editingItem?.source_id || editingItem?.sourceId || ''}
-                  onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), source_id: e.target.value }))}
-                  className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                >
-                  <option value="">Same as Group</option>
-                  {sources.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Level Prerequisite</label>
-                <Input
-                  type="number"
-                  value={editingItem?.level_prerequisite || editingItem?.levelPrerequisite || 0}
-                  onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), level_prerequisite: parseInt(e.target.value) || 0 }))}
-                  className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Page Reference</label>
-                <Input
-                  value={editingItem?.page || ''}
-                  onChange={e => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), page: e.target.value }))}
-                  placeholder="e.g. 155"
-                  className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase tracking-widest text-ink/40">String Prerequisite</label>
-                <Input
-                  value={editingItem?.string_prerequisite || editingItem?.stringPrerequisite || ''}
-                  onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), string_prerequisite: e.target.value }))}
-                  placeholder="e.g. Eldritch Blast cantrip"
-                  className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                />
-              </div>
-              <div className="flex items-center gap-2 pt-5">
-                <input
-                  type="checkbox"
-                  id="isRepeatable"
-                  checked={!!(editingItem?.is_repeatable || editingItem?.isRepeatable)}
-                  onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: 0, class_ids: [] }), is_repeatable: e.target.checked ? 1 : 0 }))}
-                  className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
-                />
-                <label htmlFor="isRepeatable" className="text-xs text-ink/40 uppercase font-bold cursor-pointer">
-                  Repeatable
-                </label>
-              </div>
-            </div>
-
-            {/* Required Options — gated by a master checkbox so the picker
-                only opens when the option actually has prereqs. Mirrors the
-                Class Restrictions UI: chips for selected entries on top, a
-                search box, and a scrollable list of checkboxes below. */}
-            {(() => {
-              const required: string[] = Array.isArray(editingItem?.requiresOptionIds)
-                ? editingItem.requiresOptionIds
-                : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []);
-              const otherOptions = items.filter((other: any) => other.id !== editingItem?.id);
-              const hasRequiredOptions = required.length > 0;
-              return (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${hasRequiredOptions ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
-                      {hasRequiredOptions && <Check className="w-2.5 h-2.5 text-white" />}
-                    </div>
-                    <input
-                      type="checkbox"
-                      className="hidden"
-                      checked={hasRequiredOptions}
-                      onChange={e => {
-                        if (e.target.checked) return; // toggling on does nothing alone — user picks options below to populate
-                        // Toggling off clears any selections.
-                        setEditingItem((prev: any) => ({
-                          ...(prev || {}),
-                          requiresOptionIds: [],
-                          requires_option_ids: []
-                        }));
-                      }}
-                    />
-                    <span className="text-xs font-bold uppercase tracking-widest text-ink/40">Required Options</span>
-                  </label>
-                  <p className="text-[10px] text-ink/30 italic -mt-1">
-                    This option only becomes available after the player has picked every option checked here, in the same import. Check below to add prerequisites.
-                  </p>
-
-                  {required.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {required.map((rid) => {
-                        const other = otherOptions.find((o: any) => o.id === rid);
-                        return other ? (
-                          <span key={rid} className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gold/10 text-gold border border-gold/20 rounded">
-                            {other.name}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = required.filter((id) => id !== rid);
-                                setEditingItem((prev: any) => ({
-                                  ...(prev || {}),
-                                  requiresOptionIds: next,
-                                  requires_option_ids: next
-                                }));
-                              }}
-                              className="ml-0.5 text-gold/50 hover:text-gold leading-none"
-                            >×</button>
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-
-                  <div className="border border-gold/10 rounded-md bg-background/20 overflow-hidden">
-                    <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10">
-                      <Search className="w-3 h-3 text-ink/30 shrink-0" />
-                      <input
-                        type="text"
-                        placeholder="Search options…"
-                        value={requiredOptionSearch}
-                        onChange={e => setRequiredOptionSearch(e.target.value)}
-                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink"
+            {/* DESCRIPTION TAB — icon, name, markdown body. */}
+            {optionTab === 'description' && (
+              <div className="space-y-4">
+                <div className="flex gap-4 items-start">
+                  <div className="shrink-0 space-y-1">
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Icon</label>
+                    <div className="w-16 h-16">
+                      <ImageUpload
+                        storagePath="icons/features/"
+                        imageType="icon"
+                        compact
+                        currentImageUrl={editingItem?.iconUrl || ''}
+                        onUpload={(url) => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), iconUrl: url }))}
+                        className="w-full h-full"
                       />
-                      {requiredOptionSearch && (
-                        <button type="button" onClick={() => setRequiredOptionSearch('')} className="text-ink/30 hover:text-ink/60 text-sm leading-none">×</button>
-                      )}
-                    </div>
-                    <div className="max-h-36 overflow-y-auto divide-y divide-gold/5 custom-scrollbar">
-                      {otherOptions.length === 0 ? (
-                        <p className="px-3 py-3 text-[10px] text-ink/20 italic">No other options in this group yet.</p>
-                      ) : otherOptions
-                          .filter((other: any) => !requiredOptionSearch || (other.name || '').toLowerCase().includes(requiredOptionSearch.toLowerCase()))
-                          .map((other: any) => {
-                            // Store the row PK; the exporter remaps PK →
-                            // per-option sourceId before shipping so the
-                            // module sees stable "class-option-<slug>"
-                            // identifiers in `requiresOptionIds`.
-                            const otherId = other.id;
-                            const isSelected = required.includes(otherId);
-                            return (
-                              <label key={other.id} className="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-gold/5 transition-colors">
-                                <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${isSelected ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
-                                  {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  className="hidden"
-                                  checked={isSelected}
-                                  disabled={!otherId}
-                                  onChange={e => {
-                                    const next = new Set(required);
-                                    if (e.target.checked) next.add(otherId);
-                                    else next.delete(otherId);
-                                    setEditingItem((prev: any) => ({
-                                      ...(prev || {}),
-                                      requiresOptionIds: Array.from(next),
-                                      requires_option_ids: Array.from(next)
-                                    }));
-                                  }}
-                                />
-                                <span className="text-xs text-ink">{other.name || '(unnamed)'}</span>
-                              </label>
-                            );
-                          })}
-                      {otherOptions.length > 0 && requiredOptionSearch && otherOptions.filter((o: any) => (o.name || '').toLowerCase().includes(requiredOptionSearch.toLowerCase())).length === 0 && (
-                        <p className="px-3 py-3 text-[10px] text-ink/20 italic">No options match "{requiredOptionSearch}".</p>
-                      )}
                     </div>
                   </div>
+                  <div className="flex-1 space-y-1">
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Option Name</label>
+                    <Input
+                      value={editingItem?.name || ''}
+                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), name: e.target.value }))}
+                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      placeholder="e.g. Agonizing Blast"
+                      required={!!editingItem}
+                      autoFocus
+                    />
+                  </div>
                 </div>
-              );
-            })()}
+                <MarkdownEditor
+                  textareaRef={itemDescRef}
+                  value={editingItem?.description || ''}
+                  onChange={(val) => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), description: val }))}
+                  placeholder="Enter the full text of the feature..."
+                  minHeight="240px"
+                  className="italic"
+                  label="Description"
+                />
+              </div>
+            )}
 
-            {/* Description */}
-            <MarkdownEditor
-              textareaRef={itemDescRef}
-              value={editingItem?.description || ''}
-              onChange={(val) => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), description: val }))}
-              placeholder="Enter the full text of the feature..."
-              minHeight="120px"
-              className="italic"
-              label="Description"
-            />
+            {/* DETAILS TAB — feature classification, requirements,
+                prerequisites, class restrictions. */}
+            {optionTab === 'details' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</label>
+                    <select
+                      value={editingItem?.source_id || editingItem?.sourceId || ''}
+                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), source_id: e.target.value }))}
+                      className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                    >
+                      <option value="">Same as Group</option>
+                      {sources.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Page Reference</label>
+                    <Input
+                      value={editingItem?.page || ''}
+                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), page: e.target.value }))}
+                      placeholder="e.g. 155"
+                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    {/* Feature Type — drives dnd5e's `system.type.subtype`
+                        on the embedded item. Free-form text rather than a
+                        fixed dropdown because dnd5e accepts any subtype
+                        string and ships canonical labels in en.json. */}
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Feature Type</label>
+                    <Input
+                      value={editingItem?.featureType || editingItem?.feature_type || ''}
+                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), featureType: e.target.value, feature_type: e.target.value }))}
+                      placeholder="e.g. Maneuver, EldritchInvocation, Infusion"
+                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Subtype</label>
+                    <Input
+                      value={editingItem?.subtype || ''}
+                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), subtype: e.target.value }))}
+                      placeholder="optional secondary tag"
+                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Requirements</label>
+                    <Input
+                      value={editingItem?.requirements || ''}
+                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), requirements: e.target.value }))}
+                      placeholder="Free-text requirement summary (e.g. 'Pact of the Blade')"
+                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                    />
+                  </div>
+                </div>
+
+                {/* Prerequisites: level + Required Options + string. */}
+                <div className="space-y-3 pt-2 border-t border-gold/10">
+                  <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Prerequisites</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Level Prerequisite</label>
+                      <Input
+                        type="number"
+                        value={editingItem?.level_prerequisite || editingItem?.levelPrerequisite || 0}
+                        onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), level_prerequisite: parseInt(e.target.value) || 0 }))}
+                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase tracking-widest text-ink/40">String Prerequisite</label>
+                      <Input
+                        value={editingItem?.string_prerequisite || editingItem?.stringPrerequisite || ''}
+                        onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), string_prerequisite: e.target.value }))}
+                        placeholder="e.g. Eldritch Blast cantrip"
+                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Required Options — gated by a master checkbox; rendered
+                      via EntityPicker so it stays visually consistent with
+                      Class Restrictions and the spell-list filters. */}
+                  {(() => {
+                    const required: string[] = Array.isArray(editingItem?.requiresOptionIds)
+                      ? editingItem.requiresOptionIds
+                      : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []);
+                    const otherOptions = items.filter((other: any) => other.id !== editingItem?.id);
+                    const hasRequiredOptions = required.length > 0;
+                    return (
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${hasRequiredOptions ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
+                            {hasRequiredOptions && <Check className="w-2.5 h-2.5 text-white" />}
+                          </div>
+                          <input
+                            type="checkbox"
+                            className="hidden"
+                            checked={hasRequiredOptions}
+                            onChange={e => {
+                              if (e.target.checked) return;
+                              setEditingItem((prev: any) => ({
+                                ...(prev || {}),
+                                requiresOptionIds: [],
+                                requires_option_ids: []
+                              }));
+                            }}
+                          />
+                          <span className="text-xs font-bold uppercase tracking-widest text-ink/40">Required Options</span>
+                        </label>
+                        <p className="text-[10px] text-ink/30 italic -mt-1">
+                          This option only becomes available after the player has picked every option checked here, in the same import.
+                        </p>
+                        <EntityPicker
+                          entities={otherOptions.map((o: any) => ({ id: o.id, name: o.name || '(unnamed)' }))}
+                          selectedIds={required}
+                          onChange={(next) => setEditingItem((prev: any) => ({
+                            ...(prev || {}),
+                            requiresOptionIds: next,
+                            requires_option_ids: next
+                          }))}
+                          searchPlaceholder="Search options…"
+                          noEntitiesText="No other options in this group yet."
+                        />
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-gold/10">
+                  <input
+                    type="checkbox"
+                    id="isRepeatable"
+                    checked={!!(editingItem?.is_repeatable || editingItem?.isRepeatable)}
+                    onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: 0, class_ids: [] }), is_repeatable: e.target.checked ? 1 : 0 }))}
+                    className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                  />
+                  <label htmlFor="isRepeatable" className="text-xs text-ink/40 uppercase font-bold cursor-pointer">
+                    Repeatable
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* ACTIVITIES TAB — same editor used by class features. */}
+            {optionTab === 'activities' && (
+              <div className="pt-2">
+                <ActivityEditor
+                  activities={editingItem?.activities || []}
+                  onChange={(acts) => setEditingItem((prev: any) => ({ ...(prev || {}), activities: acts }))}
+                  availableEffects={editingItem?.effects || []}
+                />
+              </div>
+            )}
+
+            {/* EFFECTS TAB — Active Effects (mostly used by Invocations and
+                Infusions which apply passive modifiers). */}
+            {optionTab === 'effects' && (
+              <div className="pt-2">
+                <ActiveEffectEditor
+                  effects={editingItem?.effects || []}
+                  onChange={(fx) => setEditingItem((prev: any) => ({ ...(prev || {}), effects: fx }))}
+                />
+              </div>
+            )}
+
+            {/* ADVANCEMENT TAB — option items can have their own
+                advancements per dnd5e (rare, but used by Invocations that
+                grant spells via ItemGrant). Full editor, not the
+                feature-link variant — the option item is its own document. */}
+            {optionTab === 'advancement' && (
+              <div className="pt-2">
+                <AdvancementManager
+                  advancements={editingItem?.advancements || []}
+                  onChange={(advs) => setEditingItem((prev: any) => ({ ...(prev || {}), advancements: advs }))}
+                  availableFeatures={[]}
+                  availableScalingColumns={[]}
+                  availableOptionGroups={[]}
+                />
+              </div>
+            )}
 
             <DialogFooter className="dialog-footer pt-2">
               <Button
