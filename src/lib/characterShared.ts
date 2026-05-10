@@ -4,13 +4,28 @@
  */
 import { denormalizeClassRow, denormalizeSubclassRow } from "./classExport";
 
+function parseLoadoutMembership(raw: any): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export function rebuildCharacterFromSql(
   baseRow: any,
   progressionRows: any[] = [],
   selectionRows: any[] = [],
   inventoryRows: any[] = [],
   spellRows: any[] = [],
-  proficiencyRows: any[] = []
+  proficiencyRows: any[] = [],
+  spellListExtensionRows: any[] = [],
+  spellLoadoutRows: any[] = []
 ) {
   if (!baseRow) return null;
 
@@ -85,8 +100,37 @@ export function rebuildCharacterFromSql(
     id: row.spell_id,
     sourceId: row.source_id || null,
     isPrepared: row.is_prepared === 1,
-    isAlwaysPrepared: row.is_always_prepared === 1
+    isAlwaysPrepared: row.is_always_prepared === 1,
+    grantedByType: row.granted_by_type || null,
+    grantedById: row.granted_by_id || null,
+    grantedByAdvancementId: row.granted_by_advancement_id || null,
+    countsAsClassId: row.counts_as_class_id || null,
+    doesntCountAgainstPrepared: row.doesnt_count_against_prepared === 1,
+    doesntCountAgainstKnown: row.doesnt_count_against_known === 1,
+    isFavourite: row.is_favourite === 1,
+    isWatchlist: row.is_watchlist === 1,
+    watchlistNote: row.watchlist_note || '',
+    loadoutMembership: parseLoadoutMembership(row.loadout_membership),
   }));
+
+  const spellListExtensions = (spellListExtensionRows || []).map(row => ({
+    classId: row.class_id,
+    spellId: row.spell_id,
+    grantedByType: row.granted_by_type || null,
+    grantedById: row.granted_by_id || null,
+    grantedByAdvancementId: row.granted_by_advancement_id || null,
+  }));
+
+  const spellLoadouts = (spellLoadoutRows || [])
+    .slice()
+    .sort((a, b) => (Number(a.sort_order || 0) - Number(b.sort_order || 0)))
+    .map(row => ({
+      id: row.id,
+      name: row.name || '',
+      size: Number(row.size || 0),
+      isActive: row.is_active === 1,
+      sortOrder: Number(row.sort_order || 0),
+    }));
 
   // Build the final character object
   return {
@@ -125,7 +169,9 @@ export function rebuildCharacterFromSql(
     progression,
     progressionState: {
       ownedItems,
-      ownedSpells
+      ownedSpells,
+      spellListExtensions,
+      spellLoadouts
       // classPackages are built on demand in UI/Export from progression and selectedOptions
     },
     updatedAt: baseRow.updated_at,
@@ -204,6 +250,8 @@ export function generateCharacterSaveQueries(id: string, character: any) {
   queries.push({ sql: "DELETE FROM character_selections WHERE character_id = ?", params: [id] });
   queries.push({ sql: "DELETE FROM character_inventory WHERE character_id = ?", params: [id] });
   queries.push({ sql: "DELETE FROM character_spells WHERE character_id = ?", params: [id] });
+  queries.push({ sql: "DELETE FROM character_spell_list_extensions WHERE character_id = ?", params: [id] });
+  queries.push({ sql: "DELETE FROM character_spell_loadouts WHERE character_id = ?", params: [id] });
   queries.push({ sql: "DELETE FROM character_proficiencies WHERE character_id = ?", params: [id] });
 
   // 2. Progression
@@ -244,8 +292,68 @@ export function generateCharacterSaveQueries(id: string, character: any) {
   });
   (ps.ownedSpells || []).forEach((spell: any, idx: number) => {
     queries.push({
-      sql: "INSERT INTO character_spells (id, character_id, spell_id, source_id, is_prepared, is_always_prepared) VALUES (?, ?, ?, ?, ?, ?)",
-      params: [`${id}_sp_${idx}`, id, spell.id || spell.entityId, spell.sourceId || null, spell.isPrepared ? 1 : 0, spell.isAlwaysPrepared ? 1 : 0]
+      sql: `INSERT INTO character_spells (
+        id, character_id, spell_id, source_id, is_prepared, is_always_prepared,
+        granted_by_type, granted_by_id, granted_by_advancement_id,
+        counts_as_class_id, doesnt_count_against_prepared, doesnt_count_against_known,
+        is_favourite, is_watchlist, watchlist_note, loadout_membership
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      params: [
+        `${id}_sp_${idx}`,
+        id,
+        spell.id || spell.entityId,
+        spell.sourceId || null,
+        spell.isPrepared ? 1 : 0,
+        spell.isAlwaysPrepared ? 1 : 0,
+        spell.grantedByType || null,
+        spell.grantedById || null,
+        spell.grantedByAdvancementId || null,
+        spell.countsAsClassId || null,
+        spell.doesntCountAgainstPrepared ? 1 : 0,
+        spell.doesntCountAgainstKnown ? 1 : 0,
+        spell.isFavourite ? 1 : 0,
+        spell.isWatchlist ? 1 : 0,
+        spell.watchlistNote || null,
+        JSON.stringify(Array.isArray(spell.loadoutMembership) ? spell.loadoutMembership : []),
+      ]
+    });
+  });
+  (ps.spellLoadouts || []).forEach((loadout: any, idx: number) => {
+    if (!loadout?.id || !loadout?.name) return;
+    queries.push({
+      sql: `INSERT INTO character_spell_loadouts (
+        id, character_id, name, size, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+      params: [
+        loadout.id,
+        id,
+        loadout.name,
+        Number(loadout.size || 0) || 0,
+        loadout.isActive ? 1 : 0,
+        Number(loadout.sortOrder ?? idx) || idx,
+      ]
+    });
+  });
+  (ps.spellListExtensions || []).forEach((ext: any, idx: number) => {
+    if (!ext?.classId || !ext?.spellId) return;
+    queries.push({
+      sql: `INSERT INTO character_spell_list_extensions (
+        id, character_id, class_id, spell_id,
+        granted_by_type, granted_by_id, granted_by_advancement_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(character_id, class_id, spell_id) DO UPDATE SET
+        granted_by_type = excluded.granted_by_type,
+        granted_by_id = excluded.granted_by_id,
+        granted_by_advancement_id = excluded.granted_by_advancement_id`,
+      params: [
+        `${id}_ext_${idx}`,
+        id,
+        ext.classId,
+        ext.spellId,
+        ext.grantedByType || null,
+        ext.grantedById || null,
+        ext.grantedByAdvancementId || null,
+      ]
     });
   });
 
@@ -285,13 +393,15 @@ export async function buildCharacterExport(
   characterId: string,
   queryFn: <T>(sql: string, params?: any[]) => Promise<T[]>
 ) {
-  const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows] = await Promise.all([
+  const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows, extensionRows, loadoutRows] = await Promise.all([
     queryFn<any>("SELECT * FROM characters WHERE id = ?", [characterId]),
     queryFn<any>("SELECT * FROM character_progression WHERE character_id = ? ORDER BY level_index ASC", [characterId]),
     queryFn<any>("SELECT * FROM character_selections WHERE character_id = ?", [characterId]),
     queryFn<any>("SELECT * FROM character_inventory WHERE character_id = ?", [characterId]),
     queryFn<any>("SELECT * FROM character_spells WHERE character_id = ?", [characterId]),
-    queryFn<any>("SELECT * FROM character_proficiencies WHERE character_id = ?", [characterId])
+    queryFn<any>("SELECT * FROM character_proficiencies WHERE character_id = ?", [characterId]),
+    queryFn<any>("SELECT * FROM character_spell_list_extensions WHERE character_id = ?", [characterId]),
+    queryFn<any>("SELECT * FROM character_spell_loadouts WHERE character_id = ?", [characterId])
   ]);
 
   if (!baseRows || baseRows.length === 0) return null;
@@ -302,7 +412,9 @@ export async function buildCharacterExport(
     selectionRows,
     inventoryRows,
     spellRows,
-    proficiencyRows
+    proficiencyRows,
+    extensionRows,
+    loadoutRows
   );
 
   if (!charData) return null;

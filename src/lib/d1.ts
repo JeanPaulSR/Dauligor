@@ -12,15 +12,19 @@ const SESSION_CACHE_PREFIX = 'dauligor_cache_';
 
 // Tables that are safe to persist in sessionStorage (mostly static)
 const PERSISTENT_TABLES = [
-  'eras', 'sources', 'skills', 'tools', 'weapons', 'armor', 
+  'eras', 'sources', 'skills', 'tools', 'weapons', 'armor',
   'languages', 'damage_types', 'status_conditions', 'attributes',
   'tag_groups', 'tags', 'scaling_columns', 'weapon_properties',
-  'armor_categories', 'weapon_categories', 'tool_categories', 
+  'armor_categories', 'weapon_categories', 'tool_categories',
   'language_categories', 'condition_categories',
-  'lore_articles', 'lore_meta_characters', 'lore_meta_locations', 
+  'lore_articles', 'lore_meta_characters', 'lore_meta_locations',
   'lore_meta_organizations', 'lore_meta_deities', 'lore_secrets',
   'lore_article_eras', 'lore_article_campaigns', 'lore_article_tags', 'lore_links',
-  'lore_secret_eras', 'lore_secret_campaigns', 'campaigns', 'items', 'feats'
+  'lore_secret_eras', 'lore_secret_campaigns', 'campaigns', 'items', 'feats',
+  // Spell catalogue is read-heavy across multiple pages; the long session cache
+  // matters as the catalogue grows (~5000 spells planned).
+  // (claude/kind-maxwell-bfa076 — Spellbook Manager.)
+  'spells'
 ];
 
 export function clearCache(tableName?: string) {

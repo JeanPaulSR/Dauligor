@@ -2444,7 +2444,17 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       <span className="text-[10px] font-bold uppercase tracking-widest text-ink/40">Enable Spellcasting</span>
                     </label>
                   </div>
-                  <Wand2 className="w-4 h-4 text-gold/40" />
+                  <div className="flex items-center gap-3">
+                    {id ? (
+                      <Link
+                        to={`/compendium/spell-lists?class=${id}`}
+                        className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
+                      >
+                        Manage Spell List →
+                      </Link>
+                    ) : null}
+                    <Wand2 className="w-4 h-4 text-gold/40" />
+                  </div>
                 </div>
 
                 {spellcasting.hasSpellcasting && (

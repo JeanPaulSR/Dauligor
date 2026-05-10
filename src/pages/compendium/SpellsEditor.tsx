@@ -11,6 +11,7 @@ import { fetchCollection } from '../../lib/d1';
 import { slugify } from '../../lib/utils';
 import { Database, CloudOff } from 'lucide-react';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
+import { parseFoundrySystem as parseFoundrySystemForEditor } from '../../lib/spellFilters';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -66,10 +67,52 @@ type SpellFormData = {
     consumed: boolean;
     cost: string;
   };
+  // Foundry system shape — carry these on the form so they can be authored manually,
+  // not just inherited from a Foundry import. On save they are merged into foundry_data.
+  activation: { type: string; value: number | string; condition: string };
+  range: { value: number | string; units: string; special: string };
+  duration: { value: number | string; units: string };
+  // Descriptive tags — what classifies the spell (e.g. "fire", "divine",
+  // "necrotic"). Spell rules + class spell list rules query against these.
+  // Stored on the spells.tags JSON column.
+  tags: string[];
+  // Prerequisites — character-level gates. requiredTags is checked against the
+  // character's effective tag set. prerequisiteText is a free-text fallback for
+  // prereqs that don't fit cleanly as a tag check.
+  requiredTags: string[];
+  prerequisiteText: string;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
 };
+
+const ACTIVATION_TYPES: [string, string][] = [
+  ['action', 'Action'],
+  ['bonus', 'Bonus Action'],
+  ['reaction', 'Reaction'],
+  ['minute', 'Minute(s)'],
+  ['hour', 'Hour(s)'],
+  ['special', 'Special'],
+];
+
+const RANGE_UNITS: [string, string][] = [
+  ['self', 'Self'],
+  ['touch', 'Touch'],
+  ['ft', 'Feet'],
+  ['mi', 'Miles'],
+  ['spec', 'Special'],
+  ['any', 'Unlimited'],
+];
+
+const DURATION_UNITS: [string, string][] = [
+  ['inst', 'Instantaneous'],
+  ['round', 'Round(s)'],
+  ['minute', 'Minute(s)'],
+  ['hour', 'Hour(s)'],
+  ['day', 'Day(s)'],
+  ['perm', 'Permanent'],
+  ['spec', 'Special'],
+];
 
 const SPELL_DEFAULTS: Omit<SpellFormData, 'sourceId'> & { sourceId?: string } = {
   name: '',
@@ -91,8 +134,27 @@ const SPELL_DEFAULTS: Omit<SpellFormData, 'sourceId'> & { sourceId?: string } = 
     materialText: '',
     consumed: false,
     cost: ''
-  }
+  },
+  activation: { type: 'action', value: 1, condition: '' },
+  range: { value: 0, units: 'self', special: '' },
+  duration: { value: 0, units: 'inst' },
+  tags: [],
+  requiredTags: [],
+  prerequisiteText: '',
 };
+
+function parseStringArray(raw: any): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 function makeInitialSpellForm(sources: any[] = []): SpellFormData {
   return {
@@ -155,6 +217,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [entries, setEntries] = useState<any[]>([]);
   const [spellDetailsById, setSpellDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
+  const [tags, setTags] = useState<{ id: string; name: string; groupId: string | null }[]>([]);
+  const [tagGroups, setTagGroups] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [purging, setPurging] = useState(false);
@@ -203,6 +267,24 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     };
 
     loadSources();
+
+    // Load tags + tag groups for the prerequisites picker. Spell-classified groups
+    // are the ones that semantically apply to spells; restricting the picker keeps
+    // it from being polluted by class-only or lore-only tag groups.
+    const loadTagFoundation = async () => {
+      try {
+        const [tagData, groupData] = await Promise.all([
+          fetchCollection<any>('tags', { orderBy: 'name ASC' }),
+          fetchCollection<any>('tagGroups', { where: "classifications LIKE '%spell%'" }),
+        ]);
+        setTags(tagData.map((t: any) => ({ id: t.id, name: t.name || '', groupId: t.group_id || t.groupId || null })));
+        setTagGroups(groupData.map((g: any) => ({ id: g.id, name: g.name || 'Tags' })));
+      } catch (err) {
+        console.error("[SpellsEditor] Error loading tag foundation:", err);
+      }
+    };
+
+    loadTagFoundation();
   }, [isAdmin]);
 
   useEffect(() => {
@@ -236,8 +318,10 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     if (!editingId) return;
     if (spellDetailsById[editingId]) {
       const entry = spellDetailsById[editingId];
+      const system = parseFoundrySystemForEditor(entry.foundry_data ?? entry.foundryData);
+      const defaults = makeInitialSpellForm(sources);
       setFormData({
-        ...makeInitialSpellForm(sources),
+        ...defaults,
         ...entry,
         id: entry.id,
         sourceId: entry.sourceId || sources[0]?.id || '',
@@ -259,7 +343,24 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           materialText: entry.components?.materialText || '',
           consumed: !!entry.components?.consumed,
           cost: entry.components?.cost || ''
-        }
+        },
+        activation: {
+          type: String(system?.activation?.type ?? defaults.activation.type),
+          value: system?.activation?.value ?? defaults.activation.value,
+          condition: String(system?.activation?.condition ?? ''),
+        },
+        range: {
+          value: system?.range?.value ?? defaults.range.value,
+          units: String(system?.range?.units ?? defaults.range.units),
+          special: String(system?.range?.special ?? ''),
+        },
+        duration: {
+          value: system?.duration?.value ?? defaults.duration.value,
+          units: String(system?.duration?.units ?? defaults.duration.units),
+        },
+        tags: parseStringArray(entry.tags ?? entry.tagIds),
+        requiredTags: parseStringArray(entry.requiredTags ?? entry.required_tags),
+        prerequisiteText: String(entry.prerequisiteText ?? entry.prerequisite_text ?? ''),
       });
       return;
     }
@@ -313,6 +414,19 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
     setSaving(true);
     try {
+      // Merge new casting/range/duration values into the existing foundry_data system
+      // object so we don't clobber other Foundry-only fields (target, materials, etc.)
+      // when an imported spell is edited from the manual form.
+      const existingSystem = editingId
+        ? (parseFoundrySystemForEditor(spellDetailsById[editingId]?.foundry_data ?? spellDetailsById[editingId]?.foundryData) || {})
+        : {};
+      const mergedFoundryData = {
+        ...existingSystem,
+        activation: { ...(existingSystem.activation || {}), ...formData.activation },
+        range: { ...(existingSystem.range || {}), ...formData.range },
+        duration: { ...(existingSystem.duration || {}), ...formData.duration },
+      };
+
       const payload: Record<string, any> = {
         ...formData,
         identifier: formData.identifier.trim() || slugify(formData.name),
@@ -327,12 +441,17 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         sourceType: 'spell',
         type: 'spell',
         level: Number(formData.level || 0),
-        preparationMode: formData.preparationMode || 'spell'
+        preparationMode: formData.preparationMode || 'spell',
+        foundry_data: mergedFoundryData,
       };
 
       delete payload.id;
       delete payload.activities;
       delete payload.effectsStr;
+      // These live in foundry_data, not as top-level columns on the spells table.
+      delete payload.activation;
+      delete payload.range;
+      delete payload.duration;
 
       Object.keys(payload).forEach((key) => {
         if (payload[key] === undefined) delete payload[key];
@@ -676,6 +795,91 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     />
 
                     <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Casting · Range · Duration</h3>
+                      <div className="grid gap-4 lg:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Casting Time</Label>
+                          <div className="grid grid-cols-[1fr_70px] gap-2">
+                            <select
+                              value={formData.activation.type || 'action'}
+                              onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, type: e.target.value } }))}
+                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                            >
+                              {ACTIVATION_TYPES.map(([value, label]) => (
+                                <option key={value} value={value}>{label}</option>
+                              ))}
+                            </select>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={String(formData.activation.value ?? '')}
+                              onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                              className="h-9 bg-background/50 border-gold/10 focus:border-gold"
+                            />
+                          </div>
+                          <Input
+                            value={formData.activation.condition || ''}
+                            onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, condition: e.target.value } }))}
+                            placeholder="Reaction trigger (optional)"
+                            className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Range</Label>
+                          <div className="grid grid-cols-[1fr_70px] gap-2">
+                            <select
+                              value={formData.range.units || 'self'}
+                              onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, units: e.target.value } }))}
+                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                            >
+                              {RANGE_UNITS.map(([value, label]) => (
+                                <option key={value} value={value}>{label}</option>
+                              ))}
+                            </select>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={String(formData.range.value ?? '')}
+                              onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                              disabled={formData.range.units === 'self' || formData.range.units === 'touch'}
+                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50"
+                            />
+                          </div>
+                          <Input
+                            value={formData.range.special || ''}
+                            onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, special: e.target.value } }))}
+                            placeholder='e.g. "Sight" (optional)'
+                            className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Duration</Label>
+                          <div className="grid grid-cols-[1fr_70px] gap-2">
+                            <select
+                              value={formData.duration.units || 'inst'}
+                              onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, units: e.target.value } }))}
+                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                            >
+                              {DURATION_UNITS.map(([value, label]) => (
+                                <option key={value} value={value}>{label}</option>
+                              ))}
+                            </select>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={String(formData.duration.value ?? '')}
+                              onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                              disabled={formData.duration.units === 'inst' || formData.duration.units === 'perm' || formData.duration.units === 'spec'}
+                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
                       <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Foundry Spell Shell</h3>
                       <div className="grid md:grid-cols-2 gap-4">
                         <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
@@ -768,6 +972,126 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </div>
                         <p className="text-[10px] text-ink/40">
                           Spell metadata should stay lightweight here. Runtime behavior should live in native-style activities below.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                      <div className="flex items-baseline justify-between">
+                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tags</h3>
+                        <span className="text-[10px] text-ink/40">Descriptive · what spell rules query against (e.g. "fire", "divine").</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {tags.length === 0 ? (
+                          <p className="text-xs text-ink/40 italic">No tags loaded yet.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {tagGroups.map(group => {
+                              const groupTags = tags.filter(t => t.groupId === group.id);
+                              if (groupTags.length === 0) return null;
+                              return (
+                                <div key={`desc-${group.id}`} className="space-y-1.5">
+                                  <span className="text-[10px] uppercase tracking-widest text-ink/50">{group.name}</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {groupTags.map(tag => {
+                                      const active = formData.tags.includes(tag.id);
+                                      return (
+                                        <button
+                                          key={tag.id}
+                                          type="button"
+                                          onClick={() => setFormData(prev => ({
+                                            ...prev,
+                                            tags: active
+                                              ? prev.tags.filter(id => id !== tag.id)
+                                              : [...prev.tags, tag.id],
+                                          }))}
+                                          className={cn(
+                                            'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
+                                            active
+                                              ? 'border-gold/60 bg-gold/15 text-gold'
+                                              : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80'
+                                          )}
+                                        >
+                                          {tag.name}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <p className="text-[10px] text-ink/40">
+                          Tag rules + class spell list rules use these to decide which spells they include.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                      <div className="flex items-baseline justify-between">
+                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Prerequisites</h3>
+                        <span className="text-[10px] text-ink/40">Character-level gates · evaluated at the player's spellbook, not at the class master list.</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Required Tags</Label>
+                        {tags.length === 0 ? (
+                          <p className="text-xs text-ink/40 italic">No tags loaded yet.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {tagGroups.map(group => {
+                              const groupTags = tags.filter(t => t.groupId === group.id);
+                              if (groupTags.length === 0) return null;
+                              return (
+                                <div key={group.id} className="space-y-1.5">
+                                  <span className="text-[10px] uppercase tracking-widest text-ink/50">{group.name}</span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {groupTags.map(tag => {
+                                      const active = formData.requiredTags.includes(tag.id);
+                                      return (
+                                        <button
+                                          key={tag.id}
+                                          type="button"
+                                          onClick={() => setFormData(prev => ({
+                                            ...prev,
+                                            requiredTags: active
+                                              ? prev.requiredTags.filter(id => id !== tag.id)
+                                              : [...prev.requiredTags, tag.id],
+                                          }))}
+                                          className={cn(
+                                            'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
+                                            active
+                                              ? 'border-gold/60 bg-gold/15 text-gold'
+                                              : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80'
+                                          )}
+                                        >
+                                          {tag.name}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <p className="text-[10px] text-ink/40">
+                          A character must have all selected tags on their effective tag set to use this spell.
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
+                        <Input
+                          value={formData.prerequisiteText}
+                          onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
+                          placeholder='e.g. "Must have cast Detect Magic in the past hour"'
+                          className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+                        />
+                        <p className="text-[10px] text-ink/40">
+                          Free-text fallback for prerequisites that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
                         </p>
                       </div>
                     </div>

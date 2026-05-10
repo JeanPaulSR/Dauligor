@@ -89,7 +89,13 @@ commit, or ask the user to coordinate.
 | Branch | Owns |
 |---|---|
 | `claude/pedantic-antonelli-ce1c7f` | Class importer + advancement system + option groups + class export pipeline (`module/dauligor-pairing/**`, `api/_lib/_classExport.ts`, `src/lib/classExport.ts`, `src/lib/advancementState.ts`, `src/components/compendium/AdvancementManager.tsx`, `src/pages/compendium/UniqueOptionGroup*.tsx`). Other branches may make small **additive, commented** edits to `AdvancementManager.tsx` and `advancementState.ts` to register new advancement types — keep them on the contributing branch through merge rather than relaying via main. |
-| `claude/kind-maxwell-bfa076` | Spell list manager + spell rules + spellbook authoring (`src/pages/compendium/SpellList*.tsx`, `src/pages/compendium/SpellRules*.tsx`, `src/components/compendium/Spell*.tsx`, `src/lib/spell*.ts`, `src/hooks/useSpellFilters.ts`, `src/lib/classSpellLists.ts`, new `EntityPicker.tsx`) |
+| `claude/kind-maxwell-bfa076` | Spell list manager + spell rules + spellbook authoring (`src/pages/compendium/SpellList*.tsx`, `src/pages/compendium/SpellRules*.tsx`, `src/components/compendium/Spell*.tsx`, `src/lib/spell*.ts`, `src/lib/characterTags.ts`, `src/hooks/useSpellFilters.ts`, `src/lib/classSpellLists.ts`, new `EntityPicker.tsx`) |
+
+> **2026-05-09 — handoff for `claude/pedantic-antonelli-ce1c7f`.** Spellbook
+> Manager Layers 1–4 are feature-complete. The Foundry export round-trip is
+> the natural next step on your side. See
+> [docs/handoff-spellbook-to-importer.md](docs/handoff-spellbook-to-importer.md)
+> for the full schema diff, attribution-column semantics, and crosswalk hints.
 
 ### Shared utility files (append-only discipline)
 

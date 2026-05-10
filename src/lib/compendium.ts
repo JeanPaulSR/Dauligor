@@ -29,7 +29,17 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     isSubclassFeature: 'is_subclass_feature',
     iconUrl: 'icon_url',
     quantityColumnId: 'quantity_column_id',
-    scalingColumnId: 'scaling_column_id'
+    scalingColumnId: 'scaling_column_id',
+    // spell prerequisites + Layer-2 GrantSpells/ExtendSpellList source attribution
+    // (claude/kind-maxwell-bfa076 — Spellbook Manager).
+    requiredTags: 'required_tags',
+    prerequisiteText: 'prerequisite_text',
+    grantedByType: 'granted_by_type',
+    grantedById: 'granted_by_id',
+    grantedByAdvancementId: 'granted_by_advancement_id',
+    countsAsClassId: 'counts_as_class_id',
+    doesntCountAgainstPrepared: 'doesnt_count_against_prepared',
+    doesntCountAgainstKnown: 'doesnt_count_against_known'
   };
 
   const normalized: Record<string, any> = {};
@@ -212,7 +222,17 @@ export function denormalizeCompendiumData(row: any): any {
     string_prerequisite: 'stringPrerequisite',
     is_repeatable: 'isRepeatable',
     class_ids: 'classIds',
-    requires_option_ids: 'requiresOptionIds'
+    requires_option_ids: 'requiresOptionIds',
+    // spell prerequisites + Layer-2 GrantSpells/ExtendSpellList source attribution
+    // (claude/kind-maxwell-bfa076 — Spellbook Manager).
+    required_tags: 'requiredTags',
+    prerequisite_text: 'prerequisiteText',
+    granted_by_type: 'grantedByType',
+    granted_by_id: 'grantedById',
+    granted_by_advancement_id: 'grantedByAdvancementId',
+    counts_as_class_id: 'countsAsClassId',
+    doesnt_count_against_prepared: 'doesntCountAgainstPrepared',
+    doesnt_count_against_known: 'doesntCountAgainstKnown'
   };
 
   const denormalized: any = { ...row };

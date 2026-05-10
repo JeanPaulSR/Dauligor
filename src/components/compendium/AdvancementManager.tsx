@@ -16,6 +16,9 @@ import {
   normalizeAdvancementForEditor,
   resolveAdvancementDefaultHitDie
 } from '../../lib/advancementState';
+// Layer-2 spell-grant editors live in their own file so this one doesn't grow.
+// Owned by claude/kind-maxwell-bfa076 (Spellbook Manager).
+import { GrantSpellsConfigEditor, ExtendSpellListConfigEditor } from './SpellAdvancementEditors';
 
 export type AdvancementType =
   | 'AbilityScoreImprovement'
@@ -25,7 +28,11 @@ export type AdvancementType =
   | 'ScaleValue'
   | 'Size'
   | 'Trait'
-  | 'Subclass';
+  | 'Subclass'
+  // Layer-2 spell grants — added by claude/kind-maxwell-bfa076 (Spellbook Manager).
+  // Editor blocks live in ./SpellAdvancementEditors.tsx; resolver runs in CharacterBuilder.
+  | 'GrantSpells'
+  | 'ExtendSpellList';
 
 export interface Advancement {
   _id: string;
@@ -79,6 +86,8 @@ const ADVANCEMENT_INFO: Record<AdvancementType, { label: string, icon: any, colo
   Size: { label: 'Size', icon: <Settings className="w-4 h-4" />, color: 'text-slate-500' },
   Trait: { label: 'Trait (Proficiency)', icon: <Sword className="w-4 h-4" />, color: 'text-orange-500' },
   Subclass: { label: 'Choose Subclass', icon: <Star className="w-4 h-4" />, color: 'text-purple-500' },
+  GrantSpells: { label: 'Grant Spells', icon: <BookOpen className="w-4 h-4" />, color: 'text-emerald-500' },
+  ExtendSpellList: { label: 'Extend Spell List', icon: <BookOpen className="w-4 h-4" />, color: 'text-cyan-500' },
 };
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
@@ -2454,6 +2463,28 @@ export default function AdvancementManager({
                     </div>
                   </fieldset>
                 </div>
+              )}
+
+              {/* ── GrantSpells (Layer-2, Spellbook Manager) ── */}
+              {editingAdv.type === 'GrantSpells' && (
+                <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4">
+                  <legend className="section-label text-gold/60 px-1">Grant Spells</legend>
+                  <GrantSpellsConfigEditor
+                    configuration={editingAdv.configuration || {}}
+                    onChange={(next) => setEditingAdv({ ...editingAdv, configuration: next })}
+                  />
+                </fieldset>
+              )}
+
+              {/* ── ExtendSpellList (Layer-2, Spellbook Manager) ── */}
+              {editingAdv.type === 'ExtendSpellList' && (
+                <fieldset className="border border-gold/10 rounded-md px-4 pt-1 pb-4">
+                  <legend className="section-label text-gold/60 px-1">Extend Spell List</legend>
+                  <ExtendSpellListConfigEditor
+                    configuration={editingAdv.configuration || {}}
+                    onChange={(next) => setEditingAdv({ ...editingAdv, configuration: next })}
+                  />
+                </fieldset>
               )}
 
             </div>

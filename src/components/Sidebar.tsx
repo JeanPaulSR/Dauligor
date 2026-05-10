@@ -105,6 +105,8 @@ export default function Sidebar({
           ...(isAdmin ? [
             { label: 'Feats', path: '/compendium/feats' },
             { label: 'Items', path: '/compendium/items' },
+            { label: 'Spell Lists', path: '/compendium/spell-lists' },
+            { label: 'Spell Rules', path: '/compendium/spell-rules' },
           ] : []),
         ]
       },

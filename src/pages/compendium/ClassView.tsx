@@ -36,6 +36,11 @@ import {
   exportClassSemantic,
   slugify
 } from '../../lib/classExport';
+import { fetchClassSpellList, type ClassSpellListSummary } from '../../lib/classSpellLists';
+import { SCHOOL_LABELS } from '../../lib/spellImport';
+import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
+import SpellFilterShell from '../../components/compendium/SpellFilterShell';
+import { useSpellFilters } from '../../hooks/useSpellFilters';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { toast } from 'sonner';
 import { Database, CloudOff } from 'lucide-react';
@@ -80,8 +85,27 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [selectedOptionItems, setSelectedOptionItems] = useState<Record<string, string>>({});
   const [featureFilter, setFeatureFilter] = useState<'all' | 'class' | 'subclass'>('all');
   const [collapsedFeatures, setCollapsedFeatures] = useState<Record<string, boolean>>({});
+  const [classSpellList, setClassSpellList] = useState<ClassSpellListSummary[]>([]);
+  const [classSpellListLoading, setClassSpellListLoading] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin';
+
+  useEffect(() => {
+    if (!id) {
+      setClassSpellList([]);
+      return;
+    }
+    let active = true;
+    setClassSpellListLoading(true);
+    fetchClassSpellList(id)
+      .then(rows => { if (active) setClassSpellList(rows); })
+      .catch(err => {
+        console.error('[ClassView] Failed to load class spell list:', err);
+        if (active) setClassSpellList([]);
+      })
+      .finally(() => { if (active) setClassSpellListLoading(false); });
+    return () => { active = false; };
+  }, [id]);
 
   useEffect(() => {
     if (!selectedSubclassId) {
@@ -1163,10 +1187,12 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               {/* ── Spell List Tab ────────────────────────────────────── */}
               {classData.spellcasting?.hasSpellcasting && (
                 <TabsContent value="spells">
-                  <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/20 rounded-lg">
-                    <p className="font-bold uppercase tracking-widest text-gold/40 text-sm">Under Construction</p>
-                    <p className="text-ink/40 text-xs max-w-xs">Spell list display is not yet implemented.</p>
-                  </div>
+                  <ClassSpellListTab
+                    rows={classSpellList}
+                    loading={classSpellListLoading}
+                    isAdmin={isAdmin}
+                    classId={id || ''}
+                  />
                 </TabsContent>
               )}
 
@@ -1526,6 +1552,178 @@ function TraitItem({ label, value, icon: Icon }: { label: string, value: string,
       <div>
         <p className="font-bold text-ink/40 uppercase tracking-widest">{label}</p>
         <p className="text-ink/80 leading-tight">{value || 'None'}</p>
+      </div>
+    </div>
+  );
+}
+
+function ClassSpellListTab({
+  rows,
+  loading,
+  isAdmin,
+  classId,
+}: {
+  rows: ClassSpellListSummary[];
+  loading: boolean;
+  isAdmin: boolean;
+  classId: string;
+}) {
+  const filters = useSpellFilters();
+  const [previewSpellId, setPreviewSpellId] = useState<string | null>(null);
+  const [sources, setSources] = useState<{ id: string; name?: string; abbreviation?: string; shortName?: string }[]>([]);
+  const [tags, setTags] = useState<{ id: string; name: string; groupId: string | null }[]>([]);
+  const [tagGroups, setTagGroups] = useState<{ id: string; name: string }[]>([]);
+
+  // Foundation for the filter shell (sources + spell-classified tag groups).
+  // Cheap: all three are in the d1 PERSISTENT_TABLES so subsequent loads are free.
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      fetchCollection<any>('sources', { orderBy: 'name ASC' }),
+      fetchCollection<any>('tags', { orderBy: 'name ASC' }),
+      fetchCollection<any>('tagGroups', { where: "classifications LIKE '%spell%'" }),
+    ])
+      .then(([sourceData, tagData, groupData]) => {
+        if (!active) return;
+        setSources(sourceData);
+        setTags(tagData.map((t: any) => ({ id: t.id, name: t.name || '', groupId: t.group_id || t.groupId || null })));
+        setTagGroups(groupData.map((g: any) => ({ id: g.id, name: g.name || 'Tags' })));
+      })
+      .catch(err => console.error('[ClassSpellListTab] foundation load failed:', err));
+    return () => { active = false; };
+  }, []);
+
+  const tagsById = useMemo(
+    () => Object.fromEntries(tags.map(t => [t.id, { name: t.name }])) as Record<string, { name: string }>,
+    [tags],
+  );
+
+  const sourceById = useMemo(
+    () => Object.fromEntries(sources.map(s => [s.id, s])) as Record<string, { id: string; name?: string; abbreviation?: string; shortName?: string }>,
+    [sources],
+  );
+
+  const filteredEntries = useMemo(
+    () => filters.filter(rows, tagsById),
+    [filters, rows, tagsById],
+  );
+
+  const grouped = useMemo(() => {
+    const out: Record<string, typeof filteredEntries> = {};
+    for (const entry of filteredEntries) {
+      const key = String(entry.spell.level ?? 0);
+      (out[key] = out[key] || []).push(entry);
+    }
+    return out;
+  }, [filteredEntries]);
+
+  const orderedLevels = Object.keys(grouped).sort((a, b) => Number(a) - Number(b));
+
+  if (loading) {
+    return <div className="px-8 py-20 text-center text-ink/45">Loading spell list…</div>;
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center border border-dashed border-gold/20 rounded-lg">
+        <p className="font-bold uppercase tracking-widest text-gold/40 text-sm">No spells yet</p>
+        <p className="text-ink/40 text-xs max-w-xs">
+          This class doesn't have any spells on its master list.
+          {isAdmin && classId ? ' Use the Spell List Manager to add them.' : ''}
+        </p>
+        {isAdmin && classId ? (
+          <Link
+            to={`/compendium/spell-lists?class=${classId}`}
+            className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
+          >
+            Open Spell List Manager →
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-xs text-ink/50">
+          <span className="text-gold font-bold">{filteredEntries.length}</span>
+          {filteredEntries.length !== rows.length ? <> of <span className="text-gold/70">{rows.length}</span></> : null}
+          {' '}spell{rows.length === 1 ? '' : 's'} on this class's list
+        </p>
+        {isAdmin && classId ? (
+          <Link
+            to={`/compendium/spell-lists?class=${classId}`}
+            className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
+          >
+            Manage →
+          </Link>
+        ) : null}
+      </div>
+
+      <SpellFilterShell
+        filters={filters}
+        sources={sources}
+        tags={tags}
+        tagGroups={tagGroups}
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="space-y-6">
+          {filteredEntries.length === 0 ? (
+            <div className="px-8 py-20 text-center text-ink/45 border border-dashed border-gold/20 rounded-lg">
+              No spells match the current filters.
+            </div>
+          ) : (
+            orderedLevels.map(level => (
+              <div key={level} className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-bold uppercase tracking-[0.2em] text-gold text-xs shrink-0">
+                    {level === '0' ? 'Cantrips' : `Level ${level}`}
+                  </h3>
+                  <span className="text-[10px] text-ink/40">{grouped[level].length}</span>
+                  <div className="h-px bg-gold/10 flex-1" />
+                </div>
+                <div className="grid gap-y-1 grid-cols-1 md:grid-cols-2">
+                  {grouped[level].map(({ spell }) => {
+                    const isPreviewing = previewSpellId === spell.id;
+                    const sourceLabel = sourceById[spell.source_id || '']?.abbreviation
+                      || sourceById[spell.source_id || '']?.shortName
+                      || '';
+                    return (
+                      <button
+                        key={spell.id}
+                        type="button"
+                        onClick={() => setPreviewSpellId(spell.id)}
+                        className={
+                          'flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left transition-colors '
+                          + (isPreviewing ? 'bg-gold/15' : 'hover:bg-gold/5')
+                        }
+                      >
+                        <span className="text-ink truncate flex-1">{spell.name}</span>
+                        {sourceLabel ? (
+                          <span className="text-[10px] font-bold tracking-widest text-gold/60 shrink-0">{sourceLabel}</span>
+                        ) : null}
+                        <span className="text-[10px] uppercase tracking-widest text-ink/40 shrink-0">
+                          {SCHOOL_LABELS[spell.school || ''] || (spell.school || '').toUpperCase() || '—'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <Card className="border-gold/20 bg-card/50 overflow-hidden self-start">
+          <CardContent className="p-0">
+            <SpellDetailPanel
+              spellId={previewSpellId}
+              emptyMessage="Click a spell to preview its details here."
+            />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -1,26 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Wand2 } from 'lucide-react';
-import { bbcodeToHtml } from '../../lib/bbcode';
-import { fetchCollection, fetchDocument } from '../../lib/d1';
+import { Wand2, Lock } from 'lucide-react';
+import { fetchCollection } from '../../lib/d1';
 import { Database, CloudOff } from 'lucide-react';
-import {
-  formatActivationLabel,
-  formatComponentsLabel,
-  formatDurationLabel,
-  formatFoundrySpellDescriptionForDisplay,
-  formatRangeLabel,
-  formatTargetLabel,
-  SCHOOL_LABELS
-} from '../../lib/spellImport';
+import { SCHOOL_LABELS } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
-import { ScrollArea } from '../../components/ui/scroll-area';
 import { FilterBar } from '../../components/compendium/FilterBar';
-import SpellArtPreview from '../../components/compendium/SpellArtPreview';
+import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
-import { subscribeSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
+import { fetchSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
+import {
+  ACTIVATION_LABELS,
+  ACTIVATION_ORDER,
+  DURATION_LABELS,
+  DURATION_ORDER,
+  PROPERTY_LABELS,
+  PROPERTY_ORDER,
+  RANGE_LABELS,
+  RANGE_ORDER,
+  deriveSpellFilterFacets,
+  type ActivationBucket,
+  type DurationBucket,
+  type PropertyFilter,
+  type RangeBucket,
+} from '../../lib/spellFilters';
 
 type SourceRecord = {
   id: string;
@@ -82,19 +87,21 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedSpellId, setSelectedSpellId] = useState('');
-  const [spellDetailsById, setSpellDetailsById] = useState<Record<string, SpellRecord>>({});
-  const [loadingSelectedSpell, setLoadingSelectedSpell] = useState(false);
   const [sourceFilterIds, setSourceFilterIds] = useState<string[]>([]);
   const [levelFilters, setLevelFilters] = useState<string[]>([]);
   const [schoolFilters, setSchoolFilters] = useState<string[]>([]);
   const [tagFilterIds, setTagFilterIds] = useState<string[]>([]);
+  const [activationFilters, setActivationFilters] = useState<ActivationBucket[]>([]);
+  const [rangeFilters, setRangeFilters] = useState<RangeBucket[]>([]);
+  const [durationFilters, setDurationFilters] = useState<DurationBucket[]>([]);
+  const [propertyFilters, setPropertyFilters] = useState<PropertyFilter[]>([]);
   const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   useEffect(() => {
     const loadSpells = async () => {
       setLoadingSpells(true);
       try {
-        const records = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+        const records = await fetchSpellSummaries('name ASC');
         
         const mapped = records.map(row => ({
           ...row,
@@ -102,6 +109,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           imageUrl: row.image_url,
           tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags ?? []),
           foundryShell: typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : (row.foundry_data ?? null),
+          ...deriveSpellFilterFacets(row),
         }));
 
         setSpells(mapped);
@@ -150,7 +158,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     return map;
   }, [allTags]);
   const filteredSpells = useMemo(() => {
-    return spells.filter((spell) => {
+    return spells.filter((spell: any) => {
       const sourceRecord = sourceById[String(spell.sourceId ?? '')];
       const sourceAbbrev = String(sourceRecord?.abbreviation || sourceRecord?.shortName || spell.foundryImport?.sourceBook || '').trim();
       const spellTagIds = Array.isArray(spell.tagIds) ? spell.tagIds : [];
@@ -163,9 +171,13 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         && (sourceFilterIds.length === 0 || sourceFilterIds.includes(String(spell.sourceId ?? '')))
         && (levelFilters.length === 0 || levelFilters.includes(String(Number(spell.level ?? 0))))
         && (schoolFilters.length === 0 || schoolFilters.includes(String(spell.school ?? '')))
-        && (tagFilterIds.length === 0 || tagFilterIds.every((tagId) => spellTagIds.includes(tagId)));
+        && (tagFilterIds.length === 0 || tagFilterIds.every((tagId) => spellTagIds.includes(tagId)))
+        && (activationFilters.length === 0 || activationFilters.includes(spell.activationBucket))
+        && (rangeFilters.length === 0 || rangeFilters.includes(spell.rangeBucket))
+        && (durationFilters.length === 0 || durationFilters.includes(spell.durationBucket))
+        && (propertyFilters.length === 0 || propertyFilters.every((p) => spell[p]));
     });
-  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagFilterIds]);
+  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, propertyFilters]);
 
   useEffect(() => {
     if (!selectedSpellId) return;
@@ -174,46 +186,15 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     }
   }, [filteredSpells, selectedSpellId]);
 
-  const selectedSpellSummary = filteredSpells.find((spell) => spell.id === selectedSpellId) || null;
-  const selectedSpell = selectedSpellId ? (spellDetailsById[selectedSpellId] || null) : null;
-  const activeFilterCount = sourceFilterIds.length + levelFilters.length + schoolFilters.length + tagFilterIds.length;
-
-  useEffect(() => {
-    if (!selectedSpellId || spellDetailsById[selectedSpellId]) return;
-    let active = true;
-    const loadDetails = async () => {
-      try {
-        const data = await fetchDocument<any>('spells', selectedSpellId);
-
-        if (!active || !data) return;
-
-        const mapped = {
-          ...data,
-          sourceId: data.source_id,
-          imageUrl: data.image_url,
-          tagIds: typeof data.tags === 'string' ? JSON.parse(data.tags) : (data.tags ?? []),
-          foundryDocument: typeof data.foundry_data === 'string' ? { system: JSON.parse(data.foundry_data) } : { system: null },
-          automation: {
-            activities: typeof data.activities === 'string' ? JSON.parse(data.activities) : (data.activities ?? []),
-            effects: typeof data.effects === 'string' ? JSON.parse(data.effects) : (data.effects ?? []),
-          },
-        };
-
-        setSpellDetailsById((current) => ({
-          ...current,
-          [selectedSpellId]: mapped
-        }));
-      } finally {
-        if (active) setLoadingSelectedSpell(false);
-      }
-    };
-
-    loadDetails();
-
-    return () => {
-      active = false;
-    };
-  }, [selectedSpellId, spellDetailsById]);
+  const activeFilterCount =
+    sourceFilterIds.length
+    + levelFilters.length
+    + schoolFilters.length
+    + tagFilterIds.length
+    + activationFilters.length
+    + rangeFilters.length
+    + durationFilters.length
+    + propertyFilters.length;
 
   const toggleSelection = (value: string, selected: string[], setSelected: React.Dispatch<React.SetStateAction<string[]>>) => {
     setSelected((current) => current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value]);
@@ -227,24 +208,15 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       || '—';
   };
 
-  const getDescriptionHtml = (spell: SpellRecord) => {
-    const rawFoundryHtml = String(spell.foundryDocument?.system?.description?.value || '').trim();
-    if (rawFoundryHtml) return formatFoundrySpellDescriptionForDisplay(rawFoundryHtml);
-
-    const bbcodeDescription = String(spell.description || '').trim();
-    if (!bbcodeDescription) return '';
-    return formatFoundrySpellDescriptionForDisplay(bbcodeToHtml(bbcodeDescription));
-  };
-
-  const getShell = (spell: SpellRecord) => {
-    return spell.foundryShell || spell.foundryDocument?.system || {};
-  };
-
   const resetFilters = () => {
     setSourceFilterIds([]);
     setLevelFilters([]);
     setSchoolFilters([]);
     setTagFilterIds([]);
+    setActivationFilters([]);
+    setRangeFilters([]);
+    setDurationFilters([]);
+    setPropertyFilters([]);
   };
 
   return (
@@ -340,6 +312,42 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                   />
                 );
               })}
+
+              <FilterSection
+                title="Casting Time"
+                values={ACTIVATION_ORDER.map((b) => ({ value: b, label: ACTIVATION_LABELS[b] }))}
+                selected={activationFilters}
+                onToggle={(value) => toggleSelection(value as ActivationBucket, activationFilters as string[], setActivationFilters as React.Dispatch<React.SetStateAction<string[]>>)}
+                onIncludeAll={() => setActivationFilters([...ACTIVATION_ORDER])}
+                onClear={() => setActivationFilters([])}
+              />
+
+              <FilterSection
+                title="Range"
+                values={RANGE_ORDER.map((b) => ({ value: b, label: RANGE_LABELS[b] }))}
+                selected={rangeFilters}
+                onToggle={(value) => toggleSelection(value as RangeBucket, rangeFilters as string[], setRangeFilters as React.Dispatch<React.SetStateAction<string[]>>)}
+                onIncludeAll={() => setRangeFilters([...RANGE_ORDER])}
+                onClear={() => setRangeFilters([])}
+              />
+
+              <FilterSection
+                title="Duration"
+                values={DURATION_ORDER.map((b) => ({ value: b, label: DURATION_LABELS[b] }))}
+                selected={durationFilters}
+                onToggle={(value) => toggleSelection(value as DurationBucket, durationFilters as string[], setDurationFilters as React.Dispatch<React.SetStateAction<string[]>>)}
+                onIncludeAll={() => setDurationFilters([...DURATION_ORDER])}
+                onClear={() => setDurationFilters([])}
+              />
+
+              <FilterSection
+                title="Properties"
+                values={PROPERTY_ORDER.map((p) => ({ value: p, label: PROPERTY_LABELS[p] }))}
+                selected={propertyFilters}
+                onToggle={(value) => toggleSelection(value as PropertyFilter, propertyFilters as string[], setPropertyFilters as React.Dispatch<React.SetStateAction<string[]>>)}
+                onIncludeAll={() => setPropertyFilters([...PROPERTY_ORDER])}
+                onClear={() => setPropertyFilters([])}
+              />
             </>
           }
         />
@@ -382,7 +390,38 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                         )}
                       >
                         <div className="min-w-0">
-                          <div className="truncate font-serif text-lg text-ink">{spell.name}</div>
+                          <div className="truncate font-serif text-lg text-ink flex items-center gap-1.5">
+                            <span className="truncate">{spell.name}</span>
+                            {(() => {
+                              const reqTagIds = Array.isArray((spell as any).required_tags)
+                                ? (spell as any).required_tags
+                                : [];
+                              const hasFreeText = !!(spell as any).prerequisite_text;
+                              if (reqTagIds.length === 0 && !hasFreeText) return null;
+                              const tagLabel = reqTagIds
+                                .map(
+                                  (tid: string) =>
+                                    allTags.find((t: any) => t.id === tid)?.name || tid,
+                                )
+                                .join(', ');
+                              const title = [
+                                tagLabel ? `Requires: ${tagLabel}` : null,
+                                hasFreeText
+                                  ? `Note: ${(spell as any).prerequisite_text}`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ');
+                              return (
+                                <span title={title} className="shrink-0 inline-flex">
+                                  <Lock
+                                    className="w-3 h-3 text-blood/70"
+                                    aria-label="Has prerequisites"
+                                  />
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                         <div className="text-sm text-ink/75">{Number(spell.level ?? 0) === 0 ? 'Cantrip' : spell.level}</div>
                         <div className="text-sm text-ink/75">{SCHOOL_LABELS[String(spell.school ?? '')] || String(spell.school ?? '').toUpperCase()}</div>
@@ -397,85 +436,12 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
           <Card className="border-gold/10 bg-card/50 overflow-hidden">
             <CardContent className="p-0">
-              {selectedSpellSummary ? (
-                <div className="space-y-0">
-                  <div className="border-b border-gold/10 px-6 py-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <h2 className="font-serif text-4xl font-bold uppercase tracking-tight text-gold">{selectedSpellSummary.name}</h2>
-                          <span className="text-sm font-bold text-gold/70">{renderSourceAbbreviation(selectedSpellSummary)}</span>
-                          {selectedSpell?.foundryImport?.sourcePage ? (
-                            <span className="text-sm text-ink/35">p{selectedSpell.foundryImport.sourcePage}</span>
-                          ) : null}
-                        </div>
-                        <p className="font-serif italic text-ink/70">
-                          {Number(selectedSpellSummary.level ?? 0) === 0 ? 'Cantrip' : `Level ${selectedSpellSummary.level}`}{' '}
-                          {SCHOOL_LABELS[String(selectedSpellSummary.school ?? '')] || String(selectedSpellSummary.school ?? '').toUpperCase()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {loadingSelectedSpell || !selectedSpell ? (
-                    <div className="px-8 py-20 text-center text-ink/45">
-                      Loading spell details...
-                    </div>
-                  ) : (
-                    <>
-                      <div className="border-b border-gold/10 px-6 py-5">
-                        <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
-                          <SpellArtPreview
-                            src={selectedSpell.imageUrl}
-                            alt={selectedSpell.name}
-                            size={126}
-                          />
-
-                          <div className="grid gap-y-3 text-sm text-ink md:grid-cols-2 md:gap-x-8">
-                            <SpellRow label="Casting Time" value={formatActivationLabel(getShell(selectedSpell).activation)} />
-                            <SpellRow label="Range" value={formatRangeLabel(getShell(selectedSpell).range)} />
-                            <SpellRow label="Components" value={formatComponentsLabel(Array.from(getShell(selectedSpell).properties ?? []), getShell(selectedSpell).materials)} />
-                            <SpellRow label="Duration" value={formatDurationLabel(getShell(selectedSpell).duration)} />
-                            <SpellRow label="Target" value={formatTargetLabel(getShell(selectedSpell).target)} />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-6 px-6 py-5">
-                        <div
-                          className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
-                          dangerouslySetInnerHTML={{ __html: getDescriptionHtml(selectedSpell) || '<p>No description available.</p>' }}
-                        />
-
-                        <div className="border-t border-gold/10 pt-4 text-sm text-ink/70">
-                          <span className="font-bold text-ink">Source:</span>{' '}
-                          {renderSourceAbbreviation(selectedSpellSummary)}
-                          {selectedSpell.foundryImport?.sourcePage ? `, page ${selectedSpell.foundryImport.sourcePage}` : ''}
-                          {selectedSpell.foundryImport?.rules ? ` (${selectedSpell.foundryImport.rules})` : ''}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="px-8 py-20 text-center text-ink/45">
-                  Select a spell from the list to view its details.
-                </div>
-              )}
+              <SpellDetailPanel spellId={selectedSpellId || null} />
             </CardContent>
           </Card>
         </div>
       </div>
 
-    </div>
-  );
-}
-
-function SpellRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-gold/70">{label}</div>
-      <div className="mt-1 text-sm text-ink/90">{value || '—'}</div>
     </div>
   );
 }

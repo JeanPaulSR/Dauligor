@@ -1,10 +1,27 @@
 import { fetchCollection } from './d1';
 
 /**
- * Lightweight summary record for the spell list. The legacy `spellSummaries`
- * Firestore collection is decommissioned — we read directly from the `spells`
- * D1 table and shape rows for the UI here.
+ * Slim spell projection used by every spell-browsing surface.
+ *
+ * Pulls every column needed to render a row, derive filter facets, and check
+ * prerequisites — but skips the heavy `description`, `activities`, and `effects`
+ * blobs. At ~5000 spells, including `description` alone can push the catalogue
+ * over 5 MB (sessionStorage's per-origin limit). Detail panes fetch the full
+ * row on demand via `fetchDocument('spells', id)`.
+ *
+ * `foundry_data` is included because it's needed for casting/range/duration
+ * bucketing (only ~400-500 bytes per spell — small enough to keep in the slim).
  */
+const SPELL_SUMMARY_COLUMNS = [
+  'id', 'name', 'identifier',
+  'level', 'school', 'source_id', 'image_url',
+  'tags', 'foundry_data',
+  'concentration', 'ritual',
+  'components_vocal', 'components_somatic', 'components_material',
+  'required_tags', 'prerequisite_text',
+  'created_at', 'updated_at',
+].join(', ');
+
 export type SpellSummaryRecord = {
   id: string;
   name?: string;
@@ -24,39 +41,13 @@ export type SpellSummaryRecord = {
   [key: string]: any;
 };
 
-export function subscribeSpellSummaries(
-  onData: (records: SpellSummaryRecord[]) => void,
-  onError?: (error: unknown) => void,
-  _onModeChange?: (mode: 'spellSummaries' | 'spells-fallback') => void
-) {
-  let active = true;
-
-  const load = async () => {
-    try {
-      const data = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
-
-      if (!active) return;
-
-      // Map D1 results (snake_case columns) back to camelCase expected by the UI
-      const mapped: SpellSummaryRecord[] = data.map(row => ({
-        ...row,
-        sourceId: row.source_id,
-        imageUrl: row.image_url,
-        foundryData: typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : row.foundry_data,
-        tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : row.tags,
-        // Ensure foundryShell/foundryDocument fallbacks for the summary view if needed
-        foundryShell: row.foundry_shell || (typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : row.foundry_data)
-      }));
-
-      onData(mapped);
-    } catch (err) {
-      if (active) onError?.(err);
-    }
-  };
-
-  load();
-
-  return () => {
-    active = false;
-  };
+/**
+ * Fetch the slim spell catalogue. Ordering defaults to `name ASC`; pass
+ * `'level ASC, name ASC'` for the manager-style display.
+ */
+export async function fetchSpellSummaries(orderBy: string = 'name ASC'): Promise<any[]> {
+  return fetchCollection<any>('spells', {
+    select: SPELL_SUMMARY_COLUMNS,
+    orderBy,
+  });
 }

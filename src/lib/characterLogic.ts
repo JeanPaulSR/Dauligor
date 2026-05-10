@@ -47,6 +47,8 @@ export function buildEmptyProgressionState() {
     ownedFeatures: [],
     ownedItems: [],
     ownedSpells: [],
+    spellListExtensions: [],
+    spellLoadouts: [],
     derivedSync: {},
   };
 }
@@ -101,6 +103,12 @@ export function normalizeProgressionState(progressState: any) {
       : [],
     ownedItems: Array.isArray(normalized.ownedItems) ? normalized.ownedItems : [],
     ownedSpells: Array.isArray(normalized.ownedSpells) ? normalized.ownedSpells : [],
+    spellListExtensions: Array.isArray(normalized.spellListExtensions)
+      ? normalized.spellListExtensions
+      : [],
+    spellLoadouts: Array.isArray(normalized.spellLoadouts)
+      ? normalized.spellLoadouts
+      : [],
     derivedSync:
       normalized.derivedSync &&
       typeof normalized.derivedSync === "object" &&

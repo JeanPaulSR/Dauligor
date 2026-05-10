@@ -53,6 +53,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [admin-users.md](features/admin-users.md) — admin user panel, password reset, RBAC bootstrap
 - [image-manager.md](features/image-manager.md) — image library UI, upload/rename/delete, reference scanning
 - [foundry-export.md](features/foundry-export.md) — semantic export pipeline, `dauligor.actor-bundle.v1`
+- [spellbook-manager.md](features/spellbook-manager.md) — *project:* per-class spell lists, spell rules, prereqs, Layer-2 GrantSpells/ExtendSpellList (all modes/resolvers), Layer-3 Spell Manager (filters/detail/caps/prereq gating/favourites/watchlist), Layer-4 Loadouts. **Foundry export round-trip handed off — see [handoff doc](handoff-spellbook-to-importer.md)**.
 
 ### [ui/](ui/) — visual layer
 *Style guide, theming, rich text. No domain logic.*

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardSave } from "../../hooks/useKeyboardSave";
 import { reportClientError, OperationType } from "../../lib/firebase";
@@ -126,6 +126,24 @@ import {
   normalizeAdvancementListForEditor,
   resolveAdvancementDefaultHitDie
 } from "../../lib/advancementState";
+import {
+  collectGrantedSpellsFromAdvancementList,
+  collectSpellListExtensionsFromAdvancementList,
+  dedupeOwnedSpellGrants,
+  dedupeSpellListExtensions,
+} from "../../lib/spellGrants";
+import { fetchClassSpellList } from "../../lib/classSpellLists";
+import { fetchAllRules, spellMatchesRule, type SpellRule } from "../../lib/spellRules";
+import { fetchSpellSummaries } from "../../lib/spellSummary";
+import { deriveSpellFilterFacets } from "../../lib/spellFilters";
+import { useSpellFilters } from "../../hooks/useSpellFilters";
+import SpellFilterShell from "../../components/compendium/SpellFilterShell";
+import SpellDetailPanel from "../../components/compendium/SpellDetailPanel";
+import {
+  buildCharacterEffectiveTagAttributions,
+  characterMeetsSpellPrerequisites,
+  missingPrerequisiteTags,
+} from "../../lib/characterTags";
 
 const getModifier = (score: number) => {
   const mod = Math.floor((score - 10) / 2);
@@ -539,10 +557,12 @@ function resolveSpellcastingTypeRecord(
   const progressionName = String(spellcasting.progression || "").trim().toLowerCase();
   if (!progressionName) return null;
 
+  // D1 rows come back snake_case (`foundry_name`), but legacy/normalised data
+  // sometimes carries `foundryName`. Match either.
   return (
     spellcastingTypes.find(
       (type) =>
-        String(type.foundryName || "").trim().toLowerCase() === progressionName ||
+        String(type.foundry_name || type.foundryName || "").trim().toLowerCase() === progressionName ||
         String(type.identifier || "").trim().toLowerCase() === progressionName ||
         String(type.name || "").trim().toLowerCase() === progressionName,
     ) || null
@@ -797,7 +817,7 @@ const STEPS = [
     label: "Equipment",
     icon: <Package className="w-4 h-4" />,
   },
-  { id: "spells", label: "Spells", icon: <Zap className="w-4 h-4" /> },
+  { id: "spells", label: "Spell Manager", icon: <Zap className="w-4 h-4" /> },
   { id: "actions", label: "Actions", icon: <Wind className="w-4 h-4" /> },
   {
     id: "proficiencies",
@@ -830,6 +850,31 @@ export default function CharacterBuilder({
   const [featureCache, setFeatureCache] = useState<Record<string, any[]>>({});
   const [scalingCache, setScalingCache] = useState<Record<string, any>>({});
   const [optionsCache, setOptionsCache] = useState<Record<string, any>>({});
+  // Spellbook Manager (Layer 2): lazily loaded id→{name, level, school} for any
+  // spell IDs surfaced by GrantSpells / ExtendSpellList advancements. Avoids
+  // pulling the full 5k-row spell catalog into builder context.
+  const [spellNameCache, setSpellNameCache] = useState<Record<string, any>>({});
+  // Spell Manager step: per-class spell pool (master list joined with spell row).
+  // Loaded on first entry to the step for each spellcasting class.
+  const [classSpellPools, setClassSpellPools] = useState<Record<string, any[]>>({});
+  const [activeSpellManagerClassId, setActiveSpellManagerClassId] = useState<string>("");
+  // Phase 4 / Layer 4 — per-character filter toggles (orthogonal to spell-state filters).
+  const [showFavouritesOnly, setShowFavouritesOnly] = useState(false);
+  const [showWatchlistOnly, setShowWatchlistOnly] = useState(false);
+  const [showLoadoutOnly, setShowLoadoutOnly] = useState(false);
+  // Foundation data for the Spell Manager filter shell + detail pane.
+  // Loaded once when the step opens.
+  const [spellManagerSources, setSpellManagerSources] = useState<any[]>([]);
+  const [spellManagerTags, setSpellManagerTags] = useState<any[]>([]);
+  const [spellManagerTagGroups, setSpellManagerTagGroups] = useState<any[]>([]);
+  const [selectedSpellId, setSelectedSpellId] = useState<string | null>(null);
+  const spellManagerFilters = useSpellFilters();
+  // Layer 2 rule resolver (Phase 1b.5b): all defined spell rules + the slim
+  // spell catalog. Loaded on demand the first time a rule-resolver advancement
+  // appears in the visible progression. spellSummaries is the slim projection
+  // (cached in PERSISTENT_TABLES so the cost is one fetch per session).
+  const [spellRulesById, setSpellRulesById] = useState<Record<string, SpellRule>>({});
+  const [allSpellSummaries, setAllSpellSummaries] = useState<any[] | null>(null);
 
   const [optionDialogOpen, setOptionDialogOpen] = useState<{
     name: string;
@@ -844,6 +889,20 @@ export default function CharacterBuilder({
   } | null>(null);
   const [availableOptions, setAvailableOptions] = useState<any[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
+
+  // Spellbook Manager (Layer 2): GrantSpells choice-mode picker. Stores the
+  // advancement reference, not a frozen pool snapshot — pool is re-resolved
+  // at dialog render time so it picks up rules loading after the click.
+  const [spellChoiceDialogOpen, setSpellChoiceDialogOpen] = useState<{
+    name: string;
+    count: number;
+    advId: string;
+    level: number;
+    sourceScope: string;
+    resolverKind: "explicit" | "rule";
+    explicitSpellIds: string[];
+    ruleId: string;
+  } | null>(null);
 
   const handleOpenOptionDialog = async (choice: {
     name: string;
@@ -2004,13 +2063,15 @@ export default function CharacterBuilder({
     const fetchData = async () => {
       try {
         if (id && id !== "new") {
-          const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows] = await Promise.all([
+          const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows, extensionRows, loadoutRows] = await Promise.all([
             queryD1("SELECT * FROM characters WHERE id = ?", [id]),
             queryD1("SELECT * FROM character_progression WHERE character_id = ?", [id]),
             queryD1("SELECT * FROM character_selections WHERE character_id = ?", [id]),
             queryD1("SELECT * FROM character_inventory WHERE character_id = ?", [id]),
             queryD1("SELECT * FROM character_spells WHERE character_id = ?", [id]),
-            queryD1("SELECT * FROM character_proficiencies WHERE character_id = ?", [id])
+            queryD1("SELECT * FROM character_proficiencies WHERE character_id = ?", [id]),
+            queryD1("SELECT * FROM character_spell_list_extensions WHERE character_id = ?", [id]),
+            queryD1("SELECT * FROM character_spell_loadouts WHERE character_id = ?", [id])
           ]);
 
           if (baseRows && baseRows.length > 0) {
@@ -2020,7 +2081,9 @@ export default function CharacterBuilder({
               selectionRows,
               inventoryRows,
               spellRows,
-              proficiencyRows
+              proficiencyRows,
+              extensionRows,
+              loadoutRows
             );
 
             if (data) {
@@ -2466,6 +2529,123 @@ export default function CharacterBuilder({
   const formatTraitValues = (traitType: string, values: any[] = []) =>
     uniqueStringList(values.map((value) => resolveTraitDisplayLabel(traitType, value)));
 
+  const spellcastingClassIds = uniqueStringList(
+    progressionClassGroups
+      .map((entry: any) => {
+        const doc = entry.classDocument || classCache[entry?.classId || ""];
+        // Canonical flag (see ClassEditor / classExport). `progression` is a
+        // legacy string-only path; modern records carry hasSpellcasting + a
+        // progressionId pointing at a spellcasting-type document.
+        return doc?.spellcasting?.hasSpellcasting ? doc?.id : "";
+      })
+      .filter(Boolean) as string[],
+  );
+
+  // Detect whether the visible progression carries any rule-resolver
+  // advancement. If yes, lazy-load rules + spell summaries so we can resolve
+  // them. Walks classes/subclasses/features at the levels the character has.
+  const needsRuleResolution = useMemo(() => {
+    const hasRuleResolver = (advs: any[]): boolean =>
+      Array.isArray(advs) &&
+      advs.some(
+        (a: any) =>
+          (a?.type === "GrantSpells" || a?.type === "ExtendSpellList") &&
+          a?.configuration?.resolver?.kind === "rule" &&
+          a?.configuration?.resolver?.ruleId,
+      );
+    return progressionClassGroups.some((entry: any) => {
+      const cls = entry.classDocument || classCache[entry?.classId || ""];
+      const sub = entry.subclassId ? subclassCache[entry.subclassId] : null;
+      const lvl = Number(entry.classLevel || 0) || 0;
+      if (hasRuleResolver(cls?.advancements)) return true;
+      if (hasRuleResolver(sub?.advancements)) return true;
+      const featureLists = [
+        ...(featureCache[cls?.id] || []),
+        ...(sub ? featureCache[sub.id] || [] : []),
+      ].filter((f: any) => (Number(f.level || 1) || 1) <= lvl);
+      return featureLists.some((f: any) => hasRuleResolver(f?.advancements));
+    });
+  }, [progressionClassGroups, classCache, subclassCache, featureCache]);
+
+  // Load rules + spell summaries the first time we detect rule-resolver usage.
+  // Once allSpellSummaries is non-null, both have been fetched (even if rules
+  // is empty — the empty-rules case must not re-fire infinitely).
+  useEffect(() => {
+    if (!needsRuleResolution) return;
+    if (allSpellSummaries !== null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [rules, summaries] = await Promise.all([
+          fetchAllRules(),
+          fetchSpellSummaries(),
+        ]);
+        if (cancelled) return;
+        setSpellRulesById(Object.fromEntries(rules.map((r) => [r.id, r])));
+        setAllSpellSummaries(summaries);
+      } catch (err) {
+        console.error("Failed to load spell rules / summaries for rule resolver", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsRuleResolution, allSpellSummaries]);
+
+  // Pre-derive filter facets (activation/range/duration buckets, property
+  // booleans) once so spellMatchesRule can read them. fetchSpellSummaries
+  // returns raw rows — derived facets aren't in the slim projection.
+  const facetEnrichedSpellSummaries = useMemo(() => {
+    if (!allSpellSummaries) return null;
+    return allSpellSummaries.map((s: any) => ({
+      ...s,
+      tags: Array.isArray(s.tags) ? s.tags : [],
+      ...deriveSpellFilterFacets(s),
+    }));
+  }, [allSpellSummaries]);
+
+  // Memoised ruleId → matched spell IDs. Re-derives when rules or summaries
+  // change. Each rule walks the full catalog once; for ~5k spells this is
+  // fast enough for client-side derivation. Manual spells from the rule's
+  // `manualSpells` always-include list are merged in by `spellMatchesRule`.
+  const ruleResolvedSpellIds = useMemo(() => {
+    if (!facetEnrichedSpellSummaries) return {} as Record<string, string[]>;
+    const out: Record<string, string[]> = {};
+    Object.values(spellRulesById).forEach((rule) => {
+      const matches: string[] = [];
+      for (const spell of facetEnrichedSpellSummaries) {
+        if (spellMatchesRule(spell, rule)) matches.push(spell.id);
+      }
+      out[rule.id] = matches;
+    });
+    return out;
+  }, [spellRulesById, facetEnrichedSpellSummaries]);
+
+  const resolveRulePool = useCallback(
+    (ruleId: string) => ruleResolvedSpellIds[ruleId] || [],
+    [ruleResolvedSpellIds],
+  );
+
+  // Layer 3 — character effective tag set. Aggregates tags from progression
+  // classes, subclasses, accessible features, and chosen option items. Used
+  // for spell-prerequisite gating in the Spell Manager.
+  const effectiveTagAttributions = useMemo(
+    () =>
+      buildCharacterEffectiveTagAttributions({
+        progression: character.progression || [],
+        classCache,
+        subclassCache,
+        featureCache,
+        optionsCache,
+        selectedOptionsMap,
+      }),
+    [character.progression, classCache, subclassCache, featureCache, optionsCache, selectedOptionsMap],
+  );
+  const effectiveTagSet = useMemo(
+    () => new Set(effectiveTagAttributions.keys()),
+    [effectiveTagAttributions],
+  );
+
   const classProgressionSummaries = progressionClassGroups
     .map((entry: any) => {
       const classDocument =
@@ -2659,6 +2839,166 @@ export default function CharacterBuilder({
         }))
         .filter((column: any) => column.value !== null && column.value !== undefined);
 
+      // ── Spellbook Manager (Layer 2) — collect GrantSpells + ExtendSpellList
+      // Walks the same advancement tree as grantedItems above, but emits
+      // ownedSpells / spellListExtensions instead of items. Sources covered:
+      // class, subclass, class features, subclass features. Choice-mode
+      // advancements consult selectedOptionsMap; explicit-resolver only for now.
+      const classSourceScope = buildAdvancementSourceScope(
+        buildAdvancementSourceContext({ parentType: "class", classDocument }),
+      );
+      const subclassSourceScope = subclassDocument
+        ? buildAdvancementSourceScope(
+            buildAdvancementSourceContext({
+              parentType: "subclass",
+              classDocument,
+              subclassDocument,
+            }),
+          )
+        : "";
+
+      const grantedSpellEntries: ReturnType<typeof collectGrantedSpellsFromAdvancementList> = [
+        ...collectGrantedSpellsFromAdvancementList(classDocument.advancements || [], {
+          maxLevel: classLevel,
+          defaultLevel: 1,
+          parentType: "class",
+          parentId: classDocument.id,
+          sourceScope: classSourceScope,
+          selectedOptionsMap,
+          classId: classDocument.id,
+          spellcastingClassIds,
+          resolveRulePool,
+        }),
+        ...(subclassDocument
+          ? collectGrantedSpellsFromAdvancementList(
+              subclassDocument.advancements || [],
+              {
+                maxLevel: classLevel,
+                defaultLevel: 1,
+                parentType: "subclass",
+                parentId: subclassDocument.id,
+                sourceScope: subclassSourceScope,
+                selectedOptionsMap,
+                classId: classDocument.id,
+                spellcastingClassIds,
+                resolveRulePool,
+              },
+            )
+          : []),
+        ...allAccessibleClassFeatures.flatMap((feature: any) => {
+          const featureSourceScope = buildAdvancementSourceScope(
+            buildAdvancementSourceContext({
+              parentType: "feature",
+              classDocument,
+              parentDocument: feature,
+            }),
+          );
+          return collectGrantedSpellsFromAdvancementList(feature.advancements || [], {
+            maxLevel: classLevel,
+            defaultLevel: Number(feature.level || 1) || 1,
+            parentType: "feature",
+            parentId: feature.id,
+            sourceScope: featureSourceScope,
+            selectedOptionsMap,
+            classId: classDocument.id,
+            spellcastingClassIds,
+            resolveRulePool,
+          });
+        }),
+        ...allAccessibleSubclassFeatures.flatMap((feature: any) => {
+          const featureSourceScope = buildAdvancementSourceScope(
+            buildAdvancementSourceContext({
+              parentType: "subclass-feature",
+              classDocument,
+              subclassDocument,
+              parentDocument: feature,
+            }),
+          );
+          return collectGrantedSpellsFromAdvancementList(feature.advancements || [], {
+            maxLevel: classLevel,
+            defaultLevel: Number(feature.level || 1) || 1,
+            parentType: "feature",
+            parentId: feature.id,
+            sourceScope: featureSourceScope,
+            selectedOptionsMap,
+            classId: classDocument.id,
+            spellcastingClassIds,
+            resolveRulePool,
+          });
+        }),
+      ];
+
+      const spellListExtensionEntries: ReturnType<
+        typeof collectSpellListExtensionsFromAdvancementList
+      > = [
+        ...collectSpellListExtensionsFromAdvancementList(classDocument.advancements || [], {
+          maxLevel: classLevel,
+          defaultLevel: 1,
+          parentType: "class",
+          parentId: classDocument.id,
+          sourceScope: classSourceScope,
+          selectedOptionsMap,
+          classId: classDocument.id,
+          spellcastingClassIds,
+          resolveRulePool,
+        }),
+        ...(subclassDocument
+          ? collectSpellListExtensionsFromAdvancementList(
+              subclassDocument.advancements || [],
+              {
+                maxLevel: classLevel,
+                defaultLevel: 1,
+                parentType: "subclass",
+                parentId: subclassDocument.id,
+                sourceScope: subclassSourceScope,
+                selectedOptionsMap,
+                classId: classDocument.id,
+                spellcastingClassIds,
+                resolveRulePool,
+              },
+            )
+          : []),
+        ...allAccessibleClassFeatures.flatMap((feature: any) =>
+          collectSpellListExtensionsFromAdvancementList(feature.advancements || [], {
+            maxLevel: classLevel,
+            defaultLevel: Number(feature.level || 1) || 1,
+            parentType: "feature",
+            parentId: feature.id,
+            sourceScope: buildAdvancementSourceScope(
+              buildAdvancementSourceContext({
+                parentType: "feature",
+                classDocument,
+                parentDocument: feature,
+              }),
+            ),
+            selectedOptionsMap,
+            classId: classDocument.id,
+            spellcastingClassIds,
+            resolveRulePool,
+          }),
+        ),
+        ...allAccessibleSubclassFeatures.flatMap((feature: any) =>
+          collectSpellListExtensionsFromAdvancementList(feature.advancements || [], {
+            maxLevel: classLevel,
+            defaultLevel: Number(feature.level || 1) || 1,
+            parentType: "feature",
+            parentId: feature.id,
+            sourceScope: buildAdvancementSourceScope(
+              buildAdvancementSourceContext({
+                parentType: "subclass-feature",
+                classDocument,
+                subclassDocument,
+                parentDocument: feature,
+              }),
+            ),
+            selectedOptionsMap,
+            classId: classDocument.id,
+            spellcastingClassIds,
+            resolveRulePool,
+          }),
+        ),
+      ];
+
       return {
         classId: classDocument.id,
         classKey,
@@ -2673,6 +3013,8 @@ export default function CharacterBuilder({
         scales,
         accessibleClassFeatures: allAccessibleClassFeatures,
         accessibleSubclassFeatures: allAccessibleSubclassFeatures,
+        grantedSpells: grantedSpellEntries,
+        spellListExtensions: spellListExtensionEntries,
       };
     })
     .filter(Boolean) as any[];
@@ -2704,6 +3046,220 @@ export default function CharacterBuilder({
     normalizedProgressionState.classPackages,
     optionsCache,
   );
+
+  // Spellbook Manager (Layer 2): materialise advancement-derived spell grants.
+  // Each summary already collected its GrantSpells / ExtendSpellList entries
+  // upstream; here we flatten + dedupe across classes for the state writeback.
+  // Source attribution + counts_as_class_id propagate through unchanged so
+  // removal of a class/subclass/feature can sweep its grants in one query.
+  const canonicalOwnedSpellGrants = dedupeOwnedSpellGrants(
+    classProgressionSummaries.flatMap(
+      (summary: any) => (Array.isArray(summary?.grantedSpells) ? summary.grantedSpells : []),
+    ),
+  );
+  const canonicalSpellListExtensions = dedupeSpellListExtensions(
+    classProgressionSummaries.flatMap(
+      (summary: any) =>
+        (Array.isArray(summary?.spellListExtensions) ? summary.spellListExtensions : []),
+    ),
+  );
+
+  useEffect(() => {
+    // If the spell catalog is loaded (rule-resolver path), use it to back-fill
+    // names without a per-spell fetch. Otherwise fall back to per-id fetches
+    // (the explicit-resolver path, where the catalog isn't needed).
+    if (allSpellSummaries) {
+      const knownIds = new Set(allSpellSummaries.map((s: any) => s.id));
+      const newEntries: Record<string, any> = {};
+      [
+        ...canonicalOwnedSpellGrants.map((g) => g.spellId),
+        ...canonicalSpellListExtensions.map((e) => e.spellId),
+        // Player-picked (manual) entries — needed for the Sheet's Known Spells panel.
+        ...(character.progressionState?.ownedSpells || [])
+          .filter((s: any) => !s?.grantedByAdvancementId)
+          .map((s: any) => s.id),
+      ].forEach((id) => {
+        if (!id || spellNameCache[id]) return;
+        if (!knownIds.has(id)) return;
+        const row = allSpellSummaries.find((s: any) => s.id === id);
+        if (row) {
+          newEntries[id] = {
+            id: row.id,
+            name: row.name,
+            level: row.level,
+            school: row.school,
+          };
+        }
+      });
+      if (Object.keys(newEntries).length > 0) {
+        setSpellNameCache((prev) => ({ ...prev, ...newEntries }));
+        return;
+      }
+    }
+    const referenced = uniqueStringList([
+      ...canonicalOwnedSpellGrants.map((g) => g.spellId),
+      ...canonicalSpellListExtensions.map((e) => e.spellId),
+      ...(character.progressionState?.ownedSpells || [])
+        .filter((s: any) => !s?.grantedByAdvancementId)
+        .map((s: any) => s.id),
+    ]);
+    const missing = referenced.filter((id) => id && !spellNameCache[id]);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await Promise.all(
+          missing.map((id) => fetchDocument<any>("spells", id)),
+        );
+        if (cancelled) return;
+        setSpellNameCache((prev) => {
+          const next = { ...prev };
+          rows.forEach((row: any) => {
+            if (row && row.id) {
+              next[row.id] = {
+                id: row.id,
+                name: row.name,
+                level: row.level,
+                school: row.school,
+              };
+            }
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error("Failed to load spell names for advancement display", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canonicalOwnedSpellGrants, canonicalSpellListExtensions, spellNameCache, allSpellSummaries, character.progressionState?.ownedSpells]);
+
+  // Spell Manager: load filter foundation data (sources, tags, tag groups) on
+  // first entry to the step. Cheap, cached by d1 layer.
+  useEffect(() => {
+    if (activeStep !== "spells") return;
+    if (
+      spellManagerSources.length > 0 &&
+      spellManagerTags.length > 0 &&
+      spellManagerTagGroups.length > 0
+    ) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [sources, tags, tagGroups] = await Promise.all([
+          fetchCollection<any>("sources", { orderBy: "name ASC" }),
+          fetchCollection<any>("tags", { orderBy: "name ASC" }),
+          fetchCollection<any>("tagGroups", { orderBy: "name ASC" }),
+        ]);
+        if (cancelled) return;
+        setSpellManagerSources(sources);
+        setSpellManagerTags(
+          tags.map((t: any) => ({
+            id: t.id,
+            name: t.name || "",
+            groupId: t.groupId || t.group_id || null,
+          })),
+        );
+        setSpellManagerTagGroups(tagGroups);
+      } catch (err) {
+        console.error("Failed to load Spell Manager foundation data", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeStep,
+    spellManagerSources.length,
+    spellManagerTags.length,
+    spellManagerTagGroups.length,
+  ]);
+
+  // Spell Manager: load per-class spell pools when the step opens. Skips classes
+  // already loaded. Each pool is the class's master list (class_spell_lists)
+  // joined with the spells row — extensions from this character are merged
+  // client-side at render time.
+  useEffect(() => {
+    if (activeStep !== "spells") return;
+    const classesToLoad = spellcastingClassIds.filter((cid) => !classSpellPools[cid]);
+    if (classesToLoad.length === 0) {
+      if (!activeSpellManagerClassId && spellcastingClassIds.length > 0) {
+        setActiveSpellManagerClassId(spellcastingClassIds[0]);
+      }
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(
+          classesToLoad.map(async (cid) => [cid, await fetchClassSpellList(cid)] as const),
+        );
+        if (cancelled) return;
+        setClassSpellPools((prev) => {
+          const next = { ...prev };
+          results.forEach(([cid, pool]) => {
+            next[cid] = pool;
+          });
+          return next;
+        });
+        if (!activeSpellManagerClassId && spellcastingClassIds.length > 0) {
+          setActiveSpellManagerClassId(spellcastingClassIds[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load class spell pools for Spell Manager", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeStep, spellcastingClassIds, classSpellPools, activeSpellManagerClassId]);
+
+  // Choice-mode picker open: pre-load spell names for the entire pool so the
+  // dialog renders with names rather than IDs. Pool is resolved live (rule
+  // resolver may finish loading after the click).
+  useEffect(() => {
+    if (!spellChoiceDialogOpen) return;
+    const dlg = spellChoiceDialogOpen;
+    const livePool =
+      dlg.resolverKind === "rule"
+        ? resolveRulePool(dlg.ruleId)
+        : dlg.explicitSpellIds;
+    const missing = livePool.filter((id) => id && !spellNameCache[id]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await Promise.all(
+          missing.map((id) => fetchDocument<any>("spells", id)),
+        );
+        if (cancelled) return;
+        setSpellNameCache((prev) => {
+          const next = { ...prev };
+          rows.forEach((row: any) => {
+            if (row?.id) {
+              next[row.id] = {
+                id: row.id,
+                name: row.name,
+                level: row.level,
+                school: row.school,
+                description: row.description,
+              };
+            }
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error("Failed to load picker pool spell names", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [spellChoiceDialogOpen, spellNameCache, resolveRulePool]);
   const resolvedClassProgressionSummaries = classProgressionSummaries.map(
     (summary: any) => {
       const persistedFeatures = (
@@ -2862,11 +3418,71 @@ export default function CharacterBuilder({
       };
     });
 
+    // Reconcile auto-granted spells with persisted player-edit state
+    // (isPrepared toggles, manually added spells from the spellbook UI).
+    // Granted entries replace their persisted counterpart but inherit the
+    // existing isPrepared / isAlwaysPrepared flag so toggling survives a
+    // recompute. Persisted-but-not-granted entries (manually added) pass
+    // through untouched.
+    const persistedSpellsByKey = new Map<string, any>();
+    (normalizedProgressionState.ownedSpells || []).forEach((spell: any) => {
+      const key = spell?.grantedByAdvancementId
+        ? `adv:${spell.grantedByAdvancementId}:${spell.id}`
+        : `manual:${spell.id}`;
+      persistedSpellsByKey.set(key, spell);
+    });
+
+    const grantedOwnedSpells = canonicalOwnedSpellGrants.map((grant) => {
+      const key = `adv:${grant.grantedByAdvancementId}:${grant.spellId}`;
+      const persisted = persistedSpellsByKey.get(key);
+      return {
+        id: grant.spellId,
+        sourceId: persisted?.sourceId || null,
+        isPrepared: grant.alwaysPrepared
+          ? true
+          : persisted?.isPrepared ?? false,
+        isAlwaysPrepared: grant.alwaysPrepared,
+        grantedByType: grant.grantedByType,
+        grantedById: grant.grantedById,
+        grantedByAdvancementId: grant.grantedByAdvancementId,
+        countsAsClassId: grant.countsAsClassId,
+        doesntCountAgainstPrepared: grant.doesntCountAgainstPrepared,
+        doesntCountAgainstKnown: grant.doesntCountAgainstKnown,
+        // Phase 4 / Layer 4: player annotations + loadout membership survive
+        // recomputes — they're orthogonal to the grant attribution.
+        isFavourite: persisted?.isFavourite ?? false,
+        isWatchlist: persisted?.isWatchlist ?? false,
+        watchlistNote: persisted?.watchlistNote || '',
+        loadoutMembership: Array.isArray(persisted?.loadoutMembership)
+          ? persisted.loadoutMembership
+          : [],
+      };
+    });
+
+    // Manual entries (player-added in the Spell Manager) pass through. Persisted
+    // entries that carried a grantedByAdvancementId are NOT promoted to manual —
+    // they're owned by canonicalOwnedSpellGrants. Orphaned grant rows (advancement
+    // gone because a class was removed) drop out cleanly here.
+    const manualOwnedSpells = (normalizedProgressionState.ownedSpells || []).filter(
+      (spell: any) => !spell?.grantedByAdvancementId,
+    );
+
+    const nextOwnedSpells = [...grantedOwnedSpells, ...manualOwnedSpells];
+    const nextSpellListExtensions = canonicalSpellListExtensions.map((ext) => ({
+      classId: ext.classId,
+      spellId: ext.spellId,
+      grantedByType: ext.grantedByType,
+      grantedById: ext.grantedById,
+      grantedByAdvancementId: ext.grantedByAdvancementId,
+    }));
+
     const nextProgressionState = {
       ...normalizedProgressionState,
       classPackages: nextClassPackages,
       ownedFeatures: canonicalOwnedFeatures,
       ownedItems: canonicalOwnedItems,
+      ownedSpells: nextOwnedSpells,
+      spellListExtensions: nextSpellListExtensions,
     };
 
     if (
@@ -2875,7 +3491,11 @@ export default function CharacterBuilder({
       JSON.stringify(normalizedProgressionState.ownedFeatures || []) ===
         JSON.stringify(canonicalOwnedFeatures) &&
       JSON.stringify(normalizedProgressionState.ownedItems || []) ===
-        JSON.stringify(canonicalOwnedItems)
+        JSON.stringify(canonicalOwnedItems) &&
+      JSON.stringify(normalizedProgressionState.ownedSpells || []) ===
+        JSON.stringify(nextOwnedSpells) &&
+      JSON.stringify(normalizedProgressionState.spellListExtensions || []) ===
+        JSON.stringify(nextSpellListExtensions)
     ) {
       return;
     }
@@ -2887,6 +3507,8 @@ export default function CharacterBuilder({
   }, [
     canonicalOwnedFeatures,
     canonicalOwnedItems,
+    canonicalOwnedSpellGrants,
+    canonicalSpellListExtensions,
     normalizedProgressionState,
   ]);
 
@@ -2917,11 +3539,24 @@ export default function CharacterBuilder({
         const unlockLevel = Number(spellcasting.level || 1) || 1;
         if (classLevel < unlockLevel) return;
 
+        // Resolve the progression type to compute a slot-table contribution. If
+        // the class is missing a progressionId, or it doesn't match a loaded
+        // spellcasting_types row, fall back to "full caster" so the contributor
+        // still renders. The character is clearly a spellcaster — we just don't
+        // know the exact progression. Log a warning so the misconfiguration is
+        // visible without breaking the UI.
         const typeRecord = resolveSpellcastingTypeRecord(spellcasting, spellcastingTypes);
-        if (!typeRecord?.formula) return;
+        const formula = typeRecord?.formula
+          ? String(typeRecord.formula)
+          : "1 * level";
+        if (!typeRecord?.formula) {
+          console.warn(
+            `[Spellcasting] No progression type found for ${label}; using full-caster fallback. ` +
+              `progressionId=${spellcasting.progressionId || "(unset)"}, progression=${spellcasting.progression || "(unset)"}`,
+          );
+        }
 
-        const contribution = calculateEffectiveCastingLevel(classLevel, String(typeRecord.formula || ""));
-        if (contribution <= 0) return;
+        const contribution = calculateEffectiveCastingLevel(classLevel, formula);
 
         contributors.push({
           sourceType,
@@ -2930,9 +3565,14 @@ export default function CharacterBuilder({
           subclassName: summary.subclassName || "",
           classLevel,
           unlockLevel,
-          progressionTypeName: typeRecord.name || typeRecord.identifier || typeRecord.foundryName || "Custom",
-          progressionFormula: typeRecord.formula,
-          effectiveLevel: contribution,
+          progressionTypeName:
+            typeRecord?.name ||
+            typeRecord?.identifier ||
+            (typeRecord as any)?.foundry_name ||
+            (typeRecord as any)?.foundryName ||
+            "Unknown progression",
+          progressionFormula: formula,
+          effectiveLevel: contribution > 0 ? contribution : classLevel,
           ability: String(spellcasting.ability || "").toUpperCase(),
           preparationType: spellcasting.type || "prepared",
         });
@@ -4370,6 +5010,349 @@ export default function CharacterBuilder({
                           No active spellcasting sources yet.
                         </div>
                       )}
+
+                      {/* ── Spellbook Manager (Layer 2/3/4) — known + granted + extensions + favourites + watchlist + loadouts ── */}
+                      {(() => {
+                        const ps = character.progressionState || {};
+                        const allOwned = ps.ownedSpells || [];
+                        const knownSpells = allOwned.filter(
+                          (s: any) => !s?.grantedByAdvancementId,
+                        );
+                        const grantedSpells = allOwned.filter(
+                          (s: any) => s?.grantedByAdvancementId,
+                        );
+                        const extensions = ps.spellListExtensions || [];
+                        const favouriteSpells = allOwned.filter((s: any) => s?.isFavourite);
+                        const watchlistSpells = allOwned.filter((s: any) => s?.isWatchlist);
+                        const sheetLoadouts = (ps.spellLoadouts || []) as any[];
+
+                        const resolveSourceName = (type: string, id: string) => {
+                          if (type === "class") return classCache[id]?.name || `Class ${id.slice(0, 6)}`;
+                          if (type === "subclass") return subclassCache[id]?.name || `Subclass ${id.slice(0, 6)}`;
+                          if (type === "feature") {
+                            for (const list of Object.values(featureCache)) {
+                              if (!Array.isArray(list)) continue;
+                              const f = list.find((x: any) => x?.id === id);
+                              if (f) return f.name;
+                            }
+                            return `Feature ${id.slice(0, 6)}`;
+                          }
+                          return type;
+                        };
+
+                        if (
+                          grantedSpells.length === 0 &&
+                          extensions.length === 0 &&
+                          knownSpells.length === 0 &&
+                          favouriteSpells.length === 0 &&
+                          watchlistSpells.length === 0 &&
+                          sheetLoadouts.length === 0
+                        ) {
+                          return null;
+                        }
+
+                        return (
+                          <div className="space-y-4 pt-2 border-t border-gold/10">
+                            {sheetLoadouts.length > 0 && (
+                              <div className="border border-purple-500/20 bg-purple-500/5 rounded-lg p-4 space-y-2">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-700">
+                                  Loadouts ({sheetLoadouts.length})
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {sheetLoadouts.map((l: any) => {
+                                    const memberCount = allOwned.filter((s: any) =>
+                                      (s.loadoutMembership || []).includes(l.id),
+                                    ).length;
+                                    return (
+                                      <div
+                                        key={l.id}
+                                        className={`flex items-center gap-2 px-2 py-1 rounded border text-[10px] font-bold uppercase tracking-widest ${
+                                          l.isActive
+                                            ? "border-purple-500/40 bg-purple-500/10 text-purple-700"
+                                            : "border-gold/15 bg-card/40 text-ink/55"
+                                        }`}
+                                      >
+                                        <span>{l.name}</span>
+                                        <span className="text-ink/45">
+                                          {memberCount} / {l.size || "?"}
+                                        </span>
+                                        {l.isActive && (
+                                          <span className="text-purple-700/70 normal-case font-serif italic text-[10px]">
+                                            active
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {favouriteSpells.length > 0 && (
+                              <div className="border border-amber-500/20 bg-amber-500/5 rounded-lg p-4">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 mb-3">
+                                  ★ Favourites ({favouriteSpells.length})
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {favouriteSpells.map((s: any) => {
+                                    const cached = spellNameCache[s.id];
+                                    return (
+                                      <span
+                                        key={`fav-${s.id}`}
+                                        className="text-[11px] font-bold text-amber-700 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"
+                                      >
+                                        {cached?.name || s.id}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {watchlistSpells.length > 0 && (
+                              <div className="border border-cyan-500/20 bg-cyan-500/5 rounded-lg p-4">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-700 mb-3">
+                                  ◐ Watchlist ({watchlistSpells.length})
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {watchlistSpells.map((s: any) => {
+                                    const cached = spellNameCache[s.id];
+                                    return (
+                                      <span
+                                        key={`watch-${s.id}`}
+                                        className="text-[11px] font-bold text-cyan-700 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20"
+                                      >
+                                        {cached?.name || s.id}
+                                        {s.watchlistNote && (
+                                          <span className="ml-1 italic font-serif text-cyan-600/70">
+                                            ({s.watchlistNote})
+                                          </span>
+                                        )}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                            {knownSpells.length > 0 && (
+                              <div className="border border-gold/30 bg-gold/5 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold">
+                                    Known Spells ({knownSpells.length})
+                                  </div>
+                                  <p className="text-[9px] font-serif italic text-ink/45">
+                                    Player-picked from the Spell Manager
+                                  </p>
+                                </div>
+                                {(() => {
+                                  const byLevel = new Map<number, any[]>();
+                                  knownSpells.forEach((s: any) => {
+                                    const lvl = Number(spellNameCache[s.id]?.level ?? -1);
+                                    if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+                                    byLevel.get(lvl)!.push(s);
+                                  });
+                                  const levels = Array.from(byLevel.keys()).sort((a, b) => a - b);
+                                  return (
+                                    <div className="space-y-3">
+                                      {levels.map((lvl) => (
+                                        <div key={`known-lvl-${lvl}`} className="space-y-1.5">
+                                          <div className="text-[9px] font-black uppercase tracking-[0.2em] text-gold/60 px-1">
+                                            {lvl < 0
+                                              ? "Loading…"
+                                              : lvl === 0
+                                                ? "Cantrips"
+                                                : `Level ${lvl}`}
+                                            <span className="text-ink/35 font-bold">
+                                              {" "}
+                                              · {byLevel.get(lvl)!.length}
+                                            </span>
+                                          </div>
+                                          {byLevel.get(lvl)!.map((spell: any) => {
+                                            const cached = spellNameCache[spell.id];
+                                            const isPrepared = !!spell.isPrepared;
+                                            return (
+                                              <div
+                                                key={`known-${spell.id}`}
+                                                className="flex items-center justify-between gap-3 px-3 py-2 bg-card/60 border border-gold/15 rounded-md"
+                                              >
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="font-serif font-bold text-ink text-sm truncate">
+                                                    {cached?.name || spell.id}
+                                                    {cached?.school && (
+                                                      <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40">
+                                                        {cached.school}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                                {isPrepared && (
+                                                  <span className="text-[9px] font-bold uppercase tracking-widest text-blood bg-blood/10 px-1.5 py-0.5 rounded border border-blood/30 shrink-0">
+                                                    Prepared
+                                                  </span>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            {grantedSpells.length > 0 && (
+                              <div className="border border-emerald-500/20 bg-emerald-500/5 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                    Granted Spells ({grantedSpells.length})
+                                  </div>
+                                  <p className="text-[9px] font-serif italic text-ink/45">
+                                    From class features, subclasses, feats, etc.
+                                  </p>
+                                </div>
+                                {(() => {
+                                  const byLevel = new Map<number, any[]>();
+                                  grantedSpells.forEach((s: any) => {
+                                    const lvl = Number(spellNameCache[s.id]?.level ?? -1);
+                                    if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+                                    byLevel.get(lvl)!.push(s);
+                                  });
+                                  const levels = Array.from(byLevel.keys()).sort((a, b) => a - b);
+                                  return (
+                                    <div className="space-y-3">
+                                      {levels.map((lvl) => (
+                                        <div key={`granted-lvl-${lvl}`} className="space-y-1.5">
+                                          <div className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-700/60 px-1">
+                                            {lvl < 0
+                                              ? "Loading…"
+                                              : lvl === 0
+                                                ? "Cantrips"
+                                                : `Level ${lvl}`}
+                                            <span className="text-ink/35 font-bold">
+                                              {" "}
+                                              · {byLevel.get(lvl)!.length}
+                                            </span>
+                                          </div>
+                                          {byLevel.get(lvl)!.map((spell: any) => {
+                                            const cached = spellNameCache[spell.id];
+                                            const sourceName = resolveSourceName(
+                                              spell.grantedByType,
+                                              spell.grantedById,
+                                            );
+                                            const flagBits: string[] = [];
+                                            if (spell.isAlwaysPrepared) flagBits.push("Always prepared");
+                                            if (spell.doesntCountAgainstPrepared)
+                                              flagBits.push("Free prepared");
+                                            if (spell.doesntCountAgainstKnown) flagBits.push("Free known");
+                                            if (spell.countsAsClassId) {
+                                              const c = classCache[spell.countsAsClassId];
+                                              flagBits.push(`Counts as ${c?.name || "class"}`);
+                                            }
+                                            return (
+                                              <div
+                                                key={`${spell.grantedByAdvancementId}-${spell.id}`}
+                                                className="flex items-center justify-between gap-3 px-3 py-2 bg-card/60 border border-emerald-500/10 rounded-md"
+                                              >
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="font-serif font-bold text-ink text-sm truncate">
+                                                    {cached?.name || spell.id}
+                                                  </div>
+                                                  <div className="text-[10px] font-bold uppercase tracking-widest text-ink/45 mt-0.5 truncate">
+                                                    from {sourceName}
+                                                  </div>
+                                                </div>
+                                                {flagBits.length > 0 && (
+                                                  <div className="flex flex-wrap gap-1 shrink-0">
+                                                    {flagBits.map((bit) => (
+                                                      <span
+                                                        key={bit}
+                                                        className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20"
+                                                      >
+                                                        {bit}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            {extensions.length > 0 && (
+                              <div className="border border-cyan-500/20 bg-cyan-500/5 rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-700">
+                                    Spell List Extensions ({extensions.length})
+                                  </div>
+                                  <p className="text-[9px] font-serif italic text-ink/45">
+                                    Spells added to a class's available pool for this character
+                                  </p>
+                                </div>
+                                {(() => {
+                                  const byLevel = new Map<number, any[]>();
+                                  extensions.forEach((ext: any) => {
+                                    const lvl = Number(spellNameCache[ext.spellId]?.level ?? -1);
+                                    if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+                                    byLevel.get(lvl)!.push(ext);
+                                  });
+                                  const levels = Array.from(byLevel.keys()).sort((a, b) => a - b);
+                                  return (
+                                    <div className="space-y-3">
+                                      {levels.map((lvl) => (
+                                        <div key={`ext-lvl-${lvl}`} className="space-y-1.5">
+                                          <div className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-700/60 px-1">
+                                            {lvl < 0
+                                              ? "Loading…"
+                                              : lvl === 0
+                                                ? "Cantrips"
+                                                : `Level ${lvl}`}
+                                            <span className="text-ink/35 font-bold">
+                                              {" "}
+                                              · {byLevel.get(lvl)!.length}
+                                            </span>
+                                          </div>
+                                          {byLevel.get(lvl)!.map((ext: any, idx: number) => {
+                                            const cached = spellNameCache[ext.spellId];
+                                            const className =
+                                              classCache[ext.classId]?.name ||
+                                              `Class ${ext.classId.slice(0, 6)}`;
+                                            const sourceName = resolveSourceName(
+                                              ext.grantedByType,
+                                              ext.grantedById,
+                                            );
+                                            return (
+                                              <div
+                                                key={`${ext.classId}-${ext.spellId}-${idx}`}
+                                                className="flex items-center justify-between gap-3 px-3 py-2 bg-card/60 border border-cyan-500/10 rounded-md"
+                                              >
+                                                <div className="flex-1 min-w-0">
+                                                  <div className="font-serif font-bold text-ink text-sm truncate">
+                                                    {cached?.name || ext.spellId}
+                                                  </div>
+                                                  <div className="text-[10px] font-bold uppercase tracking-widest text-ink/45 mt-0.5 truncate">
+                                                    added to {className} list · from {sourceName}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -4706,6 +5689,55 @@ export default function CharacterBuilder({
                                       name: adv.title || "Ability Score Improvement",
                                       count: 1,
                                       type: "asi-trigger",
+                                      advType: adv.type,
+                                      featureId: adv.featureId,
+                                      advId: adv._id,
+                                      sourceScope:
+                                        buildAdvancementSourceScope(sourceContext),
+                                      classId: matchedClass?.id,
+                                      level: prog.level,
+                                      configuration: adv.configuration,
+                                    });
+                                    return;
+                                  }
+
+                                  // ── Spellbook Manager (Layer 2) ──
+                                  // GrantSpells fixed mode + ExtendSpellList render
+                                  // as info cards (auto-applied). GrantSpells in
+                                  // choice mode emits a "spell-choice" card that
+                                  // opens the picker dialog.
+                                  if (
+                                    adv.type === "GrantSpells" ||
+                                    adv.type === "ExtendSpellList"
+                                  ) {
+                                    if (advLevel !== prog.level) return;
+                                    const cfg = adv.configuration || {};
+                                    // Choice mode pool: explicit spellIds OR
+                                    // the resolved rule matches. Both kinds
+                                    // open the same picker dialog.
+                                    const choicePool =
+                                      cfg.mode === "choice" &&
+                                      adv.type === "GrantSpells"
+                                        ? cfg.resolver?.kind === "rule"
+                                          ? resolveRulePool(
+                                              String(cfg.resolver.ruleId || ""),
+                                            )
+                                          : Array.isArray(cfg.resolver?.spellIds)
+                                            ? cfg.resolver.spellIds
+                                            : []
+                                        : [];
+                                    const isSpellChoice = choicePool.length > 0;
+
+                                    choicesAtThisLevel.push({
+                                      name:
+                                        adv.title ||
+                                        (adv.type === "GrantSpells"
+                                          ? "Granted Spells"
+                                          : "Extended Spell List"),
+                                      count: isSpellChoice ? Number(cfg.count) || 1 : 0,
+                                      type: isSpellChoice
+                                        ? "spell-choice"
+                                        : "advancement-info",
                                       advType: adv.type,
                                       featureId: adv.featureId,
                                       advId: adv._id,
@@ -5158,6 +6190,92 @@ export default function CharacterBuilder({
                                                 }
 
                                                 if (
+                                                  choice.type === "spell-choice"
+                                                ) {
+                                                  // ── Spellbook Manager (Layer 2) ──
+                                                  // GrantSpells choice-mode card.
+                                                  // Pool: explicit spellIds OR the
+                                                  // resolved rule matches.
+                                                  const cfg = choice.configuration || {};
+                                                  const poolIds: string[] =
+                                                    cfg.resolver?.kind === "rule"
+                                                      ? resolveRulePool(
+                                                          String(cfg.resolver.ruleId || ""),
+                                                        )
+                                                      : Array.isArray(cfg.resolver?.spellIds)
+                                                        ? cfg.resolver.spellIds
+                                                        : [];
+                                                  const sel = getAdvancementSelectionValues(
+                                                    selectedOptionsMap,
+                                                    {
+                                                      sourceScope: choice.sourceScope,
+                                                      advancementId: choice.advId,
+                                                      level: choice.level,
+                                                    },
+                                                  );
+                                                  return (
+                                                    <div
+                                                      key={`spell-choice-${cidx}`}
+                                                      className="bg-emerald-500/5 border border-emerald-500/25 rounded-md p-4 mt-2 mb-4 ml-[3px]"
+                                                    >
+                                                      <div className="flex items-center justify-between mb-2">
+                                                        <span className="font-serif font-bold text-ink text-sm uppercase tracking-wider flex items-center gap-2">
+                                                          <Zap className="w-4 h-4 text-emerald-600" />
+                                                          {choice.name}
+                                                        </span>
+                                                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                                          {sel.length} / {choice.count} chosen
+                                                        </span>
+                                                      </div>
+                                                      {sel.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mb-3">
+                                                          {sel.map((sid: string) => (
+                                                            <span
+                                                              key={sid}
+                                                              className="bg-emerald-500/10 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-500/20 text-[10px]"
+                                                            >
+                                                              {spellNameCache[sid]?.name || sid}
+                                                            </span>
+                                                          ))}
+                                                        </div>
+                                                      )}
+                                                      <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                          setSpellChoiceDialogOpen({
+                                                            name: choice.name,
+                                                            count: choice.count,
+                                                            advId: choice.advId,
+                                                            level: choice.level,
+                                                            sourceScope:
+                                                              choice.sourceScope || "",
+                                                            resolverKind:
+                                                              cfg.resolver?.kind === "rule"
+                                                                ? "rule"
+                                                                : "explicit",
+                                                            explicitSpellIds: Array.isArray(
+                                                              cfg.resolver?.spellIds,
+                                                            )
+                                                              ? cfg.resolver.spellIds
+                                                              : [],
+                                                            ruleId: String(
+                                                              cfg.resolver?.ruleId || "",
+                                                            ),
+                                                          })
+                                                        }
+                                                        className="w-full border-dashed border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10 hover:border-emerald-500 font-bold tracking-widest uppercase text-[10px]"
+                                                      >
+                                                        <Plus className="w-3 h-3 mr-2" />
+                                                        {sel.length === 0
+                                                          ? "Choose Spells"
+                                                          : "Edit Spell Choices"}
+                                                      </Button>
+                                                    </div>
+                                                  );
+                                                }
+
+                                                if (
                                                   choice.type ===
                                                   "advancement-info"
                                                 ) {
@@ -5252,6 +6370,91 @@ export default function CharacterBuilder({
                                                           </span>
                                                         </div>
                                                       )}
+                                                      {(choice.advType ===
+                                                        "GrantSpells" ||
+                                                        choice.advType ===
+                                                          "ExtendSpellList") && (() => {
+                                                        const cfg = choice.configuration || {};
+                                                        const isRule =
+                                                          cfg?.resolver?.kind === "rule";
+                                                        const ruleId = String(
+                                                          cfg?.resolver?.ruleId || "",
+                                                        );
+                                                        const rule = isRule
+                                                          ? spellRulesById[ruleId]
+                                                          : null;
+                                                        const spellIds = isRule
+                                                          ? resolveRulePool(ruleId)
+                                                          : Array.isArray(cfg.resolver?.spellIds)
+                                                            ? cfg.resolver.spellIds
+                                                            : [];
+                                                        const flagBits = [];
+                                                        if (choice.advType === "GrantSpells") {
+                                                          if (cfg.alwaysPrepared)
+                                                            flagBits.push("Always prepared");
+                                                          if (cfg.doesntCountAgainstPrepared)
+                                                            flagBits.push("Free prepared");
+                                                          if (cfg.doesntCountAgainstKnown)
+                                                            flagBits.push("Free known");
+                                                          if (cfg.mode === "choice")
+                                                            flagBits.push(`Pick ${cfg.count || 1}`);
+                                                        }
+                                                        if (choice.advType === "ExtendSpellList") {
+                                                          flagBits.push(
+                                                            `Scope: ${cfg.scope || "self"}`,
+                                                          );
+                                                        }
+                                                        return (
+                                                          <div className="mt-1 space-y-1">
+                                                            {flagBits.length > 0 && (
+                                                              <p className="text-ink/45 text-[9px] font-bold uppercase tracking-widest">
+                                                                {flagBits.join(" · ")}
+                                                              </p>
+                                                            )}
+                                                            {isRule && (
+                                                              <p className="text-ink/55 text-[10px] font-bold uppercase tracking-widest">
+                                                                Rule:{" "}
+                                                                {rule?.name || ruleId.slice(0, 6)}{" "}
+                                                                <span className="text-ink/35">
+                                                                  · {spellIds.length} matches
+                                                                </span>
+                                                              </p>
+                                                            )}
+                                                            {spellIds.length === 0 ? (
+                                                              <p className="text-ink/50 italic text-[10px]">
+                                                                {isRule && !allSpellSummaries
+                                                                  ? "Loading rule matches…"
+                                                                  : "No spells in pool."}
+                                                              </p>
+                                                            ) : (
+                                                              <div className="flex flex-wrap gap-1">
+                                                                {spellIds.slice(0, 12).map((spellId: string) => {
+                                                                  const cached =
+                                                                    spellNameCache[spellId];
+                                                                  return (
+                                                                    <span
+                                                                      key={spellId}
+                                                                      className={
+                                                                        choice.advType ===
+                                                                        "GrantSpells"
+                                                                          ? "bg-emerald-500/10 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-500/20"
+                                                                          : "bg-cyan-500/10 text-cyan-700 px-1.5 py-0.5 rounded border border-cyan-500/20"
+                                                                      }
+                                                                    >
+                                                                      {cached?.name || spellId}
+                                                                    </span>
+                                                                  );
+                                                                })}
+                                                                {spellIds.length > 12 && (
+                                                                  <span className="text-ink/40 px-1.5 py-0.5 text-[10px]">
+                                                                    +{spellIds.length - 12} more
+                                                                  </span>
+                                                                )}
+                                                              </div>
+                                                            )}
+                                                          </div>
+                                                        );
+                                                      })()}
                                                     </div>
                                                   );
                                                 }
@@ -5453,6 +6656,971 @@ export default function CharacterBuilder({
                 </div>
               )}
             </div>
+          ) : activeStep === "spells" ? (
+            (() => {
+              // ── Spell Manager (Layer 3 starter) ──
+              // Per-class browser of available spells: master class list +
+              // per-character extensions. Player can mark spells known/prepared.
+              // Granted spells (from advancements) display as locked rows.
+              const ps = character.progressionState || {};
+              const ownedSpells = ps.ownedSpells || [];
+              const extensions = ps.spellListExtensions || [];
+
+              // Build the active class's pool: class_spell_lists ∪ extensions
+              const activeClassId =
+                activeSpellManagerClassId ||
+                (spellcastingClassIds[0] ?? "");
+              const activeClass = activeClassId ? classCache[activeClassId] : null;
+              const basePool = classSpellPools[activeClassId] || [];
+
+              // Resolve extension spell records — fall back to spellNameCache or
+              // a stub if the cache hasn't fetched the row yet.
+              const extSpellIds = extensions
+                .filter((e: any) => e.classId === activeClassId)
+                .map((e: any) => e.spellId);
+              const extEntries = extSpellIds
+                .filter((id: string) => !basePool.some((s: any) => s.id === id))
+                .map((id: string) => {
+                  const cached = spellNameCache[id];
+                  return {
+                    id,
+                    name: cached?.name || id,
+                    level: cached?.level ?? 0,
+                    school: cached?.school || "",
+                    image_url: null,
+                    source_id: null,
+                    tags: [],
+                    membershipId: `ext-${id}`,
+                    membershipSource: "extension",
+                    addedAt: "",
+                    isExtension: true,
+                  };
+                });
+
+              // Pool entries from `fetchClassSpellList` already include derived
+              // filter facets via `deriveSpellFilterFacets` (see classSpellLists.ts).
+              // Extension stubs don't — the back-fill below adds them when the
+              // global catalog is available so filters work uniformly.
+              const fullPool = [...basePool, ...extEntries]
+                .map((spell: any) => {
+                  if (spell.activationBucket) return spell;
+                  // Try to back-fill from the loaded global catalog.
+                  const fromCatalog = facetEnrichedSpellSummaries?.find(
+                    (s: any) => s.id === spell.id,
+                  );
+                  if (fromCatalog) {
+                    return {
+                      ...spell,
+                      ...fromCatalog,
+                    };
+                  }
+                  return spell;
+                })
+                .sort((a, b) => {
+                  if ((a.level || 0) !== (b.level || 0))
+                    return (a.level || 0) - (b.level || 0);
+                  return String(a.name || "").localeCompare(String(b.name || ""));
+                });
+
+              const tagsByIdMap = Object.fromEntries(
+                spellManagerTags.map((t: any) => [t.id, t]),
+              );
+              const filteredEntries = spellManagerFilters.filter(
+                fullPool as any,
+                tagsByIdMap,
+              );
+              let filteredPool = filteredEntries.map((e: any) => e.spell);
+              if (showFavouritesOnly || showWatchlistOnly || showLoadoutOnly) {
+                filteredPool = filteredPool.filter((spell: any) => {
+                  const owned = ownedSpells.find((s: any) => s.id === spell.id);
+                  if (!owned) return false;
+                  if (showFavouritesOnly && !owned.isFavourite) return false;
+                  if (showWatchlistOnly && !owned.isWatchlist) return false;
+                  if (showLoadoutOnly) {
+                    const inActive = (owned.loadoutMembership || []).some((lid: string) =>
+                      activeLoadouts.some((l: any) => l.id === lid),
+                    );
+                    if (!inActive) return false;
+                  }
+                  return true;
+                });
+              }
+
+              const ownedSpellMap = new Map<string, any>(
+                ownedSpells.map((s: any) => [s.id, s]),
+              );
+
+              // Group by level for clearer browsing
+              const byLevel = new Map<number, any[]>();
+              filteredPool.forEach((spell: any) => {
+                const lvl = Number(spell.level || 0);
+                if (!byLevel.has(lvl)) byLevel.set(lvl, []);
+                byLevel.get(lvl)!.push(spell);
+              });
+              const sortedLevels = Array.from(byLevel.keys()).sort(
+                (a, b) => a - b,
+              );
+
+              // Counters for the active class. Granted spells with
+              // doesntCountAgainstKnown are excluded from the cap counts (Magic
+              // Initiate, Chronomancy Initiate, etc).
+              const countsTowardsActiveClass = (s: any) => {
+                if (!s) return false;
+                if (s.grantedByAdvancementId) {
+                  if (s.doesntCountAgainstKnown) return false;
+                  return s.countsAsClassId
+                    ? s.countsAsClassId === activeClassId
+                    : true;
+                }
+                return true;
+              };
+              const ownedForClass = ownedSpells.filter(countsTowardsActiveClass);
+              const knownCount = ownedForClass.length;
+              const preparedCount = ownedSpells.filter(
+                (s: any) => s?.isPrepared || s?.isAlwaysPrepared,
+              ).length;
+
+              // Detect cap scaling columns by name. If the class authors them
+              // as "Cantrips Known" / "Spells Known" scale columns, we display
+              // the cap and block over-cap selection. If absent, no cap is
+              // enforced (current behaviour preserved). Match is case-insensitive
+              // and tolerates "Cantrips" → "Cantrips Known" abbreviation.
+              const matchCapColumn = (pattern: RegExp) => {
+                for (const col of Object.values(scalingCache) as any[]) {
+                  if (!col || col.parentId !== activeClassId) continue;
+                  const name = String(col.name || "").trim();
+                  if (pattern.test(name)) {
+                    const v = resolveScaleValueAtLevel(
+                      col,
+                      progressionClassGroups.find(
+                        (g: any) => g.classId === activeClassId,
+                      )?.classLevel || 0,
+                    );
+                    const n = Number(v);
+                    if (Number.isFinite(n)) return n;
+                  }
+                }
+                return null;
+              };
+              const cantripsCap = matchCapColumn(/^cantrips\s*(known)?$/i);
+              const spellsCap = matchCapColumn(/^spells\s*known$/i);
+
+              const cantripsKnownCount = ownedForClass.filter((s: any) => {
+                const lvl = spellNameCache[s.id]?.level;
+                return lvl === 0;
+              }).length;
+              const spellsKnownCount = ownedForClass.filter((s: any) => {
+                const lvl = spellNameCache[s.id]?.level;
+                return lvl !== undefined && lvl > 0;
+              }).length;
+              const atCantripsCap =
+                cantripsCap !== null && cantripsKnownCount >= cantripsCap;
+              const atSpellsCap = spellsCap !== null && spellsKnownCount >= spellsCap;
+
+              const togglePlayerKnown = (
+                spellId: string,
+                spellLevel: number,
+                spellRequiredTags: string[] = [],
+              ) => {
+                setCharacter((prev: any) => {
+                  const psPrev = prev.progressionState || {};
+                  const owned = psPrev.ownedSpells || [];
+                  const existing = owned.find((s: any) => s.id === spellId);
+                  // Don't let players toggle granted spells off; they're locked.
+                  if (existing?.grantedByAdvancementId) return prev;
+                  let nextOwned;
+                  if (existing) {
+                    nextOwned = owned.filter((s: any) => s.id !== spellId);
+                  } else {
+                    // Block adding when prereqs aren't met.
+                    if (
+                      spellRequiredTags.length > 0 &&
+                      !characterMeetsSpellPrerequisites(effectiveTagSet, {
+                        requiredTags: spellRequiredTags,
+                      })
+                    ) {
+                      return prev;
+                    }
+                    // Enforce caps when set. Adding a cantrip while at cantrip
+                    // cap or a leveled spell while at spells-known cap silently
+                    // no-ops; the UI reflects the cap state separately.
+                    const isCantrip = spellLevel === 0;
+                    if (isCantrip && atCantripsCap) return prev;
+                    if (!isCantrip && atSpellsCap) return prev;
+                    nextOwned = [
+                      ...owned,
+                      {
+                        id: spellId,
+                        sourceId: null,
+                        isPrepared: false,
+                        isAlwaysPrepared: false,
+                        grantedByType: null,
+                        grantedById: null,
+                        grantedByAdvancementId: null,
+                        countsAsClassId: null,
+                        doesntCountAgainstPrepared: false,
+                        doesntCountAgainstKnown: false,
+                        isFavourite: false,
+                        isWatchlist: false,
+                        watchlistNote: '',
+                        loadoutMembership: [],
+                      },
+                    ];
+                  }
+                  return {
+                    ...prev,
+                    progressionState: { ...psPrev, ownedSpells: nextOwned },
+                  };
+                });
+              };
+
+              const togglePrepared = (spellId: string) => {
+                setCharacter((prev: any) => {
+                  const psPrev = prev.progressionState || {};
+                  const owned = psPrev.ownedSpells || [];
+                  const nextOwned = owned.map((s: any) =>
+                    s.id === spellId
+                      ? {
+                          ...s,
+                          isPrepared: s.isAlwaysPrepared
+                            ? true
+                            : !s.isPrepared,
+                        }
+                      : s,
+                  );
+                  return {
+                    ...prev,
+                    progressionState: { ...psPrev, ownedSpells: nextOwned },
+                  };
+                });
+              };
+
+              const toggleFavourite = (spellId: string) => {
+                setCharacter((prev: any) => {
+                  const psPrev = prev.progressionState || {};
+                  const owned = psPrev.ownedSpells || [];
+                  const existing = owned.find((s: any) => s.id === spellId);
+                  // Players can favourite spells they don't yet know — auto-create
+                  // a stub entry so the favourite persists.
+                  let nextOwned;
+                  if (existing) {
+                    nextOwned = owned.map((s: any) =>
+                      s.id === spellId ? { ...s, isFavourite: !s.isFavourite } : s,
+                    );
+                  } else {
+                    nextOwned = [
+                      ...owned,
+                      {
+                        id: spellId,
+                        sourceId: null,
+                        isPrepared: false,
+                        isAlwaysPrepared: false,
+                        grantedByType: null,
+                        grantedById: null,
+                        grantedByAdvancementId: null,
+                        countsAsClassId: null,
+                        doesntCountAgainstPrepared: false,
+                        doesntCountAgainstKnown: false,
+                        isFavourite: true,
+                        isWatchlist: false,
+                        watchlistNote: '',
+                        loadoutMembership: [],
+                      },
+                    ];
+                  }
+                  return {
+                    ...prev,
+                    progressionState: { ...psPrev, ownedSpells: nextOwned },
+                  };
+                });
+              };
+
+              const toggleWatchlist = (spellId: string) => {
+                setCharacter((prev: any) => {
+                  const psPrev = prev.progressionState || {};
+                  const owned = psPrev.ownedSpells || [];
+                  const existing = owned.find((s: any) => s.id === spellId);
+                  let nextOwned;
+                  if (existing) {
+                    nextOwned = owned.map((s: any) =>
+                      s.id === spellId ? { ...s, isWatchlist: !s.isWatchlist } : s,
+                    );
+                  } else {
+                    nextOwned = [
+                      ...owned,
+                      {
+                        id: spellId,
+                        sourceId: null,
+                        isPrepared: false,
+                        isAlwaysPrepared: false,
+                        grantedByType: null,
+                        grantedById: null,
+                        grantedByAdvancementId: null,
+                        countsAsClassId: null,
+                        doesntCountAgainstPrepared: false,
+                        doesntCountAgainstKnown: false,
+                        isFavourite: false,
+                        isWatchlist: true,
+                        watchlistNote: '',
+                        loadoutMembership: [],
+                      },
+                    ];
+                  }
+                  return {
+                    ...prev,
+                    progressionState: { ...psPrev, ownedSpells: nextOwned },
+                  };
+                });
+              };
+
+              // ── Layer 4: Loadouts ──
+              const loadouts = (ps.spellLoadouts || []) as any[];
+              const activeLoadouts = loadouts.filter((l: any) => l?.isActive);
+
+              const createLoadout = () => {
+                const name = window.prompt("Loadout name?", "Combat");
+                if (!name) return;
+                const sizeStr = window.prompt(
+                  "How many spells does this loadout hold?",
+                  "5",
+                );
+                const size = Math.max(0, Number(sizeStr || 0) || 0);
+                const newLoadout = {
+                  id: crypto.randomUUID(),
+                  name: name.trim(),
+                  size,
+                  isActive: true,
+                  sortOrder: loadouts.length,
+                };
+                setCharacter((prev: any) => ({
+                  ...prev,
+                  progressionState: {
+                    ...(prev.progressionState || {}),
+                    spellLoadouts: [...(prev.progressionState?.spellLoadouts || []), newLoadout],
+                  },
+                }));
+              };
+
+              const updateLoadout = (loadoutId: string, patch: Record<string, any>) => {
+                setCharacter((prev: any) => ({
+                  ...prev,
+                  progressionState: {
+                    ...(prev.progressionState || {}),
+                    spellLoadouts: (prev.progressionState?.spellLoadouts || []).map((l: any) =>
+                      l.id === loadoutId ? { ...l, ...patch } : l,
+                    ),
+                  },
+                }));
+              };
+
+              const deleteLoadout = (loadoutId: string) => {
+                if (!window.confirm("Delete this loadout?")) return;
+                setCharacter((prev: any) => {
+                  const psPrev = prev.progressionState || {};
+                  return {
+                    ...prev,
+                    progressionState: {
+                      ...psPrev,
+                      spellLoadouts: (psPrev.spellLoadouts || []).filter(
+                        (l: any) => l.id !== loadoutId,
+                      ),
+                      // Strip the deleted loadout's id from every spell's membership.
+                      ownedSpells: (psPrev.ownedSpells || []).map((s: any) => ({
+                        ...s,
+                        loadoutMembership: Array.isArray(s.loadoutMembership)
+                          ? s.loadoutMembership.filter((id: string) => id !== loadoutId)
+                          : [],
+                      })),
+                    },
+                  };
+                });
+              };
+
+              const toggleLoadoutMembership = (spellId: string, loadoutId: string) => {
+                setCharacter((prev: any) => {
+                  const psPrev = prev.progressionState || {};
+                  const owned = psPrev.ownedSpells || [];
+                  const nextOwned = owned.map((s: any) => {
+                    if (s.id !== spellId) return s;
+                    const cur = Array.isArray(s.loadoutMembership) ? s.loadoutMembership : [];
+                    return {
+                      ...s,
+                      loadoutMembership: cur.includes(loadoutId)
+                        ? cur.filter((id: string) => id !== loadoutId)
+                        : [...cur, loadoutId],
+                    };
+                  });
+                  return {
+                    ...prev,
+                    progressionState: { ...psPrev, ownedSpells: nextOwned },
+                  };
+                });
+              };
+
+              const isInActiveLoadout = (spell: any) => {
+                if (!spell?.loadoutMembership?.length) return false;
+                return spell.loadoutMembership.some((lid: string) =>
+                  activeLoadouts.some((l: any) => l.id === lid),
+                );
+              };
+
+              // Effective prepared = always_prepared ∪ active-loadout members ∪ legacy isPrepared.
+              const effectivePreparedSet = new Set<string>();
+              ownedSpells.forEach((s: any) => {
+                if (s?.isAlwaysPrepared || s?.isPrepared || isInActiveLoadout(s)) {
+                  effectivePreparedSet.add(s.id);
+                }
+              });
+              const effectivePreparedCount = effectivePreparedSet.size;
+              const favouriteCount = ownedSpells.filter((s: any) => s?.isFavourite).length;
+              const watchlistCount = ownedSpells.filter((s: any) => s?.isWatchlist).length;
+
+              if (spellcastingClassIds.length === 0) {
+                return (
+                  <div className="bg-background/50 p-8 rounded-xl border border-gold/10 h-full flex flex-col items-center justify-center text-center">
+                    <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
+                      <Zap className="w-10 h-10 text-gold" />
+                    </div>
+                    <h2 className="text-2xl font-serif font-black text-ink mb-2 uppercase tracking-tight">
+                      Spell Manager
+                    </h2>
+                    <p className="text-ink/60 max-w-sm font-serif italic mb-8">
+                      No spellcasting class on this character yet.
+                    </p>
+                    <Button
+                      onClick={() => setActiveStep("class")}
+                      variant="outline"
+                      className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
+                    >
+                      Add a Class
+                    </Button>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3 px-1">
+                    <div>
+                      <h2 className="text-2xl font-serif font-black text-ink uppercase tracking-tight flex items-center gap-2">
+                        <Zap className="w-6 h-6 text-gold" />
+                        Spell Manager
+                      </h2>
+                      <p className="text-xs text-ink/55 font-serif italic mt-1">
+                        Browse your class spell list, mark spells known and
+                        prepared. Granted spells are locked.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-ink/55 flex-wrap">
+                      {cantripsCap !== null && (
+                        <span>
+                          Cantrips:{" "}
+                          <span className={atCantripsCap ? "text-blood" : "text-gold"}>
+                            {cantripsKnownCount} / {cantripsCap}
+                          </span>
+                        </span>
+                      )}
+                      {spellsCap !== null && (
+                        <>
+                          {cantripsCap !== null && <span className="text-ink/20">·</span>}
+                          <span>
+                            Spells:{" "}
+                            <span className={atSpellsCap ? "text-blood" : "text-gold"}>
+                              {spellsKnownCount} / {spellsCap}
+                            </span>
+                          </span>
+                        </>
+                      )}
+                      {cantripsCap === null && spellsCap === null && (
+                        <span>
+                          Known: <span className="text-gold">{knownCount}</span>
+                        </span>
+                      )}
+                      <span className="text-ink/20">·</span>
+                      <span>
+                        Prepared: <span className="text-blood">{effectivePreparedCount}</span>
+                      </span>
+                      <span className="text-ink/20">·</span>
+                      <span>
+                        ★ <span className="text-amber-500">{favouriteCount}</span>
+                      </span>
+                      <span className="text-ink/20">·</span>
+                      <span>
+                        ◐ <span className="text-cyan-500">{watchlistCount}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Class tabs */}
+                  <div className="flex flex-wrap gap-2 border-b border-gold/15 pb-2">
+                    {spellcastingClassIds.map((cid) => {
+                      const c = classCache[cid];
+                      const isActive = cid === activeClassId;
+                      return (
+                        <button
+                          key={cid}
+                          onClick={() => {
+                            setActiveSpellManagerClassId(cid);
+                            setSelectedSpellId(null);
+                          }}
+                          className={`px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-md border transition-colors ${
+                            isActive
+                              ? "bg-gold text-white border-gold"
+                              : "bg-card text-ink/70 border-gold/20 hover:border-gold/50"
+                          }`}
+                        >
+                          {c?.name || `Class ${cid.slice(0, 6)}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Layer 4: Loadouts panel — sized, named, multi-active prepared sets */}
+                  <div className="border border-purple-500/20 bg-purple-500/5 rounded-md p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-700">
+                        Loadouts ({loadouts.length})
+                        {activeLoadouts.length > 0 && (
+                          <span className="ml-2 text-purple-700/60 normal-case font-bold">
+                            · {activeLoadouts.length} active
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={createLoadout}
+                        className="text-[10px] font-bold uppercase tracking-widest text-purple-700 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/30 hover:bg-purple-500/20"
+                      >
+                        + New Loadout
+                      </button>
+                    </div>
+                    {loadouts.length === 0 ? (
+                      <p className="text-[11px] font-serif italic text-ink/45">
+                        Create a loadout to compose your prepared spells. Multiple loadouts
+                        can be active at once.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {loadouts.map((l: any) => {
+                          const memberCount = ownedSpells.filter((s: any) =>
+                            (s.loadoutMembership || []).includes(l.id),
+                          ).length;
+                          const overSize = l.size > 0 && memberCount > l.size;
+                          return (
+                            <div
+                              key={l.id}
+                              className={`flex items-center gap-2 px-2 py-1 rounded border ${
+                                l.isActive
+                                  ? "border-purple-500/40 bg-purple-500/10"
+                                  : "border-gold/15 bg-card/40"
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => updateLoadout(l.id, { isActive: !l.isActive })}
+                                title={l.isActive ? "Deactivate" : "Activate"}
+                                className={`w-3 h-3 rounded border-2 flex-shrink-0 ${
+                                  l.isActive
+                                    ? "bg-purple-600 border-purple-600"
+                                    : "border-purple-500/40"
+                                }`}
+                              />
+                              <input
+                                type="text"
+                                value={l.name}
+                                onChange={(e) => updateLoadout(l.id, { name: e.target.value })}
+                                className="bg-transparent text-xs font-bold text-ink border-0 outline-none focus:ring-1 focus:ring-purple-500/40 rounded px-1 w-24"
+                              />
+                              <span
+                                className={`text-[10px] font-bold uppercase tracking-widest ${overSize ? "text-blood" : "text-ink/45"}`}
+                              >
+                                {memberCount} / {l.size || "?"}
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={l.size}
+                                onChange={(e) =>
+                                  updateLoadout(l.id, { size: Math.max(0, Number(e.target.value || 0) || 0) })
+                                }
+                                className="bg-transparent text-[10px] text-ink/55 border border-gold/15 outline-none focus:ring-1 focus:ring-purple-500/40 rounded px-1 w-10 text-center"
+                                title="Size cap (informational)"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => deleteLoadout(l.id)}
+                                title="Delete"
+                                className="text-[10px] text-blood/70 hover:text-blood px-1"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Phase 4 / Layer 4 — character-state filter pills */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowFavouritesOnly(v => !v)}
+                      className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                        showFavouritesOnly
+                          ? "border-amber-500/60 bg-amber-500/15 text-amber-600"
+                          : "border-gold/15 bg-card/40 text-ink/55 hover:border-amber-500/30"
+                      }`}
+                    >
+                      ★ Favourites only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowWatchlistOnly(v => !v)}
+                      className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                        showWatchlistOnly
+                          ? "border-cyan-500/60 bg-cyan-500/15 text-cyan-700"
+                          : "border-gold/15 bg-card/40 text-ink/55 hover:border-cyan-500/30"
+                      }`}
+                    >
+                      ◐ Watchlist only
+                    </button>
+                    {activeLoadouts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowLoadoutOnly(v => !v)}
+                        className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                          showLoadoutOnly
+                            ? "border-purple-500/60 bg-purple-500/15 text-purple-700"
+                            : "border-gold/15 bg-card/40 text-ink/55 hover:border-purple-500/30"
+                        }`}
+                      >
+                        Active loadouts only
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Effective tag set — drives spell prerequisite gating */}
+                  {effectiveTagAttributions.size > 0 && (
+                    <details className="border border-gold/15 bg-card/30 rounded-md px-3 py-2 text-[11px]">
+                      <summary className="cursor-pointer flex items-center justify-between gap-2 font-bold uppercase tracking-widest text-ink/55">
+                        <span>
+                          Character tags ({effectiveTagAttributions.size})
+                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40 normal-case">
+                          Drives spell prereqs
+                        </span>
+                      </summary>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {Array.from(effectiveTagAttributions.values()).map((attr: any) => {
+                          const tagName =
+                            spellManagerTags.find((t: any) => t.id === attr.tagId)?.name ||
+                            attr.tagId;
+                          return (
+                            <span
+                              key={attr.tagId}
+                              title={`from ${attr.source}: ${attr.sourceName}`}
+                              className="bg-gold/10 text-gold px-1.5 py-0.5 rounded border border-gold/20 text-[10px] font-bold uppercase tracking-widest"
+                            >
+                              {tagName}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  )}
+
+                  {/* Filter shell */}
+                  <SpellFilterShell
+                    filters={spellManagerFilters}
+                    sources={spellManagerSources}
+                    tags={spellManagerTags}
+                    tagGroups={spellManagerTagGroups}
+                    searchPlaceholder="Search this class's spells..."
+                  />
+
+                  {/* Two-column layout: list on left, detail pane on right */}
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+                    <div className="min-w-0">
+                      {/* Active class pool */}
+                      {!classSpellPools[activeClassId] ? (
+                        <div className="text-sm text-ink/45 font-serif italic p-4">
+                          Loading {activeClass?.name || "class"} spell list...
+                        </div>
+                      ) : fullPool.length === 0 ? (
+                        <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
+                          No spells on the {activeClass?.name || "class"} spell
+                          list yet. Curate it in /compendium/spell-lists.
+                        </div>
+                      ) : filteredPool.length === 0 ? (
+                        <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
+                          No spells match the current filters.{" "}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              spellManagerFilters.resetAll();
+                              spellManagerFilters.setSearch("");
+                            }}
+                            className="text-gold hover:underline"
+                          >
+                            Reset filters
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-ink/45 px-1">
+                            {filteredPool.length} of {fullPool.length} spells
+                            {extEntries.length > 0 &&
+                              ` · ${extEntries.length} from extensions`}
+                          </div>
+                          {sortedLevels.map((lvl) => {
+                            const spellsAtLvl = byLevel.get(lvl) || [];
+                            return (
+                              <div key={lvl} className="space-y-1.5">
+                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/70 px-1">
+                                  {lvl === 0 ? "Cantrips" : `Level ${lvl}`}{" "}
+                                  <span className="text-ink/35 font-bold">
+                                    · {spellsAtLvl.length}
+                                  </span>
+                                </div>
+                                {spellsAtLvl.map((spell: any) => {
+                                  const owned = ownedSpellMap.get(spell.id);
+                                  const isGranted = !!owned?.grantedByAdvancementId;
+                                  const isKnown = !!owned;
+                                  const isPrepared = !!owned?.isPrepared;
+                                  const isExtension = spell.isExtension;
+                                  const isSelected = selectedSpellId === spell.id;
+                                  const spellLvl = Number(spell.level || 0);
+                                  const isCantrip = spellLvl === 0;
+                                  const requiredTags = Array.isArray(spell.requiredTags)
+                                    ? spell.requiredTags
+                                    : [];
+                                  const missingTags = missingPrerequisiteTags(
+                                    effectiveTagSet,
+                                    { requiredTags },
+                                  );
+                                  const prereqBlocked =
+                                    !isKnown && !isGranted && missingTags.length > 0;
+                                  const blockedByCap =
+                                    !isKnown &&
+                                    !isGranted &&
+                                    !prereqBlocked &&
+                                    ((isCantrip && atCantripsCap) ||
+                                      (!isCantrip && atSpellsCap));
+                                  const isBlocked = prereqBlocked || blockedByCap;
+                                  return (
+                                    <div
+                                      key={spell.id}
+                                      onClick={() => setSelectedSpellId(spell.id)}
+                                      className={`flex items-center gap-3 px-3 py-2 rounded-md border transition-colors cursor-pointer ${
+                                        isSelected
+                                          ? "border-gold ring-1 ring-gold/40 bg-gold/10"
+                                          : isGranted
+                                            ? "border-emerald-500/30 bg-emerald-500/5"
+                                            : isKnown
+                                              ? "border-gold/30 bg-gold/5"
+                                              : prereqBlocked
+                                                ? "border-blood/15 bg-blood/[0.03] opacity-70"
+                                                : blockedByCap
+                                                  ? "border-gold/5 bg-card/20 opacity-60"
+                                                  : "border-gold/10 bg-card/40 hover:bg-card/60"
+                                      }`}
+                                    >
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!isGranted)
+                                            togglePlayerKnown(spell.id, spellLvl, requiredTags);
+                                        }}
+                                        disabled={isGranted || isBlocked}
+                                        title={
+                                          isGranted
+                                            ? "Granted by an advancement (locked)"
+                                            : prereqBlocked
+                                              ? `Missing prerequisite tag${missingTags.length === 1 ? "" : "s"}`
+                                              : blockedByCap
+                                                ? isCantrip
+                                                  ? `At cantrips-known cap (${cantripsCap})`
+                                                  : `At spells-known cap (${spellsCap})`
+                                                : isKnown
+                                                  ? "Remove from known"
+                                                  : "Mark as known"
+                                        }
+                                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                                          isKnown
+                                            ? isGranted
+                                              ? "bg-emerald-600 border-emerald-600 text-white"
+                                              : "bg-gold border-gold text-white"
+                                            : prereqBlocked
+                                              ? "border-blood/30"
+                                              : "border-gold/30 hover:border-gold"
+                                        } ${isGranted || isBlocked ? "cursor-not-allowed" : ""}`}
+                                      >
+                                        {isKnown && <Check className="w-3 h-3" />}
+                                      </button>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-serif font-bold text-ink text-sm truncate flex items-center gap-1.5">
+                                          <span className="truncate">{spell.name}</span>
+                                          {requiredTags.length > 0 && (
+                                            <span
+                                              className="text-[9px] font-bold uppercase tracking-widest text-blood/70 shrink-0"
+                                              title={`Requires: ${requiredTags.map((tid: string) => spellManagerTags.find((t: any) => t.id === tid)?.name || tid).join(", ")}`}
+                                            >
+                                              ⚷
+                                            </span>
+                                          )}
+                                          {spell.school && (
+                                            <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40 shrink-0">
+                                              {spell.school}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {isExtension && (
+                                          <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-700 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
+                                            Extension
+                                          </span>
+                                        )}
+                                        {isGranted && (
+                                          <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                            Granted
+                                          </span>
+                                        )}
+                                        {prereqBlocked && (
+                                          <span
+                                            className="text-[9px] font-bold uppercase tracking-widest text-blood bg-blood/10 px-1.5 py-0.5 rounded border border-blood/30"
+                                            title={`Needs: ${missingTags
+                                              .map(
+                                                (tid: string) =>
+                                                  spellManagerTags.find((t: any) => t.id === tid)?.name ||
+                                                  tid,
+                                              )
+                                              .join(", ")}`}
+                                          >
+                                            Locked
+                                          </span>
+                                        )}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleFavourite(spell.id);
+                                          }}
+                                          title={owned?.isFavourite ? "Unfavourite" : "Favourite"}
+                                          className={`text-sm leading-none px-1 ${
+                                            owned?.isFavourite
+                                              ? "text-amber-500"
+                                              : "text-ink/25 hover:text-amber-500"
+                                          }`}
+                                        >
+                                          ★
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleWatchlist(spell.id);
+                                          }}
+                                          title={owned?.isWatchlist ? "Remove from watchlist" : "Watchlist"}
+                                          className={`text-sm leading-none px-1 ${
+                                            owned?.isWatchlist
+                                              ? "text-cyan-500"
+                                              : "text-ink/25 hover:text-cyan-500"
+                                          }`}
+                                        >
+                                          ◐
+                                        </button>
+                                        {isKnown && loadouts.length > 0 && (
+                                          <div
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="flex items-center gap-0.5"
+                                          >
+                                            {loadouts.map((l: any) => {
+                                              const inLoadout = (
+                                                owned?.loadoutMembership || []
+                                              ).includes(l.id);
+                                              return (
+                                                <button
+                                                  key={l.id}
+                                                  type="button"
+                                                  onClick={() =>
+                                                    toggleLoadoutMembership(spell.id, l.id)
+                                                  }
+                                                  title={`${inLoadout ? "Remove from" : "Add to"} ${l.name}`}
+                                                  className={`text-[9px] font-bold uppercase tracking-widest w-4 h-4 rounded border flex items-center justify-center ${
+                                                    inLoadout
+                                                      ? "border-purple-500/60 bg-purple-500/20 text-purple-700"
+                                                      : "border-gold/15 text-ink/30 hover:border-purple-500/30"
+                                                  }`}
+                                                >
+                                                  {l.name.charAt(0).toUpperCase()}
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                        {isKnown && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              togglePrepared(spell.id);
+                                            }}
+                                            disabled={!!owned?.isAlwaysPrepared}
+                                            title={
+                                              owned?.isAlwaysPrepared
+                                                ? "Always prepared (locked)"
+                                                : isPrepared
+                                                  ? "Unprepare"
+                                                  : "Prepare"
+                                            }
+                                            className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${
+                                              isPrepared || isInActiveLoadout(owned)
+                                                ? "text-blood bg-blood/10 border-blood/30"
+                                                : "text-ink/45 bg-card border-gold/15 hover:border-blood/30"
+                                            } ${owned?.isAlwaysPrepared ? "cursor-not-allowed" : ""}`}
+                                          >
+                                            {isPrepared || isInActiveLoadout(owned) ? "Prepared" : "Prepare"}
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Detail pane (sticky on lg+) */}
+                    <div className="hidden lg:block">
+                      <div className="lg:sticky lg:top-4">
+                        <SpellDetailPanel
+                          spellId={selectedSpellId}
+                          emptyMessage="Click a spell to see its details."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mobile detail pane (modal-style, below the list) */}
+                  {selectedSpellId && (
+                    <div className="lg:hidden border-t-2 border-gold/20 pt-4">
+                      <div className="flex justify-end mb-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSpellId(null)}
+                          className="text-[10px] font-bold uppercase tracking-widest text-ink/45 hover:text-gold"
+                        >
+                          Close detail
+                        </button>
+                      </div>
+                      <SpellDetailPanel spellId={selectedSpellId} />
+                    </div>
+                  )}
+                </div>
+              );
+            })()
           ) : (
             <div className="bg-background/50 p-8 rounded-xl border border-gold/10 h-full flex flex-col items-center justify-center text-center">
               <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
@@ -5664,6 +7832,125 @@ export default function CharacterBuilder({
           </Card>
         </div>
       )}
+
+      {/* ── Spellbook Manager (Layer 2) — GrantSpells choice-mode picker ── */}
+      {spellChoiceDialogOpen && (() => {
+        const dlg = spellChoiceDialogOpen;
+        // Re-resolve the pool live so a rule that finishes loading after the
+        // click renders correctly without forcing the user to reopen.
+        const livePool =
+          dlg.resolverKind === "rule"
+            ? resolveRulePool(dlg.ruleId)
+            : dlg.explicitSpellIds;
+        const sel = getAdvancementSelectionValues(selectedOptionsMap, {
+          sourceScope: dlg.sourceScope,
+          advancementId: dlg.advId,
+          level: dlg.level,
+        });
+        const writeSel = (next: string[]) => {
+          setCharacter((prev: any) =>
+            updateCharacterAdvancementSelectionState(
+              prev,
+              {
+                sourceScope: dlg.sourceScope,
+                advancementId: dlg.advId,
+                level: dlg.level,
+              },
+              next,
+            ),
+          );
+        };
+        return (
+          <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <Card className="max-w-3xl w-full max-h-[90vh] flex flex-col border-4 border-emerald-500 bg-background shadow-2xl overflow-hidden">
+              <CardHeader className="border-b border-emerald-500/20 flex flex-row items-center justify-between shrink-0">
+                <div>
+                  <CardTitle className="font-serif text-2xl font-black text-ink flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-emerald-600" />
+                    {dlg.name}
+                  </CardTitle>
+                  <CardDescription className="text-ink/60 font-bold uppercase text-[10px] tracking-widest mt-1">
+                    Choose {dlg.count} from {livePool.length} · {sel.length} chosen
+                    {dlg.resolverKind === "rule" && livePool.length === 0 && (
+                      <span className="ml-2 italic text-ink/40">
+                        (loading rule matches…)
+                      </span>
+                    )}
+                  </CardDescription>
+                </div>
+                <Button variant="ghost" onClick={() => setSpellChoiceDialogOpen(null)}>
+                  <Plus className="w-5 h-5 rotate-45" />
+                </Button>
+              </CardHeader>
+              <CardContent className="flex-1 overflow-y-auto p-0">
+                {livePool.length === 0 ? (
+                  <div className="p-8 text-center text-ink/50 font-serif italic">
+                    {dlg.resolverKind === "rule"
+                      ? "Loading rule matches… or this rule matches nothing."
+                      : "No spells in the picker pool."}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-emerald-500/10">
+                    {livePool.map((sid) => {
+                      const cached = spellNameCache[sid];
+                      const isSelected = sel.includes(sid);
+                      const atCap = !isSelected && sel.length >= dlg.count;
+                      return (
+                        <div
+                          key={sid}
+                          className={`p-4 flex gap-4 transition-colors ${
+                            atCap ? "opacity-50" : "hover:bg-emerald-500/5"
+                          }`}
+                        >
+                          <div className="pt-1">
+                            <button
+                              disabled={atCap}
+                              onClick={() => {
+                                if (isSelected) {
+                                  writeSel(sel.filter((x) => x !== sid));
+                                } else if (sel.length < dlg.count) {
+                                  writeSel([...sel, sid]);
+                                }
+                              }}
+                              className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
+                                isSelected
+                                  ? "bg-emerald-600 border-emerald-600 text-white"
+                                  : "border-emerald-500/40 hover:border-emerald-500"
+                              } ${atCap ? "cursor-not-allowed" : ""}`}
+                            >
+                              {isSelected && <Check className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-serif font-bold text-ink text-base">
+                              {cached?.name || sid}
+                              {cached?.level !== undefined && (
+                                <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40">
+                                  {cached.level === 0 ? "Cantrip" : `Lv ${cached.level}`}
+                                </span>
+                              )}
+                              {cached?.school && (
+                                <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40">
+                                  {cached.school}
+                                </span>
+                              )}
+                            </div>
+                            {cached?.description && (
+                              <div className="text-xs font-serif text-ink/70 mt-1 leading-relaxed line-clamp-3">
+                                <BBCodeRenderer content={cached.description} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       {isSelectingSubclass.open && (
         <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">

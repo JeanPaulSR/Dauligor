@@ -43,6 +43,8 @@ import SkillsEditor from './pages/compendium/SkillsEditor';
 import SpellList from './pages/compendium/SpellList';
 import ToolsEditor from './pages/compendium/ToolsEditor';
 import SpellsEditor from './pages/compendium/SpellsEditor';
+import SpellListManager from './pages/compendium/SpellListManager';
+import SpellRulesEditor from './pages/compendium/SpellRulesEditor';
 import FeatsEditor from './pages/compendium/FeatsEditor';
 import ItemsEditor from './pages/compendium/ItemsEditor';
 import CharacterList from './pages/characters/CharacterList';
@@ -260,6 +262,8 @@ export default function App() {
                   <Route path="/compendium/subclasses/edit/:id" element={<SubclassEditor />} />
                   <Route path="/compendium/spells" element={<SpellList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells/manage" element={<SpellsEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/spell-lists" element={<SpellListManager userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/spell-rules" element={<SpellRulesEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/feats" element={<FeatsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/items" element={<ItemsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/scaling/new" element={<ScalingEditor userProfile={effectiveProfile} />} />

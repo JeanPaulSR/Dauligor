@@ -6,7 +6,9 @@ export type CanonicalAdvancementType =
   | 'ScaleValue'
   | 'Size'
   | 'Trait'
-  | 'Subclass';
+  | 'Subclass'
+  | 'GrantSpells'
+  | 'ExtendSpellList';
 
 export interface CanonicalTraitChoiceEntry {
   id: string;
@@ -58,6 +60,23 @@ export function buildDefaultAdvancementConfiguration(type: string, defaultHitDie
       };
     case 'Subclass':
       return {};
+    case 'GrantSpells':
+      return {
+        mode: 'fixed',
+        resolver: { kind: 'explicit', spellIds: [] },
+        count: 1,
+        countsAsClassId: null,
+        alwaysPrepared: false,
+        doesntCountAgainstPrepared: false,
+        doesntCountAgainstKnown: false,
+        preparationMode: 'spell',
+      };
+    case 'ExtendSpellList':
+      return {
+        resolver: { kind: 'rule', ruleId: '' },
+        scope: 'self',
+        scopeClassId: null,
+      };
     default:
       return {};
   }
