@@ -295,7 +295,16 @@ function denormalizeOptionItemRow(row: any) {
     stringPrerequisite: row.string_prerequisite,
     requiresOptionIds: parseJsonField(row.requires_option_ids, []),
     isRepeatable: row.is_repeatable,
-    featureId: row.feature_id,
+    // Feat-shape body added by migration 20260509-1356. Without these
+    // aliases dropSnakeKeys strips every snake_case column on the way
+    // out and the module never sees the new fields.
+    featureType: row.feature_type,
+    imageUrl: row.image_url,
+    usesMax: row.uses_max,
+    usesSpent: row.uses_spent,
+    usesRecovery: parseJsonField(row.uses_recovery, []),
+    quantityColumnId: row.quantity_column_id,
+    scalingColumnId: row.scaling_column_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
@@ -1237,6 +1246,24 @@ export async function exportClassSemantic(
       const data = denormalizeOptionItemRow(row);
       const group = uniqueOptionGroups.find((entry) => entry.id === data.groupId);
       const identifier = data.identifier || slugify(data.name || '');
+      // Wrap raw activities/effects into the `automation` object the
+      // module's createSemanticOptionItem already reads (`automation.activities`
+      // → system.activities, `automation` → flags.semanticAutomation).
+      // Mirrors the shape features ship in.
+      const rawActivities = data.activities;
+      const automation = {
+        activities: Array.isArray(rawActivities)
+          ? rawActivities
+          : Object.values(rawActivities || {}),
+        effects: Array.isArray(data.effects) ? data.effects : []
+      };
+      const usage = (trimString(data.usesMax) || Number(data.usesSpent) || (Array.isArray(data.usesRecovery) && data.usesRecovery.length))
+        ? {
+            max: data.usesMax ?? '',
+            spent: Number(data.usesSpent ?? 0) || 0,
+            ...(Array.isArray(data.usesRecovery) && data.usesRecovery.length ? { recovery: data.usesRecovery } : {})
+          }
+        : undefined;
       return omitKeys({
         ...data,
         imageUrl: resolveImageUrl(data) || undefined,
@@ -1255,8 +1282,22 @@ export async function exportClassSemantic(
         // below once every option's sourceId is known. The module
         // checks this against `state.optionSelections` to gate options
         // whose prerequisite picks haven't been made yet.
-        requiresOptionIds: asArray(data.requiresOptionIds)
-      }, ['groupId', 'featureId', 'classIds', 'iconUrl', 'page']);
+        requiresOptionIds: asArray(data.requiresOptionIds),
+        // Feat-shape body for the option-as-feature treatment. Mirrors
+        // how features ship — `automation` carries activities/effects,
+        // `usage` carries uses, and the rest pass through. The module's
+        // createSemanticOptionItem populates system.{description, type,
+        // uses, activities} + flags.semanticAutomation /
+        // semanticAdvancements from these fields.
+        automation,
+        usage,
+        advancements: Array.isArray(data.advancements) ? data.advancements : [],
+        properties: Array.isArray(data.properties) ? data.properties : [],
+        tags: Array.isArray(data.tags) ? data.tags : [],
+        featureType: trimString(data.featureType) || undefined,
+        subtype: trimString(data.subtype) || undefined,
+        requirements: trimString(data.requirements) || undefined,
+      }, ['groupId', 'classIds', 'iconUrl', 'page', 'activities', 'effects', 'usesMax', 'usesSpent', 'usesRecovery']);
     });
   }
 
