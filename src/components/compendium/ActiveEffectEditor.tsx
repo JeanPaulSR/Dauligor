@@ -102,8 +102,15 @@ interface StatusConditionRow {
   id: string;
   identifier: string;
   name: string;
-  /** Category id used as the EntityPicker hint when present. */
+  /** FK to condition_categories — added in migration 20260511-0043. */
   category_id?: string | null;
+}
+
+/** Row shape from `condition_categories` — only id/name needed for hint display. */
+interface ConditionCategoryRow {
+  id: string;
+  name: string;
+  order?: number | null;
 }
 
 export default function ActiveEffectEditor({ effects, onChange, defaultImg }: ActiveEffectEditorProps) {
@@ -114,19 +121,39 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
   // table (aliased as the `statuses` collection in D1_TABLE_MAP) rather
   // than a hardcoded catalog. The identifier column is the Foundry key
   // ("blinded", "stunned", etc.) — exactly what goes into the AE
-  // `statuses` array. fetchCollection() caches the response via d1.ts's
-  // QUERY_CACHE so re-opening the dialog hits the cache rather than D1.
+  // `statuses` array. Categories come from `condition_categories` and
+  // are surfaced as the EntityPicker hint badge ("PHB Conditions",
+  // "Spell States", etc.). fetchCollection() caches both responses via
+  // d1.ts's QUERY_CACHE so re-opening the dialog hits the cache.
   const [statusConditions, setStatusConditions] = useState<StatusConditionRow[]>([]);
+  const [conditionCategories, setConditionCategories] = useState<ConditionCategoryRow[]>([]);
   useEffect(() => {
     let cancelled = false;
-    fetchCollection<StatusConditionRow>('statuses', { orderBy: '"order", name ASC' })
-      .then((rows) => { if (!cancelled) setStatusConditions(rows); })
+    Promise.all([
+      fetchCollection<StatusConditionRow>('statuses', { orderBy: '"order", name ASC' }),
+      fetchCollection<ConditionCategoryRow>('conditionCategories', { orderBy: '"order", name ASC' }),
+    ])
+      .then(([rows, cats]) => {
+        if (!cancelled) {
+          setStatusConditions(rows);
+          setConditionCategories(cats);
+        }
+      })
       .catch((err) => {
-        console.warn('Failed to load status_conditions for AE editor:', err);
-        if (!cancelled) setStatusConditions([]);
+        console.warn('Failed to load status_conditions / categories for AE editor:', err);
+        if (!cancelled) {
+          setStatusConditions([]);
+          setConditionCategories([]);
+        }
       });
     return () => { cancelled = true; };
   }, []);
+  // Index categories by id for O(1) lookup in the render path below.
+  const categoryNameById = React.useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of conditionCategories) m[c.id] = c.name;
+    return m;
+  }, [conditionCategories]);
 
   const openNew = () => { setDraft(emptyEffect(defaultImg)); setDraftIdx(null); setTab('details'); };
   const openEdit = (idx: number) => {
@@ -262,7 +289,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
               </TabsList>
 
               {/* ── Details ──────────────────────────────── */}
-              <TabsContent value="details" className="flex-1 overflow-y-auto px-4 py-3 mt-0 space-y-0 divide-y divide-gold/10">
+              <TabsContent value="details" className="flex-1 overflow-y-auto custom-scrollbar px-4 py-3 mt-0 space-y-0 divide-y divide-gold/10">
 
                 {/* Icon Tint Color */}
                 <div className="flex items-center gap-3 py-2.5">
@@ -366,6 +393,12 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                     entities={statusConditions.map((c) => ({
                       id: c.identifier,
                       name: c.name,
+                      // Category name renders as the right-hand hint
+                      // pill in the picker — restores the "PHB
+                      // Conditions" / "Spell States" badges from the
+                      // earlier hardcoded catalog, but now driven by
+                      // authored data via the FK to condition_categories.
+                      hint: c.category_id ? categoryNameById[c.category_id] : undefined,
                     }))}
                     selectedIds={draft.statuses ?? []}
                     onChange={(next) => patch({ statuses: next })}
@@ -378,7 +411,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
               </TabsContent>
 
               {/* ── Duration ─────────────────────────────── */}
-              <TabsContent value="duration" className="flex-1 overflow-y-auto px-4 py-3 mt-0 space-y-3">
+              <TabsContent value="duration" className="flex-1 overflow-y-auto custom-scrollbar px-4 py-3 mt-0 space-y-3">
                 <p className="text-xs text-ink/40">Leave all fields blank for permanent (passive) effects — typical for class features.</p>
 
                 {/* Group 1: Seconds + Start Time */}
@@ -485,7 +518,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                   <div className="w-6 shrink-0" />
                 </div>
 
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
                   {(draft.changes || []).length === 0 ? (
                     <p className="text-xs text-ink/30 italic px-3 py-6 text-center">
                       No changes yet. Use the <span className="font-mono text-gold/50">+</span> button below to add one.

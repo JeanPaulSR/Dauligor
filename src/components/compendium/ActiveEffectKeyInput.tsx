@@ -293,7 +293,7 @@ export default function ActiveEffectKeyInput({
             zIndex: 9999,
             maxHeight: `${PREFERRED_DROPDOWN_HEIGHT}px`,
           }}
-          className="overflow-y-auto rounded-md border border-gold/30 bg-card shadow-lg text-xs"
+          className="overflow-y-auto custom-scrollbar rounded-md border border-gold/30 bg-card shadow-lg text-xs"
           role="listbox"
         >
           {flat.length === 0 ? (

@@ -37,11 +37,22 @@ interface StatusCondition {
   order?: number | null;
   changes?: EffectChange[];
   source: 'dnd5e' | 'custom' | 'imported';
+  /** FK to condition_categories (added in migration 20260511-0043). */
+  category_id?: string | null;
   created_at?: string;
   updated_at?: string;
   // Form-side aliases that get spread in after a save
   img?: string | null;
   impliedStatuses?: string[];
+}
+
+/** Row shape returned by D1 for `condition_categories`. */
+interface ConditionCategoryRow {
+  id: string;
+  identifier: string;
+  name: string;
+  order?: number | null;
+  description?: string | null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -77,6 +88,7 @@ const BLANK_FORM: Omit<StatusCondition, 'id'> = {
   impliedStatuses: [],
   changes: [],
   source: 'custom',
+  category_id: null,
 };
 
 // ─── Default D&D 5e Conditions ───────────────────────────────────────────────
@@ -268,6 +280,11 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
   const [editingItem, setEditingItem] = useState<StatusCondition | null>(null);
   const [form, setForm] = useState<Omit<StatusCondition, 'id'>>(BLANK_FORM);
   const [isUsingD1, setIsUsingD1] = useState(false);
+  // Categories drive the per-condition category dropdown below. Empty
+  // until seeded by migration 20260511-0043 (PHB / Combat / Spell /
+  // System Extras) — new categories authored after that show up here
+  // automatically.
+  const [categories, setCategories] = useState<ConditionCategoryRow[]>([]);
 
   const isAdmin = userProfile?.role === 'admin';
 
@@ -276,7 +293,11 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     const loadItems = async () => {
       try {
-        const data = await fetchCollection<StatusCondition>('statuses');
+        const [data, cats] = await Promise.all([
+          fetchCollection<StatusCondition>('statuses'),
+          fetchCollection<ConditionCategoryRow>('conditionCategories', { orderBy: '"order", name ASC' }),
+        ]);
+        setCategories(cats);
         setItems(
           data.sort((a: any, b: any) => {
             const oa = typeof a.order === 'number' ? a.order : 999;
@@ -312,6 +333,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
       implied_ids: form.impliedStatuses,
       changes: form.changes,
       source: form.source,
+      category_id: form.category_id ?? null,
       updated_at: now,
     };
 
@@ -491,6 +513,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
       impliedStatuses: item.implied_ids || [],
       changes: item.changes || [],
       source: item.source || 'custom',
+      category_id: item.category_id ?? null,
     });
   };
 
@@ -662,6 +685,35 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                   className="h-9 bg-background/50 border-gold/10 font-mono"
                 />
               </div>
+            </div>
+
+            {/* Category — FK to condition_categories. Drives the badge
+                shown next to each condition in the Active Effect editor's
+                Status Conditions picker (PHB Conditions / Combat States
+                / Spell States / System Extras). "Uncategorised" stores
+                null. Categories are seeded by migration 20260511-0043
+                and authored via a future categories admin page if needed. */}
+            <div className="space-y-2">
+              <label className="field-label">Category</label>
+              <Select
+                value={form.category_id ?? '__none__'}
+                onValueChange={(v) =>
+                  setForm(f => ({ ...f, category_id: v === '__none__' ? null : v }))
+                }
+              >
+                <SelectTrigger className="h-9 bg-background/50 border-gold/10 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Uncategorised</SelectItem>
+                  {categories.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
+                Groups conditions in the Active Effect picker
+              </p>
             </div>
 
             {/* Reference */}
