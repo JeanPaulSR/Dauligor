@@ -270,7 +270,12 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
               base-ui) and the browser logs an aria-hidden focus
               warning. */}
           {draft && (
-            <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-gold/10 shrink-0">
+            // gap-5 (was gap-3) + pl-2 on the name input give room
+            // between the ImageUpload's hover affordances (which extend
+            // a bit past the visible 48×48 thumb) and the name field —
+            // before this it was easy to mis-click the delete-image
+            // button while reaching for the input cursor.
+            <div className="flex items-center gap-5 px-4 pt-4 pb-3 border-b border-gold/10 shrink-0">
               <div className="w-12 h-12 shrink-0">
                 <ImageUpload
                   compact
@@ -283,10 +288,11 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
               </div>
               <input
                 autoFocus
+                autoComplete="off"
                 value={draft.name}
                 onChange={e => patch({ name: e.target.value })}
                 placeholder="Effect Name"
-                className="flex-1 bg-transparent text-xl font-bold text-ink border-b border-transparent hover:border-gold/30 focus:border-gold outline-none pb-0.5 transition-colors placeholder:text-ink/30"
+                className="flex-1 pl-2 bg-transparent text-xl font-bold text-ink border-b border-transparent hover:border-gold/30 focus:border-gold outline-none pb-0.5 transition-colors placeholder:text-ink/30"
               />
             </div>
           )}
@@ -309,6 +315,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                   <span className="text-sm font-semibold text-ink/80 w-44 shrink-0">Icon Tint Color</span>
                   <div className="flex items-center gap-2 flex-1">
                     <Input
+                      autoComplete="off"
                       value={draft.tint || '#ffffff'}
                       onChange={e => patch({ tint: e.target.value })}
                       placeholder="#ffffff"
@@ -327,6 +334,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                 <div className="py-2.5 space-y-1.5">
                   <span className="text-sm font-semibold text-ink/80 block">Effect Description</span>
                   <textarea
+                    autoComplete="off"
                     value={draft.description || ''}
                     onChange={e => patch({ description: e.target.value })}
                     rows={4}
@@ -435,7 +443,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                       type="number" min={0}
                       value={draft.duration?.seconds ?? ''}
                       onChange={e => patch({ duration: { ...draft.duration, seconds: parseNullableInt(e.target.value) } })}
-                      placeholder="—"
+                      autoComplete="off" placeholder="—"
                       className="no-number-spin h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"
                     />
                   </div>
@@ -445,7 +453,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                       type="number"
                       value={draft.duration?.startTime ?? ''}
                       onChange={e => patch({ duration: { ...draft.duration, startTime: parseNullableInt(e.target.value) } })}
-                      placeholder="—"
+                      autoComplete="off" placeholder="—"
                       className="no-number-spin h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"
                     />
                   </div>
@@ -466,7 +474,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                         type="number" min={0}
                         value={draft.duration?.rounds ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, rounds: parseNullableInt(e.target.value) } })}
-                        placeholder="—"
+                        autoComplete="off" placeholder="—"
                         className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
                       <span className="text-xs text-ink/50">Turns</span>
@@ -474,7 +482,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                         type="number" min={0}
                         value={draft.duration?.turns ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, turns: parseNullableInt(e.target.value) } })}
-                        placeholder="—"
+                        autoComplete="off" placeholder="—"
                         className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
                     </div>
@@ -487,7 +495,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                         type="number" min={0}
                         value={draft.duration?.startRound ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, startRound: parseNullableInt(e.target.value) } })}
-                        placeholder="—"
+                        autoComplete="off" placeholder="—"
                         className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
                       <span className="text-xs text-ink/50">Turn</span>
@@ -495,7 +503,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                         type="number" min={0}
                         value={draft.duration?.startTurn ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, startTurn: parseNullableInt(e.target.value) } })}
-                        placeholder="—"
+                        autoComplete="off" placeholder="—"
                         className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
                     </div>
@@ -639,6 +647,7 @@ function ChangeRow({
         </SelectContent>
       </Select>
       <Input
+        autoComplete="off"
         value={change.value}
         onChange={e => onPatchValue(e.target.value)}
         placeholder="value or formula"
@@ -647,6 +656,7 @@ function ChangeRow({
       {/* Priority — greyed when null (auto = mode default). */}
       <Input
         type="number"
+        autoComplete="off"
         value={change.priority ?? ''}
         onChange={e => onPatchPriority(parseNullableInt(e.target.value))}
         placeholder={String(defaultPriorityForMode(change.mode))}

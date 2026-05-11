@@ -13,6 +13,7 @@ import {
   isGroup,
   isLeaf,
 } from '../../lib/requirements';
+import SingleSelectSearch from '../ui/SingleSelectSearch';
 
 /**
  * Lookup shape consumed by the leaf-row pickers. Each list is `{ id, name }`
@@ -57,10 +58,10 @@ export interface RequirementsEditorProps {
 // All leaf types in the order the dropdown renders them. Top section is
 // the entity references most authors reach for first.
 const LEAF_TYPE_OPTIONS: Array<{ value: RequirementLeafType; label: string }> = [
-  { value: 'optionItem', label: 'Option Item (e.g. Pact of the Blade)' },
+  { value: 'optionItem', label: 'Option Item' },
   { value: 'class', label: 'Class' },
   { value: 'subclass', label: 'Subclass' },
-  { value: 'levelInClass', label: 'Class Level (Warlock 5+)' },
+  { value: 'levelInClass', label: 'Class Level' },
   { value: 'feature', label: 'Class Feature' },
   { value: 'spell', label: 'Spell' },
   { value: 'spellRule', label: 'Spell Rule' },
@@ -402,48 +403,51 @@ function LeafPayload({
       );
 
     case 'optionItem': {
-      // Cascading group → item picker. If the current itemId resolves to a
-      // group, default the group select to it; otherwise show the placeholder.
+      // Cascading group → item picker, both promoted to SingleSelectSearch
+      // (searchable single-pick comboboxes) — with 50+ option groups
+      // and hundreds of items in aggregate, a plain <select> for either
+      // half is unusable.
+      //
+      // `resolvedGroupId` derives a group either from the leaf's own
+      // `groupId` (the editor stores it as a convenience for the
+      // formatter / exporter) or by walking groups to find one that
+      // contains the chosen itemId. Picking a new group clears the
+      // itemId; picking an item locks in the resolved group.
       const groups = lookups.optionGroups ?? [];
       const resolvedGroupId =
         value.groupId ??
         groups.find(g => (g.items ?? []).some(i => i.id === value.itemId))?.id ??
         '';
       const items = groups.find(g => g.id === resolvedGroupId)?.items;
+      const itemsLoaded = items != null;
       return (
         <>
-          <select
+          <SingleSelectSearch
             value={resolvedGroupId}
-            onChange={e => onChange({
+            onChange={(nextGroupId) => onChange({
               kind: 'leaf',
               type: 'optionItem',
               itemId: '',
-              groupId: e.target.value || undefined,
+              groupId: nextGroupId || undefined,
             })}
-            className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none max-w-[180px] truncate"
-          >
-            <option value="">Select group…</option>
-            {groups.map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-          <select
+            options={groups.map(g => ({ id: g.id, name: g.name }))}
+            placeholder="Select group…"
+            noEntitiesText="No option groups available."
+            triggerClassName="min-w-[160px] max-w-[200px]"
+          />
+          <SingleSelectSearch
             value={value.itemId}
-            onChange={e => onChange({ ...value, itemId: e.target.value, groupId: resolvedGroupId || undefined })}
-            disabled={!resolvedGroupId || !items}
-            className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none max-w-[200px] truncate disabled:opacity-40"
-          >
-            <option value="">
-              {!resolvedGroupId
-                ? 'Pick group first'
-                : items == null
-                  ? '(items not loaded)'
-                  : 'Select option…'}
-            </option>
-            {(items ?? []).map(it => (
-              <option key={it.id} value={it.id}>{it.name}</option>
-            ))}
-          </select>
+            onChange={(nextItemId) => onChange({
+              ...value,
+              itemId: nextItemId,
+              groupId: resolvedGroupId || undefined,
+            })}
+            options={(items ?? []).map(it => ({ id: it.id, name: it.name }))}
+            placeholder={!resolvedGroupId ? 'Pick group first' : 'Select option…'}
+            noEntitiesText={itemsLoaded ? 'Group has no options yet.' : '(items not loaded)'}
+            disabled={!resolvedGroupId || !itemsLoaded}
+            triggerClassName="min-w-[180px] max-w-[240px]"
+          />
         </>
       );
     }
@@ -529,10 +533,12 @@ function LeafPayload({
   }
 }
 
-// Tiny shared single-entity select with empty-state messaging. Doesn't
-// pull in EntityPicker because EntityPicker is multi-select with its own
-// search UI; for a single id field a plain <select> is cleaner. If lists
-// grow to hundreds of entries we can promote this to a search-select.
+// Single-entity picker for the requirement leaves. Promoted from a
+// plain <select> to <SingleSelectSearch> after authoring against ~50
+// option groups exposed how unusable a native dropdown is at that
+// scale — searching for "Pact of the Blade" in a flat list of
+// invocations + maneuvers + pacts + fighting styles + mutations
+// without a filter input is painful.
 function EntitySelect({
   entities,
   value,
@@ -549,16 +555,13 @@ function EntitySelect({
   const opts = entities ?? [];
   const empty = opts.length === 0;
   return (
-    <select
+    <SingleSelectSearch
       value={value}
-      onChange={e => onChange(e.target.value)}
+      onChange={onChange}
+      options={opts}
+      placeholder={empty ? emptyLabel : placeholder}
       disabled={empty}
-      className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none max-w-[220px] truncate disabled:opacity-40"
-    >
-      <option value="">{empty ? emptyLabel : placeholder}</option>
-      {opts.map(o => (
-        <option key={o.id} value={o.id}>{o.name}</option>
-      ))}
-    </select>
+      triggerClassName="min-w-[140px] max-w-[240px]"
+    />
   );
 }

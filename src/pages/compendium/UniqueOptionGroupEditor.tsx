@@ -286,7 +286,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       const targetId = editingItem?.id || crypto.randomUUID();
       await upsertDocument('uniqueOptionItems', targetId, d1Data);
 
-      const stateItem = { id: targetId, ...d1Data };
+      // Spread `editingItem` first so its camelCase aliases (iconUrl,
+      // imageUrl, classIds, requirementsTree, etc.) survive into the
+      // refreshed list-row. Without this only the snake_case d1Data
+      // keys land in state, the list-row renderer reads `item.iconUrl`
+      // and finds undefined, and the just-uploaded image vanishes
+      // until the page is reloaded (which goes through
+      // denormalizeCompendiumData and re-populates camelCase).
+      const stateItem = { ...editingItem, id: targetId, ...d1Data };
       if (editingItem?.id) {
         setItems(prev => prev.map(it => it.id === targetId ? stateItem : it));
       } else {
