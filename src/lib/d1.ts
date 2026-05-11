@@ -186,6 +186,10 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // for back-compat (the migration drops the column but existing
         // cached payloads may still surface it on a stale read).
         'requirements_tree', 'requirementsTree',
+        // status_conditions JSON columns. Without these the
+        // StatusesEditor read path leaves them as raw JSON strings
+        // and call sites like `item.implied_ids.join(', ')` blow up.
+        'implied_ids', 'impliedStatuses', 'changes',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

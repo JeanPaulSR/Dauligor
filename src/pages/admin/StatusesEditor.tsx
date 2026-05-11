@@ -931,17 +931,21 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
                         </div>
                       </div>
 
-                      {/* Meta row */}
+                      {/* Meta row. Defensive guards: d1.ts auto-parses
+                          implied_ids / changes JSON, but older cached
+                          payloads or stale Service Worker results can
+                          surface either as a raw string — wrap in
+                          Array.isArray rather than trust the type. */}
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        {(item.implied_ids || []).length > 0 && (
+                        {Array.isArray(item.implied_ids) && item.implied_ids.length > 0 && (
                           <span className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                            → {item.implied_ids!.join(', ')}
+                            → {item.implied_ids.join(', ')}
                           </span>
                         )}
-                        {(item.changes || []).length > 0 && (
+                        {Array.isArray(item.changes) && item.changes.length > 0 && (
                           <span className="text-[9px] text-ink/40 font-bold uppercase tracking-widest flex items-center gap-0.5">
                             <Zap className="w-2.5 h-2.5 text-gold/30" />
-                            {item.changes!.length} change{item.changes!.length !== 1 ? 's' : ''}
+                            {item.changes.length} change{item.changes.length !== 1 ? 's' : ''}
                           </span>
                         )}
                       </div>
