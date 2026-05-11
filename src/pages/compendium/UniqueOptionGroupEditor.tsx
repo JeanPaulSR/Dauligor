@@ -369,6 +369,23 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       } else {
         setItems(prev => [...prev, stateItem].sort((a, b) => a.name.localeCompare(b.name)));
       }
+      // Also mirror the save into `allOptionGroups` so the
+      // requirements tree's optionItem picker (cascading group →
+      // item) reflects newly-added / renamed options without a page
+      // reload — otherwise a freshly authored sibling option doesn't
+      // appear in the picker until the next mount. Only updates the
+      // current group's entry; cross-group changes from other tabs
+      // still need a reload.
+      setAllOptionGroups(prev => prev.map(g => {
+        if (g.id !== id) return g;
+        const items = g.items ?? [];
+        const newItem = { id: targetId, name: stateItem.name };
+        const existingIdx = items.findIndex(it => it.id === targetId);
+        const nextItems = existingIdx >= 0
+          ? items.map((it, i) => i === existingIdx ? newItem : it)
+          : [...items, newItem].sort((a, b) => a.name.localeCompare(b.name));
+        return { ...g, items: nextItems };
+      }));
       setEditingItem(null);
       setIsItemModalOpen(false);
       toast.success('Option saved successfully');
@@ -383,6 +400,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       try {
         await deleteDocument('uniqueOptionItems', itemId);
         setItems(prev => prev.filter(it => it.id !== itemId));
+        // Mirror the deletion into allOptionGroups so any requirement
+        // tree referencing this item from elsewhere in the same
+        // session immediately drops the stale entry from its picker.
+        setAllOptionGroups(prev => prev.map(g => g.id !== id ? g : {
+          ...g,
+          items: (g.items ?? []).filter(it => it.id !== itemId),
+        }));
         toast.success('Option deleted');
       } catch (error) {
         console.error("Error deleting item:", error);
