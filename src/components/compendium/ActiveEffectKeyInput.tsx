@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ACTIVE_EFFECT_KEYS,
   ACTIVE_EFFECT_KEY_CATEGORY_ORDER,
@@ -68,6 +69,23 @@ function groupAndOrder(entries: ActiveEffectKeyEntry[]): OrderedGroup[] {
 /** Max suggestions rendered at once — keeps the dropdown navigable. */
 const MAX_VISIBLE_SUGGESTIONS = 60;
 
+/** Anchored coords for the portal-rendered dropdown. */
+interface DropdownCoords {
+  /** Viewport-relative x in px. */
+  left: number;
+  /** Viewport-relative y in px. */
+  top: number;
+  /** Match the input's width so the dropdown lines up under it. */
+  width: number;
+  /** When `true`, the input is too close to the bottom edge and we
+   *  flipped the dropdown to render above instead of below. */
+  placeAbove: boolean;
+}
+
+/** Vertical room (px) the dropdown wants to reserve when below; below
+ *  this we flip to render above the input. */
+const PREFERRED_DROPDOWN_HEIGHT = 320;
+
 export default function ActiveEffectKeyInput({
   value,
   onChange,
@@ -81,6 +99,10 @@ export default function ActiveEffectKeyInput({
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  // Portal anchor: viewport-fixed coords recomputed from the input's
+  // bounding rect on open and on every scroll / resize. Until first
+  // measurement we keep the dropdown unmounted to avoid a flash at (0,0).
+  const [coords, setCoords] = useState<DropdownCoords | null>(null);
 
   // Recompute filtered + grouped suggestions on every value change.
   const groups = useMemo(() => {
@@ -127,6 +149,46 @@ export default function ActiveEffectKeyInput({
     document.addEventListener('pointerdown', onDocPointerDown);
     return () => document.removeEventListener('pointerdown', onDocPointerDown);
   }, [open]);
+
+  // Track the input's viewport position so the portal-rendered dropdown
+  // lines up under it. We re-measure on open, on window scroll/resize,
+  // and on any scroll inside an ancestor (the modal body, for instance,
+  // can scroll while the window can't). Using `capture: true` on the
+  // scroll listener lets one global listener catch nested scrollers
+  // without us walking up the DOM ourselves.
+  const recomputeCoords = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove = spaceBelow < PREFERRED_DROPDOWN_HEIGHT && rect.top > spaceBelow;
+    setCoords({
+      left: rect.left,
+      width: rect.width,
+      // When flipping above, the dropdown's bottom edge sits a few px
+      // above the input's top. We translate via CSS, not coords, so
+      // `top` stays as the anchor point — see the popup render below.
+      top: placeAbove ? rect.top : rect.bottom,
+      placeAbove,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    recomputeCoords();
+    const handler = () => recomputeCoords();
+    window.addEventListener('resize', handler);
+    // capture:true picks up scroll events in ancestor scrollers (modal
+    // bodies, tab panels) — those don't bubble to window otherwise.
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('scroll', handler, true);
+    };
+  }, [open, recomputeCoords]);
 
   const pick = (entry: ActiveEffectKeyEntry) => {
     onChange(entry.key);
@@ -194,10 +256,27 @@ export default function ActiveEffectKeyInput({
         aria-expanded={open}
       />
 
-      {open && (
+      {open && coords && createPortal(
         <div
           ref={dropdownRef}
-          className="absolute left-0 right-0 top-full mt-1 z-50 max-h-72 overflow-y-auto rounded-md border border-gold/30 bg-card shadow-lg text-xs"
+          // Fixed positioning + portal mount on document.body means the
+          // dropdown escapes any ancestor with `overflow: hidden` /
+          // `overflow: auto` (most notably the modal that hosts the AE
+          // editor) — without this it would be clipped by the dialog's
+          // scroll container. z-index 9999 puts it above the modal's
+          // own overlay.
+          style={{
+            position: 'fixed',
+            left: `${coords.left}px`,
+            top: `${coords.top}px`,
+            width: `${coords.width}px`,
+            // When flipping above, anchor the dropdown's bottom edge to
+            // the input's top edge instead of growing downward.
+            transform: coords.placeAbove ? 'translateY(-100%)' : 'translateY(4px)',
+            zIndex: 9999,
+            maxHeight: `${PREFERRED_DROPDOWN_HEIGHT}px`,
+          }}
+          className="overflow-y-auto rounded-md border border-gold/30 bg-card shadow-lg text-xs"
           role="listbox"
         >
           {flat.length === 0 ? (
@@ -260,7 +339,8 @@ export default function ActiveEffectKeyInput({
               </div>
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
