@@ -8,6 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from '../ui/checkbox';
 import { ImageUpload } from '../ui/ImageUpload';
 import ActiveEffectKeyInput from './ActiveEffectKeyInput';
+import EntityPicker from '../ui/EntityPicker';
+import {
+  ACTIVE_EFFECT_STATUSES,
+  ACTIVE_EFFECT_TYPES,
+} from '../../lib/activeEffectStatuses';
 
 // Mirrors Foundry's EFFECT_MODES constant
 const EFFECT_MODE_OPTIONS = [
@@ -285,6 +290,59 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                     />
                   </div>
                   <p className="text-[11px] text-ink/40 mt-1">If checked, this Effect will be applied to any Actor that owns this Effect's parent Item.</p>
+                </div>
+
+                {/* Effect Type — dnd5e 5.x. `base` is the default for
+                    class features / maneuvers / invocations etc.;
+                    `enchantment` is used for magic-item enchantments
+                    via the Enchant activity workflow. */}
+                <div className="py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-ink/80 w-44 shrink-0">Effect Type</span>
+                    <Select
+                      value={draft.type || 'base'}
+                      onValueChange={v => patch({ type: v })}
+                    >
+                      <SelectTrigger className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACTIVE_EFFECT_TYPES.map(t => (
+                          <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="text-[11px] text-ink/40 mt-1">
+                    {ACTIVE_EFFECT_TYPES.find(t => t.id === (draft.type || 'base'))?.description}
+                  </p>
+                </div>
+
+                {/* Status Conditions — applies the listed condition IDs
+                    to the owning actor while the effect is active (e.g.
+                    Stunning Strike → ["stunned"], Hold Person →
+                    ["paralyzed"]). The full dnd5e 5.x catalog comes
+                    from src/lib/activeEffectStatuses.ts; authors can
+                    select any subset. The exported `statuses` array
+                    round-trips through the module's
+                    normalizeSemanticItemEffects intact. */}
+                <div className="py-2.5 space-y-1.5">
+                  <span className="text-sm font-semibold text-ink/80 block">Status Conditions</span>
+                  <p className="text-[11px] text-ink/40">
+                    Conditions applied to the actor while this effect is active. Useful for Stunning Strike, Hold Person, Charm effects, etc.
+                  </p>
+                  <EntityPicker
+                    entities={ACTIVE_EFFECT_STATUSES.map(s => ({
+                      id: s.id,
+                      name: s.label,
+                      hint: s.category,
+                    }))}
+                    selectedIds={draft.statuses ?? []}
+                    onChange={(next) => patch({ statuses: next })}
+                    searchPlaceholder="Search conditions…"
+                    showChips
+                    noEntitiesText="No conditions available."
+                  />
                 </div>
 
               </TabsContent>
