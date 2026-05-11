@@ -3,7 +3,6 @@ import {
   Swords, Wand2, Dices, Zap, Sparkles, ArrowRight,
   Heart, Shield, Boxes, RefreshCw, Wrench, Plus,
   Trash2, Info, Timer, Target,
-  X,
 } from 'lucide-react';
 import { ImageUpload } from '../ui/ImageUpload';
 import { type FoundryActiveEffect } from './ActiveEffectEditor';
@@ -50,22 +49,59 @@ const FALLBACK_ABILITY_LABELS: Record<string, string> = {
   int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
 };
 const SPELL_PROPERTIES = ['vocal', 'somatic', 'material'];
-const RECOVERY_PERIOD_OPTIONS: { value: string; label: string }[] = [
-  { value: 'lr',        label: 'Long Rest' },
-  { value: 'sr',        label: 'Short Rest' },
-  { value: 'day',       label: 'Day' },
-  { value: 'dawn',      label: 'Dawn' },
-  { value: 'dusk',      label: 'Dusk' },
-  { value: 'turn',      label: 'Turn' },
-  { value: 'turnStart', label: 'Turn Start' },
-  { value: 'turnEnd',   label: 'Turn End' },
-  { value: 'round',     label: 'Round' },
-  { value: 'recharge',  label: 'Recharge' },
-  { value: 'charges',   label: 'Charges' },
+// Every dropdown option carries a display `label` and an optional
+// `hint` (the right-side badge in SingleSelectSearch). Slug values
+// match Foundry's dnd5e key conventions so the export round-trips
+// cleanly; the editor only ever shows labels to the author.
+
+/** Recovery periods, grouped Foundry-style into Rests / Combat /
+ *  Mechanical so authors can mentally bucket them. The hint is the
+ *  category and renders as the picker's right-side badge. */
+const RECOVERY_PERIOD_OPTIONS: { value: string; label: string; hint: string }[] = [
+  { value: 'lr',        label: 'Long Rest',   hint: 'Rests' },
+  { value: 'sr',        label: 'Short Rest',  hint: 'Rests' },
+  { value: 'day',       label: 'Day',         hint: 'Rests' },
+  { value: 'dawn',      label: 'Dawn',        hint: 'Rests' },
+  { value: 'dusk',      label: 'Dusk',        hint: 'Rests' },
+  { value: 'turn',      label: 'Turn',        hint: 'Combat' },
+  { value: 'turnStart', label: 'Turn Start',  hint: 'Combat' },
+  { value: 'turnEnd',   label: 'Turn End',    hint: 'Combat' },
+  { value: 'round',     label: 'Round',       hint: 'Combat' },
+  { value: 'recharge',  label: 'Recharge',    hint: 'Mechanical' },
+  { value: 'charges',   label: 'Charges',     hint: 'Mechanical' },
 ];
-const RECOVERY_TYPE_OPTIONS = ['recoverAll', 'formula', 'loseAll'];
-const TARGET_TYPE_OPTIONS = ['none', 'creature', 'ally', 'enemy', 'object', 'space'];
-const TEMPLATE_TYPE_OPTIONS = ['none', 'cone', 'cube', 'cylinder', 'line', 'sphere', 'square'];
+
+/** Recovery types are stored as Foundry slugs; the labels are the
+ *  display strings the official AE config window shows. */
+const RECOVERY_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'recoverAll', label: 'Recover All' },
+  { value: 'formula',    label: 'Formula' },
+  { value: 'loseAll',    label: 'Lose All' },
+];
+
+/** Target affects type — Foundry display labels for the affects.type
+ *  slug. "none" / "self" exist but Foundry hides them from the
+ *  picker; we keep them so existing data round-trips. */
+const TARGET_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'none',     label: 'None' },
+  { value: 'self',     label: 'Self' },
+  { value: 'creature', label: 'Creature' },
+  { value: 'ally',     label: 'Ally' },
+  { value: 'enemy',    label: 'Enemy' },
+  { value: 'object',   label: 'Object' },
+  { value: 'space',    label: 'Space' },
+];
+
+const TEMPLATE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'none',     label: 'None' },
+  { value: 'cone',     label: 'Cone' },
+  { value: 'cube',     label: 'Cube' },
+  { value: 'cylinder', label: 'Cylinder' },
+  { value: 'line',     label: 'Line' },
+  { value: 'sphere',   label: 'Sphere' },
+  { value: 'square',   label: 'Square' },
+];
+
 const CONSUMPTION_TARGET_TYPES: { value: string; label: string }[] = [
   { value: 'activityUses', label: 'Activity Uses' },
   { value: 'itemUses',     label: 'Item Uses' },
@@ -74,6 +110,7 @@ const CONSUMPTION_TARGET_TYPES: { value: string; label: string }[] = [
   { value: 'spellSlots',   label: 'Spell Slots' },
   { value: 'attribute',    label: 'Attribute' },
 ];
+
 const DAMAGE_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'acid',        label: 'Acid' },
   { value: 'bludgeoning', label: 'Bludgeoning' },
@@ -91,25 +128,50 @@ const DAMAGE_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'healing',     label: 'Healing' },
   { value: 'temphp',      label: 'Temp HP' },
 ];
-const SCALING_MODE_OPTIONS = ['', 'whole', 'half'];
-const SUMMON_OR_TRANSFORM_MODE_OPTIONS = ['', 'cr'];
-const MOVEMENT_TYPE_OPTIONS = ['walk', 'burrow', 'climb', 'fly', 'swim'];
-const CREATURE_SIZE_OPTIONS = ['tiny', 'sm', 'med', 'lg', 'huge', 'grg'];
-const CREATURE_TYPE_OPTIONS = [
-  'aberration',
-  'beast',
-  'celestial',
-  'construct',
-  'dragon',
-  'elemental',
-  'fey',
-  'fiend',
-  'giant',
-  'humanoid',
-  'monstrosity',
-  'ooze',
-  'plant',
-  'undead'
+
+const SCALING_MODE_OPTIONS: { value: string; label: string }[] = [
+  { value: '',      label: 'Off (no scaling)' },
+  { value: 'whole', label: 'Whole Dice' },
+  { value: 'half',  label: 'Half Dice' },
+];
+
+const SUMMON_OR_TRANSFORM_MODE_OPTIONS: { value: string; label: string }[] = [
+  { value: '',   label: 'Direct (level-based)' },
+  { value: 'cr', label: 'Challenge Rating' },
+];
+
+const MOVEMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'walk',   label: 'Walk' },
+  { value: 'burrow', label: 'Burrow' },
+  { value: 'climb',  label: 'Climb' },
+  { value: 'fly',    label: 'Fly' },
+  { value: 'swim',   label: 'Swim' },
+];
+
+const CREATURE_SIZE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'tiny', label: 'Tiny' },
+  { value: 'sm',   label: 'Small' },
+  { value: 'med',  label: 'Medium' },
+  { value: 'lg',   label: 'Large' },
+  { value: 'huge', label: 'Huge' },
+  { value: 'grg',  label: 'Gargantuan' },
+];
+
+const CREATURE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'aberration',  label: 'Aberration' },
+  { value: 'beast',       label: 'Beast' },
+  { value: 'celestial',   label: 'Celestial' },
+  { value: 'construct',   label: 'Construct' },
+  { value: 'dragon',      label: 'Dragon' },
+  { value: 'elemental',   label: 'Elemental' },
+  { value: 'fey',         label: 'Fey' },
+  { value: 'fiend',       label: 'Fiend' },
+  { value: 'giant',       label: 'Giant' },
+  { value: 'humanoid',    label: 'Humanoid' },
+  { value: 'monstrosity', label: 'Monstrosity' },
+  { value: 'ooze',        label: 'Ooze' },
+  { value: 'plant',       label: 'Plant' },
+  { value: 'undead',      label: 'Undead' },
 ];
 
 // ── shared form primitives ────────────────────────────────────────────────────
@@ -233,10 +295,19 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   const [activeTab, setActiveTab] = useState('identity');
   const [activeActivationTab, setActiveActivationTab] = useState('time');
   const [attributes, setAttributes] = useState<{ id: string; identifier?: string; name: string }[]>([]);
+  // Classes drive the Visibility › Class Identifier picker (was a
+  // free-text slug input — authors now pick from the seeded classes
+  // list instead of remembering "ranger" / "warlock" / etc.). Lazily
+  // fetched on mount; d1.ts caches the response so multiple
+  // ActivityEditor instances on the same page only hit D1 once.
+  const [classes, setClasses] = useState<{ id: string; identifier?: string; name: string }[]>([]);
 
   useEffect(() => {
     fetchCollection<{ id: string; identifier?: string; name: string }>('attributes')
       .then(setAttributes)
+      .catch(() => {});
+    fetchCollection<{ id: string; identifier?: string; name: string }>('classes', { orderBy: 'name ASC' })
+      .then(setClasses)
       .catch(() => {});
   }, []);
 
@@ -813,12 +884,23 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                             />
                           </div>
                         </FieldRow>
-                        <FieldRow label="Class Identifier" hint="Slug of the class whose level is checked; leave blank to use character level">
-                          <Input
+                        <FieldRow label="Class Identifier" hint="Class whose level is checked for the visibility range. Leave blank to use total character level.">
+                          {/* Pulls from the same `classes` collection
+                              the requirements editor uses; the stored
+                              value is the class's `identifier` slug so
+                              Foundry's runtime can match it (the same
+                              shape the free-text field accepted before). */}
+                          <SingleSelectSearch
                             value={editingActivity.visibility?.identifier || ''}
-                            onChange={e => updateSection('visibility', { identifier: e.target.value })}
-                            placeholder="e.g. ranger"
-                            className="field-input border-gold/15 text-xs font-mono"
+                            onChange={(id) => updateSection('visibility', { identifier: id })}
+                            options={classes.map(c => ({
+                              id: c.identifier || c.id,
+                              name: c.name,
+                              hint: c.identifier || undefined,
+                            }))}
+                            placeholder="Use character level"
+                            noEntitiesText="No classes seeded — visibility falls back to character level."
+                            triggerClassName="w-full"
                           />
                         </FieldRow>
                       </ActivitySection>
@@ -1010,28 +1092,28 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                       recovery[idx] = { ...entry, period: val };
                                       updateCurrent({ uses: { ...(editingActivity.uses || {}), recovery } });
                                     }}
-                                    options={RECOVERY_PERIOD_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                                    options={RECOVERY_PERIOD_OPTIONS.map(o => ({ id: o.value, name: o.label, hint: o.hint }))}
                                     placeholder="Period"
                                     triggerClassName="flex-1"
                                   />
-                                  <Select
-                                    value={entry.type || '__none'}
-                                    onValueChange={val => {
+                                  {/* Recovery type — pairs with the
+                                      period above using the same
+                                      picker. Labels are the display
+                                      strings Foundry shows; values are
+                                      the dnd5e slugs ("recoverAll" /
+                                      "formula" / "loseAll") that
+                                      round-trip on export. */}
+                                  <SingleSelectSearch
+                                    value={entry.type || ''}
+                                    onChange={(val) => {
                                       const recovery = [...(editingActivity.uses?.recovery || [])];
-                                      recovery[idx] = { ...entry, type: val === '__none' ? '' : val };
+                                      recovery[idx] = { ...entry, type: val };
                                       updateCurrent({ uses: { ...(editingActivity.uses || {}), recovery } });
                                     }}
-                                  >
-                                    <SelectTrigger className="h-7 text-[10px] bg-background/40 border-gold/10 flex-1">
-                                      <SelectValue placeholder="Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="__none">None</SelectItem>
-                                      {RECOVERY_TYPE_OPTIONS.map(option => (
-                                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    options={RECOVERY_TYPE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                                    placeholder="Type"
+                                    triggerClassName="flex-1"
+                                  />
                                   <Input
                                     value={entry.formula || ''}
                                     onChange={e => {
@@ -1050,7 +1132,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                     }}
                                     className="text-blood/60 hover:text-blood shrink-0 transition-colors"
                                   >
-                                    <X className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               ))}
@@ -1110,7 +1192,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                       })}
                                       className="text-blood/60 hover:text-blood shrink-0 transition-colors"
                                     >
-                                      <X className="w-3.5 h-3.5" />
+                                      <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   </div>
                                   {/* Autocomplete-backed target path —
@@ -1130,30 +1212,28 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                     placeholder="resources.primary.value"
                                   />
                                   <div className="flex gap-2 items-center">
-                                    <Select
-                                      value={target.scaling?.mode || '__none'}
-                                      onValueChange={val => {
+                                    {/* Scaling mode — labelled values
+                                        (Whole Dice / Half Dice) instead
+                                        of the bare slugs ("whole" /
+                                        "half") that used to show. */}
+                                    <SingleSelectSearch
+                                      value={target.scaling?.mode || ''}
+                                      onChange={(val) => {
                                         const targets = [...(editingActivity.consumption?.targets || [])];
                                         targets[idx] = {
                                           ...target,
                                           scaling: {
                                             ...(target.scaling || { mode: '', formula: '' }),
-                                            mode: val === '__none' ? '' : val
-                                          }
+                                            mode: val,
+                                          },
                                         };
                                         updateConsumption({ targets });
                                       }}
-                                    >
-                                      <SelectTrigger className="h-7 text-[10px] bg-background/40 border-gold/10 flex-1">
-                                        <SelectValue placeholder="No Scaling" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__none">No Scaling</SelectItem>
-                                        {SCALING_MODE_OPTIONS.filter(Boolean).map(option => (
-                                          <SelectItem key={option} value={option}>{option}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                      options={SCALING_MODE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                                      placeholder="No Scaling"
+                                      allowClear={false}
+                                      triggerClassName="flex-1"
+                                    />
                                     <Input
                                       value={target.scaling?.formula || ''}
                                       onChange={e => {
@@ -1248,7 +1328,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   </SelectTrigger>
                                   <SelectContent>
                                     {TARGET_TYPE_OPTIONS.map(option => (
-                                      <SelectItem key={option} value={option}>{option === 'none' ? 'None' : option.charAt(0).toUpperCase() + option.slice(1)}</SelectItem>
+                                      <SelectItem key={option.value} value={option.value || 'none'}>{option.label}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
@@ -1289,7 +1369,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                 </SelectTrigger>
                                 <SelectContent>
                                   {TEMPLATE_TYPE_OPTIONS.map(option => (
-                                    <SelectItem key={option} value={option}>{option === 'none' ? 'None' : option.charAt(0).toUpperCase() + option.slice(1)}</SelectItem>
+                                    <SelectItem key={option.value} value={option.value || 'none'}>{option.label}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -2003,20 +2083,14 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                       {editingActivity.summon && (
                         <ActivitySection label="SUMMON">
                           <FieldRow label="Mode">
-                            <Select
-                              value={editingActivity.summon.mode || '__direct'}
-                              onValueChange={val => updateSummon({ mode: val === '__direct' ? '' : val })}
-                            >
-                              <SelectTrigger className="field-input border-gold/15 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__direct">Direct</SelectItem>
-                                {SUMMON_OR_TRANSFORM_MODE_OPTIONS.filter(Boolean).map(option => (
-                                  <SelectItem key={option} value={option}>{option.toUpperCase()}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <SingleSelectSearch
+                              value={editingActivity.summon.mode || ''}
+                              onChange={(val) => updateSummon({ mode: val })}
+                              options={SUMMON_OR_TRANSFORM_MODE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                              placeholder="Direct (level-based)"
+                              allowClear={false}
+                              triggerClassName="w-full"
+                            />
                           </FieldRow>
                           <FieldRow label="Temp HP">
                             <Input
@@ -2032,20 +2106,28 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               onCheckedChange={checked => updateSummon({ prompt: !!checked })}
                             />
                           </FieldRow>
-                          <FieldRow label="Creature Sizes" hint="Comma-separated">
-                            <Input
-                              value={(editingActivity.summon.creatureSizes || []).join(', ')}
-                              onChange={e => updateSummon({ creatureSizes: parseCsv(e.target.value) })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder={CREATURE_SIZE_OPTIONS.join(', ')}
+                          <FieldRow label="Creature Sizes" hint="Pick one or more sizes the summon can match.">
+                            {/* Multi-select chips replacing the
+                                comma-separated free-text input. Authors
+                                no longer have to remember the slugs
+                                ("tiny, sm, med, lg, huge, grg"). */}
+                            <EntityPicker
+                              entities={CREATURE_SIZE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                              selectedIds={editingActivity.summon.creatureSizes || []}
+                              onChange={(sizes) => updateSummon({ creatureSizes: sizes })}
+                              searchPlaceholder="Search sizes…"
+                              maxHeightClass="max-h-32"
+                              showChips
                             />
                           </FieldRow>
-                          <FieldRow label="Creature Types" hint="Comma-separated">
-                            <Input
-                              value={(editingActivity.summon.creatureTypes || []).join(', ')}
-                              onChange={e => updateSummon({ creatureTypes: parseCsv(e.target.value) })}
-                              className="field-input border-gold/15 text-xs"
-                              placeholder={CREATURE_TYPE_OPTIONS.slice(0, 4).join(', ')}
+                          <FieldRow label="Creature Types" hint="Pick one or more creature types.">
+                            <EntityPicker
+                              entities={CREATURE_TYPE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                              selectedIds={editingActivity.summon.creatureTypes || []}
+                              onChange={(types) => updateSummon({ creatureTypes: types })}
+                              searchPlaceholder="Search creature types…"
+                              maxHeightClass="max-h-32"
+                              showChips
                             />
                           </FieldRow>
                           <FieldRow label="Ability Match">
@@ -2127,7 +2209,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                     </div>
                                   </div>
                                   <button type="button" onClick={() => updateSummon({ profiles: (editingActivity.summon.profiles||[]).filter((_,i)=>i!==idx) })} className="h-7 flex items-center justify-center text-blood/60 hover:text-blood transition-colors">
-                                    <X className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                   <div className="col-span-6 grid gap-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Types</p>
@@ -2146,20 +2228,14 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                       {editingActivity.transform && (
                         <ActivitySection label="TRANSFORM">
                           <FieldRow label="Mode">
-                            <Select
-                              value={editingActivity.transform.mode || '__direct'}
-                              onValueChange={val => updateTransform({ mode: val === '__direct' ? '' : val })}
-                            >
-                              <SelectTrigger className="field-input border-gold/15 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__direct">Direct</SelectItem>
-                                {SUMMON_OR_TRANSFORM_MODE_OPTIONS.filter(Boolean).map(option => (
-                                  <SelectItem key={option} value={option}>{option.toUpperCase()}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <SingleSelectSearch
+                              value={editingActivity.transform.mode || ''}
+                              onChange={(val) => updateTransform({ mode: val })}
+                              options={SUMMON_OR_TRANSFORM_MODE_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                              placeholder="Direct (level-based)"
+                              allowClear={false}
+                              triggerClassName="w-full"
+                            />
                           </FieldRow>
                           <FieldRow label="Preset">
                             <Input
@@ -2208,18 +2284,18 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   </div>
                                   <div className="grid gap-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Sizes</p>
-                                    <Input value={(profile.sizes||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,sizes:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder={CREATURE_SIZE_OPTIONS.join(', ')} />
+                                    <Input value={(profile.sizes||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,sizes:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder={CREATURE_SIZE_OPTIONS.map(o => o.value).join(', ')} />
                                   </div>
                                   <div className="grid gap-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Types</p>
                                     <Input value={(profile.types||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,types:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder="beast" />
                                   </div>
                                   <button type="button" onClick={() => updateTransform({ profiles: (editingActivity.transform?.profiles||[]).filter((_,i)=>i!==idx) })} className="h-7 flex items-center justify-center text-blood/60 hover:text-blood transition-colors">
-                                    <X className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                   <div className="col-span-3 grid gap-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Movement</p>
-                                    <Input value={(profile.movement||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,movement:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder={MOVEMENT_TYPE_OPTIONS.join(', ')} />
+                                    <Input value={(profile.movement||[]).join(', ')} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,movement:parseCsv(e.target.value)}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs" placeholder={MOVEMENT_TYPE_OPTIONS.map(o => o.value).join(', ')} />
                                   </div>
                                   <div className="col-span-3 grid gap-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Level Range</p>
