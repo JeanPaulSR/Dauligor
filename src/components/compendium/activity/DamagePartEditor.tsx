@@ -95,25 +95,29 @@ export default function DamagePartEditor({
             <Trash2 className="h-3 w-3 text-red-400" />
           </Button>
 
-          {/* Row 1: number of dice + die size + flat bonus. */}
-          <div className="grid grid-cols-12 gap-3 mb-3">
-            <div className="col-span-2">
-              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Num</p>
+          {/* Row 1: number of dice + die size + flat bonus.
+              Even 3-col split keeps each input wide enough to type a
+              real value at the dialog's standard 4xl width without
+              overflowing on smaller screens. Previously 2/3/7 made the
+              Number input cramped and pushed Bonus too far right. */}
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <div>
+              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Number</p>
               <Input
                 type="number"
                 value={part.number ?? ''}
                 onChange={e => patchAt(idx, { number: parseInt(e.target.value) || null })}
-                className="h-8 bg-background/40 border-gold/10 text-center text-xs"
+                className="h-8 bg-background/40 border-gold/10 text-center text-xs no-number-spin"
               />
             </div>
-            <div className="col-span-3">
+            <div>
               <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Die</p>
               <Select
                 value={part.denomination?.toString() || ''}
                 onValueChange={val => patchAt(idx, { denomination: parseInt(val) || null })}
               >
                 <SelectTrigger className="h-8 bg-background/40 border-gold/10 text-xs">
-                  <SelectValue placeholder="-" />
+                  <SelectValue placeholder="—" />
                 </SelectTrigger>
                 <SelectContent>
                   {DAMAGE_DIE_DENOMINATIONS.map(d => (
@@ -122,8 +126,8 @@ export default function DamagePartEditor({
                 </SelectContent>
               </Select>
             </div>
-            <div className="col-span-7">
-              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Flat Bonus</p>
+            <div>
+              <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Bonus</p>
               <Input
                 value={part.bonus || ''}
                 onChange={e => patchAt(idx, { bonus: e.target.value })}
@@ -181,14 +185,20 @@ export default function DamagePartEditor({
           {/* Row 4: scaling — adds dice/formula as character level
               increases. Mode None / Every Level / Every Other Level
               matches Foundry's display labels for the dnd5e slug
-              values "" / "whole" / "half". */}
+              values "" / "whole" / "half".
+              base-ui's Select disallows SelectItem value="" (collides
+              with the "no selection" sentinel), so we translate the
+              empty-string mode to a `__none` token while in the
+              dropdown and back to "" when patching the data. Without
+              this, clicking the dropdown options did nothing because
+              base-ui silently swallowed the change. */}
           <div className="grid grid-cols-12 gap-2 border-t border-gold/8 mt-2.5 pt-2.5">
             <div className="col-span-4">
               <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Scaling Mode</p>
               <Select
-                value={part.scaling?.mode || ''}
+                value={part.scaling?.mode || '__none'}
                 onValueChange={val => patchAt(idx, {
-                  scaling: { ...part.scaling, mode: val },
+                  scaling: { ...part.scaling, mode: val === '__none' ? '' : val },
                 })}
               >
                 <SelectTrigger className="h-7 bg-background/40 border-gold/10 text-[9px]">
@@ -196,7 +206,7 @@ export default function DamagePartEditor({
                 </SelectTrigger>
                 <SelectContent>
                   {DAMAGE_SCALING_MODE_OPTIONS.map(o => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    <SelectItem key={o.value || '__none'} value={o.value || '__none'}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

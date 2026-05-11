@@ -829,72 +829,6 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
 
                   {activeTab === 'effect' && (
                     <div>
-                      {/* ── Applied Effects ── */}
-                      <ActivitySection label="APPLIED EFFECTS">
-                        {availableEffects.length === 0 ? (
-                          <p className="text-[10px] text-ink/30 italic py-2 text-center">
-                            No effects defined on this feature. Add effects in the Effects tab first.
-                          </p>
-                        ) : (
-                          <div className="space-y-1 pb-1">
-                            {availableEffects.map((fx, index) => {
-                              const linked = (editingActivity.effects || []).find(e => e._id === fx._id);
-                              const toggle = () => {
-                                const cur = editingActivity.effects || [];
-                                handleUpdateActivity(editingId!, {
-                                  effects: linked
-                                    ? cur.filter(e => e._id !== fx._id)
-                                    : [...cur, { _id: fx._id!, level: { min: null, max: null } }]
-                                });
-                              };
-                              const patchLevel = (patch: { min?: number | null; max?: number | null }) => {
-                                const cur = editingActivity.effects || [];
-                                handleUpdateActivity(editingId!, {
-                                  effects: cur.map(e => e._id === fx._id ? { ...e, level: { ...e.level, ...patch } } : e)
-                                });
-                              };
-                              return (
-                                <div key={fx._id || `fx-${index}`} className="flex items-center gap-2 py-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={toggle}
-                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${linked ? 'bg-gold/30 border-gold/60' : 'border-gold/20 hover:border-gold/40'}`}
-                                  >
-                                    {linked && <svg className="w-2.5 h-2.5 text-gold" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2}><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>}
-                                  </button>
-                                  {fx.img && (
-                                    <div className="w-5 h-5 rounded border border-gold/15 overflow-hidden shrink-0">
-                                      <img src={fx.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                                    </div>
-                                  )}
-                                  <span className={`flex-1 text-xs truncate ${linked ? 'text-ink/85 font-medium' : 'text-ink/40'}`}>{fx.name}</span>
-                                  {linked && (
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <span className="text-[9px] text-ink/30 uppercase tracking-wider">Lvl</span>
-                                      <Input
-                                        type="number"
-                                        value={linked.level?.min ?? ''}
-                                        onChange={e => patchLevel({ min: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
-                                        placeholder="—"
-                                      />
-                                      <span className="text-[9px] text-ink/20">–</span>
-                                      <Input
-                                        type="number"
-                                        value={linked.level?.max ?? ''}
-                                        onChange={e => patchLevel({ max: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
-                                        placeholder="—"
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </ActivitySection>
-
                       {(editingActivity.save || editingActivity.check) && (
                         <ActivitySection label={editingActivity.save ? 'SAVING THROW' : 'ABILITY CHECK'}>
                           {editingActivity.save && (
@@ -1521,10 +1455,72 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                         </ActivitySection>
                       )}
 
-                      <div className="py-10 border border-dashed border-gold/10 rounded flex flex-col items-center justify-center text-center opacity-40 mx-1">
-                        <Zap className="w-8 h-8 text-gold/10 mb-2" />
-                        <p className="text-[10px] uppercase font-serif tracking-widest">Advanced Logic Flow coming soon</p>
-                      </div>
+                      {/* ── Applied Effects ── */}
+                      <ActivitySection label="APPLIED EFFECTS">
+                        {availableEffects.length === 0 ? (
+                          <p className="text-[10px] text-ink/30 italic py-2 text-center">
+                            No effects defined on this feature. Add effects in the Effects tab first.
+                          </p>
+                        ) : (
+                          <div className="space-y-1 pb-1">
+                            {availableEffects.map((fx, index) => {
+                              const linked = (editingActivity.effects || []).find(e => e._id === fx._id);
+                              const toggle = () => {
+                                const cur = editingActivity.effects || [];
+                                handleUpdateActivity(editingId!, {
+                                  effects: linked
+                                    ? cur.filter(e => e._id !== fx._id)
+                                    : [...cur, { _id: fx._id!, level: { min: null, max: null } }]
+                                });
+                              };
+                              const patchLevel = (patch: { min?: number | null; max?: number | null }) => {
+                                const cur = editingActivity.effects || [];
+                                handleUpdateActivity(editingId!, {
+                                  effects: cur.map(e => e._id === fx._id ? { ...e, level: { ...e.level, ...patch } } : e)
+                                });
+                              };
+                              return (
+                                <div key={fx._id || `fx-${index}`} className="flex items-center gap-2 py-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={toggle}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${linked ? 'bg-gold/30 border-gold/60' : 'border-gold/20 hover:border-gold/40'}`}
+                                  >
+                                    {linked && <svg className="w-2.5 h-2.5 text-gold" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth={2}><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>}
+                                  </button>
+                                  {fx.img && (
+                                    <div className="w-5 h-5 rounded border border-gold/15 overflow-hidden shrink-0">
+                                      <img src={fx.img} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                    </div>
+                                  )}
+                                  <span className={`flex-1 text-xs truncate ${linked ? 'text-ink/85 font-medium' : 'text-ink/40'}`}>{fx.name}</span>
+                                  {linked && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className="text-[9px] text-ink/30 uppercase tracking-wider">Lvl</span>
+                                      <Input
+                                        type="number"
+                                        value={linked.level?.min ?? ''}
+                                        onChange={e => patchLevel({ min: e.target.value === '' ? null : parseInt(e.target.value) })}
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
+                                        placeholder="—"
+                                      />
+                                      <span className="text-[9px] text-ink/20">–</span>
+                                      <Input
+                                        type="number"
+                                        value={linked.level?.max ?? ''}
+                                        onChange={e => patchLevel({ max: e.target.value === '' ? null : parseInt(e.target.value) })}
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
+                                        placeholder="—"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </ActivitySection>
+
                     </div>
                   )}
                 </div>
