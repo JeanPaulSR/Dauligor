@@ -778,7 +778,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                         type="number"
                         value={editingItem?.level_prerequisite || editingItem?.levelPrerequisite || 0}
                         onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), level_prerequisite: parseInt(e.target.value) || 0 }))}
-                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold no-number-spin"
                       />
                       {/* Defaults to false (class level). When checked
                           the number is interpreted as total character

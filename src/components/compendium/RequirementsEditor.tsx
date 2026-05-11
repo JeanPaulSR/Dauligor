@@ -362,7 +362,7 @@ function LeafPayload({
             min={1}
             value={value.minLevel}
             onChange={e => onChange({ ...value, minLevel: parseInt(e.target.value) || 1 })}
-            className="h-7 w-16 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+            className="h-7 w-16 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none no-number-spin"
           />
           <label className="flex items-center gap-1 text-[10px] text-ink/50 cursor-pointer">
             <input
@@ -391,7 +391,7 @@ function LeafPayload({
             min={1}
             value={value.minLevel}
             onChange={e => onChange({ ...value, minLevel: parseInt(e.target.value) || 1 })}
-            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none no-number-spin"
           />
           <span className="text-[10px] text-ink/40">level+</span>
         </>
@@ -520,7 +520,7 @@ function LeafPayload({
             max={30}
             value={value.min}
             onChange={e => onChange({ ...value, min: parseInt(e.target.value) || 1 })}
-            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+            className="h-7 w-14 px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none no-number-spin"
           />
           <span className="text-[10px] text-ink/40">or higher</span>
         </>
