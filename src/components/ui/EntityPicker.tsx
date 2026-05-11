@@ -81,6 +81,15 @@ export default function EntityPicker({
                 className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gold/10 text-gold border border-gold/20 rounded"
               >
                 {e.name}
+                {/* Mirror the per-row hint badge from the dropdown list onto
+                    the selected chip — keeps category / level / source info
+                    visible after the user picks, without forcing them to
+                    reopen the search list. Renders only when `hint` is set,
+                    so call sites that don't supply one (Class Restrictions
+                    in the option editor, etc.) are visually unchanged. */}
+                {e.hint ? (
+                  <span className="text-[9px] text-gold/60 normal-case tracking-normal">· {e.hint}</span>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onChange(selectedIds.filter(x => x !== id))}
