@@ -35,6 +35,16 @@ export interface ActiveEffectKeyInputProps {
   id?: string;
   placeholder?: string;
   className?: string;
+  /**
+   * Optional element to size the dropdown against, instead of the
+   * input itself. Used in the Active Effect Changes tab so the
+   * dropdown spans the full change-row width (key + mode + value +
+   * priority columns) rather than only the narrow key column —
+   * matches Foundry's behaviour where the suggestion popup gets the
+   * whole row to breathe. Vertical anchoring still uses the input,
+   * so the popup opens just below the typed text.
+   */
+  widthAnchorRef?: React.RefObject<HTMLElement | null>;
 }
 
 /** Internal: flat list of suggestions in display order. */
@@ -92,6 +102,7 @@ export default function ActiveEffectKeyInput({
   id,
   placeholder = 'system.attributes.ac.calc',
   className = '',
+  widthAnchorRef,
 }: ActiveEffectKeyInputProps) {
   const [open, setOpen] = useState(false);
   // Index into the flat list of currently-rendered suggestions. -1 means
@@ -159,19 +170,25 @@ export default function ActiveEffectKeyInput({
   const recomputeCoords = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const placeAbove = spaceBelow < PREFERRED_DROPDOWN_HEIGHT && rect.top > spaceBelow;
+    const inputRect = el.getBoundingClientRect();
+    // Vertical anchor is always the input (so the popup opens just
+    // below the cursor). Horizontal anchor — left edge + width — uses
+    // the widthAnchorRef when supplied, so the dropdown can span the
+    // full effect row rather than only the narrow key column. Falls
+    // back to the input itself when no anchor is provided.
+    const anchorRect = widthAnchorRef?.current?.getBoundingClientRect() ?? inputRect;
+    const spaceBelow = window.innerHeight - inputRect.bottom;
+    const placeAbove = spaceBelow < PREFERRED_DROPDOWN_HEIGHT && inputRect.top > spaceBelow;
     setCoords({
-      left: rect.left,
-      width: rect.width,
+      left: anchorRect.left,
+      width: anchorRect.width,
       // When flipping above, the dropdown's bottom edge sits a few px
       // above the input's top. We translate via CSS, not coords, so
       // `top` stays as the anchor point — see the popup render below.
-      top: placeAbove ? rect.top : rect.bottom,
+      top: placeAbove ? inputRect.top : inputRect.bottom,
       placeAbove,
     });
-  }, []);
+  }, [widthAnchorRef]);
 
   useLayoutEffect(() => {
     if (!open) {

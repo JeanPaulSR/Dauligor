@@ -405,55 +405,15 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                   ) : (
                     <div className="divide-y divide-gold/5">
                       {(draft.changes || []).map((c, i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2">
-                          {/* Leading magnifier — visually signals the
-                              key field is searchable (matches Foundry's
-                              changes layout). */}
-                          <div className="w-6 shrink-0 flex justify-center">
-                            <Search className="w-3 h-3 text-ink/25" />
-                          </div>
-                          {/* Key — autocomplete dropdown sourced from
-                              the curated catalog in
-                              src/lib/activeEffectKeys.ts. Free-text
-                              always allowed for keys not in the
-                              catalog. */}
-                          <ActiveEffectKeyInput
-                            value={c.key}
-                            onChange={(next) => patchChange(i, { key: next })}
-                            className="flex-[2] min-w-0"
-                          />
-                          <Select value={String(c.mode)} onValueChange={v => patchChange(i, { mode: parseInt(v, 10) })}>
-                            <SelectTrigger className="w-28 h-7 text-xs shrink-0 bg-background/50 border-gold/10 focus:border-gold">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {EFFECT_MODE_OPTIONS.map(opt => (
-                                <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Input
-                            value={c.value}
-                            onChange={e => patchChange(i, { value: e.target.value })}
-                            placeholder="value or formula"
-                            className="flex-1 min-w-0 h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold"
-                          />
-                          {/* Priority — greyed when null (auto = mode default). */}
-                          <Input
-                            type="number"
-                            value={c.priority ?? ''}
-                            onChange={e => patchChange(i, { priority: parseNullableInt(e.target.value) })}
-                            placeholder={String(defaultPriorityForMode(c.mode))}
-                            className={`w-20 shrink-0 h-7 text-xs text-center bg-background/50 border-gold/10 focus:border-gold ${c.priority === null ? 'text-ink/30' : ''}`}
-                          />
-                          <button
-                            type="button" onClick={() => deleteChange(i)}
-                            className="w-6 h-6 shrink-0 flex items-center justify-center text-ink/30 hover:text-blood transition-colors"
-                            title="Remove change"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
+                        <ChangeRow
+                          key={i}
+                          change={c}
+                          onPatchKey={(key) => patchChange(i, { key })}
+                          onPatchMode={(mode) => patchChange(i, { mode })}
+                          onPatchValue={(value) => patchChange(i, { value })}
+                          onPatchPriority={(priority) => patchChange(i, { priority })}
+                          onDelete={() => deleteChange(i)}
+                        />
                       ))}
                     </div>
                   )}
@@ -480,6 +440,86 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── ChangeRow ──────────────────────────────────────────────────────────
+//
+// Extracted into its own component so each row owns a `rowRef` that we
+// can pass to <ActiveEffectKeyInput widthAnchorRef={rowRef}>. The
+// autocomplete dropdown reads that ref's bounding rect for its width,
+// which lets the popup span the full row (key + mode + value +
+// priority columns) instead of only the narrow key column —
+// matching Foundry's wider suggestion popup behaviour.
+
+interface ChangeRowProps {
+  change: EffectChange;
+  onPatchKey: (key: string) => void;
+  onPatchMode: (mode: number) => void;
+  onPatchValue: (value: string) => void;
+  onPatchPriority: (priority: number | null) => void;
+  onDelete: () => void;
+}
+
+function ChangeRow({
+  change,
+  onPatchKey,
+  onPatchMode,
+  onPatchValue,
+  onPatchPriority,
+  onDelete,
+}: ChangeRowProps) {
+  const rowRef = React.useRef<HTMLDivElement>(null);
+  const parseNullableInt = (v: string) => v === '' ? null : parseInt(v, 10);
+  return (
+    <div ref={rowRef} className="flex items-center gap-2 px-3 py-2">
+      {/* Leading magnifier — visually signals the key field is
+          searchable (matches Foundry's changes layout). */}
+      <div className="w-6 shrink-0 flex justify-center">
+        <Search className="w-3 h-3 text-ink/25" />
+      </div>
+      {/* Key — autocomplete dropdown sourced from the curated
+          catalog in src/lib/activeEffectKeys.ts. Free-text always
+          allowed for keys not in the catalog. widthAnchorRef ties
+          the popup width to the full row. */}
+      <ActiveEffectKeyInput
+        value={change.key}
+        onChange={onPatchKey}
+        widthAnchorRef={rowRef}
+        className="flex-[2] min-w-0"
+      />
+      <Select value={String(change.mode)} onValueChange={v => onPatchMode(parseInt(v, 10))}>
+        <SelectTrigger className="w-28 h-7 text-xs shrink-0 bg-background/50 border-gold/10 focus:border-gold">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {EFFECT_MODE_OPTIONS.map(opt => (
+            <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        value={change.value}
+        onChange={e => onPatchValue(e.target.value)}
+        placeholder="value or formula"
+        className="flex-1 min-w-0 h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold"
+      />
+      {/* Priority — greyed when null (auto = mode default). */}
+      <Input
+        type="number"
+        value={change.priority ?? ''}
+        onChange={e => onPatchPriority(parseNullableInt(e.target.value))}
+        placeholder={String(defaultPriorityForMode(change.mode))}
+        className={`w-20 shrink-0 h-7 text-xs text-center bg-background/50 border-gold/10 focus:border-gold ${change.priority === null ? 'text-ink/30' : ''}`}
+      />
+      <button
+        type="button" onClick={onDelete}
+        className="w-6 h-6 shrink-0 flex items-center justify-center text-ink/30 hover:text-blood transition-colors"
+        title="Remove change"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
     </div>
   );
 }
