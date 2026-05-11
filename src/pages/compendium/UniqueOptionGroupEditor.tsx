@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
+import { denormalizeCompendiumData } from '../../lib/compendium';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { ImageUpload } from '../../components/ui/ImageUpload';
@@ -77,13 +78,17 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
             setIsUsingD1(true);
           }
 
-          // 4. Items
+          // 4. Items — denormalize so camelCase keys (iconUrl, imageUrl,
+          // usesMax, usesRecovery, classIds, requiresOptionIds, etc.) the
+          // editor binds to actually populate from the snake_case row
+          // returned by D1. Without this the icon never re-displays after
+          // save and the hero header looks empty on reopen.
           const itemsData = await fetchCollection('uniqueOptionItems', {
             where: 'group_id = ?',
             params: [id],
             orderBy: 'name ASC',
           });
-          setItems(itemsData);
+          setItems(itemsData.map((row: any) => denormalizeCompendiumData(row)));
         }
       } catch (err) {
         console.error("Error loading unique options data:", err);
@@ -187,6 +192,10 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         feature_type: editingItem?.featureType || editingItem?.feature_type || null,
         subtype: editingItem?.subtype || null,
         requirements: editingItem?.requirements || null,
+        // `icon_url` is the field the hero-header ImageUpload binds to via
+        // `editingItem.iconUrl`. Was being dropped on save until this fix
+        // because only `image_url` was written.
+        icon_url: editingItem?.iconUrl || editingItem?.icon_url || null,
         image_url: editingItem?.imageUrl || editingItem?.image_url || null,
         uses_max: editingItem?.usesMax || editingItem?.uses_max || null,
         uses_spent: Number(editingItem?.usesSpent ?? editingItem?.uses_spent ?? 0) || 0,
