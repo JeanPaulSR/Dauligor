@@ -60,21 +60,32 @@ export type RequirementLeafType =
   | 'abilityScore'
   /**
    * Character has a specific proficiency. `category` narrows the surface
-   * (weapon / armor / tool / skill / language) and `identifier` names it.
-   * `identifier` is free-text today (e.g. "longsword", "Elvish") rather
-   * than an entity id — proficiencies aren't a first-class table yet.
+   * (weapon / armor / tool / skill / language) and `identifier` names
+   * the proficiency itself (e.g. "longsword", "thieves-tools",
+   * "elvish") — sourced from the matching proficiency table's
+   * `identifier` column so it round-trips as the Foundry key.
    * (Field is `category`, not `kind`, because `kind` is the Requirement
    * discriminator and would shadow it inside the intersection type.)
    */
   | 'proficiency'
   /**
-   * Numeric level gate, used inside the tree (the flat
-   * `level_prerequisite` column covers the common case on option items;
-   * this leaf exists so feats — which lack the flat column — can express
-   * level gates structurally, and so trees with mixed-scope gates can
-   * use `isTotal: false` at one branch and `isTotal: true` at another).
+   * Numeric level gate, used inside the tree. Option items also have a
+   * flat `level_prerequisite` column for the common case — kept in sync
+   * by the editor (top-level level leaves get mirrored to the flat
+   * column on save so the module's existing picker-gate flag keeps
+   * working). Once the module walks the tree directly we can drop the
+   * flat column.
    */
-  | 'level';
+  | 'level'
+  /**
+   * Free-text requirement leaf (e.g. "Pact of the Tome", "Member of
+   * the Crimson Order"). The module surfaces these as readable text in
+   * the option picker; they're not machine-checked. Replaces the
+   * previous flat `string_prerequisite` column as the authoring
+   * surface — the column is still written for back-compat with the
+   * module's current renderer.
+   */
+  | 'string';
 
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 
@@ -102,6 +113,7 @@ export interface RequirementLeafByType {
   abilityScore: { ability: AbilityKey; min: number };
   proficiency: { category: ProficiencyKind; identifier: string };
   level: { minLevel: number; isTotal: boolean };
+  string: { value: string };
 }
 
 /** A leaf node. `type` switches on the payload shape via `RequirementLeafByType`. */
@@ -194,7 +206,7 @@ function isKnownLeafType(s: string): s is RequirementLeafType {
   return [
     'levelInClass', 'class', 'subclass', 'optionItem',
     'feature', 'spell', 'spellRule',
-    'abilityScore', 'proficiency', 'level',
+    'abilityScore', 'proficiency', 'level', 'string',
   ].includes(s);
 }
 
@@ -286,6 +298,8 @@ function formatLeaf(leaf: RequirementLeaf, lookup: RequirementFormatLookup): str
       return `${ABILITY_LABEL[leaf.ability]} ${leaf.min} or higher`;
     case 'proficiency':
       return `${PROFICIENCY_LABEL[leaf.category]}: ${leaf.identifier}`;
+    case 'string':
+      return leaf.value;
   }
 }
 
@@ -394,6 +408,7 @@ function remapLeaf(leaf: RequirementLeaf, m: RequirementIdMaps): RequirementLeaf
     case 'abilityScore':
     case 'proficiency':
     case 'level':
+    case 'string':
       return leaf;
   }
 }
@@ -415,5 +430,91 @@ export function emptyLeaf(type: RequirementLeafType): RequirementLeaf {
     case 'spellRule': return { kind: 'leaf', type, spellRuleId: '' };
     case 'abilityScore': return { kind: 'leaf', type, ability: 'str', min: 13 };
     case 'proficiency': return { kind: 'leaf', type, category: 'weapon', identifier: '' };
+    case 'string': return { kind: 'leaf', type, value: '' };
   }
+}
+
+// ─── Flat ↔ tree bridge ──────────────────────────────────────────────────
+//
+// Option items historically stored `level_prerequisite`,
+// `level_prereq_is_total`, and `string_prerequisite` as flat columns,
+// authored via dedicated UI fields. The editor now folds those into the
+// tree as `level` / `string` leaves and the flat columns become
+// projections of the tree — derived on save so the module's existing
+// `flags.levelPrerequisite` enforcement keeps working, and seeded back
+// onto the tree on load when a row has flat values but no tree yet
+// (legacy data, partial migrations, fresh inserts from scripts).
+//
+// Once module-side picker enforcement walks the tree directly, the
+// flat columns can be dropped in a follow-up migration.
+
+/** Best-effort: pick the first top-level `level` leaf — either the root
+ *  itself, or a direct child of a root `all` group. Ignores nested
+ *  occurrences. Returns null if none found. */
+export function extractTopLevelLevelLeaf(
+  tree: Requirement | null | undefined,
+): { minLevel: number; isTotal: boolean } | null {
+  if (!tree) return null;
+  if (isLeaf(tree)) {
+    return tree.type === 'level' ? { minLevel: tree.minLevel, isTotal: tree.isTotal } : null;
+  }
+  if (tree.kind !== 'all') return null;
+  for (const child of tree.children) {
+    if (isLeaf(child) && child.type === 'level') {
+      return { minLevel: child.minLevel, isTotal: child.isTotal };
+    }
+  }
+  return null;
+}
+
+/** Best-effort: pick the first top-level `string` leaf's value. Same
+ *  scoping rules as extractTopLevelLevelLeaf — root leaf or direct
+ *  child of a root `all` group. */
+export function extractTopLevelStringLeaf(
+  tree: Requirement | null | undefined,
+): string {
+  if (!tree) return '';
+  if (isLeaf(tree)) {
+    return tree.type === 'string' ? tree.value : '';
+  }
+  if (tree.kind !== 'all') return '';
+  for (const child of tree.children) {
+    if (isLeaf(child) && child.type === 'string') {
+      return child.value;
+    }
+  }
+  return '';
+}
+
+/**
+ * On load: if a row has flat level/string prereqs but no tree, build a
+ * default tree from those flat values so the editor presents one
+ * surface. Existing trees pass through unchanged.
+ */
+export function seedTreeFromFlatColumns({
+  existingTree,
+  levelPrerequisite,
+  levelPrereqIsTotal,
+  stringPrerequisite,
+}: {
+  existingTree: Requirement | null;
+  levelPrerequisite: number;
+  levelPrereqIsTotal: boolean;
+  stringPrerequisite: string;
+}): Requirement | null {
+  if (existingTree) return existingTree;
+  const seeded: Requirement[] = [];
+  if (levelPrerequisite > 0) {
+    seeded.push({
+      kind: 'leaf', type: 'level',
+      minLevel: levelPrerequisite,
+      isTotal: levelPrereqIsTotal,
+    });
+  }
+  if (stringPrerequisite) {
+    seeded.push({ kind: 'leaf', type: 'string', value: stringPrerequisite });
+  }
+  if (seeded.length === 0) return null;
+  if (seeded.length === 1) return seeded[0];
+  return { kind: 'all', children: seeded };
 }

@@ -26,11 +26,14 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import AdvancementManager from '../../components/compendium/AdvancementManager';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
-import RequirementsEditor from '../../components/compendium/RequirementsEditor';
+import RequirementsEditor, { RequirementsEditorLookups } from '../../components/compendium/RequirementsEditor';
 import {
   Requirement,
   parseRequirementTree,
   serializeRequirementTree,
+  seedTreeFromFlatColumns,
+  extractTopLevelLevelLeaf,
+  extractTopLevelStringLeaf,
 } from '../../lib/requirements';
 
 export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: any }) {
@@ -54,10 +57,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [classes, setClasses] = useState<any[]>([]);
   // Lookups consumed by <RequirementsEditor>. Loaded once on mount alongside
   // the group's own data — keeps the option modal's leaf pickers populated
-  // (subclasses, every other Modular Option Group's items, spell rules).
-  // Features and spells are deferred until the picker grows a search UI;
-  // they're optional in the editor's API so the leaves stay in the
-  // type dropdown but their pickers report "(no … available)" until wired.
+  // (subclasses, every other Modular Option Group's items, spell rules,
+  // proficiency pools). Features and spells are deferred until the picker
+  // grows a search UI; they're optional in the editor's API so the leaves
+  // stay in the type dropdown but their pickers report "(no … available)"
+  // until wired.
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [spellRules, setSpellRules] = useState<any[]>([]);
   /**
@@ -72,6 +76,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     name: string;
     items: Array<{ id: string; name: string }>;
   }>>([]);
+  /**
+   * Proficiency pools (weapons + categories, armor + categories, tools +
+   * categories, skills, languages + categories) used by the `proficiency`
+   * requirement leaf's SingleSelectSearch. Per-category list mixes
+   * specific entries with their category rows; the latter get a
+   * "Category" hint badge to disambiguate.
+   */
+  const [proficiencyPools, setProficiencyPools] = useState<RequirementsEditorLookups['proficiencies']>({});
   // Tab state for the option-item modal — mirrors ClassEditor's feature
   // modal so authoring an option (Maneuver / Invocation / Infusion) feels
   // identical to authoring a class feature.
@@ -86,7 +98,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         // Lookup fetches run in parallel — the option modal won't open
         // until at least the group itself is loaded below, so the extra
         // round-trips here just need to finish before authoring starts.
-        const [sourcesData, classesData, subclassesData, spellRulesData, allGroups, allOptionItems] = await Promise.all([
+        const [
+          sourcesData, classesData, subclassesData, spellRulesData,
+          allGroups, allOptionItems,
+          weapons, weaponCategories, armor, armorCategories,
+          tools, toolCategories, skills, languages, languageCategories,
+        ] = await Promise.all([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('classes', { orderBy: 'name ASC' }),
           fetchCollection('subclasses', { orderBy: 'name ASC' }),
@@ -97,6 +114,20 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           // item in group B — e.g. an Eldritch Invocation requiring a
           // Warlock Pact).
           fetchCollection('uniqueOptionItems', { orderBy: 'name ASC' }),
+          // Proficiency pools for the `proficiency` requirement leaf.
+          // Both specific entries (longsword, plate, thieves' tools…)
+          // and their parent categories (Martial Weapons, Heavy Armor…)
+          // are valid proficiency targets in 5e, so we fetch both and
+          // merge per category below.
+          fetchCollection('weapons', { orderBy: 'name ASC' }),
+          fetchCollection('weaponCategories', { orderBy: '"order", name ASC' }),
+          fetchCollection('armor', { orderBy: 'name ASC' }),
+          fetchCollection('armorCategories', { orderBy: '"order", name ASC' }),
+          fetchCollection('tools', { orderBy: 'name ASC' }),
+          fetchCollection('toolCategories', { orderBy: '"order", name ASC' }),
+          fetchCollection('skills', { orderBy: 'name ASC' }),
+          fetchCollection('languages', { orderBy: 'name ASC' }),
+          fetchCollection('languageCategories', { orderBy: '"order", name ASC' }),
         ]);
         setSources(sourcesData);
         setClasses(classesData);
@@ -113,6 +144,27 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
             .map((it: any) => ({ id: it.id, name: it.name })),
         }));
         setAllOptionGroups(groupsWithItems);
+
+        // Merge per-kind proficiency pools. Each row's `identifier`
+        // is what gets stored on the leaf and round-trips as the
+        // Foundry key — that's why we use it as the SingleSelectSearch
+        // option id, not the database PK. Category rows get a hint
+        // badge so authors can distinguish "all Martial Weapons" from
+        // a specific weapon at a glance.
+        const mergeProf = (
+          entries: any[],
+          categories: any[],
+        ): Array<{ id: string; name: string; hint?: string }> => [
+          ...entries.map((e: any) => ({ id: e.identifier, name: e.name })),
+          ...categories.map((c: any) => ({ id: c.identifier, name: c.name, hint: 'Category' })),
+        ];
+        setProficiencyPools({
+          weapon: mergeProf(weapons as any[], weaponCategories as any[]),
+          armor: mergeProf(armor as any[], armorCategories as any[]),
+          tool: mergeProf(tools as any[], toolCategories as any[]),
+          skill: (skills as any[]).map((s: any) => ({ id: s.identifier, name: s.name })),
+          language: mergeProf(languages as any[], languageCategories as any[]),
+        });
 
         if (id) {
           // 3. Group
@@ -143,14 +195,25 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           });
           setItems(itemsData.map((row: any) => {
             const denorm = denormalizeCompendiumData(row);
+            const parsedTree = parseRequirementTree(
+              denorm.requirementsTree ?? denorm.requirements_tree
+            );
+            const levelPrereqIsTotal = Boolean(
+              denorm.levelPrereqIsTotal ?? denorm.level_prereq_is_total
+            );
+            // Seed the tree from flat columns when there isn't one yet
+            // (legacy rows, fresh inserts from scripts, etc.) so the
+            // editor only has one authoring surface to keep in sync.
+            const requirementsTree = seedTreeFromFlatColumns({
+              existingTree: parsedTree,
+              levelPrerequisite: Number(denorm.levelPrerequisite ?? denorm.level_prerequisite) || 0,
+              levelPrereqIsTotal,
+              stringPrerequisite: denorm.stringPrerequisite ?? denorm.string_prerequisite ?? '',
+            });
             return {
               ...denorm,
-              requirementsTree: parseRequirementTree(
-                denorm.requirementsTree ?? denorm.requirements_tree
-              ),
-              levelPrereqIsTotal: Boolean(
-                denorm.levelPrereqIsTotal ?? denorm.level_prereq_is_total
-              ),
+              requirementsTree,
+              levelPrereqIsTotal,
             };
           }));
         }
@@ -236,27 +299,46 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       const advancements = Array.isArray(editingItem?.advancements) ? editingItem.advancements : [];
       const tags = Array.isArray(editingItem?.tags) ? editingItem.tags : [];
 
+      // Derive the flat level / string prereq columns from the tree.
+      // The editor now treats the tree as the single authoring
+      // surface; the flat columns are projections kept around for
+      // the module's existing `flags.levelPrerequisite` enforcement
+      // path. When the module learns to walk the tree directly we
+      // can drop the columns. Falls back to whatever was on
+      // editingItem if the tree extraction returns null — covers
+      // legacy rows that still carry flat values without a tree.
+      const tree = (editingItem?.requirementsTree as Requirement | null) ?? null;
+      const extractedLevel = extractTopLevelLevelLeaf(tree);
+      const extractedString = extractTopLevelStringLeaf(tree);
+      const levelPrerequisite = extractedLevel?.minLevel
+        ?? parseInt(editingItem?.levelPrerequisite || editingItem?.level_prerequisite)
+        ?? 0;
+      const levelPrereqIsTotal = extractedLevel
+        ? extractedLevel.isTotal
+        : Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total);
+      const stringPrerequisite = extractedString
+        || editingItem?.stringPrerequisite
+        || editingItem?.string_prerequisite
+        || '';
+
       const d1Data = {
         name: editingItem?.name || 'New Option',
         description: editingItem?.description || '',
         group_id: id,
         source_id: editingItem?.source_id || editingItem?.sourceId || sourceId,
-        level_prerequisite: parseInt(editingItem?.levelPrerequisite || editingItem?.level_prerequisite) || 0,
-        // When true the flat level_prerequisite gate is checked against
-        // total character level instead of the importing-class level.
-        // Default 0 (class level) matches the historical semantics —
-        // option items are picked during a class advancement.
-        level_prereq_is_total: Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total) ? 1 : 0,
+        level_prerequisite: levelPrerequisite || 0,
+        level_prereq_is_total: levelPrereqIsTotal ? 1 : 0,
         is_repeatable: Boolean(editingItem?.isRepeatable || editingItem?.is_repeatable) ? 1 : 0,
-        string_prerequisite: editingItem?.stringPrerequisite || editingItem?.string_prerequisite || '',
+        string_prerequisite: stringPrerequisite,
         page: editingItem?.page || '',
         class_ids: Array.isArray(editingItem?.classIds) ? editingItem.classIds : (editingItem?.class_ids || []),
         // Compound requirements (And/Or/Xor tree of typed leaves —
-        // option items, classes, spell rules, ability scores, etc.).
-        // Replaces the dropped `requires_option_ids` + `requirements`
-        // text columns. Serialized to a JSON string here so D1 stores
-        // it verbatim; on read, parseRequirementTree() normalizes it.
-        requirements_tree: serializeRequirementTree(editingItem?.requirementsTree ?? null),
+        // option items, classes, spell rules, ability scores, level,
+        // free text, etc.). Single source of truth; the flat columns
+        // above are derived. Serialized to a JSON string here so D1
+        // stores it verbatim; on read, parseRequirementTree()
+        // normalizes it.
+        requirements_tree: serializeRequirementTree(tree),
         // Feat-shape body — same columns the `features` table carries.
         // feature_type is derived from the parent group's name so dnd5e's
         // `system.type.subtype` always matches the user's group naming
@@ -657,63 +739,20 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   </div>
                 </div>
 
-                {/* Prerequisites: flat level + free-text + compound tree.
-                    The flat level_prerequisite / string_prerequisite live
-                    side-by-side at the top — most options gate on level
-                    alone, so the simple controls stay reachable without
-                    opening the tree. The compound <RequirementsEditor/>
-                    below handles everything else (option-item chains,
-                    spell rules, ability scores, etc.). */}
+                {/* Requirements. The tree is the single authoring
+                    surface — level / free-text / option-item / class /
+                    proficiency / spell etc. all live inside it as
+                    typed leaves. The flat `level_prerequisite` /
+                    `level_prereq_is_total` / `string_prerequisite`
+                    columns still exist on the row, but they're
+                    derived from the tree on save (see
+                    `extractTopLevelLevelLeaf` / `extractTopLevelStringLeaf`)
+                    so the module's existing `flags.levelPrerequisite`
+                    enforcement path keeps working until module-side
+                    picker code walks the tree directly. */}
                 <div className="space-y-3 pt-2 border-t border-gold/10">
-                  <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Prerequisites</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Level Prerequisite</label>
-                      <Input
-                        type="number"
-                        value={editingItem?.level_prerequisite || editingItem?.levelPrerequisite || 0}
-                        onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), level_prerequisite: parseInt(e.target.value) || 0 }))}
-                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                      />
-                      {/* Defaults to false (class level). When checked the
-                          number is interpreted as total character level
-                          rather than the importing-class level. Mirrors
-                          the `level_prereq_is_total` column saved below. */}
-                      <label className="flex items-center gap-1.5 cursor-pointer pt-1">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total)}
-                          onChange={e => setEditingItem((prev: any) => ({
-                            ...(prev || {}),
-                            levelPrereqIsTotal: e.target.checked,
-                          }))}
-                          className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
-                        />
-                        <span className="text-[10px] text-ink/50 uppercase tracking-wider">
-                          Total character level (default: class level)
-                        </span>
-                      </label>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold uppercase tracking-widest text-ink/40">String Prerequisite</label>
-                      <Input
-                        value={editingItem?.string_prerequisite || editingItem?.stringPrerequisite || ''}
-                        onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), string_prerequisite: e.target.value }))}
-                        placeholder="e.g. Eldritch Blast cantrip"
-                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Compound requirements tree. Authors can describe
-                      arbitrary And/Or/Xor compositions — typically used
-                      for option-item chains (Ultimate Pact Weapon needs
-                      Pact of the Blade AND Superior Pact Weapon), spell
-                      rules ("knows a 1st-level evocation"), or ability
-                      score floors. The module enforces this at import
-                      time via the show-but-mark-unmet pattern. */}
                   <RequirementsEditor
-                    label="Compound Requirements"
+                    label="Requirements"
                     value={(editingItem?.requirementsTree as Requirement | null) ?? null}
                     onChange={(next) => setEditingItem((prev: any) => ({
                       ...(prev || {}),
@@ -724,6 +763,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                       subclasses: subclasses.map((s: any) => ({ id: s.id, name: s.name })),
                       spellRules: spellRules.map((r: any) => ({ id: r.id, name: r.name })),
                       optionGroups: allOptionGroups,
+                      proficiencies: proficiencyPools,
                     }}
                   />
                 </div>

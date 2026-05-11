@@ -45,6 +45,22 @@ export interface RequirementsEditorLookups {
     name: string;
     items: Array<{ id: string; name: string }> | null;
   }>;
+  /**
+   * Proficiency pools per category, used by the `proficiency` leaf.
+   * Each option carries `id` (the Foundry identifier — what gets
+   * stored in `leaf.identifier`), `name` (display), and optional
+   * `hint` (e.g. "Category" to distinguish e.g. "all Martial Weapons"
+   * from a specific weapon, or the parent category name for
+   * languages / tools).
+   *
+   * Callers should merge entity rows + category rows from the
+   * matching tables before passing them through — see
+   * UniqueOptionGroupEditor for the canonical fetch + merge pattern.
+   */
+  proficiencies?: Partial<Record<
+    ProficiencyKind,
+    Array<{ id: string; name: string; hint?: string }>
+  >>;
 }
 
 export interface RequirementsEditorProps {
@@ -68,6 +84,7 @@ const LEAF_TYPE_OPTIONS: Array<{ value: RequirementLeafType; label: string }> = 
   { value: 'abilityScore', label: 'Ability Score' },
   { value: 'proficiency', label: 'Proficiency' },
   { value: 'level', label: 'Character / Class Level' },
+  { value: 'string', label: 'Free Text' },
 ];
 
 const GROUP_KIND_OPTIONS: Array<{ value: RequirementGroupKind; label: string; summary: string }> = [
@@ -509,26 +526,55 @@ function LeafPayload({
         </>
       );
 
-    case 'proficiency':
+    case 'proficiency': {
+      // Pulls from the campaign's authored proficiency pools rather
+      // than asking the author to remember Foundry-key identifiers.
+      // `lookups.proficiencies[category]` is expected to be a merged
+      // list of specific entities (weapons / armor / tools / skills /
+      // languages) plus their category rows (e.g. "all Martial
+      // Weapons" → identifier `mar`). Hint badge differentiates them.
+      const pool = lookups.proficiencies?.[value.category] ?? [];
       return (
         <>
           <select
             value={value.category}
-            onChange={e => onChange({ ...value, category: e.target.value as ProficiencyKind })}
+            onChange={e => onChange({
+              kind: 'leaf',
+              type: 'proficiency',
+              // Reset the identifier when changing category — a
+              // weapon identifier doesn't make sense once the category
+              // is "language" anymore.
+              category: e.target.value as ProficiencyKind,
+              identifier: '',
+            })}
             className="h-7 px-1.5 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
           >
             {PROFICIENCY_OPTIONS.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          <input
-            type="text"
+          <SingleSelectSearch
             value={value.identifier}
-            onChange={e => onChange({ ...value, identifier: e.target.value })}
-            placeholder="e.g. longsword, Elvish"
-            className="h-7 flex-1 min-w-[120px] px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+            onChange={(id) => onChange({ ...value, identifier: id })}
+            options={pool}
+            placeholder={`Select ${value.category}…`}
+            noEntitiesText={`No ${value.category} proficiencies available. Seed the table in the admin panel.`}
+            triggerClassName="min-w-[160px] max-w-[240px]"
           />
         </>
+      );
+    }
+
+    case 'string':
+      return (
+        <input
+          type="text"
+          autoComplete="off"
+          value={value.value}
+          onChange={e => onChange({ ...value, value: e.target.value })}
+          placeholder="Free-text requirement (e.g. 'Member of the Crimson Order')"
+          className="h-7 flex-1 min-w-[200px] px-2 text-[11px] bg-background/50 border border-gold/10 focus:border-gold rounded outline-none"
+        />
       );
   }
 }

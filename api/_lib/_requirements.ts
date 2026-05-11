@@ -27,7 +27,8 @@ export type RequirementLeafType =
   | 'spellRule'
   | 'abilityScore'
   | 'proficiency'
-  | 'level';
+  | 'level'
+  | 'string';
 
 export type AbilityKey = 'str' | 'dex' | 'con' | 'int' | 'wis' | 'cha';
 export type ProficiencyKind = 'weapon' | 'armor' | 'tool' | 'skill' | 'language';
@@ -43,6 +44,7 @@ export interface RequirementLeafByType {
   abilityScore: { ability: AbilityKey; min: number };
   proficiency: { category: ProficiencyKind; identifier: string };
   level: { minLevel: number; isTotal: boolean };
+  string: { value: string };
 }
 
 export type RequirementLeaf = {
@@ -99,7 +101,7 @@ function isKnownLeafType(s: string): s is RequirementLeafType {
   return [
     'levelInClass', 'class', 'subclass', 'optionItem',
     'feature', 'spell', 'spellRule',
-    'abilityScore', 'proficiency', 'level',
+    'abilityScore', 'proficiency', 'level', 'string',
   ].includes(s);
 }
 
@@ -148,6 +150,8 @@ function formatLeaf(leaf: RequirementLeaf, lookup: RequirementFormatLookup): str
       return `${ABILITY_LABEL[leaf.ability]} ${leaf.min} or higher`;
     case 'proficiency':
       return `${PROFICIENCY_LABEL[leaf.category]}: ${leaf.identifier}`;
+    case 'string':
+      return leaf.value;
   }
 }
 
@@ -235,6 +239,7 @@ function remapLeaf(leaf: RequirementLeaf, m: RequirementIdMaps): RequirementLeaf
     case 'abilityScore':
     case 'proficiency':
     case 'level':
+    case 'string':
       return leaf;
   }
 }
