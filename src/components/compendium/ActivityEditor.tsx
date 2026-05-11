@@ -17,6 +17,11 @@ import { Checkbox } from '../ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ActivityKind, SemanticActivity } from '../../types/activities';
 import { fetchCollection } from '../../lib/d1';
+// Shared pickers extracted from the unique-options work, leveraged
+// here for searchable selects and multi-select chips.
+import SingleSelectSearch from '../ui/SingleSelectSearch';
+import EntityPicker from '../ui/EntityPicker';
+import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 
 interface ActivityEditorProps {
   activities: SemanticActivity[] | Record<string, SemanticActivity>;
@@ -993,24 +998,22 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                             <div className="space-y-2 pb-1">
                               {((editingActivity.uses?.recovery) || []).map((entry, idx) => (
                                 <div key={idx} className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded">
-                                  <Select
-                                    value={entry.period || '__none'}
-                                    onValueChange={val => {
+                                  {/* Recovery period — searchable single-pick
+                                      (11 entries: long rest, short rest,
+                                      day, dawn, dusk, turn variants, round,
+                                      recharge, charges). Native <select>
+                                      scrolls badly at that length. */}
+                                  <SingleSelectSearch
+                                    value={entry.period || ''}
+                                    onChange={(val) => {
                                       const recovery = [...(editingActivity.uses?.recovery || [])];
-                                      recovery[idx] = { ...entry, period: val === '__none' ? '' : val };
+                                      recovery[idx] = { ...entry, period: val };
                                       updateCurrent({ uses: { ...(editingActivity.uses || {}), recovery } });
                                     }}
-                                  >
-                                    <SelectTrigger className="h-7 text-[10px] bg-background/40 border-gold/10 flex-1">
-                                      <SelectValue placeholder="Period" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="__none">None</SelectItem>
-                                      {RECOVERY_PERIOD_OPTIONS.map(opt => (
-                                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    options={RECOVERY_PERIOD_OPTIONS.map(o => ({ id: o.value, name: o.label }))}
+                                    placeholder="Period"
+                                    triggerClassName="flex-1"
+                                  />
                                   <Select
                                     value={entry.type || '__none'}
                                     onValueChange={val => {
@@ -1074,24 +1077,22 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               {(editingActivity.consumption?.targets || []).map((target, idx) => (
                                 <div key={idx} className="p-2.5 bg-gold/3 border border-gold/8 rounded space-y-2">
                                   <div className="flex gap-2 items-center">
-                                    <Select
-                                      value={target.type || '__none'}
-                                      onValueChange={val => {
+                                    {/* Consumption target type —
+                                        searchable single-pick of the 6
+                                        consumption surfaces (Activity
+                                        Uses, Item Uses, Material, Hit
+                                        Dice, Spell Slots, Attribute). */}
+                                    <SingleSelectSearch
+                                      value={target.type || ''}
+                                      onChange={(val) => {
                                         const targets = [...(editingActivity.consumption?.targets || [])];
-                                        targets[idx] = { ...target, type: val === '__none' ? '' : val };
+                                        targets[idx] = { ...target, type: val };
                                         updateConsumption({ targets });
                                       }}
-                                    >
-                                      <SelectTrigger className="h-7 text-[10px] bg-background/40 border-gold/10 flex-1">
-                                        <SelectValue placeholder="Type" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__none">None</SelectItem>
-                                        {CONSUMPTION_TARGET_TYPES.map(opt => (
-                                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                      options={CONSUMPTION_TARGET_TYPES.map(o => ({ id: o.value, name: o.label }))}
+                                      placeholder="Type"
+                                      triggerClassName="flex-1"
+                                    />
                                     <Input
                                       value={target.value || ''}
                                       onChange={e => {
@@ -1112,14 +1113,20 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                       <X className="w-3.5 h-3.5" />
                                     </button>
                                   </div>
-                                  <Input
+                                  {/* Autocomplete-backed target path —
+                                      same dnd5e/Midi/DAE catalog the AE
+                                      editor uses for its Attribute Key
+                                      field. Authors get suggestions for
+                                      resource paths, attribute paths,
+                                      and module flags rather than having
+                                      to remember Foundry's data model. */}
+                                  <ActiveEffectKeyInput
                                     value={target.target || ''}
-                                    onChange={e => {
+                                    onChange={(next) => {
                                       const targets = [...(editingActivity.consumption?.targets || [])];
-                                      targets[idx] = { ...target, target: e.target.value };
+                                      targets[idx] = { ...target, target: next };
                                       updateConsumption({ targets });
                                     }}
-                                    className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 w-full"
                                     placeholder="resources.primary.value"
                                   />
                                   <div className="flex gap-2 items-center">
@@ -1604,28 +1611,26 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   </div>
                                   <div className="col-span-12 mt-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1.5">Damage Types</p>
-                                    <div className="flex flex-wrap gap-1">
-                                      {DAMAGE_TYPE_OPTIONS.map(dt => {
-                                        const active = (part.types || []).includes(dt.value);
-                                        return (
-                                          <button
-                                            key={dt.value}
-                                            type="button"
-                                            onClick={() => {
-                                              const dmgKey = editingActivity.healing ? 'healing' : 'damage';
-                                              const obj = editingActivity[dmgKey] as any;
-                                              const newParts = [...obj.parts];
-                                              const cur = part.types || [];
-                                              newParts[idx] = { ...part, types: active ? cur.filter((t: string) => t !== dt.value) : [...cur, dt.value] };
-                                              handleUpdateActivity(editingId!, { [dmgKey]: { ...obj, parts: newParts } });
-                                            }}
-                                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide border transition-colors ${active ? 'bg-gold/20 border-gold/50 text-ink/90' : 'bg-transparent border-gold/10 text-ink/30 hover:border-gold/25'}`}
-                                          >
-                                            {dt.label}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
+                                    {/* Damage types — searchable
+                                        multi-select with removable chips,
+                                        replacing the previous 15-button
+                                        toggle grid. Better at scale and
+                                        matches the picker pattern used
+                                        elsewhere in the app. */}
+                                    <EntityPicker
+                                      entities={DAMAGE_TYPE_OPTIONS.map(dt => ({ id: dt.value, name: dt.label }))}
+                                      selectedIds={part.types || []}
+                                      onChange={(nextTypes) => {
+                                        const dmgKey = editingActivity.healing ? 'healing' : 'damage';
+                                        const obj = editingActivity[dmgKey] as any;
+                                        const newParts = [...obj.parts];
+                                        newParts[idx] = { ...part, types: nextTypes };
+                                        handleUpdateActivity(editingId!, { [dmgKey]: { ...obj, parts: newParts } });
+                                      }}
+                                      searchPlaceholder="Search damage types…"
+                                      maxHeightClass="max-h-32"
+                                      showChips
+                                    />
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-3 border-t border-gold/5 pt-2.5">
