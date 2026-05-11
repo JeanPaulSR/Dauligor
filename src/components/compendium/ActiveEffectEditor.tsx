@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Trash2, Search, Plus, Zap } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogFooter } from '../ui/dialog';
@@ -9,10 +9,8 @@ import { Checkbox } from '../ui/checkbox';
 import { ImageUpload } from '../ui/ImageUpload';
 import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 import EntityPicker from '../ui/EntityPicker';
-import {
-  ACTIVE_EFFECT_STATUSES,
-  ACTIVE_EFFECT_TYPES,
-} from '../../lib/activeEffectStatuses';
+import { fetchCollection } from '../../lib/d1';
+import { ACTIVE_EFFECT_TYPES } from '../../lib/activeEffectStatuses';
 
 // Mirrors Foundry's EFFECT_MODES constant
 const EFFECT_MODE_OPTIONS = [
@@ -95,10 +93,40 @@ function defaultPriorityForMode(mode: number): number {
   return EFFECT_MODE_OPTIONS.find(o => o.value === mode)?.defaultPriority ?? 20;
 }
 
+/**
+ * Row shape returned by D1 for `status_conditions`. We only project the
+ * fields the picker needs; the rest (image_url, description, changes,
+ * implied_ids, etc.) round-trip with the row but aren't surfaced here.
+ */
+interface StatusConditionRow {
+  id: string;
+  identifier: string;
+  name: string;
+  /** Category id used as the EntityPicker hint when present. */
+  category_id?: string | null;
+}
+
 export default function ActiveEffectEditor({ effects, onChange, defaultImg }: ActiveEffectEditorProps) {
   const [draft, setDraft] = useState<FoundryActiveEffect | null>(null);
   const [draftIdx, setDraftIdx] = useState<number | null>(null);
   const [tab, setTab] = useState('details');
+  // Status conditions come from the application's own `status_conditions`
+  // table (aliased as the `statuses` collection in D1_TABLE_MAP) rather
+  // than a hardcoded catalog. The identifier column is the Foundry key
+  // ("blinded", "stunned", etc.) — exactly what goes into the AE
+  // `statuses` array. fetchCollection() caches the response via d1.ts's
+  // QUERY_CACHE so re-opening the dialog hits the cache rather than D1.
+  const [statusConditions, setStatusConditions] = useState<StatusConditionRow[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchCollection<StatusConditionRow>('statuses', { orderBy: '"order", name ASC' })
+      .then((rows) => { if (!cancelled) setStatusConditions(rows); })
+      .catch((err) => {
+        console.warn('Failed to load status_conditions for AE editor:', err);
+        if (!cancelled) setStatusConditions([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const openNew = () => { setDraft(emptyEffect(defaultImg)); setDraftIdx(null); setTab('details'); };
   const openEdit = (idx: number) => {
@@ -321,27 +349,29 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                 {/* Status Conditions — applies the listed condition IDs
                     to the owning actor while the effect is active (e.g.
                     Stunning Strike → ["stunned"], Hold Person →
-                    ["paralyzed"]). The full dnd5e 5.x catalog comes
-                    from src/lib/activeEffectStatuses.ts; authors can
-                    select any subset. The exported `statuses` array
-                    round-trips through the module's
-                    normalizeSemanticItemEffects intact. */}
+                    ["paralyzed"]). Pulled from the `status_conditions`
+                    D1 table (aliased as `statuses` in D1_TABLE_MAP)
+                    rather than a hardcoded catalog — keeps the picker
+                    in sync with whatever the campaign has authored or
+                    seeded. The `identifier` column is the Foundry key
+                    that goes into the AE `statuses[]` array and
+                    round-trips through normalizeSemanticItemEffects on
+                    import. */}
                 <div className="py-2.5 space-y-1.5">
                   <span className="text-sm font-semibold text-ink/80 block">Status Conditions</span>
                   <p className="text-[11px] text-ink/40">
                     Conditions applied to the actor while this effect is active. Useful for Stunning Strike, Hold Person, Charm effects, etc.
                   </p>
                   <EntityPicker
-                    entities={ACTIVE_EFFECT_STATUSES.map(s => ({
-                      id: s.id,
-                      name: s.label,
-                      hint: s.category,
+                    entities={statusConditions.map((c) => ({
+                      id: c.identifier,
+                      name: c.name,
                     }))}
                     selectedIds={draft.statuses ?? []}
                     onChange={(next) => patch({ statuses: next })}
                     searchPlaceholder="Search conditions…"
                     showChips
-                    noEntitiesText="No conditions available."
+                    noEntitiesText="No status conditions found in the compendium. Seed the conditions table to enable picks."
                   />
                 </div>
 
