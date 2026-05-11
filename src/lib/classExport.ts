@@ -9,6 +9,14 @@ import {
   buildCanonicalClassProgression,
   buildCanonicalSubclassProgression
 } from './classProgression';
+import {
+  Requirement,
+  parseRequirementTree,
+  remapRequirementTree,
+  formatRequirementText,
+  RequirementIdMaps,
+  RequirementFormatLookup,
+} from './requirements';
 
 /**
  * Pluggable fetchers so this module can run from server contexts that don't
@@ -195,8 +203,11 @@ function denormalizeOptionItemRow(row: any) {
     classIds: parseJsonField(row.class_ids, []),
     iconUrl: row.icon_url,
     levelPrerequisite: row.level_prerequisite,
+    // Migration 20260510-2152 added the total-vs-class-level flag.
+    levelPrereqIsTotal: Boolean(row.level_prereq_is_total),
     stringPrerequisite: row.string_prerequisite,
-    requiresOptionIds: parseJsonField(row.requires_option_ids, []),
+    // Compound requirements tree — replaces dropped requires_option_ids.
+    requirementsTree: parseRequirementTree(row.requirements_tree),
     isRepeatable: row.is_repeatable,
     // Feat-shape body added by migration 20260509-1356.
     featureType: row.feature_type,
@@ -1307,11 +1318,14 @@ export async function exportClassSemantic(
         featureSourceId: group?.featureSourceId || '',
         description: cleanText(data.description),
         levelPrerequisite: Number(data.levelPrerequisite || 0) || 0,
-        // PK list at authoring time; remapped to per-option sourceIds
-        // below once every option's sourceId is known. The module
-        // checks this against `state.optionSelections` to gate options
-        // whose prerequisite picks haven't been made yet.
-        requiresOptionIds: asArray(data.requiresOptionIds),
+        // When true the flat level_prerequisite gate is checked against
+        // total character level rather than the importing-class level.
+        levelPrereqIsTotal: Boolean(data.levelPrereqIsTotal),
+        // Compound requirements tree — still in PK form here; the
+        // second pass below remaps refs to source-ids once every
+        // option's sourceId is known. See `_classExport.ts` for the
+        // canonical comment block.
+        requirementsTree: data.requirementsTree ?? null,
         // Feat-shape body — see `_classExport.ts` companion for the
         // canonical comment block.
         automation,
@@ -1321,23 +1335,33 @@ export async function exportClassSemantic(
         tags: Array.isArray(data.tags) ? data.tags : [],
         featureType: trimString(data.featureType) || undefined,
         subtype: trimString(data.subtype) || undefined,
-        requirements: trimString(data.requirements) || undefined,
+        // `requirements` is populated post-remap below from the
+        // formatted tree.
+        requirements: undefined,
       }, ['groupId', 'classIds', 'iconUrl', 'page', 'activities', 'effects', 'usesMax', 'usesSpent', 'usesRecovery']);
     });
   }
 
   const optionItemSourceIdById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.sourceId]));
+  const optionItemNameById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.name]));
 
-  // Second pass: translate each option's requiresOptionIds (PKs from
-  // the editor) into the canonical per-option sourceIds, dropping any
-  // PK that no longer resolves (stale reference).
+  // Second pass: remap PK references inside each option's
+  // `requirementsTree` to canonical source-ids, then render the tree
+  // to a human-readable string for `system.requirements`. See the
+  // canonical comment in `_classExport.ts` for fuller rationale.
+  const requirementIdMaps: RequirementIdMaps = { optionItemSourceIdById };
+  const requirementFormatLookup: RequirementFormatLookup = { optionItemNameById };
   for (const opt of uniqueOptionItems) {
-    const remapped: string[] = [];
-    for (const pk of asArray(opt.requiresOptionIds)) {
-      const sid = optionItemSourceIdById[pk];
-      if (sid) remapped.push(sid);
+    const tree = opt.requirementsTree as Requirement | null;
+    if (!tree) {
+      opt.requirementsTree = null;
+      opt.requirements = undefined;
+      continue;
     }
-    opt.requiresOptionIds = remapped;
+    const remapped = remapRequirementTree(tree, requirementIdMaps);
+    opt.requirementsTree = remapped;
+    const text = formatRequirementText(remapped, requirementFormatLookup);
+    opt.requirements = text || undefined;
   }
 
   // Build per-grant maps of optionGroupSourceId → granter-specified data:

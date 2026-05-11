@@ -1595,8 +1595,19 @@ function createSemanticOptionItem(optionItem, context) {
   if (featureType?.subtype) flags.featureTypeSubtype = featureType.subtype;
   if (featureType?.value) flags.featureTypeValue = featureType.value;
   if (optionItem?.levelPrerequisite != null) flags.levelPrerequisite = optionItem.levelPrerequisite;
+  if (optionItem?.levelPrereqIsTotal != null) flags.levelPrereqIsTotal = !!optionItem.levelPrereqIsTotal;
+  // Back-compat: old exports shipped a flat `requiresOptionIds` array;
+  // new exports (post 2026-05-10 requirements-tree migration) ship
+  // `requirementsTree` instead. We forward whichever is present so the
+  // importer's option-picker can read either shape during the rollover.
+  // TODO(importer): replace the flat-array gate in importer-app.js with
+  // a recursive walk of `requirementsTree` for show-but-mark-unmet UX.
+  // See requirements_tree migration commit + AGENTS.md for the plan.
   if (Array.isArray(optionItem?.requiresOptionIds) && optionItem.requiresOptionIds.length) {
     flags.requiresOptionIds = [...optionItem.requiresOptionIds];
+  }
+  if (optionItem?.requirementsTree) {
+    flags.requirementsTree = optionItem.requirementsTree;
   }
   // Tagged at export time when the granting ItemChoice/ItemGrant
   // advancement declares a Uses Feature. The bridge's post-embed pass

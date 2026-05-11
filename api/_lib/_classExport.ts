@@ -31,6 +31,14 @@ import {
   buildCanonicalClassProgression,
   buildCanonicalSubclassProgression
 } from './_classProgression.js';
+import {
+  Requirement,
+  parseRequirementTree,
+  remapRequirementTree,
+  formatRequirementText,
+  RequirementIdMaps,
+  RequirementFormatLookup,
+} from './_requirements.js';
 
 // Module-scope ref-table cache. Survives within a warm Vercel isolate for
 // REFS_TTL_MS, then forces a refresh — that's the staleness ceiling for
@@ -292,8 +300,15 @@ function denormalizeOptionItemRow(row: any) {
     classIds: parseJsonField(row.class_ids, []),
     iconUrl: row.icon_url,
     levelPrerequisite: row.level_prerequisite,
+    // Migration 20260510-2152 added the total-vs-class-level flag.
+    // Default false (class level) matches the historical semantics for
+    // every row that pre-dates the migration.
+    levelPrereqIsTotal: Boolean(row.level_prereq_is_total),
     stringPrerequisite: row.string_prerequisite,
-    requiresOptionIds: parseJsonField(row.requires_option_ids, []),
+    // Compound requirements tree — replaces the dropped
+    // `requires_option_ids` column. Parsed once here so downstream code
+    // can rely on a typed shape. `null` for rows that never had any.
+    requirementsTree: parseRequirementTree(row.requirements_tree),
     isRepeatable: row.is_repeatable,
     // Feat-shape body added by migration 20260509-1356. Without these
     // aliases dropSnakeKeys strips every snake_case column on the way
@@ -1278,11 +1293,18 @@ export async function exportClassSemantic(
         featureSourceId: group?.featureSourceId || '',
         description: cleanText(data.description),
         levelPrerequisite: Number(data.levelPrerequisite || 0) || 0,
-        // PK list at authoring time; remapped to per-option sourceIds
-        // below once every option's sourceId is known. The module
-        // checks this against `state.optionSelections` to gate options
-        // whose prerequisite picks haven't been made yet.
-        requiresOptionIds: asArray(data.requiresOptionIds),
+        // When true the flat level_prerequisite gate is checked against
+        // total character level rather than the importing-class level.
+        // Passed through to the module so its option-picker honours
+        // both modes consistently.
+        levelPrereqIsTotal: Boolean(data.levelPrereqIsTotal),
+        // Compound requirements tree — replaces the old flat
+        // requiresOptionIds list. Still in PK form here; the second
+        // pass below remaps refs to source-ids once every option's
+        // sourceId is known. The module's option-picker walks this
+        // tree to decide whether an option is met / unmet (the
+        // show-but-mark-unmet pass — currently TODO on the importer).
+        requirementsTree: data.requirementsTree ?? null,
         // Feat-shape body for the option-as-feature treatment. Mirrors
         // how features ship — `automation` carries activities/effects,
         // `usage` carries uses, and the rest pass through. The module's
@@ -1296,24 +1318,46 @@ export async function exportClassSemantic(
         tags: Array.isArray(data.tags) ? data.tags : [],
         featureType: trimString(data.featureType) || undefined,
         subtype: trimString(data.subtype) || undefined,
-        requirements: trimString(data.requirements) || undefined,
+        // `requirements` is populated post-remap below from the
+        // formatted tree. We leave it undefined here so the placeholder
+        // is overwritten with the rendered text once names are known.
+        requirements: undefined,
       }, ['groupId', 'classIds', 'iconUrl', 'page', 'activities', 'effects', 'usesMax', 'usesSpent', 'usesRecovery']);
     });
   }
 
   const optionItemSourceIdById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.sourceId]));
+  const optionItemNameById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.name]));
 
-  // Second pass: translate each option's requiresOptionIds (currently
-  // PKs from the editor) into the canonical per-option sourceIds. Drop
-  // any PK that doesn't resolve — those are stale references to deleted
-  // sibling options.
+  // Second pass: remap PK references inside each option's
+  // `requirementsTree` to canonical source-ids, then render the tree to
+  // a human-readable string for `system.requirements`.
+  //
+  // Today only `optionItem` leaves have a translation table available —
+  // class / subclass / feature / spell / spellRule refs pass through as
+  // PKs and the module surfaces them as "<unknown …>" if it can't
+  // resolve them locally. Fuller remap (and the importer-side
+  // show-but-mark-unmet UI) is a follow-up; see the
+  // `Module importer pass` TODO.
+  const requirementIdMaps: RequirementIdMaps = {
+    optionItemSourceIdById,
+  };
+  const requirementFormatLookup: RequirementFormatLookup = {
+    optionItemNameById,
+  };
   for (const opt of uniqueOptionItems) {
-    const remapped: string[] = [];
-    for (const pk of asArray(opt.requiresOptionIds)) {
-      const sid = optionItemSourceIdById[pk];
-      if (sid) remapped.push(sid);
+    const tree = opt.requirementsTree as Requirement | null;
+    if (!tree) {
+      // No tree → no formatted text. Leave `requirements` undefined so
+      // the module's serializer omits the field.
+      opt.requirementsTree = null;
+      opt.requirements = undefined;
+      continue;
     }
-    opt.requiresOptionIds = remapped;
+    const remapped = remapRequirementTree(tree, requirementIdMaps);
+    opt.requirementsTree = remapped;
+    const text = formatRequirementText(remapped, requirementFormatLookup);
+    opt.requirements = text || undefined;
   }
 
   // Build per-grant maps of optionGroupSourceId → granter-specified data:

@@ -180,7 +180,12 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         'values', 'levels', 'option_ids', 'fixed_ids', 'category_ids', 
         'optionIds', 'fixedIds', 'categoryIds', 'prerequisites_items',
         'tag_ids', 'tagIds', 'properties', 'advancements', 'uses_recovery',
-        'requires_option_ids', 'requiresOptionIds'
+        'requires_option_ids', 'requiresOptionIds',
+        // requirements_tree was added by migration 20260510-2152 — JSON
+        // Requirement | null shape. requires_option_ids stays in the list
+        // for back-compat (the migration drops the column but existing
+        // cached payloads may still surface it on a stale read).
+        'requirements_tree', 'requirementsTree',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

@@ -26,6 +26,12 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import AdvancementManager from '../../components/compendium/AdvancementManager';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
+import RequirementsEditor from '../../components/compendium/RequirementsEditor';
+import {
+  Requirement,
+  parseRequirementTree,
+  serializeRequirementTree,
+} from '../../lib/requirements';
 
 export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -46,12 +52,26 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
-  const [requiredOptionSearch, setRequiredOptionSearch] = useState('');
-  // Whether the Required Options picker is expanded. Auto-true when the
-  // option already has prereqs; the checkbox toggles it otherwise.
-  // Toggling off also clears any selections so the collapsed state can't
-  // hide an unintentional saved prereq.
-  const [requiresOpen, setRequiresOpen] = useState(false);
+  // Lookups consumed by <RequirementsEditor>. Loaded once on mount alongside
+  // the group's own data — keeps the option modal's leaf pickers populated
+  // (subclasses, every other Modular Option Group's items, spell rules).
+  // Features and spells are deferred until the picker grows a search UI;
+  // they're optional in the editor's API so the leaves stay in the
+  // type dropdown but their pickers report "(no … available)" until wired.
+  const [subclasses, setSubclasses] = useState<any[]>([]);
+  const [spellRules, setSpellRules] = useState<any[]>([]);
+  /**
+   * All Modular Option Groups with their items pre-attached, used by the
+   * `optionItem` requirement leaf for its cascading group → item picker.
+   * Includes the group currently being edited so an option can reference
+   * a sibling (the previous `requires_option_ids` behaviour, now folded
+   * into the tree).
+   */
+  const [allOptionGroups, setAllOptionGroups] = useState<Array<{
+    id: string;
+    name: string;
+    items: Array<{ id: string; name: string }>;
+  }>>([]);
   // Tab state for the option-item modal — mirrors ClassEditor's feature
   // modal so authoring an option (Maneuver / Invocation / Infusion) feels
   // identical to authoring a class feature.
@@ -63,12 +83,36 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     const loadAll = async () => {
       setLoading(true);
       try {
-        const [sourcesData, classesData] = await Promise.all([
+        // Lookup fetches run in parallel — the option modal won't open
+        // until at least the group itself is loaded below, so the extra
+        // round-trips here just need to finish before authoring starts.
+        const [sourcesData, classesData, subclassesData, spellRulesData, allGroups, allOptionItems] = await Promise.all([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('classes', { orderBy: 'name ASC' }),
+          fetchCollection('subclasses', { orderBy: 'name ASC' }),
+          fetchCollection('spellRules', { orderBy: 'name ASC' }),
+          fetchCollection('uniqueOptionGroups', { orderBy: 'name ASC' }),
+          // All option items across all groups, used to populate the
+          // optionItem-leaf picker (so an item in group A can require an
+          // item in group B — e.g. an Eldritch Invocation requiring a
+          // Warlock Pact).
+          fetchCollection('uniqueOptionItems', { orderBy: 'name ASC' }),
         ]);
         setSources(sourcesData);
         setClasses(classesData);
+        setSubclasses(subclassesData);
+        setSpellRules(spellRulesData);
+
+        // Bucket items into their parent groups so the cascading picker
+        // doesn't have to scan the flat list every render.
+        const groupsWithItems = (allGroups as any[]).map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          items: (allOptionItems as any[])
+            .filter((it: any) => (it.group_id || it.groupId) === g.id)
+            .map((it: any) => ({ id: it.id, name: it.name })),
+        }));
+        setAllOptionGroups(groupsWithItems);
 
         if (id) {
           // 3. Group
@@ -83,16 +127,32 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           }
 
           // 4. Items — denormalize so camelCase keys (iconUrl, imageUrl,
-          // usesMax, usesRecovery, classIds, requiresOptionIds, etc.) the
-          // editor binds to actually populate from the snake_case row
-          // returned by D1. Without this the icon never re-displays after
-          // save and the hero header looks empty on reopen.
+          // usesMax, usesRecovery, classIds, etc.) the editor binds to
+          // actually populate from the snake_case row returned by D1.
+          // Without this the icon never re-displays after save and the
+          // hero header looks empty on reopen.
+          //
+          // `requirements_tree` is auto-parsed by d1.ts (added in
+          // migration 20260510-2152) but we run it through
+          // parseRequirementTree() once on load so callers can rely on a
+          // typed shape downstream rather than `any`.
           const itemsData = await fetchCollection('uniqueOptionItems', {
             where: 'group_id = ?',
             params: [id],
             orderBy: 'name ASC',
           });
-          setItems(itemsData.map((row: any) => denormalizeCompendiumData(row)));
+          setItems(itemsData.map((row: any) => {
+            const denorm = denormalizeCompendiumData(row);
+            return {
+              ...denorm,
+              requirementsTree: parseRequirementTree(
+                denorm.requirementsTree ?? denorm.requirements_tree
+              ),
+              levelPrereqIsTotal: Boolean(
+                denorm.levelPrereqIsTotal ?? denorm.level_prereq_is_total
+              ),
+            };
+          }));
         }
       } catch (err) {
         console.error("Error loading unique options data:", err);
@@ -182,16 +242,21 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         group_id: id,
         source_id: editingItem?.source_id || editingItem?.sourceId || sourceId,
         level_prerequisite: parseInt(editingItem?.levelPrerequisite || editingItem?.level_prerequisite) || 0,
+        // When true the flat level_prerequisite gate is checked against
+        // total character level instead of the importing-class level.
+        // Default 0 (class level) matches the historical semantics —
+        // option items are picked during a class advancement.
+        level_prereq_is_total: Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total) ? 1 : 0,
         is_repeatable: Boolean(editingItem?.isRepeatable || editingItem?.is_repeatable) ? 1 : 0,
         string_prerequisite: editingItem?.stringPrerequisite || editingItem?.string_prerequisite || '',
         page: editingItem?.page || '',
         class_ids: Array.isArray(editingItem?.classIds) ? editingItem.classIds : (editingItem?.class_ids || []),
-        // IDs of other option items in this group that must be picked
-        // first before this option becomes available in the picker.
-        // Stored as a JSON array; the module enforces it at prompt time.
-        requires_option_ids: Array.isArray(editingItem?.requiresOptionIds)
-          ? editingItem.requiresOptionIds
-          : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []),
+        // Compound requirements (And/Or/Xor tree of typed leaves —
+        // option items, classes, spell rules, ability scores, etc.).
+        // Replaces the dropped `requires_option_ids` + `requirements`
+        // text columns. Serialized to a JSON string here so D1 stores
+        // it verbatim; on read, parseRequirementTree() normalizes it.
+        requirements_tree: serializeRequirementTree(editingItem?.requirementsTree ?? null),
         // Feat-shape body — same columns the `features` table carries.
         // feature_type is derived from the parent group's name so dnd5e's
         // `system.type.subtype` always matches the user's group naming
@@ -200,7 +265,6 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         // the group identity.
         feature_type: name || editingItem?.featureType || editingItem?.feature_type || null,
         subtype: editingItem?.subtype || null,
-        requirements: editingItem?.requirements || null,
         // `icon_url` is the field the hero-header ImageUpload binds to via
         // `editingItem.iconUrl`. Was being dropped on save until this fix
         // because only `image_url` was written.
@@ -251,18 +315,20 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   };
 
   const openAddModal = () => {
-    setEditingItem({ levelPrerequisite: 0, isRepeatable: false, classIds: [] });
+    setEditingItem({
+      levelPrerequisite: 0,
+      levelPrereqIsTotal: false,
+      isRepeatable: false,
+      classIds: [],
+      requirementsTree: null,
+    });
     setOptionTab('description');
-    setRequiresOpen(false);
     setIsItemModalOpen(true);
   };
 
   const openEditModal = (item: any) => {
     setEditingItem({ ...item });
     setOptionTab('description');
-    const existingReqs = Array.isArray(item?.requiresOptionIds) ? item.requiresOptionIds
-      : (Array.isArray(item?.requires_option_ids) ? item.requires_option_ids : []);
-    setRequiresOpen(existingReqs.length > 0);
     setIsItemModalOpen(true);
   };
 
@@ -423,15 +489,15 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
               <div className="divide-y divide-gold/10">
                 {items.map((item) => {
-                  const requiredOptionIds: string[] = Array.isArray(item.requiresOptionIds)
-                    ? item.requiresOptionIds
-                    : (Array.isArray(item.requires_option_ids) ? item.requires_option_ids : []);
-                  const requiredOptionNames = requiredOptionIds
-                    .map((rid) => items.find((other) => other.id === rid)?.name)
-                    .filter(Boolean) as string[];
+                  // Summary chips for the list row. The requirements tree
+                  // can be arbitrarily complex (any of (A or B) and …) so
+                  // we don't try to format it inline — a "Has requirements"
+                  // tag plus level/string prereqs is the at-a-glance view;
+                  // authors open the modal to see the tree itself.
                   const hasLevelReq = (item.level_prerequisite || 0) > 0;
-                  const hasOptionReq = requiredOptionNames.length > 0;
+                  const levelIsTotal = Boolean(item.levelPrereqIsTotal ?? item.level_prereq_is_total);
                   const hasStringReq = !!item.string_prerequisite;
+                  const hasTreeReq = !!item.requirementsTree;
                   return (
                   <div key={item.id} className="py-2 flex items-center justify-between group">
                     <div className="flex items-center gap-3">
@@ -448,12 +514,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                             <Repeat className="w-3 h-3 text-gold/40" />
                           )}
                         </div>
-                        {(hasLevelReq || hasOptionReq || hasStringReq) && (
+                        {(hasLevelReq || hasTreeReq || hasStringReq) && (
                           <div className="text-[10px] text-ink/40">
                             <span className="font-bold uppercase tracking-wider">Prerequisites:</span>{' '}
                             {[
-                              hasLevelReq ? `Level ${item.level_prerequisite}+` : null,
-                              hasOptionReq ? `Requires ${requiredOptionNames.join(', ')}` : null,
+                              hasLevelReq
+                                ? `Level ${item.level_prerequisite}+${levelIsTotal ? ' (character)' : ''}`
+                                : null,
+                              hasTreeReq ? 'Compound requirements' : null,
                               hasStringReq ? item.string_prerequisite : null
                             ].filter(Boolean).join(' · ')}
                           </div>
@@ -582,7 +650,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   </div>
                 </div>
 
-                {/* Prerequisites: level + Required Options + string. */}
+                {/* Prerequisites: flat level + free-text + compound tree.
+                    The flat level_prerequisite / string_prerequisite live
+                    side-by-side at the top — most options gate on level
+                    alone, so the simple controls stay reachable without
+                    opening the tree. The compound <RequirementsEditor/>
+                    below handles everything else (option-item chains,
+                    spell rules, ability scores, etc.). */}
                 <div className="space-y-3 pt-2 border-t border-gold/10">
                   <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Prerequisites</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -594,6 +668,24 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                         onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), level_prerequisite: parseInt(e.target.value) || 0 }))}
                         className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
                       />
+                      {/* Defaults to false (class level). When checked the
+                          number is interpreted as total character level
+                          rather than the importing-class level. Mirrors
+                          the `level_prereq_is_total` column saved below. */}
+                      <label className="flex items-center gap-1.5 cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total)}
+                          onChange={e => setEditingItem((prev: any) => ({
+                            ...(prev || {}),
+                            levelPrereqIsTotal: e.target.checked,
+                          }))}
+                          className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                        />
+                        <span className="text-[10px] text-ink/50 uppercase tracking-wider">
+                          Total character level (default: class level)
+                        </span>
+                      </label>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-ink/40">String Prerequisite</label>
@@ -606,70 +698,27 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                     </div>
                   </div>
 
-                  {/* Required Options — gated by a master checkbox; rendered
-                      via EntityPicker so it stays visually consistent with
-                      Class Restrictions and the spell-list filters. The
-                      picker only renders when the checkbox is on (so the
-                      Details tab stays compact when no prereqs are needed);
-                      unchecking clears any saved selections. */}
-                  {(() => {
-                    const required: string[] = Array.isArray(editingItem?.requiresOptionIds)
-                      ? editingItem.requiresOptionIds
-                      : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []);
-                    const otherOptions = items.filter((other: any) => other.id !== editingItem?.id);
-                    return (
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${requiresOpen ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
-                            {requiresOpen && <Check className="w-2.5 h-2.5 text-white" />}
-                          </div>
-                          <input
-                            type="checkbox"
-                            className="hidden"
-                            checked={requiresOpen}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setRequiresOpen(true);
-                              } else {
-                                setRequiresOpen(false);
-                                // Collapsing also clears existing selections — the panel
-                                // hides on uncheck, so we don't want lingering invisible
-                                // prereqs the author can't see at a glance.
-                                setEditingItem((prev: any) => ({
-                                  ...(prev || {}),
-                                  requiresOptionIds: [],
-                                  requires_option_ids: []
-                                }));
-                              }
-                            }}
-                          />
-                          <span className="text-xs font-bold uppercase tracking-widest text-ink/40">Required Options</span>
-                        </label>
-                        {requiresOpen ? (
-                          <>
-                            <p className="text-[10px] text-ink/30 italic -mt-1">
-                              This option only becomes available after the player has picked every option checked here, in the same import.
-                            </p>
-                            <EntityPicker
-                              entities={otherOptions.map((o: any) => ({ id: o.id, name: o.name || '(unnamed)' }))}
-                              selectedIds={required}
-                              onChange={(next) => setEditingItem((prev: any) => ({
-                                ...(prev || {}),
-                                requiresOptionIds: next,
-                                requires_option_ids: next
-                              }))}
-                              searchPlaceholder="Search options…"
-                              noEntitiesText="No other options in this group yet."
-                            />
-                          </>
-                        ) : (
-                          <p className="text-[10px] text-ink/30 italic -mt-1">
-                            Check the box to lock this option behind other options in the same group.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  {/* Compound requirements tree. Authors can describe
+                      arbitrary And/Or/Xor compositions — typically used
+                      for option-item chains (Ultimate Pact Weapon needs
+                      Pact of the Blade AND Superior Pact Weapon), spell
+                      rules ("knows a 1st-level evocation"), or ability
+                      score floors. The module enforces this at import
+                      time via the show-but-mark-unmet pattern. */}
+                  <RequirementsEditor
+                    label="Compound Requirements"
+                    value={(editingItem?.requirementsTree as Requirement | null) ?? null}
+                    onChange={(next) => setEditingItem((prev: any) => ({
+                      ...(prev || {}),
+                      requirementsTree: next,
+                    }))}
+                    lookups={{
+                      classes: classes.map((c: any) => ({ id: c.id, name: c.name })),
+                      subclasses: subclasses.map((s: any) => ({ id: s.id, name: s.name })),
+                      spellRules: spellRules.map((r: any) => ({ id: r.id, name: r.name })),
+                      optionGroups: allOptionGroups,
+                    }}
+                  />
                 </div>
 
                 <div className="flex items-center gap-2 pt-2 border-t border-gold/10">
