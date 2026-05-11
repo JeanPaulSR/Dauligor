@@ -47,6 +47,11 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
   const [requiredOptionSearch, setRequiredOptionSearch] = useState('');
+  // Whether the Required Options picker is expanded. Auto-true when the
+  // option already has prereqs; the checkbox toggles it otherwise.
+  // Toggling off also clears any selections so the collapsed state can't
+  // hide an unintentional saved prereq.
+  const [requiresOpen, setRequiresOpen] = useState(false);
   // Tab state for the option-item modal — mirrors ClassEditor's feature
   // modal so authoring an option (Maneuver / Invocation / Infusion) feels
   // identical to authoring a class feature.
@@ -188,7 +193,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           ? editingItem.requiresOptionIds
           : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []),
         // Feat-shape body — same columns the `features` table carries.
-        feature_type: editingItem?.featureType || editingItem?.feature_type || null,
+        // feature_type is derived from the parent group's name so dnd5e's
+        // `system.type.subtype` always matches the user's group naming
+        // (Battle Master Maneuvers → "Battle Master Maneuvers" subtype).
+        // Authors don't need to remember to fill it in; it's locked to
+        // the group identity.
+        feature_type: name || editingItem?.featureType || editingItem?.feature_type || null,
         subtype: editingItem?.subtype || null,
         requirements: editingItem?.requirements || null,
         // `icon_url` is the field the hero-header ImageUpload binds to via
@@ -243,12 +253,16 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const openAddModal = () => {
     setEditingItem({ levelPrerequisite: 0, isRepeatable: false, classIds: [] });
     setOptionTab('description');
+    setRequiresOpen(false);
     setIsItemModalOpen(true);
   };
 
   const openEditModal = (item: any) => {
     setEditingItem({ ...item });
     setOptionTab('description');
+    const existingReqs = Array.isArray(item?.requiresOptionIds) ? item.requiresOptionIds
+      : (Array.isArray(item?.requires_option_ids) ? item.requires_option_ids : []);
+    setRequiresOpen(existingReqs.length > 0);
     setIsItemModalOpen(true);
   };
 
@@ -539,17 +553,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                     />
                   </div>
                   <div className="space-y-1">
-                    {/* Feature Type — drives dnd5e's `system.type.subtype`
-                        on the embedded item. Free-form text rather than a
-                        fixed dropdown because dnd5e accepts any subtype
-                        string and ships canonical labels in en.json. */}
-                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Feature Type</label>
-                    <Input
-                      value={editingItem?.featureType || editingItem?.feature_type || ''}
-                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), featureType: e.target.value, feature_type: e.target.value }))}
-                      placeholder="e.g. Maneuver, EldritchInvocation, Infusion"
-                      className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
-                    />
+                    {/* Feature Type is locked to the parent Modular Option
+                        Group's name — drives dnd5e's `system.type.subtype`
+                        on the embedded item. Read-only; renames on the
+                        group level flow through here on save. */}
+                    <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Modular Option Group</label>
+                    <div className="h-8 px-3 flex items-center text-sm text-ink/70 bg-background/30 border border-gold/10 rounded-md select-none">
+                      {name || <span className="italic text-ink/30">Save the group first</span>}
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Subtype</label>
@@ -597,48 +608,65 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
                   {/* Required Options — gated by a master checkbox; rendered
                       via EntityPicker so it stays visually consistent with
-                      Class Restrictions and the spell-list filters. */}
+                      Class Restrictions and the spell-list filters. The
+                      picker only renders when the checkbox is on (so the
+                      Details tab stays compact when no prereqs are needed);
+                      unchecking clears any saved selections. */}
                   {(() => {
                     const required: string[] = Array.isArray(editingItem?.requiresOptionIds)
                       ? editingItem.requiresOptionIds
                       : (Array.isArray(editingItem?.requires_option_ids) ? editingItem.requires_option_ids : []);
                     const otherOptions = items.filter((other: any) => other.id !== editingItem?.id);
-                    const hasRequiredOptions = required.length > 0;
                     return (
                       <div className="space-y-2">
                         <label className="flex items-center gap-2 cursor-pointer">
-                          <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${hasRequiredOptions ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
-                            {hasRequiredOptions && <Check className="w-2.5 h-2.5 text-white" />}
+                          <div className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center transition-all ${requiresOpen ? 'bg-gold border-gold' : 'border-gold/30 hover:border-gold/60'}`}>
+                            {requiresOpen && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
                           <input
                             type="checkbox"
                             className="hidden"
-                            checked={hasRequiredOptions}
+                            checked={requiresOpen}
                             onChange={e => {
-                              if (e.target.checked) return;
-                              setEditingItem((prev: any) => ({
-                                ...(prev || {}),
-                                requiresOptionIds: [],
-                                requires_option_ids: []
-                              }));
+                              if (e.target.checked) {
+                                setRequiresOpen(true);
+                              } else {
+                                setRequiresOpen(false);
+                                // Collapsing also clears existing selections — the panel
+                                // hides on uncheck, so we don't want lingering invisible
+                                // prereqs the author can't see at a glance.
+                                setEditingItem((prev: any) => ({
+                                  ...(prev || {}),
+                                  requiresOptionIds: [],
+                                  requires_option_ids: []
+                                }));
+                              }
                             }}
                           />
                           <span className="text-xs font-bold uppercase tracking-widest text-ink/40">Required Options</span>
                         </label>
-                        <p className="text-[10px] text-ink/30 italic -mt-1">
-                          This option only becomes available after the player has picked every option checked here, in the same import.
-                        </p>
-                        <EntityPicker
-                          entities={otherOptions.map((o: any) => ({ id: o.id, name: o.name || '(unnamed)' }))}
-                          selectedIds={required}
-                          onChange={(next) => setEditingItem((prev: any) => ({
-                            ...(prev || {}),
-                            requiresOptionIds: next,
-                            requires_option_ids: next
-                          }))}
-                          searchPlaceholder="Search options…"
-                          noEntitiesText="No other options in this group yet."
-                        />
+                        {requiresOpen ? (
+                          <>
+                            <p className="text-[10px] text-ink/30 italic -mt-1">
+                              This option only becomes available after the player has picked every option checked here, in the same import.
+                            </p>
+                            <EntityPicker
+                              entities={otherOptions.map((o: any) => ({ id: o.id, name: o.name || '(unnamed)' }))}
+                              selectedIds={required}
+                              onChange={(next) => setEditingItem((prev: any) => ({
+                                ...(prev || {}),
+                                requiresOptionIds: next,
+                                requires_option_ids: next
+                              }))}
+                              searchPlaceholder="Search options…"
+                              noEntitiesText="No other options in this group yet."
+                            />
+                          </>
+                        ) : (
+                          <p className="text-[10px] text-ink/30 italic -mt-1">
+                            Check the box to lock this option behind other options in the same group.
+                          </p>
+                        )}
                       </div>
                     );
                   })()}
