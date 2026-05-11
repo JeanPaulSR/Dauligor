@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
 import { ImageUpload } from '../ui/ImageUpload';
+import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 
 // Mirrors Foundry's EFFECT_MODES constant
 const EFFECT_MODE_OPTIONS = [
@@ -394,12 +395,14 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                         <div className="w-6 shrink-0 flex justify-center">
                           <Search className="w-3 h-3 text-ink/25" />
                         </div>
-                        {/* Key */}
-                        <Input
+                        {/* Key — autocomplete dropdown sourced from the
+                            curated dnd5e / midi-qol / DAE catalog in
+                            src/lib/activeEffectKeys.ts. Free-text always
+                            allowed for keys not in the catalog. */}
+                        <ActiveEffectKeyInput
                           value={c.key}
-                          onChange={e => patchChange(i, { key: e.target.value })}
-                          placeholder="system.attributes.ac.calc"
-                          className="flex-[2] min-w-0 h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold"
+                          onChange={(next) => patchChange(i, { key: next })}
+                          className="flex-[2] min-w-0"
                         />
                         {/* Mode */}
                         <Select value={String(c.mode)} onValueChange={v => patchChange(i, { mode: parseInt(v, 10) })}>
