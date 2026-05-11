@@ -67,12 +67,15 @@ Migration `20260510-2152_requirements_tree.sql` replaced the flat `requires_opti
 | `spell` | `spellId` | "knows Cure Wounds" |
 | `spellRule` | `spellRuleId` | "knows any spell matching this Spell Rule" |
 | `abilityScore` | `ability`, `min` | "STR 13 or higher" |
-| `proficiency` | `category` (weapon/armor/tool/skill/language), `identifier` | "Weapon proficiency: longsword" |
+| `proficiency` | `category` (weapon/armor/tool/skill/language), `identifier` | "Weapon proficiency: longsword". The `identifier` is the Foundry slug picked from the matching campaign pool (weapons + categories / armor + categories / tools + categories / skills / languages + categories) via `<SingleSelectSearch>`; not free-text. |
 | `level` | `minLevel`, `isTotal` | Character-level or total-level gate (option items also have a flat `level_prerequisite` column for the common case) |
+| `string` | `value` | Free-text leaf for compound expressions where the requirement isn't machine-checkable (e.g. `"Member of the Crimson Order"` inside an `all` group with other typed leaves). Note: option items also keep a flat `string_prerequisite` column for the simple case — both surfaces coexist, see [list-row rendering](#list-row-summary-formats-the-tree) below. |
 
 **Group nodes** combine children with `all` (AND), `any` (OR), or `one` (XOR — exactly one). Groups can nest.
 
-**Editor**: [`<RequirementsEditor />`](../../src/components/compendium/RequirementsEditor.tsx) — a recursive card-with-children component matching the activity/effect group pattern. Used by `UniqueOptionGroupEditor` today; will be ported to the feats editor in a follow-up.
+**Editor**: [`<RequirementsEditor />`](../../src/components/compendium/RequirementsEditor.tsx) — a recursive card-with-children component matching the activity/effect group pattern. Used by `UniqueOptionGroupEditor` today; will be ported to the feats editor in a follow-up. Every entity leaf picker (class / subclass / `levelInClass` / feature / spell / spellRule / `optionItem`) uses the shared [`<SingleSelectSearch />`](../../src/components/ui/SingleSelectSearch.tsx) — a portal'd combobox with search-as-you-type — instead of a native `<select>`. With 50+ option groups and hundreds of option items in aggregate, the searchable single-pick is the only thing that scales.
+
+The `optionItem` leaf renders as a **cascading group → item picker** so authors first narrow to the parent Modular Option Group (Eldritch Invocations, Battle Master Maneuvers, etc.) and then pick a specific option inside it. The leaf stores the item PK + an optional `groupId` convenience hint; on export both translate to the canonical source-ids the module recognises.
 
 **Export**: The exporter walks the tree, remaps the `optionItem.itemId` PKs to canonical source-ids (so the module recognises them at import time), and renders the result into dnd5e's `system.requirements` free-text via `formatRequirementText()`. The structured tree is also forwarded to the module as `flags.dauligor-pairing.requirementsTree` so a future importer pass can do show-but-mark-unmet enforcement in the option-picker (the current importer hard-blocks on the legacy `requiresOptionIds` flag only — that's the next module-side task).
 
@@ -85,6 +88,21 @@ Most option items gate on level — typically "available at level 5" of the impo
 - `1` — the gate checks *total character level* (rare; some feat-shape options need character-level 4 regardless of class).
 
 Surfaced in the editor as a "Total character level (default: class level)" checkbox under the Level Prerequisite input.
+
+### List-row summary formats the tree
+{#list-row-summary-formats-the-tree}
+
+The Individual Options list under the group page renders a one-line prereq summary per row. The flat-level + flat-string fields render first, then the tree is rendered to readable text via `formatRequirementText(tree, lookup)`:
+
+- `{ abilityScore: dex 13 }` → "Dexterity 13 or higher"
+- `{ any: [proficiency simple-weapons, proficiency martial-weapons] }` → "Simple or Martial Weapons"
+- Flat level 6 + `{ optionItem: classical-swordplay }` → "Level 6+ · Classical Swordplay"
+
+The `lookup` is memoized at the editor level from `classes` / `subclasses` / `spellRules` / `allOptionGroups`, so entity names (not raw PKs) appear in the rendered text.
+
+### In-session state sync
+
+`allOptionGroups` — the list backing the `optionItem` leaf picker — is fetched once on mount. Save and delete handlers in `UniqueOptionGroupEditor` mirror their item change into this state alongside the per-group `items` array, so adding a new option in the current group makes it immediately available to a sibling option's requirement picker without a page reload. Cross-group changes from other tabs still need a reload (intentional — keeps the page query-cheap; see [d1.ts query cache](../platform/d1-architecture.md) for the TTL).
 
 ### Linked-feature concept (removed)
 A `feature_id` FK on `unique_option_items` once let an option point at a feature row for content. **Dropped** in `20260509-1356_unique_option_items_feat_shape.sql` — option items now carry their own mechanical content end-to-end (activities / effects / advancements / uses), so there's nothing to delegate. If a class feature wants to grant shared option content, it does so via the option group itself in an `ItemChoice` / `ItemGrant` advancement, not by linking a single feature row.

@@ -690,7 +690,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   }
                                 }
                               })}
-                              className="field-input border-gold/15 text-center"
+                              className="field-input border-gold/15 text-center no-number-spin"
                               placeholder="20"
                             />
                           </FieldRow>
@@ -739,7 +739,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               onChange={e => updateSection('visibility', {
                                 level: { min: parseInt(e.target.value, 10) || 0, max: editingActivity.visibility?.level?.max ?? 20 }
                               })}
-                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs"
+                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
                             />
                             <ArrowRight className="w-3 h-3 text-gold/25 shrink-0" />
                             <Input
@@ -748,7 +748,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               onChange={e => updateSection('visibility', {
                                 level: { min: editingActivity.visibility?.level?.min ?? 0, max: parseInt(e.target.value, 10) || 20 }
                               })}
-                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs"
+                              className="h-9 w-16 bg-background/40 border-gold/15 text-center text-xs no-number-spin"
                             />
                           </div>
                         </FieldRow>
@@ -1047,7 +1047,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                               onChange={e => handleUpdateActivity(editingId!, {
                                 spell: { ...editingActivity.spell!, level: parseInt(e.target.value) || null }
                               })}
-                              className="field-input border-gold/15 text-xs text-center"
+                              className="field-input border-gold/15 text-xs text-center no-number-spin"
                             />
                           </FieldRow>
                           <FieldRow label="Use Caster Spellbook" hint="Keep this on for most native cast activities." inline>
@@ -1073,7 +1073,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   onChange={e => handleUpdateActivity(editingId!, {
                                     spell: { ...editingActivity.spell!, challenge: { ...editingActivity.spell!.challenge, attack: parseInt(e.target.value) || null } }
                                   })}
-                                  className="field-input border-gold/15 text-xs text-center"
+                                  className="field-input border-gold/15 text-xs text-center no-number-spin"
                                 />
                               </FieldRow>
                               <FieldRow label="Override Save DC">
@@ -1083,7 +1083,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   onChange={e => handleUpdateActivity(editingId!, {
                                     spell: { ...editingActivity.spell!, challenge: { ...editingActivity.spell!.challenge, save: parseInt(e.target.value) || null } }
                                   })}
-                                  className="field-input border-gold/15 text-xs text-center"
+                                  className="field-input border-gold/15 text-xs text-center no-number-spin"
                                 />
                               </FieldRow>
                             </>
@@ -1345,8 +1345,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   <div className="grid gap-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Level</p>
                                     <div className="flex gap-1">
-                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center" />
-                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center" />
+                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
+                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.summon.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateSummon({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
                                     </div>
                                   </div>
                                   <button type="button" onClick={() => updateSummon({ profiles: (editingActivity.summon.profiles||[]).filter((_,i)=>i!==idx) })} className="h-7 flex items-center justify-center text-blood/60 hover:text-blood transition-colors">
@@ -1441,8 +1441,8 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                   <div className="col-span-3 grid gap-1">
                                     <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest">Level Range</p>
                                     <div className="flex gap-2">
-                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center" />
-                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center" />
+                                      <Input type="number" value={profile.level.min} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,min:parseInt(e.target.value,10)||0}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
+                                      <Input type="number" value={profile.level.max} onChange={e => { const p=[...(editingActivity.transform?.profiles||[])]; p[idx]={...profile,level:{...profile.level,max:parseInt(e.target.value,10)||20}}; updateTransform({profiles:p}); }} className="h-7 bg-background/40 border-gold/10 text-xs text-center no-number-spin" />
                                     </div>
                                   </div>
                                 </div>
@@ -1501,7 +1501,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                         type="number"
                                         value={linked.level?.min ?? ''}
                                         onChange={e => patchLevel({ min: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10 no-number-spin"
                                         placeholder="—"
                                       />
                                       <span className="text-[9px] text-ink/20">–</span>
@@ -1509,7 +1509,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                         type="number"
                                         value={linked.level?.max ?? ''}
                                         onChange={e => patchLevel({ max: e.target.value === '' ? null : parseInt(e.target.value) })}
-                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10"
+                                        className="h-6 w-10 text-[10px] text-center bg-background/40 border-gold/10 no-number-spin"
                                         placeholder="—"
                                       />
                                     </div>

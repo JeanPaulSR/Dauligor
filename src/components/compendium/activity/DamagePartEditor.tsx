@@ -220,7 +220,7 @@ export default function DamagePartEditor({
                   onChange={e => patchAt(idx, {
                     scaling: { ...part.scaling, mode: part.scaling?.mode ?? '', number: parseInt(e.target.value) || 0 },
                   })}
-                  className="h-7 w-12 bg-background/40 border-gold/10 text-[9px] text-center"
+                  className="h-7 w-12 bg-background/40 border-gold/10 text-[9px] text-center no-number-spin"
                   placeholder="1"
                 />
                 <Input

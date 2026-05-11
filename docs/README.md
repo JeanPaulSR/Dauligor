@@ -48,6 +48,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [compendium-scaling.md](features/compendium-scaling.md) — scaling columns, spellcasting/pact-magic/spells-known progressions
 - [compendium-options.md](features/compendium-options.md) — unique option groups, items, tags, requirements tree
 - [active-effects.md](features/active-effects.md) — shared Active Effect editor: autocomplete catalog, status conditions + categories, change modes, export round-trip
+- [activity-editor.md](features/activity-editor.md) — shared Activity editor: 11 activity kinds, sub-component layout (`activity/`), shared picker reuse, Foundry-consistent labels
 - [character-builder.md](features/character-builder.md) — builder logic, progression-owned state
 - [character-sheet.md](features/character-sheet.md) — sheet rendering, sub-tabs
 - [campaigns-eras.md](features/campaigns-eras.md) — campaign and era management
