@@ -21,6 +21,29 @@ import { fetchCollection } from '../../lib/d1';
 import SingleSelectSearch from '../ui/SingleSelectSearch';
 import EntityPicker from '../ui/EntityPicker';
 import ActiveEffectKeyInput from './ActiveEffectKeyInput';
+// Sub-components + shared primitives/constants for the activity
+// editor. Each lives in `./activity/` so the file stays browsable;
+// see DamagePartEditor for the canonical example.
+import { ActivitySection, FieldRow } from './activity/primitives';
+import DamagePartEditor from './activity/DamagePartEditor';
+import {
+  ABILITY_OPTIONS,
+  FALLBACK_ABILITY_LABELS,
+  SPELL_PROPERTIES,
+  RECOVERY_PERIOD_OPTIONS,
+  RECOVERY_TYPE_OPTIONS,
+  TARGET_TYPE_OPTIONS,
+  TEMPLATE_TYPE_OPTIONS,
+  CONSUMPTION_TARGET_TYPES,
+  DAMAGE_TYPE_OPTIONS,
+  SCALING_MODE_OPTIONS,
+  SUMMON_OR_TRANSFORM_MODE_OPTIONS,
+  MOVEMENT_TYPE_OPTIONS,
+  CREATURE_SIZE_OPTIONS,
+  CREATURE_TYPE_OPTIONS,
+  parseCsv,
+  parseNullableInteger,
+} from './activity/constants';
 
 interface ActivityEditorProps {
   activities: SemanticActivity[] | Record<string, SemanticActivity>;
@@ -43,183 +66,11 @@ const ACTIVITY_KINDS: { kind: ActivityKind; label: string; icon: any }[] = [
   { kind: 'utility', label: 'Utility', icon: Wrench },
 ];
 
-const ABILITY_OPTIONS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
-const FALLBACK_ABILITY_LABELS: Record<string, string> = {
-  str: 'Strength', dex: 'Dexterity', con: 'Constitution',
-  int: 'Intelligence', wis: 'Wisdom', cha: 'Charisma',
-};
-const SPELL_PROPERTIES = ['vocal', 'somatic', 'material'];
-// Every dropdown option carries a display `label` and an optional
-// `hint` (the right-side badge in SingleSelectSearch). Slug values
-// match Foundry's dnd5e key conventions so the export round-trips
+// Option catalogs + parseCsv/parseNullableInteger helpers live in
+// `./activity/constants.ts`. Imported above. Slug values match
+// Foundry's dnd5e key conventions so the export round-trips
 // cleanly; the editor only ever shows labels to the author.
 
-/** Recovery periods, grouped Foundry-style into Rests / Combat /
- *  Mechanical so authors can mentally bucket them. The hint is the
- *  category and renders as the picker's right-side badge. */
-const RECOVERY_PERIOD_OPTIONS: { value: string; label: string; hint: string }[] = [
-  { value: 'lr',        label: 'Long Rest',   hint: 'Rests' },
-  { value: 'sr',        label: 'Short Rest',  hint: 'Rests' },
-  { value: 'day',       label: 'Day',         hint: 'Rests' },
-  { value: 'dawn',      label: 'Dawn',        hint: 'Rests' },
-  { value: 'dusk',      label: 'Dusk',        hint: 'Rests' },
-  { value: 'turn',      label: 'Turn',        hint: 'Combat' },
-  { value: 'turnStart', label: 'Turn Start',  hint: 'Combat' },
-  { value: 'turnEnd',   label: 'Turn End',    hint: 'Combat' },
-  { value: 'round',     label: 'Round',       hint: 'Combat' },
-  { value: 'recharge',  label: 'Recharge',    hint: 'Mechanical' },
-  { value: 'charges',   label: 'Charges',     hint: 'Mechanical' },
-];
-
-/** Recovery types are stored as Foundry slugs; the labels are the
- *  display strings the official AE config window shows. */
-const RECOVERY_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'recoverAll', label: 'Recover All' },
-  { value: 'formula',    label: 'Formula' },
-  { value: 'loseAll',    label: 'Lose All' },
-];
-
-/** Target affects type — Foundry display labels for the affects.type
- *  slug. "none" / "self" exist but Foundry hides them from the
- *  picker; we keep them so existing data round-trips. */
-const TARGET_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'none',     label: 'None' },
-  { value: 'self',     label: 'Self' },
-  { value: 'creature', label: 'Creature' },
-  { value: 'ally',     label: 'Ally' },
-  { value: 'enemy',    label: 'Enemy' },
-  { value: 'object',   label: 'Object' },
-  { value: 'space',    label: 'Space' },
-];
-
-const TEMPLATE_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'none',     label: 'None' },
-  { value: 'cone',     label: 'Cone' },
-  { value: 'cube',     label: 'Cube' },
-  { value: 'cylinder', label: 'Cylinder' },
-  { value: 'line',     label: 'Line' },
-  { value: 'sphere',   label: 'Sphere' },
-  { value: 'square',   label: 'Square' },
-];
-
-const CONSUMPTION_TARGET_TYPES: { value: string; label: string }[] = [
-  { value: 'activityUses', label: 'Activity Uses' },
-  { value: 'itemUses',     label: 'Item Uses' },
-  { value: 'material',     label: 'Material' },
-  { value: 'hitDice',      label: 'Hit Dice' },
-  { value: 'spellSlots',   label: 'Spell Slots' },
-  { value: 'attribute',    label: 'Attribute' },
-];
-
-const DAMAGE_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'acid',        label: 'Acid' },
-  { value: 'bludgeoning', label: 'Bludgeoning' },
-  { value: 'cold',        label: 'Cold' },
-  { value: 'fire',        label: 'Fire' },
-  { value: 'force',       label: 'Force' },
-  { value: 'lightning',   label: 'Lightning' },
-  { value: 'necrotic',    label: 'Necrotic' },
-  { value: 'piercing',    label: 'Piercing' },
-  { value: 'poison',      label: 'Poison' },
-  { value: 'psychic',     label: 'Psychic' },
-  { value: 'radiant',     label: 'Radiant' },
-  { value: 'slashing',    label: 'Slashing' },
-  { value: 'thunder',     label: 'Thunder' },
-  { value: 'healing',     label: 'Healing' },
-  { value: 'temphp',      label: 'Temp HP' },
-];
-
-const SCALING_MODE_OPTIONS: { value: string; label: string }[] = [
-  { value: '',      label: 'Off (no scaling)' },
-  { value: 'whole', label: 'Whole Dice' },
-  { value: 'half',  label: 'Half Dice' },
-];
-
-const SUMMON_OR_TRANSFORM_MODE_OPTIONS: { value: string; label: string }[] = [
-  { value: '',   label: 'Direct (level-based)' },
-  { value: 'cr', label: 'Challenge Rating' },
-];
-
-const MOVEMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'walk',   label: 'Walk' },
-  { value: 'burrow', label: 'Burrow' },
-  { value: 'climb',  label: 'Climb' },
-  { value: 'fly',    label: 'Fly' },
-  { value: 'swim',   label: 'Swim' },
-];
-
-const CREATURE_SIZE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'tiny', label: 'Tiny' },
-  { value: 'sm',   label: 'Small' },
-  { value: 'med',  label: 'Medium' },
-  { value: 'lg',   label: 'Large' },
-  { value: 'huge', label: 'Huge' },
-  { value: 'grg',  label: 'Gargantuan' },
-];
-
-const CREATURE_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'aberration',  label: 'Aberration' },
-  { value: 'beast',       label: 'Beast' },
-  { value: 'celestial',   label: 'Celestial' },
-  { value: 'construct',   label: 'Construct' },
-  { value: 'dragon',      label: 'Dragon' },
-  { value: 'elemental',   label: 'Elemental' },
-  { value: 'fey',         label: 'Fey' },
-  { value: 'fiend',       label: 'Fiend' },
-  { value: 'giant',       label: 'Giant' },
-  { value: 'humanoid',    label: 'Humanoid' },
-  { value: 'monstrosity', label: 'Monstrosity' },
-  { value: 'ooze',        label: 'Ooze' },
-  { value: 'plant',       label: 'Plant' },
-  { value: 'undead',      label: 'Undead' },
-];
-
-// ── shared form primitives ────────────────────────────────────────────────────
-
-/**
- * Section header for grouping FieldRows inside an activity tab.
- * Previously rendered as a thin "label between dashed lines" — easy
- * to miss when scrolling. Now a proper gold-tinted bar with a
- * left-edge accent, matching the visual weight of section headers
- * elsewhere in the compendium. The content area still uses a
- * `divide-y` between rows so the structural grouping is unchanged.
- */
-function ActivitySection({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-5 first:mt-0">
-      <header className="flex items-center gap-2 mb-1 px-3 py-2 rounded-t bg-gold/8 border border-gold/15 border-b-0">
-        <span className="w-1 h-3 bg-gold/60 rounded-sm shrink-0" aria-hidden />
-        <h3 className="text-[10px] uppercase tracking-[0.2em] font-black text-gold/80 select-none">{label}</h3>
-      </header>
-      <div className="border border-gold/15 border-t-0 rounded-b px-3 divide-y divide-gold/8 bg-background/20">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-/**
- * Single labelled field inside an ActivitySection. The label column
- * carries the field name + optional hint; the input column sits on
- * the right at a fixed width so labels and inputs line up across
- * sibling rows. `inline=true` collapses the alignment for
- * single-control rows (checkboxes etc.).
- */
-function FieldRow({
-  label, hint, children, inline = false,
-}: {
-  label: string; hint?: string; children: React.ReactNode; inline?: boolean;
-}) {
-  return (
-    <div className={cn('flex gap-4 py-2.5', inline ? 'items-center' : 'items-start')}>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-ink/80 leading-none">{label}</p>
-        {hint && <p className="text-[10px] text-ink/40 mt-1 leading-snug">{hint}</p>}
-      </div>
-      <div className={inline ? 'shrink-0' : 'w-[240px] shrink-0'}>{children}</div>
-    </div>
-  );
-}
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -255,13 +106,6 @@ function formatActivationSummary(activity: SemanticActivity): string {
   const val = activity.activation.value;
   return val && val > 1 ? `${val} ${label}s` : label;
 }
-
-const parseCsv = (value: string) => value.split(',').map(s => s.trim()).filter(Boolean);
-const parseNullableInteger = (value: string) => {
-  if (value.trim() === '') return null;
-  const parsed = parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-};
 
 const sanitizeActivity = (activity: SemanticActivity): SemanticActivity => {
   const sanitized: SemanticActivity = { ...activity };
@@ -1642,200 +1486,24 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
 
                       {(editingActivity.damage || editingActivity.healing) && (
                         <ActivitySection label={editingActivity.healing ? 'HEALING' : 'DAMAGE'}>
-                          <div className="py-2 space-y-3">
-                            {(editingActivity.damage?.parts || editingActivity.healing?.parts || []).map((part, idx) => (
-                              <div key={idx} className="p-3 border border-gold/8 bg-gold/3 rounded relative group">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-background border border-gold/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => {
-                                    const key = editingActivity.healing ? 'healing' : 'damage';
-                                    const obj = editingActivity[key] as any;
-                                    handleUpdateActivity(editingId!, { [key]: { ...obj, parts: obj.parts.filter((_: any, i: number) => i !== idx) } });
-                                  }}
-                                >
-                                  <Trash2 className="h-3 w-3 text-red-400" />
-                                </Button>
-                                <div className="grid grid-cols-12 gap-3 mb-3">
-                                  <div className="col-span-2">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Num</p>
-                                    <Input
-                                      type="number"
-                                      value={part.number || ''}
-                                      onChange={e => {
-                                        const key = editingActivity.healing ? 'healing' : 'damage';
-                                        const obj = editingActivity[key] as any;
-                                        const newParts = [...obj.parts];
-                                        newParts[idx] = { ...part, number: parseInt(e.target.value) || null };
-                                        handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                      }}
-                                      className="h-8 bg-background/40 border-gold/10 text-center text-xs"
-                                    />
-                                  </div>
-                                  <div className="col-span-3">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Die</p>
-                                    <Select
-                                      value={part.denomination?.toString() || ''}
-                                      onValueChange={val => {
-                                        const key = editingActivity.healing ? 'healing' : 'damage';
-                                        const obj = editingActivity[key] as any;
-                                        const newParts = [...obj.parts];
-                                        newParts[idx] = { ...part, denomination: parseInt(val) || null };
-                                        handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                      }}
-                                    >
-                                      <SelectTrigger className="h-8 bg-background/40 border-gold/10 text-xs">
-                                        <SelectValue placeholder="-" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {[4,6,8,10,12,20,100].map(d => (
-                                          <SelectItem key={d} value={String(d)}>d{d}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="col-span-3">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Bonus</p>
-                                    <Input
-                                      value={part.bonus || ''}
-                                      onChange={e => {
-                                        const key = editingActivity.healing ? 'healing' : 'damage';
-                                        const obj = editingActivity[key] as any;
-                                        const newParts = [...obj.parts];
-                                        newParts[idx] = { ...part, bonus: e.target.value };
-                                        handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                      }}
-                                      className="h-8 bg-background/40 border-gold/10 text-xs font-mono"
-                                      placeholder="+5"
-                                    />
-                                  </div>
-                                  <div className="col-span-12 mt-1">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1.5">Damage Types</p>
-                                    {/* Damage types — searchable
-                                        multi-select with removable chips,
-                                        replacing the previous 15-button
-                                        toggle grid. Better at scale and
-                                        matches the picker pattern used
-                                        elsewhere in the app. */}
-                                    <EntityPicker
-                                      entities={DAMAGE_TYPE_OPTIONS.map(dt => ({ id: dt.value, name: dt.label }))}
-                                      selectedIds={part.types || []}
-                                      onChange={(nextTypes) => {
-                                        const dmgKey = editingActivity.healing ? 'healing' : 'damage';
-                                        const obj = editingActivity[dmgKey] as any;
-                                        const newParts = [...obj.parts];
-                                        newParts[idx] = { ...part, types: nextTypes };
-                                        handleUpdateActivity(editingId!, { [dmgKey]: { ...obj, parts: newParts } });
-                                      }}
-                                      searchPlaceholder="Search damage types…"
-                                      maxHeightClass="max-h-32"
-                                      showChips
-                                    />
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3 border-t border-gold/5 pt-2.5">
-                                  <Checkbox
-                                    id={`custom-${idx}`}
-                                    checked={part.custom?.enabled}
-                                    onCheckedChange={checked => {
-                                      const key = editingActivity.healing ? 'healing' : 'damage';
-                                      const obj = editingActivity[key] as any;
-                                      const newParts = [...obj.parts];
-                                      newParts[idx] = { ...part, custom: { ...part.custom, enabled: !!checked, formula: part.custom?.formula || '' } };
-                                      handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                    }}
-                                  />
-                                  <Label htmlFor={`custom-${idx}`} className="text-[9px] uppercase text-ink/60 font-black tracking-widest">Custom Formula</Label>
-                                  {part.custom?.enabled && (
-                                    <Input
-                                      value={part.custom.formula}
-                                      onChange={e => {
-                                        const key = editingActivity.healing ? 'healing' : 'damage';
-                                        const obj = editingActivity[key] as any;
-                                        const newParts = [...obj.parts];
-                                        newParts[idx] = { ...part, custom: { ...part.custom, formula: e.target.value } };
-                                        handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                      }}
-                                      className="h-7 flex-1 bg-background/40 border-gold/10 text-[9px] font-mono"
-                                      placeholder="Formula..."
-                                    />
-                                  )}
-                                </div>
-                                <div className="grid grid-cols-12 gap-2 border-t border-gold/5 mt-2.5 pt-2.5">
-                                  <div className="col-span-4">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Scaling Mode</p>
-                                    <Select
-                                      value={part.scaling?.mode || ''}
-                                      onValueChange={val => {
-                                        const key = editingActivity.healing ? 'healing' : 'damage';
-                                        const obj = editingActivity[key] as any;
-                                        const newParts = [...obj.parts];
-                                        newParts[idx] = { ...part, scaling: { ...part.scaling, mode: val } };
-                                        handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                      }}
-                                    >
-                                      <SelectTrigger className="h-7 bg-background/40 border-gold/10 text-[9px]">
-                                        <SelectValue placeholder="None" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="">None</SelectItem>
-                                        <SelectItem value="whole">Every Level</SelectItem>
-                                        <SelectItem value="half">Every Other Level</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="col-span-8">
-                                    <p className="text-[9px] uppercase text-ink/40 font-black tracking-widest mb-1">Scaling Dice / Formula</p>
-                                    <div className="flex gap-2">
-                                      <Input
-                                        type="number"
-                                        value={part.scaling?.number || ''}
-                                        onChange={e => {
-                                          const key = editingActivity.healing ? 'healing' : 'damage';
-                                          const obj = editingActivity[key] as any;
-                                          const newParts = [...obj.parts];
-                                          newParts[idx] = { ...part, scaling: { ...part.scaling, number: parseInt(e.target.value) || 0 } };
-                                          handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                        }}
-                                        className="h-7 w-12 bg-background/40 border-gold/10 text-[9px] text-center"
-                                        placeholder="1"
-                                      />
-                                      <Input
-                                        value={part.scaling?.formula || ''}
-                                        onChange={e => {
-                                          const key = editingActivity.healing ? 'healing' : 'damage';
-                                          const obj = editingActivity[key] as any;
-                                          const newParts = [...obj.parts];
-                                          newParts[idx] = { ...part, scaling: { ...part.scaling, formula: e.target.value } };
-                                          handleUpdateActivity(editingId!, { [key]: { ...obj, parts: newParts } });
-                                        }}
-                                        className="h-7 flex-1 bg-background/40 border-gold/10 text-[9px] font-mono"
-                                        placeholder="Formula..."
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                            {!editingActivity.healing && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const obj = editingActivity.damage as any;
-                                  handleUpdateActivity(editingId!, { damage: { ...obj, parts: [...(obj?.parts || []), { types: [''] }] } });
-                                }}
-                                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
-                              >
-                                <Plus className="w-3 h-3" /> Add Damage Part
-                              </button>
-                            )}
-                            {editingActivity.healing && (
-                              <p className="text-[10px] text-ink/40 border border-dashed border-gold/10 rounded p-3">
-                                Foundry heal activities use a single healing roll. This editor keeps one primary healing part.
-                              </p>
-                            )}
-                          </div>
+                          {/* Damage / healing parts editor — same
+                              extracted component used wherever an
+                              activity carries a `parts[]` damage roll.
+                              Heal activities pass singlePart=true so
+                              the editor surfaces the "single healing
+                              roll" note instead of an Add button. */}
+                          <DamagePartEditor
+                            parts={(editingActivity.damage?.parts || editingActivity.healing?.parts || []) as any}
+                            onChange={(nextParts) => {
+                              const key = editingActivity.healing ? 'healing' : 'damage';
+                              const obj = editingActivity[key] as any;
+                              handleUpdateActivity(editingId!, {
+                                [key]: { ...(obj || {}), parts: nextParts },
+                              });
+                            }}
+                            singlePart={!!editingActivity.healing}
+                            partNoun={editingActivity.healing ? 'Healing Part' : 'Damage Part'}
+                          />
                           {showsBaseDamageToggle && (
                             <FieldRow label="Base Item Damage" inline>
                               <Checkbox
