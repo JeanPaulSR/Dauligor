@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
@@ -31,9 +31,7 @@ import {
   Requirement,
   parseRequirementTree,
   serializeRequirementTree,
-  seedTreeFromFlatColumns,
-  extractTopLevelLevelLeaf,
-  extractTopLevelStringLeaf,
+  formatRequirementText,
 } from '../../lib/requirements';
 
 export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: any }) {
@@ -90,6 +88,24 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const [optionTab, setOptionTab] = useState<'description' | 'details' | 'activities' | 'effects' | 'advancement'>('description');
   const groupDescRef = useRef<HTMLTextAreaElement>(null);
   const itemDescRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Name-by-id lookup used by `formatRequirementText` when rendering
+   * tree-based prereqs as plain text in the list-row summary. Built
+   * from the entity collections fetched above; recomputed only when
+   * one of those changes. The leaf types we don't populate here
+   * (features, spells) format to "<unknown …>" placeholders, which
+   * is the documented fallback — we'll wire them in once those
+   * pickers grow real lookups.
+   */
+  const requirementsTextLookup = useMemo(() => ({
+    classNameById: Object.fromEntries(classes.map((c: any) => [c.id, c.name])),
+    subclassNameById: Object.fromEntries(subclasses.map((s: any) => [s.id, s.name])),
+    spellRuleNameById: Object.fromEntries(spellRules.map((r: any) => [r.id, r.name])),
+    optionItemNameById: Object.fromEntries(
+      allOptionGroups.flatMap(g => g.items.map(it => [it.id, it.name] as const)),
+    ),
+  }), [classes, subclasses, spellRules, allOptionGroups]);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -195,25 +211,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           });
           setItems(itemsData.map((row: any) => {
             const denorm = denormalizeCompendiumData(row);
-            const parsedTree = parseRequirementTree(
-              denorm.requirementsTree ?? denorm.requirements_tree
-            );
-            const levelPrereqIsTotal = Boolean(
-              denorm.levelPrereqIsTotal ?? denorm.level_prereq_is_total
-            );
-            // Seed the tree from flat columns when there isn't one yet
-            // (legacy rows, fresh inserts from scripts, etc.) so the
-            // editor only has one authoring surface to keep in sync.
-            const requirementsTree = seedTreeFromFlatColumns({
-              existingTree: parsedTree,
-              levelPrerequisite: Number(denorm.levelPrerequisite ?? denorm.level_prerequisite) || 0,
-              levelPrereqIsTotal,
-              stringPrerequisite: denorm.stringPrerequisite ?? denorm.string_prerequisite ?? '',
-            });
             return {
               ...denorm,
-              requirementsTree,
-              levelPrereqIsTotal,
+              requirementsTree: parseRequirementTree(
+                denorm.requirementsTree ?? denorm.requirements_tree
+              ),
+              levelPrereqIsTotal: Boolean(
+                denorm.levelPrereqIsTotal ?? denorm.level_prereq_is_total
+              ),
             };
           }));
         }
@@ -299,44 +304,27 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       const advancements = Array.isArray(editingItem?.advancements) ? editingItem.advancements : [];
       const tags = Array.isArray(editingItem?.tags) ? editingItem.tags : [];
 
-      // Derive the flat level / string prereq columns from the tree.
-      // The editor now treats the tree as the single authoring
-      // surface; the flat columns are projections kept around for
-      // the module's existing `flags.levelPrerequisite` enforcement
-      // path. When the module learns to walk the tree directly we
-      // can drop the columns. Falls back to whatever was on
-      // editingItem if the tree extraction returns null — covers
-      // legacy rows that still carry flat values without a tree.
+      // Flat prereq fields and the requirements tree are independent
+      // surfaces — flat for the quick-access common case (Level X,
+      // String Y), tree for compound rules. The list-row renderer
+      // joins both into one readable summary via
+      // `formatRequirementText`.
       const tree = (editingItem?.requirementsTree as Requirement | null) ?? null;
-      const extractedLevel = extractTopLevelLevelLeaf(tree);
-      const extractedString = extractTopLevelStringLeaf(tree);
-      const levelPrerequisite = extractedLevel?.minLevel
-        ?? parseInt(editingItem?.levelPrerequisite || editingItem?.level_prerequisite)
-        ?? 0;
-      const levelPrereqIsTotal = extractedLevel
-        ? extractedLevel.isTotal
-        : Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total);
-      const stringPrerequisite = extractedString
-        || editingItem?.stringPrerequisite
-        || editingItem?.string_prerequisite
-        || '';
 
       const d1Data = {
         name: editingItem?.name || 'New Option',
         description: editingItem?.description || '',
         group_id: id,
         source_id: editingItem?.source_id || editingItem?.sourceId || sourceId,
-        level_prerequisite: levelPrerequisite || 0,
-        level_prereq_is_total: levelPrereqIsTotal ? 1 : 0,
+        level_prerequisite: parseInt(editingItem?.levelPrerequisite || editingItem?.level_prerequisite) || 0,
+        level_prereq_is_total: Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total) ? 1 : 0,
         is_repeatable: Boolean(editingItem?.isRepeatable || editingItem?.is_repeatable) ? 1 : 0,
-        string_prerequisite: stringPrerequisite,
+        string_prerequisite: editingItem?.stringPrerequisite || editingItem?.string_prerequisite || '',
         page: editingItem?.page || '',
         class_ids: Array.isArray(editingItem?.classIds) ? editingItem.classIds : (editingItem?.class_ids || []),
-        // Compound requirements (And/Or/Xor tree of typed leaves —
-        // option items, classes, spell rules, ability scores, level,
-        // free text, etc.). Single source of truth; the flat columns
-        // above are derived. Serialized to a JSON string here so D1
-        // stores it verbatim; on read, parseRequirementTree()
+        // Compound requirements tree — independent of the flat
+        // level/string fields. Serialized to a JSON string here so
+        // D1 stores it verbatim; on read, parseRequirementTree()
         // normalizes it.
         requirements_tree: serializeRequirementTree(tree),
         // Feat-shape body — same columns the `features` table carries.
@@ -578,15 +566,19 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
 
               <div className="divide-y divide-gold/10">
                 {items.map((item) => {
-                  // Summary chips for the list row. The requirements tree
-                  // can be arbitrarily complex (any of (A or B) and …) so
-                  // we don't try to format it inline — a "Has requirements"
-                  // tag plus level/string prereqs is the at-a-glance view;
-                  // authors open the modal to see the tree itself.
+                  // List-row summary. Renders the three prereq surfaces
+                  // (flat level, flat string, tree) into one " · "-joined
+                  // line. The tree gets fully formatted via
+                  // `formatRequirementText` so authors see
+                  // "Dexterity 13 or higher" or "Simple or Martial
+                  // Weapons" instead of the previous "Compound
+                  // requirements" placeholder.
                   const hasLevelReq = (item.level_prerequisite || 0) > 0;
                   const levelIsTotal = Boolean(item.levelPrereqIsTotal ?? item.level_prereq_is_total);
                   const hasStringReq = !!item.string_prerequisite;
-                  const hasTreeReq = !!item.requirementsTree;
+                  const treeText = item.requirementsTree
+                    ? formatRequirementText(item.requirementsTree, requirementsTextLookup)
+                    : '';
                   return (
                   <div key={item.id} className="py-2 flex items-center justify-between group">
                     <div className="flex items-center gap-3">
@@ -603,15 +595,15 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                             <Repeat className="w-3 h-3 text-gold/40" />
                           )}
                         </div>
-                        {(hasLevelReq || hasTreeReq || hasStringReq) && (
+                        {(hasLevelReq || treeText || hasStringReq) && (
                           <div className="text-[10px] text-ink/40">
                             <span className="font-bold uppercase tracking-wider">Prerequisites:</span>{' '}
                             {[
                               hasLevelReq
                                 ? `Level ${item.level_prerequisite}+${levelIsTotal ? ' (character)' : ''}`
                                 : null,
-                              hasTreeReq ? 'Compound requirements' : null,
-                              hasStringReq ? item.string_prerequisite : null
+                              hasStringReq ? item.string_prerequisite : null,
+                              treeText || null,
                             ].filter(Boolean).join(' · ')}
                           </div>
                         )}
@@ -739,18 +731,62 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   </div>
                 </div>
 
-                {/* Requirements. The tree is the single authoring
-                    surface — level / free-text / option-item / class /
-                    proficiency / spell etc. all live inside it as
-                    typed leaves. The flat `level_prerequisite` /
-                    `level_prereq_is_total` / `string_prerequisite`
-                    columns still exist on the row, but they're
-                    derived from the tree on save (see
-                    `extractTopLevelLevelLeaf` / `extractTopLevelStringLeaf`)
-                    so the module's existing `flags.levelPrerequisite`
-                    enforcement path keeps working until module-side
-                    picker code walks the tree directly. */}
+                {/* Requirements. Two layers, kept independent:
+                    – The flat Level Prerequisite + Total checkbox +
+                      String Prerequisite inputs are the fast path
+                      most options need ("Level 6", "Pact of the
+                      Tome", etc.) — keep them reachable without
+                      opening the tree.
+                    – The tree below handles compound expressions —
+                      option-item chains, proficiencies, ability
+                      scores, And/Or/Xor compositions. Renders all
+                      typed leaves the leaf vocabulary supports.
+                    The list-row prereq summary joins all three
+                    surfaces into one readable line via
+                    formatRequirementText() — see the list render
+                    above for the lookup wiring. */}
                 <div className="space-y-3 pt-2 border-t border-gold/10">
+                  <h4 className="text-[10px] text-gold uppercase tracking-widest font-black">Prerequisites</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase tracking-widest text-ink/40">Level Prerequisite</label>
+                      <Input
+                        type="number"
+                        value={editingItem?.level_prerequisite || editingItem?.levelPrerequisite || 0}
+                        onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), level_prerequisite: parseInt(e.target.value) || 0 }))}
+                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      />
+                      {/* Defaults to false (class level). When checked
+                          the number is interpreted as total character
+                          level rather than the importing-class level
+                          — used by the rare option items that gate on
+                          overall character level regardless of class. */}
+                      <label className="flex items-center gap-1.5 cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editingItem?.levelPrereqIsTotal ?? editingItem?.level_prereq_is_total)}
+                          onChange={e => setEditingItem((prev: any) => ({
+                            ...(prev || {}),
+                            levelPrereqIsTotal: e.target.checked,
+                          }))}
+                          className="w-3 h-3 rounded border-gold/20 text-gold focus:ring-gold"
+                        />
+                        <span className="text-[10px] text-ink/50 uppercase tracking-wider">
+                          Total character level (default: class level)
+                        </span>
+                      </label>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold uppercase tracking-widest text-ink/40">String Prerequisite</label>
+                      <Input
+                        value={editingItem?.string_prerequisite || editingItem?.stringPrerequisite || ''}
+                        onChange={e => setEditingItem((prev: any) => ({ ...(prev || { level_prerequisite: 0, is_repeatable: false }), string_prerequisite: e.target.value }))}
+                        placeholder="e.g. Pact of the Tome"
+                        className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
+                      />
+                    </div>
+                  </div>
+
                   <RequirementsEditor
                     label="Requirements"
                     value={(editingItem?.requirementsTree as Requirement | null) ?? null}
