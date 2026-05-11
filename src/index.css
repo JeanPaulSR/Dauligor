@@ -495,3 +495,16 @@
   background-color: var(--gold);
   opacity: 0.8;
 }
+
+/* Hide the up/down spinner controls on number inputs. The browser
+   default arrows are visually noisy at our small input sizes and
+   misalign with neighbouring text inputs. Authors can still type or
+   paste numbers; arrow-key increment/decrement still works. Apply via
+   `className="no-number-spin"` on any number input where the arrows
+   are unwanted (Duration fields, Priority, etc.). */
+.no-number-spin::-webkit-outer-spin-button,
+.no-number-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-number-spin { -moz-appearance: textfield; }

@@ -1035,7 +1035,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
               <textarea
                 value={importJson}
                 onChange={e => { setImportJson(e.target.value); setImportError(''); }}

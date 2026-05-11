@@ -126,7 +126,7 @@ export default function EntityPicker({
           ) : null}
         </div>
 
-        <div className={cn('overflow-y-auto divide-y divide-gold/5', maxHeightClass)}>
+        <div className={cn('overflow-y-auto custom-scrollbar divide-y divide-gold/5', maxHeightClass)}>
           {entities.length === 0 ? (
             <p className="px-3 py-3 text-[10px] text-ink/20 italic">{noEntitiesText}</p>
           ) : filtered.length === 0 ? (

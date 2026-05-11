@@ -129,9 +129,22 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
   const [conditionCategories, setConditionCategories] = useState<ConditionCategoryRow[]>([]);
   useEffect(() => {
     let cancelled = false;
+    // Explicit `select` projection has two benefits:
+    //  1. Pulls only the four columns we actually use (smaller payload).
+    //  2. Invalidates any stale sessionStorage cache from before the
+    //     20260511-0043 migration that added `category_id` — the query
+    //     cache is keyed on the full SQL string, so a fresh column list
+    //     produces a fresh cache key and the user gets real data on
+    //     first paint instead of the pre-migration cached row shape.
     Promise.all([
-      fetchCollection<StatusConditionRow>('statuses', { orderBy: '"order", name ASC' }),
-      fetchCollection<ConditionCategoryRow>('conditionCategories', { orderBy: '"order", name ASC' }),
+      fetchCollection<StatusConditionRow>('statuses', {
+        select: 'id, identifier, name, category_id',
+        orderBy: '"order", name ASC',
+      }),
+      fetchCollection<ConditionCategoryRow>('conditionCategories', {
+        select: 'id, name, "order"',
+        orderBy: '"order", name ASC',
+      }),
     ])
       .then(([rows, cats]) => {
         if (!cancelled) {
@@ -423,7 +436,7 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                       value={draft.duration?.seconds ?? ''}
                       onChange={e => patch({ duration: { ...draft.duration, seconds: parseNullableInt(e.target.value) } })}
                       placeholder="—"
-                      className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"
+                      className="no-number-spin h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"
                     />
                   </div>
                   <div className="flex items-center gap-3 px-3 py-2.5">
@@ -433,52 +446,57 @@ export default function ActiveEffectEditor({ effects, onChange, defaultImg }: Ac
                       value={draft.duration?.startTime ?? ''}
                       onChange={e => patch({ duration: { ...draft.duration, startTime: parseNullableInt(e.target.value) } })}
                       placeholder="—"
-                      className="h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"
+                      className="no-number-spin h-7 text-xs flex-1 bg-background/50 border-gold/10 focus:border-gold"
                     />
                   </div>
                 </div>
 
-                {/* Group 2: Combat duration */}
+                {/* Group 2: Combat duration.
+                    Rounds / Turns and Round / Turn share the same
+                    inline-grid template (`[auto_5rem_auto_5rem]`) so the
+                    "Rounds" + "Turns" inputs line up vertically with the
+                    "Round" + "Turn" inputs even though the labels have
+                    different character counts. */}
                 <div className="border border-gold/10 rounded-md divide-y divide-gold/10 bg-background/20">
                   <div className="flex items-center gap-3 px-3 py-2.5">
                     <span className="text-xs font-semibold text-ink/70 w-44 shrink-0">Effect Duration (Combat)</span>
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-ink/50 shrink-0">Rounds</span>
+                    <div className="grid grid-cols-[3rem_5rem_3rem_5rem] items-center gap-2 flex-1">
+                      <span className="text-xs text-ink/50">Rounds</span>
                       <Input
                         type="number" min={0}
                         value={draft.duration?.rounds ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, rounds: parseNullableInt(e.target.value) } })}
                         placeholder="—"
-                        className="h-7 text-xs w-20 bg-background/50 border-gold/10 focus:border-gold"
+                        className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
-                      <span className="text-xs text-ink/50 shrink-0">Turns</span>
+                      <span className="text-xs text-ink/50">Turns</span>
                       <Input
                         type="number" min={0}
                         value={draft.duration?.turns ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, turns: parseNullableInt(e.target.value) } })}
                         placeholder="—"
-                        className="h-7 text-xs w-20 bg-background/50 border-gold/10 focus:border-gold"
+                        className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
                     </div>
                   </div>
                   <div className="flex items-center gap-3 px-3 py-2.5">
                     <span className="text-xs font-semibold text-ink/70 w-44 shrink-0">Effect Start</span>
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-ink/50 shrink-0">Round</span>
+                    <div className="grid grid-cols-[3rem_5rem_3rem_5rem] items-center gap-2 flex-1">
+                      <span className="text-xs text-ink/50">Round</span>
                       <Input
                         type="number" min={0}
                         value={draft.duration?.startRound ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, startRound: parseNullableInt(e.target.value) } })}
                         placeholder="—"
-                        className="h-7 text-xs w-20 bg-background/50 border-gold/10 focus:border-gold"
+                        className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
-                      <span className="text-xs text-ink/50 shrink-0">Turn</span>
+                      <span className="text-xs text-ink/50">Turn</span>
                       <Input
                         type="number" min={0}
                         value={draft.duration?.startTurn ?? ''}
                         onChange={e => patch({ duration: { ...draft.duration, startTurn: parseNullableInt(e.target.value) } })}
                         placeholder="—"
-                        className="h-7 text-xs w-20 bg-background/50 border-gold/10 focus:border-gold"
+                        className="no-number-spin h-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
                       />
                     </div>
                   </div>
@@ -632,7 +650,7 @@ function ChangeRow({
         value={change.priority ?? ''}
         onChange={e => onPatchPriority(parseNullableInt(e.target.value))}
         placeholder={String(defaultPriorityForMode(change.mode))}
-        className={`w-20 shrink-0 h-7 text-xs text-center bg-background/50 border-gold/10 focus:border-gold ${change.priority === null ? 'text-ink/30' : ''}`}
+        className={`no-number-spin w-20 shrink-0 h-7 text-xs text-center bg-background/50 border-gold/10 focus:border-gold ${change.priority === null ? 'text-ink/30' : ''}`}
       />
       <button
         type="button" onClick={onDelete}
