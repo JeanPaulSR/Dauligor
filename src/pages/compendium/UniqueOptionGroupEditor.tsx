@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
+import { Dialog, DialogContent } from '../../components/ui/dialog';
 import {
   Repeat,
   Check,
@@ -149,8 +149,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     }
   };
 
-  const handleSaveItem = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveItem = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     if (!id) return;
 
     try {
@@ -493,9 +493,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               />
 
 
-              <form onSubmit={handleSaveItem} className={`flex-1 min-h-0 flex flex-col bg-background/50 ${optionTab === 'description' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
-                <div className="flex-1 min-h-0 p-6 space-y-4">
-
+              <div className={`flex-1 min-h-0 p-6 bg-background/50 space-y-4 ${optionTab === 'description' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
             {/* DESCRIPTION TAB — markdown body (icon + name live in the hero
                 header above, visible across every tab). */}
             {optionTab === 'description' && (
@@ -700,27 +698,26 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               </div>
             )}
 
-                </div>
-                <DialogFooter className="dialog-footer p-4 border-t border-gold/10 shrink-0 bg-card">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => { setIsItemModalOpen(false); setEditingItem(null); }}
-                    className="text-ink/40 text-xs"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={!editingItem?.name}
-                    className="btn-gold-solid"
-                  >
-                    {editingItem?.id ? 'Update Option' : 'Add Option'}
-                  </Button>
-                </DialogFooter>
-              </form>
+              </div>
+
+              <div className="p-4 border-t border-gold/10 bg-background flex justify-end shrink-0 gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => { setIsItemModalOpen(false); setEditingItem(null); }}
+                  className="label-text opacity-70 hover:opacity-100"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSaveItem}
+                  disabled={!editingItem?.name}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 px-8 label-text"
+                >
+                  {editingItem?.id ? 'Update Option' : 'Add Option'}
+                </Button>
+              </div>
             </>
           )}
         </DialogContent>
