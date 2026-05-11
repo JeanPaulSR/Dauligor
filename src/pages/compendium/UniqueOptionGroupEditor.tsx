@@ -699,6 +699,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                 <ActiveEffectEditor
                   effects={editingItem?.effects || []}
                   onChange={(fx) => setEditingItem((prev: any) => ({ ...(prev || {}), effects: fx }))}
+                  defaultImg={editingItem?.iconUrl || editingItem?.imageUrl || editingItem?.icon_url || editingItem?.image_url || null}
                 />
               </div>
             )}

@@ -51,17 +51,24 @@ export interface FoundryActiveEffect {
 interface ActiveEffectEditorProps {
   effects: FoundryActiveEffect[];
   onChange: (effects: FoundryActiveEffect[]) => void;
+  /**
+   * Image to seed on freshly-created effects. Typically the parent
+   * feature / option-item's icon — keeps the actor sheet visually
+   * consistent (the effect chip and the granting item share an icon by
+   * default; authors can change it per effect afterwards).
+   */
+  defaultImg?: string | null;
 }
 
 function makeId() {
   return Math.random().toString(36).slice(2, 18);
 }
 
-function emptyEffect(): FoundryActiveEffect {
+function emptyEffect(defaultImg?: string | null): FoundryActiveEffect {
   return {
     _id: makeId(),
     name: 'New Effect',
-    img: null,
+    img: defaultImg || null,
     description: '',
     disabled: false,
     transfer: true,
@@ -82,12 +89,12 @@ function defaultPriorityForMode(mode: number): number {
   return EFFECT_MODE_OPTIONS.find(o => o.value === mode)?.defaultPriority ?? 20;
 }
 
-export default function ActiveEffectEditor({ effects, onChange }: ActiveEffectEditorProps) {
+export default function ActiveEffectEditor({ effects, onChange, defaultImg }: ActiveEffectEditorProps) {
   const [draft, setDraft] = useState<FoundryActiveEffect | null>(null);
   const [draftIdx, setDraftIdx] = useState<number | null>(null);
   const [tab, setTab] = useState('details');
 
-  const openNew = () => { setDraft(emptyEffect()); setDraftIdx(null); setTab('details'); };
+  const openNew = () => { setDraft(emptyEffect(defaultImg)); setDraftIdx(null); setTab('details'); };
   const openEdit = (idx: number) => {
     setDraft({ ...effects[idx], changes: (effects[idx].changes || []).map(c => ({ ...c })) });
     setDraftIdx(idx);

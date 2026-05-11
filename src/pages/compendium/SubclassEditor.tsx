@@ -1540,6 +1540,7 @@ export default function SubclassEditor() {
                     <ActiveEffectEditor
                       effects={editingFeature.effects || []}
                       onChange={fx => setEditingFeature({ ...editingFeature, effects: fx })}
+                      defaultImg={editingFeature.iconUrl || editingFeature.imageUrl || editingFeature.icon_url || editingFeature.image_url || null}
                     />
                   </div>
                 )}
