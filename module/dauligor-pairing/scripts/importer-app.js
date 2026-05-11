@@ -12,6 +12,12 @@ import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
 import { CharacterUpdater, isAlreadyMarked } from "./update-character.js";
+import {
+  evaluateRequirementsTree,
+  formatRequirementsTree,
+  formatMissingLeaves,
+  treeFromFlatRequiresOptionIds
+} from "./requirements-walker.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -2273,7 +2279,7 @@ async function runDauligorClassImportSequence({
         // from a partial run).
         if ((state.optionSelections[group.sourceId] ?? []).length === group.maxSelections) continue;
 
-        const groupResult = await runOptionGroupStep({ workflow, group, sequence, progress });
+        const groupResult = await runOptionGroupStep({ workflow, actor, group, sequence, progress });
         if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
         if (Array.isArray(groupResult)) {
           state.optionSelections[group.sourceId] = groupResult;
@@ -3292,26 +3298,70 @@ async function runToolSelectionStep({ workflow, sequence, progress, advancement 
   return result.value;
 }
 
-async function runOptionGroupStep({ workflow, group, sequence, progress }) {
+async function runOptionGroupStep({ workflow, actor, group, sequence, progress }) {
   const stepId = `option:${group.sourceId}`;
   progress.markStep(stepId, "active", `Choose ${group.maxSelections} option(s) from ${group.name || group.featureName || "this pool"}.`);
   progress.setStatus(`Waiting for ${group.name || group.featureName || "class option"} choices...`);
 
   // Source-ids the user has already picked in earlier option-group prompts
   // this import. Combined with the in-flight selections inside this prompt
-  // they form the "satisfied" set for option prerequisites.
+  // they form the "satisfied" set the requirements walker checks
+  // `optionItem` leaves against.
   const priorSelections = new Set();
   for (const arr of Object.values(workflow?.selection?.optionSelections ?? {})) {
     for (const sid of ensureArray(arr)) priorSelections.add(sid);
   }
 
-  // Build a lookup of (sourceId → name) inside this group so the disabled
-  // tooltip can list missing prereqs by name.
-  const optionNameBySourceId = new Map();
-  for (const item of group.options) {
-    const sid = item.flags?.[MODULE_ID]?.sourceId;
-    if (sid) optionNameBySourceId.set(sid, item.name);
+  // Global sourceId → name lookup across every option group in the
+  // workflow, so a tree referencing an option from a different group
+  // (e.g. an invocation that requires Pact of the Blade — pacts live in
+  // their own group) can still produce a readable hint. Same-group
+  // entries are included automatically.
+  const optionItemNameBySourceId = {};
+  for (const grp of ensureArray(workflow?.optionGroups)) {
+    for (const opt of ensureArray(grp?.options)) {
+      const sid = opt.flags?.[MODULE_ID]?.sourceId;
+      if (sid) optionItemNameBySourceId[sid] = opt.name;
+    }
   }
+
+  // Build the lookup the formatter uses. classNameById is best-effort —
+  // only the class being imported is named confidently; subclass/spell/
+  // feature lookups stay empty since those identifiers aren't remapped
+  // at export time yet (see requirements-walker.js header note).
+  const formatLookups = {
+    optionItemNameBySourceId,
+    classNameById: workflow?.classItem
+      ? {
+        [workflow.classItem.flags?.[MODULE_ID]?.sourceId ?? ""]: workflow.classItem.name
+      }
+      : {}
+  };
+
+  // Snapshot the actor's ability-score values so the walker doesn't have
+  // to reach into the Foundry actor each render. Missing scores fall
+  // through to `manual` in the walker — defensive against partial
+  // actors mid-import.
+  const abilityScores = {};
+  for (const ability of ["str", "dex", "con", "int", "wis", "cha"]) {
+    const value = Number(actor?.system?.abilities?.[ability]?.value);
+    if (Number.isFinite(value)) abilityScores[ability] = value;
+  }
+  // Total character level if available — used for `level` leaves with
+  // `isTotal: true`. The class-being-imported level uses
+  // workflow.targetLevel (`level` leaves with `isTotal: false`).
+  const totalLevel = Number(actor?.system?.details?.level) || Number(workflow?.targetLevel) || 0;
+
+  // Pre-resolve the tree per option so we only build it once per render.
+  // Falls back to the legacy flat `requiresOptionIds` array when no tree
+  // is present — old exports shipped only the array, and the walker
+  // accepts either shape via treeFromFlatRequiresOptionIds.
+  const optionEntries = group.options.map((item) => {
+    const flags = item.flags?.[MODULE_ID] ?? {};
+    const tree = flags.requirementsTree
+      ?? treeFromFlatRequiresOptionIds(ensureArray(flags.requiresOptionIds));
+    return { item, tree };
+  });
 
   const result = await DauligorSequencePromptApp.prompt({
     title: `Choose ${group.maxSelections} Option${group.maxSelections === 1 ? "" : "s"}: ${group.name || group.featureName || "Class Options"} (Level ${workflow.targetLevel})`,
@@ -3322,17 +3372,30 @@ async function runOptionGroupStep({ workflow, group, sequence, progress }) {
     },
     renderBody: (app) => {
       const satisfied = new Set([...priorSelections, ...(app._state.selectedSourceIds ?? [])]);
+      const ctx = {
+        satisfied,
+        classLevel: Number(workflow?.targetLevel) || 0,
+        totalLevel,
+        abilityScores
+      };
       return `
       <div class="dauligor-sequence__option-list">
-        ${group.options.map((item) => {
+        ${optionEntries.map(({ item, tree }) => {
       const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
       const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
-      const requires = ensureArray(item.flags?.[MODULE_ID]?.requiresOptionIds);
-      const missing = requires.filter((sid) => !satisfied.has(sid));
-      const isDisabled = missing.length > 0;
-      const disabledHint = isDisabled
-        ? `Requires: ${missing.map((sid) => optionNameBySourceId.get(sid) || sid).join(', ')}`
-        : "";
+      const verdict = evaluateRequirementsTree(tree, ctx);
+      const isDisabled = verdict.blocked;
+      // The full tree summary is shown in-row as advisory text so the
+      // user sees "Requires: Pact of the Blade and Charisma 13+" up
+      // front, regardless of whether they've blocked themselves.
+      const fullRequirementsText = formatRequirementsTree(tree, formatLookups);
+      // Tooltip lists only the auto-failed leaves — the "what you need
+      // to fix RIGHT NOW" subset — so the user isn't spammed with
+      // manual prereqs they've already mentally satisfied.
+      const missingText = formatMissingLeaves(verdict.missingLeaves, formatLookups);
+      const disabledHint = isDisabled && missingText
+        ? `Requires: ${missingText}`
+        : (fullRequirementsText ? `Requires: ${fullRequirementsText}` : "");
       return `
             <label class="dauligor-sequence__option-row ${isDisabled ? "dauligor-sequence__option-row--disabled" : ""}" ${disabledHint ? `title="${foundry.utils.escapeHTML(disabledHint)}"` : ""}>
               <span class="dauligor-sequence__option-check">
@@ -3344,7 +3407,7 @@ async function runOptionGroupStep({ workflow, group, sequence, progress }) {
                   ${isDisabled ? "disabled" : ""}
                 >
               </span>
-              <span class="dauligor-sequence__option-name">${foundry.utils.escapeHTML(item.name)}${isDisabled ? ` <span style="color:var(--dauligor-text-muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;">· ${foundry.utils.escapeHTML(disabledHint)}</span>` : ""}</span>
+              <span class="dauligor-sequence__option-name">${foundry.utils.escapeHTML(item.name)}${fullRequirementsText ? ` <span style="color:var(--dauligor-text-muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;">· ${foundry.utils.escapeHTML(fullRequirementsText)}</span>` : ""}</span>
               <span class="dauligor-sequence__option-source">${foundry.utils.escapeHTML(sourceLabel)}</span>
             </label>
           `;
@@ -3362,17 +3425,30 @@ async function runOptionGroupStep({ workflow, group, sequence, progress }) {
           if (input.checked) selected.add(sourceId);
           else {
             selected.delete(sourceId);
-            // Cascade-uncheck dependents in this group whose prereqs
-            // are no longer all satisfied. Otherwise users could leave
-            // a dependent checked without its prereq.
-            const stillSatisfied = new Set([...priorSelections, ...selected]);
-            for (const it of group.options) {
-              const sid = it.flags?.[MODULE_ID]?.sourceId;
-              if (!sid || !selected.has(sid)) continue;
-              const reqs = ensureArray(it.flags?.[MODULE_ID]?.requiresOptionIds);
-              if (reqs.some((r) => !stillSatisfied.has(r))) {
-                selected.delete(sid);
-                stillSatisfied.delete(sid);
+            // Cascade-uncheck dependents in this group whose
+            // requirements no longer evaluate cleanly. Re-walks each
+            // selected option's tree against the post-uncheck
+            // satisfied set; anything that newly blocks gets pulled.
+            // Loops until the set is stable so an A→B→C dependency
+            // chain unravels in one pass.
+            let changed = true;
+            while (changed) {
+              changed = false;
+              const stillSatisfied = new Set([...priorSelections, ...selected]);
+              const innerCtx = {
+                satisfied: stillSatisfied,
+                classLevel: Number(workflow?.targetLevel) || 0,
+                totalLevel,
+                abilityScores
+              };
+              for (const { item, tree } of optionEntries) {
+                const sid = item.flags?.[MODULE_ID]?.sourceId;
+                if (!sid || !selected.has(sid)) continue;
+                const verdict = evaluateRequirementsTree(tree, innerCtx);
+                if (verdict.blocked) {
+                  selected.delete(sid);
+                  changed = true;
+                }
               }
             }
           }

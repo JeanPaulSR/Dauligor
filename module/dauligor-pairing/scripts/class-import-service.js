@@ -1599,15 +1599,23 @@ function createSemanticOptionItem(optionItem, context) {
   // Back-compat: old exports shipped a flat `requiresOptionIds` array;
   // new exports (post 2026-05-10 requirements-tree migration) ship
   // `requirementsTree` instead. We forward whichever is present so the
-  // importer's option-picker can read either shape during the rollover.
-  // TODO(importer): replace the flat-array gate in importer-app.js with
-  // a recursive walk of `requirementsTree` for show-but-mark-unmet UX.
-  // See requirements_tree migration commit + AGENTS.md for the plan.
+  // importer's option-picker (runOptionGroupStep) can read either
+  // shape — the picker prefers the tree and falls back to the flat
+  // array via `treeFromFlatRequiresOptionIds()` in
+  // requirements-walker.js.
   if (Array.isArray(optionItem?.requiresOptionIds) && optionItem.requiresOptionIds.length) {
     flags.requiresOptionIds = [...optionItem.requiresOptionIds];
   }
   if (optionItem?.requirementsTree) {
     flags.requirementsTree = optionItem.requirementsTree;
+  }
+  // Flat string-prereq carried forward for back-compat. New exports
+  // embed this as a `string` leaf inside the tree (see editor's
+  // seedTreeFromFlatColumns), but legacy bundles need the raw column
+  // so the importer can still surface "Member of the Crimson Order"
+  // style narrative gates in the picker hint.
+  if (trimString(optionItem?.stringPrerequisite)) {
+    flags.stringPrerequisite = optionItem.stringPrerequisite;
   }
   // Tagged at export time when the granting ItemChoice/ItemGrant
   // advancement declares a Uses Feature. The bridge's post-embed pass
@@ -5945,6 +5953,16 @@ function normalizeSemanticFeatureSubtype(label) {
 }
 
 function buildSemanticOptionRequirement(optionItem, context, feature = null) {
+  // Prefer the rich text the editor produces from the option's
+  // requirementsTree (see src/lib/classExport.ts where
+  // `opt.requirements` is set to `formatRequirementText(remapped)`).
+  // That string includes class/level + every other authored prereq
+  // ("Warlock 5 and Pact of the Blade and Knows Booming Blade"),
+  // which is what Foundry's item card should display in
+  // `system.requirements`. Falls back to the simple "Warlock 5"
+  // construction for older bundles that predate the tree.
+  const rich = trimString(optionItem?.requirements);
+  if (rich) return rich;
   const className = trimString(context.classData?.name) || "Class";
   const featureLevel = Number(feature?.level ?? 0);
   const optionLevel = Number(optionItem?.levelPrerequisite ?? 0);
