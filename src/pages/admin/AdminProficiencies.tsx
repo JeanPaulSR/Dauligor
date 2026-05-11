@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Crosshair, Brain, Hammer, Settings, MessageCircle, HeartPulse, Skull, Star, Wand2 } from 'lucide-react';
+import { ShieldCheck, Crosshair, Brain, Hammer, Settings, MessageCircle, Skull, Star, Wand2 } from 'lucide-react';
 import SkillsEditor from '../compendium/SkillsEditor';
 import ToolsEditor from '../compendium/ToolsEditor';
 import WeaponsEditor from './WeaponsEditor';
@@ -7,9 +7,13 @@ import ArmorEditor from './ArmorEditor';
 import SimplePropertyEditor from './SimplePropertyEditor';
 import SpellcastingAdvancementManager from './SpellcastingAdvancementManager';
 
+// Status conditions + condition categories USED to live here. They moved
+// to /admin/statuses (StatusesEditor) which has the richer condition
+// editor anyway — see commit "Move conditions admin under /admin/statuses".
+
 export default function AdminProficiencies({ userProfile }: { userProfile: any }) {
   const [activeTab, setActiveTab] = useState<
-    'skills' | 'tools' | 'toolCategories' | 'weapons' | 'weaponCategories' | 'weaponProperties' | 'armor' | 'armorCategories' | 'languages' | 'languageCategories' | 'damageTypes' | 'conditions' | 'conditionCategories' | 'attributes' | 'spellcasting'
+    'skills' | 'tools' | 'toolCategories' | 'weapons' | 'weaponCategories' | 'weaponProperties' | 'armor' | 'armorCategories' | 'languages' | 'languageCategories' | 'damageTypes' | 'attributes' | 'spellcasting'
   >('skills');
 
   if (userProfile?.role !== 'admin') {
@@ -26,7 +30,7 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Proficiencies Manager</h1>
-          <p className="text-ink/60 font-serif italic">Define the core skills, tools, weapons, armor, languages, conditions, damage types, and attributes available in your game system.</p>
+          <p className="text-ink/60 font-serif italic">Define the core skills, tools, weapons, armor, languages, damage types, and attributes available in your game system.</p>
         </div>
       </div>
 
@@ -43,8 +47,6 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
           { id: 'languages', label: 'Languages', icon: MessageCircle },
           { id: 'languageCategories', label: 'Language Categories', icon: MessageCircle },
           { id: 'damageTypes', label: 'Damage Types', icon: Skull },
-          { id: 'conditions', label: 'Conditions', icon: HeartPulse },
-          { id: 'conditionCategories', label: 'Condition Categories', icon: HeartPulse },
           { id: 'attributes', label: 'Attributes', icon: Star },
           { id: 'spellcasting', label: 'Spellcasting', icon: Wand2 }
         ].map(tab => (
@@ -75,8 +77,6 @@ export default function AdminProficiencies({ userProfile }: { userProfile: any }
         {activeTab === 'languages' && <SimplePropertyEditor userProfile={userProfile} collectionName="languages" title="Language" descriptionText="Define the languages available to be selected in race, class, and background proficiencies." icon={MessageCircle} categoryCollectionName="languageCategories" categoryLabel="Language Category" />}
         {activeTab === 'languageCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="languageCategories" title="Language Category" descriptionText="Define broad language groups such as Common Tongues, Exotic Tongues, Secret Scripts, or other homebrew categories." icon={MessageCircle} />}
         {activeTab === 'damageTypes' && <SimplePropertyEditor userProfile={userProfile} collectionName="damageTypes" title="Damage Type" descriptionText="Categories of damage a creature can be immune or resistant to." icon={Skull} />}
-        {activeTab === 'conditions' && <SimplePropertyEditor userProfile={userProfile} collectionName="conditions" title="Condition" descriptionText="Categories of conditions a creature can be immune to." icon={HeartPulse} />}
-        {activeTab === 'conditionCategories' && <SimplePropertyEditor userProfile={userProfile} collectionName="conditionCategories" title="Condition Category" descriptionText="Groupings for status conditions surfaced as the badge next to each condition in the Active Effect picker (PHB Conditions, Combat States, Spell States, System Extras, or your own). Edit the seeded categories or add new ones; status_conditions.category_id references rows here." icon={HeartPulse} />}
         {activeTab === 'attributes' && <SimplePropertyEditor userProfile={userProfile} collectionName="attributes" title="Attribute" descriptionText="Define the core ability scores/attributes of the system." icon={Star} />}
         {activeTab === 'spellcasting' && <SpellcastingAdvancementManager userProfile={userProfile} />}
       </div>

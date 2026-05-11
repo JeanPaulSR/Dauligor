@@ -11,7 +11,8 @@ import { HeartPulse, Plus, Trash2, Download, Upload, X, Zap } from 'lucide-react
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
-import { Database, CloudOff } from 'lucide-react';
+import { Database, CloudOff, Layers } from 'lucide-react';
+import SimplePropertyEditor from './SimplePropertyEditor';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -285,6 +286,12 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
   // System Extras) — new categories authored after that show up here
   // automatically.
   const [categories, setCategories] = useState<ConditionCategoryRow[]>([]);
+
+  // Page tab. "conditions" = the rich condition form + list (the
+  // historical body of this page). "categories" = the SimplePropertyEditor
+  // for `conditionCategories`, moved here from AdminProficiencies so
+  // both halves of the status-condition stack live on /admin/statuses.
+  const [activeTab, setActiveTab] = useState<'conditions' | 'categories'>('conditions');
 
   const isAdmin = userProfile?.role === 'admin';
 
@@ -580,35 +587,77 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
             Define the status conditions available in your game — default D&amp;D 5e conditions,
             custom homebrew conditions, and imported Foundry condition types.
           </p>
-          <div className="flex items-center gap-2 pt-1">
-            <span className="text-[10px] font-bold uppercase tracking-widest border border-blue-500/30 bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">
-              {dnd5eCount} D&amp;D 5e
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-widest border border-gold/30 bg-gold/10 text-gold px-2 py-0.5 rounded">
-              {customCount} Custom / Imported
-            </span>
-          </div>
+          {activeTab === 'conditions' && (
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest border border-blue-500/30 bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">
+                {dnd5eCount} D&amp;D 5e
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-widest border border-gold/30 bg-gold/10 text-gold px-2 py-0.5 rounded">
+                {customCount} Custom / Imported
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="flex gap-2 shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowImport(true)}
-            className="border-gold/20 text-gold/70 hover:text-gold hover:bg-gold/10 gap-2 text-xs"
-          >
-            <Upload className="w-3.5 h-3.5" /> Import JSON
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSeedDefaults}
-            className="btn-primary gap-2 text-xs"
-          >
-            <Download className="w-3.5 h-3.5" /> Seed D&amp;D 5e Defaults
-          </Button>
-        </div>
+        {/* Top-right action buttons only apply to the Conditions tab —
+            the Categories tab's SimplePropertyEditor renders its own
+            Add affordance. */}
+        {activeTab === 'conditions' && (
+          <div className="flex gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowImport(true)}
+              className="border-gold/20 text-gold/70 hover:text-gold hover:bg-gold/10 gap-2 text-xs"
+            >
+              <Upload className="w-3.5 h-3.5" /> Import JSON
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSeedDefaults}
+              className="btn-primary gap-2 text-xs"
+            >
+              <Download className="w-3.5 h-3.5" /> Seed D&amp;D 5e Defaults
+            </Button>
+          </div>
+        )}
       </div>
 
+      {/* Tab strip — mirrors AdminProficiencies' visual style. Lets
+          authors flip between the rich Conditions editor and the
+          Categories SimplePropertyEditor without leaving the page. */}
+      <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-4">
+        {([
+          { id: 'conditions', label: 'Conditions', icon: HeartPulse },
+          { id: 'categories', label: 'Condition Categories', icon: Layers },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg transition-colors font-bold uppercase tracking-widest text-[10px] ${
+              activeTab === tab.id
+                ? 'bg-gold text-white shadow-sm'
+                : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
+            }`}
+          >
+            <tab.icon className="w-3.5 h-3.5" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Conditions tab body ──────────────────────────────── */}
+      {activeTab === 'categories' && (
+        <SimplePropertyEditor
+          userProfile={userProfile}
+          collectionName="conditionCategories"
+          title="Condition Category"
+          descriptionText="Groupings for status conditions surfaced as the badge next to each condition in the Active Effect picker (PHB Conditions, Combat States, Spell States, System Extras, or your own). Edit the seeded categories or add new ones; status_conditions.category_id references rows here."
+          icon={Layers}
+        />
+      )}
+
+      {activeTab === 'conditions' && (
       <div className="grid lg:grid-cols-3 gap-8">
 
         {/* ── Left: Form panel ────────────────────────────────────────────── */}
@@ -957,6 +1006,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
           )}
         </div>
       </div>
+      )}
 
       {/* ── Import JSON modal ───────────────────────────────────────────────── */}
       {showImport && (
