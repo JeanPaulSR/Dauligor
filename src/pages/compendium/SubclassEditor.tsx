@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
+import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
@@ -1297,35 +1298,26 @@ export default function SubclassEditor() {
         <DialogContent className="dialog-content max-w-[95vw] lg:max-w-6xl flex flex-col h-[90vh]">
           {editingFeature && (
             <>
-              <div className="p-6 pb-0 shrink-0 border-b border-gold/10">
-                <div className="flex gap-6 items-start">
-                  <div className="w-32 h-32 shrink-0">
-                    <ImageUpload
-                      storagePath="icons/features/"
-                      imageType="icon"
-                      compact
-                      currentImageUrl={editingFeature.iconUrl || ''}
-                      onUpload={(url) => setEditingFeature({ ...editingFeature, iconUrl: url })}
-                      className="w-full h-full"
-                    />
-                  </div>
-                  <div className="flex-1 space-y-2 pt-2 flex flex-col items-center">
-                    <input 
-                      value={editingFeature.name || ''} 
-                      onChange={e => setEditingFeature({...editingFeature, name: e.target.value})}
-                      className="w-full h-16 font-serif text-4xl tracking-tight text-center bg-transparent border border-transparent hover:border-gold/20 focus:border-gold/50 focus:bg-background/50 rounded outline-none text-gold transition-colors"
-                      placeholder="Feature Name"
-                      required
-                    />
+              <FeatureModalHero
+                iconUrl={editingFeature.iconUrl || ''}
+                onIconChange={(url) => setEditingFeature({ ...editingFeature, iconUrl: url })}
+                name={editingFeature.name || ''}
+                onNameChange={(name) => setEditingFeature({ ...editingFeature, name })}
+                required
+                tabs={['description', 'details', 'activities', 'effects', 'advancement']}
+                activeTab={featureTab}
+                onTabChange={setFeatureTab}
+                nameExtras={
+                  <>
                     <div className="flex justify-center transition-all">
                       <span className="text-xs text-ink/60 my-auto mr-1 select-none pointer-events-none">Level</span>
-                      <input 
+                      <input
                         type="number"
                         min="1"
                         max="20"
                         value={editingFeature.level || 1}
                         readOnly
-                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 outline-none pointer-events-none select-none opacity-80" 
+                        className="w-12 h-8 bg-transparent border border-transparent rounded text-left text-xs text-ink/60 px-2 py-0 outline-none pointer-events-none select-none opacity-80"
                       />
                     </div>
                     <ReferenceSheetDialog
@@ -1334,28 +1326,9 @@ export default function SubclassEditor() {
                       triggerClassName="mt-2"
                       context={subclassReferenceContext}
                     />
-                  </div>
-                </div>
-
-                <div className="flex mt-6 relative pb-4">
-                  <div className="absolute left-[50%] ml-[-12px] bottom-[-16px] w-6 h-6 bg-card flex items-center justify-center text-gold/40 text-sm rounded-full z-10 border border-gold/10">
-                    <Zap className="w-3 h-3" />
-                  </div>
-                  <Tabs value={featureTab} onValueChange={setFeatureTab} className="w-full bg-transparent border-none">
-                    <TabsList className="bg-transparent border-none h-auto p-0 flex justify-between w-full">
-                      {['description', 'details', 'activities', 'effects', 'advancement'].map(tab => (
-                        <TabsTrigger 
-                          key={tab} 
-                          value={tab} 
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-gold data-[state=active]:border-b-2 data-[state=active]:border-gold rounded-none h-10 px-0 label-text transition-all opacity-60 data-[state=active]:opacity-100 flex-1 hover:text-gold/80"
-                        >
-                          {tab}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
-                </div>
-              </div>
+                  </>
+                }
+              />
 
               <div className={`flex-1 min-h-0 p-6 bg-background/50 ${featureTab === 'description' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                 {featureTab === 'description' && (

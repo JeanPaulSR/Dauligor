@@ -15,18 +15,17 @@ import {
   Save,
   Plus,
   Edit,
-  Zap,
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import EntityPicker from '../../components/ui/EntityPicker';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import AdvancementManager from '../../components/compendium/AdvancementManager';
+import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 
 export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -480,54 +479,19 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         <DialogContent className="dialog-content max-w-[95vw] lg:max-w-6xl flex flex-col h-[90vh]">
           {editingItem && (
             <>
-              {/* Hero header — big icon + centered serif name, mirrors the
-                  ClassEditor feature modal so the option editor (Maneuver /
-                  Invocation / Infusion) feels identical to a class feature.
-                  Sits outside the tab content so icon + name stay visible
-                  across every tab. */}
-              <div className="p-6 pb-0 shrink-0 border-b border-gold/10">
-                <div className="flex gap-6 items-start">
-                  <div className="w-32 h-32 shrink-0">
-                    <ImageUpload
-                      storagePath="icons/features/"
-                      imageType="icon"
-                      compact
-                      currentImageUrl={editingItem?.iconUrl || ''}
-                      onUpload={(url) => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), iconUrl: url }))}
-                      className="w-full h-full"
-                    />
-                  </div>
-                  <div className="flex-1 space-y-2 pt-2 flex flex-col items-center">
-                    <input
-                      value={editingItem?.name || ''}
-                      onChange={e => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), name: e.target.value }))}
-                      className="w-full h-16 font-serif text-4xl tracking-tight text-center bg-transparent border border-transparent hover:border-gold/20 focus:border-gold/50 focus:bg-background/50 rounded outline-none text-gold transition-colors"
-                      placeholder="Option Name"
-                      required
-                      autoFocus
-                    />
-                  </div>
-                </div>
+              <FeatureModalHero
+                iconUrl={editingItem?.iconUrl || ''}
+                onIconChange={(url) => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), iconUrl: url }))}
+                name={editingItem?.name || ''}
+                onNameChange={(name) => setEditingItem((prev: any) => ({ ...(prev || { levelPrerequisite: 0, isRepeatable: false }), name }))}
+                namePlaceholder="Option Name"
+                required
+                autoFocusName
+                tabs={['description', 'details', 'activities', 'effects', 'advancement']}
+                activeTab={optionTab}
+                onTabChange={(v) => setOptionTab(v as any)}
+              />
 
-                <div className="flex mt-6 relative pb-4">
-                  <div className="absolute left-[50%] ml-[-12px] bottom-[-16px] w-6 h-6 bg-card flex items-center justify-center text-gold/40 text-sm rounded-full z-10 border border-gold/10">
-                    <Zap className="w-3 h-3" />
-                  </div>
-                  <Tabs value={optionTab} onValueChange={(v) => setOptionTab(v as any)} className="w-full bg-transparent border-none">
-                    <TabsList className="bg-transparent border-none h-auto p-0 flex justify-between w-full">
-                      {(['description', 'details', 'activities', 'effects', 'advancement'] as const).map(tab => (
-                        <TabsTrigger
-                          key={tab}
-                          value={tab}
-                          className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-gold data-[state=active]:border-b-2 data-[state=active]:border-gold rounded-none h-10 px-0 label-text transition-all opacity-60 data-[state=active]:opacity-100 flex-1 hover:text-gold/80"
-                        >
-                          {tab}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
-                </div>
-              </div>
 
               <form onSubmit={handleSaveItem} className={`flex-1 min-h-0 flex flex-col bg-background/50 ${optionTab === 'description' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                 <div className="flex-1 min-h-0 p-6 space-y-4">
