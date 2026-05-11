@@ -25,7 +25,7 @@ A "group" is a pool of mutually-exclusive (or stacking, depending on `is_repeata
 | Table | Role |
 |---|---|
 | `unique_option_groups` | Group identity, description, source, `class_ids` (JSON) restricting which classes see it |
-| `unique_option_items` | **Full feat-shape feature documents** belonging to groups. `group_id` FK + the standard feat columns (`feature_type`, `subtype`, `requirements`, `image_url`, `uses_max/spent/recovery`, `properties`, `activities`, `effects`, `advancements`, `tags`, `quantity_column_id`, `scaling_column_id`) + option-specific extras (`level_prerequisite`, `string_prerequisite`, `is_repeatable`, `class_ids`, `requires_option_ids`). Migrations `20260508-1951_unique_option_items_requires.sql` (Required Options chain) and `20260509-1356_unique_option_items_feat_shape.sql` (the rest). |
+| `unique_option_items` | **Full feat-shape feature documents** belonging to groups. `group_id` FK + the standard feat columns (`feature_type`, `subtype`, `image_url`, `uses_max/spent/recovery`, `properties`, `activities`, `effects`, `advancements`, `tags`, `quantity_column_id`, `scaling_column_id`) + option-specific extras (`level_prerequisite`, `level_prereq_is_total`, `string_prerequisite`, `is_repeatable`, `class_ids`, `requirements_tree`). Migrations: `20260509-1356_unique_option_items_feat_shape.sql` (feat-shape body), `20260510-2152_requirements_tree.sql` (compound requirements + `level_prereq_is_total` total-vs-class-level flag — also dropped `requires_option_ids` and the redundant `requirements` text column). |
 
 Schema: [../database/structure/](../database/structure/), [../_archive/migration-details/phase-1-foundation.md](../_archive/migration-details/phase-1-foundation.md).
 
@@ -44,17 +44,53 @@ Items are managed in a Dialog modal with a five-tab layout matching the ClassEdi
 | Tab | Fields |
 |---|---|
 | **Description** | Icon, Name, Markdown body |
-| **Details** | Source, Page, `Feature Type` (free-form, e.g. `"Maneuver"`/`"EldritchInvocation"`/`"Infusion"`; matches dnd5e v5.x `system.type.subtype` per [actor-spell-flag-schema.md](../../module/dauligor-pairing/docs/actor-spell-flag-schema.md)), Subtype, Requirements, Level Prereq, **Required Options** (chained sibling prereqs), String Prereq, Repeatable |
+| **Details** | Source, Page, **Modular Option Group** (read-only display of the parent group's name; drives dnd5e v5.x `system.type.subtype` on export so authors don't have to remember to fill in `featureType`), Subtype, Level Prereq + **Total character level** checkbox, String Prereq, **Compound Requirements** (the full requirements tree — see below), Repeatable |
 | **Activities** | `<ActivityEditor />` — same component class features use |
-| **Effects** | `<ActiveEffectEditor />` — same |
+| **Effects** | `<ActiveEffectEditor />` — see [active-effects.md](active-effects.md) for the autocomplete + status picker + categories wiring |
 | **Advancement** | `<AdvancementManager />` standalone-mode — option items can have their own advancements (rare; used by Invocations granting spells via `ItemGrant`) |
-
-The Required Options picker is gated by a master checkbox so the picker stays compact when no prereqs are set. Selected sibling option IDs render as chips on top, plus a searchable scrollable list below. The picker uses the shared [`<EntityPicker />`](../../src/components/ui/EntityPicker.tsx) component.
 
 Source: [src/pages/compendium/UniqueOptionGroupEditor.tsx](../../src/pages/compendium/UniqueOptionGroupEditor.tsx).
 
+### Compound Requirements tree
+
+Migration `20260510-2152_requirements_tree.sql` replaced the flat `requires_option_ids` array and the free-text `requirements` column with a single JSON tree column (`requirements_tree`) capturing arbitrary And/Or/Xor compositions of typed leaves. This unblocks compound prereqs like *Ultimate Pact Weapon (UA) = Pact of the Blade **AND** Superior Pact Weapon*.
+
+**Leaf vocabulary** (see [`src/lib/requirements.ts`](../../src/lib/requirements.ts) for the full type definition):
+
+| Leaf type | Payload | Purpose |
+|---|---|---|
+| `levelInClass` | `classId`, `minLevel` | "Warlock 5+" |
+| `class` | `classId` | "must have any levels in Warlock" |
+| `subclass` | `subclassId` | "Battle Master" |
+| `optionItem` | `itemId`, optional `groupId` | "must have picked Pact of the Blade" — most common leaf |
+| `feature` | `featureId` | "must already have feature X" |
+| `spell` | `spellId` | "knows Cure Wounds" |
+| `spellRule` | `spellRuleId` | "knows any spell matching this Spell Rule" |
+| `abilityScore` | `ability`, `min` | "STR 13 or higher" |
+| `proficiency` | `category` (weapon/armor/tool/skill/language), `identifier` | "Weapon proficiency: longsword" |
+| `level` | `minLevel`, `isTotal` | Character-level or total-level gate (option items also have a flat `level_prerequisite` column for the common case) |
+
+**Group nodes** combine children with `all` (AND), `any` (OR), or `one` (XOR — exactly one). Groups can nest.
+
+**Editor**: [`<RequirementsEditor />`](../../src/components/compendium/RequirementsEditor.tsx) — a recursive card-with-children component matching the activity/effect group pattern. Used by `UniqueOptionGroupEditor` today; will be ported to the feats editor in a follow-up.
+
+**Export**: The exporter walks the tree, remaps the `optionItem.itemId` PKs to canonical source-ids (so the module recognises them at import time), and renders the result into dnd5e's `system.requirements` free-text via `formatRequirementText()`. The structured tree is also forwarded to the module as `flags.dauligor-pairing.requirementsTree` so a future importer pass can do show-but-mark-unmet enforcement in the option-picker (the current importer hard-blocks on the legacy `requiresOptionIds` flag only — that's the next module-side task).
+
+**Drift-managed pair**: `src/lib/requirements.ts` ↔ `api/_lib/_requirements.ts` — same reason as the `_classExport.ts` pair, the Vercel function bundle can't import across the `api/`/`src/` boundary. Keep them in sync.
+
+### Total character level vs class level
+
+Most option items gate on level — typically "available at level 5" of the importing class. The flat `level_prerequisite` column carries this number; `level_prereq_is_total` (boolean, default 0) flips the interpretation:
+- `0` (default) — the gate checks the *importing class's* level (Battle Master Maneuvers' "level 5" = Fighter 5).
+- `1` — the gate checks *total character level* (rare; some feat-shape options need character-level 4 regardless of class).
+
+Surfaced in the editor as a "Total character level (default: class level)" checkbox under the Level Prerequisite input.
+
 ### Linked-feature concept (removed)
 A `feature_id` FK on `unique_option_items` once let an option point at a feature row for content. **Dropped** in `20260509-1356_unique_option_items_feat_shape.sql` — option items now carry their own mechanical content end-to-end (activities / effects / advancements / uses), so there's nothing to delegate. If a class feature wants to grant shared option content, it does so via the option group itself in an `ItemChoice` / `ItemGrant` advancement, not by linking a single feature row.
+
+### `requires_option_ids` + `requirements` text (removed)
+The flat `requires_option_ids` array (sibling-option AND gate) and the redundant free-text `requirements` column were both **dropped** in `20260510-2152_requirements_tree.sql` and folded into the new `requirements_tree` JSON column (see Compound Requirements tree above). Existing rows' `requires_option_ids` arrays were auto-backfilled into the tree as a top-level `all` group of `optionItem` leaves; the `requirements` text was promoted onto `string_prerequisite` where that column was empty.
 
 ### Class-restriction multi-select
 Group Details has a searchable multi-select for class restrictions: chip display for selected classes + search input + scrollable filtered list with gold checkboxes. (Currently inline; planned swap to `<EntityPicker />` is tracked as cleanup.)
