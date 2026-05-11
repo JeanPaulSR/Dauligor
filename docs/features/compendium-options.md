@@ -111,7 +111,7 @@ A `feature_id` FK on `unique_option_items` once let an option point at a feature
 The flat `requires_option_ids` array (sibling-option AND gate) and the redundant free-text `requirements` column were both **dropped** in `20260510-2152_requirements_tree.sql` and folded into the new `requirements_tree` JSON column (see Compound Requirements tree above). Existing rows' `requires_option_ids` arrays were auto-backfilled into the tree as a top-level `all` group of `optionItem` leaves; the `requirements` text was promoted onto `string_prerequisite` where that column was empty.
 
 ### Class-restriction multi-select
-Group Details has a searchable multi-select for class restrictions: chip display for selected classes + search input + scrollable filtered list with gold checkboxes. (Currently inline; planned swap to `<EntityPicker />` is tracked as cleanup.)
+Group Details uses the shared `<EntityPicker />` for class restrictions — chip display for selected classes + search input + scrollable filtered checkbox list, identical to the picker used for damage types, status conditions, and the other multi-select surfaces in the compendium. `EntityPicker` was originally extracted from this exact widget; the call site was migrated over after the picker had matured. Empty list = group visible to all classes in the advancement editor.
 
 ### Cross-class option discovery
 `AdvancementManager.tsx` (the advancement editor) has an inline "Search all option groups" panel for cross-class discovery — for example, a Wizard subclass that grants access to Warlock invocations. The class restriction is then implicit on the parent group (the Warlock invocations group is `class_ids: [warlock]`, but the Wizard's advancement can still grant items from it).
