@@ -2,7 +2,7 @@
   "id": "dauligor-pairing",
   "title": "Dauligor Pairing",
   "description": "Foundry VTT v13 bridge module for Dauligor research, a Foundry-side importer window, class import browsing, research bundles, and test imports.",
-  "version": "0.5.58",
+  "version": "0.5.59",
   "compatibility": {
     "minimum": "13",
     "verified": "13"

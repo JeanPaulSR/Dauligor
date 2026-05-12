@@ -14,3 +14,4 @@ export const IMPORTER_TEMPLATE = "modules/dauligor-pairing/templates/importer-sh
 export const CLASS_BROWSER_TEMPLATE = "modules/dauligor-pairing/templates/class-browser-shell.hbs";
 export const CLASS_OPTIONS_TEMPLATE = "modules/dauligor-pairing/templates/class-options-shell.hbs";
 export const SPELL_PREPARATION_TEMPLATE = "modules/dauligor-pairing/templates/spell-preparation-shell.hbs";
+export const FEATURE_MANAGER_TEMPLATE = "modules/dauligor-pairing/templates/feature-manager-shell.hbs";

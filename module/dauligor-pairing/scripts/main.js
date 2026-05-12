@@ -1,5 +1,6 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
 import { exportApplicationWindow, exportSpellFolder } from "./export-service.js";
+import { openFeatureManager } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
 import { openSpellPreparationManager } from "./spell-preparation-app.js";
@@ -14,6 +15,7 @@ Hooks.once("init", () => {
   registerLauncherControl();
   registerSettingsUiButtons();
   registerSidebarButtons();
+  registerRestBarControls();
 });
 
 Hooks.once("ready", () => {
@@ -171,6 +173,63 @@ function registerSheetControls() {
   });
 }
 
+/**
+ * Inject a Dauligor Feature Manager button into the dnd5e 5.x character
+ * header's rest-button bar (next to Short Rest / Long Rest), so the
+ * primary entry point is a visible icon in the sheet body rather than
+ * something buried behind the kebab/header-controls menu.
+ *
+ * Anchor: the dnd5e character header renders
+ *   `.sheet-header-buttons > button.{long|short}-rest.gold-button`
+ * inside `systems/dnd5e/templates/actors/character-header.hbs`. We
+ * append a sibling `<button class="gold-button">` so it picks up
+ * dnd5e's native styling automatically.
+ *
+ * Hooks: dnd5e 5.x sheets extend `ApplicationV2Mixin(ActorSheetV2)`,
+ * so the legacy `renderActorSheet` hook never fires. AppV2's render
+ * hook chain runs once per class in the prototype chain — we listen
+ * on the dnd5e-specific class hooks (most specific first) plus
+ * `renderApplicationV2` as a backstop.
+ */
+function registerRestBarControls() {
+  const inject = (appLike, htmlLike) =>
+    injectFeatureManagerRestButton(appLike, resolveHookRoot(htmlLike));
+  Hooks.on("renderCharacterActorSheet", inject);
+  Hooks.on("renderBaseActorSheet", inject);
+  Hooks.on("renderApplicationV2", inject);
+}
+
+function injectFeatureManagerRestButton(appLike, root) {
+  const actor = resolveActorDocument(appLike?.document ?? appLike?.actor ?? appLike);
+  if (!actor || actor.type !== "character") return;
+  if (!root) return;
+
+  // Search both the immediate hook-root and the broader window — AppV2
+  // hooks sometimes pass `.window-content` instead of the outer
+  // application element. `.sheet-header-buttons` lives inside the
+  // window content either way, but widen the search to be safe.
+  const restBar = root.querySelector?.(".sheet-header-buttons")
+    ?? root.closest?.(".application")?.querySelector?.(".sheet-header-buttons")
+    ?? (appLike?.id ? document.querySelector(`#${appLike.id} .sheet-header-buttons`) : null);
+  if (!restBar) return;
+  if (restBar.querySelector(`[data-${MODULE_ID}-feature-manager]`)) return;
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "gold-button dauligor-rest-bar-button";
+  button.setAttribute(`data-${MODULE_ID}-feature-manager`, "true");
+  button.setAttribute("aria-label", "Dauligor Feature Manager");
+  button.setAttribute("data-tooltip", "Dauligor Feature Manager");
+  button.innerHTML = `<i class="fas fa-toolbox" inert></i>`;
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await openFeatureManager(actor, { scope: "long-rest" });
+  });
+  restBar.appendChild(button);
+  log(`Feature Manager rest-bar button injected for "${actor.name}"`);
+}
+
 function registerLauncherControl() {
   Hooks.on("getHeaderControlsSettings", (_app, controls) => {
     injectControl(controls, {
@@ -316,6 +375,12 @@ async function openActorToolsHub(actorLike) {
         label: "Prepare Spells",
         icon: "fas fa-book-open",
         callback: async () => openSpellPreparationManager(actor)
+      },
+      {
+        action: "feature-manager",
+        label: "Feature Manager",
+        icon: "fas fa-toolbox",
+        callback: async () => openFeatureManager(actor, { scope: "long-rest" })
       },
       {
         action: "polymorpher",
