@@ -3460,6 +3460,17 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
   progress.markStep(stepId, "active", `Choose ${group.maxSelections} option(s) from ${group.name || group.featureName || "this pool"}.`);
   progress.setStatus(`Waiting for ${group.name || group.featureName || "class option"} choices...`);
 
+  // ─── Setup: lookups + context ──────────────────────────────────────────
+  // The original picker was a flat checkbox list. Players need more
+  // signal:
+  //   - what does this option *do*  (description)
+  //   - what does it require        (prereqs)
+  //   - is it gated and by what     (level / ability / another option)
+  //   - is it already mine          (greyed-out selected state)
+  // The redesign below lays the dialog out as list + detail panel,
+  // groups options by their level prerequisite under headers, and adds
+  // status icons + clickable "jump to prereq" navigation.
+
   // Source-ids the user has already picked in earlier option-group prompts
   // this import. Combined with the in-flight selections inside this prompt
   // they form the "satisfied" set the requirements walker checks
@@ -3469,23 +3480,35 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     for (const sid of ensureArray(arr)) priorSelections.add(sid);
   }
 
-  // Global sourceId → name lookup across every option group in the
-  // workflow, so a tree referencing an option from a different group
-  // (e.g. an invocation that requires Pact of the Blade — pacts live in
-  // their own group) can still produce a readable hint. Same-group
-  // entries are included automatically.
-  const optionItemNameBySourceId = {};
+  // Source-ids of options ALREADY on the actor from a prior import — used
+  // to grey-out (and prevent re-picking) selections the actor already has
+  // on the books. The user-facing rule is "already selected = greyed",
+  // which on a re-import surfaces as the old picks being locked in.
+  const previouslyOwnedSourceIds = new Set();
+  for (const item of ensureArray(actor?.items)) {
+    const sid = item?.flags?.[MODULE_ID]?.sourceId;
+    if (sid) previouslyOwnedSourceIds.add(sid);
+  }
+
+  // Global sourceId → option-record lookup across every option group in
+  // the workflow. Used by the detail panel when a prereq points at an
+  // option that lives in a different group (e.g. a Warlock invocation
+  // referencing Pact of the Blade — pacts are in their own group).
+  const allOptionsBySourceId = {};
   for (const grp of ensureArray(workflow?.optionGroups)) {
     for (const opt of ensureArray(grp?.options)) {
       const sid = opt.flags?.[MODULE_ID]?.sourceId;
-      if (sid) optionItemNameBySourceId[sid] = opt.name;
+      if (sid) allOptionsBySourceId[sid] = { item: opt, group: grp };
     }
   }
+  const optionItemNameBySourceId = Object.fromEntries(
+    Object.entries(allOptionsBySourceId).map(([sid, entry]) => [sid, entry.item.name])
+  );
 
-  // Build the lookup the formatter uses. classNameById is best-effort —
-  // only the class being imported is named confidently; subclass/spell/
-  // feature lookups stay empty since those identifiers aren't remapped
-  // at export time yet (see requirements-walker.js header note).
+  // Build the format-lookup the walker uses for human-readable
+  // requirement text. classNameById is best-effort — only the class
+  // being imported has a confident name; subclass/spell/feature
+  // identifiers aren't remapped at export time yet.
   const formatLookups = {
     optionItemNameBySourceId,
     classNameById: workflow?.classItem
@@ -3496,83 +3519,433 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
   };
 
   // Snapshot the actor's ability-score values so the walker doesn't have
-  // to reach into the Foundry actor each render. Missing scores fall
-  // through to `manual` in the walker — defensive against partial
-  // actors mid-import.
+  // to reach into the Foundry actor each render.
   const abilityScores = {};
   for (const ability of ["str", "dex", "con", "int", "wis", "cha"]) {
     const value = Number(actor?.system?.abilities?.[ability]?.value);
     if (Number.isFinite(value)) abilityScores[ability] = value;
   }
-  // Total character level if available — used for `level` leaves with
-  // `isTotal: true`. The class-being-imported level uses
-  // workflow.targetLevel (`level` leaves with `isTotal: false`).
   const totalLevel = Number(actor?.system?.details?.level) || Number(workflow?.targetLevel) || 0;
+  const classLevel = Number(workflow?.targetLevel) || 0;
 
-  // Pre-resolve the tree per option so we only build it once per render.
-  // Falls back to the legacy flat `requiresOptionIds` array when no tree
-  // is present — old exports shipped only the array, and the walker
-  // accepts either shape via treeFromFlatRequiresOptionIds.
-  const optionEntries = group.options.map((item) => {
+  // ─── Enrich each option with display data ──────────────────────────────
+  // Pre-compute everything we need per option so each render pass is
+  // a pure data → HTML transformation. The expensive parts (tree
+  // resolution, HTML enrichment) only happen here.
+  const inGroupSourceIds = new Set(
+    ensureArray(group.options).map((o) => o?.flags?.[MODULE_ID]?.sourceId).filter(Boolean)
+  );
+
+  const enrichedEntries = ensureArray(group.options).map((item, idx) => {
     const flags = item.flags?.[MODULE_ID] ?? {};
     const tree = flags.requirementsTree
       ?? treeFromFlatRequiresOptionIds(ensureArray(flags.requiresOptionIds));
-    return { item, tree };
+    const sourceId = flags.sourceId ?? "";
+    const levelGate = Number(flags.levelPrerequisite ?? 0) || 0;
+    const description = String(item.system?.description?.value ?? "").trim();
+    const img = String(item.img ?? "icons/svg/aura.svg");
+    return {
+      idx,
+      item,
+      tree,
+      sourceId,
+      levelGate,
+      description,
+      img,
+      sourceLabel: deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source)
+    };
   });
+
+  // Group entries by levelGate ascending. Within a group, preserve
+  // editor authoring order (the source array's index).
+  const entriesByLevel = new Map();
+  for (const e of enrichedEntries) {
+    if (!entriesByLevel.has(e.levelGate)) entriesByLevel.set(e.levelGate, []);
+    entriesByLevel.get(e.levelGate).push(e);
+  }
+  const sortedLevels = [...entriesByLevel.keys()].sort((a, b) => a - b);
+
+  // Default focused option = first non-disabled in the list. Falls back
+  // to the very first option if everything's locked (still want SOMETHING
+  // displayed in the detail panel).
+  const initialFocus = enrichedEntries[0]?.sourceId ?? null;
+
+  // ─── Render helpers ────────────────────────────────────────────────────
+
+  const escapeHTML = (s) => foundry.utils.escapeHTML(String(s ?? ""));
+
+  // Compute per-option status given the current selection / ctx state.
+  // Returns:
+  //   - state: "selected" | "owned" | "blocked-prereq" | "blocked-level"
+  //            | "blocked-ability" | "available"
+  //   - blockReasonText: short hint for the row badge
+  //   - blockedByOptionSourceId: when the blocker is an in-group option,
+  //     its sourceId so the row can jump there
+  const computeOptionStatus = (entry, selectedSet, ctx) => {
+    if (previouslyOwnedSourceIds.has(entry.sourceId)) return { state: "owned" };
+    if (selectedSet.has(entry.sourceId)) return { state: "selected" };
+    const verdict = evaluateRequirementsTree(entry.tree, ctx);
+    if (!verdict.blocked) return { state: "available", verdict };
+
+    // Identify the dominant blocker so the row badge / icon is
+    // specific. Order: missing in-group option > level > ability >
+    // generic. (We don't distinguish other leaves into specific
+    // states because the walker treats them as manual.)
+    const optionLeaf = verdict.missingLeaves.find(
+      (l) => l.type === "optionItem" && inGroupSourceIds.has(l.itemId)
+    );
+    if (optionLeaf) {
+      return {
+        state: "blocked-prereq",
+        verdict,
+        blockedByOptionSourceId: optionLeaf.itemId,
+        blockReasonText: optionItemNameBySourceId[optionLeaf.itemId] ?? "another option"
+      };
+    }
+    const levelLeaf = verdict.missingLeaves.find((l) => l.type === "level" || l.type === "levelInClass");
+    if (levelLeaf) {
+      return {
+        state: "blocked-level",
+        verdict,
+        blockReasonText: levelLeaf.type === "levelInClass"
+          ? `${formatLookups.classNameById?.[levelLeaf.classId] ?? "class"} ${levelLeaf.minLevel}+`
+          : `Level ${levelLeaf.minLevel}+`
+      };
+    }
+    const abilityLeaf = verdict.missingLeaves.find((l) => l.type === "abilityScore");
+    if (abilityLeaf) {
+      return {
+        state: "blocked-ability",
+        verdict,
+        blockReasonText: `${abilityLeaf.ability.toUpperCase()} ${abilityLeaf.min}+`
+      };
+    }
+    return { state: "blocked-prereq", verdict, blockReasonText: "Locked" };
+  };
+
+  // Map a status state to its icon char and color hint. Inline so the
+  // CSS file doesn't have to know about every state separately.
+  const STATUS_VISUALS = {
+    available: { icon: "○", title: "Available" },
+    selected: { icon: "✓", title: "Selected" },
+    owned: { icon: "●", title: "Already on actor" },
+    "blocked-prereq": { icon: "🔗", title: "Requires another option" },
+    "blocked-level": { icon: "⬆", title: "Level requirement not met" },
+    "blocked-ability": { icon: "💪", title: "Ability score not met" }
+  };
+
+  const renderRow = (entry, app, ctx) => {
+    const selectedSet = new Set([
+      ...priorSelections,
+      ...(app._state.selectedSourceIds ?? [])
+    ]);
+    const status = computeOptionStatus(entry, selectedSet, ctx);
+    const visual = STATUS_VISUALS[status.state] ?? STATUS_VISUALS.available;
+
+    // "owned" and "blocked-*" disable the checkbox. "selected" is checked
+    // but stays interactive (so the user can uncheck mid-prompt).
+    const isOwned = status.state === "owned";
+    const isChecked = status.state === "selected" || isOwned;
+    const isCheckboxDisabled = isOwned || status.state.startsWith("blocked");
+
+    // Visual class: greyed-out for owned (already on actor) AND
+    // available-but-already-in-this-prompt (matches the user's "greyed
+    // out = something already selected" rule). Blocked uses a separate
+    // muted-but-not-greyed style so it stands out as "fixable".
+    const rowClass = [
+      "dauligor-option-picker__row",
+      isOwned && "dauligor-option-picker__row--owned",
+      status.state === "selected" && "dauligor-option-picker__row--selected",
+      status.state.startsWith("blocked") && "dauligor-option-picker__row--blocked",
+      entry.sourceId === app._state.focusedSourceId && "dauligor-option-picker__row--focused",
+      app._state.highlightSourceId === entry.sourceId && "dauligor-option-picker__row--highlighted"
+    ].filter(Boolean).join(" ");
+
+    const badgeText = isOwned
+      ? "Owned"
+      : status.state === "selected"
+        ? "Selected"
+        : status.blockReasonText
+          ? `Requires: ${status.blockReasonText}`
+          : "";
+
+    return `
+      <div
+        class="${rowClass}"
+        data-option-source-id="${escapeHTML(entry.sourceId)}"
+        data-action="focus-option"
+        title="${escapeHTML(visual.title)}"
+      >
+        <input
+          type="checkbox"
+          class="dauligor-option-picker__row-check"
+          data-action="toggle-option"
+          data-option-source-id="${escapeHTML(entry.sourceId)}"
+          ${isChecked ? "checked" : ""}
+          ${isCheckboxDisabled ? "disabled" : ""}
+        >
+        <img class="dauligor-option-picker__row-img" src="${escapeHTML(entry.img)}" alt="" />
+        <div class="dauligor-option-picker__row-text">
+          <div class="dauligor-option-picker__row-name">${escapeHTML(entry.item.name)}</div>
+          ${badgeText ? `<div class="dauligor-option-picker__row-badge">${escapeHTML(badgeText)}</div>` : ""}
+        </div>
+        <div class="dauligor-option-picker__row-status" aria-label="${escapeHTML(visual.title)}">${visual.icon}</div>
+      </div>
+    `;
+  };
+
+  const renderLevelHeader = (level, count) => {
+    const label = level <= 0
+      ? "Available Immediately"
+      : `Available from Level ${level}`;
+    return `
+      <div class="dauligor-option-picker__level-header">
+        <span>${escapeHTML(label)}</span>
+        <span class="dauligor-option-picker__level-count">${count}</span>
+      </div>
+    `;
+  };
+
+  // Render the detail panel for the focused option. Shows the
+  // description, the requirements summary (with clickable "jump"
+  // badges for in-group prereqs and "view" badges for out-of-group
+  // prereqs), and the source label.
+  const renderDetailPanel = (entry, app, ctx) => {
+    if (!entry) {
+      return `<div class="dauligor-option-picker__detail-empty">No option focused. Click a row to see its details.</div>`;
+    }
+    const selectedSet = new Set([
+      ...priorSelections,
+      ...(app._state.selectedSourceIds ?? [])
+    ]);
+    const status = computeOptionStatus(entry, selectedSet, ctx);
+    const fullText = formatRequirementsTree(entry.tree, formatLookups);
+
+    // Build the prereq pill list — one pill per missing leaf, plus
+    // any "manual" advisory leaves so the user sees the full set even
+    // when nothing's currently blocking. Each pill carries the data to
+    // either jump (in-group option) or open the out-of-group modal.
+    const pills = [];
+    const allLeaves = collectLeaves(entry.tree);
+    for (const leaf of allLeaves) {
+      if (leaf.type === "optionItem") {
+        const refSid = leaf.itemId;
+        const isOwned = previouslyOwnedSourceIds.has(refSid);
+        const isPicked = selectedSet.has(refSid);
+        const isInGroup = inGroupSourceIds.has(refSid);
+        const refName = optionItemNameBySourceId[refSid] ?? "(unknown option)";
+        const action = isInGroup ? "jump-to-option" : "show-out-of-group";
+        const tag = isOwned || isPicked ? "✓ " : "";
+        const pillClass = isOwned || isPicked
+          ? "dauligor-option-picker__pill dauligor-option-picker__pill--met"
+          : "dauligor-option-picker__pill dauligor-option-picker__pill--unmet";
+        pills.push(`
+          <button
+            type="button"
+            class="${pillClass}"
+            data-action="${action}"
+            data-target-source-id="${escapeHTML(refSid)}"
+            data-leaf-type="optionItem"
+          >${escapeHTML(tag + refName)}</button>
+        `);
+      } else if (leaf.type === "level") {
+        const met = ctx.classLevel >= leaf.minLevel;
+        pills.push(`
+          <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
+            ${met ? "✓ " : ""}Level ${escapeHTML(leaf.minLevel)}+
+          </span>
+        `);
+      } else if (leaf.type === "abilityScore") {
+        const score = ctx.abilityScores?.[leaf.ability] ?? 0;
+        const met = score >= leaf.min;
+        pills.push(`
+          <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
+            ${met ? "✓ " : ""}${escapeHTML(leaf.ability.toUpperCase())} ${escapeHTML(leaf.min)}+
+          </span>
+        `);
+      } else if (leaf.type === "feature" || leaf.type === "spell" || leaf.type === "spellRule") {
+        // Non-option entity refs — out-of-group by definition.
+        const refName = (
+          leaf.type === "feature" ? "a class feature"
+            : leaf.type === "spell" ? "a known spell"
+              : "a spell matching a rule"
+        );
+        pills.push(`
+          <button
+            type="button"
+            class="dauligor-option-picker__pill dauligor-option-picker__pill--manual"
+            data-action="show-out-of-group"
+            data-leaf-type="${escapeHTML(leaf.type)}"
+            data-leaf-payload="${escapeHTML(JSON.stringify(leaf))}"
+          >Requires: ${escapeHTML(refName)}</button>
+        `);
+      } else if (leaf.type === "string") {
+        pills.push(`
+          <span class="dauligor-option-picker__pill dauligor-option-picker__pill--manual">${escapeHTML(leaf.value || "(see description)")}</span>
+        `);
+      }
+    }
+
+    // Status banner — describes the current state up-front so the user
+    // doesn't have to read the description to know if they can pick it.
+    const statusBanner = (() => {
+      if (status.state === "owned") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--muted">Already on this actor.</div>`;
+      if (status.state === "selected") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--ok">Selected for this import.</div>`;
+      if (status.state === "available") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--ok">Available — click the checkbox to pick this option.</div>`;
+      if (status.state === "blocked-prereq") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--block">Locked: requires ${escapeHTML(status.blockReasonText ?? "another option")}.</div>`;
+      if (status.state === "blocked-level") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--block">Locked: ${escapeHTML(status.blockReasonText)} needed.</div>`;
+      if (status.state === "blocked-ability") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--block">Locked: ${escapeHTML(status.blockReasonText)} needed.</div>`;
+      return "";
+    })();
+
+    // Back button is wired to the breadcrumb — clicking a prereq pill
+    // pushes the previous focusedSourceId onto the stack, and this
+    // button pops it.
+    const hasBack = (app._state.focusBreadcrumb ?? []).length > 0;
+    const backButton = hasBack
+      ? `<button type="button" class="dauligor-option-picker__back" data-action="back-to-previous">← Back</button>`
+      : "";
+
+    return `
+      <div class="dauligor-option-picker__detail">
+        ${backButton}
+        <div class="dauligor-option-picker__detail-header">
+          <img class="dauligor-option-picker__detail-img" src="${escapeHTML(entry.img)}" alt="" />
+          <div>
+            <h3 class="dauligor-option-picker__detail-name">${escapeHTML(entry.item.name)}</h3>
+            <div class="dauligor-option-picker__detail-meta">
+              ${entry.levelGate > 0 ? `<span>Level ${escapeHTML(entry.levelGate)}+</span>` : "<span>No level gate</span>"}
+              ${entry.sourceLabel ? ` · <span>${escapeHTML(entry.sourceLabel)}</span>` : ""}
+            </div>
+          </div>
+        </div>
+        ${statusBanner}
+        ${pills.length ? `
+          <div class="dauligor-option-picker__detail-section">
+            <div class="dauligor-option-picker__detail-section-title">Prerequisites</div>
+            <div class="dauligor-option-picker__pill-row">${pills.join("")}</div>
+            ${fullText ? `<div class="dauligor-option-picker__detail-summary">${escapeHTML(fullText)}</div>` : ""}
+          </div>
+        ` : ""}
+        <div class="dauligor-option-picker__detail-section">
+          <div class="dauligor-option-picker__detail-section-title">Description</div>
+          <div class="dauligor-option-picker__detail-body">
+            ${entry.description || "<p><em>No description authored.</em></p>"}
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  // Out-of-group prereq overlay panel. Triggered when the user clicks a
+  // pill referencing something not in this group (a feature, spell,
+  // option-item from a different group). Renders inline rather than
+  // launching a second dialog — keeps the user inside the picker.
+  const renderOutOfGroupOverlay = (overlayData) => {
+    if (!overlayData) return "";
+    let title = "Requirement";
+    let body = "";
+    if (overlayData.type === "optionItem") {
+      const entry = allOptionsBySourceId[overlayData.sourceId];
+      if (entry) {
+        title = entry.item.name;
+        body = `
+          <div class="dauligor-option-picker__overlay-meta">
+            From group: ${escapeHTML(entry.group?.name ?? "(unknown group)")}
+          </div>
+          <div class="dauligor-option-picker__overlay-body">
+            ${String(entry.item.system?.description?.value ?? "<p><em>No description authored.</em></p>")}
+          </div>
+        `;
+      } else {
+        title = optionItemNameBySourceId[overlayData.sourceId] ?? "Unknown option";
+        body = `<p><em>This option isn't in any of the imported option groups. It may be a previously-removed option or one from another class.</em></p>`;
+      }
+    } else if (overlayData.type === "feature") {
+      title = "Class Feature Requirement";
+      body = `<p>This option requires the character to already have a specific class feature granted. The webapp's export pipeline does not yet remap feature references to source-ids, so the specific feature isn't named here.</p>`;
+    } else if (overlayData.type === "spell") {
+      title = "Spell Requirement";
+      body = `<p>This option requires the character to know a specific spell.</p>`;
+    } else if (overlayData.type === "spellRule") {
+      title = "Spell Rule Requirement";
+      body = `<p>This option requires the character to know a spell matching a rule.</p>`;
+    }
+    return `
+      <div class="dauligor-option-picker__overlay" data-action="dismiss-overlay">
+        <div class="dauligor-option-picker__overlay-card" data-action="overlay-stop">
+          <button type="button" class="dauligor-option-picker__overlay-close" data-action="dismiss-overlay">×</button>
+          <h3 class="dauligor-option-picker__overlay-title">${escapeHTML(title)}</h3>
+          ${body}
+        </div>
+      </div>
+    `;
+  };
+
+  // ─── The prompt ─────────────────────────────────────────────────────────
 
   const result = await DauligorSequencePromptApp.prompt({
     title: `Choose ${group.maxSelections} Option${group.maxSelections === 1 ? "" : "s"}: ${group.name || group.featureName || "Class Options"} (Level ${workflow.targetLevel})`,
-    width: 700,
-    height: 620,
+    width: 1040,
+    height: 740,
     state: {
-      selectedSourceIds: [...(group.selectedSourceIds ?? [])]
+      selectedSourceIds: [...(group.selectedSourceIds ?? [])],
+      focusedSourceId: initialFocus,
+      // Stack of previously-focused sourceIds. Each "jump to option"
+      // pill click pushes the current focus and switches to the new
+      // one; the Back button pops.
+      focusBreadcrumb: [],
+      // When set, the in-group row matching this sourceId pulses
+      // briefly after a jump so the user can find it on the list side.
+      highlightSourceId: null,
+      // Overlay data for out-of-group prereq view — `null` = hidden.
+      outOfGroupOverlay: null
     },
     renderBody: (app) => {
       const satisfied = new Set([...priorSelections, ...(app._state.selectedSourceIds ?? [])]);
-      const ctx = {
-        satisfied,
-        classLevel: Number(workflow?.targetLevel) || 0,
-        totalLevel,
-        abilityScores
-      };
+      const ctx = { satisfied, classLevel, totalLevel, abilityScores };
+      const focused = enrichedEntries.find((e) => e.sourceId === app._state.focusedSourceId)
+        ?? enrichedEntries[0]
+        ?? null;
       return `
-      <div class="dauligor-sequence__option-list">
-        ${optionEntries.map(({ item, tree }) => {
-      const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
-      const sourceLabel = deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
-      const verdict = evaluateRequirementsTree(tree, ctx);
-      const isDisabled = verdict.blocked;
-      // The full tree summary is shown in-row as advisory text so the
-      // user sees "Requires: Pact of the Blade and Charisma 13+" up
-      // front, regardless of whether they've blocked themselves.
-      const fullRequirementsText = formatRequirementsTree(tree, formatLookups);
-      // Tooltip lists only the auto-failed leaves — the "what you need
-      // to fix RIGHT NOW" subset — so the user isn't spammed with
-      // manual prereqs they've already mentally satisfied.
-      const missingText = formatMissingLeaves(verdict.missingLeaves, formatLookups);
-      const disabledHint = isDisabled && missingText
-        ? `Requires: ${missingText}`
-        : (fullRequirementsText ? `Requires: ${fullRequirementsText}` : "");
-      return `
-            <label class="dauligor-sequence__option-row ${isDisabled ? "dauligor-sequence__option-row--disabled" : ""}" ${disabledHint ? `title="${foundry.utils.escapeHTML(disabledHint)}"` : ""}>
-              <span class="dauligor-sequence__option-check">
-                <input
-                  type="checkbox"
-                  data-action="toggle-option"
-                  data-option-source-id="${foundry.utils.escapeHTML(sourceId)}"
-                  ${app._state.selectedSourceIds.includes(sourceId) ? "checked" : ""}
-                  ${isDisabled ? "disabled" : ""}
-                >
-              </span>
-              <span class="dauligor-sequence__option-name">${foundry.utils.escapeHTML(item.name)}${fullRequirementsText ? ` <span style="color:var(--dauligor-text-muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;">· ${foundry.utils.escapeHTML(fullRequirementsText)}</span>` : ""}</span>
-              <span class="dauligor-sequence__option-source">${foundry.utils.escapeHTML(sourceLabel)}</span>
-            </label>
-          `;
-    }).join("")}
-      </div>
-    `;
+        <div class="dauligor-option-picker">
+          <div class="dauligor-option-picker__list">
+            ${sortedLevels.map((lvl) => {
+              const entries = entriesByLevel.get(lvl);
+              return `
+                ${renderLevelHeader(lvl, entries.length)}
+                ${entries.map((e) => renderRow(e, app, ctx)).join("")}
+              `;
+            }).join("")}
+          </div>
+          <div class="dauligor-option-picker__detail-pane">
+            ${renderDetailPanel(focused, app, ctx)}
+          </div>
+          ${renderOutOfGroupOverlay(app._state.outOfGroupOverlay)}
+        </div>
+      `;
     },
     onRenderBody: (app, root) => {
+      // Row focus on click (anywhere on the row except the checkbox).
+      root.querySelectorAll(`[data-action="focus-option"]`).forEach((el) => {
+        el.addEventListener("click", (evt) => {
+          // Ignore clicks that originated inside the checkbox — let
+          // the toggle handler below own those.
+          if (evt.target.closest('[data-action="toggle-option"]')) return;
+          const sid = el.dataset.optionSourceId;
+          if (!sid || sid === app._state.focusedSourceId) return;
+          app.updateState({
+            focusedSourceId: sid,
+            // Direct row clicks reset the breadcrumb — they're a
+            // user-initiated navigation, not a follow-the-reference.
+            focusBreadcrumb: [],
+            highlightSourceId: null
+          });
+          app.rerenderPrompt();
+        });
+      });
+
+      // Checkbox toggle.
       root.querySelectorAll(`[data-action="toggle-option"]`).forEach((input) => {
         input.addEventListener("change", () => {
           if (input.disabled) return;
@@ -3582,28 +3955,19 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
           if (input.checked) selected.add(sourceId);
           else {
             selected.delete(sourceId);
-            // Cascade-uncheck dependents in this group whose
-            // requirements no longer evaluate cleanly. Re-walks each
-            // selected option's tree against the post-uncheck
-            // satisfied set; anything that newly blocks gets pulled.
-            // Loops until the set is stable so an A→B→C dependency
-            // chain unravels in one pass.
+            // Cascade-uncheck dependents whose tree no longer evaluates
+            // cleanly. Loops until the set is stable so A→B→C chains
+            // unravel in one pass.
             let changed = true;
             while (changed) {
               changed = false;
               const stillSatisfied = new Set([...priorSelections, ...selected]);
-              const innerCtx = {
-                satisfied: stillSatisfied,
-                classLevel: Number(workflow?.targetLevel) || 0,
-                totalLevel,
-                abilityScores
-              };
-              for (const { item, tree } of optionEntries) {
-                const sid = item.flags?.[MODULE_ID]?.sourceId;
-                if (!sid || !selected.has(sid)) continue;
-                const verdict = evaluateRequirementsTree(tree, innerCtx);
+              const innerCtx = { satisfied: stillSatisfied, classLevel, totalLevel, abilityScores };
+              for (const entry of enrichedEntries) {
+                if (!selected.has(entry.sourceId)) continue;
+                const verdict = evaluateRequirementsTree(entry.tree, innerCtx);
                 if (verdict.blocked) {
-                  selected.delete(sid);
+                  selected.delete(entry.sourceId);
                   changed = true;
                 }
               }
@@ -3616,6 +3980,93 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
           }
           app.updateState({ selectedSourceIds: [...selected] });
           app.rerenderPrompt();
+        });
+      });
+
+      // Jump to a prereq option that's in this same group. Pushes the
+      // current focus onto the breadcrumb so the Back button can return.
+      root.querySelectorAll(`[data-action="jump-to-option"]`).forEach((btn) => {
+        btn.addEventListener("click", (evt) => {
+          evt.stopPropagation();
+          const targetSid = btn.dataset.targetSourceId;
+          if (!targetSid) return;
+          const breadcrumb = [...(app._state.focusBreadcrumb ?? [])];
+          if (app._state.focusedSourceId) breadcrumb.push(app._state.focusedSourceId);
+          app.updateState({
+            focusedSourceId: targetSid,
+            focusBreadcrumb: breadcrumb,
+            highlightSourceId: targetSid
+          });
+          app.rerenderPrompt();
+          // Scroll the highlighted row into view in the list column.
+          requestAnimationFrame(() => {
+            const target = root.querySelector(
+              `.dauligor-option-picker__row[data-option-source-id="${CSS.escape(targetSid)}"]`
+            );
+            if (target?.scrollIntoView) target.scrollIntoView({ block: "center", behavior: "smooth" });
+          });
+        });
+      });
+
+      // Back button — pop the breadcrumb.
+      root.querySelectorAll(`[data-action="back-to-previous"]`).forEach((btn) => {
+        btn.addEventListener("click", (evt) => {
+          evt.stopPropagation();
+          const breadcrumb = [...(app._state.focusBreadcrumb ?? [])];
+          const previous = breadcrumb.pop();
+          if (!previous) return;
+          app.updateState({
+            focusedSourceId: previous,
+            focusBreadcrumb: breadcrumb,
+            highlightSourceId: previous
+          });
+          app.rerenderPrompt();
+          requestAnimationFrame(() => {
+            const target = root.querySelector(
+              `.dauligor-option-picker__row[data-option-source-id="${CSS.escape(previous)}"]`
+            );
+            if (target?.scrollIntoView) target.scrollIntoView({ block: "center", behavior: "smooth" });
+          });
+        });
+      });
+
+      // Show out-of-group prereq overlay.
+      root.querySelectorAll(`[data-action="show-out-of-group"]`).forEach((btn) => {
+        btn.addEventListener("click", (evt) => {
+          evt.stopPropagation();
+          const leafType = btn.dataset.leafType ?? "";
+          let overlay;
+          if (leafType === "optionItem") {
+            overlay = { type: "optionItem", sourceId: btn.dataset.targetSourceId ?? "" };
+          } else if (btn.dataset.leafPayload) {
+            try {
+              const leaf = JSON.parse(btn.dataset.leafPayload);
+              overlay = { type: leaf.type, leaf };
+            } catch (err) {
+              overlay = { type: "unknown" };
+            }
+          }
+          app.updateState({ outOfGroupOverlay: overlay });
+          app.rerenderPrompt();
+        });
+      });
+
+      // Dismiss overlay (click backdrop or close button).
+      root.querySelectorAll(`[data-action="dismiss-overlay"]`).forEach((el) => {
+        el.addEventListener("click", (evt) => {
+          // If the click bubbled up from inside the card, ignore.
+          if (evt.target.closest('[data-action="overlay-stop"]') && evt.target !== el) return;
+          app.updateState({ outOfGroupOverlay: null });
+          app.rerenderPrompt();
+        });
+      });
+
+      // Prevent clicks inside the overlay card from dismissing it.
+      root.querySelectorAll(`[data-action="overlay-stop"]`).forEach((el) => {
+        el.addEventListener("click", (evt) => {
+          // Allow the close button (delegated above) to still work.
+          if (evt.target.closest('[data-action="dismiss-overlay"]')) return;
+          evt.stopPropagation();
         });
       });
     },
@@ -3644,6 +4095,24 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
 
   progress.markStep(stepId, "complete", `${result.value.length}/${group.maxSelections} option(s) selected.`);
   return result.value;
+}
+
+/**
+ * Walk a requirements tree and collect every leaf in document order.
+ * Used by the option-picker's detail panel to render one pill per
+ * authored leaf, regardless of whether the leaf is currently met.
+ */
+function collectLeaves(tree) {
+  if (!tree) return [];
+  if (tree.kind === "leaf") return [tree];
+  if (tree.kind === "all" || tree.kind === "any" || tree.kind === "one") {
+    const out = [];
+    for (const child of tree.children ?? []) {
+      for (const leaf of collectLeaves(child)) out.push(leaf);
+    }
+    return out;
+  }
+  return [];
 }
 
 async function runSpellPlaceholderStep({ workflow, sequence, progress }) {
