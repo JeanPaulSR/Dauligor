@@ -164,7 +164,16 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       this._instance._state.sourceCatalogUrl = newUrl;
       this._instance._sourcesLoading = false;
 
-      this._instance.render({ force: true });
+      // ApplicationV2's render pipeline is async. Awaiting it keeps the
+      // calling click handler open until `_updateFrame()` has run its
+      // positioning pass — meaning the element is inserted into the DOM
+      // already at its final coords. Plutonium's `ChooseImporter._pOpen`
+      // does exactly this (`await chooseImporter.render(true)`) and is
+      // reliably flash-free; we used to fire-and-forget the render so
+      // the element briefly appeared at 0×0 / 200×100 in the corner
+      // before the position frame caught up. See
+      // `centeredAppPosition()`'s header comment for the full story.
+      await this._instance.render({ force: true });
       this._instance.maximize?.();
       return this._instance;
     }
@@ -180,7 +189,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       statusLevel
     });
     this._instance = instance;
-    instance.render({ force: true });
+    await instance.render({ force: true });
     return instance;
   }
 
@@ -721,7 +730,10 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       this._instance.setTargetLevel(targetLevel);
       this._instance.setSourceTypes(sourceTypeIds ?? normalizeSourceTypeIds(sourceTypeId));
       this._instance.setPreferredSelectionIds(preferredSelectionIds);
-      this._instance.render({ force: true });
+      // Await render so positioning completes before paint — see the
+      // matching block in `DauligorImporterApp.open()` for the trap
+      // we used to hit.
+      await this._instance.render({ force: true });
       this._instance.maximize?.();
       return this._instance;
     }
@@ -737,7 +749,7 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       preferredSelectionIds
     });
     this._instance = instance;
-    instance.render({ force: true });
+    await instance.render({ force: true });
     return instance;
   }
 
@@ -797,6 +809,12 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     this._catalog = null;
     this._classModels = [];
     this._availableTags = [];
+    // Tag ID → display name, shipped by `buildSourceClassCatalog` as
+    // `catalog.tagIndex`. Populated in `_loadBrowserData`. Used by
+    // `_renderFilterModal` so chips read "Martial" instead of "3sDg…".
+    // Empty object on older catalogs that predate the field; chips
+    // gracefully fall back to the raw tag id label in that case.
+    this._tagIndex = {};
     this._isLoaded = false;
     // Lazy per-class payload cache. Populated when the user clicks Import,
     // not when the browser opens — Phase C avoids eagerly fetching N×120KB
@@ -1001,14 +1019,27 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
   _renderFilterModal() {
     const tags = this._availableTags ?? [];
     const states = this._state.tagStates;
-    const chipsHtml = tags.length
-      ? tags.map((tagId) => {
+    const tagIndex = this._tagIndex ?? {};
+    // Sort by resolved name so chips read alphabetically by what the
+    // user actually sees. Older catalogs without `tagIndex` fall back
+    // to id-string sort (still deterministic).
+    const sortedTags = [...tags].sort((a, b) => {
+      const nameA = (tagIndex[a] ?? a).toLowerCase();
+      const nameB = (tagIndex[b] ?? b).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+    const chipsHtml = sortedTags.length
+      ? sortedTags.map((tagId) => {
           const state = states[tagId] || 0;
           const stateClass = state === 1
             ? "dauligor-class-browser__chip--include"
             : state === 2
               ? "dauligor-class-browser__chip--exclude"
               : "";
+          // Display name from catalog's `tagIndex`. Falls back to the
+          // raw id on legacy catalogs that didn't ship the index —
+          // ugly but never broken.
+          const label = tagIndex[tagId] ?? tagId;
           return `
             <button
               type="button"
@@ -1016,7 +1047,7 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
               data-action="filter-chip"
               data-tag-id="${foundry.utils.escapeHTML(tagId)}"
               title="Click to ${state === 0 ? "include" : state === 1 ? "exclude" : "clear"}"
-            >${foundry.utils.escapeHTML(tagId)}</button>
+            >${foundry.utils.escapeHTML(label)}</button>
           `;
         }).join("")
       : `<div class="dauligor-class-browser__filter-empty">No tags available in the current catalog.</div>`;
@@ -1239,6 +1270,19 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
     this._classModels = buildClassModels(entryPayloads);
     this._availableTags = [...new Set(this._classModels.flatMap((classModel) => classModel.tags))].sort();
+    // Merge tagIndex from every catalog that shipped one. The browser
+    // may have loaded multiple per-source catalogs (the user can pick
+    // several sources in Step 2), so we union their indexes. Later
+    // entries win on key collisions — fine, the names are the same.
+    this._tagIndex = {};
+    for (const catalog of catalogs) {
+      const index = catalog?.tagIndex;
+      if (index && typeof index === "object") {
+        for (const [id, name] of Object.entries(index)) {
+          if (name) this._tagIndex[id] = String(name);
+        }
+      }
+    }
     this._applyPreferredSelection();
     this._state.isLoading = false;
     this._state.status = `Loaded ${this._classModels.length} class option${this._classModels.length === 1 ? "" : "s"} from ${catalogEntries.length} catalog entr${catalogEntries.length === 1 ? "y" : "ies"} across ${catalogs.length} catalog${catalogs.length === 1 ? "" : "s"}.`;
@@ -1532,9 +1576,11 @@ class DauligorImportProgressApp extends HandlebarsApplicationMixin(ApplicationV2
     this._onCancel = onCancel;
   }
 
-  static open(options = {}) {
+  static async open(options = {}) {
     const app = new this(options);
-    app.render({ force: true });
+    // Await render so first-paint position is final — see
+    // `DauligorImporterApp.open()` for the rationale.
+    await app.render({ force: true });
     return app;
   }
 
@@ -1712,7 +1758,11 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
   static async prompt(config = {}, sequence = null) {
     const app = new this(config);
     sequence?.setActivePrompt(app);
-    app.render({ force: true });
+    // Await render so first-paint position is final — same trap as
+    // `DauligorImporterApp.open()`. The picker pops up over the
+    // sequence shell which is already mounted, so even a brief
+    // mis-positioned frame is jarring.
+    await app.render({ force: true });
     const result = await app.wait();
     sequence?.setActivePrompt(null);
     return result;
@@ -2175,7 +2225,12 @@ async function runDauligorClassImportSequence({
   }
 
   const state = createImportSequenceState(baseWorkflow, initialTargetLevel, preferredSubclassSourceId);
-  const progress = DauligorImportProgressApp.open({
+  // Await — `DauligorImportProgressApp.open` is async (it awaits its
+  // own first render so positioning settles pre-paint, same trap as
+  // `DauligorImporterApp.open()`). Without the await, `progress` would
+  // be a Promise here and subsequent `progress.markStep(...)` calls
+  // would throw.
+  const progress = await DauligorImportProgressApp.open({
     title: `Importing ${baseWorkflow.classItem?.name ?? classModel?.name ?? "Class"}`,
     subtitle: actor ? `Actor "${actor.name}"` : "World / Sidebar"
   });

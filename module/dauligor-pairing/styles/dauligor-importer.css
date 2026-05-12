@@ -56,7 +56,15 @@
 .dauligor-importer__body {
   display: grid;
   grid-template-columns: minmax(180px, 0.72fr) minmax(220px, 0.88fr) minmax(300px, 1fr);
+  /* Plutonium's ChooseImporter.hbs sandwiches `<div class="imp-wiz__spc-panels
+   * ve-mx-2">` (≈16px total) between each panel. Mirror that breathing room
+   * here via a grid `column-gap` so step 1 / step 2 / step 3 aren't kissing.
+   * Vertical gap stays 0 because the body is a single row. */
+  column-gap: 14px;
   min-height: 0;
+  /* The gap above lives in the body's background; pad the body so the
+   * outermost panels don't kiss the window-content border either. */
+  padding: 0 4px;
 }
 
 .dauligor-importer__panel {
@@ -64,15 +72,15 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--dauligor-border);
+  /* Panels no longer share a `border-right` separator — the grid gap
+   * already gives them breathing room, and the visible border was
+   * doubling up against the surrounding window chrome on dark themes. */
   background: var(--dauligor-panel-alt);
 }
 
-.dauligor-importer__panel:last-child {
-  border-right: 0;
-}
-
 .dauligor-importer__divider {
+  /* Layout-only spacer in the .hbs template; styling is handled by the
+   * parent grid's `column-gap`. Hidden node either way. */
   display: none;
 }
 

@@ -211,6 +211,27 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
     };
   });
 
+  // Resolve tag IDs → display names so the Foundry class browser's filter
+  // chips can label themselves as "Martial" / "Spellcaster" / etc. rather
+  // than raw D1 PKs like "3sDgK4MJv2cjp2ex0Vte". We only fetch the tags
+  // actually referenced by classes in this catalog — keeps the payload
+  // small even when the tags table is broad. The wizard's classlist view
+  // (`src/pages/compendium/ClassList.tsx`) does the same lookup at render
+  // time via `tagsByGroup`; this ships the resolved labels directly so
+  // the module doesn't need a second round-trip.
+  const referencedTagIds = Array.from(new Set(entries.flatMap((e) => e.tags).map(String).filter(Boolean)));
+  const tagIndex: Record<string, string> = {};
+  if (referencedTagIds.length) {
+    const placeholders = referencedTagIds.map(() => "?").join(",");
+    const tagRes = await executeD1QueryInternal({
+      sql: `SELECT id, name FROM tags WHERE id IN (${placeholders})`,
+      params: referencedTagIds,
+    });
+    for (const row of tagRes.results || []) {
+      if (row.id && row.name) tagIndex[String(row.id)] = String(row.name);
+    }
+  }
+
   return {
     kind: "dauligor.class-catalog.v1",
     schemaVersion: 1,
@@ -221,6 +242,7 @@ export async function buildSourceClassCatalog(sourceSlug: string) {
       sourceId: source.semanticId,
     },
     entries,
+    tagIndex,
   };
 }
 
