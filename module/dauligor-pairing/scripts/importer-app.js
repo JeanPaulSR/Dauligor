@@ -1173,16 +1173,11 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         `
         : "";
 
-      // Per-class "Preview" link opens `DauligorSubclassPreviewApp`
-      // for this class. Hidden when the class has zero subclasses
-      // (the preview would be empty anyway). Inside the row's <label>,
-      // so the click handler must prevent the surrounding radio from
-      // toggling — the button calls `event.preventDefault()` +
-      // `event.stopPropagation()` before opening the preview.
-      const previewBtnHtml = classModel.subclasses.length
-        ? `<button type="button" class="dauligor-class-browser__row-preview" data-action="preview-subclasses" data-class-source-id="${foundry.utils.escapeHTML(classModel.classSourceId)}" title="Preview subclasses">Preview</button>`
-        : "";
-
+      // (The per-class Preview pill was removed by user request — the
+      // subclass-preview window is reachable later in the import flow
+      // via the "Choose Subclass" step. `_openSubclassPreview` is
+      // still defined below so the SubclassPreviewApp can be opened
+      // programmatically from elsewhere if we wire a new entry point.)
       return `
         <div class="dauligor-class-browser__group" data-class-card="${foundry.utils.escapeHTML(classModel.classSourceId)}">
           <label class="dauligor-class-browser__row dauligor-class-browser__row--class ${isSelected ? "dauligor-class-browser__row--selected" : ""}">
@@ -1200,7 +1195,6 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
             <span class="dauligor-class-browser__row-name">
               <span class="dauligor-class-browser__row-name-text">${foundry.utils.escapeHTML(classModel.name)}</span>
             </span>
-            ${previewBtnHtml}
             <span class="dauligor-class-browser__row-source">${foundry.utils.escapeHTML(classSource)}</span>
           </label>
           ${subclassesHtml}
@@ -1227,17 +1221,6 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     this._listRegion.querySelectorAll(`[data-action="select-subclass"]`).forEach((button) => {
       button.addEventListener("click", () => {
         this._selectClass(button.dataset.classSourceId, button.dataset.subclassSourceId);
-      });
-    });
-    this._listRegion.querySelectorAll(`[data-action="preview-subclasses"]`).forEach((button) => {
-      button.addEventListener("click", async (event) => {
-        // The Preview button lives inside the row's <label>, which
-        // would otherwise toggle the class-radio when clicked. Cancel
-        // those defaults explicitly so the preview opens without
-        // selecting the class.
-        event.preventDefault();
-        event.stopPropagation();
-        await this._openSubclassPreview(button.dataset.classSourceId);
       });
     });
   }
@@ -3667,11 +3650,75 @@ async function runSubclassStep({ workflow, sequence, progress, entry = null }) {
   // preview opened from the class browser. The previous flat-radio
   // list was inconsistent with the rest of the importer's design
   // language and didn't surface feature details.
-  const subclassPayload = workflow?.payload ?? workflow?.bundle?.payload ?? null;
-  if (!subclassPayload || !ensureArray(subclassPayload.subclasses).length) {
+  //
+  // We can't pass `workflow.payload` here the way the class browser's
+  // Preview button does — by the time the import sequence runs,
+  // `workflow.payload` has been normalized through
+  // `normalizeSupportedClassPayload` into a `dauligor.class-bundle.v1`
+  // bundle (see `class-import-service.js:normalizeSupportedClassPayload`),
+  // which no longer carries `subclasses[]` / `features[]` arrays at
+  // the top level. Instead we rebuild a thin payload-shaped object
+  // from the bundle's normalized Foundry-item arrays
+  // (`workflow.subclassItems` + `workflow.subclassFeatures`). Each
+  // feature item carries its `parentSourceId`, `level`, etc. on
+  // `flags.[MODULE_ID]` (set by `createSemanticFeatureItem`), so we
+  // can reconstruct everything the SubclassPreviewApp expects.
+  const subclassItems = ensureArray(workflow?.subclassItems);
+  const subclassFeatures = ensureArray(workflow?.subclassFeatures);
+  if (!subclassItems.length) {
     notifyWarn("No subclasses available for this class.");
     return "cancelled";
   }
+
+  // The catalog ships an explicit `shortName` per subclass entry — that's
+  // the canonical book label (e.g. "TCoE", "XGE"). The Foundry-shaped
+  // subclass item the bundle gives us instead carries
+  // `system.source.book` derived from the parent class's source
+  // record, so deriveSourceLabel() ends up showing "PHB" for every
+  // subclass even when published in a different book. Prefer the
+  // catalog's shortName.
+  const catalogShortNameBySubclassSourceId = new Map();
+  for (const sub of ensureArray(entry?.subclasses)) {
+    if (sub?.sourceId && sub?.shortName) {
+      catalogShortNameBySubclassSourceId.set(sub.sourceId, sub.shortName);
+    }
+  }
+
+  const subclassPayload = {
+    subclasses: subclassItems.map((item) => {
+      const flags = item.flags?.[MODULE_ID] ?? {};
+      const sourceId = flags.sourceId ?? null;
+      const shortName = catalogShortNameBySubclassSourceId.get(sourceId);
+      return {
+        sourceId,
+        name: item.name ?? "Subclass",
+        imageUrl: item.img ?? "",
+        // The preview reads `sub.source.book` / `sub.sourceBookId` /
+        // `sub.rules` (in that order) via `deriveSourceLabel`. Pass
+        // the catalog shortName under `sourceBookId` so the label
+        // resolves to the *publishing* book, not the parent class's.
+        sourceBookId: shortName ?? item.system?.source?.book ?? flags.sourceBookId ?? ""
+      };
+    }),
+    features: subclassFeatures.map((item) => {
+      const flags = item.flags?.[MODULE_ID] ?? {};
+      return {
+        sourceId: flags.sourceId ?? null,
+        name: item.name ?? "Feature",
+        // Foundry-item descriptions live at `system.description.value`
+        // as enriched HTML. The semantic export's `feature.description`
+        // is the same string. Pass it through.
+        description: item.system?.description?.value ?? "",
+        level: Number(flags.level ?? 0) || 0,
+        // The walker keys features off `parentSourceId === subclass.sourceId`
+        // — `createSemanticFeatureItem` stamps this onto
+        // `flags.[MODULE_ID].parentSourceId`.
+        parentSourceId: flags.parentSourceId ?? null,
+        featureKind: flags.featureKind ?? "subclassFeature",
+        identifier: flags.identifier ?? item.system?.identifier ?? ""
+      };
+    })
+  };
 
   const classModel = {
     name: workflow?.classItem?.name ?? entry?.name ?? "Class",
