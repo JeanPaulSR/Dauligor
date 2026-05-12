@@ -36,10 +36,11 @@
  *   - `class`         → actor class items keyed by entityId
  *   - `subclass`      → actor subclass items by entityId
  *   - `levelInClass`  → class-item levels, compared against `minLevel`
+ *   - `spellRule`     → intersect actor's known spell sourceIds with
+ *                       the rule's pre-resolved allowlist (built at
+ *                       bake time by `src/lib/classExport.ts`)
  *
  * Still manual (returns "manual" — doesn't block selection):
- *   - `spellRule` — needs a tag-resolution pass against actor
- *     spells that the walker doesn't currently do.
  *   - `string`    — free-text by design; the player acknowledges it.
  *
  * An option is blocked when at least one auto-evaluable leaf is
@@ -171,10 +172,29 @@ function evaluateLeaf(leaf, ctx) {
       const min = Number(leaf.minLevel) || 0;
       return levels >= min ? "met" : "unmet";
     }
-    // Still manual — spell rules need a tag-resolution pass the
-    // walker doesn't currently do, and `string` leaves are
-    // free-text by design (the player has to acknowledge them).
-    case "spellRule":
+    case "spellRule": {
+      // "Knows any spell matching <rule>." The export-side bake
+      // resolved each rule's tag-query against the live spell catalog
+      // and shipped `spellRuleAllowlists[ruleId]` — the set of spell
+      // sourceIds that satisfy the rule. We can answer the gate by
+      // intersecting that with the actor's known-spell sourceIds.
+      //
+      // If the allowlist is missing (older bake before this field
+      // shipped, or rule deleted upstream), fall back to "manual" so
+      // the option isn't false-blocked — the player will see the
+      // requirement as advisory text and decide for themselves.
+      if (!leaf.spellRuleId) return "manual";
+      const allowlist = ctx.spellRuleAllowlists?.get?.(leaf.spellRuleId);
+      if (!allowlist) return "manual";
+      const owned = ctx.ownedSpellSourceIds;
+      if (!owned || owned.size === 0) return "unmet";
+      for (const sourceId of allowlist) {
+        if (owned.has(sourceId)) return "met";
+      }
+      return "unmet";
+    }
+    // `string` leaves are free-text by design (the player has to
+    // acknowledge them); they always stay manual.
     case "string":
       return "manual";
     default:

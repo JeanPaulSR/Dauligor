@@ -3567,14 +3567,17 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
   // Build the format-lookup the walker uses for human-readable
   // requirement text. classNameById is best-effort — only the class
   // being imported has a confident name; subclass/spell/feature
-  // identifiers aren't remapped at export time yet.
+  // identifiers aren't remapped at export time yet. spellRuleNameById
+  // IS shipped by the export (the bake knows the rule names), so pills
+  // render as "Knows Fire Spells" not "(spell rule)".
   const formatLookups = {
     optionItemNameBySourceId,
     classNameById: workflow?.classItem
       ? {
         [workflow.classItem.flags?.[MODULE_ID]?.sourceId ?? ""]: workflow.classItem.name
       }
-      : {}
+      : {},
+    spellRuleNameById: workflow?.spellRuleNameById ?? {}
   };
 
   // ─── Snapshot the actor's state for the requirements walker ───────────
@@ -3645,6 +3648,18 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     }
   };
 
+  // Pre-resolved `spellRule` allowlists from the class export — ruleId
+  // → Set<spellSourceId> of every spell satisfying the rule at bake
+  // time. The walker intersects the actor's known spell sourceIds with
+  // the allowlist; non-empty intersection ⇒ the `spellRule` leaf is
+  // met. A rule with no entry here (e.g. shipped from an older bake)
+  // falls back to "manual" so the option isn't false-blocked. See
+  // `src/lib/classExport.ts` for how the allowlist is built.
+  const spellRuleAllowlists = new Map();
+  for (const [ruleId, sourceIds] of Object.entries(workflow?.spellRuleAllowlists ?? {})) {
+    spellRuleAllowlists.set(ruleId, new Set(ensureArray(sourceIds)));
+  }
+
   // Owned-item indexes. The walker uses entityId for `feature` /
   // `spell` / `class` / `subclass` leaves (the leaf carries the
   // D1 row PK which round-trips as the embedded item's entityId
@@ -3697,7 +3712,8 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     ownedSpellEntityIds,
     ownedSpellSourceIds,
     classLevels,
-    subclassEntityIds
+    subclassEntityIds,
+    spellRuleAllowlists
   });
 
   // ─── Enrich each option with display data ──────────────────────────────

@@ -701,6 +701,16 @@ export function buildClassImportWorkflow(payload, {
     subclassFeatures,
     optionItems,
     optionGroups,
+    // Pre-resolved `spellRule` allowlists from the class export — each
+    // ruleId maps to spell sourceIds the rule covers at bake time. The
+    // option-picker hands this through to the requirements walker so
+    // `spellRule` leaves can auto-evaluate ("does the actor know any
+    // matching spell?") without re-running the tag-query matcher in JS.
+    // See `src/lib/classExport.ts` for how the allowlist is built.
+    spellRuleAllowlists: payload.spellRuleAllowlists ?? {},
+    // Rule id → display name, used by the picker's pill renderer so
+    // spellRule pills show "Knows Fire Spells" instead of "(spell rule)".
+    spellRuleNameById: payload.spellRuleNameById ?? {},
     minSubclassLevel,
     requiresSubclassSelection: Boolean(
       targetActor

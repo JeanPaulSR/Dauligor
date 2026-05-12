@@ -39,6 +39,12 @@ import {
   RequirementIdMaps,
   RequirementFormatLookup,
 } from './_requirements.js';
+import {
+  deriveSpellFilterFacets,
+  matchSpellAgainstRule,
+  type RuleQuery,
+  type SpellMatchInput,
+} from './_spellFilters.js';
 
 // Module-scope ref-table cache. Survives within a warm Vercel isolate for
 // REFS_TTL_MS, then forces a refresh — that's the staleness ceiling for
@@ -157,6 +163,39 @@ function parseJsonField(val: any, fallback: any) {
     try { return JSON.parse(val); } catch { return fallback; }
   }
   return val ?? fallback;
+}
+
+// Read a possibly-stringified array of strings into `string[]`. Server-side
+// rows can arrive with `tags` already auto-parsed (object) or still raw
+// (string) depending on the fetcher; this normalizes both. (Mirrors the
+// helper in `src/lib/classExport.ts` — keep in sync.)
+function safeParseStringArray(raw: any): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw !== 'string') return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Walk a Requirement tree and collect every spell-rule id referenced by
+// any leaf. Used at export time to know which rules to resolve into a
+// spell-sourceId allowlist for the module-side walker. (Mirrors the
+// helper in `src/lib/classExport.ts` — keep in sync.)
+function collectSpellRuleIds(tree: Requirement | null | undefined, out: Set<string>): void {
+  if (!tree) return;
+  if ((tree as any).kind === 'leaf') {
+    const leaf = tree as any;
+    if (leaf.type === 'spellRule' && leaf.spellRuleId) {
+      out.add(String(leaf.spellRuleId));
+    }
+    return;
+  }
+  for (const child of ((tree as any).children ?? [])) {
+    collectSpellRuleIds(child, out);
+  }
 }
 
 function denormalizeSource(row: any) {
@@ -1329,21 +1368,86 @@ export async function exportClassSemantic(
   const optionItemSourceIdById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.sourceId]));
   const optionItemNameById = Object.fromEntries(uniqueOptionItems.map((item) => [item.id, item.name]));
 
+  // ── Pre-resolve `spellRule` leaves ───────────────────────────────────────
+  // Walk every option's tree, collect each unique referenced `spellRuleId`,
+  // then resolve each rule against the live spell catalog so the export
+  // ships a flat allowlist of matching spell sourceIds per rule. The
+  // module-side requirements walker uses these to auto-evaluate `spellRule`
+  // leaves without re-running the matcher in JS — it just checks whether
+  // any of the actor's known spell sourceIds appear in the allowlist.
+  //
+  // Conditional fetch: when no option references a spell rule (the common
+  // case) we don't touch the spells / spell_rules tables at all, so this
+  // adds zero cost to most bakes.
+  const referencedSpellRuleIds = new Set<string>();
+  for (const opt of uniqueOptionItems) {
+    collectSpellRuleIds(opt.requirementsTree as Requirement | null, referencedSpellRuleIds);
+  }
+
+  const spellRuleAllowlists: Record<string, string[]> = {};
+  const spellRuleNameById: Record<string, string> = {};
+  if (referencedSpellRuleIds.size > 0) {
+    const ruleIdList = [...referencedSpellRuleIds];
+    const ruleRows = await fetchCollection<any>('spellRules', {
+      where: `id IN (${ruleIdList.map(() => '?').join(',')})`,
+      params: ruleIdList,
+    });
+    const spellRows = await fetchCollection<any>('spells', {
+      select: 'id, source_id, level, school, tags, foundry_data, concentration, ritual, components_vocal, components_somatic, components_material',
+    });
+    const spellMatchInputs: Array<{ id: string; sourceId: string | null; match: SpellMatchInput }> = spellRows.map((row: any) => {
+      const facets = deriveSpellFilterFacets(row);
+      const tags = Array.isArray(row.tags)
+        ? row.tags.map((t: any) => String(t))
+        : (typeof row.tags === 'string' ? safeParseStringArray(row.tags) : []);
+      return {
+        id: String(row.id),
+        sourceId: row.source_id ?? null,
+        match: {
+          ...facets,
+          level: Number(row.level) || 0,
+          school: String(row.school ?? ''),
+          source_id: row.source_id ?? null,
+          tags,
+        },
+      };
+    });
+    for (const r of ruleRows) {
+      const ruleId = String(r.id);
+      const query: RuleQuery = parseJsonField(r.query, {}) as RuleQuery;
+      const manualSpells: string[] = parseJsonField(r.manual_spells, []) as string[];
+      const manualSet = new Set(manualSpells.map(String));
+      spellRuleNameById[ruleId] = String(r.name ?? '');
+      const matchedSourceIds: string[] = [];
+      for (const s of spellMatchInputs) {
+        if (!s.sourceId) continue;
+        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query)) {
+          matchedSourceIds.push(s.sourceId);
+        }
+      }
+      spellRuleAllowlists[ruleId] = matchedSourceIds;
+    }
+  }
+
   // Second pass: remap PK references inside each option's
   // `requirementsTree` to canonical source-ids, then render the tree to
   // a human-readable string for `system.requirements`.
   //
   // Today only `optionItem` leaves have a translation table available —
-  // class / subclass / feature / spell / spellRule refs pass through as
-  // PKs and the module surfaces them as "<unknown …>" if it can't
-  // resolve them locally. Fuller remap (and the importer-side
-  // show-but-mark-unmet UI) is a follow-up; see the
-  // `Module importer pass` TODO.
+  // class / subclass / feature / spell refs pass through as PKs and the
+  // module surfaces them as "<unknown …>" if it can't resolve them
+  // locally. `spellRule` refs are still PKs, but we ship the resolved
+  // allowlist alongside (above) so the walker can auto-evaluate them.
+  // Fuller remap (and the importer-side show-but-mark-unmet UI) is a
+  // follow-up; see the `Module importer pass` TODO.
   const requirementIdMaps: RequirementIdMaps = {
     optionItemSourceIdById,
   };
   const requirementFormatLookup: RequirementFormatLookup = {
     optionItemNameById,
+    // Feed rule names into the format lookup so `formatRequirementText`
+    // produces "Knows Fire Spells" rather than "(a spell matching a rule)".
+    spellRuleNameById,
   };
   for (const opt of uniqueOptionItems) {
     const tree = opt.requirementsTree as Requirement | null;
@@ -1556,6 +1660,17 @@ export async function exportClassSemantic(
     uniqueOptionItems,
     spellsKnownScalings,
     alternativeSpellcastingScalings,
+    // Pre-resolved `spellRule` allowlists — each ruleId maps to an array
+    // of spell sourceIds that satisfy the rule at bake time. The
+    // module-side requirements walker reads this from
+    // `workflow.spellRuleAllowlists` to auto-evaluate `spellRule` leaves.
+    // Empty `{}` when no option's requirementsTree references a rule.
+    spellRuleAllowlists,
+    // Rule id → display name for the module-side picker's pill renderer.
+    // The `requirements` text on each option already bakes names in via
+    // `formatRequirementText`, but the runtime walker's pill row needs
+    // names too (otherwise spellRule pills show "(spell rule)").
+    spellRuleNameById,
     source
   };
 }
