@@ -4441,6 +4441,89 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     proficiencies.language.add(String(slug).toLowerCase());
   }
 
+  // In-flight import selections — picks the user made EARLIER in the
+  // current import flow that haven't been committed to the actor yet.
+  //
+  // Repro: importing a class with Athletics in its skill pool, the
+  // user picks Athletics in the Skills step, then a few prompts
+  // later they hit an option-group with a Brawling option that
+  // requires Athletics. Without this block the walker only sees
+  // the *committed* actor state (Athletics not yet there) and
+  // Brawling stays locked. Now the walker treats in-flight picks
+  // as proficient and Brawling becomes selectable.
+  //
+  // The selections live on `workflow.selection.*` — `state.*` gets
+  // rebuilt into the workflow via `buildWorkflowFromSequenceState`
+  // each iteration, so this read picks up the latest picks.
+  //
+  // Two sources to merge per category:
+  //   1. The class's class-fixed proficiencies (auto-granted). Those
+  //      WILL be on the actor after commit but aren't yet — same trap.
+  //   2. The user's actual picks from the trait prompts (stored as
+  //      `<type>:<slug>` slug-prefixed strings; `stripTypePrefix`
+  //      drops the prefix so what lands in the Set is just "ath").
+  const stripPrefix = (slug) => String(slug ?? "").toLowerCase().replace(/^[a-z]+:/, "");
+  const addProficiency = (set, slug) => {
+    const clean = stripPrefix(slug);
+    if (clean) set.add(clean);
+  };
+
+  // Class-fixed proficiencies (every category baseClassHandler exposes).
+  // The base advancements carry the `fixed[]` array of slugs the class
+  // grants automatically — those should count as already-met for the
+  // walker even before the importer writes them.
+  try {
+    const baseFeatures = baseClassHandler(workflow);
+    for (const adv of ensureArray(baseFeatures?.advancements)) {
+      const cfgType = String(adv?.configuration?.type ?? "").toLowerCase();
+      const set = ({
+        skills: proficiencies.skill,
+        tools: proficiencies.tool,
+        saves: proficiencies.save,
+        weapons: proficiencies.weapon,
+        armor: proficiencies.armor,
+        languages: proficiencies.language
+      })[cfgType];
+      if (!set) continue;
+      for (const slug of ensureArray(adv?.fixed)) addProficiency(set, slug);
+    }
+  } catch (e) {
+    log("buildCtx baseClassHandler fixed-prof merge failed", e);
+  }
+
+  // User selections from each trait prompt. These are stored as
+  // arrays of slugs on `workflow.selection`; each set is the
+  // "user chose these N from the prompt's pool" outcome.
+  for (const slug of ensureArray(workflow?.selection?.skillSelections)) {
+    addProficiency(proficiencies.skill, slug);
+  }
+  for (const slug of ensureArray(workflow?.selection?.toolSelections)) {
+    addProficiency(proficiencies.tool, slug);
+  }
+  for (const slug of ensureArray(workflow?.selection?.savingThrowSelections)) {
+    addProficiency(proficiencies.save, slug);
+  }
+  for (const slug of ensureArray(workflow?.selection?.languageSelections)) {
+    addProficiency(proficiencies.language, slug);
+  }
+  // Generic trait selections (feature-level Trait advancements that
+  // can mix types). Each entry is the same `<type>:<slug>` form,
+  // route by the prefix.
+  for (const slug of ensureArray(workflow?.selection?.traitSelections)) {
+    const raw = String(slug ?? "").toLowerCase();
+    const m = raw.match(/^([a-z]+):(.+)$/);
+    if (!m) continue;
+    const set = ({
+      skills: proficiencies.skill,
+      tools: proficiencies.tool,
+      saves: proficiencies.save,
+      weapons: proficiencies.weapon,
+      armor: proficiencies.armor,
+      languages: proficiencies.language
+    })[m[1]];
+    if (set) set.add(m[2]);
+  }
+
   // Aliases for skill keys. The editor sometimes authors the
   // identifier as the full word ("athletics") and sometimes as the
   // 3-letter dnd5e config key ("ath"). The actor stores the
