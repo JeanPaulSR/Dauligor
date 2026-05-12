@@ -170,10 +170,19 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const handleSetCampaignEra = async (campaignId: string, eraId: string) => {
     try {
       // Partial upsert: only the fields actually changing. The ON CONFLICT
-      // DO UPDATE SET clause leaves other columns alone, so we don't need
-      // to spread the whole campaign (which now carries camelCase aliases
-      // that aren't real D1 columns).
+      // DO UPDATE SET clause leaves other columns alone, BUT SQLite still
+      // validates NOT NULL on the INSERT-side row before routing — so
+      // we must include `name` + `slug` (both NOT NULL on `campaigns`)
+      // even though they aren't being changed. Pull from local state so
+      // we don't have to re-fetch.
+      const existing = campaigns.find(c => c.id === campaignId);
+      if (!existing) {
+        toast.error('Campaign not found in local state');
+        return;
+      }
       await upsertDocument('campaigns', campaignId, {
+        name: existing.name,
+        slug: existing.slug,
         era_id: eraId || null,
         updated_at: new Date().toISOString(),
       });
@@ -200,7 +209,15 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
   const handleSetRecommendedLore = async (campaignId: string, loreId: string) => {
     try {
+      // Same NOT NULL gotcha as handleSetCampaignEra — see comment there.
+      const existing = campaigns.find(c => c.id === campaignId);
+      if (!existing) {
+        toast.error('Campaign not found in local state');
+        return;
+      }
       await upsertDocument('campaigns', campaignId, {
+        name: existing.name,
+        slug: existing.slug,
         recommended_lore_id: loreId || null,
         updated_at: new Date().toISOString(),
       });

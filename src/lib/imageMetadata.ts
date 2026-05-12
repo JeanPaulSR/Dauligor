@@ -1,4 +1,4 @@
-import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from './d1';
+import { fetchCollection, fetchDocument, upsertDocument, updateDocument, deleteDocument } from './d1';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -111,9 +111,10 @@ export async function updateImageMetadata(
   updates: Partial<ImageMetadata>,
 ): Promise<void> {
   const docId = storagePathToDocId(storagePath);
-  // Partial upsert — ON CONFLICT(id) DO UPDATE SET <only-the-supplied-cols> = excluded.<…>
-  // leaves untouched columns at their existing values.
-  await upsertDocument('imageMetadata', docId, toRowShape(updates));
+  // Real UPDATE — image_metadata has NOT NULL columns (`url`, `storage_path`)
+  // that we don't necessarily resupply in a partial patch, so we can't use
+  // upsertDocument here (its INSERT-side NOT NULL check would fail).
+  await updateDocument('imageMetadata', docId, toRowShape(updates));
 }
 
 export async function deleteImageMetadata(storagePath: string): Promise<void> {
@@ -171,7 +172,12 @@ export async function updateImageReferences(oldUrl: string, newUrl: string): Pro
           });
           await Promise.all(
             matches.map(async (m: any) => {
-              await upsertDocument(col, m.id, { [field]: newUrl });
+              // Real UPDATE — we're patching one column on a row we just
+              // selected by id, and the target tables (classes, features,
+              // users, sources, subclasses, lore) each have NOT NULL
+              // columns that aren't in our payload. upsertDocument would
+              // throw `NOT NULL constraint failed` on those tables.
+              await updateDocument(col, m.id, { [field]: newUrl });
               count++;
             }),
           );

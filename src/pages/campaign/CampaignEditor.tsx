@@ -26,6 +26,11 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
 
   const [formData, setFormData] = useState({
     name: '',
+    // `slug` isn't user-editable here, but campaigns.slug is NOT NULL and
+    // upsertDocument's INSERT-on-conflict-UPDATE pattern checks NOT NULL
+    // against the would-be inserted row first — so we have to thread the
+    // existing slug through the form state to preserve it on save.
+    slug: '',
     description: '',
     eraId: '',
     recommendedLoreId: '',
@@ -79,6 +84,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
 
             setFormData({
               name: campData.name || '',
+              slug: campData.slug || '',
               description: campData.description || '',
               eraId: campData.era_id || '',
               recommendedLoreId: campData.recommended_lore_id || '',
@@ -110,6 +116,7 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
       // 1. Save the campaign
       const campaignData = {
         name: formData.name,
+        slug: formData.slug,
         description: formData.description,
         era_id: formData.eraId,
         recommended_lore_id: formData.recommendedLoreId,

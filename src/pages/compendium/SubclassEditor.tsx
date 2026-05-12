@@ -1234,10 +1234,18 @@ export default function SubclassEditor() {
                 {scalingColumns.map(col => (
                   <div key={col.id} className="p-3 bg-gold/5 border border-gold/10 rounded space-y-2 group relative">
                     <div className="flex items-center justify-between">
-                      <Input 
-                        value={col.name} 
+                      <Input
+                        value={col.name}
                         onChange={e => {
-                          upsertDocument("scaling_columns", col.id, { name: e.target.value });
+                          // upsertDocument fires INSERT ... ON CONFLICT(id) DO UPDATE;
+                          // SQLite checks NOT NULL on the insert-side row before
+                          // routing to UPDATE, so we must supply parent_id +
+                          // parent_type even on a name-only patch.
+                          upsertDocument("scaling_columns", col.id, {
+                            name: e.target.value,
+                            parent_id: id,
+                            parent_type: "subclass",
+                          });
                           queueRebake('scalingColumn', col.id);
                         }}
                         className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"

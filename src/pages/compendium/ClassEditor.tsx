@@ -3869,7 +3869,16 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     <Input
                       value={col.name}
                       onChange={e => {
-                        upsertDocument("scaling_columns", col.id, { name: e.target.value });
+                        // upsertDocument fires INSERT ... ON CONFLICT(id) DO UPDATE;
+                        // SQLite checks NOT NULL on the insert-side row before
+                        // routing to UPDATE, so we must supply parent_id +
+                        // parent_type even on a name-only patch of an existing
+                        // scaling column.
+                        upsertDocument("scaling_columns", col.id, {
+                          name: e.target.value,
+                          parent_id: id,
+                          parent_type: "class",
+                        });
                         queueRebake('scalingColumn', col.id);
                       }}
                       className="h-6 text-[11px] font-bold bg-transparent border-none p-0 focus-visible:ring-0"

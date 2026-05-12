@@ -423,6 +423,43 @@ export async function upsertDocumentBatch(collectionName: string, entries: { id:
 }
 
 /**
+ * Update an existing document by id without round-tripping through
+ * upsert. Prefer this over `upsertDocument` for **partial patches of
+ * known-existing rows** — upsertDocument's `INSERT ... ON CONFLICT(id)
+ * DO UPDATE` pattern makes SQLite validate NOT NULL on the would-be
+ * inserted row first, so partial payloads that omit a NOT NULL column
+ * fail with `NOT NULL constraint failed: <table>.<col>` even when the
+ * existing row's value is fine. A real UPDATE has no such trap.
+ *
+ * Use `upsertDocument` when you don't know whether the row exists yet
+ * (the common create-or-update case). Use this when you do — e.g.
+ * after a `fetchCollection` returned the id, or when patching a
+ * single column on a row your code just selected.
+ *
+ * Returns the number of rows touched (0 or 1 for unique ids).
+ */
+export async function updateDocument(
+  collectionName: string,
+  id: string,
+  data: Record<string, any>
+): Promise<void> {
+  const tableName = getTableName(collectionName);
+  const entries = dropUndefined(Object.entries(data));
+  if (entries.length === 0) return;
+  const setClause = entries
+    .map(([key]) => `${q(key)} = ?`)
+    .join(', ');
+  const values = [
+    ...entries.map(([, val]) => typeof val === 'object' && val !== null ? JSON.stringify(val) : val),
+    id
+  ];
+  const sql = `UPDATE ${tableName} SET ${setClause} WHERE id = ?`;
+  await queryD1(sql, values);
+  const timestamp = new Date().toLocaleTimeString();
+  console.info(`%c[D1][${timestamp}] Successfully patched document ${id} in ${tableName}`, 'color: #06b6d4; font-weight: bold;');
+}
+
+/**
  * Delete a document from D1.
  */
 export async function deleteDocument(
