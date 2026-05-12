@@ -20,11 +20,21 @@ const PUBLIC_URL_FALLBACK = "https://images.dauligor.com";
 // Old prefixes are orphaned in R2; safe to delete.
 const EXPORT_PREFIX = "module-export/v6";
 
-// 60s browser cache, 5min CDN cache, stale-while-revalidate 24h. Tuned for
-// "edits are infrequent, reads are constant". Tweaked higher than typical
-// because invalidations are explicit (rebake-now / queue) — the CDN value
-// is a worst-case bound on staleness from background reads.
-const PUBLIC_CACHE_HEADER = "public, max-age=60, s-maxage=300, stale-while-revalidate=86400";
+// 60s browser cache, 5min CDN cache, 5min stale-while-revalidate.
+//
+// The previous `stale-while-revalidate=86400` (24h) was overly generous:
+// after `rebake-now` succeeded and R2 was already fresh, the first reader
+// past the 5-min `s-maxage` window got a stale CDN response *and* kicked
+// off the background revalidation — but only the second reader saw the
+// fresh content. With low-traffic endpoints, that "second reader" could
+// be 10+ minutes away, making manual bakes feel broken.
+//
+// Reducing SWR to 5min caps worst-case staleness at 10min (`s-maxage` +
+// SWR window) and removes the surprise. Manual bakes now also call
+// `warmPublicUrlsForKeys()` after writing R2, which trips the SWR
+// refresh proactively so the very next external reader gets fresh
+// content even without us waiting 5min.
+const PUBLIC_CACHE_HEADER = "public, max-age=60, s-maxage=300, stale-while-revalidate=300";
 
 function getPublicBaseUrl() {
   return (process.env.R2_PUBLIC_URL || PUBLIC_URL_FALLBACK).replace(/\/+$/, "");
@@ -51,6 +61,82 @@ export function sourceClassCatalogKey(sourceSlug: string) {
 
 export function classBundleKey(sourceSlug: string, classIdentifier: string) {
   return `${EXPORT_PREFIX}/${sourceSlug}/classes/${classIdentifier}.json`;
+}
+
+// ── CDN warming ─────────────────────────────────────────────────────────────
+
+/**
+ * After a fresh R2 write, fire one HEAD-equivalent fetch per affected
+ * URL through Vercel so the function runs against the new R2 content
+ * and the CDN cache entry is replaced with the fresh body.
+ *
+ * Without this, the next *external* reader would hit Vercel's existing
+ * stale entry, get served stale, and only THEN trigger the
+ * `stale-while-revalidate` background refresh — so the user who hit
+ * "Bake Now" might re-fetch and see their *old* data while the system
+ * silently warms in the background. By doing the warm-up ourselves on
+ * the bake path, the very next external reader gets fresh content.
+ *
+ * Strict best-effort: each fetch has a short timeout, swallows errors,
+ * and never blocks the rebake response. The bake itself already wrote
+ * R2 successfully by the time this runs; warming is just a UX nicety.
+ *
+ * R2 keys look like `module-export/v6/ll/classes/foo.json`. The
+ * corresponding Vercel URL is
+ * `https://<host>/api/module/ll/classes/foo.json`. We strip the
+ * `${EXPORT_PREFIX}/` prefix and prepend the public origin.
+ *
+ * `process.env.PUBLIC_SITE_URL` is the origin the Vercel function
+ * should warm against (e.g. `https://www.dauligor.com`). Falls back to
+ * `https://${VERCEL_URL}` (Vercel's per-deployment hostname) when
+ * unset — that path works in preview deployments too. If neither is
+ * available the helper exits silently.
+ */
+function getPublicSiteUrl(): string | null {
+  const explicit = (process.env.PUBLIC_SITE_URL || "").trim().replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const vercel = (process.env.VERCEL_URL || "").trim();
+  if (vercel) return `https://${vercel.replace(/\/+$/, "")}`;
+  return null;
+}
+
+export function publicUrlForBundleKey(key: string): string | null {
+  const siteUrl = getPublicSiteUrl();
+  if (!siteUrl) return null;
+  const stripped = key.startsWith(`${EXPORT_PREFIX}/`)
+    ? key.slice(EXPORT_PREFIX.length + 1)
+    : key;
+  return `${siteUrl}/api/module/${stripped}`;
+}
+
+export async function warmPublicUrlsForKeys(keys: readonly string[]): Promise<void> {
+  if (!keys.length) return;
+  const urls = keys.map((k) => publicUrlForBundleKey(k)).filter((u): u is string => !!u);
+  if (!urls.length) return;
+
+  // Per-request 3s timeout. The function only needs to fetch from R2
+  // and re-serialize, so 3s is generous; if Vercel is slower than that
+  // the warm step would block the bake response and any future
+  // external reader would still get the SWR-promoted bundle anyway.
+  await Promise.all(urls.map(async (url) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    try {
+      await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal,
+        // Send a header the function can log if needed. Not gated on —
+        // any GET against the URL triggers the same CDN-warm effect.
+        headers: { "x-dauligor-warm": "rebake-now" },
+      });
+    } catch (error) {
+      // Swallow — R2 is already fresh, this is just a nicety.
+      console.warn("[module-export-store] warmPublicUrlsForKeys: fetch failed", { url, error });
+    } finally {
+      clearTimeout(timer);
+    }
+  }));
 }
 
 // ── Read ────────────────────────────────────────────────────────────────────

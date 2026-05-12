@@ -12,6 +12,7 @@ import {
   readBundle,
   sourceClassCatalogKey,
   topLevelCatalogKey,
+  warmPublicUrlsForKeys,
   writeBundle,
 } from "./_lib/module-export-store.js";
 import {
@@ -148,6 +149,12 @@ export default async function handler(req: any, res: any) {
         // were rebaked above; their queue entries (if any) keep their own
         // last_edit_at and will fire normally.
         await clearForRebake(entry.kind, entry.id);
+        // Warm Vercel CDN for the just-rebaked URLs. Without this, the
+        // very next external reader past the s-maxage window would still
+        // get the stale CDN entry while SWR refreshes in the background;
+        // by warming proactively the next reader gets fresh content
+        // immediately. Best-effort — failures don't break the response.
+        await warmPublicUrlsForKeys(written);
         res.setHeader("Content-Type", "application/json");
         return res.end(JSON.stringify({ rebaked: entry, written }));
       }
