@@ -319,17 +319,17 @@
 }
 
 .dauligor-wizard__source-header {
-  border-bottom: 1px solid rgba(192, 160, 96, 0.18);
-  /* Gold-tinted header recipe — same as the class-browser table
-   * header, option-picker level headers, and subclass-preview
-   * level headers. The "Tag Filters" modal and the section heads
-   * in the Class Import Overview already use this color treatment. */
-  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #d9b977;
+  /* Grey "table header" recipe — shared with the class-browser list
+   * header. We tried a gold-gradient pass on these table chromes and
+   * the user pushed back: they liked the cooler grey, just wanted
+   * the structural consistency (rounded panel + matching hover) we
+   * landed in round 4. Gold lives on the *content* (section labels,
+   * accent bars on selected rows) not the chrome. */
+  border-bottom: 1px solid var(--dauligor-border);
+  background: #2b2b2b;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c5c3bb;
 }
 
 .dauligor-wizard__source-body {
@@ -352,14 +352,17 @@
 
 .dauligor-wizard__source-row:hover,
 .dauligor-wizard__source-row:focus-within {
-  /* Gold-tint hover unifies the wizard's source table with the
-   * class-browser list, option-picker rows, subclass-preview rows,
-   * and level-selector rows. */
-  background: rgba(192, 160, 96, 0.08);
+  /* Grey hover — shared rhythm with class-browser rows, option-picker
+   * rows, subclass-preview rows, and level-selector rows. We keep
+   * a thin gold inset accent bar on `--selected` as a structural
+   * marker (matches the gold border highlight on "Divine Domain"
+   * in the Class Import Overview screenshot) without flooding the
+   * row background. */
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .dauligor-wizard__source-row--selected {
-  background: rgba(192, 160, 96, 0.14);
+  background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
@@ -852,16 +855,16 @@
   text-align: center;
 }
 
-/* Level header — sticky, gold-tinted, same shape as the option
- * picker's `.dauligor-option-picker__level-header`. */
+/* Level header — sticky, grey band with a gold label. Same recipe
+ * as `.dauligor-option-picker__level-header`. */
 .dauligor-subclass-preview__level-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
-  border-top: 1px solid rgba(192, 160, 96, 0.25);
-  border-bottom: 1px solid rgba(192, 160, 96, 0.18);
+  background: #2b2b2b;
+  border-top: 1px solid var(--dauligor-border);
+  border-bottom: 1px solid var(--dauligor-border);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -878,11 +881,13 @@
 
 .dauligor-subclass-preview__level-count {
   font-size: 10px;
-  color: rgba(217, 185, 119, 0.6);
+  color: rgba(217, 185, 119, 0.55);
 }
 
 /* Row — works for both subclass rows (with image) and feature rows
- * (no image). Same focus / hover treatments as the option picker. */
+ * (no image). Same hover / focus treatments as the option picker:
+ * grey backgrounds across the board, gold inset accent bar as the
+ * only gold marker on the `--focused` row. */
 .dauligor-subclass-preview__row {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
@@ -905,11 +910,11 @@
 }
 
 .dauligor-subclass-preview__row:hover {
-  background: rgba(192, 160, 96, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .dauligor-subclass-preview__row--focused {
-  background: rgba(192, 160, 96, 0.14);
+  background: rgba(255, 255, 255, 0.10);
   box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
@@ -1013,14 +1018,12 @@
   border-bottom: 0;
   border-top-left-radius: 8px;
   border-top-right-radius: 8px;
-  /* Gold-tinted header recipe shared with the option-picker /
-   * subclass-preview / level-selector. */
-  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #d9b977;
+  /* Grey header chrome — same recipe as the wizard source-table
+   * header. See that block's comment for the gold-vs-grey rationale. */
+  background: #2b2b2b;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c5c3bb;
 }
 
 .dauligor-class-browser__header-cell--source {
@@ -1067,14 +1070,15 @@
 
 .dauligor-class-browser__row:hover,
 .dauligor-class-browser__row:focus {
-  /* Gold-tint hover matches the option-picker + subclass-preview
-   * rows so all "clickable list rows" in the module behave the
-   * same way visually. */
-  background: rgba(192, 160, 96, 0.08);
+  /* Grey hover (same as wizard source-row, option-picker row,
+   * subclass-preview row, level-selector row). See the
+   * `.dauligor-wizard__source-row:hover` block for the
+   * gold-vs-grey rationale. */
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .dauligor-class-browser__row--selected {
-  background: rgba(192, 160, 96, 0.14);
+  background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
@@ -1316,16 +1320,14 @@
 }
 
 .dauligor-class-options__levels-header {
-  /* Sticky gold-tinted header, same recipe as the option-picker's
-   * `__level-header`. Visually links the level picker to the rest
-   * of the importer's UI family. */
-  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
-  border-bottom: 1px solid rgba(192, 160, 96, 0.18);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: #d9b977;
+  /* Grey table-header chrome — matches the wizard source-table
+   * + class-browser table headers. The gold/uppercase recipe is
+   * reserved for *labels* (section titles, badges), not chrome. */
+  background: #2b2b2b;
+  border-bottom: 1px solid var(--dauligor-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: #c5c3bb;
 }
 
 .dauligor-class-options__levels-row {
@@ -1337,17 +1339,20 @@
 }
 
 .dauligor-class-options__levels-row:hover {
-  background: rgba(192, 160, 96, 0.08);
+  /* Grey hover, same as the rest of the module's clickable rows. */
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .dauligor-class-options__levels-row.is-selected {
-  background: rgba(192, 160, 96, 0.10);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .dauligor-class-options__levels-row.is-current {
-  /* The actively-picked target level. Match the option-picker's
-   * `__row--focused` recipe: gold tint + inset accent bar. */
-  background: rgba(192, 160, 96, 0.18);
+  /* Actively-picked target level. Grey background + the gold inset
+   * accent bar as a structural marker — the only place gold still
+   * shows up on the row, matching the gold outline on selected
+   * features in the Class Import Overview. */
+  background: rgba(255, 255, 255, 0.10);
   box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
@@ -2614,9 +2619,14 @@
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
-  border-top: 1px solid rgba(192, 160, 96, 0.25);
-  border-bottom: 1px solid rgba(192, 160, 96, 0.18);
+  /* Grey level-divider chrome with gold label text. The level
+   * header IS a label (it tells you which section of the list
+   * you're in), so the text gets the gold/uppercase treatment;
+   * the band itself stays grey to match the other table headers
+   * in the module. */
+  background: #2b2b2b;
+  border-top: 1px solid var(--dauligor-border);
+  border-bottom: 1px solid var(--dauligor-border);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -2633,7 +2643,7 @@
 
 .dauligor-option-picker__level-count {
   font-size: 10px;
-  color: rgba(217, 185, 119, 0.6);
+  color: rgba(217, 185, 119, 0.55);
 }
 
 .dauligor-option-picker__row {
@@ -2653,21 +2663,29 @@
 }
 
 .dauligor-option-picker__row:hover {
-  background: rgba(192, 160, 96, 0.08);
+  /* Grey hover; matches the rest of the module's clickable rows. */
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .dauligor-option-picker__row--focused {
-  background: rgba(192, 160, 96, 0.14);
+  /* Grey background + gold inset accent bar — the gold lives on
+   * the accent strip only, not flooding the row. Same pattern as
+   * `.dauligor-class-options__levels-row.is-current` and the rest
+   * of the unified `--selected` rows. */
+  background: rgba(255, 255, 255, 0.10);
   box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
 .dauligor-option-picker__row--highlighted {
+  /* Jump-to-prereq one-shot pulse. Same grey-with-accent palette
+   * the rest of the rows use — fades into the resting `--focused`
+   * background so the bar doesn't pop. */
   animation: dauligor-option-picker-pulse 1500ms ease-out 1;
 }
 
 @keyframes dauligor-option-picker-pulse {
-  0% { background: rgba(192, 160, 96, 0.42); }
-  100% { background: rgba(192, 160, 96, 0.14); }
+  0% { background: rgba(255, 255, 255, 0.28); }
+  100% { background: rgba(255, 255, 255, 0.10); }
 }
 
 .dauligor-option-picker__row--owned {
