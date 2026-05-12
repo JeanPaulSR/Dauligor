@@ -24,6 +24,10 @@ import {
   type Requirement,
   type ProficiencyKind,
 } from '../../lib/requirements';
+import {
+  RECOVERY_PERIOD_OPTIONS,
+  RECOVERY_TYPE_OPTIONS,
+} from '../../components/compendium/activity/constants';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertFeat, deleteFeat, fetchFeat } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
@@ -34,32 +38,69 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
+import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import VirtualizedList from '../../components/ui/VirtualizedList';
 
 // ─── Constants ──────────────────────────────────────────────────────────
 
-// Feat category enum. These currently map 1:1 to dnd5e 5.x `system.type.value`
-// for feat-typed items (with our `classFeature` slug mapping to dnd5e's
-// "class feature" subtype on export). We keep the editor's enum narrow —
-// the importer can expand the value/subtype pair from this list when it
-// wires up the feats round-trip.
-const FEAT_TYPES: [string, string][] = [
-  ['general', 'General'],
-  ['origin', 'Origin'],
-  ['fightingStyle', 'Fighting Style'],
-  ['epicBoon', 'Epic Boon'],
-  ['classFeature', 'Class Feature Style'],
+// dnd5e 5.x `system.type.value` — the broad document category for a
+// feat-typed item. Authoritative list cross-checked against the
+// Foundry-JSON dumps in E:/DnD/Professional/Foundry-JSON/features/
+// and `CONFIG.DND5E.featureTypes` in dnd5e v5.x. Each value below is
+// the canonical Foundry slug; we surface a label for the dropdown.
+const FEAT_TYPE_VALUES: [string, string][] = [
+  ['feat', 'Feat'],
+  ['class', 'Class Feature'],
+  ['subclass', 'Subclass Feature'],
+  ['race', 'Racial Feature'],
+  ['background', 'Background Feature'],
+  ['monster', 'Monster Feature'],
 ];
+
+// `system.type.subtype` cascading on the value. For `feat` we know the
+// canonical four subtypes Foundry ships (general / origin / fightingStyle
+// / epicBoon — taken straight from PHB / Tasha's authoring conventions).
+// For the others, the subtype is an open identifier (class identifier,
+// race identifier, etc.) — the editor falls through to a free-text input.
+const FEAT_SUBTYPE_OPTIONS_BY_VALUE: Record<string, [string, string][]> = {
+  feat: [
+    ['', '(None)'],
+    ['general', 'General'],
+    ['origin', 'Origin'],
+    ['fightingStyle', 'Fighting Style'],
+    ['epicBoon', 'Epic Boon'],
+  ],
+  // The others use the free-text path — empty array means "no enumerated
+  // subtypes; let the author type one in".
+  class: [],
+  subclass: [],
+  race: [],
+  background: [],
+  monster: [],
+};
 
 // Used by the export pipeline (and eventually the import pipeline) to
 // decide which Foundry document shape to mint — most go to a `feat`-typed
 // Item; class/subclass-feature variants land as features attached to a
-// class instead.
+// class instead. Kept separate from `feat_type` because the same authored
+// row may want to ship as a feat AND as a class-feature record in the
+// future (Foundry doesn't strictly enforce the distinction).
 const SOURCE_TYPES: [string, string][] = [
   ['feat', 'Feat'],
   ['classFeature', 'Class Feature'],
   ['subclassFeature', 'Subclass Feature'],
 ];
+
+// Recovery rule on item-level uses. Same shape activities use for their
+// per-activity uses.recovery[] — reuse the editor pattern from
+// ConsumptionTabEditor (period / type / formula). Authored as JSON onto
+// `feats.uses_recovery` and lands at `system.uses.recovery[]` on the
+// Foundry-side feat item.
+type UsesRecoveryRule = {
+  period: string;
+  type: string;
+  formula?: string;
+};
 
 // Mirrors the dimensions SpellsEditor uses so the two managers feel
 // visually identical at a glance.
@@ -75,11 +116,35 @@ type FeatFormData = {
   sourceId: string;
   imageUrl: string;
   description: string;
+  /**
+   * `system.type.value` on the Foundry feat item — the broad category
+   * (feat / class / subclass / race / background / monster).
+   * Stored as `feats.feat_type` in D1.
+   */
   featType: string;
+  /**
+   * `system.type.subtype` on the Foundry feat item — the granular tag.
+   * Cascades on `featType`: enumerated for `feat`, free-text identifier
+   * for the other categories. Stored as `feats.feat_subtype` in D1
+   * (added by migration 20260511-1830).
+   */
+  featSubtype: string;
   sourceType: string;
   requirements: string;
   repeatable: boolean;
-  uses: { max: string; spent: number };
+  uses: {
+    max: string;
+    spent: number;
+    /**
+     * `system.uses.recovery[]` — items with limited uses publish
+     * how those uses recover (long-rest / short-rest / dawn / etc.).
+     * Each entry mirrors what activity-level `uses.recovery[]` carries:
+     * `{ period, type, formula }`. Stored as JSON on
+     * `feats.uses_recovery` (added by migration 20260511-1830) and
+     * auto-parsed by `d1.ts`'s jsonFields list.
+     */
+    recovery: UsesRecoveryRule[];
+  };
   activities: any[];
   effectsStr: string;
   /**
@@ -101,15 +166,36 @@ const FEAT_DEFAULTS: Omit<FeatFormData, 'sourceId'> & { sourceId?: string } = {
   sourceId: '',
   imageUrl: '',
   description: '',
-  featType: 'general',
+  featType: 'feat',
+  featSubtype: 'general',
   sourceType: 'feat',
   requirements: '',
   repeatable: false,
-  uses: { max: '', spent: 0 },
+  uses: { max: '', spent: 0, recovery: [] },
   activities: [],
   effectsStr: '[]',
   requirementsTree: EMPTY_REQUIREMENT_TREE,
 };
+
+/**
+ * Migrate a legacy `feat_type` slug onto the new value/subtype pair.
+ * The migration 20260511-1830 ran the same normalization on the DB
+ * side, but defensive in-memory normalization keeps the form sane
+ * if anything still arrives with a pre-migration shape (e.g. a stale
+ * cached row, or a roundtrip through code that hasn't been redeployed).
+ */
+function normalizeLegacyFeatType(legacyType: string | undefined | null): { featType: string; featSubtype: string } {
+  const t = String(legacyType ?? '').trim();
+  if (t === 'general' || t === 'origin' || t === 'fightingStyle' || t === 'epicBoon') {
+    return { featType: 'feat', featSubtype: t };
+  }
+  if (t === 'classFeature') return { featType: 'class', featSubtype: '' };
+  if (!t) return { featType: 'feat', featSubtype: '' };
+  // Already-canonical values (feat / class / subclass / race / background
+  // / monster) pass through unchanged with an empty subtype that the form
+  // can backfill from the row's separate `feat_subtype` column.
+  return { featType: t, featSubtype: '' };
+}
 
 function makeInitialFeatForm(sources: any[] = []): FeatFormData {
   return {
@@ -195,15 +281,22 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         // SpellsEditor's `mapped` produces. requirementsTree is auto-
         // parsed by d1.ts and arrives as the typed object on the row
         // already, but parse defensively so older rows survive.
-        const mapped = featRows.map((row: any) => ({
-          ...row,
-          sourceId: row.source_id,
-          imageUrl: row.image_url,
-          featType: row.feat_type,
-          sourceType: row.source_type,
-          requirementsTree: parseRequirementTree(row.requirements_tree ?? row.requirementsTree),
-          tagIds: Array.isArray(row.tags) ? row.tags : [],
-        }));
+        const mapped = featRows.map((row: any) => {
+          const normalized = normalizeLegacyFeatType(row.feat_type);
+          return {
+            ...row,
+            sourceId: row.source_id,
+            imageUrl: row.image_url,
+            // featType + featSubtype together represent the canonical
+            // dnd5e `system.type.{value, subtype}` pair. Defensive
+            // normalization runs in case any row predates the migration.
+            featType: normalized.featType,
+            featSubtype: row.feat_subtype || normalized.featSubtype,
+            sourceType: row.source_type,
+            requirementsTree: parseRequirementTree(row.requirements_tree ?? row.requirementsTree),
+            tagIds: Array.isArray(row.tags) ? row.tags : [],
+          };
+        });
         setEntries(mapped);
         setSources(sourceRows);
         if (sourceRows.length > 0) setIsFoundationUsingD1(true);
@@ -288,6 +381,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         String(entry.name || '').toLowerCase().includes(lowered)
         || String(entry.identifier || '').toLowerCase().includes(lowered)
         || String(entry.featType || '').toLowerCase().includes(lowered)
+        || String(entry.featSubtype || '').toLowerCase().includes(lowered)
         || sourceLabel.includes(lowered)
       );
     });
@@ -328,19 +422,33 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     const cached = featDetailsById[editingId];
     if (cached) {
       const defaults = makeInitialFeatForm(sources);
+      const normalized = normalizeLegacyFeatType(cached.featType || cached.feat_type);
+      const recoveryRaw = cached.uses?.recovery
+        ?? cached.usesRecovery
+        ?? cached.uses_recovery
+        ?? [];
       setFormData({
         ...defaults,
         ...cached,
         id: cached.id,
         sourceId: cached.sourceId || cached.source_id || sources[0]?.id || '',
         imageUrl: cached.imageUrl || cached.image_url || '',
-        featType: cached.featType || cached.feat_type || 'general',
+        featType: normalized.featType,
+        featSubtype: cached.featSubtype || cached.feat_subtype || normalized.featSubtype || '',
         sourceType: cached.sourceType || cached.source_type || 'feat',
         requirements: cached.requirements || '',
         repeatable: !!cached.repeatable,
         uses: {
           max: cached.uses?.max ?? cached.usesMax ?? cached.uses_max ?? '',
           spent: Number(cached.uses?.spent ?? cached.usesSpent ?? cached.uses_spent ?? 0) || 0,
+          // `uses_recovery` is in d1.ts's auto-parse list so it arrives
+          // as an array on a fresh fetch; older cached payloads may
+          // still surface the JSON string — parse defensively.
+          recovery: Array.isArray(recoveryRaw)
+            ? recoveryRaw
+            : typeof recoveryRaw === 'string'
+              ? (() => { try { return JSON.parse(recoveryRaw); } catch { return []; } })()
+              : [],
         },
         activities: Array.isArray(cached.automation?.activities)
           ? cached.automation.activities
@@ -382,15 +490,19 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   const refreshEntries = async () => {
     try {
       const rows = await fetchCollection<any>('feats', { orderBy: 'name ASC' });
-      const mapped = rows.map((row: any) => ({
-        ...row,
-        sourceId: row.source_id,
-        imageUrl: row.image_url,
-        featType: row.feat_type,
-        sourceType: row.source_type,
-        requirementsTree: parseRequirementTree(row.requirements_tree ?? row.requirementsTree),
-        tagIds: Array.isArray(row.tags) ? row.tags : [],
-      }));
+      const mapped = rows.map((row: any) => {
+        const normalized = normalizeLegacyFeatType(row.feat_type);
+        return {
+          ...row,
+          sourceId: row.source_id,
+          imageUrl: row.image_url,
+          featType: normalized.featType,
+          featSubtype: row.feat_subtype || normalized.featSubtype,
+          sourceType: row.source_type,
+          requirementsTree: parseRequirementTree(row.requirements_tree ?? row.requirementsTree),
+          tagIds: Array.isArray(row.tags) ? row.tags : [],
+        };
+      });
       setEntries(mapped);
       // Invalidate the per-feat detail cache so the next select re-reads
       // the freshly-saved row (no stale activities/effects after edit).
@@ -427,18 +539,27 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       // `normalizeCompendiumData` expects, and the JSON columns get
       // unwrapped to top-level `activities` / `effects` automatically.
       // We also write `requirements_tree` as the serialized tree (or null).
+      // Drop empty recovery rows (period AND type AND formula all
+      // blank) so the JSON column doesn't accumulate placeholder
+      // entries from rules the author added then never filled in.
+      const cleanedRecovery = (formData.uses.recovery || []).filter(
+        (r) => r.period || r.type || (r.formula && r.formula.trim()),
+      );
+
       const payload: Record<string, any> = {
         name: formData.name,
         identifier: formData.identifier.trim() || slugify(formData.name),
         source_id: formData.sourceId,
         image_url: formData.imageUrl || null,
         description: formData.description || '',
-        feat_type: formData.featType || 'general',
+        feat_type: formData.featType || 'feat',
+        feat_subtype: formData.featSubtype || null,
         source_type: formData.sourceType || 'feat',
         requirements: formData.requirements || null,
         repeatable: formData.repeatable ? 1 : 0,
         uses_max: formData.uses.max || null,
         uses_spent: Number(formData.uses.spent) || 0,
+        uses_recovery: cleanedRecovery,
         activities: Array.isArray(formData.activities) ? formData.activities : [],
         effects: parsedEffects,
         requirements_tree: serializeRequirementTree(formData.requirementsTree),
@@ -591,10 +712,23 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                           const sourceLabel = String(
                             sourceNameById[entry.sourceId] || entry.sourceId || 'Unknown Source',
                           );
-                          const featTypeLabel =
-                            FEAT_TYPES.find(([value]) => value === entry.featType)?.[1]
-                            || entry.featType
-                            || 'General';
+                          // Row label shows the canonical type ("Feat" /
+                          // "Class Feature" / etc.) with the optional
+                          // subtype tacked on so authors can tell apart
+                          // "Feat · Fighting Style" from "Feat · Origin"
+                          // at a glance.
+                          const featTypeLabel = (() => {
+                            const valueLabel =
+                              FEAT_TYPE_VALUES.find(([value]) => value === entry.featType)?.[1]
+                              || entry.featType
+                              || 'Feat';
+                            const subtypeRaw = String(entry.featSubtype || '').trim();
+                            if (!subtypeRaw) return valueLabel;
+                            const enumLabel = (
+                              FEAT_SUBTYPE_OPTIONS_BY_VALUE[entry.featType] || []
+                            ).find(([v]) => v === subtypeRaw)?.[1];
+                            return `${valueLabel} · ${enumLabel || subtypeRaw}`;
+                          })();
                           // A row "has prereqs" if either the legacy free-text
                           // column carries a value or the structured tree is
                           // non-empty. Mirrors the lock-icon UX SpellList
@@ -671,7 +805,15 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                         ) : null}
                       </div>
                       <p className="font-serif italic text-ink/70">
-                        {FEAT_TYPES.find(([value]) => value === formData.featType)?.[1] || 'General'}
+                        {(() => {
+                          const valueLabel =
+                            FEAT_TYPE_VALUES.find(([value]) => value === formData.featType)?.[1] || 'Feat';
+                          const subtypeRaw = String(formData.featSubtype || '').trim();
+                          if (!subtypeRaw) return valueLabel;
+                          const enumLabel = (FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [])
+                            .find(([v]) => v === subtypeRaw)?.[1];
+                          return `${valueLabel} · ${enumLabel || subtypeRaw}`;
+                        })()}
                         {formData.repeatable ? ' · Repeatable' : ''}
                       </p>
                     </div>
@@ -758,17 +900,65 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                             ))}
                           </select>
                         </div>
+                        {/* Foundry's `system.type` is a {value, subtype}
+                            pair. Authoring as two cascading fields so
+                            the export drops them straight into the same
+                            slot without translation. */}
                         <div className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Feat Type</Label>
                           <select
-                            value={formData.featType || 'general'}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, featType: e.target.value }))}
+                            value={formData.featType || 'feat'}
+                            onChange={(e) => setFormData((prev) => ({
+                              ...prev,
+                              featType: e.target.value,
+                              // Reset the subtype when the value changes
+                              // since the enumerated options differ per
+                              // value (and may be invalid for the new
+                              // value's free-text path).
+                              featSubtype: '',
+                            }))}
                             className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
                           >
-                            {FEAT_TYPES.map(([value, label]) => (
+                            {FEAT_TYPE_VALUES.map(([value, label]) => (
                               <option key={value} value={value}>{label}</option>
                             ))}
                           </select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Subtype</Label>
+                          {(() => {
+                            const subtypeOptions = FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [];
+                            if (subtypeOptions.length > 0) {
+                              return (
+                                <select
+                                  value={formData.featSubtype || ''}
+                                  onChange={(e) =>
+                                    setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
+                                  }
+                                  className="w-full h-10 px-3 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                                >
+                                  {subtypeOptions.map(([value, label]) => (
+                                    <option key={value || '_blank'} value={value}>{label}</option>
+                                  ))}
+                                </select>
+                              );
+                            }
+                            // class / subclass / race / background / monster
+                            // — the subtype is a free identifier (e.g.
+                            // "wizard", "tiefling"). Foundry uses these
+                            // strings to drive system.type.subtype's
+                            // display in the item card.
+                            return (
+                              <Input
+                                value={formData.featSubtype || ''}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({ ...prev, featSubtype: e.target.value }))
+                                }
+                                className="bg-background/50 border-gold/10 focus:border-gold font-mono"
+                                placeholder="identifier (e.g. wizard, tiefling)"
+                              />
+                            );
+                          })()}
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source Type</Label>
@@ -846,6 +1036,114 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                           </div>
                         </div>
                       </div>
+                      {/* Recovery rules — drive `system.uses.recovery[]`
+                          on the Foundry feat item. Pattern lifted from
+                          ConsumptionTabEditor's per-activity recovery
+                          editor (same option catalogs, same row layout)
+                          so authors don't have to learn a second UI for
+                          the same concept. Empty list = no recovery
+                          (item uses persist until manually reset). */}
+                      <div className="space-y-2 border-t border-gold/8 pt-3">
+                        <div className="flex items-baseline justify-between">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Recovery Rules</Label>
+                          <span className="text-[10px] text-ink/40">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
+                        </div>
+                        <div className="space-y-2">
+                          {formData.uses.recovery.map((entry, idx) => (
+                            <div
+                              key={idx}
+                              className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded"
+                            >
+                              <SingleSelectSearch
+                                value={entry.period || ''}
+                                onChange={(val) => {
+                                  const next = formData.uses.recovery.slice();
+                                  next[idx] = { ...entry, period: val };
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    uses: { ...prev.uses, recovery: next },
+                                  }));
+                                }}
+                                options={RECOVERY_PERIOD_OPTIONS.map((o) => ({
+                                  id: o.value,
+                                  name: o.label,
+                                  hint: o.hint,
+                                }))}
+                                placeholder="Period"
+                                triggerClassName="flex-1"
+                              />
+                              <SingleSelectSearch
+                                value={entry.type || ''}
+                                onChange={(val) => {
+                                  const next = formData.uses.recovery.slice();
+                                  next[idx] = { ...entry, type: val };
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    uses: { ...prev.uses, recovery: next },
+                                  }));
+                                }}
+                                options={RECOVERY_TYPE_OPTIONS.map((o) => ({
+                                  id: o.value,
+                                  name: o.label,
+                                }))}
+                                placeholder="Type"
+                                triggerClassName="flex-1"
+                              />
+                              <Input
+                                value={entry.formula || ''}
+                                onChange={(e) => {
+                                  const next = formData.uses.recovery.slice();
+                                  next[idx] = { ...entry, formula: e.target.value };
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    uses: { ...prev.uses, recovery: next },
+                                  }));
+                                }}
+                                className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 flex-1"
+                                placeholder="1d4 or @prof"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    uses: {
+                                      ...prev.uses,
+                                      recovery: prev.uses.recovery.filter((_, i) => i !== idx),
+                                    },
+                                  }))
+                                }
+                                className="text-blood/60 hover:text-blood shrink-0 transition-colors"
+                                aria-label="Remove recovery rule"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          {formData.uses.recovery.length === 0 && (
+                            <p className="text-center py-3 text-ink/30 italic text-[10px]">No recovery rules.</p>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                uses: {
+                                  ...prev.uses,
+                                  recovery: [
+                                    ...prev.uses.recovery,
+                                    { period: '', type: '', formula: '' },
+                                  ],
+                                },
+                              }))
+                            }
+                            className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
+                          >
+                            <Plus className="w-3 h-3" /> Add Recovery Rule
+                          </button>
+                        </div>
+                      </div>
+
                       <p className="text-[10px] text-ink/40">
                         This is for general feats first. Class and subclass features still primarily travel through the class feature pipeline, even though they import as Foundry <code className="font-mono">feat</code> items.
                       </p>

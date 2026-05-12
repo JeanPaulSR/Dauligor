@@ -15,24 +15,37 @@ Feats and item records share the same editor scaffolding as features in [compend
 
 | Table | Key columns |
 |---|---|
-| `feats` | `id`, `name`, `identifier`, `feat_type`, `source_type`, `requirements`, `requirements_tree` (JSON tree), `repeatable`, `uses_max`, `uses_spent`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
+| `feats` | `id`, `name`, `identifier`, `feat_type` (= `system.type.value`), `feat_subtype` (= `system.type.subtype`), `source_type`, `requirements`, `requirements_tree` (JSON tree), `repeatable`, `uses_max`, `uses_spent`, `uses_recovery` (JSON array), `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
 | `items` | `id`, `name`, `identifier`, `item_type`, `rarity`, `quantity`, `weight`, `price_value`, `price_denomination`, `attunement` (BOOL), `equipped`, `identified`, `magical`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
 
 Schema: [../database/structure/](../database/structure/), [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md).
 
 ## Feats
 
-### Feat types
-Feats fall into a few `feat_type` values:
-- **General** — earned at ASI levels via the AbilityScoreImprovement advancement's feat branch
-- **Origin** — granted by background or starting feat
-- **Fighting style** — fighting-style feats picked from class advancement choices
-- **Class** — class-feature-style feats granted directly by class progression
+### Feat types — `feat_type` + `feat_subtype`
 
-`source_type` records where the feat originated: `homebrew`, `phb`, `xge`, etc.
+Mirrors dnd5e 5.x's `system.type.{value, subtype}` pair on the embedded feat item (cross-checked against `E:/DnD/Professional/Foundry-JSON/features/item-feature.json`, system v5.3.1):
+
+- **`feat_type`** = `system.type.value` — the broad document category. Six canonical values: `feat`, `class`, `subclass`, `race`, `background`, `monster`.
+- **`feat_subtype`** = `system.type.subtype` — the granular tag. The editor cascades the subtype dropdown on the feat_type value:
+  - `feat` → enumerated: `general` / `origin` / `fightingStyle` / `epicBoon` (the canonical 5e PHB / Tasha's feat slots)
+  - `class` / `subclass` / `race` / `background` / `monster` → free-text identifier (e.g. `wizard`, `tiefling`, `dragon`)
+
+The split landed via migration `20260511-1830_feat_subtype_and_uses_recovery.sql`, which also normalized legacy rows: the four feat-subtype slugs got promoted into `feat_subtype` with `feat_type` rewritten to `feat`, and `classFeature` rewrote to `class`.
+
+`source_type` is a separate enum (`feat` / `classFeature` / `subclassFeature`) that records which Foundry document the export pipeline should mint — most go to a `feat`-typed Item; class/subclass-feature variants get embedded onto a class instead.
 
 ### Repeatable feats
 The `repeatable` boolean lets a feat be taken multiple times. Repeatable feats with stacking effects need to be authored carefully — the activity / effect side typically has a level scaling formula that uses the repeat count.
+
+### Uses + recovery rules
+
+Item-level `uses` mirrors dnd5e's `system.uses` shape:
+- **`uses_max`** — formula or number (`@prof`, `3`, etc.)
+- **`uses_spent`** — integer counter (runtime state)
+- **`uses_recovery`** — JSON array of `{ period, type, formula }` rules. Each rule lands at `system.uses.recovery[<idx>]` on the Foundry-side feat item. Period catalog matches the activity-level recovery (`lr` / `sr` / `day` / `dawn` / `dusk` / `turn` / `turnStart` / `turnEnd` / `round` / `recharge` / `charges`); type catalog is `recoverAll` / `formula` / `loseAll`. The editor reuses the same row layout `ConsumptionTabEditor` uses for per-activity recovery so authors don't have to learn a second UI.
+
+Empty array = the item's uses persist until manually reset (matches Foundry's behavior when `recovery[]` is empty).
 
 ### Prerequisites — structured tree + free-text fallback
 
