@@ -213,9 +213,18 @@ function evaluateLeaf(leaf, ctx) {
  */
 function rollUpGroup(kind, childStatuses) {
   if (childStatuses.length === 0) return "met"; // empty group ≡ no gate
-  const metCount = childStatuses.filter(s => s === "met").length;
-  const unmetCount = childStatuses.filter(s => s === "unmet").length;
-  const manualCount = childStatuses.filter(s => s === "manual").length;
+  // Single-pass tally — the previous version ran three `.filter().length`
+  // passes over the same array. With 250+ leaves per option per render
+  // (50 options × 5-leaf tree is realistic for an Eldritch Invocation
+  // group), the savings add up. Same result, ~3× less iteration.
+  let metCount = 0;
+  let unmetCount = 0;
+  let manualCount = 0;
+  for (const s of childStatuses) {
+    if (s === "met") metCount++;
+    else if (s === "unmet") unmetCount++;
+    else if (s === "manual") manualCount++;
+  }
 
   if (kind === "all") {
     if (unmetCount > 0) return "unmet";

@@ -2460,10 +2460,69 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
       el.addEventListener("click", () => {
         const id = el.dataset.featureId;
         if (!id || id === this._focusedFeatureSourceId) return;
-        this._focusedFeatureSourceId = id;
-        this._renderBody();
+        // Partial update path — feature focus only affects the right
+        // (detail) column and the `--focused` class on two feature
+        // rows. Re-rendering the whole body for this was wasteful and
+        // (more importantly) reset the middle column's scroll position
+        // every time the user clicked a feature far down the list.
+        //
+        // Subclass focus still goes through a full `_renderBody()`
+        // because it changes the middle column's data; only the feature-
+        // -focus path gets this optimization.
+        this._updateFocusedFeature(id);
       });
     });
+  }
+
+  /**
+   * Swap the right-pane detail HTML and toggle the `--focused` class
+   * on the affected feature rows. No full re-render — preserves
+   * middle-column scroll position. See the feature-focus handler in
+   * `_renderBody` for the rationale.
+   */
+  _updateFocusedFeature(newFeatureId) {
+    if (!this._bodyRegion) return;
+    const prevId = this._focusedFeatureSourceId;
+    this._focusedFeatureSourceId = newFeatureId;
+
+    // Update row chrome
+    if (prevId) {
+      const prevEl = this._bodyRegion.querySelector(
+        `[data-action="focus-feature"][data-feature-id="${CSS.escape(prevId)}"]`
+      );
+      prevEl?.classList.remove("dauligor-option-picker__row--focused");
+    }
+    const nextEl = this._bodyRegion.querySelector(
+      `[data-action="focus-feature"][data-feature-id="${CSS.escape(newFeatureId)}"]`
+    );
+    nextEl?.classList.add("dauligor-option-picker__row--focused");
+
+    // Swap detail pane content
+    const detailCol = this._bodyRegion.querySelector(
+      ".dauligor-subclass-preview__col--detail"
+    );
+    if (!detailCol) return;
+    const focusedSubFeatures = this._featuresBySubclass.get(this._focusedSubclassSourceId) ?? [];
+    const focusedFeature = focusedSubFeatures.find((f) => f.sourceId === newFeatureId) ?? null;
+    const escapeHTML = (s) => foundry.utils.escapeHTML(String(s ?? ""));
+    detailCol.innerHTML = focusedFeature
+      ? `
+        <div class="dauligor-subclass-preview__detail">
+          <div class="dauligor-subclass-preview__detail-header">
+            <h2 class="dauligor-subclass-preview__detail-name">${escapeHTML(focusedFeature.name)}</h2>
+            <div class="dauligor-subclass-preview__detail-meta">
+              ${focusedFeature.level ? `Level ${focusedFeature.level}` : "Always active"}
+            </div>
+          </div>
+          <div class="dauligor-subclass-preview__detail-section">
+            <div class="dauligor-subclass-preview__detail-section-title">Description</div>
+            <div class="dauligor-subclass-preview__detail-body">
+              ${focusedFeature.description ?? ""}
+            </div>
+          </div>
+        </div>
+      `
+      : `<div class="dauligor-subclass-preview__detail-empty">Select a feature to read its description.</div>`;
   }
 }
 
@@ -4743,11 +4802,20 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     return parts.length ? `Requires: ${parts.join(" and ")}` : "";
   };
 
-  const renderRow = (entry, app, ctx) => {
-    const selectedSet = new Set([
-      ...priorSelections,
-      ...(app._state.selectedSourceIds ?? [])
-    ]);
+  // `renderRow` is called once per option per renderBody pass. The
+  // `selectedSet` it needs is identical across every row (it's the
+  // union of priorSelections + this prompt's selectedSourceIds), so
+  // callers should build it ONCE in `renderBody` and pass it in.
+  // Falling back to rebuilding here is a defensive cheap path for
+  // any straggler caller — but the hot path (the 50-row map() loop
+  // inside renderBody) passes `selectedSet` explicitly.
+  const renderRow = (entry, app, ctx, selectedSet = null) => {
+    if (!selectedSet) {
+      selectedSet = new Set([
+        ...priorSelections,
+        ...(app._state.selectedSourceIds ?? [])
+      ]);
+    }
     const status = computeOptionStatus(entry, selectedSet, ctx);
 
     // "owned" and "blocked-*" disable the checkbox. "selected" is checked
@@ -5044,6 +5112,14 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     renderBody: (app) => {
       const satisfied = new Set([...priorSelections, ...(app._state.selectedSourceIds ?? [])]);
       const ctx = buildCtx(satisfied);
+      // `selectedSet` is identical across every row in this pass —
+      // build it ONCE and hand it down to each `renderRow` so we
+      // don't allocate a fresh Set per option (a 50-row group used
+      // to allocate 50 identical Sets per render).
+      const selectedSet = new Set([
+        ...priorSelections,
+        ...(app._state.selectedSourceIds ?? [])
+      ]);
       const focused = enrichedEntries.find((e) => e.sourceId === app._state.focusedSourceId)
         ?? enrichedEntries[0]
         ?? null;
@@ -5054,7 +5130,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
               const entries = entriesByLevel.get(lvl);
               return `
                 ${renderLevelHeader(lvl, entries.length)}
-                ${entries.map((e) => renderRow(e, app, ctx)).join("")}
+                ${entries.map((e) => renderRow(e, app, ctx, selectedSet)).join("")}
               `;
             }).join("")}
           </div>
