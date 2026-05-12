@@ -3377,3 +3377,173 @@ button.dauligor-option-picker__pill:hover {
   color: var(--dauligor-text-muted);
   font-style: italic;
 }
+
+/* ── Tab scope tag (Long Rest / Level Up) ─────────────────────────────── */
+
+/* Keep the base inline-flex row layout (no column override) so the scope
+ * tag sits to the right of the label on a single row. The previous
+ * two-row layout caused inactive tabs to bleed their tag past the tab
+ * bar's bottom border (no background to anchor it visually). */
+
+.dauligor-feature-manager__tab-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dauligor-feature-manager__tab-scope {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+  opacity: 0.7;
+  line-height: 1.2;
+}
+
+.dauligor-feature-manager__tab-scope--long-rest {
+  color: var(--dauligor-success);
+}
+
+.dauligor-feature-manager__tab-scope--level-up {
+  color: var(--dauligor-warning);
+}
+
+.dauligor-feature-manager__tab.is-active .dauligor-feature-manager__tab-scope {
+  opacity: 1;
+}
+
+/* ── Queued-state styling on Features tab ─────────────────────────────── */
+
+.dauligor-feature-manager__queued {
+  margin: 0 10px 10px;
+  padding: 8px 10px;
+  background: var(--dauligor-panel-alt);
+  border: 1px dashed var(--dauligor-warning);
+  border-radius: 2px;
+}
+
+.dauligor-feature-manager__queued-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dauligor-warning);
+  margin-bottom: 6px;
+}
+
+.dauligor-feature-manager__queued-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-feature-manager__queued-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  background: var(--dauligor-panel);
+  border-radius: 2px;
+  font-size: 0.82rem;
+}
+
+.dauligor-feature-manager__queued-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dauligor-feature-manager__queued-from {
+  color: var(--dauligor-text-muted);
+  text-decoration: line-through;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-feature-manager__queued-to {
+  color: var(--dauligor-accent-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-feature-manager__queued-remove {
+  background: transparent;
+  border: 1px solid var(--dauligor-border);
+  color: var(--dauligor-text-muted);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.dauligor-feature-manager__queued-remove:hover {
+  color: var(--dauligor-danger);
+  border-color: var(--dauligor-danger);
+}
+
+/* ── Footer queue summary ─────────────────────────────────────────────── */
+
+.dauligor-feature-manager__queue-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dauligor-feature-manager__queue-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-feature-manager__queue-stat i {
+  color: var(--dauligor-accent);
+}
+
+.dauligor-feature-manager__queue-stat strong {
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-feature-manager__queue-clear {
+  background: transparent;
+  border: 1px solid var(--dauligor-danger);
+  color: var(--dauligor-danger);
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dauligor-feature-manager__queue-clear:hover {
+  background: var(--dauligor-danger);
+  color: #fff;
+}
+
+/* The "Queue Change" pill swaps from neutral to warning-tinted so it
+ * reads as an intent action rather than a destructive one. */
+.dauligor-feature-manager__change {
+  color: var(--dauligor-text);
+  border-color: var(--dauligor-border);
+}
+
+.dauligor-feature-manager__change:hover:not(:disabled) {
+  border-color: var(--dauligor-warning);
+  color: var(--dauligor-warning);
+}
