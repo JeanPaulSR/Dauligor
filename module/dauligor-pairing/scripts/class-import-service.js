@@ -617,16 +617,32 @@ export function buildClassImportWorkflow(payload, {
       toolChoices.availableSet.add(opt);
     }
   }
-  const importClassFeatureItems = desiredClassFeatureItems.filter((item) =>
-    shouldImportProgressionItem(item, {
-      actor: targetActor,
-      existingClassLevel
-    }));
-  const importSubclassFeatureItems = desiredSubclassFeatureItems.filter((item) =>
-    shouldImportProgressionItem(item, {
-      actor: targetActor,
-      existingClassLevel
-    }));
+  // Sort by (grant level ascending, then editor-side sort key) so the
+  // level-by-level prompt loop in importer-app.js can iterate features
+  // in chronological order without re-sorting per iteration, and the
+  // embed phase below applies them to the actor in the same order
+  // they're shown on a class's level-up table.
+  const featureLevelOf = (item) => Number(item?.flags?.[MODULE_ID]?.level ?? 0) || 0;
+  const featureSortOf = (item) => Number(item?.flags?.[MODULE_ID]?.sort ?? item?.sort ?? 0) || 0;
+  const sortByLevelThenSort = (a, b) => {
+    const lvlDiff = featureLevelOf(a) - featureLevelOf(b);
+    if (lvlDiff !== 0) return lvlDiff;
+    return featureSortOf(a) - featureSortOf(b);
+  };
+  const importClassFeatureItems = desiredClassFeatureItems
+    .filter((item) =>
+      shouldImportProgressionItem(item, {
+        actor: targetActor,
+        existingClassLevel
+      }))
+    .sort(sortByLevelThenSort);
+  const importSubclassFeatureItems = desiredSubclassFeatureItems
+    .filter((item) =>
+      shouldImportProgressionItem(item, {
+        actor: targetActor,
+        existingClassLevel
+      }))
+    .sort(sortByLevelThenSort);
   const importOptionItems = selectedOptionItems.filter((item) =>
     shouldImportProgressionItem(item, {
       actor: targetActor,

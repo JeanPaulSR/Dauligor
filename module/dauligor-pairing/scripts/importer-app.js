@@ -2204,18 +2204,48 @@ async function runDauligorClassImportSequence({
 
 
     if (actor) {
-      // If the class has subclass support and the target level is at/above
-      // the subclass-feature level (Artificer 3, Sorcerer 1, etc.), prompt
-      // the user before bridging — the legacy path errors otherwise.
-      // Subclass selection is the one piece of selection-collection that
-      // wasn't already in the per-advancement loop.
+      // ─── Level-by-level prompt loop ─────────────────────────────────
+      // The character-JSON extractor (CharacterUpdater) was built around
+      // level-by-level progression — each level's class features can be
+      // taught their advancement choices BEFORE the next level's
+      // features even appear. So instead of the old "all option-groups,
+      // then all ItemChoice, then all Trait" batches, we now iterate
+      // class levels from `existingClassLevel + 1` up to `targetLevel`
+      // and at each level:
+      //
+      //   1. If we just reached the subclass-grant level and no
+      //      subclass is selected yet → prompt for subclass first.
+      //   2. For each class feature granted at this level (in `sort`
+      //      order), prompt the user for the choices tied to that
+      //      feature (its feature-attached ItemChoice + Trait + any
+      //      option group whose `featureSourceId` matches it).
+      //   3. Same for subclass features granted at this level.
+      //   4. Then class-root / subclass-root option groups that fire
+      //      at THIS level (Fighter's Fighting Style at level 1, etc.) —
+      //      these aren't owned by a specific feature so they sit
+      //      after the feature batch.
+      //
+      // The embed phase that runs after this loop is still a single
+      // chunk; only the *prompt ordering* changes here. This keeps the
+      // user's mental model aligned with the actor's level-up timeline:
+      // pick Pact Boon → pick Pact of the Blade → see next level's
+      // features → make their picks.
       let subclassSourceId = state.subclassSourceId ?? null;
       let includeSubclass = Boolean(subclassSourceId);
-      const subclassNeeded = workflow.hasSubclassSupport
-        && Number(state.targetLevel || 1) >= Number(workflow.minSubclassLevel || Infinity)
-        && (workflow.subclassItems?.length ?? 0) > 0;
 
-      if (subclassNeeded && !subclassSourceId) {
+      state.optionSelections = state.optionSelections ?? {};
+
+      // Subclass selection helper — fires whenever we cross the
+      // subclass-grant level and a subclass isn't already picked.
+      // Class-import-service.js exposes `workflow.minSubclassLevel` for
+      // the gate (e.g. Sorcerer 1, Cleric 1, Artificer 3, Warlock 3,
+      // Battle Master at Fighter 3).
+      const promptSubclassIfNeeded = async (currentLevel) => {
+        if (subclassSourceId) return;
+        if (!workflow.hasSubclassSupport) return;
+        if (currentLevel < Number(workflow.minSubclassLevel || Infinity)) return;
+        if ((workflow.subclassItems?.length ?? 0) === 0) return;
+
         const subclassResult = await runSubclassStep({ workflow, sequence, progress, entry });
         if (subclassResult === "cancelled") throw new DauligorImportSequenceCancelledError();
         if (subclassResult) {
@@ -2223,247 +2253,272 @@ async function runDauligorClassImportSequence({
           includeSubclass = true;
           state.subclassSourceId = subclassSourceId;
           state.includeSubclass = true;
-          // Rebuild workflow so option groups + features pick up the
-          // selected subclass before the option-group prompts run.
           workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
           progress.setSteps(buildImportSequenceSteps(workflow, { actor }));
         }
-      }
+      };
 
-      // Option-group prompts (Choice / Grant advancements that map to
-      // dauligor's UniqueOptionGroup machinery — Sorcerer Origin pool,
-      // Fighter Style pool, Cleric Domain pool, etc.). The legacy
-      // pipeline embeds the picked option items on the actor and the
-      // dnd5e advancement framework grants their associated features.
-      // Sequence collects per-group source-ids into state.optionSelections
-      // keyed by group.sourceId; the bridge below passes the whole map
-      // through as importSelection.optionSelections.
-      //
-      // workflow.optionGroups is sourced from the class document's flags
-      // and includes groups whose owning feature lives on a *different*
-      // subclass. Filter to groups whose featureSourceId is actually being
-      // granted at the chosen level + subclass (so picking Lycanthrope
-      // doesn't surface Mutant / Battle Master / War Chief option groups).
-      // Groups with no featureSourceId (orphan / class-wide) pass through.
-      state.optionSelections = state.optionSelections ?? {};
-      const grantedFeatureSourceIds = new Set([
+      // Refresh the granted-feature set after the workflow changes
+      // (subclass selection, option picks). Used to gate option-group
+      // and ItemChoice prompts on "is this feature actually being
+      // granted right now".
+      const grantedFeatureSourceIds = () => new Set([
         ...ensureArray(workflow.desiredClassFeatureItems),
         ...ensureArray(workflow.desiredSubclassFeatureItems)
       ].map((f) => f?.flags?.[MODULE_ID]?.sourceId).filter(Boolean));
 
-      for (const group of ensureArray(workflow.optionGroups)) {
-        if (!group?.options?.length || !group?.maxSelections) continue;
-        // Filter by granted-feature set — drops groups whose owning
-        // feature lives on a different subclass / isn't being granted
-        // at this level.
-        if (group.featureSourceId && !grantedFeatureSourceIds.has(group.featureSourceId)) {
-          log("Skipping option group — owning feature not granted", {
-            group: group.name,
-            featureSourceId: group.featureSourceId
+      // Per-feature prompt runner. Walks every authored choice that
+      // ties back to the given feature's sourceId:
+      //   - option groups whose featureSourceId matches
+      //   - feature-attached ItemChoice advancements (option-group-backed)
+      //   - feature-attached Trait advancements (skill / language picks)
+      // Runs them in that order so the user sees the "what items does
+      // this feature grant" pick before the "what skills does this
+      // feature train" pick, which is the rhythm dnd5e's own
+      // advancement prompts use.
+      const promptForFeature = async (featureSourceId, featureName) => {
+        if (!featureSourceId) return;
+
+        // (a) Option-group prompts owned by this feature (featureSourceId
+        // attribution set by buildOptionGroupAdvancementMetadataMap on the
+        // class-export side, OR by the feature's own ItemChoice ref).
+        for (const group of ensureArray(workflow.optionGroups)) {
+          if (group?.featureSourceId !== featureSourceId) continue;
+          if (!group?.options?.length || !group?.maxSelections) continue;
+          if (group.subclassSourceId && group.subclassSourceId !== state.subclassSourceId) continue;
+          if ((state.optionSelections[group.sourceId] ?? []).length === group.maxSelections) continue;
+
+          const groupResult = await runOptionGroupStep({ workflow, actor, group, sequence, progress });
+          if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (Array.isArray(groupResult)) {
+            state.optionSelections[group.sourceId] = groupResult;
+            workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+          }
+        }
+
+        // (b) Feature-attached ItemChoice advancements that reference
+        // an option-group via configuration.optionGroupId. The
+        // owner-tagger in class-import-service.js stamps each
+        // advancement with `_ownerSourceId` so we can identify which
+        // feature it belongs to.
+        for (const adv of ensureArray(workflow.choiceAdvancements)) {
+          if (adv?.type !== "ItemChoice") continue;
+          if (adv._ownerSourceId !== featureSourceId) continue;
+          const optionGroupSourceId = String(adv?.configuration?.optionGroupId ?? "").trim();
+          if (!optionGroupSourceId) continue;
+
+          const choicesRaw = adv.configuration?.choices ?? {};
+          const choicesEntries = Array.isArray(choicesRaw)
+            ? choicesRaw
+            : Object.values(choicesRaw);
+          const pickCount = choicesEntries.reduce(
+            (max, c) => Math.max(max, Number(c?.count || 0) || 0),
+            0
+          );
+          if (pickCount <= 0) continue;
+
+          const group = ensureArray(workflow.optionGroups).find(
+            (g) => g?.sourceId === optionGroupSourceId
+          );
+          if (!group?.options?.length) {
+            log("Skipping feature-attached ItemChoice — option group not in workflow catalog", {
+              optionGroupSourceId,
+              featureSourceId,
+              featureName
+            });
+            continue;
+          }
+          if ((state.optionSelections[group.sourceId] ?? []).length === pickCount) continue;
+
+          const featureAttachedGroup = {
+            ...group,
+            maxSelections: pickCount,
+            featureSourceId,
+            selectedSourceIds: state.optionSelections[group.sourceId] ?? []
+          };
+
+          const groupResult = await runOptionGroupStep({
+            workflow,
+            actor,
+            group: featureAttachedGroup,
+            sequence,
+            progress
           });
-          continue;
+          if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (Array.isArray(groupResult)) {
+            state.optionSelections[group.sourceId] = groupResult;
+            workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+          }
         }
-        // Filter by subclass attribution. Set when the group originates
-        // on a subclass-root advancement (no owning feature), so we
-        // can't use the featureSourceId gate above. Dropped when the
-        // active subclass doesn't match.
-        if (group.subclassSourceId && group.subclassSourceId !== state.subclassSourceId) {
-          log("Skipping option group — owning subclass not selected", {
-            group: group.name,
-            subclassSourceId: group.subclassSourceId,
-            selectedSubclassSourceId: state.subclassSourceId
-          });
-          continue;
-        }
-        // Skip if the user previously satisfied this group (e.g. resumed
-        // from a partial run).
-        if ((state.optionSelections[group.sourceId] ?? []).length === group.maxSelections) continue;
 
-        const groupResult = await runOptionGroupStep({ workflow, actor, group, sequence, progress });
-        if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
-        if (Array.isArray(groupResult)) {
-          state.optionSelections[group.sourceId] = groupResult;
-          // Refresh the workflow so subsequent group prompts see the
-          // updated selection state (some groups may filter their pool
-          // based on prior picks via group.selectionCountsByLevel).
-          workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
-        }
-      }
-
-      // Feature-attached ItemChoice prompts. The optionGroups loop above
-      // only fires for class-root and subclass-root option-group
-      // references (those have non-empty selectionCountsByLevel via the
-      // export-side advancement-metadata builder). Feature-attached
-      // ItemChoice — like Pact Boon's pact pick, granted to a warlock
-      // at level 3 via the Pact Boon feature's own system.advancement —
-      // doesn't contribute to that catalog and would otherwise be
-      // silently dropped at import time. We surface them here using
-      // the same runOptionGroupStep prompt the class-root loop uses,
-      // synthesising a group object whose maxSelections comes from the
-      // advancement's own configuration.choices.
-      //
-      // The advancement carries _ownerSourceId / _ownerLevel tags set
-      // by class-import-service.js so we can:
-      //   - Skip when the owning feature isn't being granted at this
-      //     import (e.g. warlock 2 → 3 surfaces Pact Boon; warlock 1
-      //     → 2 doesn't).
-      //   - Skip when the owning feature was already granted on a
-      //     prior level-up (the user made the choice then).
-      for (const adv of ensureArray(workflow.choiceAdvancements)) {
-        if (adv?.type !== "ItemChoice") continue;
-        const optionGroupSourceId = String(adv?.configuration?.optionGroupId ?? "").trim();
-        if (!optionGroupSourceId) continue;
-
-        // Only fire for feature/option-item-attached ItemChoices. The
-        // class-root option-group loop above already prompted any
-        // class-root / subclass-root references via their populated
-        // `selectionCountsByLevel`.
-        const ownerSourceId = adv._ownerSourceId;
-        if (!ownerSourceId || !grantedFeatureSourceIds.has(ownerSourceId)) continue;
-
-        // The feature/option-item is granted at this class level —
-        // skip prompts whose owning feature was already granted on
-        // a prior import (we don't re-prompt for choices the user
-        // already made). `_ownerLevel` is the class level at which
-        // the parent feature is granted; existingClassLevelForSkip
-        // is the level the actor already had this class to.
-        const ownerLevel = Number(adv._ownerLevel ?? 0) || 0;
-        if (ownerLevel > 0 && ownerLevel <= existingClassLevelForSkip) continue;
-
-        // Derive the pick count. Option-group-backed ItemChoice on a
-        // feature is typically authored as `choices: { "1": { count: N } }`
-        // — level "1" inside the feature meaning "fires when the
-        // feature is granted". Some authors may use object form, some
-        // array form; handle both.
-        const choicesRaw = adv.configuration?.choices ?? {};
-        const choicesEntries = Array.isArray(choicesRaw)
-          ? choicesRaw
-          : Object.values(choicesRaw);
-        const pickCount = choicesEntries.reduce(
-          (max, c) => Math.max(max, Number(c?.count || 0) || 0),
-          0
+        // (c) Feature-attached Trait advancements (skill / tool /
+        // language picks living on the feature's own
+        // system.advancement). Same `_ownerSourceId` attribution path.
+        const baseAdvancementIds = new Set(
+          baseFeatures.advancements.map((entry) => entry?.adv?._id).filter(Boolean)
         );
-        if (pickCount <= 0) continue;
+        for (const adv of ensureArray(workflow.choiceAdvancements)) {
+          if (adv?.type !== "Trait") continue;
+          if (adv._ownerSourceId !== featureSourceId) continue;
+          if (!adv?._id || baseAdvancementIds.has(adv._id)) continue;
 
-        // Look up the option group in the workflow catalog. The
-        // export side's `collectReferencedOptionGroupIds` includes
-        // features, so feature-referenced groups are present in the
-        // catalog even when their `selectionCountsByLevel` was empty.
-        const group = ensureArray(workflow.optionGroups).find(
-          (g) => g?.sourceId === optionGroupSourceId
-        );
-        if (!group?.options?.length) {
-          log("Skipping feature-attached ItemChoice — option group not in workflow catalog", {
-            optionGroupSourceId,
-            ownerSourceId,
-            ownerLevel
-          });
-          continue;
-        }
+          const traitChoice = extractFeatureTraitChoice(adv);
+          if (!traitChoice) continue;
 
-        // Skip if the user already satisfied this group via a prior
-        // prompt this turn (or a resumed partial run). Same shape the
-        // class-root loop uses.
-        if ((state.optionSelections[group.sourceId] ?? []).length === pickCount) continue;
-
-        // Synthesise a feature-attached group: same options pool,
-        // but maxSelections derived from the advancement instead of
-        // the empty catalog metadata. featureSourceId is set so the
-        // option-picker tooltip ("Granted by Pact Boon") could
-        // surface the owner in a future polish pass.
-        const featureAttachedGroup = {
-          ...group,
-          maxSelections: pickCount,
-          featureSourceId: ownerSourceId,
-          selectedSourceIds: state.optionSelections[group.sourceId] ?? []
-        };
-
-        const groupResult = await runOptionGroupStep({
-          workflow,
-          actor,
-          group: featureAttachedGroup,
-          sequence,
-          progress
-        });
-        if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
-        if (Array.isArray(groupResult)) {
-          state.optionSelections[group.sourceId] = groupResult;
-          workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
-        }
-      }
-
-      // Feature-level Trait choice prompts — `workflow.choiceAdvancements`
-      // collects every Trait + ItemChoice advancement (across class root,
-      // subclass root, granted features, and selected option items) that
-      // has user-selectable choices at the chosen target level. The
-      // base-advancement loop above already covered the 11 universal
-      // class-root slots; iterate the rest here so a feature like
-      // Barbarian's Primal Knowledge (which adds a skill pick at level 3)
-      // gets prompted instead of silently dropped.
-      //
-      // Each prompt's selections go through CharacterUpdater's
-      // mixed-prefix writer because feature-trait pools can be
-      // heterogeneous (e.g. "choose one skill OR language"). The
-      // ItemChoice branch above handles feature-attached ItemChoice
-      // (Pact Boon etc.); this loop is the Trait-specific path.
-      const baseAdvancementIds = new Set(
-        baseFeatures.advancements.map((entry) => entry?.adv?._id).filter(Boolean)
-      );
-      for (const adv of ensureArray(workflow.choiceAdvancements)) {
-        if (adv?.type !== "Trait") continue;
-        if (!adv?._id || baseAdvancementIds.has(adv._id)) continue;
-        // Skip choice advancements that fired at a previous class level —
-        // their feature was already granted on a prior import and the
-        // user already made (or should have made) the choice then.
-        const choiceLevel = Number(adv?.level ?? 1) || 1;
-        if (choiceLevel <= existingClassLevelForSkip) continue;
-        const traitChoice = extractFeatureTraitChoice(adv);
-        if (!traitChoice) continue;
-
-        // Pool source = "proficient" means derive the pool from the
-        // actor's current proficient traits at prompt time. With
-        // count=0 it means "all" — auto-apply with no prompt.
-        if (traitChoice.poolSource === "proficient") {
-          const derivedPool = deriveProficientPool(actor, traitChoice.traitType);
-          if (traitChoice.choiceCount === 0) {
-            if (derivedPool.length > 0) {
-              sequence.characterUpdater?.applyTraitSelections(derivedPool, {
-                mode: traitChoice.mode,
-                traitType: traitChoice.traitType
-              });
-              progress.markStep(`advancement:feature-trait:${adv._id}`, "complete",
-                `Auto-applied to ${derivedPool.length} matching proficienc${derivedPool.length === 1 ? "y" : "ies"}.`);
-            } else {
+          if (traitChoice.poolSource === "proficient") {
+            const derivedPool = deriveProficientPool(actor, traitChoice.traitType);
+            if (traitChoice.choiceCount === 0) {
+              if (derivedPool.length > 0) {
+                sequence.characterUpdater?.applyTraitSelections(derivedPool, {
+                  mode: traitChoice.mode,
+                  traitType: traitChoice.traitType
+                });
+                progress.markStep(`advancement:feature-trait:${adv._id}`, "complete",
+                  `Auto-applied to ${derivedPool.length} matching proficienc${derivedPool.length === 1 ? "y" : "ies"}.`);
+              } else {
+                progress.markStep(`advancement:feature-trait:${adv._id}`, "skipped",
+                  "No matching proficiencies on the actor.");
+              }
+              continue;
+            }
+            if (derivedPool.length === 0) {
               progress.markStep(`advancement:feature-trait:${adv._id}`, "skipped",
                 "No matching proficiencies on the actor.");
+              continue;
             }
-            continue;
+            traitChoice.options = derivedPool;
           }
-          if (derivedPool.length === 0) {
-            progress.markStep(`advancement:feature-trait:${adv._id}`, "skipped",
-              "No matching proficiencies on the actor.");
-            continue;
+
+          const result = await runTraitSelectionStep({
+            title: traitChoice.title,
+            fieldName: `feature-trait:${adv._id}`,
+            advancement: traitChoice,
+            workflow,
+            sequence,
+            progress
+          });
+          if (result === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (Array.isArray(result) && result.length) {
+            sequence.characterUpdater?.applyTraitSelections(result, {
+              mode: traitChoice.mode,
+              traitType: traitChoice.traitType
+            });
           }
-          // Hydrate the pool so runTraitSelectionStep can render it.
-          traitChoice.options = derivedPool;
+        }
+      };
+
+      // For each level from existingClassLevel+1 up to targetLevel,
+      // walk the features granted at that level and run their prompts.
+      // existingClassLevel = 0 for a fresh import → loop starts at 1.
+      const startLevel = existingClassLevelForSkip + 1;
+      const endLevel = Number(state.targetLevel || 1) || 1;
+      for (let currentLevel = startLevel; currentLevel <= endLevel; currentLevel++) {
+        throwIfSequenceCancelled(sequence);
+
+        // 1. Subclass selection — fires when we cross the gate.
+        await promptSubclassIfNeeded(currentLevel);
+
+        // 2. Class features granted AT this level, sorted by their
+        // editor-side sort key (falls back to 0). For features
+        // authored without an explicit sort, this preserves the
+        // editor's input order.
+        const featureLevelOf = (item) => Number(item?.flags?.[MODULE_ID]?.level ?? 0) || 0;
+        const featureSortOf = (item) => Number(item?.flags?.[MODULE_ID]?.sort ?? item?.sort ?? 0) || 0;
+        const classFeaturesAtLevel = ensureArray(workflow.desiredClassFeatureItems)
+          .filter((f) => featureLevelOf(f) === currentLevel)
+          .sort((a, b) => featureSortOf(a) - featureSortOf(b));
+
+        for (const feature of classFeaturesAtLevel) {
+          throwIfSequenceCancelled(sequence);
+          await promptForFeature(
+            feature?.flags?.[MODULE_ID]?.sourceId,
+            feature?.name
+          );
         }
 
-        const result = await runTraitSelectionStep({
-          title: traitChoice.title,
-          fieldName: `feature-trait:${adv._id}`,
-          advancement: traitChoice,
-          workflow,
-          sequence,
-          progress
-        });
-        if (result === "cancelled") throw new DauligorImportSequenceCancelledError();
-        if (Array.isArray(result) && result.length) {
-          sequence.characterUpdater?.applyTraitSelections(result, {
-            mode: traitChoice.mode,
-            traitType: traitChoice.traitType
+        // 3. Subclass features granted AT this level, same sorting.
+        const subclassFeaturesAtLevel = ensureArray(workflow.desiredSubclassFeatureItems)
+          .filter((f) => featureLevelOf(f) === currentLevel)
+          .sort((a, b) => featureSortOf(a) - featureSortOf(b));
+
+        for (const feature of subclassFeaturesAtLevel) {
+          throwIfSequenceCancelled(sequence);
+          await promptForFeature(
+            feature?.flags?.[MODULE_ID]?.sourceId,
+            feature?.name
+          );
+        }
+
+        // 4. Class-root / subclass-root option groups that fire at
+        // this level. These have no `featureSourceId` (the metadata
+        // builder only sets it for feature-owned references), so they
+        // weren't picked up by the per-feature loops above. Use
+        // `selectionCountsByLevel` to decide whether this level adds
+        // any new picks for the group.
+        const granted = grantedFeatureSourceIds();
+        for (const group of ensureArray(workflow.optionGroups)) {
+          if (!group?.options?.length) continue;
+          // Skip feature-attached groups — handled by promptForFeature.
+          if (group.featureSourceId && granted.has(group.featureSourceId)) continue;
+          // Skip groups whose owning feature isn't being granted at all
+          // (different subclass, etc.).
+          if (group.featureSourceId && !granted.has(group.featureSourceId)) continue;
+          if (group.subclassSourceId && group.subclassSourceId !== state.subclassSourceId) continue;
+
+          // Does this group accumulate any picks by this level?
+          const countAtTarget = group.maxSelections ?? 0;
+          if (countAtTarget <= 0) continue;
+          // Only fire at the FIRST level where the group's selection
+          // count reaches its current cap — keeps Fighter's Fighting
+          // Style from re-prompting after level 1.
+          const countBefore = (() => {
+            const counts = group.selectionCountsByLevel ?? {};
+            let cumulative = 0;
+            for (const [lvl, ct] of Object.entries(counts)) {
+              if (Number(lvl) < currentLevel) cumulative = Math.max(cumulative, Number(ct) || 0);
+            }
+            return cumulative;
+          })();
+          const countAt = (() => {
+            const counts = group.selectionCountsByLevel ?? {};
+            let cumulative = 0;
+            for (const [lvl, ct] of Object.entries(counts)) {
+              if (Number(lvl) <= currentLevel) cumulative = Math.max(cumulative, Number(ct) || 0);
+            }
+            return cumulative;
+          })();
+          if (countAt <= countBefore) continue; // No new picks at this level
+          if ((state.optionSelections[group.sourceId] ?? []).length >= countAt) continue;
+
+          // Prompt for the picks added at this level. We pass the
+          // accumulated cap (countAt) as maxSelections so the picker
+          // knows how many total picks the user should have by now.
+          const levelGatedGroup = {
+            ...group,
+            maxSelections: countAt,
+            selectedSourceIds: state.optionSelections[group.sourceId] ?? []
+          };
+
+          const groupResult = await runOptionGroupStep({
+            workflow,
+            actor,
+            group: levelGatedGroup,
+            sequence,
+            progress
           });
+          if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+          if (Array.isArray(groupResult)) {
+            state.optionSelections[group.sourceId] = groupResult;
+            workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+          }
         }
       }
+
+      // ─── End level-by-level loop. The legacy class-root Trait /
+      //     ItemChoice loops that used to run after this point are now
+      //     interleaved INSIDE the loop via `promptForFeature`. Anything
+      //     class-root that isn't attached to a feature is handled by
+      //     the per-level option-group step above. ────────────────────
 
       // Hand off to the legacy import pipeline for the document-level
       // work:
