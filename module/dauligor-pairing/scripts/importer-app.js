@@ -2122,8 +2122,14 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
         contentClasses: ["dauligor-importer-window"]
       },
       position: centeredAppPosition(
-        Math.min(window.innerWidth - 120, 1280),
-        Math.min(window.innerHeight - 120, 740)
+        // Bumped 1280 → 1440 so the 3 columns (subclasses /
+        // features / description) all have breathing room. The
+        // user flagged the subclass + features columns as
+        // "scrunched together" at 1280, since both got squeezed
+        // against the wider description column. The viewport
+        // cap still shrinks the window on narrow displays.
+        Math.min(window.innerWidth - 120, 1440),
+        Math.min(window.innerHeight - 120, 780)
       )
     });
 
@@ -2297,44 +2303,51 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
   _renderFooter() {
     if (!this._footerRegion) return;
 
+    // Mirror `DauligorSequencePromptApp._renderFooter`'s exact markup
+    // (`.dauligor-sequence__footer` + `.dauligor-class-browser__status`
+    // + `.dauligor-class-browser__actions` with primary-modifier
+    // buttons) so the subclass-preview / selector footer reads as
+    // the same control surface as the Choose Option window. The
+    // previous `__footer-bar` / `__controls` markup styled the
+    // buttons in their own grid which looked off next to the rest
+    // of the importer's prompts.
     if (this._mode === "select") {
-      // Selector mode — show Confirm/Cancel; Confirm is gated on
-      // having an actually-focused subclass. Empty-payload edge
-      // disables Confirm with a hint.
       const hasSelection = Boolean(this._focusedSubclassSourceId);
+      const selectedName = this._subclasses.find(
+        (s) => s.sourceId === this._focusedSubclassSourceId
+      )?.name ?? "";
       this._footerRegion.innerHTML = `
-        <div class="dauligor-class-browser__footer-bar">
+        <div class="dauligor-sequence__footer">
           <div class="dauligor-class-browser__status">
             ${hasSelection
-              ? `Selected: <strong>${foundry.utils.escapeHTML(
-                  this._subclasses.find((s) => s.sourceId === this._focusedSubclassSourceId)?.name ?? ""
-                )}</strong>`
+              ? `Selected: <strong>${foundry.utils.escapeHTML(selectedName)}</strong>`
               : "Pick a subclass to continue."}
           </div>
-          <div class="dauligor-class-browser__controls">
-            <button type="button" class="dauligor-class-browser__button" data-action="cancel">Cancel</button>
+          <div class="dauligor-class-browser__actions">
             <button
               type="button"
               class="dauligor-class-browser__button dauligor-class-browser__button--primary"
               data-action="confirm"
               ${hasSelection ? "" : "disabled"}
-            >Confirm</button>
+            >OK</button>
+            <button type="button" class="dauligor-class-browser__button" data-action="cancel">Cancel</button>
           </div>
         </div>
       `;
-      this._footerRegion.querySelector(`[data-action="cancel"]`)
-        ?.addEventListener("click", () => this._resolveAndClose("cancel"));
       this._footerRegion.querySelector(`[data-action="confirm"]`)
         ?.addEventListener("click", () => this._resolveAndClose("confirm", this._focusedSubclassSourceId));
+      this._footerRegion.querySelector(`[data-action="cancel"]`)
+        ?.addEventListener("click", () => this._resolveAndClose("cancel"));
       return;
     }
 
-    // Preview mode — just a close button.
+    // Preview mode — just a close button. Same markup recipe as
+    // select mode for visual consistency.
     this._footerRegion.innerHTML = `
-      <div class="dauligor-class-browser__footer-bar">
+      <div class="dauligor-sequence__footer">
         <div class="dauligor-class-browser__status">Read-only preview.</div>
-        <div class="dauligor-class-browser__controls">
-          <button type="button" class="dauligor-class-browser__button" data-action="close">Close</button>
+        <div class="dauligor-class-browser__actions">
+          <button type="button" class="dauligor-class-browser__button dauligor-class-browser__button--primary" data-action="close">Close</button>
         </div>
       </div>
     `;

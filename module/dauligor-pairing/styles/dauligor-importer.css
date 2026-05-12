@@ -295,11 +295,15 @@
   flex-direction: column;
   min-height: 0;
   border: 1px solid var(--dauligor-border);
-  /* Rounded panel + dark-translucent background matches the rest
-   * of the importer's panels (option-picker columns,
-   * subclass-preview columns, class-browser list). */
+  /* All importer panels/columns share `var(--dauligor-panel-alt)`
+   * (#252525) — the same color the wizard's "Choose Importer"
+   * column uses. Earlier we tried `rgba(0, 0, 0, 0.18)` for
+   * inset depth; the user pushed back: the translucent overlay
+   * darkened columns relative to the surrounding window content
+   * which made the importer feel inconsistent against the
+   * wizard. Uniform panel-alt across every surface. */
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--dauligor-panel-alt);
   overflow: hidden;
 }
 
@@ -824,8 +828,11 @@
 .dauligor-subclass-preview {
   display: grid;
   /* Left: subclass list. Middle: feature list. Right: description.
-   * The description gets the widest minmax so prose stays readable. */
-  grid-template-columns: minmax(220px, 0.9fr) minmax(260px, 1.1fr) minmax(360px, 1.6fr);
+   * Mins bumped from 220/260/360 → 300/340/420 (with proportional
+   * fr weights) so subclass + feature names no longer ellipsis
+   * after one word. The description column stays the widest since
+   * prose is what the right pane carries. */
+  grid-template-columns: minmax(300px, 1fr) minmax(340px, 1.1fr) minmax(420px, 1.5fr);
   gap: 12px;
   min-height: 0;
   height: 100%;
@@ -1047,7 +1054,9 @@
   border: 1px solid var(--dauligor-border);
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  /* Uniform panel-alt background — see the wizard's source-table
+   * comment for rationale. */
+  background: var(--dauligor-panel-alt);
   overflow: hidden;
 }
 
@@ -1303,11 +1312,10 @@
   flex-direction: column;
   margin-top: 8px;
   border: 1px solid var(--dauligor-border);
-  /* Rounded panel to match the option-picker / subclass-preview
-   * columns. The level-row table reads as a "panel" now instead
-   * of a flat sheet. */
+  /* Rounded panel-alt — unified with every other column/panel in
+   * the importer. */
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--dauligor-panel-alt);
   overflow: hidden;
 }
 
@@ -2575,6 +2583,24 @@
   padding: 8px 12px;
   display: flex;
   flex-direction: column;
+  /* Body bg = panel-alt so the inter-column gap blends with the
+   * columns and the whole window reads as one continuous panel,
+   * matching the wizard's "Choose Importer" column color and the
+   * subclass-preview window. Without this the gap shows Foundry's
+   * default near-black `.window-content` color and the importer
+   * feels disconnected from the wizard. */
+  background: var(--dauligor-panel-alt);
+}
+
+/* Same panel-alt fill for every region of any class-options-shell-based
+ * importer window — toolbar, body, footer — so the entire window is
+ * uniformly the wizard's column color. Scoped to importer-app windows
+ * so it doesn't bleed onto other Foundry apps that happen to use the
+ * same shell. */
+.dauligor-importer-app .dauligor-class-options__region--toolbar,
+.dauligor-importer-app .dauligor-class-options__region--body,
+.dauligor-importer-app .dauligor-class-options__region--footer {
+  background: var(--dauligor-panel-alt);
 }
 
 .dauligor-sequence__body:has(.dauligor-option-picker) {
@@ -2605,7 +2631,9 @@
    * list from leaking through to a parent scroller — relevant when
    * the list's last row is reached and the user keeps scrolling. */
   overscroll-behavior: contain;
-  background: rgba(0, 0, 0, 0.18);
+  /* Uniform panel-alt — same color as the wizard's "Choose
+   * Importer" column. The whole importer reads as one surface. */
+  background: var(--dauligor-panel-alt);
   min-height: 0;
 }
 
@@ -2757,7 +2785,8 @@
 .dauligor-option-picker__detail-pane {
   border: 1px solid var(--dauligor-border);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  /* Uniform panel-alt — see `.dauligor-option-picker__list`. */
+  background: var(--dauligor-panel-alt);
   padding: 16px 18px;
   overflow-y: auto;
   min-height: 0;
