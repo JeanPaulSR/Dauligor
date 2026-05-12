@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { ImageUpload } from '../ui/ImageUpload';
 import { type FoundryActiveEffect } from './ActiveEffectEditor';
-import { cn } from '../../lib/utils';
+import { cn, makeFoundryId } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -191,7 +191,12 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
   }, [activities, onChange]);
 
   const handleAddActivity = (kind: ActivityKind) => {
-    const id = Math.random().toString(36).substring(2, 11);
+    // 16-char alphanumeric id matching dnd5e 5.x's PseudoDocument
+    // validator. Previously this used `makeFoundryId()`
+    // which produced 9-char ids and made the embed fail at import time
+    // with "must be a valid 16-character alphanumeric ID". See
+    // `makeFoundryId` in lib/utils for the alphabet definition.
+    const id = makeFoundryId();
     const newActivity: SemanticActivity = {
       id,
       kind,
@@ -1315,7 +1320,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                 onClick={() => updateSummon({
                                   profiles: [
                                     ...(editingActivity.summon.profiles || []),
-                                    { _id: Math.random().toString(36).substring(2, 11), count: '1', cr: '', level: { min: 0, max: 20 }, name: '', types: [], uuid: null }
+                                    { _id: makeFoundryId(), count: '1', cr: '', level: { min: 0, max: 20 }, name: '', types: [], uuid: null }
                                   ]
                                 })}
                                 className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold transition-colors"
@@ -1400,7 +1405,7 @@ export default function ActivityEditor({ activities, onChange, context = 'featur
                                 onClick={() => updateTransform({
                                   profiles: [
                                     ...(editingActivity.transform.profiles || []),
-                                    { _id: Math.random().toString(36).substring(2, 11), cr: '', level: { min: 0, max: 20 }, movement: [], name: '', sizes: [], types: [], uuid: null }
+                                    { _id: makeFoundryId(), cr: '', level: { min: 0, max: 20 }, movement: [], name: '', sizes: [], types: [], uuid: null }
                                   ]
                                 })}
                                 className="flex items-center gap-1 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold transition-colors"

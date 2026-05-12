@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { cn } from '../../lib/utils';
+import { cn, makeFoundryId } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Plus, Minus, Trash2, Edit2, Zap, Heart, Star, BookOpen, Settings, Sword, Lock, Check, Eye, EyeOff, X, Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogClose } from '../ui/dialog';
@@ -563,7 +563,7 @@ export default function AdvancementManager({
   const handleAdd = () => {
     setEditingIndex(null);
     setEditingAdv({
-      _id: Math.random().toString(36).substring(2, 11),
+      _id: makeFoundryId(),
       type: 'ItemGrant',
       level: defaultLevel,
       title: '',

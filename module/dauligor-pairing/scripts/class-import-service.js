@@ -1566,7 +1566,12 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
     system.uses.max = feature.usesScaleFormula;
   }
 
-  const activities = normalizeSemanticActivityCollection(feature?.automation?.activities);
+  // Build a coordinated id remap across this feature's activities +
+  // effects + activity sub-profiles. The two normalizers below both
+  // consume the same maps so `activity.effects[]._id` → item-level
+  // AE `_id` references survive the rekey. See `buildItemIdRemap`.
+  const idMaps = buildItemIdRemap(feature?.automation);
+  const activities = normalizeSemanticActivityCollection(feature?.automation?.activities, idMaps);
   if (activities && Object.keys(activities).length) system.activities = activities;
 
   // Advancements only natively belong to Class, Subclass, and Background items in Foundry.
@@ -1587,8 +1592,9 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
     // Item-level Active Effects authored in the feature's Effects tab.
     // Foundry creates embedded ActiveEffect documents from this array
     // when the item embeds; effects with transfer=true then propagate
-    // to the actor automatically.
-    effects: normalizeSemanticItemEffects(feature?.automation?.effects),
+    // to the actor automatically. Routed through the same idMaps so
+    // `_id`s match the references in the activity collection above.
+    effects: normalizeSemanticItemEffects(feature?.automation?.effects, idMaps),
     flags: {
       [MODULE_ID]: flags
     },
@@ -1687,7 +1693,10 @@ function createSemanticOptionItem(optionItem, context) {
   const uses = normalizeSemanticUses(optionItem?.usage ?? optionItem?.uses);
   if (uses) system.uses = uses;
 
-  const activities = normalizeSemanticActivityCollection(optionItem?.automation?.activities);
+  // Same coordinated rekey as features — see buildItemIdRemap header
+  // for why this exists.
+  const idMaps = buildItemIdRemap(optionItem?.automation);
+  const activities = normalizeSemanticActivityCollection(optionItem?.automation?.activities, idMaps);
   if (activities && Object.keys(activities).length) system.activities = activities;
 
   // Advancements only natively belong to Class, Subclass, and Background items in Foundry.
@@ -1709,8 +1718,9 @@ function createSemanticOptionItem(optionItem, context) {
     // mostly used by Invocations (e.g. Agonizing Blast adds CHA to
     // Eldritch Blast damage via a `system.bonuses.msak.damage` change
     // with transfer=true) and Infusions (which apply effects to the
-    // infused target item rather than the infusion itself).
-    effects: normalizeSemanticItemEffects(optionItem?.automation?.effects),
+    // infused target item rather than the infusion itself). Routed
+    // through the same idMaps so `_id`s match references in activities.
+    effects: normalizeSemanticItemEffects(optionItem?.automation?.effects, idMaps),
     flags: {
       [MODULE_ID]: flags
     },
@@ -2239,7 +2249,90 @@ function normalizeTraitKey(type, value) {
   }
 }
 
-function normalizeSemanticActivityCollection(activities) {
+/**
+ * Build a coordinated old→new id remap for every authored `_id` inside
+ * a feature/option-item/spell's `automation` block, then run the
+ * normalizers with the maps so cross-references survive the rekey.
+ *
+ * Why this exists: the web editor was authoring activity and item-level
+ * Active Effect `_id`s as short (~9-char) random strings — e.g.
+ * `Math.random().toString(36).slice(2, 11)`. dnd5e 5.x's
+ * `MidiAttackActivity` / `MidiUtilityActivity` / etc. validators
+ * require document `_id`s to be **exactly 16 alphanumeric characters**
+ * (see PseudoDocument + DataModel validation in foundry.mjs), so the
+ * embed step blew up:
+ *
+ *   DataModelValidationError: MidiAttackActivity [1chgd6sx3] validation
+ *     errors: _id: must be a valid 16-character alphanumeric ID
+ *
+ * Fixing per-id (regenerate when malformed) would silently strand
+ * references — an activity's `effects: [{ _id: <old> }]` array points
+ * at item-level Active Effect `_id`s by value; a `forward`-type
+ * activity references another activity by id; `summon` / `transform`
+ * profiles each carry their own `_id`. If the activity's `_id` got
+ * regenerated but the AE's old `_id` was rewritten independently, the
+ * effects[] entry would dangle. The coordinated remap below
+ * guarantees: walk every authored `_id` once, build a single
+ * old→new map, then re-emit references using that map.
+ *
+ * The maps are scoped per-item — IDs only collide within one item's
+ * activity / effect collections, so a per-item map is sufficient.
+ */
+function buildItemIdRemap(automation) {
+  const activityIdMap = new Map();
+  const effectIdMap = new Map();
+  // summon/transform profiles are activity-internal, but we hoist the
+  // map to item-scope so we don't need to thread a third map through
+  // the call chain — the keys are unique enough across the item.
+  const profileIdMap = new Map();
+
+  const remapOne = (raw, into) => {
+    const oldId = String(raw ?? "").trim();
+    if (!oldId) return;
+    if (into.has(oldId)) return;
+    const newId = /^[A-Za-z0-9]{16}$/.test(oldId) ? oldId : foundry.utils.randomID();
+    into.set(oldId, newId);
+  };
+
+  const rawActivities = Array.isArray(automation?.activities)
+    ? automation.activities
+    : Object.values(automation?.activities ?? {});
+  for (const activity of rawActivities) {
+    remapOne(activity?.id ?? activity?._id, activityIdMap);
+    // summon/transform profiles ride inside the activity payload.
+    for (const profile of ensureArray(activity?.summon?.profiles)) {
+      remapOne(profile?._id, profileIdMap);
+    }
+    for (const profile of ensureArray(activity?.transform?.profiles)) {
+      remapOne(profile?._id, profileIdMap);
+    }
+  }
+
+  for (const effect of ensureArray(automation?.effects)) {
+    remapOne(effect?._id, effectIdMap);
+  }
+
+  return { activityIdMap, effectIdMap, profileIdMap };
+}
+
+/**
+ * Resolve an authored id through a remap. Falls back to a fresh
+ * randomID() when the input is empty or unknown — covers cases like
+ * a `forward.activity.id` pointing at an activity that was filtered
+ * out (e.g. unsupported kind), which is a malformed reference but
+ * shouldn't break the import.
+ */
+function resolveRemappedId(map, raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return foundry.utils.randomID();
+  if (map?.has(s)) return map.get(s);
+  // Fallback — the source-side id wasn't seen in the remap pass (e.g.
+  // a stale forward reference). Validate-or-regen so the result is at
+  // least Foundry-valid.
+  return /^[A-Za-z0-9]{16}$/.test(s) ? s : foundry.utils.randomID();
+}
+
+function normalizeSemanticActivityCollection(activities, idMaps) {
   const entries = Array.isArray(activities)
     ? activities
     : activities && typeof activities === "object"
@@ -2248,7 +2341,7 @@ function normalizeSemanticActivityCollection(activities) {
   const normalized = {};
 
   entries.forEach((activity, index) => {
-    const mapped = normalizeSemanticActivity(activity, index);
+    const mapped = normalizeSemanticActivity(activity, index, idMaps);
     if (!mapped) return;
     normalized[mapped._id] = mapped;
   });
@@ -2256,11 +2349,13 @@ function normalizeSemanticActivityCollection(activities) {
   return Object.keys(normalized).length ? normalized : null;
 }
 
-function normalizeSemanticActivity(activity, index = 0) {
+function normalizeSemanticActivity(activity, index = 0, idMaps = {}) {
   const type = trimString(activity?.kind ?? activity?.type).toLowerCase();
   if (!SUPPORTED_SEMANTIC_ACTIVITY_TYPES.has(type)) return null;
 
-  const id = trimString(activity?.id ?? activity?._id) || foundry.utils.randomID();
+  // Resolve the activity's own _id through the remap so cross-refs
+  // (forward.activity.id) line up with the same final value.
+  const id = resolveRemappedId(idMaps.activityIdMap, activity?.id ?? activity?._id);
   const normalized = {
     type,
     _id: id,
@@ -2270,7 +2365,10 @@ function normalizeSemanticActivity(activity, index = 0) {
     consumption: normalizeSemanticConsumption(activity?.consumption),
     description: normalizeSemanticActivityDescription(activity),
     duration: normalizeSemanticDuration(activity?.duration),
-    effects: normalizeSemanticActivityEffects(activity?.effects),
+    // Activity-level effect refs point at item-level Active Effect
+    // `_id`s. Rewire them through `effectIdMap` so the references
+    // survive the rekey above.
+    effects: normalizeSemanticActivityEffects(activity?.effects, idMaps),
     flags: foundry.utils.deepClone(activity?.flags ?? {}),
     range: normalizeSemanticRange(activity?.range),
     target: normalizeSemanticTarget(activity?.target),
@@ -2300,12 +2398,15 @@ function normalizeSemanticActivity(activity, index = 0) {
       };
       normalized.restrictions = normalizeSemanticEnchantRestrictions(activity?.enchant?.restrictions ?? activity?.restrictions);
       if (!normalized.effects.length) {
-        normalized.effects = normalizeSemanticActivityEffects(activity?.enchant?.effects);
+        normalized.effects = normalizeSemanticActivityEffects(activity?.enchant?.effects, idMaps);
       }
       break;
     case "forward":
+      // `forward.activity.id` references another activity on the same
+      // item by `_id`. Rewire through `activityIdMap` so it points at
+      // the post-remap value.
       normalized.activity = {
-        id: trimString(activity?.activity?.id)
+        id: resolveRemappedId(idMaps.activityIdMap, activity?.activity?.id)
       };
       break;
     case "heal":
@@ -2315,10 +2416,10 @@ function normalizeSemanticActivity(activity, index = 0) {
       normalized.save = normalizeSemanticSave(activity?.save);
       break;
     case "summon":
-      Object.assign(normalized, normalizeSemanticSummon(activity?.summon));
+      Object.assign(normalized, normalizeSemanticSummon(activity?.summon, idMaps));
       break;
     case "transform":
-      Object.assign(normalized, normalizeSemanticTransform(activity?.transform));
+      Object.assign(normalized, normalizeSemanticTransform(activity?.transform, idMaps));
       break;
     case "utility":
       normalized.roll = normalizeSemanticRoll(activity?.roll);
@@ -2374,9 +2475,11 @@ function normalizeSemanticDuration(duration) {
   };
 }
 
-function normalizeSemanticActivityEffects(effects) {
+function normalizeSemanticActivityEffects(effects, idMaps = {}) {
   return ensureArray(effects).map((effect) => ({
-    _id: trimString(effect?._id) || foundry.utils.randomID(),
+    // Activity-effect refs point at item-level AE `_id`s — rewire
+    // through the effect map so the activity sees the post-remap id.
+    _id: resolveRemappedId(idMaps.effectIdMap, effect?._id),
     level: foundry.utils.deepClone(effect?.level ?? {}),
     riders: foundry.utils.deepClone(effect?.riders ?? {})
   }));
@@ -2395,11 +2498,17 @@ function normalizeSemanticActivityEffects(effects) {
 //     flags }
 // dnd5e 5.x effect `type` defaults to "base"; the system may register
 // custom types ("enchantment") that we pass through verbatim.
-function normalizeSemanticItemEffects(effects) {
+function normalizeSemanticItemEffects(effects, idMaps = {}) {
   return ensureArray(effects).map((effect) => {
     if (!effect || typeof effect !== "object") return null;
     return {
-      _id: ensureSemanticEffectId(effect?._id),
+      // Route through the shared effect remap so the activity-effect
+      // refs in `normalizeSemanticActivityEffects` resolve to the same
+      // post-remap value. Falls back to `ensureSemanticEffectId` when
+      // no map is provided (legacy callers / direct invocations).
+      _id: idMaps.effectIdMap
+        ? resolveRemappedId(idMaps.effectIdMap, effect?._id)
+        : ensureSemanticEffectId(effect?._id),
       name: trimString(effect?.name) || "Unnamed Effect",
       img: trimString(effect?.img) || trimString(effect?.icon) || "icons/svg/aura.svg",
       description: typeof effect?.description === "string" ? effect.description : "",
@@ -2637,7 +2746,7 @@ function normalizeSemanticEnchantRestrictions(restrictions) {
   };
 }
 
-function normalizeSemanticSummon(summon) {
+function normalizeSemanticSummon(summon, idMaps = {}) {
   return {
     bonuses: {
       ac: normalizeOptionalString(summon?.bonuses?.ac),
@@ -2659,7 +2768,11 @@ function normalizeSemanticSummon(summon) {
     profiles: ensureArray(summon?.profiles).map((profile) => ({
       count: normalizeOptionalString(profile?.count),
       name: trimString(profile?.name),
-      _id: trimString(profile?._id) || foundry.utils.randomID(),
+      // Profile _ids are activity-internal but still need to be valid
+      // 16-char alphanumeric for dnd5e's validator. Route through the
+      // shared profile map so any author-side cross-reference (if a
+      // future feature ever points at a profile by id) survives.
+      _id: resolveRemappedId(idMaps.profileIdMap, profile?._id),
       uuid: trimString(profile?.uuid) || null,
       level: {
         min: profile?.level?.min ?? null,
@@ -2675,11 +2788,13 @@ function normalizeSemanticSummon(summon) {
   };
 }
 
-function normalizeSemanticTransform(transform) {
+function normalizeSemanticTransform(transform, idMaps = {}) {
   return {
     profiles: ensureArray(transform?.profiles).map((profile) => ({
       name: trimString(profile?.name),
-      _id: trimString(profile?._id) || foundry.utils.randomID(),
+      // Same rationale as summon profiles — must round-trip as 16-char
+      // alphanumeric. See `buildItemIdRemap`.
+      _id: resolveRemappedId(idMaps.profileIdMap, profile?._id),
       uuid: trimString(profile?.uuid) || null,
       level: {
         min: profile?.level?.min ?? null,

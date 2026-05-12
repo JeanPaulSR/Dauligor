@@ -1,5 +1,5 @@
 import { upsertDocument, deleteDocument, fetchDocument, upsertDocumentBatch } from './d1';
-import { slugify } from './utils';
+import { slugify, makeFoundryId } from './utils';
 
 /**
  * Standard mapping for common compendium fields from camelCase (React) to snake_case (SQL).
@@ -290,13 +290,13 @@ export function denormalizeCompendiumData(row: any): any {
   if (Array.isArray(denormalized.automation.activities)) {
     denormalized.automation.activities = denormalized.automation.activities.map((a: any) => ({
       ...a,
-      id: a.id || a._id || Math.random().toString(36).substring(2, 11)
+      id: a.id || a._id || makeFoundryId()
     }));
   }
   if (Array.isArray(denormalized.automation.effects)) {
     denormalized.automation.effects = denormalized.automation.effects.map((e: any) => ({
       ...e,
-      id: e.id || e._id || Math.random().toString(36).substring(2, 11)
+      id: e.id || e._id || makeFoundryId()
     }));
   }
 

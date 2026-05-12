@@ -11,6 +11,7 @@ import ActiveEffectKeyInput from './ActiveEffectKeyInput';
 import EntityPicker from '../ui/EntityPicker';
 import { fetchCollection } from '../../lib/d1';
 import { ACTIVE_EFFECT_TYPES } from '../../lib/activeEffectStatuses';
+import { makeFoundryId } from '../../lib/utils';
 
 // Mirrors Foundry's EFFECT_MODES constant
 const EFFECT_MODE_OPTIONS = [
@@ -64,8 +65,13 @@ interface ActiveEffectEditorProps {
   defaultImg?: string | null;
 }
 
+// Each authored Active Effect gets a 16-char alphanumeric `_id` so it
+// passes dnd5e 5.x's PseudoDocument validator on import (the module
+// also normalizes via `ensureSemanticEffectId` defensively, but
+// producing valid ids here avoids any chance of stale refs after
+// rekey).
 function makeId() {
-  return Math.random().toString(36).slice(2, 18);
+  return makeFoundryId();
 }
 
 function emptyEffect(defaultImg?: string | null): FoundryActiveEffect {
