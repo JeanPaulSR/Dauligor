@@ -594,7 +594,6 @@ export function buildClassImportWorkflow(payload, {
   ].filter(Boolean);
 
   const extraSkills = collectTraitAdvancementChoices(allAdvancements, "skills");
-  console.log("[Dauligor Importer] extraSkills collected:", extraSkills);
   if (extraSkills.choiceCount > 0) {
     skillChoices.choiceCount += extraSkills.choiceCount;
     for (const opt of extraSkills.options) {
@@ -609,7 +608,6 @@ export function buildClassImportWorkflow(payload, {
   }
 
   const extraTools = collectTraitAdvancementChoices(allAdvancements, "tools");
-  console.log("[Dauligor Importer] extraTools collected:", extraTools);
   if (extraTools.choiceCount > 0) {
     toolChoices.choiceCount += extraTools.choiceCount;
     for (const opt of extraTools.options) {

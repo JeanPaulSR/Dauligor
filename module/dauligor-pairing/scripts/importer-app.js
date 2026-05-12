@@ -1173,11 +1173,6 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         `
         : "";
 
-      // (The per-class Preview pill was removed by user request — the
-      // subclass-preview window is reachable later in the import flow
-      // via the "Choose Subclass" step. `_openSubclassPreview` is
-      // still defined below so the SubclassPreviewApp can be opened
-      // programmatically from elsewhere if we wire a new entry point.)
       return `
         <div class="dauligor-class-browser__group" data-class-card="${foundry.utils.escapeHTML(classModel.classSourceId)}">
           <label class="dauligor-class-browser__row dauligor-class-browser__row--class ${isSelected ? "dauligor-class-browser__row--selected" : ""}">
@@ -1222,34 +1217,6 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       button.addEventListener("click", () => {
         this._selectClass(button.dataset.classSourceId, button.dataset.subclassSourceId);
       });
-    });
-  }
-
-  /**
-   * Resolve the picked class's class model + variant payload (lazy
-   * fetch through `_ensureVariantPayload`) and hand them to
-   * `DauligorSubclassPreviewApp`.
-   */
-  async _openSubclassPreview(classSourceId) {
-    const classModel = this._classModels.find((c) => c.classSourceId === classSourceId);
-    if (!classModel) {
-      notifyWarn("Could not locate the class for preview.");
-      return;
-    }
-    const variant = this._getSelectedVariant(classModel) ?? classModel.variants?.[0];
-    if (!variant) {
-      notifyWarn(`No payload available for ${classModel.name}.`);
-      return;
-    }
-    const ok = await this._ensureVariantPayload(variant);
-    if (!ok || !variant.payload) {
-      notifyWarn(`Could not load ${classModel.name} payload.`);
-      return;
-    }
-    await DauligorSubclassPreviewApp.open({
-      classModel,
-      payload: variant.payload,
-      actor: this._actor
     });
   }
 
@@ -3363,8 +3330,10 @@ async function runDauligorClassImportSequence({
         hpCustomFormula: null,
         skillSelections: [],
         toolSelections: [],
-        savingThrowSelections: [],
-        languageSelections: [],
+        // Save / armor / weapon / language picks live in
+        // `traitSelections[<adv.id>]` — the per-category placeholders
+        // (savingThrowSelections / languageSelections) were dead and
+        // got removed in the round-7 redundancy pass.
         traitSelections: {}
       };
 
@@ -3447,8 +3416,12 @@ function createImportSequenceState(workflow, initialTargetLevel = 1, preferredSu
     optionSelections: foundry.utils.deepClone(workflow?.selection?.optionSelections ?? {}),
     skillSelections: foundry.utils.deepClone(workflow?.selection?.skillSelections ?? []),
     toolSelections: foundry.utils.deepClone(workflow?.selection?.toolSelections ?? []),
-    savingThrowSelections: foundry.utils.deepClone(workflow?.selection?.savingThrowSelections ?? []),
-    languageSelections: foundry.utils.deepClone(workflow?.selection?.languageSelections ?? []),
+    // Save / armor / weapon / language selections live in
+    // `traitSelections` keyed by base-advancement id (see
+    // `runDauligorClassImportSequence`). The per-category
+    // `savingThrowSelections` / `languageSelections` fields
+    // sanitizeClassImportSelection used to mirror are placeholders
+    // that never got populated; dropped in the round-7 pass.
     traitSelections: foundry.utils.deepClone(workflow?.selection?.traitSelections ?? {})
   };
 }
@@ -3504,8 +3477,6 @@ function buildWorkflowFromSequenceState(payload, { entry = null, actor = null, s
       spellMode: state.spellMode,
       skillSelections: state.skillSelections,
       toolSelections: state.toolSelections,
-      savingThrowSelections: state.savingThrowSelections,
-      languageSelections: state.languageSelections,
       traitSelections: state.traitSelections
     }
   });

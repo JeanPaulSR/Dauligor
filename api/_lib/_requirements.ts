@@ -8,9 +8,10 @@
 // Differences from the client copy:
 //   - Drops the editor factory helpers (emptyGroup / emptyLeaf) — those are
 //     only used by `<RequirementsEditor>`.
-//   - Adds `remapRequirementTree` — used by the exporter to translate PK
-//     references in leaves (e.g. optionItem.itemId is an editor PK) into
-//     the canonical source-id strings the module consumes.
+//
+// (`remapRequirementTree` is defined in BOTH files now, not exclusive to the
+// server copy — earlier drafts called it out as an additive feature; that's
+// no longer accurate.)
 //
 // DRIFT WARNING: this file mirrors `src/lib/requirements.ts`. When you
 // touch the Requirement shape, the leaf vocabulary, the JSON parse rules,
