@@ -301,9 +301,13 @@
 .dauligor-wizard__source-header,
 .dauligor-wizard__source-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1.5fr) 68px 68px 58px;
+  /* Widened Short column (68 → 84) and added a 14px inter-column gap
+   * so Name doesn't kiss "SCC" / "XGE" / etc. The screenshot showed
+   * the ellipsis-truncated Name flowing visually into the Short
+   * code with no breathing room. */
+  grid-template-columns: 34px minmax(0, 1.5fr) 84px 70px 60px;
   align-items: center;
-  gap: 0;
+  gap: 14px;
   min-height: 28px;
   padding: 0 8px;
 }

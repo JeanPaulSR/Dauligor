@@ -98,28 +98,56 @@ import {
 /**
  * Compute a `position` object for an ApplicationV2 window.
  *
- * **Why this returns ONLY width/height (no left/top):**
- *
- * ApplicationV2 in Foundry v13 runs its centering math **synchronously,
- * pre-paint** whenever the constructor's `position` omits explicit
- * `left`/`top`. The window's first frame is already centered; no jump,
- * no flash. This mirrors what Plutonium's TempApplication does — it
- * only passes `{ width, height }` and is reliably flash-free.
- *
- * The previous version of this helper computed `left`/`top` ourselves
- * (`(viewport - width) / 2`) and passed them in. Foundry honored those
- * literally, so the window painted at those coords on the first frame
- * before any further math ran. On the *first* open after Foundry boot,
- * the CSS for our app classes hadn't finished cascading yet, so the
- * computed measurements were occasionally off and the window briefly
- * appeared at the corner before re-centering — the exact bug the user
- * reported as "still appears in the top left."
+ * Returns ONLY width/height — left/top centering happens in
+ * `applyCenteredPositionToFrame()` below, which subclasses call from
+ * their `_renderFrame` override BEFORE the element enters the DOM.
  *
  * Caller still passes the clamped `width`/`height` it wants; the
  * caps against viewport dimensions live at the call sites.
  */
 function centeredAppPosition(width, height) {
   return { width, height };
+}
+
+/**
+ * Pre-apply centered position styles to an ApplicationV2 frame element
+ * so its FIRST paint already has the correct coords. Reading Foundry's
+ * `application.mjs` source — specifically the `ApplicationV2.#render`
+ * pipeline — reveals why a fire-and-forget `render({force: true})`
+ * (and even an `await`'d one) wasn't enough on its own:
+ *
+ *   1. `_renderFrame` creates the element                  (line 491)
+ *   2. `_renderHTML` + `_replaceHTML`                      (line 498-499)
+ *   3. `_insertElement` mounts it into `document.body`     (line 513)
+ *   4. `_updateFrame` updates title/icon                   (line 515)
+ *   5. `_doEvent(_onFirstRender)` AWAITS                   (line 520)
+ *   6. `_doEvent(_onRender)`      AWAITS                   (line 522)
+ *   7. `_doEvent(_postRender)`    AWAITS                   (line 528)
+ *   8. `setPosition(options.position)` — FINALLY centers   (line 531)
+ *
+ * Between steps 3 and 8 there are three awaited event handlers (each
+ * yields to the microtask queue), giving the browser ample opportunity
+ * to paint the element at its default CSS coords (top-left). The
+ * yield only matters when the application's content is non-trivial —
+ * which is why Plutonium's simpler windows don't visibly flash and
+ * ours do.
+ *
+ * The fix: stamp `left`/`top`/`width`/`height` inline on the frame
+ * BEFORE the caller returns it from `_renderFrame`. Foundry's later
+ * `setPosition` call at step 8 re-computes and re-applies the same
+ * coords, so there's no visual jump. Inline styles override any
+ * default CSS in `.application`, so first paint is already correct.
+ */
+function applyCenteredPositionToFrame(frame, { width, height }) {
+  if (!frame || !Number.isFinite(width) || !Number.isFinite(height)) return;
+  const vw = document.documentElement.clientWidth || window.innerWidth || 0;
+  const vh = document.documentElement.clientHeight || window.innerHeight || 0;
+  const left = Math.max(0, Math.round((vw - width) / 2));
+  const top = Math.max(0, Math.round((vh - height) / 2));
+  frame.style.width = `${width}px`;
+  frame.style.height = `${height}px`;
+  frame.style.left = `${left}px`;
+  frame.style.top = `${top}px`;
 }
 
 export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -261,6 +289,14 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         template: this._template
       }
     };
+  }
+
+  // Pre-apply centered position to the frame BEFORE `_insertElement`
+  // mounts it. See `applyCenteredPositionToFrame()` for the rationale.
+  async _renderFrame(options) {
+    const frame = await super._renderFrame(options);
+    applyCenteredPositionToFrame(frame, this.position);
+    return frame;
   }
 
   async close(options) {
@@ -702,7 +738,10 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         sourceTypeIds: selectedSources.map((source) => source.id),
         preferredSelectionIds: this._state.selectedEntryIds
       });
-      await this.close();
+      // Don't close the wizard behind the class browser — the user
+      // may want to come back, change source picks, or switch
+      // importer modes without re-launching from scratch. The
+      // browser owns its own close.
       return;
     }
 
@@ -829,6 +868,15 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         template: this._template
       }
     };
+  }
+
+  // Pre-apply centered position before mount — see
+  // `applyCenteredPositionToFrame()` for why this is necessary
+  // despite already awaiting `render({force: true})`.
+  async _renderFrame(options) {
+    const frame = await super._renderFrame(options);
+    applyCenteredPositionToFrame(frame, this.position);
+    return frame;
   }
 
   async close(options) {
@@ -1600,6 +1648,14 @@ class DauligorImportProgressApp extends HandlebarsApplicationMixin(ApplicationV2
     };
   }
 
+  // Pre-apply centered position before mount — see
+  // `applyCenteredPositionToFrame()`.
+  async _renderFrame(options) {
+    const frame = await super._renderFrame(options);
+    applyCenteredPositionToFrame(frame, this.position);
+    return frame;
+  }
+
   async _onRender() {
     super._onRender?.(...arguments);
 
@@ -1778,6 +1834,14 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
         template: this._template
       }
     };
+  }
+
+  // Pre-apply centered position before mount — see
+  // `applyCenteredPositionToFrame()`.
+  async _renderFrame(options) {
+    const frame = await super._renderFrame(options);
+    applyCenteredPositionToFrame(frame, this.position);
+    return frame;
   }
 
   async close(options) {
