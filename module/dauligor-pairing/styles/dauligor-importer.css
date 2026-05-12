@@ -909,14 +909,20 @@
  *   --no-check   — preview mode hides the indicator entirely
  *                  (read-only browse, no selection commit).
  *   --feature    — feature rows have no checkbox AND no image,
- *                  just the name; collapse to a single column. */
-.dauligor-subclass-preview__row--subclass.dauligor-subclass-preview__row--no-check {
+ *                  just the name; collapse to a single column.
+ *
+ * Both modifiers are paired with `.dauligor-option-picker__row` in
+ * the selector so they win the cascade against the bare
+ * `.dauligor-option-picker__row { grid-template-columns: 24px 36px
+ * minmax(0, 1fr); }` rule that lives later in this file. Without the
+ * paired selector, the feature row would inherit the 3-column grid
+ * and the lone text child would land in the 24px checkbox slot —
+ * causing feature names to clip to a single letter ("A...", "M..."). */
+.dauligor-option-picker__row.dauligor-subclass-preview__row--no-check {
   grid-template-columns: 36px minmax(0, 1fr);
 }
 
-.dauligor-subclass-preview__row--feature {
-  /* Feature rows are name-only. Collapsing the grid avoids two
-   * empty 24px + 36px columns shoving the name way to the right. */
+.dauligor-option-picker__row.dauligor-subclass-preview__row--feature {
   grid-template-columns: minmax(0, 1fr);
 }
 
