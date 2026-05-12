@@ -2101,12 +2101,28 @@
 
 /* ─── Option-group picker (redesigned with detail panel + level groups) ─── */
 
-/* Make the prompt body itself willing to constrain its child — without
- * this the body sizes to its content's natural height, which lets the
- * inner picker grow past the viewport and the dialog body becomes the
- * scrollable container instead of our list/detail columns. Scoping by
- * `:has(.dauligor-option-picker)` keeps every other prompt's body
- * sizing intact. */
+/* The actual chain that owns scrolling, top to bottom, when our picker
+ * is in the body:
+ *
+ *   .dauligor-class-options__region--body  ← was `overflow: auto` (BAD —
+ *                                            this stole the scroll
+ *                                            from our inner columns)
+ *     .dauligor-sequence__body             ← inner wrapper
+ *       .dauligor-option-picker            ← grid
+ *         .dauligor-option-picker__list    ← scrollable ✓
+ *         .dauligor-option-picker__detail-pane ← scrollable ✓
+ *
+ * Override the body-region's `overflow: auto` ONLY when our picker is
+ * inside. Other prompts (skills, tools, traits) keep the existing
+ * "body region scrolls when content overflows" behavior. The
+ * `:has()` selector cleanly scopes this to the picker case. */
+.dauligor-class-options__region--body:has(.dauligor-option-picker) {
+  overflow: hidden;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
 .dauligor-sequence__body:has(.dauligor-option-picker) {
   min-height: 0;
   flex: 1 1 auto;

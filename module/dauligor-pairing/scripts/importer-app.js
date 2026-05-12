@@ -3898,6 +3898,16 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
             Level ${escapeHTML(leaf.minLevel)}+
           </span>
         `);
+      } else if (leaf.type === "levelInClass") {
+        // Class-specific level gate. The walker treats this as "manual"
+        // since class identifiers aren't remapped at export time yet,
+        // so we render it as advisory rather than green/red.
+        const className = formatLookups.classNameById?.[leaf.classId] ?? "Class";
+        pills.push(`
+          <span class="dauligor-option-picker__pill dauligor-option-picker__pill--manual">
+            ${escapeHTML(className)} ${escapeHTML(leaf.minLevel)}+
+          </span>
+        `);
       } else if (leaf.type === "abilityScore") {
         const score = ctx.abilityScores?.[leaf.ability] ?? 0;
         const met = score >= leaf.min;
@@ -3905,6 +3915,39 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
           <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
             ${escapeHTML(leaf.ability.toUpperCase())} ${escapeHTML(leaf.min)}+
           </span>
+        `);
+      } else if (leaf.type === "proficiency") {
+        // Authored skill / armor / weapon / tool / language requirement.
+        // Walker reports these as `manual` (the picker doesn't yet
+        // resolve actor proficiencies), so render advisory in gold.
+        // Identifier is the Foundry key like "acr" (Acrobatics) or
+        // "athletics" — surface as-is; the editor authors the human
+        // identifier on the proficiency leaf already.
+        const label = leaf.identifier || "(proficiency)";
+        pills.push(`
+          <span class="dauligor-option-picker__pill dauligor-option-picker__pill--manual">${escapeHTML(label)}</span>
+        `);
+      } else if (leaf.type === "class") {
+        const refName = formatLookups.classNameById?.[leaf.classId] ?? "(class)";
+        pills.push(`
+          <button
+            type="button"
+            class="dauligor-option-picker__pill dauligor-option-picker__pill--manual"
+            data-action="show-out-of-group"
+            data-leaf-type="class"
+            data-leaf-payload="${escapeHTML(JSON.stringify(leaf))}"
+          >${escapeHTML(refName)}</button>
+        `);
+      } else if (leaf.type === "subclass") {
+        const refName = formatLookups.subclassNameById?.[leaf.subclassId] ?? "(subclass)";
+        pills.push(`
+          <button
+            type="button"
+            class="dauligor-option-picker__pill dauligor-option-picker__pill--manual"
+            data-action="show-out-of-group"
+            data-leaf-type="subclass"
+            data-leaf-payload="${escapeHTML(JSON.stringify(leaf))}"
+          >${escapeHTML(refName)}</button>
         `);
       } else if (leaf.type === "feature" || leaf.type === "spell" || leaf.type === "spellRule") {
         const refName = (
@@ -4063,21 +4106,38 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       `;
     },
     onRenderBody: (app, root) => {
-      // Helper — `app.rerenderPrompt()` rebuilds the entire body, which
-      // resets every internal scroll container including our list
-      // column. When a row-focus or checkbox-toggle re-renders, we want
-      // the player to keep their place in the list (they're often
-      // browsing rows one by one). Capture the list's scrollTop before
-      // the re-render and restore it after. The pill-jump handlers
-      // below do NOT call this — those intentionally scrollIntoView to
-      // the jumped-to row.
+      // Helper — `app.rerenderPrompt()` calls `render({ force: true })`
+      // which rebuilds the entire window content. Critically: the
+      // `_bodyRegion` element itself is replaced (re-queried inside
+      // `_onRender`), so the `root` captured in this closure becomes
+      // a DETACHED DOM tree after the rerender. Querying that stale
+      // tree after rAF finds nothing — which is why the prior fix
+      // didn't actually preserve scroll.
+      //
+      // Fix: read live state through `app._bodyRegion`, which is
+      // re-assigned during each render to point at the current
+      // body region. The `root` in this closure is only valid until
+      // the next render; `app._bodyRegion` survives.
       const rerenderPreservingListScroll = () => {
-        const list = root.querySelector(".dauligor-option-picker__list");
+        const list = (app._bodyRegion ?? root).querySelector(".dauligor-option-picker__list");
         const scrollTop = list?.scrollTop ?? 0;
+        const detailPane = (app._bodyRegion ?? root).querySelector(".dauligor-option-picker__detail-pane");
+        const detailScrollTop = detailPane?.scrollTop ?? 0;
         app.rerenderPrompt();
+        // Two animation frames: one for the new DOM to mount, one
+        // for the layout pass to settle so `scrollTop` writes stick.
+        // A single rAF is sometimes too eager — the new list element
+        // exists but its overflow constraints aren't yet applied,
+        // so setting scrollTop is silently no-op'd.
         requestAnimationFrame(() => {
-          const next = root.querySelector(".dauligor-option-picker__list");
-          if (next) next.scrollTop = scrollTop;
+          requestAnimationFrame(() => {
+            const liveBody = app._bodyRegion;
+            if (!liveBody) return;
+            const nextList = liveBody.querySelector(".dauligor-option-picker__list");
+            if (nextList) nextList.scrollTop = scrollTop;
+            const nextDetail = liveBody.querySelector(".dauligor-option-picker__detail-pane");
+            if (nextDetail) nextDetail.scrollTop = detailScrollTop;
+          });
         });
       };
 
