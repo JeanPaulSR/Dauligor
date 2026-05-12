@@ -1173,6 +1173,16 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         `
         : "";
 
+      // Per-class "Preview" link opens `DauligorSubclassPreviewApp`
+      // for this class. Hidden when the class has zero subclasses
+      // (the preview would be empty anyway). Inside the row's <label>,
+      // so the click handler must prevent the surrounding radio from
+      // toggling — the button calls `event.preventDefault()` +
+      // `event.stopPropagation()` before opening the preview.
+      const previewBtnHtml = classModel.subclasses.length
+        ? `<button type="button" class="dauligor-class-browser__row-preview" data-action="preview-subclasses" data-class-source-id="${foundry.utils.escapeHTML(classModel.classSourceId)}" title="Preview subclasses">Preview</button>`
+        : "";
+
       return `
         <div class="dauligor-class-browser__group" data-class-card="${foundry.utils.escapeHTML(classModel.classSourceId)}">
           <label class="dauligor-class-browser__row dauligor-class-browser__row--class ${isSelected ? "dauligor-class-browser__row--selected" : ""}">
@@ -1190,6 +1200,7 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
             <span class="dauligor-class-browser__row-name">
               <span class="dauligor-class-browser__row-name-text">${foundry.utils.escapeHTML(classModel.name)}</span>
             </span>
+            ${previewBtnHtml}
             <span class="dauligor-class-browser__row-source">${foundry.utils.escapeHTML(classSource)}</span>
           </label>
           ${subclassesHtml}
@@ -1217,6 +1228,45 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       button.addEventListener("click", () => {
         this._selectClass(button.dataset.classSourceId, button.dataset.subclassSourceId);
       });
+    });
+    this._listRegion.querySelectorAll(`[data-action="preview-subclasses"]`).forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        // The Preview button lives inside the row's <label>, which
+        // would otherwise toggle the class-radio when clicked. Cancel
+        // those defaults explicitly so the preview opens without
+        // selecting the class.
+        event.preventDefault();
+        event.stopPropagation();
+        await this._openSubclassPreview(button.dataset.classSourceId);
+      });
+    });
+  }
+
+  /**
+   * Resolve the picked class's class model + variant payload (lazy
+   * fetch through `_ensureVariantPayload`) and hand them to
+   * `DauligorSubclassPreviewApp`.
+   */
+  async _openSubclassPreview(classSourceId) {
+    const classModel = this._classModels.find((c) => c.classSourceId === classSourceId);
+    if (!classModel) {
+      notifyWarn("Could not locate the class for preview.");
+      return;
+    }
+    const variant = this._getSelectedVariant(classModel) ?? classModel.variants?.[0];
+    if (!variant) {
+      notifyWarn(`No payload available for ${classModel.name}.`);
+      return;
+    }
+    const ok = await this._ensureVariantPayload(variant);
+    if (!ok || !variant.payload) {
+      notifyWarn(`Could not load ${classModel.name} payload.`);
+      return;
+    }
+    await DauligorSubclassPreviewApp.open({
+      classModel,
+      payload: variant.payload,
+      actor: this._actor
     });
   }
 
@@ -1983,6 +2033,295 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
           return;
         }
         this._resolveAndClose({ status: action.id, value: foundry.utils.deepClone(this._state) });
+      });
+    });
+  }
+}
+
+/**
+ * Read-only browser for a class's subclasses + their features. Opened
+ * from the class browser's per-class "Preview" button. Three columns:
+ *
+ *   Left   : subclass list (image + name + source label)
+ *   Middle : features of the focused subclass, grouped by level
+ *   Right  : description + meta for the focused feature
+ *
+ * Visually mirrors the option-picker so the picker / preview UIs feel
+ * like a family. No selection state is exposed — the user can come
+ * back and pick from the class browser whenever they're ready.
+ */
+class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV2) {
+  static _instance = null;
+
+  static async open({ classModel, payload, actor = null } = {}) {
+    if (this._instance) {
+      this._instance.setData({ classModel, payload, actor });
+      await this._instance.render({ force: true });
+      this._instance.bringToFront?.();
+      return this._instance;
+    }
+    const instance = new this({ classModel, payload, actor });
+    this._instance = instance;
+    await instance.render({ force: true });
+    return instance;
+  }
+
+  constructor({ classModel = null, payload = null, actor = null } = {}) {
+    super({
+      id: `${MODULE_ID}-subclass-preview`,
+      classes: ["dauligor-importer-app", "dauligor-importer-app--subclass-preview"],
+      window: {
+        title: `${classModel?.name ?? "Class"} — Subclass Preview`,
+        resizable: true,
+        contentClasses: ["dauligor-importer-window"]
+      },
+      position: centeredAppPosition(
+        Math.min(window.innerWidth - 120, 1280),
+        Math.min(window.innerHeight - 120, 740)
+      )
+    });
+
+    this._template = CLASS_OPTIONS_TEMPLATE;
+    this._classModel = classModel;
+    this._payload = payload;
+    this._actor = actor;
+    this._rebuildIndexes();
+    this._focusedSubclassSourceId = this._subclasses[0]?.sourceId ?? null;
+    this._focusedFeatureSourceId = this._firstFeatureFor(this._focusedSubclassSourceId);
+  }
+
+  setData({ classModel = null, payload = null, actor = null } = {}) {
+    this._classModel = classModel ?? this._classModel;
+    this._payload = payload ?? this._payload;
+    this._actor = actor ?? this._actor;
+    this.options.window.title = `${this._classModel?.name ?? "Class"} — Subclass Preview`;
+    this._rebuildIndexes();
+    this._focusedSubclassSourceId = this._subclasses[0]?.sourceId ?? null;
+    this._focusedFeatureSourceId = this._firstFeatureFor(this._focusedSubclassSourceId);
+  }
+
+  // Build the subclass list + per-subclass feature index from the
+  // currently-held payload. Called from the constructor and from
+  // setData on reopen so the indexes stay in sync with the data.
+  _rebuildIndexes() {
+    this._subclasses = ensureArray(this._payload?.subclasses).map((sub) => ({
+      sourceId: sub?.sourceId,
+      name: sub?.name ?? "Subclass",
+      img: sub?.imageUrl ?? sub?.img ?? "icons/svg/aura.svg",
+      sourceLabel: deriveSourceLabel(
+        sub?.source?.book ?? sub?.sourceBookId ?? sub?.rules ?? ""
+      )
+    })).filter((s) => s.sourceId);
+    this._subclasses.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Subclass features key off `parentSourceId` in the export (see
+    // `extractClassEntryMetadata` and the export shape — features
+    // carry `parentSourceId: "subclass-<identifier>"`).
+    this._featuresBySubclass = new Map();
+    for (const f of ensureArray(this._payload?.features)) {
+      if (f?.featureKind !== "subclassFeature") continue;
+      const key = f?.parentSourceId;
+      if (!key) continue;
+      const list = this._featuresBySubclass.get(key) ?? [];
+      list.push(f);
+      this._featuresBySubclass.set(key, list);
+    }
+    for (const list of this._featuresBySubclass.values()) {
+      list.sort((a, b) =>
+        (Number(a?.level) || 0) - (Number(b?.level) || 0)
+        || String(a?.name ?? "").localeCompare(String(b?.name ?? ""))
+      );
+    }
+  }
+
+  _firstFeatureFor(subSourceId) {
+    if (!subSourceId) return null;
+    return this._featuresBySubclass.get(subSourceId)?.[0]?.sourceId ?? null;
+  }
+
+  _configureRenderParts() {
+    return { main: { template: this._template } };
+  }
+
+  // Pre-apply centered position before mount — see
+  // `applyCenteredPositionToFrame()`.
+  async _renderFrame(options) {
+    const frame = await super._renderFrame(options);
+    applyCenteredPositionToFrame(frame, this.position);
+    return frame;
+  }
+
+  async close(options) {
+    if (DauligorSubclassPreviewApp._instance === this) DauligorSubclassPreviewApp._instance = null;
+    return super.close(options);
+  }
+
+  async _onRender() {
+    super._onRender?.(...arguments);
+    const root = this._getRootElement();
+    if (!root) return;
+    const content = root.querySelector(".window-content") ?? root;
+    this._toolbarRegion = content.querySelector(`[data-region="toolbar"]`);
+    this._bodyRegion = content.querySelector(`[data-region="body"]`);
+    this._footerRegion = content.querySelector(`[data-region="footer"]`);
+    this._renderAll();
+  }
+
+  _getRootElement() {
+    if (this.element instanceof HTMLElement) return this.element;
+    if (this.element?.[0] instanceof HTMLElement) return this.element[0];
+    return document.getElementById(this.id) ?? null;
+  }
+
+  _renderAll() {
+    this._renderToolbar();
+    this._renderBody();
+    this._renderFooter();
+  }
+
+  _renderToolbar() {
+    if (!this._toolbarRegion) return;
+    const cls = this._classModel ?? {};
+    this._toolbarRegion.innerHTML = `
+      <div class="dauligor-subclass-preview__toolbar">
+        <div class="dauligor-subclass-preview__toolbar-title">
+          ${foundry.utils.escapeHTML(cls.name ?? "Class")}
+        </div>
+        <div class="dauligor-subclass-preview__toolbar-subtitle">
+          ${this._subclasses.length} subclass${this._subclasses.length === 1 ? "" : "es"}
+          ${cls.sourceLabel ? ` · ${foundry.utils.escapeHTML(cls.sourceLabel)}` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  _renderFooter() {
+    if (!this._footerRegion) return;
+    this._footerRegion.innerHTML = `
+      <div class="dauligor-class-browser__footer-bar">
+        <div class="dauligor-class-browser__status">Read-only preview.</div>
+        <div class="dauligor-class-browser__controls">
+          <button type="button" class="dauligor-class-browser__button" data-action="close">Close</button>
+        </div>
+      </div>
+    `;
+    this._footerRegion.querySelector(`[data-action="close"]`)
+      ?.addEventListener("click", () => this.close());
+  }
+
+  _renderBody() {
+    if (!this._bodyRegion) return;
+    const escapeHTML = (s) => foundry.utils.escapeHTML(String(s ?? ""));
+
+    if (!this._subclasses.length) {
+      this._bodyRegion.innerHTML = `
+        <div class="dauligor-subclass-preview__empty">
+          This class has no subclasses in the loaded payload.
+        </div>
+      `;
+      return;
+    }
+
+    const focusedSub = this._subclasses.find((s) => s.sourceId === this._focusedSubclassSourceId)
+      ?? this._subclasses[0];
+    const focusedSubFeatures = this._featuresBySubclass.get(focusedSub?.sourceId) ?? [];
+    const focusedFeature = focusedSubFeatures.find((f) => f.sourceId === this._focusedFeatureSourceId)
+      ?? focusedSubFeatures[0]
+      ?? null;
+
+    // Left column — subclass rows.
+    const subclassesHtml = this._subclasses.map((sub) => `
+      <button
+        type="button"
+        class="dauligor-subclass-preview__row dauligor-subclass-preview__row--subclass ${sub.sourceId === focusedSub?.sourceId ? "dauligor-subclass-preview__row--focused" : ""}"
+        data-action="focus-subclass"
+        data-sub-id="${escapeHTML(sub.sourceId)}"
+      >
+        <img class="dauligor-subclass-preview__row-img" src="${escapeHTML(sub.img)}" alt="" loading="lazy">
+        <div class="dauligor-subclass-preview__row-text">
+          <div class="dauligor-subclass-preview__row-name">${escapeHTML(sub.name)}</div>
+          ${sub.sourceLabel ? `<div class="dauligor-subclass-preview__row-meta">${escapeHTML(sub.sourceLabel)}</div>` : ""}
+        </div>
+      </button>
+    `).join("");
+
+    // Middle column — features grouped by level under sticky level
+    // headers. Mirrors the option-picker's level-header pattern so
+    // the two windows read the same way.
+    const featuresByLevel = new Map();
+    for (const f of focusedSubFeatures) {
+      const lvl = Number(f?.level) || 0;
+      if (!featuresByLevel.has(lvl)) featuresByLevel.set(lvl, []);
+      featuresByLevel.get(lvl).push(f);
+    }
+    const sortedLevels = [...featuresByLevel.keys()].sort((a, b) => a - b);
+
+    const featuresHtml = sortedLevels.length
+      ? sortedLevels.map((lvl) => `
+        <div class="dauligor-subclass-preview__level-header">
+          <span>${lvl > 0 ? `Level ${lvl}` : "Always Active"}</span>
+          <span class="dauligor-subclass-preview__level-count">${featuresByLevel.get(lvl).length}</span>
+        </div>
+        ${featuresByLevel.get(lvl).map((f) => `
+          <button
+            type="button"
+            class="dauligor-subclass-preview__row dauligor-subclass-preview__row--feature ${f.sourceId === focusedFeature?.sourceId ? "dauligor-subclass-preview__row--focused" : ""}"
+            data-action="focus-feature"
+            data-feature-id="${escapeHTML(f.sourceId)}"
+          >
+            <div class="dauligor-subclass-preview__row-text">
+              <div class="dauligor-subclass-preview__row-name">${escapeHTML(f.name)}</div>
+            </div>
+          </button>
+        `).join("")}
+      `).join("")
+      : `<div class="dauligor-subclass-preview__empty">No features authored for this subclass.</div>`;
+
+    // Right column — feature description.
+    const detailHtml = focusedFeature
+      ? `
+        <div class="dauligor-subclass-preview__detail">
+          <div class="dauligor-subclass-preview__detail-header">
+            <h2 class="dauligor-subclass-preview__detail-name">${escapeHTML(focusedFeature.name)}</h2>
+            <div class="dauligor-subclass-preview__detail-meta">
+              ${focusedFeature.level ? `Level ${focusedFeature.level}` : "Always Active"}
+              ${focusedFeature.identifier ? ` · ${escapeHTML(focusedFeature.identifier)}` : ""}
+            </div>
+          </div>
+          <div class="dauligor-subclass-preview__detail-body">
+            ${focusedFeature.description ?? ""}
+          </div>
+        </div>
+      `
+      : `<div class="dauligor-subclass-preview__detail-empty">Select a feature to read its description.</div>`;
+
+    this._bodyRegion.innerHTML = `
+      <div class="dauligor-subclass-preview">
+        <div class="dauligor-subclass-preview__col dauligor-subclass-preview__col--subclasses">${subclassesHtml}</div>
+        <div class="dauligor-subclass-preview__col dauligor-subclass-preview__col--features">${featuresHtml}</div>
+        <div class="dauligor-subclass-preview__col dauligor-subclass-preview__col--detail">${detailHtml}</div>
+      </div>
+    `;
+
+    // Handlers — partial updates only re-render the body, preserving
+    // outer scroll position. Same pattern as the option-picker.
+    this._bodyRegion.querySelectorAll(`[data-action="focus-subclass"]`).forEach((el) => {
+      el.addEventListener("click", () => {
+        const id = el.dataset.subId;
+        if (!id || id === this._focusedSubclassSourceId) return;
+        this._focusedSubclassSourceId = id;
+        // Reset feature focus to the first feature of the newly-focused
+        // subclass so the right pane isn't stale.
+        this._focusedFeatureSourceId = this._firstFeatureFor(id);
+        this._renderBody();
+      });
+    });
+    this._bodyRegion.querySelectorAll(`[data-action="focus-feature"]`).forEach((el) => {
+      el.addEventListener("click", () => {
+        const id = el.dataset.featureId;
+        if (!id || id === this._focusedFeatureSourceId) return;
+        this._focusedFeatureSourceId = id;
+        this._renderBody();
       });
     });
   }
