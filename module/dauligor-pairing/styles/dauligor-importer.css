@@ -843,14 +843,14 @@
   border: 1px solid var(--dauligor-border);
   border-radius: 8px;
   overflow-y: auto;
+  /* Clip horizontal overflow — the rows now inherit the option-
+   * picker's padding (8px 12px) on top of the grid template
+   * columns; long subclass names would otherwise bleed beyond the
+   * column's rounded edge. `overflow-y: auto + overflow-x: hidden`
+   * is the safe combo. */
+  overflow-x: hidden;
   overscroll-behavior: contain;
-  /* Match the wizard's "Choose Importer" panel background
-   * (`var(--dauligor-panel-alt)` = #252525) so the subclass
-   * preview / selector reads as the same surface as the rest of
-   * the importer. The previous `rgba(0, 0, 0, 0.18)` overlay
-   * darkened the columns relative to the surrounding window
-   * content, which the user flagged as "the background is a
-   * dark grey for some reason." */
+  /* Match the wizard's "Choose Importer" panel background. */
   background: var(--dauligor-panel-alt);
   min-height: 0;
 }
@@ -900,121 +900,33 @@
   color: var(--dauligor-text-muted);
 }
 
-/* Row — works for both subclass rows (with optional indicator + image)
- * and feature rows (just text). Hover / focus treatments mirror the
- * option-picker: subtle grey wash, inset accent bar on `--focused`. */
-.dauligor-subclass-preview__row {
-  display: grid;
-  /* Base shape: icon + text. Modifier classes below shift the grid
-   * to add an indicator column (select mode) or drop the icon
-   * (feature rows). */
+/* Subclass rows reuse `.dauligor-option-picker__row` + friends
+ * directly — see those rules for the canonical visual treatment
+ * (24px checkbox / 36px icon / name+badge text grid, hover,
+ * focused). The modifier classes below adjust the grid for the
+ * two niches the option-picker doesn't cover:
+ *
+ *   --no-check   — preview mode hides the indicator entirely
+ *                  (read-only browse, no selection commit).
+ *   --feature    — feature rows have no checkbox AND no image,
+ *                  just the name; collapse to a single column. */
+.dauligor-subclass-preview__row--subclass.dauligor-subclass-preview__row--no-check {
   grid-template-columns: 36px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  width: 100%;
-  /* Bumped padding 8px → 12px vertical so rows breathe like the
-   * option-chooser's. The user flagged the previous rows as
-   * "scrunched together" against the option-chooser's roomier
-   * rhythm. */
-  padding: 12px 14px;
-  border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.015);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 120ms ease, box-shadow 120ms ease;
-}
-
-.dauligor-subclass-preview__row--with-indicator {
-  /* Select mode: indicator + icon + text. Matches the option-
-   * chooser's `24px 36px minmax(0, 1fr)` grid recipe. */
-  grid-template-columns: 24px 36px minmax(0, 1fr);
 }
 
 .dauligor-subclass-preview__row--feature {
-  /* No image — collapse the icon column. Feature rows have only
-   * a name; no indicator either (the feature pane is read-only). */
+  /* Feature rows are name-only. Collapsing the grid avoids two
+   * empty 24px + 36px columns shoving the name way to the right. */
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* Indicator pip — checkbox-shaped square with a checkmark when on.
- * Single-select semantics (only one focused subclass at a time);
- * we use a `<span>` rather than a real radio input because the
- * row already owns click handling. The shape matches the
- * option-chooser's checkbox so the two windows read as the same
- * UI family. */
-.dauligor-subclass-preview__row-indicator {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 1px solid var(--dauligor-border);
-  border-radius: 3px;
-  background: var(--dauligor-panel);
-  position: relative;
-  flex: none;
-}
-
-.dauligor-subclass-preview__row-indicator--on {
-  border-color: var(--dauligor-accent-strong);
-  background: var(--dauligor-accent-strong);
-}
-
-/* Checkmark glyph drawn via CSS — a rotated rectangle with two
- * borders, the classic CSS-only checkmark recipe. Sits inside the
- * filled indicator. */
-.dauligor-subclass-preview__row-indicator--on::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  left: 4px;
-  width: 5px;
-  height: 9px;
-  border: solid var(--dauligor-panel);
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-
-.dauligor-subclass-preview__row:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.dauligor-subclass-preview__row--focused {
-  background: rgba(255, 255, 255, 0.10);
-  box-shadow: inset 3px 0 0 var(--dauligor-accent);
-}
-
-.dauligor-subclass-preview__row-img {
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 4px;
-  object-fit: cover;
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.dauligor-subclass-preview__row-text {
-  min-width: 0;
-}
-
-.dauligor-subclass-preview__row-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #f0e8d8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dauligor-subclass-preview__row-meta {
-  margin-top: 2px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.7);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* The checkbox in a subclass row is purely a visual affordance —
+ * clicks anywhere on the row focus the subclass; we don't want the
+ * browser toggling the checkbox state independently and getting
+ * visually out-of-sync with the focused row. `pointer-events: none`
+ * lets clicks fall through to the row's handler. */
+.dauligor-subclass-preview__row--subclass .dauligor-option-picker__row-check {
+  pointer-events: none;
 }
 
 .dauligor-subclass-preview__detail {

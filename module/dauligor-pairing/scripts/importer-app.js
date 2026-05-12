@@ -2375,39 +2375,42 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
       ?? focusedSubFeatures[0]
       ?? null;
 
-    // Left column — subclass rows. Match the option-chooser's
-    // row shape: a square indicator on the left (checkbox-shaped,
-    // single-select semantics here so only one is "checked" at a
-    // time), then icon, then name + source label. More vertical
-    // padding than the previous draft so the row rhythm matches
-    // the option-chooser. Preview mode hides the indicator (it's a
-    // browse-only window, nothing to commit).
+    // Left column — subclass rows. Uses the option-chooser's exact
+    // row classes (`dauligor-option-picker__row` + friends) so the
+    // visual treatment is identical: 24px checkbox + 36px icon +
+    // name/badge text grid, same hover / focus / row-name typography.
+    // The `<div>` (not `<button>`) wrapper also matches.
+    //
+    // Single-select semantics — the checkbox is purely a visual
+    // affordance. Clicking anywhere on the row focuses it (which
+    // visually checks the box); clicking the checkbox itself goes
+    // through the same handler. Confirm in the footer commits the
+    // focused subclass.
     const showIndicator = this._mode === "select";
     const subclassesHtml = this._subclasses.map((sub) => {
       const isFocused = sub.sourceId === focusedSub?.sourceId;
-      const indicatorHtml = showIndicator
-        ? `<span class="dauligor-subclass-preview__row-indicator ${isFocused ? "dauligor-subclass-preview__row-indicator--on" : ""}" aria-hidden="true"></span>`
+      const checkboxHtml = showIndicator
+        ? `<input type="checkbox" class="dauligor-option-picker__row-check" ${isFocused ? "checked" : ""} tabindex="-1" aria-hidden="true">`
         : "";
       return `
-        <button
-          type="button"
-          class="dauligor-subclass-preview__row dauligor-subclass-preview__row--subclass ${showIndicator ? "dauligor-subclass-preview__row--with-indicator" : ""} ${isFocused ? "dauligor-subclass-preview__row--focused" : ""}"
+        <div
+          class="dauligor-option-picker__row dauligor-subclass-preview__row--subclass ${showIndicator ? "" : "dauligor-subclass-preview__row--no-check"} ${isFocused ? "dauligor-option-picker__row--focused" : ""}"
           data-action="focus-subclass"
           data-sub-id="${escapeHTML(sub.sourceId)}"
         >
-          ${indicatorHtml}
-          <img class="dauligor-subclass-preview__row-img" src="${escapeHTML(sub.img)}" alt="" loading="lazy">
-          <div class="dauligor-subclass-preview__row-text">
-            <div class="dauligor-subclass-preview__row-name">${escapeHTML(sub.name)}</div>
-            ${sub.sourceLabel ? `<div class="dauligor-subclass-preview__row-meta">${escapeHTML(sub.sourceLabel)}</div>` : ""}
+          ${checkboxHtml}
+          <img class="dauligor-option-picker__row-img" src="${escapeHTML(sub.img)}" alt="" loading="lazy">
+          <div class="dauligor-option-picker__row-text">
+            <div class="dauligor-option-picker__row-name">${escapeHTML(sub.name)}</div>
+            ${sub.sourceLabel ? `<div class="dauligor-option-picker__row-badge">${escapeHTML(sub.sourceLabel)}</div>` : ""}
           </div>
-        </button>
+        </div>
       `;
     }).join("");
 
-    // Middle column — features grouped by level under sticky level
-    // headers. Mirrors the option-picker's level-header pattern so
-    // the two windows read the same way.
+    // Middle column — features grouped by level under flat dividers.
+    // Reuse the option-chooser's row classes (sans checkbox + image)
+    // so the feature row hover / focused styling matches the rest.
     const featuresByLevel = new Map();
     for (const f of focusedSubFeatures) {
       const lvl = Number(f?.level) || 0;
@@ -2423,16 +2426,15 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
           <span class="dauligor-subclass-preview__level-count">${featuresByLevel.get(lvl).length}</span>
         </div>
         ${featuresByLevel.get(lvl).map((f) => `
-          <button
-            type="button"
-            class="dauligor-subclass-preview__row dauligor-subclass-preview__row--feature ${f.sourceId === focusedFeature?.sourceId ? "dauligor-subclass-preview__row--focused" : ""}"
+          <div
+            class="dauligor-option-picker__row dauligor-subclass-preview__row--feature ${f.sourceId === focusedFeature?.sourceId ? "dauligor-option-picker__row--focused" : ""}"
             data-action="focus-feature"
             data-feature-id="${escapeHTML(f.sourceId)}"
           >
-            <div class="dauligor-subclass-preview__row-text">
-              <div class="dauligor-subclass-preview__row-name">${escapeHTML(f.name)}</div>
+            <div class="dauligor-option-picker__row-text">
+              <div class="dauligor-option-picker__row-name">${escapeHTML(f.name)}</div>
             </div>
-          </button>
+          </div>
         `).join("")}
       `).join("")
       : `<div class="dauligor-subclass-preview__empty">No features authored for this subclass.</div>`;
