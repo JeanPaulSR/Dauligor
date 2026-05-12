@@ -53,6 +53,10 @@ Each `<class-id>.json` is a "Semantic Bundle":
 - Spellcasting progression(s)
 - Unique option groups + their items
 - Tag references
+- **`spellRuleAllowlists: Record<ruleId, sourceId[]>`** — bake-time resolution of every `spellRule` requirement leaf referenced by any option in this class. Each rule maps to the spell sourceIds that satisfy it (manualSpells + tag-query matches against the live spell catalog). The module's `requirements-walker.js` intersects this with the actor's known spell sourceIds — that's how a Warlock invocation gated on "knows any 1st-level evocation" auto-evaluates without re-running the matcher in JS. See [compendium-options.md](compendium-options.md#compound-requirements-tree).
+- **`spellRuleNameById: Record<ruleId, string>`** — display names for the same rules, used by the picker's pill renderer so spellRule pills show "Knows Fire Spells" instead of "(spell rule)".
+
+The per-source class-catalog endpoint additionally emits **`tagIndex: Record<tagId, tagName>`** alongside `entries` — collected from every unique tagId referenced across the catalog's classes, resolved via one `SELECT id, name FROM tags WHERE id IN (…)` at bake time. The module's class-browser filter chips read this directly so they label as "Martial" / "Spellcaster" instead of raw D1 PKs.
 
 Source: [src/lib/classExport.ts](../../src/lib/classExport.ts).
 

@@ -77,9 +77,25 @@ Migration `20260510-2152_requirements_tree.sql` replaced the flat `requires_opti
 
 The `optionItem` leaf renders as a **cascading group → item picker** so authors first narrow to the parent Modular Option Group (Eldritch Invocations, Battle Master Maneuvers, etc.) and then pick a specific option inside it. The leaf stores the item PK + an optional `groupId` convenience hint; on export both translate to the canonical source-ids the module recognises.
 
-**Export**: The exporter walks the tree, remaps the `optionItem.itemId` PKs to canonical source-ids (so the module recognises them at import time), and renders the result into dnd5e's `system.requirements` free-text via `formatRequirementText()`. The structured tree is also forwarded to the module as `flags.dauligor-pairing.requirementsTree`; the legacy `requiresOptionIds` flat array is still forwarded for back-compat with old exports.
+**Export**: The exporter walks the tree, remaps the `optionItem.itemId` PKs to canonical source-ids (so the module recognises them at import time), and renders the result into dnd5e's `system.requirements` free-text via `formatRequirementText()`. The structured tree is also forwarded to the module as `flags.dauligor-pairing.requirementsTree`; the legacy `requiresOptionIds` flat array is still forwarded for back-compat with old exports. Spell-rule leaves get an additional pre-resolution pass at bake time — the exporter walks every option's tree, collects each unique `spellRuleId`, resolves the rule against the live spell catalog (manualSpells + tag-query match), and emits the result as `spellRuleAllowlists: Record<ruleId, sourceId[]>` on the class export. A `spellRuleNameById` map is also emitted so the picker's pill renderer can show real rule names.
 
-**Importer**: [`module/dauligor-pairing/scripts/requirements-walker.js`](../../module/dauligor-pairing/scripts/requirements-walker.js) is the module-side walker. Used by `runOptionGroupStep` to render each option row with its full requirement summary in the secondary line (e.g. "Pact of the Blade and Charisma 13+"), and to block selection only when at least one auto-evaluable leaf is unmet. V1 auto-evaluates `optionItem` (against picked sourceIds), `level` (vs class-level being imported or character total level), and `abilityScore` (vs the actor's ability score). Other leaf types — `class`, `subclass`, `feature`, `spell`, `spellRule`, `levelInClass`, `proficiency`, `string` — are rendered as advisory text without blocking (the entity-id remap on those leaves hasn't been wired through export yet; once it is, the walker can extend its `evaluateLeaf` switch). Falls back to the legacy flat-array shape via `treeFromFlatRequiresOptionIds()` when an old bundle ships no tree.
+**Importer**: [`module/dauligor-pairing/scripts/requirements-walker.js`](../../module/dauligor-pairing/scripts/requirements-walker.js) is the module-side walker. Used by `runOptionGroupStep` to render each option row with its full requirement summary in the secondary line (e.g. "Pact of the Blade and Charisma 13+"), and to block selection when at least one auto-evaluable leaf is unmet.
+
+Of the 11 leaf types, **10 auto-evaluate**:
+- `optionItem` — vs the satisfied set of already-picked sourceIds across option groups
+- `level` / `levelInClass` — vs the class-level being imported / total character level / per-class levels Map
+- `abilityScore` — vs the actor's ability score
+- `proficiency` — vs per-category Sets (skill / weapon / armor / tool / language / save) with a full-word → 3-letter alias map for skills
+- `class` / `subclass` — vs the actor's class / subclass items keyed by entityId or sourceId
+- `feature` — vs the actor's feature items (entityId / sourceId)
+- `spell` — vs spell-typed actor items (entityId / sourceId)
+- `spellRule` — intersect the actor's spell sourceIds with the rule's pre-resolved allowlist shipped on the export (above)
+
+Only `string` (free-text by design) stays manual.
+
+**In-flight selection awareness**: the proficiency Sets the walker checks include EARLIER picks from the current import flow that haven't been committed to the actor yet. The walker reads from `sequence.characterUpdater.delta` (the CharacterUpdater's pending-changes map) instead of `workflow.selection.*` — so picking Athletics in the base-skills step instantly unlocks a Brawling option that requires Athletics on the very next prompt. Without this the option would stay locked because the actor's *committed* state is still empty.
+
+Falls back to the legacy flat-array shape via `treeFromFlatRequiresOptionIds()` when an old bundle ships no tree.
 
 **Drift-managed pair**: `src/lib/requirements.ts` ↔ `api/_lib/_requirements.ts` — same reason as the `_classExport.ts` pair, the Vercel function bundle can't import across the `api/`/`src/` boundary. Keep them in sync.
 
