@@ -102,8 +102,11 @@ export default function Sidebar({
         subItems: [
           { label: 'Classes', path: '/compendium/classes' },
           { label: 'Spells', path: '/compendium/spells' },
+          // Feats moved to a public browse page (FeatList.tsx) alongside
+          // the spells list; the admin Feat Manager hangs off the page
+          // itself for admins (same pattern as Spells).
+          { label: 'Feats', path: '/compendium/feats' },
           ...(isAdmin ? [
-            { label: 'Feats', path: '/compendium/feats' },
             { label: 'Items', path: '/compendium/items' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },
             { label: 'Spell Rules', path: '/compendium/spell-rules' },

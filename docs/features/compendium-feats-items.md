@@ -6,10 +6,11 @@ Feats and item records share the same editor scaffolding as features in [compend
 
 | Route | File | Purpose |
 |---|---|---|
-| `/compendium/feats` | [FeatsEditor.tsx](../../src/pages/compendium/FeatsEditor.tsx) | Feat browser + editor |
-| `/compendium/items` | [ItemsEditor.tsx](../../src/pages/compendium/ItemsEditor.tsx) | Item browser + editor |
+| `/compendium/feats` | [FeatList.tsx](../../src/pages/compendium/FeatList.tsx) | Public feat browser (filter / search / detail panel) |
+| `/compendium/feats/manage` | [FeatsEditor.tsx](../../src/pages/compendium/FeatsEditor.tsx) | Admin authoring manager |
+| `/compendium/items` | [ItemsEditor.tsx](../../src/pages/compendium/ItemsEditor.tsx) | Item browser + editor (still admin-only) |
 
-(Both are admin-only; players see feats indirectly through advancement choices and items through inventory.)
+Feats now follow the same public-list / admin-manager split spells use: anyone can browse and read feat detail pages at `/compendium/feats`; admins see a "Feat Manager" button in the page header that links to the master-detail authoring surface at `/compendium/feats/manage`. The sidebar lists "Feats" alongside "Spells" for all users (no longer admin-gated). Items still travel through the legacy admin-only single-page editor — that overhaul is a future task.
 
 ## Data layer (D1)
 
@@ -58,6 +59,15 @@ A lock icon appears on the feat manager's list rows whenever either surface is p
 
 ### Manager layout
 [`FeatsEditor.tsx`](../../src/pages/compendium/FeatsEditor.tsx) is a master-detail manager identical in shape to [`SpellsEditor.tsx`](../../src/pages/compendium/SpellsEditor.tsx)'s manual editor: a virtualized + searchable list on the left, a sticky-header detail pane with Save/Reset/Delete on the right, compact 126px icon at the top of the form. Loads the RequirementsEditor's lookup pools (classes / subclasses / spell rules / every Modular Option Group's items / proficiencies) in parallel with the feats list on mount.
+
+### Public list layout
+[`FeatList.tsx`](../../src/pages/compendium/FeatList.tsx) is the public-facing browse page at `/compendium/feats`. Same shape as [`SpellList.tsx`](../../src/pages/compendium/SpellList.tsx): a filter bar at top, a master-detail grid below with the virtualized feat list on the left and a `<FeatDetailPanel />` on the right. Filter facets are derived once at load time via [`lib/featFilters.ts`](../../src/lib/featFilters.ts) (`deriveFeatPropertyFlags`) — three sections:
+
+- **Sources** — multi-select of book / source abbreviations
+- **Feat Type** — six chips for the canonical `system.type.value` set (`feat` / `class` / `subclass` / `race` / `background` / `monster`)
+- **Properties** — five boolean chips: Repeatable / Has Uses / Has Activities / Has Effects / Has Prereqs
+
+[`FeatDetailPanel.tsx`](../../src/components/compendium/FeatDetailPanel.tsx) is a self-contained read-only preview pane (loads its own data on `featId` prop change, caches per-feat). Renders the BBCode description, the prerequisite gate (free-text + tree-formatted), and a "Recovery" summary line whenever `uses_recovery[]` is non-empty. Activity / Active-Effect counts surface as a footer summary; the structured editor surface for those lives in the admin manager.
 
 ### Activities and effects
 Same shape as features. See [compendium-classes.md](compendium-classes.md) for the editor patterns.

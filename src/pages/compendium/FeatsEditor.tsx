@@ -613,10 +613,10 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
       <div className="flex items-center gap-4">
-        <Link to="/compendium">
+        <Link to="/compendium/feats">
           <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
-            Back To Compendium
+            Back To Feats
           </Button>
         </Link>
       </div>
