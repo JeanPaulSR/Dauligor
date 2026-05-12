@@ -8,6 +8,18 @@ import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, C
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 
+// Migration 20260512-1418 narrowed tag uniqueness from `(group_id, slug)`
+// to `(group_id, COALESCE(parent_tag_id, ''), slug)`, so duplicates only
+// trip within the same parent bucket. The error surfaces through queryD1
+// as a thrown Error whose message contains "UNIQUE constraint" — we
+// rewrite the generic "Failed to ..." toast into something the user can
+// actually act on. Falls through to the caller's original toast for any
+// other failure shape (network, FK, NOT NULL, etc.).
+const isUniqueConstraintError = (err: unknown): boolean => {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes('UNIQUE constraint');
+};
+
 const SYSTEM_CLASSIFICATIONS = [
   'class',
   'subclass',
@@ -153,33 +165,44 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
 
   const handleAddTag = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTagName.trim()) return;
+    const trimmed = newTagName.trim();
+    if (!trimmed) return;
     try {
-      await addTag(newTagName, null);
+      await addTag(trimmed, null);
       setNewTagName('');
       toast.success('Tag added');
     } catch (error) {
       console.error('Error adding tag:', error);
-      toast.error('Failed to add tag');
+      if (isUniqueConstraintError(error)) {
+        toast.error(`A tag named "${trimmed}" already exists here.`);
+      } else {
+        toast.error('Failed to add tag');
+      }
     }
   };
 
   const handleAddSubtag = async (e: React.FormEvent, parentTagId: string) => {
     e.preventDefault();
-    if (!newSubtagName.trim()) return;
+    const trimmed = newSubtagName.trim();
+    if (!trimmed) return;
     try {
-      await addTag(newSubtagName, parentTagId);
+      await addTag(trimmed, parentTagId);
       setNewSubtagName('');
       setAddingSubtagOfId(null);
       toast.success('Subtag added');
     } catch (error) {
       console.error('Error adding subtag:', error);
-      toast.error('Failed to add subtag');
+      if (isUniqueConstraintError(error)) {
+        toast.error(`A tag named "${trimmed}" already exists here.`);
+      } else {
+        toast.error('Failed to add subtag');
+      }
     }
   };
 
   const handleUpdateTag = async (tagId: string) => {
-    if (!editingTagName.trim()) return;
+    const trimmedName = editingTagName.trim();
+    if (!trimmedName) return;
     try {
       // upsertDocument runs `INSERT ... ON CONFLICT(id) DO UPDATE`, and
       // SQLite validates NOT NULL constraints against the would-be
@@ -188,7 +211,6 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
       // that's `group_id` + `name` + `slug`. Slug stays in sync with
       // name on rename (matches the create-side derivation in
       // handleAddTag).
-      const trimmedName = editingTagName.trim();
       const d1Data = {
         group_id: id,
         name: trimmedName,
@@ -202,7 +224,11 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
       toast.success('Tag updated');
     } catch (error) {
       console.error('Error updating tag:', error);
-      toast.error('Failed to update tag');
+      if (isUniqueConstraintError(error)) {
+        toast.error(`A tag named "${trimmedName}" already exists here.`);
+      } else {
+        toast.error('Failed to update tag');
+      }
     }
   };
 
