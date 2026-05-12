@@ -512,9 +512,14 @@ export function buildClassImportWorkflow(payload, {
     classItem.system?.advancement
   )
     .map((group) => {
+      // All options the group owns ship through to the picker — the
+      // option-picker UI is responsible for displaying higher-level
+      // options as locked rather than hiding them. Players want to
+      // see "what's coming next level" alongside what they can pick
+      // right now, with the locked entries clearly marked so they
+      // know it's a level-gate not a permanent block.
       const availableOptions = optionItems
         .filter((item) => (item.flags?.[MODULE_ID]?.groupSourceId ?? null) === group.sourceId)
-        .filter((item) => Number(item.flags?.[MODULE_ID]?.levelPrerequisite ?? 0) <= normalizedTargetLevel)
         .sort((left, right) => left.name.localeCompare(right.name));
       const maxSelections = getSelectionCountForLevel(group.selectionCountsByLevel, normalizedTargetLevel);
       const preferredSelections = requestedSelections.optionSelections[group.sourceId]?.length

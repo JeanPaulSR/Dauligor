@@ -3584,13 +3584,25 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
   const computeOptionStatus = (entry, selectedSet, ctx) => {
     if (previouslyOwnedSourceIds.has(entry.sourceId)) return { state: "owned" };
     if (selectedSet.has(entry.sourceId)) return { state: "selected" };
+
+    // Flat levelGate check — the option's `levelPrerequisite` flag
+    // gates it against the import's class level. Treated as a level
+    // block even when the tree walker says "available" (the flat
+    // column lives outside the tree). This is what locks "Available
+    // from Level 5" options when the player is importing at level 3.
+    if (entry.levelGate > 0 && ctx.classLevel < entry.levelGate) {
+      return {
+        state: "blocked-level",
+        blockReasonText: `Level ${entry.levelGate}+`
+      };
+    }
+
     const verdict = evaluateRequirementsTree(entry.tree, ctx);
     if (!verdict.blocked) return { state: "available", verdict };
 
-    // Identify the dominant blocker so the row badge / icon is
-    // specific. Order: missing in-group option > level > ability >
-    // generic. (We don't distinguish other leaves into specific
-    // states because the walker treats them as manual.)
+    // Identify the dominant blocker so the row badge is specific.
+    // Order: missing in-group option > level (from tree) > ability >
+    // generic.
     const optionLeaf = verdict.missingLeaves.find(
       (l) => l.type === "optionItem" && inGroupSourceIds.has(l.itemId)
     );
@@ -3721,11 +3733,24 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     const status = computeOptionStatus(entry, selectedSet, ctx);
     const fullText = formatRequirementsTree(entry.tree, formatLookups);
 
-    // Build the prereq pill list — one pill per missing leaf, plus
-    // any "manual" advisory leaves so the user sees the full set even
-    // when nothing's currently blocking. Each pill carries the data to
-    // either jump (in-group option) or open the out-of-group modal.
+    // Build the prereq pill list — one pill per authored leaf plus
+    // a synthetic pill for the flat `levelPrerequisite` flag when set.
+    // The pills are colored met/unmet/manual but carry no checkmark
+    // glyph (color alone communicates state, the icon was redundant).
     const pills = [];
+
+    // Flat levelGate (option's `levelPrerequisite` flag) — gets its
+    // own pill when authored, sitting before tree-derived pills so
+    // it reads as the primary level gate. Skipped when 0 (no gate).
+    if (entry.levelGate > 0) {
+      const met = ctx.classLevel >= entry.levelGate;
+      pills.push(`
+        <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
+          Level ${escapeHTML(entry.levelGate)}+
+        </span>
+      `);
+    }
+
     const allLeaves = collectLeaves(entry.tree);
     for (const leaf of allLeaves) {
       if (leaf.type === "optionItem") {
@@ -3735,7 +3760,6 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
         const isInGroup = inGroupSourceIds.has(refSid);
         const refName = optionItemNameBySourceId[refSid] ?? "(unknown option)";
         const action = isInGroup ? "jump-to-option" : "show-out-of-group";
-        const tag = isOwned || isPicked ? "✓ " : "";
         const pillClass = isOwned || isPicked
           ? "dauligor-option-picker__pill dauligor-option-picker__pill--met"
           : "dauligor-option-picker__pill dauligor-option-picker__pill--unmet";
@@ -3746,13 +3770,13 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
             data-action="${action}"
             data-target-source-id="${escapeHTML(refSid)}"
             data-leaf-type="optionItem"
-          >${escapeHTML(tag + refName)}</button>
+          >${escapeHTML(refName)}</button>
         `);
       } else if (leaf.type === "level") {
         const met = ctx.classLevel >= leaf.minLevel;
         pills.push(`
           <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
-            ${met ? "✓ " : ""}Level ${escapeHTML(leaf.minLevel)}+
+            Level ${escapeHTML(leaf.minLevel)}+
           </span>
         `);
       } else if (leaf.type === "abilityScore") {
@@ -3760,11 +3784,10 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
         const met = score >= leaf.min;
         pills.push(`
           <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
-            ${met ? "✓ " : ""}${escapeHTML(leaf.ability.toUpperCase())} ${escapeHTML(leaf.min)}+
+            ${escapeHTML(leaf.ability.toUpperCase())} ${escapeHTML(leaf.min)}+
           </span>
         `);
       } else if (leaf.type === "feature" || leaf.type === "spell" || leaf.type === "spellRule") {
-        // Non-option entity refs — out-of-group by definition.
         const refName = (
           leaf.type === "feature" ? "a class feature"
             : leaf.type === "spell" ? "a known spell"
@@ -3806,19 +3829,16 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       ? `<button type="button" class="dauligor-option-picker__back" data-action="back-to-previous">← Back</button>`
       : "";
 
+    // The dialog title already names the focused option group, and
+    // the highlighted row in the list shows the focused option's
+    // name + image. Repeating either inside the detail panel just
+    // pads the column with the same info — so the detail panel leads
+    // with the status banner (which gives the player the answer to
+    // "can I pick this?") and goes straight into Prerequisites +
+    // Description.
     return `
       <div class="dauligor-option-picker__detail">
         ${backButton}
-        <div class="dauligor-option-picker__detail-header">
-          <img class="dauligor-option-picker__detail-img" src="${escapeHTML(entry.img)}" alt="" />
-          <div>
-            <h3 class="dauligor-option-picker__detail-name">${escapeHTML(entry.item.name)}</h3>
-            <div class="dauligor-option-picker__detail-meta">
-              ${entry.levelGate > 0 ? `<span>Level ${escapeHTML(entry.levelGate)}+</span>` : "<span>No level gate</span>"}
-              ${entry.sourceLabel ? ` · <span>${escapeHTML(entry.sourceLabel)}</span>` : ""}
-            </div>
-          </div>
-        </div>
         ${statusBanner}
         ${pills.length ? `
           <div class="dauligor-option-picker__detail-section">
