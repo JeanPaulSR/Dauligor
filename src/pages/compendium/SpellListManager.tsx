@@ -10,6 +10,7 @@ import { FilterBar } from '../../components/compendium/FilterBar';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
+import { normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
@@ -84,7 +85,7 @@ type SourceRow = {
   shortName?: string;
 };
 
-type TagRow = { id: string; name: string; groupId: string | null };
+type TagRow = { id: string; name: string; groupId: string | null; parentTagId: string | null };
 type TagGroupRow = { id: string; name: string };
 
 type FilteredEntry = {
@@ -162,7 +163,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         }));
         setSpells(mappedSpells);
         setSources(sourceData);
-        setTags(tagData.map((t: any) => ({ id: t.id, name: t.name || '', groupId: t.group_id || t.groupId || null })));
+        setTags(tagData.map(normalizeTagRow));
         setTagGroups(tagGroupData.map((g: any) => ({ id: g.id, name: g.name || 'Tags' })));
 
         // Bulk-fetch class memberships for the "Also on" badge. One query, indexed lookup.
@@ -240,11 +241,18 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   );
 
   const tagsByGroup = useMemo(() => {
+    // Each group's tags are reordered so subtags follow their parent.
+    // Filter chips render through RuleFilterSection (flat value/label),
+    // so the parent-child visual is applied via tagPickerLabel at the
+    // mapping site (line ~750).
     const map: Record<string, TagRow[]> = {};
     for (const tag of tags) {
       if (!tag.groupId) continue;
       if (!map[tag.groupId]) map[tag.groupId] = [];
       map[tag.groupId].push(tag);
+    }
+    for (const groupId in map) {
+      map[groupId] = orderTagsAsTree(map[groupId]);
     }
     return map;
   }, [tags]);
@@ -746,7 +754,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                       <FilterSection
                         key={group.id}
                         title={group.name}
-                        values={groupTags.map(t => ({ value: t.id, label: t.name }))}
+                        values={groupTags.map(t => ({ value: t.id, label: tagPickerLabel(t) }))}
                         selected={tagFilterIds}
                         onToggle={v => toggleFromArray(v, tagFilterIds, setTagFilterIds)}
                         onIncludeAll={() => setTagFilterIds(prev => Array.from(new Set([...prev, ...groupTags.map(t => t.id)])))}

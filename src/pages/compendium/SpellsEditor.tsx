@@ -8,6 +8,7 @@ import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, deleteSpell, fetchSpell } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
+import { orderTagsAsTree, normalizeTagRow } from '../../lib/tagHierarchy';
 import { slugify } from '../../lib/utils';
 import { Database, CloudOff } from 'lucide-react';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
@@ -217,7 +218,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [entries, setEntries] = useState<any[]>([]);
   const [spellDetailsById, setSpellDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
-  const [tags, setTags] = useState<{ id: string; name: string; groupId: string | null }[]>([]);
+  const [tags, setTags] = useState<{ id: string; name: string; groupId: string | null; parentTagId: string | null }[]>([]);
   const [tagGroups, setTagGroups] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -277,7 +278,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           fetchCollection<any>('tags', { orderBy: 'name ASC' }),
           fetchCollection<any>('tagGroups', { where: "classifications LIKE '%spell%'" }),
         ]);
-        setTags(tagData.map((t: any) => ({ id: t.id, name: t.name || '', groupId: t.group_id || t.groupId || null })));
+        setTags(tagData.map(normalizeTagRow));
         setTagGroups(groupData.map((g: any) => ({ id: g.id, name: g.name || 'Tags' })));
       } catch (err) {
         console.error("[SpellsEditor] Error loading tag foundation:", err);
@@ -988,7 +989,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         ) : (
                           <div className="space-y-3">
                             {tagGroups.map(group => {
-                              const groupTags = tags.filter(t => t.groupId === group.id);
+                              const groupTags = orderTagsAsTree(tags.filter(t => t.groupId === group.id));
                               if (groupTags.length === 0) return null;
                               return (
                                 <div key={`desc-${group.id}`} className="space-y-1.5">
@@ -996,6 +997,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                                   <div className="flex flex-wrap gap-1.5">
                                     {groupTags.map(tag => {
                                       const active = formData.tags.includes(tag.id);
+                                      const isSubtag = !!tag.parentTagId;
                                       return (
                                         <button
                                           key={tag.id}
@@ -1013,6 +1015,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                                               : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80'
                                           )}
                                         >
+                                          {isSubtag && <span className="opacity-60 mr-1">↳</span>}
                                           {tag.name}
                                         </button>
                                       );
@@ -1042,7 +1045,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         ) : (
                           <div className="space-y-3">
                             {tagGroups.map(group => {
-                              const groupTags = tags.filter(t => t.groupId === group.id);
+                              const groupTags = orderTagsAsTree(tags.filter(t => t.groupId === group.id));
                               if (groupTags.length === 0) return null;
                               return (
                                 <div key={group.id} className="space-y-1.5">
@@ -1050,6 +1053,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                                   <div className="flex flex-wrap gap-1.5">
                                     {groupTags.map(tag => {
                                       const active = formData.requiredTags.includes(tag.id);
+                                      const isSubtag = !!tag.parentTagId;
                                       return (
                                         <button
                                           key={tag.id}
@@ -1067,6 +1071,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                                               : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80'
                                           )}
                                         >
+                                          {isSubtag && <span className="opacity-60 mr-1">↳</span>}
                                           {tag.name}
                                         </button>
                                       );

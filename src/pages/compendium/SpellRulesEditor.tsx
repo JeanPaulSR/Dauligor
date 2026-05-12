@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { FilterBar } from '../../components/compendium/FilterBar';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
+import { normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
@@ -64,7 +65,7 @@ type SpellSummaryRow = SpellMatchInput & {
 
 type ClassRow = { id: string; name: string };
 type SourceRow = { id: string; name?: string; abbreviation?: string; shortName?: string };
-type TagRow = { id: string; name: string; groupId: string | null };
+type TagRow = { id: string; name: string; groupId: string | null; parentTagId: string | null };
 type TagGroupRow = { id: string; name: string };
 
 /**
@@ -120,7 +121,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
         if (!active) return;
         setClasses(classData.map((c: any) => ({ id: c.id, name: c.name })));
         setSources(sourceData);
-        setTags(tagData.map((t: any) => ({ id: t.id, name: t.name || '', groupId: t.group_id || t.groupId || null })));
+        setTags(tagData.map(normalizeTagRow));
         setTagGroups(tagGroupData.map((g: any) => ({ id: g.id, name: g.name || 'Tags' })));
         setSpells(spellData.map((s: any) => ({
           id: s.id,
@@ -178,10 +179,17 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     [tags],
   );
   const tagsByGroup = useMemo(() => {
+    // Subtags are ordered immediately after their parent within each
+    // group so the chip row reads "Parent, ↳ Sub1, ↳ Sub2, NextParent,
+    // …" — the visual prefix is applied per-tag in the picker via
+    // tagPickerLabel().
     const map: Record<string, TagRow[]> = {};
     for (const tag of tags) {
       if (!tag.groupId) continue;
       (map[tag.groupId] = map[tag.groupId] || []).push(tag);
+    }
+    for (const groupId in map) {
+      map[groupId] = orderTagsAsTree(map[groupId]);
     }
     return map;
   }, [tags]);
@@ -556,7 +564,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             <RuleFilterSection
                               key={group.id}
                               title={group.name}
-                              values={groupTags.map(t => ({ value: t.id, label: t.name }))}
+                              values={groupTags.map(t => ({ value: t.id, label: tagPickerLabel(t) }))}
                               selected={draft.query.tagFilterIds || []}
                               onToggle={v => toggleFromQueryArray('tagFilterIds', v)}
                               onIncludeAll={() => updateQuery({
