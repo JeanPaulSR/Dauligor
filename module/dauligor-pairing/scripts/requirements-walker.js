@@ -23,18 +23,28 @@
  *
  * Evaluation policy (V1)
  * ----------------------
- * - Auto-evaluate leaves we can confidently resolve from the import
- *   context: `optionItem`, `level`, `abilityScore`.
- * - All other leaf types (class, subclass, feature, spell, spellRule,
- *   levelInClass, proficiency, string) are rendered to text but treated
- *   as `manual` — they're surfaced to the user as advisory requirements
- *   but they do NOT block selection. The picker stays usable when the
- *   author has only described prereqs we can't auto-verify; a more
- *   aggressive gate can land later once we have actor-side identifier
- *   lookups for those entity types.
- * - An option is blocked only when at least one auto-evaluable leaf is
- *   `unmet`. If every leaf is `manual`, the option is enabled with the
- *   requirements text shown as a soft hint.
+ * Auto-evaluate against the actor whenever the picker can supply the
+ * data. The picker hands in a `ctx` populated from the live actor:
+ *   - `optionItem`    → satisfied set (picks across all groups)
+ *   - `level`         → class-being-imported / total character level
+ *   - `abilityScore`  → actor.system.abilities[ability].value
+ *   - `proficiency`   → per-category Sets of slugs, plus an
+ *                       aliases map for full-word skill names
+ *                       ("athletics" → "ath")
+ *   - `feature`       → actor items' entityId / sourceId
+ *   - `spell`         → spell-typed actor items' entityId / sourceId
+ *   - `class`         → actor class items keyed by entityId
+ *   - `subclass`      → actor subclass items by entityId
+ *   - `levelInClass`  → class-item levels, compared against `minLevel`
+ *
+ * Still manual (returns "manual" — doesn't block selection):
+ *   - `spellRule` — needs a tag-resolution pass against actor
+ *     spells that the walker doesn't currently do.
+ *   - `string`    — free-text by design; the player acknowledges it.
+ *
+ * An option is blocked when at least one auto-evaluable leaf is
+ * `unmet`. If every leaf is `manual`, the option is enabled with the
+ * requirements text shown as a soft hint.
  *
  * Group semantics (`all` / `any` / `one`) match the editor's labels:
  *   - `all` (And): every child must be satisfied
@@ -94,15 +104,77 @@ function evaluateLeaf(leaf, ctx) {
       if (!Number.isFinite(score)) return "manual";
       return score >= (Number(leaf.min) || 0) ? "met" : "unmet";
     }
-    // Everything else: render only, don't block. See "Evaluation policy
-    // (V1)" in the file header for rationale.
-    case "levelInClass":
-    case "class":
-    case "subclass":
-    case "feature":
-    case "spell":
+    case "proficiency": {
+      // Author requires "Athletics", "Longsword", etc. — check the
+      // actor's proficiency set for the matching category. `category`
+      // narrows the lookup (skill / weapon / armor / tool / language /
+      // save); `identifier` is the Foundry-style slug. The picker
+      // populates lowercased sets per category for direct hits, plus
+      // an aliases table that maps editor-authored full words (like
+      // "athletics") to the canonical 3-letter dnd5e keys (like
+      // "ath"). When neither map has the slug we fall through to
+      // unmet rather than manual — the player can see precisely
+      // what's missing.
+      const pool = ctx.proficiencies?.[leaf.category];
+      if (!pool) return "manual";
+      const id = String(leaf.identifier ?? "").toLowerCase();
+      if (!id) return "manual";
+      if (pool.has(id)) return "met";
+      const aliased = ctx.proficiencyAliases?.[leaf.category]?.[id];
+      if (aliased && pool.has(aliased)) return "met";
+      return "unmet";
+    }
+    case "feature": {
+      // Author requires a specific class feature granted earlier.
+      // The leaf's `featureId` is the D1 row PK (editor-authored).
+      // Embedded feature items on the actor carry the same PK as
+      // `flags.dauligor-pairing.entityId`, set by
+      // `createSemanticFeatureItem`. Match either entityId or
+      // sourceId so already-migrated re-imports work too.
+      if (!leaf.featureId) return "manual";
+      if (ctx.ownedEntityIds?.has(leaf.featureId)) return "met";
+      if (ctx.ownedSourceIds?.has(leaf.featureId)) return "met";
+      return "unmet";
+    }
+    case "spell": {
+      // Same matching pattern as `feature` but scoped to actor items
+      // of type "spell". A separate set lets the walker tell apart
+      // "the actor has a feature with this PK" from "the actor knows
+      // a spell with this PK" — they live in distinct namespaces in
+      // D1, so the picker pre-filters by type.
+      if (!leaf.spellId) return "manual";
+      if (ctx.ownedSpellEntityIds?.has(leaf.spellId)) return "met";
+      if (ctx.ownedSpellSourceIds?.has(leaf.spellId)) return "met";
+      return "unmet";
+    }
+    case "class": {
+      // "Character must have any levels in <class>". Matches against
+      // the actor's class items by entityId — same PK pattern as
+      // feature/spell. We could also accept sourceId but actor class
+      // items always carry entityId.
+      if (!leaf.classId) return "manual";
+      if (ctx.classLevels?.has(leaf.classId)) return "met";
+      return "unmet";
+    }
+    case "subclass": {
+      // "Character has subclass X". Subclasses also embed on the
+      // actor as their own items with entityId in flags.
+      if (!leaf.subclassId) return "manual";
+      if (ctx.subclassEntityIds?.has(leaf.subclassId)) return "met";
+      return "unmet";
+    }
+    case "levelInClass": {
+      // "Character has at least N levels in <class>". Pull the class
+      // item's level from the per-class map built by the picker.
+      if (!leaf.classId) return "manual";
+      const levels = ctx.classLevels?.get(leaf.classId) ?? 0;
+      const min = Number(leaf.minLevel) || 0;
+      return levels >= min ? "met" : "unmet";
+    }
+    // Still manual — spell rules need a tag-resolution pass the
+    // walker doesn't currently do, and `string` leaves are
+    // free-text by design (the player has to acknowledge them).
     case "spellRule":
-    case "proficiency":
     case "string":
       return "manual";
     default:

@@ -3577,8 +3577,11 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       : {}
   };
 
-  // Snapshot the actor's ability-score values so the walker doesn't have
-  // to reach into the Foundry actor each render.
+  // ─── Snapshot the actor's state for the requirements walker ───────────
+  // Everything the walker checks against. Built once per prompt so the
+  // walker doesn't have to reach into the live actor on every render.
+
+  // Ability scores.
   const abilityScores = {};
   for (const ability of ["str", "dex", "con", "int", "wis", "cha"]) {
     const value = Number(actor?.system?.abilities?.[ability]?.value);
@@ -3586,6 +3589,116 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
   }
   const totalLevel = Number(actor?.system?.details?.level) || Number(workflow?.targetLevel) || 0;
   const classLevel = Number(workflow?.targetLevel) || 0;
+
+  // Per-category proficiency Sets. The walker checks
+  // `ctx.proficiencies[category].has(identifier)` for `proficiency`
+  // leaves, e.g. category="skill" + identifier="ath" against the
+  // skill set built from actor.system.skills.
+  //
+  // The skill / tool maps in dnd5e v5 use `.value > 0` for proficient
+  // and `.value > 1` for expertise; both pass the gate. Weapon /
+  // armor / language proficiencies live in trait arrays. Saves go
+  // through abilities.<key>.proficient.
+  const proficiencies = {
+    skill: new Set(),
+    weapon: new Set(),
+    armor: new Set(),
+    tool: new Set(),
+    language: new Set(),
+    save: new Set()
+  };
+  for (const [key, data] of Object.entries(actor?.system?.skills ?? {})) {
+    if (Number(data?.value) > 0) proficiencies.skill.add(String(key).toLowerCase());
+  }
+  for (const [key, data] of Object.entries(actor?.system?.tools ?? {})) {
+    if (Number(data?.value) > 0) proficiencies.tool.add(String(key).toLowerCase());
+  }
+  for (const [key, data] of Object.entries(actor?.system?.abilities ?? {})) {
+    if (Number(data?.proficient) > 0) proficiencies.save.add(String(key).toLowerCase());
+  }
+  for (const slug of ensureArray(actor?.system?.traits?.toolProf?.value)) {
+    proficiencies.tool.add(String(slug).toLowerCase());
+  }
+  for (const slug of ensureArray(actor?.system?.traits?.weaponProf?.value)) {
+    proficiencies.weapon.add(String(slug).toLowerCase());
+  }
+  for (const slug of ensureArray(actor?.system?.traits?.armorProf?.value)) {
+    proficiencies.armor.add(String(slug).toLowerCase());
+  }
+  for (const slug of ensureArray(actor?.system?.traits?.languages?.value)) {
+    proficiencies.language.add(String(slug).toLowerCase());
+  }
+
+  // Aliases for skill keys. The editor sometimes authors the
+  // identifier as the full word ("athletics") and sometimes as the
+  // 3-letter dnd5e config key ("ath"). The actor stores the
+  // 3-letter form. Map full words → 3-letter so direct lookups
+  // succeed either way.
+  const proficiencyAliases = {
+    skill: {
+      acrobatics: "acr", "animal handling": "ani", arcana: "arc",
+      athletics: "ath", deception: "dec", history: "his",
+      insight: "ins", intimidation: "itm", investigation: "inv",
+      medicine: "med", nature: "nat", perception: "prc",
+      performance: "prf", persuasion: "per", religion: "rel",
+      "sleight of hand": "slt", stealth: "ste", survival: "sur"
+    }
+  };
+
+  // Owned-item indexes. The walker uses entityId for `feature` /
+  // `spell` / `class` / `subclass` leaves (the leaf carries the
+  // D1 row PK which round-trips as the embedded item's entityId
+  // flag). sourceId is the canonical export id — kept as a fallback
+  // in case an item was imported via a different code path.
+  const ownedEntityIds = new Set();
+  const ownedSourceIds = new Set();
+  const ownedSpellEntityIds = new Set();
+  const ownedSpellSourceIds = new Set();
+  // Maps a class item's entityId → its `system.levels` so the
+  // `levelInClass` leaf can compare. `class` and `levelInClass`
+  // both read from this; `class` just checks presence.
+  const classLevels = new Map();
+  const subclassEntityIds = new Set();
+
+  for (const item of ensureArray(actor?.items)) {
+    const flags = item?.flags?.[MODULE_ID] ?? {};
+    if (flags.entityId) ownedEntityIds.add(flags.entityId);
+    if (flags.sourceId) ownedSourceIds.add(flags.sourceId);
+    if (item.type === "spell") {
+      if (flags.entityId) ownedSpellEntityIds.add(flags.entityId);
+      if (flags.sourceId) ownedSpellSourceIds.add(flags.sourceId);
+    }
+    if (item.type === "class") {
+      const lvl = Number(item.system?.levels) || 0;
+      if (flags.entityId) classLevels.set(flags.entityId, lvl);
+      // Tagging by sourceId too so `class` / `levelInClass` leaves
+      // referencing the export-side sourceId resolve.
+      if (flags.sourceId) classLevels.set(flags.sourceId, lvl);
+    }
+    if (item.type === "subclass") {
+      if (flags.entityId) subclassEntityIds.add(flags.entityId);
+      if (flags.sourceId) subclassEntityIds.add(flags.sourceId);
+    }
+  }
+
+  // Build the full evaluation context the walker consumes. The
+  // `satisfied` set is recomputed per call (it depends on in-flight
+  // selections), but everything else is static for the prompt's
+  // lifetime — closed over from the snapshots above.
+  const buildCtx = (satisfied) => ({
+    satisfied,
+    classLevel,
+    totalLevel,
+    abilityScores,
+    proficiencies,
+    proficiencyAliases,
+    ownedEntityIds,
+    ownedSourceIds,
+    ownedSpellEntityIds,
+    ownedSpellSourceIds,
+    classLevels,
+    subclassEntityIds
+  });
 
   // ─── Enrich each option with display data ──────────────────────────────
   // Pre-compute everything we need per option so each render pass is
@@ -4070,7 +4183,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     },
     renderBody: (app) => {
       const satisfied = new Set([...priorSelections, ...(app._state.selectedSourceIds ?? [])]);
-      const ctx = { satisfied, classLevel, totalLevel, abilityScores };
+      const ctx = buildCtx(satisfied);
       const focused = enrichedEntries.find((e) => e.sourceId === app._state.focusedSourceId)
         ?? enrichedEntries[0]
         ?? null;
@@ -4215,7 +4328,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
               ...priorSelections,
               ...(app._state.selectedSourceIds ?? [])
             ]);
-            const ctx = { satisfied, classLevel, totalLevel, abilityScores };
+            const ctx = buildCtx(satisfied);
             detailPane.innerHTML = renderDetailPanel(focused, app, ctx);
             // (c) Re-wire the pane's pill/back-button handlers on
             // the fresh DOM nodes.
@@ -4275,7 +4388,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
             while (changed) {
               changed = false;
               const stillSatisfied = new Set([...priorSelections, ...selected]);
-              const innerCtx = { satisfied: stillSatisfied, classLevel, totalLevel, abilityScores };
+              const innerCtx = buildCtx(stillSatisfied);
               for (const entry of enrichedEntries) {
                 if (!selected.has(entry.sourceId)) continue;
                 const verdict = evaluateRequirementsTree(entry.tree, innerCtx);
