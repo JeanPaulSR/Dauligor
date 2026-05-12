@@ -3413,10 +3413,14 @@ async function upsertWorldItem(item, { folderPath = null } = {}) {
     return created;
   }
 
-  const updateData = {
+  // Embedded-collection replace semantics — see
+  // `applyCollectionReplaceSemantics`. Without `==` prefixes on
+  // `effects`, `system.activities`, and `system.advancement`, a
+  // re-bake's stale entries would accumulate on the world item.
+  const updateData = applyCollectionReplaceSemantics({
     _id: existing.id,
     ...clone
-  };
+  }, clone);
   const updated = await existing.update(updateData);
   return updated ?? existing;
 }
@@ -3441,21 +3445,73 @@ async function upsertActorItem(actor, item) {
   return updated ?? targetActor.items.get(existing.id) ?? existing;
 }
 
+/**
+ * Build the `update()` payload for an existing item, ensuring every
+ * embedded *collection* on the item replaces cleanly rather than
+ * mergeObject-merges with the prior state.
+ *
+ * Foundry's `mergeObject` (used by `Document#update`) recurses by
+ * default — for plain fields that's fine, but for collections like
+ * `system.advancement`, `system.activities`, and the top-level
+ * `effects[]` array it means "this update adds to / overrides
+ * matching keys but leaves un-touched keys intact." On a re-import
+ * where the source bundle no longer contains an activity / effect
+ * that an earlier import shipped, the stale entry would linger on
+ * the actor's item document forever.
+ *
+ * Foundry's documented workaround: prefix the key with `==` in the
+ * update payload to force overwrite rather than recursive merge.
+ * Apply it to every collection that's an authoring surface — system
+ * advancement (class/subclass only), system activities (any item
+ * that runs activities), and the top-level effects array.
+ *
+ * For brand-new items, this isn't relevant (Foundry's `create`
+ * pipeline doesn't merge — it just writes the shape we passed).
+ */
+function applyCollectionReplaceSemantics(updateData, clone) {
+  // Top-level `effects[]` — embedded Active Effect documents on the
+  // item. Without `==effects`, the old effect docs would persist
+  // and the new ones would be added on top.
+  if (Array.isArray(clone?.effects)) {
+    delete updateData.effects;
+    updateData["==effects"] = clone.effects;
+  }
+
+  // `system.activities` and `system.advancement` need the `==`
+  // prefix INSIDE the system object. We deep-clone system once and
+  // mutate that copy.
+  if (clone?.system && typeof clone.system === "object") {
+    let systemMutated = false;
+    const system = foundry.utils.deepClone(clone.system);
+
+    if (Object.hasOwn(system, "activities")) {
+      const activities = system.activities;
+      delete system.activities;
+      system["==activities"] = activities;
+      systemMutated = true;
+    }
+
+    // advancement is class/subclass-only; on a feat-typed item it
+    // doesn't exist in the canonical shape (and Foundry rejects it).
+    if (["class", "subclass"].includes(clone?.type) && Object.hasOwn(system, "advancement")) {
+      const advancement = system.advancement;
+      delete system.advancement;
+      system["==advancement"] = advancement;
+      systemMutated = true;
+    }
+
+    if (systemMutated) updateData.system = system;
+  }
+
+  return updateData;
+}
+
 function buildEmbeddedActorItemUpdateData(existingId, clone) {
   const updateData = {
     _id: existingId,
     ...clone
   };
-
-  if (["class", "subclass"].includes(clone?.type) && clone?.system && Object.hasOwn(clone.system, "advancement")) {
-    const system = foundry.utils.deepClone(clone.system);
-    const advancement = system.advancement;
-    delete system.advancement;
-    system["==advancement"] = advancement;
-    updateData.system = system;
-  }
-
-  return updateData;
+  return applyCollectionReplaceSemantics(updateData, clone);
 }
 
 function sanitizeEmbeddedActorProgressionItem(item, { existingItem = null } = {}) {
