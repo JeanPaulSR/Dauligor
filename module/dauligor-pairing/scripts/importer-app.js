@@ -4445,83 +4445,62 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
   // current import flow that haven't been committed to the actor yet.
   //
   // Repro: importing a class with Athletics in its skill pool, the
-  // user picks Athletics in the Skills step, then a few prompts
-  // later they hit an option-group with a Brawling option that
-  // requires Athletics. Without this block the walker only sees
-  // the *committed* actor state (Athletics not yet there) and
-  // Brawling stays locked. Now the walker treats in-flight picks
-  // as proficient and Brawling becomes selectable.
+  // user picks Athletics in the Skills step, then a few prompts later
+  // they hit an option-group with a Brawling option that requires
+  // Athletics. Without this block the walker only sees the *committed*
+  // actor state (Athletics not yet there) and Brawling stays locked.
   //
-  // The selections live on `workflow.selection.*` — `state.*` gets
-  // rebuilt into the workflow via `buildWorkflowFromSequenceState`
-  // each iteration, so this read picks up the latest picks.
+  // Source of truth: `sequence.characterUpdater.delta`. The base-
+  // advancements loop (skills / tools / saves / armor / weapons /
+  // languages) writes to this delta map via `updateSkills`,
+  // `updateSaves`, `updateTools`, `updateTraitProficiencies` —
+  // see `update-character.js`. Each writer already merges the
+  // class's fixed grants + the user's picks AND strips any
+  // `<type>:` slug prefix, so the delta is the cleanest read here.
   //
-  // Two sources to merge per category:
-  //   1. The class's class-fixed proficiencies (auto-granted). Those
-  //      WILL be on the actor after commit but aren't yet — same trap.
-  //   2. The user's actual picks from the trait prompts (stored as
-  //      `<type>:<slug>` slug-prefixed strings; `stripTypePrefix`
-  //      drops the prefix so what lands in the Set is just "ath").
+  // First attempt at this fix read from `workflow.selection.*Selections`
+  // instead, but that path is unreliable: `sanitizeClassImportSelection`
+  // only forwards `skill` / `tool` selections (saves / armor / weapons
+  // / languages were placeholders), AND it filters skill picks through
+  // `availableSet` of normalized 3-letter slugs while the picker
+  // returns the raw `"skills:ath"` form — so even skills were getting
+  // dropped on the rebuild. The delta avoids both traps.
+  const delta = sequence?.characterUpdater?.delta ?? {};
   const stripPrefix = (slug) => String(slug ?? "").toLowerCase().replace(/^[a-z]+:/, "");
-  const addProficiency = (set, slug) => {
-    const clean = stripPrefix(slug);
-    if (clean) set.add(clean);
-  };
 
-  // Class-fixed proficiencies (every category baseClassHandler exposes).
-  // The base advancements carry the `fixed[]` array of slugs the class
-  // grants automatically — those should count as already-met for the
-  // walker even before the importer writes them.
-  try {
-    const baseFeatures = baseClassHandler(workflow);
-    for (const adv of ensureArray(baseFeatures?.advancements)) {
-      const cfgType = String(adv?.configuration?.type ?? "").toLowerCase();
-      const set = ({
-        skills: proficiencies.skill,
-        tools: proficiencies.tool,
-        saves: proficiencies.save,
-        weapons: proficiencies.weapon,
-        armor: proficiencies.armor,
-        languages: proficiencies.language
-      })[cfgType];
-      if (!set) continue;
-      for (const slug of ensureArray(adv?.fixed)) addProficiency(set, slug);
+  // Per-key scalar paths — `delta["system.skills.<key>.value"] = 1`
+  // per skill, ditto for abilities + tools. value > 0 is enough
+  // (1 = proficient, 2 = expertise — both pass the gate).
+  for (const [path, value] of Object.entries(delta)) {
+    if (value == null || value === false) continue;
+    let m;
+    if ((m = path.match(/^system\.skills\.([a-z]+)\.value$/i)) && Number(value) > 0) {
+      proficiencies.skill.add(m[1].toLowerCase());
+    } else if ((m = path.match(/^system\.abilities\.([a-z]+)\.proficient$/i)) && Number(value) > 0) {
+      proficiencies.save.add(m[1].toLowerCase());
+    } else if ((m = path.match(/^system\.tools\.([a-z]+)\.value$/i)) && Number(value) > 0) {
+      proficiencies.tool.add(m[1].toLowerCase());
     }
-  } catch (e) {
-    log("buildCtx baseClassHandler fixed-prof merge failed", e);
   }
 
-  // User selections from each trait prompt. These are stored as
-  // arrays of slugs on `workflow.selection`; each set is the
-  // "user chose these N from the prompt's pool" outcome.
-  for (const slug of ensureArray(workflow?.selection?.skillSelections)) {
-    addProficiency(proficiencies.skill, slug);
+  // Trait arrays — `delta["system.traits.<traitPath>.value"]` is a
+  // merged array of slugs (current actor + new). `updateTraitProficiencies`
+  // already strips prefixes; double-strip here defensively.
+  for (const slug of ensureArray(delta["system.traits.toolProf.value"])) {
+    const clean = stripPrefix(slug);
+    if (clean) proficiencies.tool.add(clean);
   }
-  for (const slug of ensureArray(workflow?.selection?.toolSelections)) {
-    addProficiency(proficiencies.tool, slug);
+  for (const slug of ensureArray(delta["system.traits.weaponProf.value"])) {
+    const clean = stripPrefix(slug);
+    if (clean) proficiencies.weapon.add(clean);
   }
-  for (const slug of ensureArray(workflow?.selection?.savingThrowSelections)) {
-    addProficiency(proficiencies.save, slug);
+  for (const slug of ensureArray(delta["system.traits.armorProf.value"])) {
+    const clean = stripPrefix(slug);
+    if (clean) proficiencies.armor.add(clean);
   }
-  for (const slug of ensureArray(workflow?.selection?.languageSelections)) {
-    addProficiency(proficiencies.language, slug);
-  }
-  // Generic trait selections (feature-level Trait advancements that
-  // can mix types). Each entry is the same `<type>:<slug>` form,
-  // route by the prefix.
-  for (const slug of ensureArray(workflow?.selection?.traitSelections)) {
-    const raw = String(slug ?? "").toLowerCase();
-    const m = raw.match(/^([a-z]+):(.+)$/);
-    if (!m) continue;
-    const set = ({
-      skills: proficiencies.skill,
-      tools: proficiencies.tool,
-      saves: proficiencies.save,
-      weapons: proficiencies.weapon,
-      armor: proficiencies.armor,
-      languages: proficiencies.language
-    })[m[1]];
-    if (set) set.add(m[2]);
+  for (const slug of ensureArray(delta["system.traits.languages.value"])) {
+    const clean = stripPrefix(slug);
+    if (clean) proficiencies.language.add(clean);
   }
 
   // Aliases for skill keys. The editor sometimes authors the
