@@ -95,6 +95,30 @@ import {
   summarizeHtml
 } from "./importer-utils.js";
 
+/**
+ * Compute a centered `position` object for an ApplicationV2 window.
+ *
+ * Foundry's ApplicationV2 mounts new windows at the document's
+ * default (top-left, `top: 0; left: 0`) before its centering math
+ * runs — visible as a brief flash where the window appears in the
+ * corner then jumps to the middle of the screen. Setting `top` and
+ * `left` explicitly in the constructor's `position` skips the flash
+ * because the window's first paint is already at its final spot.
+ *
+ * Caps `top` and `left` at 0 so the window never starts off-screen
+ * for narrow viewports.
+ */
+function centeredAppPosition(width, height) {
+  const viewportW = window.innerWidth || 0;
+  const viewportH = window.innerHeight || 0;
+  return {
+    width,
+    height,
+    left: Math.max(0, Math.round((viewportW - width) / 2)),
+    top: Math.max(0, Math.round((viewportH - height) / 2))
+  };
+}
+
 export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
 
@@ -121,9 +145,20 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
       const mode = game.settings.get(MODULE_ID, SETTINGS.apiEndpointMode) || "local";
       const host = mode === "production" ? "https://www.dauligor.com" : "http://localhost:3000";
-      this._instance._state.sourceCatalogUrl = `${host}/api/module/sources`;
-
-      this._instance._sourcesLoaded = false;
+      const newUrl = `${host}/api/module/sources`;
+      // Only invalidate the cached source catalog when the URL actually
+      // changes (e.g. user toggled between local/production in module
+      // settings). The previous unconditional invalidation forced a
+      // network round-trip on every importer open, which was the main
+      // contributor to "the importer takes a while to load" — the
+      // catalog rarely changes between reopens within a session.
+      // `_sourcesLoadedUrl` tracks the URL the cached catalog was
+      // fetched from; see `_loadWizardSources` for the read side.
+      if (this._instance._state.sourceCatalogUrl !== newUrl) {
+        this._instance._sourcesLoaded = false;
+        this._instance._sourcesLoadedUrl = null;
+      }
+      this._instance._state.sourceCatalogUrl = newUrl;
       this._instance._sourcesLoading = false;
 
       this._instance.render({ force: true });
@@ -168,10 +203,10 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         resizable: true,
         contentClasses: ["dauligor-importer-window"]
       },
-      position: {
-        width: Math.min(window.innerWidth - 120, 1120),
-        height: Math.min(window.innerHeight - 120, 640)
-      }
+      position: centeredAppPosition(
+        Math.min(window.innerWidth - 120, 1120),
+        Math.min(window.innerHeight - 120, 640)
+      )
     });
 
     this._template = IMPORTER_TEMPLATE;
@@ -197,6 +232,11 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     this._sourceEntries = [];
     this._sourcesLoaded = false;
     this._sourcesLoading = false;
+    // URL the cached catalog was loaded from. Compared against the
+    // current `_state.sourceCatalogUrl` to decide whether to refetch
+    // on a re-open — avoids the per-open network round-trip that used
+    // to be unconditional. See the static `open()` method's URL diff.
+    this._sourcesLoadedUrl = null;
   }
 
   _configureRenderParts() {
@@ -292,9 +332,13 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
   async _loadWizardSources({ force = false } = {}) {
     if (this._sourcesLoading) return;
-    if (this._sourcesLoaded && !force) return;
-
     const sourceUrl = this._state.sourceCatalogUrl;
+    // Skip the fetch when we already have a fresh catalog for THIS
+    // URL. `force=true` (manual "Reload" affordance) still pulls a
+    // new copy. `_sourcesLoadedUrl` is set in lockstep with
+    // `_sourcesLoaded = true` below.
+    if (this._sourcesLoaded && this._sourcesLoadedUrl === sourceUrl && !force) return;
+
     if (!sourceUrl || !/^https?:\/\//i.test(sourceUrl)) {
       this._sourcesLoading = false;
       this._sourcesLoaded = false;
@@ -342,6 +386,11 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       : "No class-capable sources were found in the local source library.";
     this._state.statusLevel = this._sourceEntries.length ? "success" : "danger";
     this._sourcesLoaded = true;
+    // Pair with `_sourcesLoaded = true` so a same-URL reopen can
+    // short-circuit the fetch. The URL is what we just fetched
+    // from, not whatever the state holds at read-time later
+    // (defensive in case the state mutates between fetch and now).
+    this._sourcesLoadedUrl = sourceUrl;
     this._sourcesLoading = false;
     this._renderSourceTypesPanel();
     this._renderFooterPanel();
@@ -711,10 +760,10 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         resizable: true,
         contentClasses: ["dauligor-importer-window"]
       },
-      position: {
-        width: Math.min(window.innerWidth - 100, 860),
-        height: Math.min(window.innerHeight - 100, 760)
-      }
+      position: centeredAppPosition(
+        Math.min(window.innerWidth - 100, 860),
+        Math.min(window.innerHeight - 100, 760)
+      )
     });
 
     this._template = CLASS_BROWSER_TEMPLATE;
@@ -1344,10 +1393,7 @@ class DauligorImportProgressApp extends HandlebarsApplicationMixin(ApplicationV2
         resizable: true,
         contentClasses: ["dauligor-importer-window", "dauligor-sequence-window"]
       },
-      position: {
-        width: 460,
-        height: 420
-      }
+      position: centeredAppPosition(460, 420)
     });
 
     this._template = CLASS_OPTIONS_TEMPLATE;
@@ -1522,10 +1568,10 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
         resizable: true,
         contentClasses: ["dauligor-importer-window", "dauligor-sequence-window"]
       },
-      position: {
-        width: config.width ?? 720,
-        height: config.height ?? 540
-      }
+      position: centeredAppPosition(
+        config.width ?? 720,
+        config.height ?? 540
+      )
     });
 
     this._template = CLASS_OPTIONS_TEMPLATE;
