@@ -867,46 +867,56 @@
   text-align: center;
 }
 
-/* Level header — sticky, grey band with a gold label. Same recipe
- * as `.dauligor-option-picker__level-header`. */
+/* Level divider — flat "Level N" label + bottom rule, matching the
+ * lightweight style of the Class Selector's level column. The
+ * earlier sticky/banded recipe felt like another row of chrome
+ * stacked on top of the column header; this version reads as a
+ * section break inside the list, not a header.
+ *
+ * No sticky positioning — when the user scrolls past a level the
+ * label scrolls out with its group. Acceptable here since each
+ * level rarely has many features. */
 .dauligor-subclass-preview__level-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: #2b2b2b;
-  border-top: 1px solid var(--dauligor-border);
+  align-items: baseline;
+  padding: 16px 12px 6px;
+  background: transparent;
+  border: 0;
   border-bottom: 1px solid var(--dauligor-border);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--dauligor-accent-strong);
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--dauligor-text);
 }
 
 .dauligor-subclass-preview__col > .dauligor-subclass-preview__level-header:first-child {
-  border-top: 0;
+  padding-top: 10px;
 }
 
 .dauligor-subclass-preview__level-count {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
 }
 
-/* Row — works for both subclass rows (with image) and feature rows
- * (no image). Same hover / focus treatments as the option picker:
- * grey backgrounds across the board, gold inset accent bar as the
- * only gold marker on the `--focused` row. */
+/* Row — works for both subclass rows (with optional indicator + image)
+ * and feature rows (just text). Hover / focus treatments mirror the
+ * option-picker: subtle grey wash, inset accent bar on `--focused`. */
 .dauligor-subclass-preview__row {
   display: grid;
+  /* Base shape: icon + text. Modifier classes below shift the grid
+   * to add an indicator column (select mode) or drop the icon
+   * (feature rows). */
   grid-template-columns: 36px minmax(0, 1fr);
-  gap: 10px;
+  gap: 12px;
   align-items: center;
   width: 100%;
-  padding: 8px 12px;
+  /* Bumped padding 8px → 12px vertical so rows breathe like the
+   * option-chooser's. The user flagged the previous rows as
+   * "scrunched together" against the option-chooser's roomier
+   * rhythm. */
+  padding: 12px 14px;
   border: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.015);
@@ -916,9 +926,53 @@
   transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
+.dauligor-subclass-preview__row--with-indicator {
+  /* Select mode: indicator + icon + text. Matches the option-
+   * chooser's `24px 36px minmax(0, 1fr)` grid recipe. */
+  grid-template-columns: 24px 36px minmax(0, 1fr);
+}
+
 .dauligor-subclass-preview__row--feature {
-  /* No image — collapse the first column. */
+  /* No image — collapse the icon column. Feature rows have only
+   * a name; no indicator either (the feature pane is read-only). */
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* Indicator pip — checkbox-shaped square with a checkmark when on.
+ * Single-select semantics (only one focused subclass at a time);
+ * we use a `<span>` rather than a real radio input because the
+ * row already owns click handling. The shape matches the
+ * option-chooser's checkbox so the two windows read as the same
+ * UI family. */
+.dauligor-subclass-preview__row-indicator {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 3px;
+  background: var(--dauligor-panel);
+  position: relative;
+  flex: none;
+}
+
+.dauligor-subclass-preview__row-indicator--on {
+  border-color: var(--dauligor-accent-strong);
+  background: var(--dauligor-accent-strong);
+}
+
+/* Checkmark glyph drawn via CSS — a rotated rectangle with two
+ * borders, the classic CSS-only checkmark recipe. Sits inside the
+ * filled indicator. */
+.dauligor-subclass-preview__row-indicator--on::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--dauligor-panel);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .dauligor-subclass-preview__row:hover {

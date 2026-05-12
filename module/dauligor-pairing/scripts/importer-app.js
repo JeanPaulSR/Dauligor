@@ -2375,21 +2375,35 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
       ?? focusedSubFeatures[0]
       ?? null;
 
-    // Left column — subclass rows.
-    const subclassesHtml = this._subclasses.map((sub) => `
-      <button
-        type="button"
-        class="dauligor-subclass-preview__row dauligor-subclass-preview__row--subclass ${sub.sourceId === focusedSub?.sourceId ? "dauligor-subclass-preview__row--focused" : ""}"
-        data-action="focus-subclass"
-        data-sub-id="${escapeHTML(sub.sourceId)}"
-      >
-        <img class="dauligor-subclass-preview__row-img" src="${escapeHTML(sub.img)}" alt="" loading="lazy">
-        <div class="dauligor-subclass-preview__row-text">
-          <div class="dauligor-subclass-preview__row-name">${escapeHTML(sub.name)}</div>
-          ${sub.sourceLabel ? `<div class="dauligor-subclass-preview__row-meta">${escapeHTML(sub.sourceLabel)}</div>` : ""}
-        </div>
-      </button>
-    `).join("");
+    // Left column — subclass rows. Match the option-chooser's
+    // row shape: a square indicator on the left (checkbox-shaped,
+    // single-select semantics here so only one is "checked" at a
+    // time), then icon, then name + source label. More vertical
+    // padding than the previous draft so the row rhythm matches
+    // the option-chooser. Preview mode hides the indicator (it's a
+    // browse-only window, nothing to commit).
+    const showIndicator = this._mode === "select";
+    const subclassesHtml = this._subclasses.map((sub) => {
+      const isFocused = sub.sourceId === focusedSub?.sourceId;
+      const indicatorHtml = showIndicator
+        ? `<span class="dauligor-subclass-preview__row-indicator ${isFocused ? "dauligor-subclass-preview__row-indicator--on" : ""}" aria-hidden="true"></span>`
+        : "";
+      return `
+        <button
+          type="button"
+          class="dauligor-subclass-preview__row dauligor-subclass-preview__row--subclass ${showIndicator ? "dauligor-subclass-preview__row--with-indicator" : ""} ${isFocused ? "dauligor-subclass-preview__row--focused" : ""}"
+          data-action="focus-subclass"
+          data-sub-id="${escapeHTML(sub.sourceId)}"
+        >
+          ${indicatorHtml}
+          <img class="dauligor-subclass-preview__row-img" src="${escapeHTML(sub.img)}" alt="" loading="lazy">
+          <div class="dauligor-subclass-preview__row-text">
+            <div class="dauligor-subclass-preview__row-name">${escapeHTML(sub.name)}</div>
+            ${sub.sourceLabel ? `<div class="dauligor-subclass-preview__row-meta">${escapeHTML(sub.sourceLabel)}</div>` : ""}
+          </div>
+        </button>
+      `;
+    }).join("");
 
     // Middle column — features grouped by level under sticky level
     // headers. Mirrors the option-picker's level-header pattern so
