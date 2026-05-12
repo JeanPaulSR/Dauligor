@@ -1624,14 +1624,27 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
     }
     this._toolbarRegion.style.removeProperty("display");
 
-    this._toolbarRegion.innerHTML = `
-      <div class="dauligor-sequence__toolbar">
-        <div>
-          <h2 class="dauligor-class-browser__title">${foundry.utils.escapeHTML(this._config.title ?? "Dauligor Prompt")}</h2>
-          ${this._config.subtitle ? `<p class="dauligor-class-browser__subtitle">${foundry.utils.escapeHTML(this._config.subtitle)}</p>` : ""}
+    // The Foundry application chrome already renders the prompt title
+    // in the window's draggable header bar. Repeating it as a body-
+    // local <h2> doubled the title visually for no informational gain
+    // — every prompt that uses this app gets the title via the window
+    // header. We still surface the optional `subtitle` (which carries
+    // the actual instruction copy on prompts like "Choose two skill
+    // proficiencies") since the window header doesn't show it.
+    if (this._config.subtitle) {
+      this._toolbarRegion.style.removeProperty("display");
+      this._toolbarRegion.innerHTML = `
+        <div class="dauligor-sequence__toolbar">
+          <p class="dauligor-class-browser__subtitle">${foundry.utils.escapeHTML(this._config.subtitle)}</p>
         </div>
-      </div>
-    `;
+      `;
+    } else {
+      // No subtitle → hide the toolbar region entirely so the empty
+      // wrapper doesn't leave whitespace at the top of the prompt
+      // body. The body's flex sizing fills the recovered space.
+      this._toolbarRegion.innerHTML = "";
+      this._toolbarRegion.style.display = "none";
+    }
   }
 
   _renderBody() {
@@ -3635,24 +3648,12 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     return { state: "blocked-prereq", verdict, blockReasonText: "Locked" };
   };
 
-  // Map a status state to its icon char and color hint. Inline so the
-  // CSS file doesn't have to know about every state separately.
-  const STATUS_VISUALS = {
-    available: { icon: "○", title: "Available" },
-    selected: { icon: "✓", title: "Selected" },
-    owned: { icon: "●", title: "Already on actor" },
-    "blocked-prereq": { icon: "🔗", title: "Requires another option" },
-    "blocked-level": { icon: "⬆", title: "Level requirement not met" },
-    "blocked-ability": { icon: "💪", title: "Ability score not met" }
-  };
-
   const renderRow = (entry, app, ctx) => {
     const selectedSet = new Set([
       ...priorSelections,
       ...(app._state.selectedSourceIds ?? [])
     ]);
     const status = computeOptionStatus(entry, selectedSet, ctx);
-    const visual = STATUS_VISUALS[status.state] ?? STATUS_VISUALS.available;
 
     // "owned" and "blocked-*" disable the checkbox. "selected" is checked
     // but stays interactive (so the user can uncheck mid-prompt).
@@ -3686,7 +3687,6 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
         class="${rowClass}"
         data-option-source-id="${escapeHTML(entry.sourceId)}"
         data-action="focus-option"
-        title="${escapeHTML(visual.title)}"
       >
         <input
           type="checkbox"
@@ -3701,7 +3701,6 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
           <div class="dauligor-option-picker__row-name">${escapeHTML(entry.item.name)}</div>
           ${badgeText ? `<div class="dauligor-option-picker__row-badge">${escapeHTML(badgeText)}</div>` : ""}
         </div>
-        <div class="dauligor-option-picker__row-status" aria-label="${escapeHTML(visual.title)}">${visual.icon}</div>
       </div>
     `;
   };
@@ -3731,7 +3730,6 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       ...(app._state.selectedSourceIds ?? [])
     ]);
     const status = computeOptionStatus(entry, selectedSet, ctx);
-    const fullText = formatRequirementsTree(entry.tree, formatLookups);
 
     // Build the prereq pill list — one pill per authored leaf plus
     // a synthetic pill for the flat `levelPrerequisite` flag when set.
@@ -3809,15 +3807,14 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       }
     }
 
-    // Status banner — describes the current state up-front so the user
-    // doesn't have to read the description to know if they can pick it.
+    // Status banner only fires for the three non-blocked states. For
+    // a blocked option, the Prerequisites pill row below tells the
+    // player exactly what's missing — repeating that as a banner just
+    // doubles the same information.
     const statusBanner = (() => {
       if (status.state === "owned") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--muted">Already on this actor.</div>`;
       if (status.state === "selected") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--ok">Selected for this import.</div>`;
       if (status.state === "available") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--ok">Available — click the checkbox to pick this option.</div>`;
-      if (status.state === "blocked-prereq") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--block">Locked: requires ${escapeHTML(status.blockReasonText ?? "another option")}.</div>`;
-      if (status.state === "blocked-level") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--block">Locked: ${escapeHTML(status.blockReasonText)} needed.</div>`;
-      if (status.state === "blocked-ability") return `<div class="dauligor-option-picker__banner dauligor-option-picker__banner--block">Locked: ${escapeHTML(status.blockReasonText)} needed.</div>`;
       return "";
     })();
 
@@ -3829,22 +3826,21 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       ? `<button type="button" class="dauligor-option-picker__back" data-action="back-to-previous">← Back</button>`
       : "";
 
-    // The dialog title already names the focused option group, and
-    // the highlighted row in the list shows the focused option's
-    // name + image. Repeating either inside the detail panel just
-    // pads the column with the same info — so the detail panel leads
-    // with the status banner (which gives the player the answer to
-    // "can I pick this?") and goes straight into Prerequisites +
-    // Description.
     return `
       <div class="dauligor-option-picker__detail">
         ${backButton}
+        <div class="dauligor-option-picker__detail-header">
+          <img class="dauligor-option-picker__detail-img" src="${escapeHTML(entry.img)}" alt="" />
+          <div>
+            <h3 class="dauligor-option-picker__detail-name">${escapeHTML(entry.item.name)}</h3>
+            ${entry.sourceLabel ? `<div class="dauligor-option-picker__detail-meta">${escapeHTML(entry.sourceLabel)}</div>` : ""}
+          </div>
+        </div>
         ${statusBanner}
         ${pills.length ? `
           <div class="dauligor-option-picker__detail-section">
             <div class="dauligor-option-picker__detail-section-title">Prerequisites</div>
             <div class="dauligor-option-picker__pill-row">${pills.join("")}</div>
-            ${fullText ? `<div class="dauligor-option-picker__detail-summary">${escapeHTML(fullText)}</div>` : ""}
           </div>
         ` : ""}
         <div class="dauligor-option-picker__detail-section">

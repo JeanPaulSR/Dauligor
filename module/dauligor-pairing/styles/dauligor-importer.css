@@ -2173,7 +2173,11 @@
 
 .dauligor-option-picker__row {
   display: grid;
-  grid-template-columns: 24px 36px minmax(0, 1fr) 24px;
+  /* Checkbox + icon + name/badge. The right-side status-icon column
+   * was removed — the row badge already conveys status as text
+   * ("Owned" / "Selected" / "Requires: …" / "Level N+") and the
+   * extra glyph was redundant. */
+  grid-template-columns: 24px 36px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   padding: 8px 12px;
