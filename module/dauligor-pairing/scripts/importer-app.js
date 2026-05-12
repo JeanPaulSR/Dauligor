@@ -3729,7 +3729,13 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       case "spellRule":
         return formatLookups.spellRuleNameById?.[leaf.spellRuleId] ?? "(spell rule)";
       case "proficiency":
-        return leaf.identifier || "(proficiency)";
+        // Humanize through the same util the base-trait prompts use.
+        // Handles 3-letter skill slugs ("ath" → Athletics, "prc" →
+        // Perception), longer tool / armor / weapon slugs, full-word
+        // skill aliases ("athletics" → Athletics via title-case
+        // fallback), etc. Returns the raw identifier only when no
+        // CONFIG.DND5E entry and no inline lookup match.
+        return formatFoundryLabel(leaf.identifier) || "(proficiency)";
       case "string":
         return leaf.value || "(see description)";
       default:
@@ -3852,21 +3858,21 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     ]);
     const status = computeOptionStatus(entry, selectedSet, ctx);
 
-    // Build the prereq pill list — one pill per authored leaf plus
-    // a synthetic pill for the flat `levelPrerequisite` flag when set.
-    // The pills are colored met/unmet/manual but carry no checkmark
-    // glyph (color alone communicates state, the icon was redundant).
+    // Build the prereq pill list — one pill per authored leaf plus a
+    // synthetic pill for the flat `levelPrerequisite` flag when set.
+    // All pills share the same neutral styling now: green/red/gold
+    // variants were too much visual noise for what's already a
+    // dense panel. The pill's interactivity (jump-to-option vs.
+    // show-out-of-group overlay) is communicated by the cursor
+    // changing to a pointer on hover; static informational pills
+    // (level, ability score, etc.) stay non-clickable.
     const pills = [];
 
-    // Flat levelGate (option's `levelPrerequisite` flag) — gets its
-    // own pill when authored, sitting before tree-derived pills so
-    // it reads as the primary level gate. Skipped when 0 (no gate).
+    // Flat levelGate first so it reads as the primary gate when both
+    // it and a tree-level leaf are authored.
     if (entry.levelGate > 0) {
-      const met = ctx.classLevel >= entry.levelGate;
       pills.push(`
-        <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
-          Level ${escapeHTML(entry.levelGate)}+
-        </span>
+        <span class="dauligor-option-picker__pill">Level ${escapeHTML(entry.levelGate)}+</span>
       `);
     }
 
@@ -3874,65 +3880,46 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     for (const leaf of allLeaves) {
       if (leaf.type === "optionItem") {
         const refSid = leaf.itemId;
-        const isOwned = previouslyOwnedSourceIds.has(refSid);
-        const isPicked = selectedSet.has(refSid);
         const isInGroup = inGroupSourceIds.has(refSid);
         const refName = optionItemNameBySourceId[refSid] ?? "(unknown option)";
         const action = isInGroup ? "jump-to-option" : "show-out-of-group";
-        const pillClass = isOwned || isPicked
-          ? "dauligor-option-picker__pill dauligor-option-picker__pill--met"
-          : "dauligor-option-picker__pill dauligor-option-picker__pill--unmet";
         pills.push(`
           <button
             type="button"
-            class="${pillClass}"
+            class="dauligor-option-picker__pill"
             data-action="${action}"
             data-target-source-id="${escapeHTML(refSid)}"
             data-leaf-type="optionItem"
           >${escapeHTML(refName)}</button>
         `);
       } else if (leaf.type === "level") {
-        const met = ctx.classLevel >= leaf.minLevel;
         pills.push(`
-          <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
-            Level ${escapeHTML(leaf.minLevel)}+
-          </span>
+          <span class="dauligor-option-picker__pill">Level ${escapeHTML(leaf.minLevel)}+</span>
         `);
       } else if (leaf.type === "levelInClass") {
-        // Class-specific level gate. The walker treats this as "manual"
-        // since class identifiers aren't remapped at export time yet,
-        // so we render it as advisory rather than green/red.
         const className = formatLookups.classNameById?.[leaf.classId] ?? "Class";
         pills.push(`
-          <span class="dauligor-option-picker__pill dauligor-option-picker__pill--manual">
-            ${escapeHTML(className)} ${escapeHTML(leaf.minLevel)}+
-          </span>
+          <span class="dauligor-option-picker__pill">${escapeHTML(className)} ${escapeHTML(leaf.minLevel)}+</span>
         `);
       } else if (leaf.type === "abilityScore") {
-        const score = ctx.abilityScores?.[leaf.ability] ?? 0;
-        const met = score >= leaf.min;
         pills.push(`
-          <span class="dauligor-option-picker__pill ${met ? "dauligor-option-picker__pill--met" : "dauligor-option-picker__pill--unmet"}">
-            ${escapeHTML(leaf.ability.toUpperCase())} ${escapeHTML(leaf.min)}+
-          </span>
+          <span class="dauligor-option-picker__pill">${escapeHTML(leaf.ability.toUpperCase())} ${escapeHTML(leaf.min)}+</span>
         `);
       } else if (leaf.type === "proficiency") {
-        // Authored skill / armor / weapon / tool / language requirement.
-        // Walker reports these as `manual` (the picker doesn't yet
-        // resolve actor proficiencies), so render advisory in gold.
-        // Identifier is the Foundry key like "acr" (Acrobatics) or
-        // "athletics" — surface as-is; the editor authors the human
-        // identifier on the proficiency leaf already.
-        const label = leaf.identifier || "(proficiency)";
+        // Humanize via `formatFoundryLabel` — same util the base
+        // trait prompts use. Translates "ath" → Athletics,
+        // "athletics" → Athletics (title-case fallback),
+        // "longsword" → Longsword, "thief" → Thieves' Tools, etc.
+        const label = formatFoundryLabel(leaf.identifier) || "(proficiency)";
         pills.push(`
-          <span class="dauligor-option-picker__pill dauligor-option-picker__pill--manual">${escapeHTML(label)}</span>
+          <span class="dauligor-option-picker__pill">${escapeHTML(label)}</span>
         `);
       } else if (leaf.type === "class") {
         const refName = formatLookups.classNameById?.[leaf.classId] ?? "(class)";
         pills.push(`
           <button
             type="button"
-            class="dauligor-option-picker__pill dauligor-option-picker__pill--manual"
+            class="dauligor-option-picker__pill"
             data-action="show-out-of-group"
             data-leaf-type="class"
             data-leaf-payload="${escapeHTML(JSON.stringify(leaf))}"
@@ -3943,7 +3930,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
         pills.push(`
           <button
             type="button"
-            class="dauligor-option-picker__pill dauligor-option-picker__pill--manual"
+            class="dauligor-option-picker__pill"
             data-action="show-out-of-group"
             data-leaf-type="subclass"
             data-leaf-payload="${escapeHTML(JSON.stringify(leaf))}"
@@ -3958,7 +3945,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
         pills.push(`
           <button
             type="button"
-            class="dauligor-option-picker__pill dauligor-option-picker__pill--manual"
+            class="dauligor-option-picker__pill"
             data-action="show-out-of-group"
             data-leaf-type="${escapeHTML(leaf.type)}"
             data-leaf-payload="${escapeHTML(JSON.stringify(leaf))}"
@@ -3966,7 +3953,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
         `);
       } else if (leaf.type === "string") {
         pills.push(`
-          <span class="dauligor-option-picker__pill dauligor-option-picker__pill--manual">${escapeHTML(leaf.value || "(see description)")}</span>
+          <span class="dauligor-option-picker__pill">${escapeHTML(leaf.value || "(see description)")}</span>
         `);
       }
     }
@@ -4106,29 +4093,159 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       `;
     },
     onRenderBody: (app, root) => {
-      // Helper — `app.rerenderPrompt()` calls `render({ force: true })`
-      // which rebuilds the entire window content. Critically: the
-      // `_bodyRegion` element itself is replaced (re-queried inside
-      // `_onRender`), so the `root` captured in this closure becomes
-      // a DETACHED DOM tree after the rerender. Querying that stale
-      // tree after rAF finds nothing — which is why the prior fix
-      // didn't actually preserve scroll.
-      //
-      // Fix: read live state through `app._bodyRegion`, which is
-      // re-assigned during each render to point at the current
-      // body region. The `root` in this closure is only valid until
-      // the next render; `app._bodyRegion` survives.
+      const liveRoot = () => app._bodyRegion ?? root;
+
+      // Wire the click handlers that live INSIDE the detail pane
+      // (pill jumps + back button + show-out-of-group overlay
+      // triggers). Reusable so the partial focus-change update can
+      // re-wire after replacing the pane's innerHTML without going
+      // through `app.rerenderPrompt()`.
+      const wireDetailPaneHandlers = (paneEl) => {
+        if (!paneEl) return;
+
+        paneEl.querySelectorAll(`[data-action="jump-to-option"]`).forEach((btn) => {
+          btn.addEventListener("click", (evt) => {
+            evt.stopPropagation();
+            const targetSid = btn.dataset.targetSourceId;
+            if (!targetSid) return;
+            const breadcrumb = [...(app._state.focusBreadcrumb ?? [])];
+            if (app._state.focusedSourceId) breadcrumb.push(app._state.focusedSourceId);
+            app.updateState({
+              focusedSourceId: targetSid,
+              focusBreadcrumb: breadcrumb,
+              highlightSourceId: targetSid
+            });
+            app.rerenderPrompt();
+            requestAnimationFrame(() => {
+              const target = liveRoot().querySelector(
+                `.dauligor-option-picker__row[data-option-source-id="${CSS.escape(targetSid)}"]`
+              );
+              if (target?.scrollIntoView) target.scrollIntoView({ block: "center", behavior: "smooth" });
+            });
+          });
+        });
+
+        paneEl.querySelectorAll(`[data-action="back-to-previous"]`).forEach((btn) => {
+          btn.addEventListener("click", (evt) => {
+            evt.stopPropagation();
+            const breadcrumb = [...(app._state.focusBreadcrumb ?? [])];
+            const previous = breadcrumb.pop();
+            if (!previous) return;
+            app.updateState({
+              focusedSourceId: previous,
+              focusBreadcrumb: breadcrumb,
+              highlightSourceId: previous
+            });
+            app.rerenderPrompt();
+            requestAnimationFrame(() => {
+              const target = liveRoot().querySelector(
+                `.dauligor-option-picker__row[data-option-source-id="${CSS.escape(previous)}"]`
+              );
+              if (target?.scrollIntoView) target.scrollIntoView({ block: "center", behavior: "smooth" });
+            });
+          });
+        });
+
+        paneEl.querySelectorAll(`[data-action="show-out-of-group"]`).forEach((btn) => {
+          btn.addEventListener("click", (evt) => {
+            evt.stopPropagation();
+            const leafType = btn.dataset.leafType ?? "";
+            let overlay;
+            if (leafType === "optionItem") {
+              overlay = { type: "optionItem", sourceId: btn.dataset.targetSourceId ?? "" };
+            } else if (btn.dataset.leafPayload) {
+              try {
+                const leaf = JSON.parse(btn.dataset.leafPayload);
+                overlay = { type: leaf.type, leaf };
+              } catch (err) {
+                overlay = { type: "unknown" };
+              }
+            }
+            app.updateState({ outOfGroupOverlay: overlay });
+            app.rerenderPrompt();
+          });
+        });
+      };
+
+      // Row focus on click (anywhere on the row except the checkbox).
+      // PARTIAL DOM UPDATE — does NOT call `app.rerenderPrompt()`.
+      // The list column is left untouched, so the user's scroll
+      // position is naturally preserved without restoration logic
+      // and without any visible flicker. We only mutate:
+      //   (a) the `--focused` class on the two affected rows
+      //   (b) the detail pane's innerHTML
+      //   (c) the detail pane's handlers (rewired after innerHTML
+      //       replacement, since the new pills are fresh DOM nodes)
+      // Checkbox toggle still goes through `rerenderPreservingListScroll`
+      // below because cascading dependents elsewhere in the list may
+      // need their statuses recomputed.
+      root.querySelectorAll(`[data-action="focus-option"]`).forEach((el) => {
+        el.addEventListener("click", (evt) => {
+          if (evt.target.closest('[data-action="toggle-option"]')) return;
+          const sid = el.dataset.optionSourceId;
+          if (!sid || sid === app._state.focusedSourceId) return;
+
+          const prevFocused = app._state.focusedSourceId;
+          app.updateState({
+            focusedSourceId: sid,
+            focusBreadcrumb: [],
+            highlightSourceId: null
+          });
+
+          const body = liveRoot();
+
+          // (a) Swap `--focused` between old and new rows. Use
+          // `liveRoot` so a stale `root` reference still finds the
+          // current DOM if a render happened in between somehow.
+          if (prevFocused) {
+            const prevRow = body.querySelector(
+              `.dauligor-option-picker__row[data-option-source-id="${CSS.escape(prevFocused)}"]`
+            );
+            prevRow?.classList.remove("dauligor-option-picker__row--focused");
+          }
+          el.classList.add("dauligor-option-picker__row--focused");
+
+          // (b) Replace the detail pane content.
+          const detailPane = body.querySelector(".dauligor-option-picker__detail-pane");
+          if (detailPane) {
+            const focused = enrichedEntries.find((e) => e.sourceId === sid)
+              ?? enrichedEntries[0]
+              ?? null;
+            const satisfied = new Set([
+              ...priorSelections,
+              ...(app._state.selectedSourceIds ?? [])
+            ]);
+            const ctx = { satisfied, classLevel, totalLevel, abilityScores };
+            detailPane.innerHTML = renderDetailPanel(focused, app, ctx);
+            // (c) Re-wire the pane's pill/back-button handlers on
+            // the fresh DOM nodes.
+            wireDetailPaneHandlers(detailPane);
+            // Reset the detail pane's scroll to the top — the
+            // content changed entirely, leaving it scrolled mid-way
+            // through the previous description would be confusing.
+            detailPane.scrollTop = 0;
+          }
+        });
+      });
+
+      // Wire the initial detail pane handlers — partial-update path
+      // re-wires for itself; this handles the first render after
+      // mount.
+      wireDetailPaneHandlers(root.querySelector(".dauligor-option-picker__detail-pane"));
+
+      // Checkbox toggle — still uses a full rerender because changing
+      // the selection set can cascade through other rows' blocked
+      // states. Scroll preservation goes through this helper.
       const rerenderPreservingListScroll = () => {
-        const list = (app._bodyRegion ?? root).querySelector(".dauligor-option-picker__list");
+        const list = liveRoot().querySelector(".dauligor-option-picker__list");
         const scrollTop = list?.scrollTop ?? 0;
-        const detailPane = (app._bodyRegion ?? root).querySelector(".dauligor-option-picker__detail-pane");
+        const detailPane = liveRoot().querySelector(".dauligor-option-picker__detail-pane");
         const detailScrollTop = detailPane?.scrollTop ?? 0;
         app.rerenderPrompt();
-        // Two animation frames: one for the new DOM to mount, one
-        // for the layout pass to settle so `scrollTop` writes stick.
-        // A single rAF is sometimes too eager — the new list element
-        // exists but its overflow constraints aren't yet applied,
-        // so setting scrollTop is silently no-op'd.
+        // Two animation frames so the layout pass has settled
+        // before the scrollTop write — a single rAF sometimes fires
+        // while the new list exists but isn't yet scrollable, so
+        // the write is silently dropped.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             const liveBody = app._bodyRegion;
@@ -4140,25 +4257,6 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
           });
         });
       };
-
-      // Row focus on click (anywhere on the row except the checkbox).
-      root.querySelectorAll(`[data-action="focus-option"]`).forEach((el) => {
-        el.addEventListener("click", (evt) => {
-          // Ignore clicks that originated inside the checkbox — let
-          // the toggle handler below own those.
-          if (evt.target.closest('[data-action="toggle-option"]')) return;
-          const sid = el.dataset.optionSourceId;
-          if (!sid || sid === app._state.focusedSourceId) return;
-          app.updateState({
-            focusedSourceId: sid,
-            // Direct row clicks reset the breadcrumb — they're a
-            // user-initiated navigation, not a follow-the-reference.
-            focusBreadcrumb: [],
-            highlightSourceId: null
-          });
-          rerenderPreservingListScroll();
-        });
-      });
 
       // Checkbox toggle.
       root.querySelectorAll(`[data-action="toggle-option"]`).forEach((input) => {
@@ -4198,73 +4296,10 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
         });
       });
 
-      // Jump to a prereq option that's in this same group. Pushes the
-      // current focus onto the breadcrumb so the Back button can return.
-      root.querySelectorAll(`[data-action="jump-to-option"]`).forEach((btn) => {
-        btn.addEventListener("click", (evt) => {
-          evt.stopPropagation();
-          const targetSid = btn.dataset.targetSourceId;
-          if (!targetSid) return;
-          const breadcrumb = [...(app._state.focusBreadcrumb ?? [])];
-          if (app._state.focusedSourceId) breadcrumb.push(app._state.focusedSourceId);
-          app.updateState({
-            focusedSourceId: targetSid,
-            focusBreadcrumb: breadcrumb,
-            highlightSourceId: targetSid
-          });
-          app.rerenderPrompt();
-          // Scroll the highlighted row into view in the list column.
-          requestAnimationFrame(() => {
-            const target = root.querySelector(
-              `.dauligor-option-picker__row[data-option-source-id="${CSS.escape(targetSid)}"]`
-            );
-            if (target?.scrollIntoView) target.scrollIntoView({ block: "center", behavior: "smooth" });
-          });
-        });
-      });
-
-      // Back button — pop the breadcrumb.
-      root.querySelectorAll(`[data-action="back-to-previous"]`).forEach((btn) => {
-        btn.addEventListener("click", (evt) => {
-          evt.stopPropagation();
-          const breadcrumb = [...(app._state.focusBreadcrumb ?? [])];
-          const previous = breadcrumb.pop();
-          if (!previous) return;
-          app.updateState({
-            focusedSourceId: previous,
-            focusBreadcrumb: breadcrumb,
-            highlightSourceId: previous
-          });
-          app.rerenderPrompt();
-          requestAnimationFrame(() => {
-            const target = root.querySelector(
-              `.dauligor-option-picker__row[data-option-source-id="${CSS.escape(previous)}"]`
-            );
-            if (target?.scrollIntoView) target.scrollIntoView({ block: "center", behavior: "smooth" });
-          });
-        });
-      });
-
-      // Show out-of-group prereq overlay.
-      root.querySelectorAll(`[data-action="show-out-of-group"]`).forEach((btn) => {
-        btn.addEventListener("click", (evt) => {
-          evt.stopPropagation();
-          const leafType = btn.dataset.leafType ?? "";
-          let overlay;
-          if (leafType === "optionItem") {
-            overlay = { type: "optionItem", sourceId: btn.dataset.targetSourceId ?? "" };
-          } else if (btn.dataset.leafPayload) {
-            try {
-              const leaf = JSON.parse(btn.dataset.leafPayload);
-              overlay = { type: leaf.type, leaf };
-            } catch (err) {
-              overlay = { type: "unknown" };
-            }
-          }
-          app.updateState({ outOfGroupOverlay: overlay });
-          app.rerenderPrompt();
-        });
-      });
+      // Jump-pill / Back / show-out-of-group handlers live INSIDE the
+      // detail pane; they're wired by `wireDetailPaneHandlers` above
+      // so the partial focus-change update can re-wire them on the
+      // replaced pane without going through a full rerender.
 
       // Dismiss overlay (click backdrop or close button).
       root.querySelectorAll(`[data-action="dismiss-overlay"]`).forEach((el) => {

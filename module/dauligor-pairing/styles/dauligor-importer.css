@@ -2423,6 +2423,14 @@
   gap: 6px;
 }
 
+/* Single neutral pill style. Earlier iterations colored pills by
+ * met/unmet/manual state, but the row badge + status banner already
+ * communicate "is this pickable" — adding green/red/gold to every
+ * prereq pill made the detail panel look like a stoplight. Plain
+ * gold-on-dark reads cleanly and treats every requirement as
+ * informational. <button> pills (clickable for jump/overlay) and
+ * <span> pills (static) share the same look; the cursor change on
+ * hover signals which ones are interactive. */
 .dauligor-option-picker__pill {
   display: inline-flex;
   align-items: center;
@@ -2431,30 +2439,16 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   border-radius: 999px;
-  border: 1px solid;
-  background: transparent;
-  cursor: pointer;
-}
-
-.dauligor-option-picker__pill--met {
-  border-color: rgba(60, 140, 90, 0.5);
-  color: #92d4a8;
-  background: rgba(60, 140, 90, 0.10);
-}
-
-.dauligor-option-picker__pill--unmet {
-  border-color: rgba(190, 76, 60, 0.5);
-  color: #e09686;
-  background: rgba(190, 76, 60, 0.10);
-}
-
-.dauligor-option-picker__pill--manual {
-  border-color: rgba(192, 160, 96, 0.4);
+  border: 1px solid rgba(192, 160, 96, 0.4);
   color: #d9b977;
   background: rgba(192, 160, 96, 0.08);
 }
 
-.dauligor-option-picker__pill:hover:not(:disabled) {
+button.dauligor-option-picker__pill {
+  cursor: pointer;
+}
+
+button.dauligor-option-picker__pill:hover {
   filter: brightness(1.18);
 }
 
