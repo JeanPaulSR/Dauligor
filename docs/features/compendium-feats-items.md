@@ -15,7 +15,7 @@ Feats and item records share the same editor scaffolding as features in [compend
 
 | Table | Key columns |
 |---|---|
-| `feats` | `id`, `name`, `identifier`, `feat_type`, `source_type`, `requirements`, `repeatable`, `uses_max`, `uses_spent`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
+| `feats` | `id`, `name`, `identifier`, `feat_type`, `source_type`, `requirements`, `requirements_tree` (JSON tree), `repeatable`, `uses_max`, `uses_spent`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
 | `items` | `id`, `name`, `identifier`, `item_type`, `rarity`, `quantity`, `weight`, `price_value`, `price_denomination`, `attunement` (BOOL), `equipped`, `identified`, `magical`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
 
 Schema: [../database/structure/](../database/structure/), [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md).
@@ -33,6 +33,18 @@ Feats fall into a few `feat_type` values:
 
 ### Repeatable feats
 The `repeatable` boolean lets a feat be taken multiple times. Repeatable feats with stacking effects need to be authored carefully — the activity / effect side typically has a level scaling formula that uses the repeat count.
+
+### Prerequisites — structured tree + free-text fallback
+
+Feats author prereqs through two parallel surfaces, the same pair the unique-option editor uses:
+
+- **Free-text `requirements`** (legacy column) — narrative gates that don't fit the tree leaves (e.g. "DM approval", "Member of the Crimson Order"). Surfaces verbatim on the feat card as dnd5e's `system.requirements`. Not machine-checked.
+- **Structured `requirements_tree`** (JSON column added by `20260510-2152_requirements_tree.sql`) — authored via the shared [`<RequirementsEditor />`](../../src/components/compendium/RequirementsEditor.tsx). Same leaf vocabulary as option items: `level` / `levelInClass` / `class` / `subclass` / `optionItem` / `feature` / `spell` / `spellRule` / `abilityScore` / `proficiency` / `string`. Composed with And/Or/Xor groups. Rendered live as a readable preview underneath the editor.
+
+A lock icon appears on the feat manager's list rows whenever either surface is populated, so admins can tell at a glance which feats carry gates. See [compendium-options.md](compendium-options.md#compound-requirements-tree) for the leaf vocabulary and how the export remaps tree references to canonical source-ids.
+
+### Manager layout
+[`FeatsEditor.tsx`](../../src/pages/compendium/FeatsEditor.tsx) is a master-detail manager identical in shape to [`SpellsEditor.tsx`](../../src/pages/compendium/SpellsEditor.tsx)'s manual editor: a virtualized + searchable list on the left, a sticky-header detail pane with Save/Reset/Delete on the right, compact 126px icon at the top of the form. Loads the RequirementsEditor's lookup pools (classes / subclasses / spell rules / every Modular Option Group's items / proficiencies) in parallel with the feats list on mount.
 
 ### Activities and effects
 Same shape as features. See [compendium-classes.md](compendium-classes.md) for the editor patterns.
