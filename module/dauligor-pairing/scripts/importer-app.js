@@ -531,8 +531,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
             </span>
             <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--name">Name</span>
             <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--short">Short</span>
-            <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--rules">Rules</span>
-            <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--count">Classes</span>
           </div>
           <div class="dauligor-wizard__source-body">
             ${visibleSources.map((source) => {
@@ -554,8 +552,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
                     <span class="dauligor-wizard__source-name">${foundry.utils.escapeHTML(source.label)}</span>
                   </span>
                   <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--short">${source.shortName ? foundry.utils.escapeHTML(source.shortName) : "&mdash;"}</span>
-                  <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--rules">${source.rules ? foundry.utils.escapeHTML(String(source.rules)) : "&mdash;"}</span>
-                  <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--count">${foundry.utils.escapeHTML(String(source.count ?? 0))}</span>
                 </label>
               `;
         }).join("")}
