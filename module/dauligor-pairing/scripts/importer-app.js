@@ -3648,6 +3648,76 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
     return { state: "blocked-prereq", verdict, blockReasonText: "Locked" };
   };
 
+  // Compact formatter used for the in-row badge. The walker's
+  // `formatRequirementsTree` produces full sentences ("Strength 13 or
+  // higher or Dexterity 13 or higher") which read poorly inside a
+  // narrow row — players want a quick scan, so we shorten each leaf
+  // to a token like "STR 13+" and preserve the And/Or/Xor structure
+  // by joining with " and " / " or " / " (one of) ". An `any` group
+  // of two ability leaves renders "STR 13+ or DEX 13+", which is the
+  // user-facing example the redesign was driven by — previously the
+  // badge picked only the first missing leaf and dropped the OR
+  // structure entirely.
+  const formatLeafShort = (leaf) => {
+    switch (leaf?.type) {
+      case "level":
+        return leaf.isTotal
+          ? `Level ${leaf.minLevel}+ (total)`
+          : `Level ${leaf.minLevel}+`;
+      case "levelInClass": {
+        const name = formatLookups.classNameById?.[leaf.classId] ?? "Class";
+        return `${name} ${leaf.minLevel}+`;
+      }
+      case "abilityScore":
+        return `${String(leaf.ability ?? "").toUpperCase()} ${leaf.min}+`;
+      case "optionItem":
+        return optionItemNameBySourceId[leaf.itemId] ?? "(option)";
+      case "class":
+        return formatLookups.classNameById?.[leaf.classId] ?? "(class)";
+      case "subclass":
+        return formatLookups.subclassNameById?.[leaf.subclassId] ?? "(subclass)";
+      case "feature":
+        return formatLookups.featureNameById?.[leaf.featureId] ?? "(feature)";
+      case "spell":
+        return formatLookups.spellNameById?.[leaf.spellId] ?? "(spell)";
+      case "spellRule":
+        return formatLookups.spellRuleNameById?.[leaf.spellRuleId] ?? "(spell rule)";
+      case "proficiency":
+        return leaf.identifier || "(proficiency)";
+      case "string":
+        return leaf.value || "(see description)";
+      default:
+        return "(unknown)";
+    }
+  };
+
+  const formatRequirementsTreeShort = (tree) => {
+    if (!tree) return "";
+    if (tree.kind === "leaf") return formatLeafShort(tree);
+    const children = (tree.children ?? []).filter(Boolean);
+    if (children.length === 0) return "";
+    if (children.length === 1) return formatRequirementsTreeShort(children[0]);
+    const joiner = tree.kind === "any"
+      ? " or "
+      : tree.kind === "one"
+        ? " (one of) "
+        : " and ";
+    return children.map((c) => formatRequirementsTreeShort(c)).join(joiner);
+  };
+
+  // Combine the option's flat `levelGate` (the `levelPrerequisite`
+  // flag column) with the structured tree's text in a single
+  // human-readable badge. The flat-level pill renders before the
+  // tree text so "Level 5+" sits ahead of "Pact of the Blade" in a
+  // compound requirement.
+  const buildBlockedBadge = (entry) => {
+    const parts = [];
+    if (entry.levelGate > 0) parts.push(`Level ${entry.levelGate}+`);
+    const treeText = formatRequirementsTreeShort(entry.tree);
+    if (treeText) parts.push(treeText);
+    return parts.length ? `Requires: ${parts.join(" and ")}` : "";
+  };
+
   const renderRow = (entry, app, ctx) => {
     const selectedSet = new Set([
       ...priorSelections,
@@ -3674,12 +3744,17 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       app._state.highlightSourceId === entry.sourceId && "dauligor-option-picker__row--highlighted"
     ].filter(Boolean).join(" ");
 
+    // Row badge text — uses the compact tree formatter for blocked
+    // rows so an `any` group of two ability scores renders both
+    // ("Requires: STR 13+ or DEX 13+") instead of just the first
+    // missing leaf. `status.blockReasonText` was only the dominant
+    // blocker; the compact-tree path captures the full picture.
     const badgeText = isOwned
       ? "Owned"
       : status.state === "selected"
         ? "Selected"
-        : status.blockReasonText
-          ? `Requires: ${status.blockReasonText}`
+        : status.state.startsWith("blocked")
+          ? buildBlockedBadge(entry)
           : "";
 
     return `
@@ -3942,6 +4017,24 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
       `;
     },
     onRenderBody: (app, root) => {
+      // Helper — `app.rerenderPrompt()` rebuilds the entire body, which
+      // resets every internal scroll container including our list
+      // column. When a row-focus or checkbox-toggle re-renders, we want
+      // the player to keep their place in the list (they're often
+      // browsing rows one by one). Capture the list's scrollTop before
+      // the re-render and restore it after. The pill-jump handlers
+      // below do NOT call this — those intentionally scrollIntoView to
+      // the jumped-to row.
+      const rerenderPreservingListScroll = () => {
+        const list = root.querySelector(".dauligor-option-picker__list");
+        const scrollTop = list?.scrollTop ?? 0;
+        app.rerenderPrompt();
+        requestAnimationFrame(() => {
+          const next = root.querySelector(".dauligor-option-picker__list");
+          if (next) next.scrollTop = scrollTop;
+        });
+      };
+
       // Row focus on click (anywhere on the row except the checkbox).
       root.querySelectorAll(`[data-action="focus-option"]`).forEach((el) => {
         el.addEventListener("click", (evt) => {
@@ -3957,7 +4050,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
             focusBreadcrumb: [],
             highlightSourceId: null
           });
-          app.rerenderPrompt();
+          rerenderPreservingListScroll();
         });
       });
 
@@ -3995,7 +4088,7 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
             return;
           }
           app.updateState({ selectedSourceIds: [...selected] });
-          app.rerenderPrompt();
+          rerenderPreservingListScroll();
         });
       });
 
