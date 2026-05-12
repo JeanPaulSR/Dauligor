@@ -1503,6 +1503,15 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     //     point asking again, and the subclass picker locks it anyway)
     //   - bump the target level to existing+1 unless the user has
     //     manually picked something higher
+    //
+    // When the actor does NOT have this class (multiclass entry):
+    //   - reset targetLevel to 1. Without this reset, a targetLevel
+    //     inherited from a different class (e.g. opening the importer
+    //     via "Dauligor Level Up" on a Blood Hunter 4 then switching
+    //     to Cleric here) would carry "5" through to the level
+    //     selector, defaulting the import to a Cleric 5 entry — which
+    //     is "import all 5 levels of cleric" instead of the expected
+    //     multiclass dip at level 1.
     let resolvedSubclassId = subclassSourceId ?? null;
     if (classSourceId) {
       const actorClassMap = this._getActorClassMap();
@@ -1517,6 +1526,12 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
             this._state.targetLevel = nextLevel;
           }
         }
+      } else if (this._actor) {
+        // Multiclass entry. Reset the inherited level (whatever it
+        // was for the previous class) to 1. The user can still bump
+        // it manually in the level-selection step if they really do
+        // want a multi-level dip.
+        this._state.targetLevel = 1;
       }
     }
     this._state.selectedSubclassSourceId = resolvedSubclassId;
@@ -2039,39 +2054,87 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
 }
 
 /**
- * Read-only browser for a class's subclasses + their features. Opened
- * from the class browser's per-class "Preview" button. Three columns:
+ * Fallback art for subclasses that lack a populated `imageUrl` in
+ * the catalog. dnd5e ships `icons/svg/book.svg` (an open tome) which
+ * matches Foundry's own subclass-document default — keeps the
+ * placeholder in line with what the user would see on the actor
+ * sheet if no image were configured.
+ */
+const DEFAULT_SUBCLASS_IMG = "icons/svg/book.svg";
+
+/**
+ * Three-column subclass window. Supports two modes:
+ *
+ *   - "preview"  (default) — opened from the class browser's per-row
+ *     "Preview" button. No commit affordance; user just browses.
+ *
+ *   - "select"  — opened from `runSubclassStep` mid-import. Adds
+ *     Confirm / Cancel buttons in the footer, returns the chosen
+ *     subclass sourceId via the `onSelect` callback.
+ *
+ * Three columns inside the class-options shell:
  *
  *   Left   : subclass list (image + name + source label)
  *   Middle : features of the focused subclass, grouped by level
  *   Right  : description + meta for the focused feature
  *
- * Visually mirrors the option-picker so the picker / preview UIs feel
- * like a family. No selection state is exposed — the user can come
- * back and pick from the class browser whenever they're ready.
+ * Visually mirrors the option-picker so picker / preview / selector
+ * windows feel like a family.
  */
 class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
 
-  static async open({ classModel, payload, actor = null } = {}) {
+  static async open({
+    classModel,
+    payload,
+    actor = null,
+    mode = "preview",
+    preselectedSubclassSourceId = null,
+    onSelect = null,
+    onCancel = null
+  } = {}) {
     if (this._instance) {
-      this._instance.setData({ classModel, payload, actor });
+      this._instance.setData({
+        classModel,
+        payload,
+        actor,
+        mode,
+        preselectedSubclassSourceId,
+        onSelect,
+        onCancel
+      });
       await this._instance.render({ force: true });
       this._instance.bringToFront?.();
       return this._instance;
     }
-    const instance = new this({ classModel, payload, actor });
+    const instance = new this({
+      classModel, payload, actor, mode, preselectedSubclassSourceId, onSelect, onCancel
+    });
     this._instance = instance;
     await instance.render({ force: true });
     return instance;
   }
 
-  constructor({ classModel = null, payload = null, actor = null } = {}) {
+  constructor({
+    classModel = null,
+    payload = null,
+    actor = null,
+    mode = "preview",
+    preselectedSubclassSourceId = null,
+    onSelect = null,
+    onCancel = null
+  } = {}) {
     super({
       id: `${MODULE_ID}-subclass-preview`,
-      classes: ["dauligor-importer-app", "dauligor-importer-app--subclass-preview"],
+      classes: [
+        "dauligor-importer-app",
+        "dauligor-importer-app--subclass-preview",
+        `dauligor-importer-app--subclass-${mode}`
+      ],
       window: {
-        title: `${classModel?.name ?? "Class"} — Subclass Preview`,
+        title: mode === "select"
+          ? `${classModel?.name ?? "Class"} — Choose Subclass`
+          : `${classModel?.name ?? "Class"} — Subclass Preview`,
         resizable: true,
         contentClasses: ["dauligor-importer-window"]
       },
@@ -2085,18 +2148,43 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
     this._classModel = classModel;
     this._payload = payload;
     this._actor = actor;
+    this._mode = mode;
+    this._onSelect = onSelect;
+    this._onCancel = onCancel;
+    this._resolved = false;
     this._rebuildIndexes();
-    this._focusedSubclassSourceId = this._subclasses[0]?.sourceId ?? null;
+    // In "select" mode default the focused row to the pre-passed
+    // subclass (e.g. one the user already picked in the class
+    // browser) so the right pane shows their pick first.
+    const initialSub = preselectedSubclassSourceId
+      && this._subclasses.find((s) => s.sourceId === preselectedSubclassSourceId)?.sourceId;
+    this._focusedSubclassSourceId = initialSub ?? this._subclasses[0]?.sourceId ?? null;
     this._focusedFeatureSourceId = this._firstFeatureFor(this._focusedSubclassSourceId);
   }
 
-  setData({ classModel = null, payload = null, actor = null } = {}) {
+  setData({
+    classModel = null,
+    payload = null,
+    actor = null,
+    mode = null,
+    preselectedSubclassSourceId = null,
+    onSelect = null,
+    onCancel = null
+  } = {}) {
     this._classModel = classModel ?? this._classModel;
     this._payload = payload ?? this._payload;
     this._actor = actor ?? this._actor;
-    this.options.window.title = `${this._classModel?.name ?? "Class"} — Subclass Preview`;
+    if (mode) this._mode = mode;
+    if (onSelect !== undefined) this._onSelect = onSelect;
+    if (onCancel !== undefined) this._onCancel = onCancel;
+    this._resolved = false;
+    this.options.window.title = this._mode === "select"
+      ? `${this._classModel?.name ?? "Class"} — Choose Subclass`
+      : `${this._classModel?.name ?? "Class"} — Subclass Preview`;
     this._rebuildIndexes();
-    this._focusedSubclassSourceId = this._subclasses[0]?.sourceId ?? null;
+    const initialSub = preselectedSubclassSourceId
+      && this._subclasses.find((s) => s.sourceId === preselectedSubclassSourceId)?.sourceId;
+    this._focusedSubclassSourceId = initialSub ?? this._subclasses[0]?.sourceId ?? null;
     this._focusedFeatureSourceId = this._firstFeatureFor(this._focusedSubclassSourceId);
   }
 
@@ -2107,7 +2195,11 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
     this._subclasses = ensureArray(this._payload?.subclasses).map((sub) => ({
       sourceId: sub?.sourceId,
       name: sub?.name ?? "Subclass",
-      img: sub?.imageUrl ?? sub?.img ?? "icons/svg/aura.svg",
+      // `??` only falls through on null/undefined; the catalog
+      // sometimes ships `imageUrl: ""` for subclasses that haven't
+      // been art-assigned yet. Use `||` so the empty-string falls
+      // through to the Foundry placeholder. Same for `img`.
+      img: (sub?.imageUrl || sub?.img || "").trim() || DEFAULT_SUBCLASS_IMG,
       sourceLabel: deriveSourceLabel(
         sub?.source?.book ?? sub?.sourceBookId ?? sub?.rules ?? ""
       )
@@ -2153,7 +2245,31 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
 
   async close(options) {
     if (DauligorSubclassPreviewApp._instance === this) DauligorSubclassPreviewApp._instance = null;
+    // In "select" mode, an unresolved close means cancel. Fire the
+    // cancel callback so the awaiting `runSubclassStep` (or wherever
+    // the open was awaited) gets unblocked instead of hanging.
+    if (this._mode === "select" && !this._resolved) {
+      this._resolved = true;
+      try { this._onCancel?.(); } catch (e) { log("subclass-preview onCancel", e); }
+    }
     return super.close(options);
+  }
+
+  /**
+   * select-mode helper: stamp the resolution flag, fire the callback,
+   * and close the window. Idempotent — `_resolved` guards against
+   * double-fire (e.g. Confirm followed by the close hook).
+   */
+  async _resolveAndClose(action, value = null) {
+    if (this._resolved) return;
+    this._resolved = true;
+    try {
+      if (action === "confirm") this._onSelect?.(value);
+      else this._onCancel?.();
+    } catch (e) {
+      log("subclass-preview resolve", { action, e });
+    }
+    await this.close();
   }
 
   async _onRender() {
@@ -2197,6 +2313,40 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
 
   _renderFooter() {
     if (!this._footerRegion) return;
+
+    if (this._mode === "select") {
+      // Selector mode — show Confirm/Cancel; Confirm is gated on
+      // having an actually-focused subclass. Empty-payload edge
+      // disables Confirm with a hint.
+      const hasSelection = Boolean(this._focusedSubclassSourceId);
+      this._footerRegion.innerHTML = `
+        <div class="dauligor-class-browser__footer-bar">
+          <div class="dauligor-class-browser__status">
+            ${hasSelection
+              ? `Selected: <strong>${foundry.utils.escapeHTML(
+                  this._subclasses.find((s) => s.sourceId === this._focusedSubclassSourceId)?.name ?? ""
+                )}</strong>`
+              : "Pick a subclass to continue."}
+          </div>
+          <div class="dauligor-class-browser__controls">
+            <button type="button" class="dauligor-class-browser__button" data-action="cancel">Cancel</button>
+            <button
+              type="button"
+              class="dauligor-class-browser__button dauligor-class-browser__button--primary"
+              data-action="confirm"
+              ${hasSelection ? "" : "disabled"}
+            >Confirm</button>
+          </div>
+        </div>
+      `;
+      this._footerRegion.querySelector(`[data-action="cancel"]`)
+        ?.addEventListener("click", () => this._resolveAndClose("cancel"));
+      this._footerRegion.querySelector(`[data-action="confirm"]`)
+        ?.addEventListener("click", () => this._resolveAndClose("confirm", this._focusedSubclassSourceId));
+      return;
+    }
+
+    // Preview mode — just a close button.
     this._footerRegion.innerHTML = `
       <div class="dauligor-class-browser__footer-bar">
         <div class="dauligor-class-browser__status">Read-only preview.</div>
@@ -2305,6 +2455,9 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
 
     // Handlers — partial updates only re-render the body, preserving
     // outer scroll position. Same pattern as the option-picker.
+    // In select mode, the footer status + Confirm-disabled state
+    // depend on the focused subclass too, so the footer also gets
+    // re-rendered on subclass-focus changes.
     this._bodyRegion.querySelectorAll(`[data-action="focus-subclass"]`).forEach((el) => {
       el.addEventListener("click", () => {
         const id = el.dataset.subId;
@@ -2314,6 +2467,7 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
         // subclass so the right pane isn't stale.
         this._focusedFeatureSourceId = this._firstFeatureFor(id);
         this._renderBody();
+        if (this._mode === "select") this._renderFooter();
       });
     });
     this._bodyRegion.querySelectorAll(`[data-action="focus-feature"]`).forEach((el) => {
@@ -3508,71 +3662,65 @@ async function runSubclassStep({ workflow, sequence, progress, entry = null }) {
   progress.markStep(stepId, "active", "Choose the subclass to import alongside the base class.");
   progress.setStatus("Waiting for subclass selection...");
 
-  // The catalog ships an explicit `shortName` per subclass entry — that's the
-  // canonical book label (e.g. "TCoE", "XGE"). The Foundry-shaped subclass
-  // item the bundle gives us instead carries `system.source.book` derived
-  // from the *parent class's* source record (the bundle only exposes one
-  // top-level source), so deriveSourceLabel(item.system.source.book) ends
-  // up showing "PHB" for every subclass even when the subclass was
-  // published in a different book. Build a sourceId → shortName map from
-  // the catalog entry once and prefer it.
-  const catalogShortNameBySubclassSourceId = new Map();
-  for (const sub of ensureArray(entry?.subclasses)) {
-    if (sub?.sourceId && sub?.shortName) {
-      catalogShortNameBySubclassSourceId.set(sub.sourceId, sub.shortName);
-    }
+  // Reuse the 3-column SubclassPreviewApp in "select" mode so the
+  // import-flow's subclass picker is the same UI as the read-only
+  // preview opened from the class browser. The previous flat-radio
+  // list was inconsistent with the rest of the importer's design
+  // language and didn't surface feature details.
+  const subclassPayload = workflow?.payload ?? workflow?.bundle?.payload ?? null;
+  if (!subclassPayload || !ensureArray(subclassPayload.subclasses).length) {
+    notifyWarn("No subclasses available for this class.");
+    return "cancelled";
   }
 
-  const result = await DauligorSequencePromptApp.prompt({
-    title: "Choose Subclass",
-    subtitle: "Select the subclass to import with the base class.",
-    width: 620,
-    height: 420,
-    state: {
-      subclassSourceId: workflow.selection.subclassSourceId ?? workflow.subclassItems[0]?.flags?.[MODULE_ID]?.sourceId ?? null
-    },
-    renderBody: (app) => `
-      <div class="dauligor-class-options__choice-list">
-        ${workflow.subclassItems.map((item) => {
-      const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? "";
-      const sourceLabel = catalogShortNameBySubclassSourceId.get(sourceId)
-        || deriveSourceLabel(item.system?.source?.book ?? item.flags?.plutonium?.source);
-      return `
-            <label class="dauligor-class-options__radio">
-              <input type="radio" name="subclass-source-id" value="${foundry.utils.escapeHTML(sourceId)}" ${app._state.subclassSourceId === sourceId ? "checked" : ""}>
-              <span class="dauligor-sequence__choice-copy">
-                <span>${foundry.utils.escapeHTML(item.name)}</span>
-                ${sourceLabel ? `<span class="dauligor-sequence__choice-meta">${foundry.utils.escapeHTML(sourceLabel)}</span>` : ""}
-              </span>
-            </label>
-          `;
-    }).join("")}
-      </div>
-    `,
-    onRenderBody: (app, root) => {
-      root.querySelectorAll(`input[name="subclass-source-id"]`).forEach((input) => {
-        input.addEventListener("change", () => {
-          app.updateState({ subclassSourceId: input.value || null });
-        });
-      });
-    },
-    actions: [
-      { id: "confirm", label: "OK", primary: true },
-      { id: "cancel", label: "Cancel" }
-    ],
-    onAction: async (app, actionId) => {
-      if (actionId === "cancel") return { status: "cancelled" };
-      if (!app._state.subclassSourceId) {
-        notifyWarn("Choose a subclass before continuing.");
-        return false;
+  const classModel = {
+    name: workflow?.classItem?.name ?? entry?.name ?? "Class",
+    classSourceId: workflow?.classSourceId
+      ?? workflow?.classItem?.flags?.[MODULE_ID]?.sourceId
+      ?? null,
+    sourceLabel: deriveSourceLabel(
+      workflow?.classItem?.system?.source?.book
+      ?? entry?.shortName
+      ?? entry?.rules
+      ?? ""
+    )
+  };
+
+  const preselected = workflow.selection?.subclassSourceId
+    ?? workflow.subclassItems?.[0]?.flags?.[MODULE_ID]?.sourceId
+    ?? null;
+
+  // Wrap the modal lifecycle in a promise so we can await the
+  // selector's Confirm/Cancel resolution synchronously from this
+  // async step. We keep a handle to the opened app so an external
+  // sequence-cancellation can close the window — otherwise it'd
+  // sit open after `requestCancel` fires.
+  let openedApp = null;
+  const result = await new Promise(async (resolve) => {
+    sequence?.setActivePrompt({
+      options: { window: { title: `${classModel.name} — Choose Subclass` } },
+      cancelFromSequence: () => {
+        resolve({ status: "cancelled" });
+        openedApp?.close?.();
       }
-      return { status: "confirmed", value: app._state.subclassSourceId };
-    }
-  }, sequence);
+    });
+    openedApp = await DauligorSubclassPreviewApp.open({
+      classModel,
+      payload: subclassPayload,
+      actor: workflow?.targetActor ?? null,
+      mode: "select",
+      preselectedSubclassSourceId: preselected,
+      onSelect: (sourceId) => resolve({ status: "confirmed", value: sourceId }),
+      onCancel: () => resolve({ status: "cancelled" })
+    });
+  });
+  sequence?.setActivePrompt(null);
 
   if (result.status === "cancelled") return "cancelled";
 
-  const selectedName = workflow.subclassItems.find((item) => (item.flags?.[MODULE_ID]?.sourceId ?? null) === result.value)?.name ?? "Subclass";
+  const selectedName = workflow.subclassItems.find(
+    (item) => (item.flags?.[MODULE_ID]?.sourceId ?? null) === result.value
+  )?.name ?? "Subclass";
   progress.markStep(stepId, "complete", `${selectedName} selected.`);
   return result.value;
 }

@@ -295,7 +295,12 @@
   flex-direction: column;
   min-height: 0;
   border: 1px solid var(--dauligor-border);
-  background: #232323;
+  /* Rounded panel + dark-translucent background matches the rest
+   * of the importer's panels (option-picker columns,
+   * subclass-preview columns, class-browser list). */
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
 }
 
 .dauligor-wizard__source-header,
@@ -314,11 +319,17 @@
 }
 
 .dauligor-wizard__source-header {
-  border-bottom: 1px solid var(--dauligor-border);
-  background: #2b2b2b;
-  font-size: 12px;
-  font-weight: 600;
-  color: #a9b7c6;
+  border-bottom: 1px solid rgba(192, 160, 96, 0.18);
+  /* Gold-tinted header recipe — same as the class-browser table
+   * header, option-picker level headers, and subclass-preview
+   * level headers. The "Tag Filters" modal and the section heads
+   * in the Class Import Overview already use this color treatment. */
+  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #d9b977;
 }
 
 .dauligor-wizard__source-body {
@@ -341,11 +352,15 @@
 
 .dauligor-wizard__source-row:hover,
 .dauligor-wizard__source-row:focus-within {
-  background: #2a2a2a;
+  /* Gold-tint hover unifies the wizard's source table with the
+   * class-browser list, option-picker rows, subclass-preview rows,
+   * and level-selector rows. */
+  background: rgba(192, 160, 96, 0.08);
 }
 
 .dauligor-wizard__source-row--selected {
-  background: #353535;
+  background: rgba(192, 160, 96, 0.14);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
 .dauligor-wizard__source-row--disabled {
@@ -996,10 +1011,16 @@
   padding: 0 8px;
   border: 1px solid var(--dauligor-border);
   border-bottom: 0;
-  background: #2b2b2b;
-  font-size: 12px;
-  font-weight: 600;
-  color: #a9b7c6;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  /* Gold-tinted header recipe shared with the option-picker /
+   * subclass-preview / level-selector. */
+  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #d9b977;
 }
 
 .dauligor-class-browser__header-cell--source {
@@ -1016,7 +1037,10 @@
   flex-direction: column;
   min-height: 0;
   border: 1px solid var(--dauligor-border);
-  background: #232323;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
 }
 
 .dauligor-class-browser__group + .dauligor-class-browser__group {
@@ -1043,11 +1067,15 @@
 
 .dauligor-class-browser__row:hover,
 .dauligor-class-browser__row:focus {
-  background: #2a2a2a;
+  /* Gold-tint hover matches the option-picker + subclass-preview
+   * rows so all "clickable list rows" in the module behave the
+   * same way visually. */
+  background: rgba(192, 160, 96, 0.08);
 }
 
 .dauligor-class-browser__row--selected {
-  background: #3a3a3a;
+  background: rgba(192, 160, 96, 0.14);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
 .dauligor-class-browser__row--class {
@@ -1271,7 +1299,11 @@
   flex-direction: column;
   margin-top: 8px;
   border: 1px solid var(--dauligor-border);
-  border-radius: 0;
+  /* Rounded panel to match the option-picker / subclass-preview
+   * columns. The level-row table reads as a "panel" now instead
+   * of a flat sheet. */
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
   overflow: hidden;
 }
 
@@ -1284,32 +1316,45 @@
 }
 
 .dauligor-class-options__levels-header {
-  background: #2c2c2c;
-  font-size: 12px;
-  color: #d1cfc7;
+  /* Sticky gold-tinted header, same recipe as the option-picker's
+   * `__level-header`. Visually links the level picker to the rest
+   * of the importer's UI family. */
+  background: linear-gradient(180deg, rgba(192, 160, 96, 0.14), rgba(192, 160, 96, 0.04));
+  border-bottom: 1px solid rgba(192, 160, 96, 0.18);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #d9b977;
 }
 
 .dauligor-class-options__levels-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.015);
   cursor: pointer;
   min-height: 28px;
-}
-
-.dauligor-class-options__levels-row.is-selected {
-  background: #3a3a3a;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .dauligor-class-options__levels-row:hover {
-  background: #2a2a2a;
+  background: rgba(192, 160, 96, 0.08);
+}
+
+.dauligor-class-options__levels-row.is-selected {
+  background: rgba(192, 160, 96, 0.10);
 }
 
 .dauligor-class-options__levels-row.is-current {
-  background: #4a4a4a;
+  /* The actively-picked target level. Match the option-picker's
+   * `__row--focused` recipe: gold tint + inset accent bar. */
+  background: rgba(192, 160, 96, 0.18);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
 }
 
 .dauligor-class-options__levels-row.is-locked {
-  color: #9d9b93;
+  color: var(--dauligor-text-muted);
   cursor: default;
+  opacity: 0.65;
 }
 
 .dauligor-class-options__levels-cell {
