@@ -6017,7 +6017,24 @@ function looksLikeBbcode(value) {
 }
 
 function looksLikeMarkdown(value) {
-  return /^(?:\s{0,3}(?:#{1,4}\s|\* |\-\s|\+\s|\d+\.\s|> ))/m.test(String(value ?? ""));
+  const str = String(value ?? "");
+  // Block markdown — lines starting with #/*/-/+/<n>./> (headings,
+  // lists, blockquotes).
+  if (/^(?:\s{0,3}(?:#{1,4}\s|\* |\-\s|\+\s|\d+\.\s|> ))/m.test(str)) return true;
+  // Inline markdown — bold/italic markers anywhere in the text.
+  // We also need this branch because descriptions like "Your
+  // knowledge of dark alchemy… ***Latent Mutagens.*** You inoculate…"
+  // carry no line-starting markdown but still need the asterisks
+  // converted. Without this check the text falls through to
+  // `plainTextToHtml` which just wraps in <p> and escapes the
+  // asterisks literally — rendering "***Latent Mutagens.***" in
+  // the importer's description panes instead of bold-italic.
+  if (/\*\*\*[^*\s][^*]*?\*\*\*/.test(str)) return true;  // ***bold italic***
+  if (/\*\*[^*\s][^*]*?\*\*/.test(str)) return true;       // **bold**
+  if (/___[^_\s][^_]*?___/.test(str)) return true;         // ___bold italic___
+  if (/__[^_\s][^_]*?__/.test(str)) return true;           // __bold__
+  if (/`[^`\n]+`/.test(str)) return true;                  // `code`
+  return false;
 }
 
 function plainTextToHtml(text) {
@@ -6169,7 +6186,13 @@ function markdownToFoundryHtml(text) {
 }
 
 function applyInlineMarkdown(text) {
+  // Order matters: triple-marker (bold+italic) MUST run before
+  // the double-marker rules, otherwise `**bold**` would match
+  // the inner `**` of `***bold-italic***` and leave a stray `*`
+  // on each side.
   return String(text ?? "")
+    .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/___([^_]+)___/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/__([^_]+)__/g, "<strong>$1</strong>")
     .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>")

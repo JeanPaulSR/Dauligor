@@ -367,7 +367,7 @@
 
 .dauligor-wizard__source-row--selected {
   background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
 }
 
 .dauligor-wizard__source-row--disabled {
@@ -596,9 +596,9 @@
  * label so the user sees how many filters are active without opening
  * the modal. */
 .dauligor-class-browser__button--active {
-  border-color: var(--dauligor-accent, #c0a060);
-  background: rgba(192, 160, 96, 0.18);
-  color: #f0d9a5;
+  border-color: var(--dauligor-accent);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--dauligor-text);
 }
 
 .dauligor-class-browser__filter-count {
@@ -610,7 +610,7 @@
   margin-left: 6px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(192, 160, 96, 0.85);
+  background: rgba(255, 255, 255, 0.85);
   color: #1c1c1c;
   font-size: 10px;
   font-weight: 700;
@@ -662,7 +662,7 @@
   gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--dauligor-border);
-  background: rgba(192, 160, 96, 0.08);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .dauligor-class-browser__filter-title {
@@ -670,7 +670,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #f0d9a5;
+  color: var(--dauligor-accent-strong);
 }
 
 .dauligor-class-browser__filter-subtitle {
@@ -705,7 +705,7 @@
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--dauligor-border);
-  background: rgba(192, 160, 96, 0.05);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* Tri-state chip: inactive / include / exclude.
@@ -720,9 +720,9 @@
   height: 24px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(192, 160, 96, 0.35);
-  background: rgba(192, 160, 96, 0.05);
-  color: #d9b977;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dauligor-accent-strong);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -735,8 +735,8 @@
 }
 
 .dauligor-class-browser__chip--include {
-  border-color: #c0a060;
-  background: rgba(192, 160, 96, 0.85);
+  border-color: var(--dauligor-accent);
+  background: rgba(255, 255, 255, 0.85);
   color: #1c1c1c;
 }
 
@@ -881,7 +881,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: #d9b977;
+  color: var(--dauligor-accent-strong);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -893,7 +893,7 @@
 
 .dauligor-subclass-preview__level-count {
   font-size: 10px;
-  color: rgba(217, 185, 119, 0.55);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 /* Row — works for both subclass rows (with image) and feature rows
@@ -927,13 +927,13 @@
 
 .dauligor-subclass-preview__row--focused {
   background: rgba(255, 255, 255, 0.10);
-  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
 }
 
 .dauligor-subclass-preview__row-img {
   width: 36px;
   height: 36px;
-  border: 1px solid rgba(192, 160, 96, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 4px;
   object-fit: cover;
   background: rgba(0, 0, 0, 0.3);
@@ -957,7 +957,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(217, 185, 119, 0.7);
+  color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -990,6 +990,24 @@
   text-transform: uppercase;
 }
 
+/* Section block + uppercase label inside the detail pane — mirrors
+ * `.dauligor-option-picker__detail-section{,-title}` so the two
+ * panes share their information hierarchy (name + meta header, then
+ * a labeled DESCRIPTION section below). */
+.dauligor-subclass-preview__detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dauligor-subclass-preview__detail-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+}
+
 .dauligor-subclass-preview__detail-body {
   font-size: 13px;
   line-height: 1.6;
@@ -1002,6 +1020,24 @@
 
 .dauligor-subclass-preview__detail-body p:last-child {
   margin-bottom: 0;
+}
+
+/* Headings inside imported descriptions — clamp them down to a
+ * reasonable size so things like `## Spell Slots` don't render at
+ * 32px+ inside a 13px description body. */
+.dauligor-subclass-preview__detail-body h1,
+.dauligor-subclass-preview__detail-body h2,
+.dauligor-subclass-preview__detail-body h3,
+.dauligor-subclass-preview__detail-body h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  border: 0;
+}
+
+.dauligor-subclass-preview__detail-body strong {
+  color: var(--dauligor-accent-strong);
 }
 
 .dauligor-class-browser__toolbar .dauligor-class-browser__input,
@@ -1093,7 +1129,7 @@
 
 .dauligor-class-browser__row--selected {
   background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
 }
 
 .dauligor-class-browser__row--class {
@@ -1361,7 +1397,7 @@
    * shows up on the row, matching the gold outline on selected
    * features in the Class Import Overview. */
   background: rgba(255, 255, 255, 0.10);
-  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
 }
 
 .dauligor-class-options__levels-row.is-locked {
@@ -2546,6 +2582,25 @@
   margin: 0 0 8px;
 }
 
+/* Clamp imported description headings + style bold consistently —
+ * Foundry's default `<h1>`/`<h2>` styles are giant page-titles and
+ * Foundry's default `<strong>` color is the page text, both of
+ * which look out-of-place inside this 12px detail body. */
+.dauligor-overview__detail-body h1,
+.dauligor-overview__detail-body h2,
+.dauligor-overview__detail-body h3,
+.dauligor-overview__detail-body h4 {
+  margin: 10px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  border: 0;
+}
+
+.dauligor-overview__detail-body strong {
+  color: var(--dauligor-accent-strong);
+}
+
 .dauligor-overview__placeholder {
   flex: 1 1 auto;
   display: flex;
@@ -2659,7 +2714,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: #d9b977;
+  color: var(--dauligor-accent-strong);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -2671,7 +2726,7 @@
 
 .dauligor-option-picker__level-count {
   font-size: 10px;
-  color: rgba(217, 185, 119, 0.55);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .dauligor-option-picker__row {
@@ -2701,7 +2756,7 @@
    * `.dauligor-class-options__levels-row.is-current` and the rest
    * of the unified `--selected` rows. */
   background: rgba(255, 255, 255, 0.10);
-  box-shadow: inset 3px 0 0 var(--dauligor-accent, #c0a060);
+  box-shadow: inset 3px 0 0 var(--dauligor-accent);
 }
 
 .dauligor-option-picker__row--highlighted {
@@ -2740,7 +2795,7 @@
 .dauligor-option-picker__row-img {
   width: 36px;
   height: 36px;
-  border: 1px solid rgba(192, 160, 96, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 4px;
   object-fit: cover;
   background: rgba(0, 0, 0, 0.3);
@@ -2764,7 +2819,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(217, 185, 119, 0.7);
+  color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2777,7 +2832,7 @@
 .dauligor-option-picker__row-status {
   font-size: 14px;
   text-align: center;
-  color: rgba(217, 185, 119, 0.7);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /* Detail pane */
@@ -2807,20 +2862,20 @@
 
 .dauligor-option-picker__back {
   align-self: flex-start;
-  background: rgba(192, 160, 96, 0.08);
-  border: 1px solid rgba(192, 160, 96, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 4px;
   padding: 4px 10px;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #d9b977;
+  color: var(--dauligor-accent-strong);
   cursor: pointer;
   transition: background-color 120ms ease;
 }
 
 .dauligor-option-picker__back:hover {
-  background: rgba(192, 160, 96, 0.2);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .dauligor-option-picker__detail-header {
@@ -2833,7 +2888,7 @@
 .dauligor-option-picker__detail-img {
   width: 64px;
   height: 64px;
-  border: 1px solid rgba(192, 160, 96, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
   object-fit: cover;
   background: rgba(0, 0, 0, 0.3);
@@ -2888,7 +2943,7 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #d9b977;
+  color: var(--dauligor-accent-strong);
 }
 
 .dauligor-option-picker__detail-body {
@@ -2903,6 +2958,24 @@
 
 .dauligor-option-picker__detail-body p:last-child {
   margin-bottom: 0;
+}
+
+/* Clamp imported `## Heading`-style headings inside option
+ * descriptions to a sane size — Foundry's default `<h2>` styles
+ * are giant page-headers, which look absurd inside a 13px body. */
+.dauligor-option-picker__detail-body h1,
+.dauligor-option-picker__detail-body h2,
+.dauligor-option-picker__detail-body h3,
+.dauligor-option-picker__detail-body h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+  border: 0;
+}
+
+.dauligor-option-picker__detail-body strong {
+  color: var(--dauligor-accent-strong);
 }
 
 .dauligor-option-picker__detail-summary {
@@ -2935,9 +3008,9 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   border-radius: 999px;
-  border: 1px solid rgba(192, 160, 96, 0.4);
-  color: #d9b977;
-  background: rgba(192, 160, 96, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: var(--dauligor-accent-strong);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 button.dauligor-option-picker__pill {
@@ -2963,7 +3036,7 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-option-picker__overlay-card {
   background: #1c1814;
-  border: 1px solid rgba(192, 160, 96, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 8px;
   padding: 20px 22px;
   max-width: 80%;

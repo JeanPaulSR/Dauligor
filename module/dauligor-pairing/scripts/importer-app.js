@@ -2424,18 +2424,25 @@ class DauligorSubclassPreviewApp extends HandlebarsApplicationMixin(ApplicationV
       : `<div class="dauligor-subclass-preview__empty">No features authored for this subclass.</div>`;
 
     // Right column — feature description.
+    // Detail markup follows the option-chooser's recipe so the two
+    // panes read as the same surface: name + meta in the header,
+    // then a labeled DESCRIPTION section below. Identifier slugs
+    // (e.g. "aberrant-alchemy") aren't useful to the player and
+    // were adding visual noise — dropped from the meta line.
     const detailHtml = focusedFeature
       ? `
         <div class="dauligor-subclass-preview__detail">
           <div class="dauligor-subclass-preview__detail-header">
             <h2 class="dauligor-subclass-preview__detail-name">${escapeHTML(focusedFeature.name)}</h2>
             <div class="dauligor-subclass-preview__detail-meta">
-              ${focusedFeature.level ? `Level ${focusedFeature.level}` : "Always Active"}
-              ${focusedFeature.identifier ? ` · ${escapeHTML(focusedFeature.identifier)}` : ""}
+              ${focusedFeature.level ? `Level ${focusedFeature.level}` : "Always active"}
             </div>
           </div>
-          <div class="dauligor-subclass-preview__detail-body">
-            ${focusedFeature.description ?? ""}
+          <div class="dauligor-subclass-preview__detail-section">
+            <div class="dauligor-subclass-preview__detail-section-title">Description</div>
+            <div class="dauligor-subclass-preview__detail-body">
+              ${focusedFeature.description ?? ""}
+            </div>
           </div>
         </div>
       `
