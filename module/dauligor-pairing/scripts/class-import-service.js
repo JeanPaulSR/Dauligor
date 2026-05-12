@@ -2278,6 +2278,52 @@ function normalizeTraitKey(type, value) {
  * The maps are scoped per-item — IDs only collide within one item's
  * activity / effect collections, so a per-item map is sufficient.
  */
+/**
+ * Deterministic mapping from any string to a Foundry-valid 16-char
+ * alphanumeric id. Used for stale/malformed authored ids so they
+ * regenerate to the SAME value on every import — making the actor's
+ * activity / effect `_id`s stable across re-imports (a player
+ * leveling up a month later sees the same activity ids they had at
+ * the original import).
+ *
+ * Why not just `foundry.utils.randomID()`? Random regeneration would
+ * churn activity ids on every level-up — player macros, Midi-QOL
+ * workflow flags, and DAE effects that reference an activity by id
+ * would all dangle after each import. With the deterministic
+ * fallback, the actor sees the SAME activity id on every re-import
+ * of a given (stale) bundle, so those external references survive.
+ *
+ * Algorithm: FNV-1a 32-bit hash of the input seeds a small LCG that
+ * draws 16 chars from the Foundry alphabet (`[A-Za-z0-9]`). Same
+ * input → same output, no async / no Web Crypto required.
+ *
+ * Collision risk: not a cryptographic hash. With 62^16 ≈ 4.8e28
+ * possible outputs and ~20 ids per item in the worst case, the
+ * per-item collision probability is negligible. If two activities
+ * within a single item ever DID hash to the same output, the
+ * `normalized[mapped._id] = mapped` reduce would silently dedupe to
+ * the last writer — surfaceable as a missing activity. Mitigation:
+ * re-edit the affected activity in the webapp, which regenerates a
+ * fresh `makeFoundryId()` via `handleAddActivity`'s replacement.
+ */
+function deterministicFoundryId(seed) {
+  const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const input = String(seed ?? "");
+  if (!input) return foundry.utils.randomID();
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = (hash * 16777619) >>> 0;
+  }
+  let out = "";
+  let lcg = hash || 1;
+  for (let i = 0; i < 16; i++) {
+    lcg = (lcg * 1103515245 + 12345) >>> 0;
+    out += ALPHABET[lcg % ALPHABET.length];
+  }
+  return out;
+}
+
 function buildItemIdRemap(automation) {
   const activityIdMap = new Map();
   const effectIdMap = new Map();
@@ -2290,7 +2336,11 @@ function buildItemIdRemap(automation) {
     const oldId = String(raw ?? "").trim();
     if (!oldId) return;
     if (into.has(oldId)) return;
-    const newId = /^[A-Za-z0-9]{16}$/.test(oldId) ? oldId : foundry.utils.randomID();
+    // Deterministic fallback for malformed ids — see
+    // `deterministicFoundryId` for the rationale. The actor's
+    // activity / effect `_id`s now stay stable across re-imports
+    // even when the source bundle's authored ids are too short.
+    const newId = /^[A-Za-z0-9]{16}$/.test(oldId) ? oldId : deterministicFoundryId(oldId);
     into.set(oldId, newId);
   };
 
@@ -2327,9 +2377,11 @@ function resolveRemappedId(map, raw) {
   if (!s) return foundry.utils.randomID();
   if (map?.has(s)) return map.get(s);
   // Fallback — the source-side id wasn't seen in the remap pass (e.g.
-  // a stale forward reference). Validate-or-regen so the result is at
-  // least Foundry-valid.
-  return /^[A-Za-z0-9]{16}$/.test(s) ? s : foundry.utils.randomID();
+  // a stale forward reference pointing at a filtered-out activity).
+  // Pass valid ids through unchanged, otherwise use the deterministic
+  // mapping so re-imports of the same stale id resolve to the same
+  // new id (identity-stable, see `deterministicFoundryId`).
+  return /^[A-Za-z0-9]{16}$/.test(s) ? s : deterministicFoundryId(s);
 }
 
 function normalizeSemanticActivityCollection(activities, idMaps) {
@@ -2550,12 +2602,21 @@ function normalizeSemanticItemEffects(effects, idMaps = {}) {
 
 function ensureSemanticEffectId(raw) {
   // Foundry requires document IDs to be exactly 16 alphanumeric chars.
-  // The web editor's `Math.random().toString(36).slice(2, 18)` is mostly
-  // OK but can produce shorter IDs when the random float happens to be
-  // short. Regenerate when malformed.
+  // The web editor's pre-`makeFoundryId()` code path (now replaced)
+  // used `Math.random().toString(36).slice(2, 18)`, which produced
+  // shorter ids when the random float happened to start with `0.0…`.
+  // Pass valid ids through unchanged; for malformed ids fall back to
+  // the deterministic mapping so re-imports of the same stale id
+  // produce the same actor-side `_id`. See `deterministicFoundryId`.
+  //
+  // Pure callers (no shared idMaps) still land here — the determinism
+  // means they too get stable ids across re-imports of the same
+  // bundle, even though they don't participate in the cross-reference
+  // map.
   const s = String(raw ?? "");
   if (/^[A-Za-z0-9]{16}$/.test(s)) return s;
-  return foundry.utils.randomID();
+  if (!s) return foundry.utils.randomID();
+  return deterministicFoundryId(s);
 }
 
 function normalizeSemanticRange(range) {
