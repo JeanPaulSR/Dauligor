@@ -96,27 +96,30 @@ import {
 } from "./importer-utils.js";
 
 /**
- * Compute a centered `position` object for an ApplicationV2 window.
+ * Compute a `position` object for an ApplicationV2 window.
  *
- * Foundry's ApplicationV2 mounts new windows at the document's
- * default (top-left, `top: 0; left: 0`) before its centering math
- * runs — visible as a brief flash where the window appears in the
- * corner then jumps to the middle of the screen. Setting `top` and
- * `left` explicitly in the constructor's `position` skips the flash
- * because the window's first paint is already at its final spot.
+ * **Why this returns ONLY width/height (no left/top):**
  *
- * Caps `top` and `left` at 0 so the window never starts off-screen
- * for narrow viewports.
+ * ApplicationV2 in Foundry v13 runs its centering math **synchronously,
+ * pre-paint** whenever the constructor's `position` omits explicit
+ * `left`/`top`. The window's first frame is already centered; no jump,
+ * no flash. This mirrors what Plutonium's TempApplication does — it
+ * only passes `{ width, height }` and is reliably flash-free.
+ *
+ * The previous version of this helper computed `left`/`top` ourselves
+ * (`(viewport - width) / 2`) and passed them in. Foundry honored those
+ * literally, so the window painted at those coords on the first frame
+ * before any further math ran. On the *first* open after Foundry boot,
+ * the CSS for our app classes hadn't finished cascading yet, so the
+ * computed measurements were occasionally off and the window briefly
+ * appeared at the corner before re-centering — the exact bug the user
+ * reported as "still appears in the top left."
+ *
+ * Caller still passes the clamped `width`/`height` it wants; the
+ * caps against viewport dimensions live at the call sites.
  */
 function centeredAppPosition(width, height) {
-  const viewportW = window.innerWidth || 0;
-  const viewportH = window.innerHeight || 0;
-  return {
-    width,
-    height,
-    left: Math.max(0, Math.round((viewportW - width) / 2)),
-    top: Math.max(0, Math.round((viewportH - height) / 2))
-  };
+  return { width, height };
 }
 
 export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -204,8 +207,12 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         contentClasses: ["dauligor-importer-window"]
       },
       position: centeredAppPosition(
-        Math.min(window.innerWidth - 120, 1120),
-        Math.min(window.innerHeight - 120, 640)
+        // Bumped from 1120×640 → 1280×740 to stop the Step 2 source
+        // table from scrunching the "Name" column when the rules /
+        // classes columns are populated. The viewport caps still
+        // shrink the window on narrow displays.
+        Math.min(window.innerWidth - 120, 1280),
+        Math.min(window.innerHeight - 120, 740)
       )
     });
 
@@ -410,7 +417,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         <div class="dauligor-wizard__choice-header">
           <span class="dauligor-wizard__choice-label">${foundry.utils.escapeHTML(type.label)}</span>
           <span class="dauligor-wizard__choice-meta">
-            <span class="dauligor-wizard__badge dauligor-wizard__badge--${type.status}">${foundry.utils.escapeHTML(type.status)}</span>
             <span class="dauligor-wizard__choice-arrow" aria-hidden="true">&#187;</span>
           </span>
         </div>
@@ -501,7 +507,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
                   </span>
                   <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--name">
                     <span class="dauligor-wizard__source-name">${foundry.utils.escapeHTML(source.label)}</span>
-                    <span class="dauligor-wizard__badge dauligor-wizard__badge--${source.status}">${foundry.utils.escapeHTML(source.status)}</span>
                   </span>
                   <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--short">${source.shortName ? foundry.utils.escapeHTML(source.shortName) : "&mdash;"}</span>
                   <span class="dauligor-wizard__source-cell dauligor-wizard__source-cell--rules">${source.rules ? foundry.utils.escapeHTML(String(source.rules)) : "&mdash;"}</span>
@@ -523,9 +528,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         >
           <div class="dauligor-wizard__choice-header">
             <span class="dauligor-wizard__choice-label">${foundry.utils.escapeHTML(source.label)}${source.shortName ? ` <span class="dauligor-wizard__choice-label-secondary">${foundry.utils.escapeHTML(source.shortName)}</span>` : ""}</span>
-            <span class="dauligor-wizard__choice-meta">
-              <span class="dauligor-wizard__badge dauligor-wizard__badge--${source.status}">${foundry.utils.escapeHTML(source.status)}</span>
-            </span>
           </div>
           ${this._state.importTypeId === "classes-subclasses" ? `
             <div class="dauligor-wizard__choice-submeta">
@@ -776,7 +778,15 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       sourceTypeId: normalizedSourceTypeIds[0] ?? sourceTypeId,
       selectedSourceIds: normalizedSourceTypeIds,
       search: "",
-      tagFilter: "__all__",
+      // Tri-state per-tag filter mirroring `src/components/compendium/
+      // FilterBar.tsx`'s `tagStates`: 0 = inactive, 1 = include, 2 =
+      // exclude. Tags not present in the map are treated as inactive.
+      // Cycle order on click is 0 → 1 → 2 → 0, just like the React
+      // chip's `cycleTagState`.
+      tagStates: {},
+      // Is the filter modal open. Local-only UI state; persisted only
+      // for the lifetime of this browser instance.
+      isFilterOpen: false,
       selectedClassSourceId: null,
       selectedSubclassSourceId: null,
       preferredSelectionIds: normalizeSelectionIds(preferredSelectionIds),
@@ -888,10 +898,19 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
   _renderToolbar() {
     if (!this._toolbarRegion) return;
 
+    // Active-filter count mirrors the React FilterBar's
+    // `activeFilterCount = Object.keys(tagStates).length`. Both include
+    // and exclude chips count as "active" filters.
+    const activeFilterCount = Object.keys(this._state.tagStates).length;
+
     this._toolbarRegion.innerHTML = `
       <div class="dauligor-class-browser__toolbar">
         <div class="dauligor-class-browser__toolbar-controls">
-          <button type="button" class="dauligor-class-browser__button" data-action="filter">Filter</button>
+          <button
+            type="button"
+            class="dauligor-class-browser__button ${this._state.isFilterOpen ? "dauligor-class-browser__button--active" : ""}"
+            data-action="filter"
+          >Filter${activeFilterCount > 0 ? ` <span class="dauligor-class-browser__filter-count">${activeFilterCount}</span>` : ""}</button>
           <button type="button" class="dauligor-class-browser__button dauligor-class-browser__button--icon" data-action="reload" aria-label="Reload class list">
             <i class="fa-solid fa-rotate-right"></i>
           </button>
@@ -905,10 +924,12 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
           <button type="button" class="dauligor-class-browser__button" data-action="reset">Reset</button>
         </div>
       </div>
+      ${this._state.isFilterOpen ? this._renderFilterModal() : ""}
     `;
 
     this._toolbarRegion.querySelector(`[data-action="filter"]`)?.addEventListener("click", () => {
-      notifyWarn("Class browser filters are not wired up yet.");
+      this._state.isFilterOpen = !this._state.isFilterOpen;
+      this._renderToolbar();
     });
     this._toolbarRegion.querySelector(`[data-action="search"]`)?.addEventListener("input", (event) => {
       this._state.search = event.currentTarget.value ?? "";
@@ -920,11 +941,107 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     });
     this._toolbarRegion.querySelector(`[data-action="reset"]`)?.addEventListener("click", () => {
       this._state.search = "";
-      this._state.tagFilter = "__all__";
+      this._state.tagStates = {};
       this._renderToolbar();
       this._renderList();
       this._renderFooter();
     });
+
+    // Filter modal listeners — only present when isFilterOpen.
+    if (this._state.isFilterOpen) {
+      this._toolbarRegion.querySelector(`[data-action="filter-backdrop"]`)?.addEventListener("click", () => {
+        this._state.isFilterOpen = false;
+        this._renderToolbar();
+      });
+      this._toolbarRegion.querySelector(`[data-action="filter-close"]`)?.addEventListener("click", () => {
+        this._state.isFilterOpen = false;
+        this._renderToolbar();
+      });
+      this._toolbarRegion.querySelector(`[data-action="filter-reset"]`)?.addEventListener("click", () => {
+        this._state.tagStates = {};
+        this._renderToolbar();
+        this._renderList();
+        this._renderFooter();
+      });
+      this._toolbarRegion.querySelectorAll(`[data-action="filter-chip"]`).forEach((chip) => {
+        chip.addEventListener("click", () => {
+          const tagId = chip.dataset.tagId;
+          if (!tagId) return;
+          this._cycleTagState(tagId);
+          this._renderToolbar();
+          this._renderList();
+          this._renderFooter();
+        });
+      });
+    }
+  }
+
+  /**
+   * Cycle a tag through inactive → include → exclude → inactive.
+   * Mirrors `cycleTagState` from the React FilterBar's host pages so
+   * the on-screen mental model matches.
+   */
+  _cycleTagState(tagId) {
+    const cur = this._state.tagStates[tagId] || 0;
+    const next = (cur + 1) % 3;
+    if (next === 0) delete this._state.tagStates[tagId];
+    else this._state.tagStates[tagId] = next;
+  }
+
+  /**
+   * Render the filter modal — chip grid with tri-state include/exclude,
+   * reset button, close button, backdrop click-to-dismiss. Visually
+   * mirrors `src/components/compendium/FilterBar.tsx` but lives in
+   * the same DOM region as the toolbar (absolute-positioned overlay)
+   * because we can't mount a portal in vanilla DOM the way React does.
+   *
+   * If the catalog ships no tags (current Phase C local catalogs don't
+   * yet), the modal shows an empty-state hint instead of an empty grid.
+   */
+  _renderFilterModal() {
+    const tags = this._availableTags ?? [];
+    const states = this._state.tagStates;
+    const chipsHtml = tags.length
+      ? tags.map((tagId) => {
+          const state = states[tagId] || 0;
+          const stateClass = state === 1
+            ? "dauligor-class-browser__chip--include"
+            : state === 2
+              ? "dauligor-class-browser__chip--exclude"
+              : "";
+          return `
+            <button
+              type="button"
+              class="dauligor-class-browser__chip ${stateClass}"
+              data-action="filter-chip"
+              data-tag-id="${foundry.utils.escapeHTML(tagId)}"
+              title="Click to ${state === 0 ? "include" : state === 1 ? "exclude" : "clear"}"
+            >${foundry.utils.escapeHTML(tagId)}</button>
+          `;
+        }).join("")
+      : `<div class="dauligor-class-browser__filter-empty">No tags available in the current catalog.</div>`;
+
+    return `
+      <div class="dauligor-class-browser__filter-overlay">
+        <div class="dauligor-class-browser__filter-backdrop" data-action="filter-backdrop"></div>
+        <div class="dauligor-class-browser__filter-card" role="dialog" aria-label="Class filters">
+          <div class="dauligor-class-browser__filter-head">
+            <div>
+              <div class="dauligor-class-browser__filter-title">Tag Filters</div>
+              <div class="dauligor-class-browser__filter-subtitle">Click a tag once to include, twice to exclude, again to clear.</div>
+            </div>
+            <button type="button" class="dauligor-class-browser__button dauligor-class-browser__button--icon" data-action="filter-close" aria-label="Close filters">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div class="dauligor-class-browser__filter-body">${chipsHtml}</div>
+          <div class="dauligor-class-browser__filter-footer">
+            <button type="button" class="dauligor-class-browser__button" data-action="filter-reset">Reset All Filters</button>
+            <button type="button" class="dauligor-class-browser__button dauligor-class-browser__button--primary" data-action="filter-close">Apply &amp; Close</button>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   _renderList() {
@@ -1185,20 +1302,29 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
   _getVisibleClasses() {
     const search = this._state.search.trim().toLowerCase();
-    const tagFilter = this._state.tagFilter;
+    const tagStates = this._state.tagStates ?? {};
+    const includeTags = Object.keys(tagStates).filter((id) => tagStates[id] === 1);
+    const excludeTags = Object.keys(tagStates).filter((id) => tagStates[id] === 2);
 
     return this._classModels.filter((classModel) => {
-      if (tagFilter !== "__all__" && !classModel.tags.includes(tagFilter)) return false;
-      if (!search) return true;
+      const tags = classModel.tags ?? [];
+      // Excludes are AND-NOT — any single match knocks the row out.
+      // Match the React FilterBar's default exclusion semantics; the
+      // group-mode AND/OR/XOR knobs aren't surfaced in this initial
+      // wiring, so the simpler "any included match passes, any
+      // excluded match blocks" rule applies. We can graft on the
+      // group-combine modes once the catalog ships grouped tags.
+      if (excludeTags.some((id) => tags.includes(id))) return false;
+      if (includeTags.length && !includeTags.some((id) => tags.includes(id))) return false;
 
+      if (!search) return true;
       const haystack = [
         classModel.name,
         classModel.description,
-        ...classModel.tags,
+        ...tags,
         ...classModel.subclasses.map((subclass) => subclass.name),
         ...classModel.variants.map((variant) => variant.entry.name)
       ].filter(Boolean).join(" ").toLowerCase();
-
       return haystack.includes(search);
     });
   }

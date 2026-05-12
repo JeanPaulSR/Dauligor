@@ -383,27 +383,11 @@
   margin: 0;
 }
 
-.dauligor-wizard__badge {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 2px;
-  padding: 1px 5px;
-  font-size: 9px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.dauligor-wizard__badge--ready {
-  color: #132714;
-  background: color-mix(in srgb, var(--dauligor-success) 85%, white 15%);
-}
-
-.dauligor-wizard__badge--soon {
-  color: #3d2910;
-  background: color-mix(in srgb, var(--dauligor-warning) 84%, white 16%);
-}
+/* Ready / Soon wizard status badges are gone — the wizard no longer
+ * advertises an importer's readiness in the chrome (disabled rows speak
+ * for themselves and the Open Importer button enforces the gate). Keep
+ * this comment as a breadcrumb so re-introducing the badges later picks
+ * up the BEM naming and slot layout that already worked. */
 
 .dauligor-wizard__card,
 .dauligor-class-browser__summary,
@@ -572,6 +556,170 @@
   width: 32px;
   min-width: 32px;
 }
+
+/* Filter button "active" state — used when the filter modal is open.
+ * Mirrors the React FilterBar's `variant={isFilterOpen ? "default" :
+ * "outline"}` distinction. The count chip rides inline next to the
+ * label so the user sees how many filters are active without opening
+ * the modal. */
+.dauligor-class-browser__button--active {
+  border-color: var(--dauligor-accent, #c0a060);
+  background: rgba(192, 160, 96, 0.18);
+  color: #f0d9a5;
+}
+
+.dauligor-class-browser__filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(192, 160, 96, 0.85);
+  color: #1c1c1c;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Filter modal — vanilla-JS port of `src/components/compendium/
+ * FilterBar.tsx`'s `<Card>` overlay. Lives inside the toolbar region
+ * (so it's absolutely-positioned within the class-browser window,
+ * not a global portal — Foundry AppV2 doesn't give us a clean root
+ * to mount into). Click-outside / X / Apply all close it. */
+.dauligor-class-browser__filter-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 32px 20px;
+  pointer-events: none;
+}
+
+.dauligor-class-browser__filter-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.55);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+}
+
+.dauligor-class-browser__filter-card {
+  position: relative;
+  pointer-events: auto;
+  width: min(680px, 100%);
+  max-height: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border: 1px solid var(--dauligor-border);
+  border-radius: 6px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.dauligor-class-browser__filter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--dauligor-border);
+  background: rgba(192, 160, 96, 0.08);
+}
+
+.dauligor-class-browser__filter-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f0d9a5;
+}
+
+.dauligor-class-browser__filter-subtitle {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--dauligor-muted);
+  line-height: 1.4;
+}
+
+.dauligor-class-browser__filter-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dauligor-class-browser__filter-empty {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: var(--dauligor-muted);
+  text-align: center;
+  padding: 28px 8px;
+  font-style: italic;
+}
+
+.dauligor-class-browser__filter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--dauligor-border);
+  background: rgba(192, 160, 96, 0.05);
+}
+
+/* Tri-state chip: inactive / include / exclude.
+ *
+ *   inactive → neutral outline
+ *   include  → gold solid
+ *   exclude  → blood outlined
+ *
+ * Cycles in that order on click. Matches the React FilterBar's chip
+ * state colors so users get the same affordance in both UIs. */
+.dauligor-class-browser__chip {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(192, 160, 96, 0.35);
+  background: rgba(192, 160, 96, 0.05);
+  color: #d9b977;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: filter 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.dauligor-class-browser__chip:hover {
+  filter: brightness(1.15);
+}
+
+.dauligor-class-browser__chip--include {
+  border-color: #c0a060;
+  background: rgba(192, 160, 96, 0.85);
+  color: #1c1c1c;
+}
+
+.dauligor-class-browser__chip--exclude {
+  border-color: #a85050;
+  background: rgba(168, 80, 80, 0.18);
+  color: #f4b8b8;
+  text-decoration: line-through;
+}
+
+/* The filter overlay relies on `.window-content` being the nearest
+ * positioned ancestor. Foundry's AppV2 `.window-content` is already
+ * `position: relative` by default — no override needed. (Earlier
+ * iteration of this CSS made the toolbar `position: relative`, which
+ * shrank the modal's anchoring box to the 34px-tall toolbar height
+ * and visually clipped the chip grid.) */
 
 .dauligor-class-browser__toolbar .dauligor-class-browser__input,
 .dauligor-class-browser__field--compact .dauligor-class-browser__input {
