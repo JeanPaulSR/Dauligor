@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
+import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import RequirementsEditor, { RequirementsEditorLookups } from '../../components/compendium/RequirementsEditor';
 import {
@@ -146,7 +147,13 @@ type FeatFormData = {
     recovery: UsesRecoveryRule[];
   };
   activities: any[];
-  effectsStr: string;
+  /**
+   * Item-level Active Effects authored through the shared
+   * `<ActiveEffectEditor>` — same component class features and
+   * option items use. Round-trips as JSON onto `feats.effects` and
+   * lands at `effects[]` on the Foundry feat item.
+   */
+  effects: any[];
   /**
    * Compound requirement tree authored via `<RequirementsEditor>`. Stored
    * separately from the free-text `requirements` field — the two are
@@ -173,7 +180,7 @@ const FEAT_DEFAULTS: Omit<FeatFormData, 'sourceId'> & { sourceId?: string } = {
   repeatable: false,
   uses: { max: '', spent: 0, recovery: [] },
   activities: [],
-  effectsStr: '[]',
+  effects: [],
   requirementsTree: EMPTY_REQUIREMENT_TREE,
 };
 
@@ -455,11 +462,15 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           : Array.isArray(cached.activities)
             ? cached.activities
             : [],
-        effectsStr: JSON.stringify(
-          cached.automation?.effects || cached.effects || [],
-          null,
-          2,
-        ),
+        // d1.ts's jsonFields auto-parses the `effects` column so it
+        // arrives as a typed array on a fresh fetch. Newer rows
+        // always arrive as arrays; we only fall through to the empty
+        // array if the column is missing entirely.
+        effects: Array.isArray(cached.automation?.effects)
+          ? cached.automation.effects
+          : Array.isArray(cached.effects)
+            ? cached.effects
+            : [],
         requirementsTree: parseRequirementTree(
           cached.requirementsTree ?? cached.requirements_tree,
         ),
@@ -523,15 +534,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       return;
     }
 
-    let parsedEffects: any[] = [];
-    try {
-      parsedEffects = formData.effectsStr ? JSON.parse(formData.effectsStr) : [];
-      if (!Array.isArray(parsedEffects)) throw new Error('Effects must be a JSON array');
-    } catch (error: any) {
-      toast.error(error.message || 'Effects must be valid JSON');
-      return;
-    }
-
     setSaving(true);
     try {
       // Payload mirrors what `DevelopmentCompendiumManager` produced for
@@ -561,7 +563,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         uses_spent: Number(formData.uses.spent) || 0,
         uses_recovery: cleanedRecovery,
         activities: Array.isArray(formData.activities) ? formData.activities : [],
-        effects: parsedEffects,
+        effects: Array.isArray(formData.effects) ? formData.effects : [],
         requirements_tree: serializeRequirementTree(formData.requirementsTree),
         updated_at: new Date().toISOString(),
       };
@@ -1198,31 +1200,32 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                       )}
                     </div>
 
-                    {/* Activities + raw effects. Same shape SpellsEditor
-                        uses — ActivityEditor for the structured array,
-                        a JSON textarea for the still-evolving Active
-                        Effects raw shape. */}
+                    {/* Activities + structured Active Effects. Both
+                        share the same authoring surfaces option items
+                        and class features use — ActivityEditor for the
+                        per-activity data, ActiveEffectEditor for the
+                        item-level effects array. `availableEffects` is
+                        passed to ActivityEditor so the "Applied Effects"
+                        list on save/utility/cast activities can pick
+                        from this feat's authored effects by id. */}
                     <div className="space-y-3">
                       <div className="border-t border-gold/10 pt-4">
                         <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
                         <ActivityEditor
                           activities={formData.activities}
                           onChange={(activities) => setFormData((prev) => ({ ...prev, activities }))}
+                          availableEffects={formData.effects}
                           context="feat"
                         />
                       </div>
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Effects (JSON)</Label>
-                        <textarea
-                          value={formData.effectsStr}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, effectsStr: e.target.value }))}
-                          className="w-full min-h-[160px] rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs font-mono p-3 custom-scrollbar"
-                          placeholder="[]"
+                      <div className="border-t border-gold/10 pt-4">
+                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
+                        <ActiveEffectEditor
+                          effects={formData.effects}
+                          onChange={(effects) => setFormData((prev) => ({ ...prev, effects }))}
+                          defaultImg={formData.imageUrl || null}
                         />
-                        <p className="text-[10px] text-ink/40">
-                          Raw effect scaffolding for now. Activities should be the primary runtime surface, with effects for persistent states and automation support.
-                        </p>
                       </div>
                     </div>
                   </form>

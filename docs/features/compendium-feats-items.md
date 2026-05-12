@@ -60,6 +60,11 @@ A lock icon appears on the feat manager's list rows whenever either surface is p
 ### Manager layout
 [`FeatsEditor.tsx`](../../src/pages/compendium/FeatsEditor.tsx) is a master-detail manager identical in shape to [`SpellsEditor.tsx`](../../src/pages/compendium/SpellsEditor.tsx)'s manual editor: a virtualized + searchable list on the left, a sticky-header detail pane with Save/Reset/Delete on the right, compact 126px icon at the top of the form. Loads the RequirementsEditor's lookup pools (classes / subclasses / spell rules / every Modular Option Group's items / proficiencies) in parallel with the feats list on mount.
 
+### Activities + Active Effects
+The Activities tab below the Foundry shell uses the shared [`<ActivityEditor />`](../../src/components/compendium/ActivityEditor.tsx) — same component classes, subclasses, and modular option items use. The Active Effects section underneath uses the shared [`<ActiveEffectEditor />`](../../src/components/compendium/ActiveEffectEditor.tsx) — same component option items use for invocations / infusions / etc., with the same autocomplete-backed key input, status condition picker, change-mode dropdowns, and image fallback. The activity surface reads `formData.effects` as its `availableEffects` prop so the per-activity "Applied Effects" list can reference the feat's authored Active Effects by id without copy-paste.
+
+Effects round-trip through `feats.effects` as a JSON array. The column is auto-parsed by `d1.ts`'s `jsonFields` list so the editor receives a typed array on every fetch.
+
 ### Public list layout
 [`FeatList.tsx`](../../src/pages/compendium/FeatList.tsx) is the public-facing browse page at `/compendium/feats`. Same shape as [`SpellList.tsx`](../../src/pages/compendium/SpellList.tsx): a filter bar at top, a master-detail grid below with the virtualized feat list on the left and a `<FeatDetailPanel />` on the right. Filter facets are derived once at load time via [`lib/featFilters.ts`](../../src/lib/featFilters.ts) (`deriveFeatPropertyFlags`) — three sections:
 
