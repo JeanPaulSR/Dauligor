@@ -2290,6 +2290,108 @@ async function runDauligorClassImportSequence({
         }
       }
 
+      // Feature-attached ItemChoice prompts. The optionGroups loop above
+      // only fires for class-root and subclass-root option-group
+      // references (those have non-empty selectionCountsByLevel via the
+      // export-side advancement-metadata builder). Feature-attached
+      // ItemChoice — like Pact Boon's pact pick, granted to a warlock
+      // at level 3 via the Pact Boon feature's own system.advancement —
+      // doesn't contribute to that catalog and would otherwise be
+      // silently dropped at import time. We surface them here using
+      // the same runOptionGroupStep prompt the class-root loop uses,
+      // synthesising a group object whose maxSelections comes from the
+      // advancement's own configuration.choices.
+      //
+      // The advancement carries _ownerSourceId / _ownerLevel tags set
+      // by class-import-service.js so we can:
+      //   - Skip when the owning feature isn't being granted at this
+      //     import (e.g. warlock 2 → 3 surfaces Pact Boon; warlock 1
+      //     → 2 doesn't).
+      //   - Skip when the owning feature was already granted on a
+      //     prior level-up (the user made the choice then).
+      for (const adv of ensureArray(workflow.choiceAdvancements)) {
+        if (adv?.type !== "ItemChoice") continue;
+        const optionGroupSourceId = String(adv?.configuration?.optionGroupId ?? "").trim();
+        if (!optionGroupSourceId) continue;
+
+        // Only fire for feature/option-item-attached ItemChoices. The
+        // class-root option-group loop above already prompted any
+        // class-root / subclass-root references via their populated
+        // `selectionCountsByLevel`.
+        const ownerSourceId = adv._ownerSourceId;
+        if (!ownerSourceId || !grantedFeatureSourceIds.has(ownerSourceId)) continue;
+
+        // The feature/option-item is granted at this class level —
+        // skip prompts whose owning feature was already granted on
+        // a prior import (we don't re-prompt for choices the user
+        // already made). `_ownerLevel` is the class level at which
+        // the parent feature is granted; existingClassLevelForSkip
+        // is the level the actor already had this class to.
+        const ownerLevel = Number(adv._ownerLevel ?? 0) || 0;
+        if (ownerLevel > 0 && ownerLevel <= existingClassLevelForSkip) continue;
+
+        // Derive the pick count. Option-group-backed ItemChoice on a
+        // feature is typically authored as `choices: { "1": { count: N } }`
+        // — level "1" inside the feature meaning "fires when the
+        // feature is granted". Some authors may use object form, some
+        // array form; handle both.
+        const choicesRaw = adv.configuration?.choices ?? {};
+        const choicesEntries = Array.isArray(choicesRaw)
+          ? choicesRaw
+          : Object.values(choicesRaw);
+        const pickCount = choicesEntries.reduce(
+          (max, c) => Math.max(max, Number(c?.count || 0) || 0),
+          0
+        );
+        if (pickCount <= 0) continue;
+
+        // Look up the option group in the workflow catalog. The
+        // export side's `collectReferencedOptionGroupIds` includes
+        // features, so feature-referenced groups are present in the
+        // catalog even when their `selectionCountsByLevel` was empty.
+        const group = ensureArray(workflow.optionGroups).find(
+          (g) => g?.sourceId === optionGroupSourceId
+        );
+        if (!group?.options?.length) {
+          log("Skipping feature-attached ItemChoice — option group not in workflow catalog", {
+            optionGroupSourceId,
+            ownerSourceId,
+            ownerLevel
+          });
+          continue;
+        }
+
+        // Skip if the user already satisfied this group via a prior
+        // prompt this turn (or a resumed partial run). Same shape the
+        // class-root loop uses.
+        if ((state.optionSelections[group.sourceId] ?? []).length === pickCount) continue;
+
+        // Synthesise a feature-attached group: same options pool,
+        // but maxSelections derived from the advancement instead of
+        // the empty catalog metadata. featureSourceId is set so the
+        // option-picker tooltip ("Granted by Pact Boon") could
+        // surface the owner in a future polish pass.
+        const featureAttachedGroup = {
+          ...group,
+          maxSelections: pickCount,
+          featureSourceId: ownerSourceId,
+          selectedSourceIds: state.optionSelections[group.sourceId] ?? []
+        };
+
+        const groupResult = await runOptionGroupStep({
+          workflow,
+          actor,
+          group: featureAttachedGroup,
+          sequence,
+          progress
+        });
+        if (groupResult === "cancelled") throw new DauligorImportSequenceCancelledError();
+        if (Array.isArray(groupResult)) {
+          state.optionSelections[group.sourceId] = groupResult;
+          workflow = buildWorkflowFromSequenceState(payload, { entry, actor, state });
+        }
+      }
+
       // Feature-level Trait choice prompts — `workflow.choiceAdvancements`
       // collects every Trait + ItemChoice advancement (across class root,
       // subclass root, granted features, and selected option items) that
@@ -2301,9 +2403,9 @@ async function runDauligorClassImportSequence({
       //
       // Each prompt's selections go through CharacterUpdater's
       // mixed-prefix writer because feature-trait pools can be
-      // heterogeneous (e.g. "choose one skill OR language"). ItemChoice
-      // advancements on features aren't wired yet — they'll need a
-      // separate prompt UI similar to runOptionGroupStep.
+      // heterogeneous (e.g. "choose one skill OR language"). The
+      // ItemChoice branch above handles feature-attached ItemChoice
+      // (Pact Boon etc.); this loop is the Trait-specific path.
       const baseAdvancementIds = new Set(
         baseFeatures.advancements.map((entry) => entry?.adv?._id).filter(Boolean)
       );

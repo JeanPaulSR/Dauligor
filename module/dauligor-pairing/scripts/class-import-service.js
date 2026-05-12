@@ -705,11 +705,25 @@ export function buildClassImportWorkflow(payload, {
     importOptionItems,
     startingEquipment: semanticClassData?.startingEquipment ?? "",
     choiceAdvancements: (function () {
+      // Tag each feature-attached advancement with the owner item's
+      // sourceId + grant level so the importer-app.js prompt loop can
+      // gate by "is this feature being granted at this level?" Without
+      // this attribution, a Pact Boon ItemChoice would look identical
+      // to a class-root ItemChoice and we'd lose the link to whether
+      // the feature is actually present.
+      const tagOwner = (item) => (adv) => ({
+        ...adv,
+        _ownerSourceId: item?.flags?.[MODULE_ID]?.sourceId ?? null,
+        _ownerLevel: Number(item?.flags?.[MODULE_ID]?.level ?? 0) || 0,
+        _ownerType: item?.flags?.[MODULE_ID]?.sourceType ?? null
+      });
       const featureAdvancements = [
         ...desiredClassFeatureItems,
         ...desiredSubclassFeatureItems,
         ...selectedOptionItems
-      ].flatMap(item => Object.values(normalizeAdvancementStructure(item?.system?.advancement)));
+      ].flatMap(item =>
+        Object.values(normalizeAdvancementStructure(item?.system?.advancement)).map(tagOwner(item))
+      );
       const advancements = [
         ...Object.values(normalizeAdvancementStructure(classItem?.system?.advancement)),
         ...Object.values(normalizeAdvancementStructure(selectedSubclassItem?.system?.advancement)),
@@ -726,8 +740,26 @@ export function buildClassImportWorkflow(payload, {
           return false;
         }
         if (adv.type === "ItemChoice") {
-          const choices = Array.isArray(adv.configuration?.choices) ? adv.configuration.choices : [];
-          return choices.some(c => c.count > 0 && Array.isArray(c.pool) && c.pool.length > 0);
+          // Two pool shapes are supported in dnd5e 5.x ItemChoice:
+          //   - inline `configuration.choices[].pool` (array-form, with
+          //     per-entry count + UUID pool — used by some legacy or
+          //     hand-authored entries)
+          //   - reference to one of our Modular Option Groups via
+          //     `configuration.optionGroupId` (Dauligor's canonical
+          //     path for Pact Boon / Eldritch Invocations / Battle
+          //     Master Maneuvers / etc.) — count lives in
+          //     `configuration.choices` keyed by level
+          const choices = Array.isArray(adv.configuration?.choices)
+            ? adv.configuration.choices
+            : Object.values(adv.configuration?.choices ?? {});
+          const hasInlinePool = choices.some(c => Number(c?.count || 0) > 0 && Array.isArray(c?.pool) && c.pool.length > 0);
+          if (hasInlinePool) return true;
+          const optionGroupSourceId = trimString(adv.configuration?.optionGroupId);
+          if (!optionGroupSourceId) return false;
+          // Option-group-backed: include when at least one choice tier
+          // has a count > 0. Pool resolution happens at prompt time via
+          // workflow.optionGroups lookup.
+          return choices.some(c => Number(c?.count || 0) > 0);
         }
         return false;
       });

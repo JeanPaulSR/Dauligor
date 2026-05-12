@@ -139,6 +139,19 @@ This is what makes a single Trip Attack feature reusable across Battle Master an
 
 Option groups referenced from a *subclass-root* advancement (Battle Master Maneuvers, Eldritch Knight pools, etc.) carry `subclassSourceId` in the bundle. The runtime suppresses the prompt for non-matching subclasses — picking Champion doesn't show Maneuvers; picking Battle Master does. Class-root and feature-owned groups are unaffected and use the existing `featureSourceId` / `grantedFeatureSourceIds` filter.
 
+### Feature-attached `ItemChoice` (Pact Boon path)
+
+A class feature can itself carry an `ItemChoice` advancement that references an option group — Pact Boon is the canonical example: granted to a warlock at level 3, the feature's own `system.advancement` contains an `ItemChoice` whose `configuration.optionGroupId` points at the Pact Boons option group. The export pipeline's `collectReferencedOptionGroupIds` includes feature records, so the group ends up in the class document's `flags.dauligor-pairing.optionGroups` catalog. The runtime contribution to `selectionCountsByLevel` from feature-attached advancements is *not* exported (that map is built only from class+subclass records), so the catalog entry's `selectionCountsByLevel` ends up empty.
+
+To bridge this, [`module/dauligor-pairing/scripts/class-import-service.js`](../../module/dauligor-pairing/scripts/class-import-service.js)'s `choiceAdvancements` tagger annotates every feature/option-item-attached advancement with `_ownerSourceId` + `_ownerLevel` (the class level at which the parent feature is granted). The ItemChoice filter passes any advancement with either an inline `pool` *or* an `optionGroupId` reference. [`module/dauligor-pairing/scripts/importer-app.js`](../../module/dauligor-pairing/scripts/importer-app.js) then runs a dedicated feature-attached ItemChoice loop in `runImportSequence` *after* the class-root `optionGroups` loop but *before* the Trait choice loop. It:
+
+1. Filters `workflow.choiceAdvancements` to `type === "ItemChoice"` entries with `_ownerSourceId` set + `configuration.optionGroupId` populated.
+2. Skips when the owning feature isn't in `grantedFeatureSourceIds` (i.e., not being granted at this import) or when `_ownerLevel <= existingClassLevelForSkip` (already granted on a prior level-up).
+3. Synthesises a feature-attached group object (cloned from the catalog entry but with `maxSelections` derived from the advancement's own `configuration.choices`).
+4. Calls `runOptionGroupStep` with the synthesised group so the picker UI, prerequisite-walker, and selection state all behave identically to a class-root option-group prompt.
+
+The class-root option-groups loop above this one short-circuits feature-attached entries naturally: a feature-attributed catalog entry has empty `selectionCountsByLevel`, so its derived `maxSelections` is 0 and the loop's `if (!group?.options?.length || !group?.maxSelections) continue` skip clears it. The two loops cover orthogonal sets.
+
 ## Tags
 
 A general-purpose tagging system used across:
