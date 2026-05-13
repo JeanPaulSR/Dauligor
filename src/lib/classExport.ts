@@ -23,6 +23,7 @@ import {
   type RuleQuery,
   type SpellMatchInput,
 } from './spellFilters';
+import { buildTagParentMap } from './tagHierarchy';
 
 /**
  * Pluggable fetchers so this module can run from server contexts that don't
@@ -1414,6 +1415,14 @@ export async function exportClassSemantic(
     const spellRows = await fetchCollection<any>('spells', {
       select: 'id, source_id, level, school, tags, foundry_data, concentration, ritual, components_vocal, components_somatic, components_material',
     });
+    // Hierarchical tag matching: a spell tagged with `Conjure.Manifest`
+    // (subtag) is treated as also carrying its ancestor `Conjure` for
+    // rule-query purposes. We pass `parentByTagId` into the matcher so
+    // the bake-time allowlist reflects this — module-side walker reads
+    // pre-baked allowlists, so the change automatically lands on the
+    // actor sheet without further plumbing.
+    const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id' });
+    const parentByTagId = buildTagParentMap(tagRows);
     const spellMatchInputs: Array<{ id: string; sourceId: string | null; match: SpellMatchInput }> = spellRows.map((row: any) => {
       const facets = deriveSpellFilterFacets(row);
       const tags = Array.isArray(row.tags)
@@ -1440,7 +1449,7 @@ export async function exportClassSemantic(
       const matchedSourceIds: string[] = [];
       for (const s of spellMatchInputs) {
         if (!s.sourceId) continue;
-        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query)) {
+        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query, parentByTagId)) {
           matchedSourceIds.push(s.sourceId);
         }
       }

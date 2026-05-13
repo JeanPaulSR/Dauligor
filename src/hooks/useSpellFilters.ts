@@ -7,6 +7,7 @@ import {
   type RuleQuery,
   type SpellMatchInput,
 } from '../lib/spellFilters';
+import { expandTagsWithAncestors } from '../lib/tagHierarchy';
 
 /**
  * Shared filter state for any spell-browsing surface (manager, public list,
@@ -43,9 +44,13 @@ export type UseSpellFiltersResult = {
   resetAll: () => void;
 
   // Filter function — returns predicate-passing entries with the matched tag names.
+  // `tagsById` value type optionally carries `parent_tag_id` / `parentTagId`
+  // so the hook can build a hierarchy map and treat tag matching as
+  // subtag-aware (parent matches its descendants). Callers without
+  // hierarchy info still work — matching falls back to flat .includes().
   filter: <S extends FilterableSpell>(
     spells: S[],
-    tagsById: Record<string, { name: string }>,
+    tagsById: Record<string, { name: string; parent_tag_id?: string | null; parentTagId?: string | null }>,
   ) => FilteredEntry<S>[];
 };
 
@@ -99,15 +104,28 @@ export function useSpellFilters(): UseSpellFiltersResult {
 
   const filter = useCallback(<S extends FilterableSpell>(
     spells: S[],
-    tagsById: Record<string, { name: string }>,
+    tagsById: Record<string, { name: string; parent_tag_id?: string | null; parentTagId?: string | null }>,
   ): FilteredEntry<S>[] => {
     const q = search.trim().toLowerCase();
+    // Hierarchy map for subtag-aware tag matching. Built once per
+    // filter() call; map size is bounded by the tag catalog (low
+    // hundreds typically). When `tagsById` rows lack parent info, the
+    // map is effectively empty and matching degrades to flat
+    // `.includes()` exactly as before.
+    const parentByTagId = new Map<string, string | null>();
+    for (const tagId of Object.keys(tagsById)) {
+      const tag = tagsById[tagId];
+      parentByTagId.set(tagId, (tag?.parent_tag_id ?? tag?.parentTagId ?? null) as string | null);
+    }
     const out: FilteredEntry<S>[] = [];
     for (const s of spells) {
       if (levelFilters.length > 0 && !levelFilters.includes(String(s.level))) continue;
       if (schoolFilters.length > 0 && !schoolFilters.includes(s.school)) continue;
       if (sourceFilterIds.length > 0 && !sourceFilterIds.includes(String(s.source_id ?? ''))) continue;
-      if (tagFilterIds.length > 0 && !tagFilterIds.every(tid => s.tags.includes(tid))) continue;
+      if (tagFilterIds.length > 0) {
+        const effective = new Set(expandTagsWithAncestors(s.tags, parentByTagId));
+        if (!tagFilterIds.every(tid => effective.has(tid))) continue;
+      }
       if (activationFilters.length > 0 && !activationFilters.includes(s.activationBucket)) continue;
       if (rangeFilters.length > 0 && !rangeFilters.includes(s.rangeBucket)) continue;
       if (durationFilters.length > 0 && !durationFilters.includes(s.durationBucket)) continue;

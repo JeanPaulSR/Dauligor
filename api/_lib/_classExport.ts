@@ -1395,6 +1395,17 @@ export async function exportClassSemantic(
     const spellRows = await fetchCollection<any>('spells', {
       select: 'id, source_id, level, school, tags, foundry_data, concentration, ritual, components_vocal, components_somatic, components_material',
     });
+    // Hierarchical tag matching: a spell tagged with `Conjure.Manifest`
+    // is treated as also carrying its ancestor `Conjure` when matching
+    // rule queries. Built once per bake and threaded through to the
+    // matcher. See docs/database/structure/tags.md for the model and
+    // src/lib/tagHierarchy.ts for the client copy.
+    const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id' });
+    const parentByTagId = new Map<string, string | null>();
+    for (const t of tagRows) {
+      if (!t?.id) continue;
+      parentByTagId.set(String(t.id), (t.parent_tag_id ?? null) as string | null);
+    }
     const spellMatchInputs: Array<{ id: string; sourceId: string | null; match: SpellMatchInput }> = spellRows.map((row: any) => {
       const facets = deriveSpellFilterFacets(row);
       const tags = Array.isArray(row.tags)
@@ -1421,7 +1432,7 @@ export async function exportClassSemantic(
       const matchedSourceIds: string[] = [];
       for (const s of spellMatchInputs) {
         if (!s.sourceId) continue;
-        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query)) {
+        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query, parentByTagId)) {
           matchedSourceIds.push(s.sourceId);
         }
       }

@@ -10,7 +10,7 @@ import { FilterBar } from '../../components/compendium/FilterBar';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
-import { normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
+import { expandTagsWithAncestors, normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
@@ -257,6 +257,15 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     return map;
   }, [tags]);
 
+  // Subtag-aware tag matching: a spell tagged `Conjure.Manifest` is
+  // treated as also carrying its ancestor `Conjure`, so a filter on
+  // `Conjure` matches the subtag-tagged spell. See tagHierarchy.ts.
+  const parentByTagId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const t of tags) map.set(t.id, t.parentTagId ?? null);
+    return map;
+  }, [tags]);
+
   const filteredSpells = useMemo<FilteredEntry[]>(() => {
     const q = search.trim().toLowerCase();
     const out: FilteredEntry[] = [];
@@ -266,7 +275,10 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       if (levelFilters.length > 0 && !levelFilters.includes(String(s.level))) continue;
       if (schoolFilters.length > 0 && !schoolFilters.includes(s.school)) continue;
       if (sourceFilterIds.length > 0 && !sourceFilterIds.includes(String(s.source_id ?? ''))) continue;
-      if (tagFilterIds.length > 0 && !tagFilterIds.every(tid => s.tags.includes(tid))) continue;
+      if (tagFilterIds.length > 0) {
+        const effective = new Set(expandTagsWithAncestors(s.tags, parentByTagId));
+        if (!tagFilterIds.every(tid => effective.has(tid))) continue;
+      }
       if (activationFilters.length > 0 && !activationFilters.includes(s.activationBucket)) continue;
       if (rangeFilters.length > 0 && !rangeFilters.includes(s.rangeBucket)) continue;
       if (durationFilters.length > 0 && !durationFilters.includes(s.durationBucket)) continue;

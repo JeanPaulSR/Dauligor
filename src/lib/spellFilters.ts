@@ -8,6 +8,8 @@
  * ability) are tracked in docs/features/spellbook-manager.md.
  */
 
+import { expandTagsWithAncestors } from './tagHierarchy';
+
 export type ActivationBucket = 'action' | 'bonus' | 'reaction' | 'minute' | 'hour' | 'special';
 export type RangeBucket = 'self' | 'touch' | '5ft' | '30ft' | '60ft' | '120ft' | 'long' | 'other';
 export type DurationBucket = 'inst' | 'round' | 'minute' | 'hour' | 'day' | 'perm' | 'special';
@@ -165,12 +167,33 @@ export type SpellMatchInput = SpellFilterFacets & {
  * Pure check: does this spell match the rule's saved filter state? Used by the
  * rebuild path (re-populating class_spell_lists from rules) and could power a
  * "preview matches" UI later.
+ *
+ * Tag matching is HIERARCHICAL when `parentByTagId` is supplied. A spell
+ * tagged `Conjure.Manifest` (a subtag of `Conjure`) is treated as also
+ * carrying its ancestor tags, so a rule for `Conjure` matches it. Rules
+ * remain specific in the OTHER direction: a rule for `Conjure.Manifest`
+ * does NOT match a spell tagged only with `Conjure` or with the sibling
+ * `Conjure.Summon`. See `docs/database/structure/tags.md` for the
+ * tagging model.
+ *
+ * Callers without access to the hierarchy map (legacy or self-contained
+ * scenarios) can omit `parentByTagId`; the matcher falls back to flat
+ * `.includes()` against the spell's stored tags.
  */
-export function matchSpellAgainstRule(spell: SpellMatchInput, query: RuleQuery): boolean {
+export function matchSpellAgainstRule(
+  spell: SpellMatchInput,
+  query: RuleQuery,
+  parentByTagId?: Map<string, string | null>,
+): boolean {
   if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) return false;
   if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) return false;
   if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) return false;
-  if (query.tagFilterIds?.length && !query.tagFilterIds.every(t => spell.tags.includes(t))) return false;
+  if (query.tagFilterIds?.length) {
+    const effective = parentByTagId
+      ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
+      : new Set(spell.tags);
+    if (!query.tagFilterIds.every(t => effective.has(t))) return false;
+  }
   if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) return false;
   if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) return false;
   if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) return false;

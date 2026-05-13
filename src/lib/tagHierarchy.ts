@@ -111,3 +111,54 @@ export const SUBTAG_LABEL_PREFIX = "↳ ";
 export function tagPickerLabel(tag: TagWithHierarchy): string {
   return tag.parentTagId ? `${SUBTAG_LABEL_PREFIX}${tag.name}` : tag.name;
 }
+
+/**
+ * Build a fast `tagId → parentTagId | null` lookup from an array of
+ * tag rows. Used by `expandTagsWithAncestors` and any other code that
+ * needs to walk up the hierarchy.
+ *
+ * Tolerates either snake-case or camel-case rows — pass raw D1 rows
+ * directly without going through `normalizeTagRow`.
+ */
+export function buildTagParentMap(tags: Array<{ id: string; parent_tag_id?: string | null; parentTagId?: string | null }>): Map<string, string | null> {
+  const map = new Map<string, string | null>();
+  for (const tag of tags) {
+    if (!tag?.id) continue;
+    const parent = (tag.parent_tag_id ?? tag.parentTagId ?? null) as string | null;
+    map.set(tag.id, parent);
+  }
+  return map;
+}
+
+/**
+ * Return the input tag ids plus every ANCESTOR (parent / grandparent /
+ * …) reachable via `parentByTagId`. Result is a flat string array with
+ * stable order (input first, ancestors after, deduped).
+ *
+ * This is the canonical "semantic tag set" expansion used by the spell
+ * matcher: a spell tagged with `Conjure.Manifest` semantically IS also
+ * a `Conjure` spell, so queries on the parent tag should pick it up.
+ * Queries on the subtag stay specific (no descendant expansion happens
+ * here — only ancestors).
+ *
+ * Defensive against cycles: tracks a visited set so a malformed parent
+ * chain can't infinite-loop. SQLite's UNIQUE invariant on the new tags
+ * table prevents legitimate cycles, but better safe than wedged.
+ */
+export function expandTagsWithAncestors(
+  tagIds: readonly string[],
+  parentByTagId: Map<string, string | null>,
+): string[] {
+  const out = new Set<string>();
+  for (const tid of tagIds) {
+    if (!tid) continue;
+    let cursor: string | null = tid;
+    const visited = new Set<string>();
+    while (cursor && !visited.has(cursor)) {
+      visited.add(cursor);
+      out.add(cursor);
+      cursor = parentByTagId.get(cursor) ?? null;
+    }
+  }
+  return Array.from(out);
+}

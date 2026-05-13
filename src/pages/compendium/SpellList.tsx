@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Wand2, Lock } from 'lucide-react';
+import { expandTagsWithAncestors } from '../../lib/tagHierarchy';
 import { fetchCollection } from '../../lib/d1';
 import { Database, CloudOff } from 'lucide-react';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
@@ -157,6 +158,18 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     }
     return map;
   }, [allTags]);
+  // Subtag-aware tag filter: a spell tagged `Conjure.Manifest` is
+  // treated as also carrying its ancestor `Conjure`, so a filter
+  // selection on `Conjure` matches the subtag-tagged spell. See
+  // src/lib/tagHierarchy.ts.
+  const parentByTagId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const tag of allTags) {
+      map.set(tag.id, ((tag as any).parent_tag_id ?? (tag as any).parentTagId ?? null) as string | null);
+    }
+    return map;
+  }, [allTags]);
+
   const filteredSpells = useMemo(() => {
     return spells.filter((spell: any) => {
       const sourceRecord = sourceById[String(spell.sourceId ?? '')];
@@ -167,17 +180,22 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         || sourceAbbrev.toLowerCase().includes(search.trim().toLowerCase())
         || String(spell.identifier ?? '').toLowerCase().includes(search.trim().toLowerCase());
 
+      const tagFilterMatches = tagFilterIds.length === 0 || (() => {
+        const effective = new Set(expandTagsWithAncestors(spellTagIds, parentByTagId));
+        return tagFilterIds.every((tagId) => effective.has(tagId));
+      })();
+
       return matchesSearch
         && (sourceFilterIds.length === 0 || sourceFilterIds.includes(String(spell.sourceId ?? '')))
         && (levelFilters.length === 0 || levelFilters.includes(String(Number(spell.level ?? 0))))
         && (schoolFilters.length === 0 || schoolFilters.includes(String(spell.school ?? '')))
-        && (tagFilterIds.length === 0 || tagFilterIds.every((tagId) => spellTagIds.includes(tagId)))
+        && tagFilterMatches
         && (activationFilters.length === 0 || activationFilters.includes(spell.activationBucket))
         && (rangeFilters.length === 0 || rangeFilters.includes(spell.rangeBucket))
         && (durationFilters.length === 0 || durationFilters.includes(spell.durationBucket))
         && (propertyFilters.length === 0 || propertyFilters.every((p) => spell[p]));
     });
-  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, propertyFilters]);
+  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, propertyFilters, parentByTagId]);
 
   useEffect(() => {
     if (!selectedSpellId) return;

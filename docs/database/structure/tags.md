@@ -40,6 +40,24 @@ Tag groups use `classifications` to determine where they appear in the UI. A gro
 
 Tags are 2-level by design: root tag → subtag. The schema doesn't enforce the depth cap because SQLite CHECK constraints can't run subqueries — the editor enforces it by only exposing the "Add Subtag" affordance on tags whose `parent_tag_id` is NULL. If you ever want to deepen the hierarchy, expect to revisit the unique-index expression and the per-group renderer in `TagGroupEditor.tsx`, which assumes exactly 2 levels.
 
+### Hierarchical query matching
+
+Tag matching in spell-rule queries and spell-list filters is **subtag-aware**: a spell tagged with a subtag is treated as also carrying its ancestor tags. So filtering for `Conjure` matches spells tagged with `Conjure`, `Conjure.Manifest`, or `Conjure.Summon`; filtering for `Conjure.Manifest` matches only `Conjure.Manifest` (siblings and the bare root do NOT match).
+
+The expansion is **spell-side**, not query-side — the matcher reads `expandTagsWithAncestors(spell.tags, parentByTagId)` into a Set and checks each query tag for set membership. Equivalent semantically to expanding the query, cheaper because we walk ancestors per spell instead of descendants per query tag.
+
+`expandTagsWithAncestors` and `buildTagParentMap` live in [`src/lib/tagHierarchy.ts`](../../../src/lib/tagHierarchy.ts). The same algorithm is inlined into [`api/_lib/_spellFilters.ts`](../../../api/_lib/_spellFilters.ts) because Vercel bundling can't reliably traverse cross-folder imports — drift contract: keep both copies in sync.
+
+Call sites that pass `parentByTagId` to the matcher today:
+  - `src/lib/spellFilters.ts` (`matchSpellAgainstRule`) — central matcher
+  - `src/lib/classExport.ts` — bake-time `spellRuleAllowlists` resolution
+  - `api/_lib/_classExport.ts` — server bake for module export
+  - `src/hooks/useSpellFilters.ts` — public/admin spell-list filter
+  - `src/pages/compendium/SpellList.tsx` — public browse filter (uses its own inline filter loop)
+  - `src/pages/compendium/SpellListManager.tsx` — per-class spell-list filter
+
+Module-side `requirements-walker.js` does NOT need an explicit hierarchy walk because allowlists are baked server-side and already include subtag-derived matches.
+
 ### Migration traps — read before authoring another `tags` migration
 
 1. **D1 forbids `BEGIN TRANSACTION` / `COMMIT` / `PRAGMA` in user SQL.** wrangler errors out with the `state.storage.transaction()` message. D1 wraps the file atomically on its side; write plain DDL only. (See the header of `20260512-1418_tags_parent_aware_unique.sql`.)

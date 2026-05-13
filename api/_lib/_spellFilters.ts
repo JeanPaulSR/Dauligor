@@ -107,11 +107,53 @@ export type SpellMatchInput = SpellFilterFacets & {
   tags: string[];
 };
 
-export function matchSpellAgainstRule(spell: SpellMatchInput, query: RuleQuery): boolean {
+// Server-side mirror of `expandTagsWithAncestors` from
+// `src/lib/tagHierarchy.ts`. Inlined here because Vercel bundling
+// cannot reliably traverse cross-folder imports from `api/` into
+// `src/lib/` — see docs/operations/deployment.md ("Vercel cross-folder
+// bundling caveat"). DRIFT WARNING: if you change the algorithm in
+// src/lib/tagHierarchy.ts, update this copy in the same commit.
+function expandTagsWithAncestors(
+  tagIds: readonly string[],
+  parentByTagId: Map<string, string | null>,
+): string[] {
+  const out = new Set<string>();
+  for (const tid of tagIds) {
+    if (!tid) continue;
+    let cursor: string | null = tid;
+    const visited = new Set<string>();
+    while (cursor && !visited.has(cursor)) {
+      visited.add(cursor);
+      out.add(cursor);
+      cursor = parentByTagId.get(cursor) ?? null;
+    }
+  }
+  return Array.from(out);
+}
+
+/**
+ * Tag matching is HIERARCHICAL when `parentByTagId` is supplied: a
+ * spell tagged with `Conjure.Manifest` is treated as also carrying
+ * its ancestor tags, so a rule for `Conjure` matches it. Rules stay
+ * specific in the OTHER direction: a rule for `Conjure.Manifest` does
+ * NOT match a spell tagged only with `Conjure` or with the sibling
+ * `Conjure.Summon`. Callers without the map fall back to flat
+ * `.includes()` for back-compat.
+ */
+export function matchSpellAgainstRule(
+  spell: SpellMatchInput,
+  query: RuleQuery,
+  parentByTagId?: Map<string, string | null>,
+): boolean {
   if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) return false;
   if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) return false;
   if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) return false;
-  if (query.tagFilterIds?.length && !query.tagFilterIds.every(t => spell.tags.includes(t))) return false;
+  if (query.tagFilterIds?.length) {
+    const effective = parentByTagId
+      ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
+      : new Set(spell.tags);
+    if (!query.tagFilterIds.every(t => effective.has(t))) return false;
+  }
   if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) return false;
   if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) return false;
   if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) return false;
