@@ -104,18 +104,20 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
       .then(([spellData, memberships]) => {
         if (!active) return;
         if (spellData) {
+          // `foundry_data` is auto-parsed by d1.ts now (jsonFields list),
+          // but tolerate the string case for cache coherence with older
+          // sessions. Both `foundryShell` and `foundryDocument.system`
+          // are aliases for the same parsed JSON — the system block.
+          const parsedFoundryData = typeof spellData.foundry_data === 'string'
+            ? (() => { try { return JSON.parse(spellData.foundry_data); } catch { return null; } })()
+            : (spellData.foundry_data ?? null);
           const mapped: SpellRecord = {
             ...spellData,
             sourceId: spellData.source_id,
             imageUrl: spellData.image_url,
             tagIds: typeof spellData.tags === 'string' ? safeJsonArray(spellData.tags) : (spellData.tags ?? []),
-            foundryDocument: typeof spellData.foundry_data === 'string'
-              ? { system: JSON.parse(spellData.foundry_data) }
-              : { system: null },
-            foundryShell: typeof spellData.foundry_data === 'string'
-              ? JSON.parse(spellData.foundry_data)
-              : (spellData.foundry_data ?? null),
-            foundryImport: spellData.foundry_import,
+            foundryDocument: { system: parsedFoundryData },
+            foundryShell: parsedFoundryData,
             requiredTags: typeof spellData.required_tags === 'string'
               ? safeJsonArray(spellData.required_tags).map(String)
               : (Array.isArray(spellData.required_tags) ? spellData.required_tags.map(String) : []),
@@ -158,7 +160,7 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
     const sourceRecord = sourceById[String(s.sourceId ?? '')];
     return sourceRecord?.abbreviation
       || sourceRecord?.shortName
-      || s.foundryImport?.sourceBook
+      || (s as any).foundryShell?.source?.book
       || '—';
   };
 
@@ -188,8 +190,8 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
                 {spell.name}
               </h2>
               <span className="text-sm font-bold text-gold/70">{renderSourceAbbreviation(spell)}</span>
-              {spell.foundryImport?.sourcePage ? (
-                <span className="text-sm text-ink/35">p{spell.foundryImport.sourcePage}</span>
+              {(spell.page || (spell as any).foundryShell?.source?.page) ? (
+                <span className="text-sm text-ink/35">p{spell.page || (spell as any).foundryShell?.source?.page}</span>
               ) : null}
             </div>
             <p className="font-serif italic text-ink/70">
@@ -242,8 +244,12 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
           <div>
             <span className="font-bold text-ink">Source:</span>{' '}
             {renderSourceAbbreviation(spell)}
-            {spell.foundryImport?.sourcePage ? `, page ${spell.foundryImport.sourcePage}` : ''}
-            {spell.foundryImport?.rules ? ` (${spell.foundryImport.rules})` : ''}
+            {(spell.page || (spell as any).foundryShell?.source?.page)
+              ? `, page ${spell.page || (spell as any).foundryShell?.source?.page}`
+              : ''}
+            {(spell as any).foundryShell?.source?.rules
+              ? ` (${(spell as any).foundryShell.source.rules})`
+              : ''}
           </div>
           {memberships ? (
             memberships.length === 0 ? (

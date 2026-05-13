@@ -299,11 +299,36 @@ function buildSavePayload(entry: FoundrySpellFolderExport, spell: FoundrySpellEx
   const system = sourceDocument.system ?? {};
   const properties = Array.from(system.properties ?? []).map((value) => String(value));
   const materials = system.materials ?? {};
-  const effects = Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [];
   const method = String(system.method ?? 'spell').trim() || 'spell';
   const identifier = slugify(spell.name || sourceDocument.name || 'spell');
-  const sourceBook = String(spell.source?.book ?? system.source?.book ?? '').trim();
-  const rules = String(spell.source?.rules ?? system.source?.rules ?? '').trim();
+
+  // Build the Foundry system payload we persist on the spells row.
+  // Convention (consistent with SpellsEditor's manual save and every
+  // consumer that reads `foundry_data`): store the SYSTEM BLOCK at the
+  // root of the column, not the wrapping item document. So
+  // `foundry_data.description.value` is the original Foundry HTML,
+  // `foundry_data.activation` is the activation shell, etc.
+  //
+  // We also stash a `_dauligorImport` sub-object for round-trip
+  // bookkeeping (when this row came in, from which folder, what the
+  // foundry item id was). Lives under the system block so it round-
+  // trips with the same column and doesn't need a separate D1 column.
+  // Consumers that don't care about it just ignore the extra key —
+  // Foundry doesn't either, because we never push the `_dauligor`
+  // namespace back out on export.
+  const foundrySystem: any = {
+    ...system,
+    _dauligorImport: {
+      kind: entry.kind,
+      exportedAt: entry.exportedAt || '',
+      moduleId: entry.moduleId || '',
+      folderPath: String(spell.folderPath ?? ''),
+      relativeFolderPath: String(spell.relativeFolderPath ?? ''),
+      foundryItemId: spell.id,
+      foundryUuid: spell.uuid || '',
+      sourceResolved: Boolean(matchedSource),
+    },
+  };
 
   return {
     name: spell.name || sourceDocument.name || 'Spell',
@@ -312,21 +337,18 @@ function buildSavePayload(entry: FoundrySpellFolderExport, spell: FoundrySpellEx
     imageUrl: resolveFoundryImageUrl(sourceDocument.img || ''),
     description: convertFoundrySpellHtmlToBbcode(String(system.description?.value ?? '')),
     activities: Object.values(system.activities ?? {}),
-    effectsStr: JSON.stringify(effects, null, 2),
-    foundryImport: {
-      kind: entry.kind,
-      exportedAt: entry.exportedAt || '',
-      moduleId: entry.moduleId || '',
-      folderPath: String(spell.folderPath ?? ''),
-      relativeFolderPath: String(spell.relativeFolderPath ?? ''),
-      sourceBook,
-      sourcePage: String(spell.source?.page ?? ''),
-      rules,
-      foundryItemId: spell.id,
-      foundryUuid: spell.uuid || '',
-      sourceResolved: Boolean(matchedSource)
-    },
-    foundryDocument: sourceDocument,
+    effects: Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [],
+    // The actual snake_case D1 column. Previously this was written as
+    // `foundryDocument` which doesn't exist on the spells table —
+    // SQLite would error on the unknown column and the field silently
+    // never persisted. Combined with `foundry_data`'s schema default
+    // of `'{}'` that's why every imported row showed up with empty
+    // foundry data and the backfill found nothing to refresh.
+    foundry_data: foundrySystem,
+    // `page` lives as a top-level column on the spells row; populating
+    // it here lets the detail panel show the page reference even when
+    // the source pub-metadata block is missing.
+    page: String(spell.source?.page ?? system.source?.page ?? ''),
     level: Number(system.level ?? 0),
     school: String(system.school ?? 'evo'),
     preparationMode: method,
@@ -339,24 +361,6 @@ function buildSavePayload(entry: FoundrySpellFolderExport, spell: FoundrySpellEx
       materialText: String(materials.value ?? ''),
       consumed: Boolean(materials.consumed),
       cost: materials.cost ? String(materials.cost) : ''
-    },
-    foundryShell: {
-      ability: String(system.ability ?? ''),
-      method,
-      prepared: Number(system.prepared ?? 0),
-      sourceItem: String(system.sourceItem ?? ''),
-      activation: system.activation ?? {},
-      range: system.range ?? {},
-      target: system.target ?? {},
-      duration: system.duration ?? {},
-      materials: {
-        value: String(materials.value ?? ''),
-        consumed: Boolean(materials.consumed),
-        cost: Number(materials.cost ?? 0),
-        supply: Number(materials.supply ?? 0)
-      },
-      properties,
-      uses: system.uses ?? {}
     },
     sourceType: 'spell',
     type: 'spell',
@@ -455,21 +459,21 @@ export async function backfillSpellDescriptionsFromFoundry(options: { onProgress
     const row = rows[i];
     options.onProgress?.(i, rows.length);
     try {
-      // `foundry_data` is NOT in d1.ts's jsonFields auto-parse list, so
-      // fetchCollection returns it as a JSON string. Parse on demand here.
-      // The other two aliases are camelCase remaps that downstream code
-      // sometimes emits; tolerate either to avoid coupling backfill to
-      // a single read path.
-      const rawFoundry = row.foundry_data ?? row.foundryData ?? row.foundryDocument;
+      // `foundry_data` is auto-parsed by d1.ts's jsonFields, but we
+      // tolerate the string shape too in case the cached payload is
+      // older than the parser update. Convention (set by the importer
+      // and by SpellsEditor's manual save): the column holds the
+      // Foundry SYSTEM BLOCK at the root, so the description HTML
+      // lives at `foundry_data.description.value`. The fallback
+      // `.system.description.value` catches legacy rows that may
+      // have stored the full item document instead.
+      const rawFoundry = row.foundry_data ?? row.foundryData;
       const foundry: any = typeof rawFoundry === 'string'
         ? (() => { try { return JSON.parse(rawFoundry); } catch { return null; } })()
         : rawFoundry;
-      // The Foundry payload's description lives at `system.description.value`
-      // when we stored the full item document, OR at `description.value`
-      // when we stored just the system block. Tolerate both shapes.
       const rawHtml = String(
-        foundry?.system?.description?.value
-        ?? foundry?.description?.value
+        foundry?.description?.value
+        ?? foundry?.system?.description?.value
         ?? ''
       ).trim();
       if (!rawHtml) { skipped++; continue; }

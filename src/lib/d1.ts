@@ -175,9 +175,9 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
 
       // Auto-parse JSON fields
       const jsonFields = [
-        'proficiencies', 'spellcasting', 'activities', 'effects', 'tags', 'class_ids', 'class_levels', 'progression', 
+        'proficiencies', 'spellcasting', 'activities', 'effects', 'tags', 'class_ids', 'class_levels', 'progression',
         'selections', 'inventory', 'spells', 'meta_data', 'classifications',
-        'values', 'levels', 'option_ids', 'fixed_ids', 'category_ids', 
+        'values', 'levels', 'option_ids', 'fixed_ids', 'category_ids',
         'optionIds', 'fixedIds', 'categoryIds', 'prerequisites_items',
         'tag_ids', 'tagIds', 'properties', 'advancements', 'uses_recovery',
         'requires_option_ids', 'requiresOptionIds',
@@ -190,6 +190,13 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // StatusesEditor read path leaves them as raw JSON strings
         // and call sites like `item.implied_ids.join(', ')` blow up.
         'implied_ids', 'impliedStatuses', 'changes',
+        // spells.foundry_data — JSON column storing the Foundry system
+        // block (activation, range, duration, target, materials, uses,
+        // description.value, plus the `_dauligorImport` round-trip
+        // bookkeeping). Without auto-parse, every consumer had to
+        // hand-parse — and the backfill missed every row because it
+        // dereferenced `.system.description.value` on a raw JSON string.
+        'foundry_data', 'foundryData',
       ];
       const parsedResults = (data.results || []).map((row: any) => {
         const parsed: any = { ...row };

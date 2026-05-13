@@ -184,7 +184,16 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const filteredSpells = useMemo(() => {
     return spells.filter((spell: any) => {
       const sourceRecord = sourceById[String(spell.sourceId ?? '')];
-      const sourceAbbrev = String(sourceRecord?.abbreviation || sourceRecord?.shortName || spell.foundryImport?.sourceBook || '').trim();
+      // Source abbreviation falls back to the Foundry-native publication
+      // metadata in the system block (`system.source.book`) when no
+      // Dauligor source row matches. `foundryShell` is the parsed
+      // foundry_data column (see mapped row above).
+      const sourceAbbrev = String(
+        sourceRecord?.abbreviation
+        || sourceRecord?.shortName
+        || spell.foundryShell?.source?.book
+        || ''
+      ).trim();
       const spellTagIds = Array.isArray(spell.tagIds) ? spell.tagIds : [];
       const matchesSearch = !search.trim()
         || String(spell.name ?? '').toLowerCase().includes(search.trim().toLowerCase())
@@ -251,7 +260,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     const sourceRecord = sourceById[String(spell.sourceId ?? '')];
     return sourceRecord?.abbreviation
       || sourceRecord?.shortName
-      || spell.foundryImport?.sourceBook
+      || (spell as any).foundryShell?.source?.book
       || '—';
   };
 
