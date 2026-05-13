@@ -13,7 +13,7 @@ import { orderTagsAsTree, normalizeTagRow } from '../../lib/tagHierarchy';
 import { slugify } from '../../lib/utils';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { Database, CloudOff } from 'lucide-react';
-import { SCHOOL_LABELS } from '../../lib/spellImport';
+import { SCHOOL_LABELS, backfillSpellDescriptionsFromFoundry } from '../../lib/spellImport';
 import { parseFoundrySystem as parseFoundrySystemForEditor } from '../../lib/spellFilters';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -216,15 +216,56 @@ function mergeSpellComponents(
 }
 
 export default function SpellsEditor({ userProfile }: { userProfile: any }) {
+  const isAdmin = userProfile?.role === 'admin';
+  const [backfilling, setBackfilling] = useState(false);
+
+  const handleBackfillDescriptions = async () => {
+    if (!confirm(
+      'This will regenerate the BBCode description of every spell from its ' +
+      'preserved Foundry HTML payload (foundry_data.system.description.value). ' +
+      'Existing descriptions will be overwritten. Spells without a Foundry ' +
+      'payload are skipped. Continue?'
+    )) return;
+    setBackfilling(true);
+    try {
+      const result = await backfillSpellDescriptionsFromFoundry();
+      toast.success(
+        `Backfilled ${result.updated} of ${result.scanned} spells ` +
+        `(${result.skipped} unchanged${result.errors.length ? `, ${result.errors.length} errors` : ''})`
+      );
+      if (result.errors.length) {
+        // eslint-disable-next-line no-console
+        console.warn('Backfill errors:', result.errors);
+      }
+    } catch (err: any) {
+      toast.error(`Backfill failed: ${err?.message ?? err}`);
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 justify-between">
         <Link to="/compendium/spells">
           <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
             Back To Spells
           </Button>
         </Link>
+        {isAdmin && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleBackfillDescriptions}
+            disabled={backfilling}
+            className="border-gold/30 text-gold/80 hover:bg-gold/5 hover:text-gold text-xs uppercase tracking-widest"
+          >
+            <Wand2 className="w-3.5 h-3.5 mr-1.5" />
+            {backfilling ? 'Backfilling…' : 'Backfill Descriptions from Foundry HTML'}
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="foundry-import" className="space-y-6">

@@ -239,7 +239,24 @@ export function htmlToBbcode(html: string): string {
   // Clean up p tags and other common HTML wrappers from TipTap
   // Convert paragraphs to double newlines for Source mode readability
   bbcode = bbcode.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1\n\n');
-  
+
+  // Strip remaining wrapper tags. Foundry (and TipTap, and any rich-text
+  // source) often wraps content in `<span>`, naked `<div>`, `<section>`,
+  // `<article>`, etc. — wrappers whose semantics we've already captured
+  // via the styled-alignment / class-driven matchers above. Their class
+  // and data-* attrs are stripped upstream by sanitizers (see
+  // `sanitizeFoundrySpellHtmlForStorage` in lib/spellImport.ts), so what
+  // lands here is naked `<span>…</span>`. Leaving them in the bbcode
+  // would be catastrophic: `bbcodeToHtml` HTML-escapes `<` before tag
+  // matching (XSS guard), so any stray HTML renders as literal text on
+  // the page — that's the "spells show their HTML" bug. We keep the
+  // inner content and only drop the tag.
+  bbcode = bbcode.replace(/<\/?(?:span|div|section|article|figure|figcaption|header|footer|main|aside|nav)[^>]*>/gi, '');
+  // Orphaned `<a>` tags without href (e.g. Foundry's content links once
+  // their data-* / class= attrs are sanitized away) — drop the tag, keep
+  // the visible text. Real `<a href=...>` links were converted above.
+  bbcode = bbcode.replace(/<a(?![^>]*\shref=)[^>]*>([\s\S]*?)<\/a>/gi, '$1');
+
   // Final cleanup of multiple newlines
   bbcode = bbcode.replace(/\n\n\n+/g, '\n\n');
   bbcode = bbcode.replace(/^\n+/, '');

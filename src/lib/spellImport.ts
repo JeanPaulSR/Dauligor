@@ -1,5 +1,6 @@
 import { slugify } from './utils';
 import { htmlToBbcode } from './bbcode';
+import { fetchCollection, updateDocument } from './d1';
 
 const IMAGE_CDN_BASE = 'https://images.dauligor.com';
 
@@ -424,4 +425,41 @@ export function buildSpellImportCandidates(
       savePayload
     };
   });
+}
+
+/**
+ * One-shot backfill: regenerate `spells.description` (BBCode) from each
+ * spell's preserved `foundry_data.system.description.value` (the original
+ * Foundry HTML, kept on every import for round-trip). Re-runs the same
+ * htmlToBbcode pipeline imports use, so the result is whatever the current
+ * conversion produces — meaning this is also the fix path whenever the
+ * conversion gains a new handler (e.g. the recent <span>/<div> wrapper
+ * strip). Idempotent. Skips rows without a foundry_data payload.
+ *
+ * Returns { scanned, updated, skipped, errors } counts so the admin button
+ * can surface a summary toast.
+ */
+export async function backfillSpellDescriptionsFromFoundry(options: { onProgress?: (done: number, total: number) => void } = {}) {
+  const rows = await fetchCollection<any>('spells');
+  let updated = 0;
+  let skipped = 0;
+  const errors: { id: string; error: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    options.onProgress?.(i, rows.length);
+    try {
+      const foundry = row.foundry_data ?? row.foundryData ?? row.foundryDocument;
+      const rawHtml = String(foundry?.system?.description?.value ?? '').trim();
+      if (!rawHtml) { skipped++; continue; }
+      const nextDescription = convertFoundrySpellHtmlToBbcode(rawHtml);
+      if (nextDescription === String(row.description ?? '')) { skipped++; continue; }
+      await updateDocument('spells', row.id, { description: nextDescription });
+      updated++;
+    } catch (err: any) {
+      errors.push({ id: String(row.id ?? ''), error: String(err?.message ?? err) });
+    }
+  }
+  options.onProgress?.(rows.length, rows.length);
+  return { scanned: rows.length, updated, skipped, errors };
 }
