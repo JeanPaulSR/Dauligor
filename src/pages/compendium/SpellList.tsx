@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Wand2, Lock } from 'lucide-react';
 import { expandTagsWithAncestors } from '../../lib/tagHierarchy';
 import { fetchCollection } from '../../lib/d1';
@@ -90,6 +90,13 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [loadingSpells, setLoadingSpells] = useState(true);
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
+  // `?focus=<id>` deep-links to a specific spell — used by [ref|spell|<id>]
+  // BBCode cross-references rendered elsewhere in the app. We read the
+  // param once on mount and seed selection from it. Identifier-based
+  // (slug) matching takes priority over raw ID; falls back to ID for
+  // legacy/migration cases where the param is the row UUID.
+  const [searchParams] = useSearchParams();
+  const focusParam = searchParams.get('focus') || '';
   const [selectedSpellId, setSelectedSpellId] = useState('');
   const [sourceFilterIds, setSourceFilterIds] = useState<string[]>([]);
   const [levelFilters, setLevelFilters] = useState<string[]>([]);
@@ -208,6 +215,22 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       setSelectedSpellId('');
     }
   }, [filteredSpells, selectedSpellId]);
+
+  // Resolve `?focus=<id-or-identifier>` once spells have loaded.
+  // BBCode `[ref|spell|<id>]` cross-references land here — `<id>` is
+  // typically the slug-style `identifier` column (e.g. "fire-bolt") so
+  // we try that first, then fall back to row UUID for completeness.
+  // Runs once per focusParam change; `selectedSpellId` is intentionally
+  // not in the deps so we don't fight user clicks after the deep-link
+  // takes effect.
+  useEffect(() => {
+    if (!focusParam || loadingSpells) return;
+    const target = spells.find(
+      (s) => s.identifier === focusParam || s.id === focusParam
+    );
+    if (target) setSelectedSpellId(target.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusParam, loadingSpells, spells]);
 
   const activeFilterCount =
     sourceFilterIds.length
