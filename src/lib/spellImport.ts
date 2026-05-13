@@ -455,8 +455,23 @@ export async function backfillSpellDescriptionsFromFoundry(options: { onProgress
     const row = rows[i];
     options.onProgress?.(i, rows.length);
     try {
-      const foundry = row.foundry_data ?? row.foundryData ?? row.foundryDocument;
-      const rawHtml = String(foundry?.system?.description?.value ?? '').trim();
+      // `foundry_data` is NOT in d1.ts's jsonFields auto-parse list, so
+      // fetchCollection returns it as a JSON string. Parse on demand here.
+      // The other two aliases are camelCase remaps that downstream code
+      // sometimes emits; tolerate either to avoid coupling backfill to
+      // a single read path.
+      const rawFoundry = row.foundry_data ?? row.foundryData ?? row.foundryDocument;
+      const foundry: any = typeof rawFoundry === 'string'
+        ? (() => { try { return JSON.parse(rawFoundry); } catch { return null; } })()
+        : rawFoundry;
+      // The Foundry payload's description lives at `system.description.value`
+      // when we stored the full item document, OR at `description.value`
+      // when we stored just the system block. Tolerate both shapes.
+      const rawHtml = String(
+        foundry?.system?.description?.value
+        ?? foundry?.description?.value
+        ?? ''
+      ).trim();
       if (!rawHtml) { skipped++; continue; }
       const nextDescription = convertFoundrySpellHtmlToBbcode(rawHtml);
       if (nextDescription === String(row.description ?? '')) { skipped++; continue; }
