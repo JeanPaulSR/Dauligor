@@ -1484,30 +1484,79 @@ function SpellTagPicker({ tags, tagGroups, selectedIds, onChange, hint, emptyHin
                   </span>
                 </span>
               </button>
-              {isOpen && (
-                <div className="px-3 pb-2.5 pt-1 flex flex-wrap gap-1.5">
-                  {visibleTags.map(tag => {
-                    const active = selectedIds.includes(tag.id);
-                    const isSubtag = !!tag.parentTagId;
-                    return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => toggleTag(tag.id)}
-                        className={cn(
-                          'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
-                          active
-                            ? 'border-gold/60 bg-gold/15 text-gold'
-                            : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
-                        )}
-                      >
-                        {isSubtag && <span className="opacity-60 mr-1">↳</span>}
-                        {tag.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              {isOpen && (() => {
+                // Two-level tree render: each root gets its own row;
+                // its subtags (if any) get an indented row below. The
+                // earlier flat layout with `↳` glyphs in front of each
+                // subtag made for compact rows but hard scanning, since
+                // a parent and its subtags interleaved with the next
+                // parent on the same line. Stacking by parent is taller
+                // but reads as a tree at a glance.
+                //
+                // `visibleTags` is already ordered roots-first-then-
+                // children by orderTagsAsTree, and the filter logic
+                // upstream keeps parents in the visible set when a
+                // subtag matches. So a visible subtag whose parent
+                // ALSO isn't in `visibleTags` is rare (synthetic data
+                // / orphaned hierarchy); we surface those at the
+                // bottom as an "ungrouped" sub-row so they don't
+                // disappear.
+                const visibleRoots = visibleTags.filter(t => !t.parentTagId);
+                const subtagsByParentId = new Map<string, typeof visibleTags>();
+                const visibleRootIds = new Set(visibleRoots.map(r => r.id));
+                const orphans: typeof visibleTags = [];
+                for (const tag of visibleTags) {
+                  if (!tag.parentTagId) continue;
+                  if (!visibleRootIds.has(tag.parentTagId)) {
+                    orphans.push(tag);
+                    continue;
+                  }
+                  if (!subtagsByParentId.has(tag.parentTagId)) subtagsByParentId.set(tag.parentTagId, []);
+                  subtagsByParentId.get(tag.parentTagId)!.push(tag);
+                }
+
+                const renderChip = (tag: typeof visibleTags[number]) => {
+                  const active = selectedIds.includes(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => toggleTag(tag.id)}
+                      className={cn(
+                        'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
+                        active
+                          ? 'border-gold/60 bg-gold/15 text-gold'
+                          : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
+                      )}
+                    >
+                      {tag.name}
+                    </button>
+                  );
+                };
+
+                return (
+                  <div className="px-3 pb-2.5 pt-1 space-y-1.5">
+                    {visibleRoots.map(root => {
+                      const subs = subtagsByParentId.get(root.id) ?? [];
+                      return (
+                        <div key={root.id} className="space-y-1">
+                          <div className="flex flex-wrap gap-1.5">{renderChip(root)}</div>
+                          {subs.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pl-5 border-l border-gold/10 ml-1">
+                              {subs.map(renderChip)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {orphans.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pl-5 border-l border-amber-500/20 ml-1">
+                        {orphans.map(renderChip)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
