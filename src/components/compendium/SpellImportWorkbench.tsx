@@ -457,6 +457,8 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                           onChange={(event) => setSearch(event.target.value)}
                           placeholder="Search spell name, source, or identifier"
                           className="bg-background/50 border-gold/10 pl-9 focus:border-gold"
+                          autoComplete="off"
+                          spellCheck={false}
                         />
                       </div>
                     </div>
@@ -484,6 +486,8 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                             onChange={(event) => setTagSearch(event.target.value)}
                             placeholder="Search tags"
                             className="bg-background/50 border-gold/10 pl-9 focus:border-gold"
+                            autoComplete="off"
+                            spellCheck={false}
                           />
                         </div>
                         <div className="max-h-80 space-y-4 overflow-y-auto pr-1">

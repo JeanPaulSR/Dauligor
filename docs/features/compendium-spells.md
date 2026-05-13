@@ -103,9 +103,21 @@ Form is split across **inner tabs** for focus instead of one long scroll:
 |---|---|
 | **Basics** | Icon, name, identifier, source, level, school, preparation mode |
 | **Description** | MarkdownEditor (kept its own tab — it's the long one) |
-| **Mechanics** | Casting time, range, duration, ritual, concentration, V/S/M components, material text/cost/consumed |
+| **Mechanics** | Sub-tabbed (Casting / Targeting / Uses) — see below |
 | **Activities** | `ActivityEditor` + raw effects JSON textarea |
 | **Tags & Prereqs** | `SpellTagPicker` for descriptive tags AND a second instance for `required_tags`; per-tag-group collapsible sections, parent-row + indented-subtag-row layout |
+
+### Mechanics sub-tabs
+
+Mirrors Foundry's Details-tab field grouping. Sub-tabs are nested `Radix Tabs` — same controlled-form pattern as Tags & Prereqs, so switching sub-tabs doesn't drop unsaved values (state lives in `formData`).
+
+| Sub-tab | Holds | Lands at (on `system.*`) |
+|---|---|---|
+| **Casting** | Activation (type + value + reaction condition), Ritual, Concentration, Components (V/S/M + material text/cost/consumed) | `activation.*`, `properties[ritual,concentration,vocal,somatic,material]`, `materials.*` |
+| **Targeting** | Range (units + value + **long** + special), Duration (units + value), Target Template (type + size/width/height/units), Target Affects (type + count + chooses + special) | `range.{value,long,units,special}`, `duration.*`, `target.template.*`, `target.affects.*` |
+| **Uses** | Max formula, full Recovery editor (period + type + formula rows, add/remove) — same UI as FeatsEditor and ActivityEditor's ConsumptionTab | `uses.max`, `uses.recovery[]` |
+
+`range.long` is a second range value used by ranged-attack-style spells (Firebolt, Eldritch Blast); most spells leave it blank.
 
 Save / Delete / Reset live in the Card header above the TabsList, so the action bar is one click away regardless of which tab is showing. Form state is fully controlled (every input is bound to `formData`), so `Radix Tabs` unmounting inactive tab content does NOT lose unsaved values on tab switch.
 

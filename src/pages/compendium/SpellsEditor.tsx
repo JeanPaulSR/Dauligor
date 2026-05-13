@@ -24,6 +24,11 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import VirtualizedList from '../../components/ui/VirtualizedList';
+import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
+import {
+  RECOVERY_PERIOD_OPTIONS,
+  RECOVERY_TYPE_OPTIONS,
+} from '../../components/compendium/activity/constants';
 import type { SpellSummaryRecord } from '../../lib/spellSummary';
 
 const SPELL_SCHOOLS = [
@@ -78,7 +83,10 @@ type SpellFormData = {
   // Foundry system shape — carry these on the form so they can be authored manually,
   // not just inherited from a Foundry import. On save they are merged into foundry_data.
   activation: { type: string; value: number | string; condition: string };
-  range: { value: number | string; units: string; special: string };
+  // `long` is dnd5e's second range value, used by attack-style spells with
+  // a normal + long increment (Eldritch Blast, Firebolt-like ranged attacks).
+  // Most spells leave it blank; on export it lands at `system.range.long`.
+  range: { value: number | string; long: number | string; units: string; special: string };
   duration: { value: number | string; units: string };
   // dnd5e 5.x splits target into `template` (AoE shape) + `affects`
   // (who/what is targeted). Both are optional — touch spells leave
@@ -160,7 +168,7 @@ const SPELL_DEFAULTS: Omit<SpellFormData, 'sourceId'> & { sourceId?: string } = 
     cost: ''
   },
   activation: { type: 'action', value: 1, condition: '' },
-  range: { value: 0, units: 'self', special: '' },
+  range: { value: 0, long: '', units: 'self', special: '' },
   duration: { value: 0, units: 'inst' },
   target: {
     template: { type: '', size: '', width: '', height: '', units: 'ft' },
@@ -390,6 +398,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         },
         range: {
           value: system?.range?.value ?? defaults.range.value,
+          long: system?.range?.long ?? '',
           units: String(system?.range?.units ?? defaults.range.units),
           special: String(system?.range?.special ?? ''),
         },
@@ -664,6 +673,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search spell name, source, or identifier"
                     className="bg-background/50 border-gold/10 pl-9 focus:border-gold"
+                    autoComplete="off"
+                    spellCheck={false}
                   />
                 </div>
               </div>
@@ -799,7 +810,23 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                 </div>
 
                 <div className="max-h-[78vh] overflow-y-auto custom-scrollbar px-6 py-5">
-                  <form id="spell-manual-editor-form" onSubmit={handleSave} className="space-y-6">
+                  {/* `autoComplete="off"` blocks browser autofill on the
+                    * form's text inputs; `spellCheck={false}` cascades to
+                    * every contained input so spell names and identifiers
+                    * don't get red-squiggle-underlined. `data-1p-ignore`
+                    * and `data-lpignore` ask 1Password / LastPass to skip
+                    * the form. Foundry-shape values (identifiers, formulas
+                    * like `@prof`, range values) are not natural language
+                    * and should never be autocorrected. */}
+                  <form
+                    id="spell-manual-editor-form"
+                    onSubmit={handleSave}
+                    className="space-y-6"
+                    autoComplete="off"
+                    spellCheck={false}
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                  >
                   <TabsContent value="basics" className="mt-0 space-y-6">
                     <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
                       <ImageUpload
@@ -897,161 +924,141 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     />
                   </TabsContent>
 
-                  <TabsContent value="mechanics" className="mt-0 space-y-6">
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Casting · Range · Duration</h3>
-                      <div className="grid gap-4 lg:grid-cols-3">
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Casting Time</Label>
-                          <div className="grid grid-cols-[1fr_70px] gap-2">
-                            <select
-                              value={formData.activation.type || 'action'}
-                              onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, type: e.target.value } }))}
-                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                            >
-                              {ACTIVATION_TYPES.map(([value, label]) => (
-                                <option key={value} value={value}>{label}</option>
-                              ))}
-                            </select>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={String(formData.activation.value ?? '')}
-                              onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
-                              className="h-9 bg-background/50 border-gold/10 focus:border-gold"
-                            />
-                          </div>
-                          <Input
-                            value={formData.activation.condition || ''}
-                            onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, condition: e.target.value } }))}
-                            placeholder="Reaction trigger (optional)"
-                            className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
-                          />
-                        </div>
+                  <TabsContent value="mechanics" className="mt-0 space-y-4">
+                    {/* Sub-tabs mirror Foundry's Details-tab field grouping
+                      * (Casting / Targeting / Uses) and break the previously
+                      * cramped single scroll into focused panels. Same
+                      * Radix-Tabs pattern as the Tags & Prereqs tab — form
+                      * state is fully controlled in `formData`, so Radix
+                      * unmounting inactive sub-tabs does NOT discard
+                      * unsaved values when you switch sub-tabs. */}
+                    <Tabs defaultValue="casting" className="space-y-4">
+                      <TabsList variant="line" className="gap-2 bg-transparent p-0">
+                        <TabsTrigger value="casting" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
+                          Casting
+                        </TabsTrigger>
+                        <TabsTrigger value="targeting" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
+                          Targeting
+                        </TabsTrigger>
+                        <TabsTrigger value="uses" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
+                          Uses {formData.uses.recovery.length > 0 && <span className="ml-1 text-gold/70">({formData.uses.recovery.length})</span>}
+                        </TabsTrigger>
+                      </TabsList>
 
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Range</Label>
-                          <div className="grid grid-cols-[1fr_70px] gap-2">
-                            <select
-                              value={formData.range.units || 'self'}
-                              onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, units: e.target.value } }))}
-                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                            >
-                              {RANGE_UNITS.map(([value, label]) => (
-                                <option key={value} value={value}>{label}</option>
-                              ))}
-                            </select>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={String(formData.range.value ?? '')}
-                              onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
-                              disabled={formData.range.units === 'self' || formData.range.units === 'touch'}
-                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50"
-                            />
+                      <TabsContent value="casting" className="mt-0 space-y-4">
+                        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Casting Time</h3>
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Activation</Label>
+                              <div className="grid grid-cols-[1fr_80px] gap-2">
+                                <select
+                                  value={formData.activation.type || 'action'}
+                                  onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, type: e.target.value } }))}
+                                  className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                                >
+                                  {ACTIVATION_TYPES.map(([value, label]) => (
+                                    <option key={value} value={value}>{label}</option>
+                                  ))}
+                                </select>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={String(formData.activation.value ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Reaction Trigger</Label>
+                              <Input
+                                value={formData.activation.condition || ''}
+                                onChange={e => setFormData(prev => ({ ...prev, activation: { ...prev.activation, condition: e.target.value } }))}
+                                placeholder="e.g. when you take damage (optional)"
+                                className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                              />
+                            </div>
                           </div>
-                          <Input
-                            value={formData.range.special || ''}
-                            onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, special: e.target.value } }))}
-                            placeholder='e.g. "Sight" (optional)'
-                            className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Duration</Label>
-                          <div className="grid grid-cols-[1fr_70px] gap-2">
-                            <select
-                              value={formData.duration.units || 'inst'}
-                              onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, units: e.target.value } }))}
-                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                            >
-                              {DURATION_UNITS.map(([value, label]) => (
-                                <option key={value} value={value}>{label}</option>
-                              ))}
-                            </select>
-                            <Input
-                              type="number"
-                              min={0}
-                              value={String(formData.duration.value ?? '')}
-                              onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
-                              disabled={formData.duration.units === 'inst' || formData.duration.units === 'perm' || formData.duration.units === 'spec'}
-                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Foundry Spell Shell</h3>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                          <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Ritual</span>
-                          <Checkbox
-                            checked={!!formData.ritual}
-                            onCheckedChange={checked => setFormData(prev => ({ ...prev, ritual: !!checked }))}
-                          />
-                        </label>
-                        <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                          <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Concentration</span>
-                          <Checkbox
-                            checked={!!formData.concentration}
-                            onCheckedChange={checked => setFormData(prev => ({ ...prev, concentration: !!checked }))}
-                          />
-                        </label>
-                      </div>
-
-                      <div className="space-y-3">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-ink/60">Components</h4>
-                        <div className="grid md:grid-cols-3 gap-4">
-                          <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                            <span className="text-xs uppercase text-ink/60 font-bold">Verbal</span>
-                            <Checkbox
-                              checked={!!formData.components?.vocal}
-                              onCheckedChange={checked => setFormData(prev => ({
-                                ...prev,
-                                components: mergeSpellComponents(prev.components, { vocal: !!checked })
-                              }))}
-                            />
-                          </label>
-                          <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                            <span className="text-xs uppercase text-ink/60 font-bold">Somatic</span>
-                            <Checkbox
-                              checked={!!formData.components?.somatic}
-                              onCheckedChange={checked => setFormData(prev => ({
-                                ...prev,
-                                components: mergeSpellComponents(prev.components, { somatic: !!checked })
-                              }))}
-                            />
-                          </label>
-                          <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                            <span className="text-xs uppercase text-ink/60 font-bold">Material</span>
-                            <Checkbox
-                              checked={!!formData.components?.material}
-                              onCheckedChange={checked => setFormData(prev => ({
-                                ...prev,
-                                components: mergeSpellComponents(prev.components, { material: !!checked })
-                              }))}
-                            />
-                          </label>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div className="space-y-1">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Material Text</Label>
-                            <Input
-                              value={formData.components?.materialText || ''}
-                              onChange={e => setFormData(prev => ({
-                                ...prev,
-                                components: mergeSpellComponents(prev.components, { materialText: e.target.value })
-                              }))}
-                              className="bg-background/50 border-gold/10 focus:border-gold"
-                              placeholder="a tiny ball of bat guano and sulfur"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid md:grid-cols-2 gap-3">
                             <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
-                              <span className="text-xs uppercase text-ink/60 font-bold">Consumed</span>
+                              <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Ritual</span>
+                              <Checkbox
+                                checked={!!formData.ritual}
+                                onCheckedChange={checked => setFormData(prev => ({ ...prev, ritual: !!checked }))}
+                              />
+                            </label>
+                            <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
+                              <span className="text-xs font-bold uppercase tracking-widest text-ink/60">Concentration</span>
+                              <Checkbox
+                                checked={!!formData.concentration}
+                                onCheckedChange={checked => setFormData(prev => ({ ...prev, concentration: !!checked }))}
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 border border-gold/10 rounded-md p-4 bg-background/20">
+                          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Components</h3>
+                          <div className="grid md:grid-cols-3 gap-3">
+                            <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
+                              <span className="text-xs uppercase text-ink/60 font-bold">Verbal</span>
+                              <Checkbox
+                                checked={!!formData.components?.vocal}
+                                onCheckedChange={checked => setFormData(prev => ({
+                                  ...prev,
+                                  components: mergeSpellComponents(prev.components, { vocal: !!checked })
+                                }))}
+                              />
+                            </label>
+                            <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
+                              <span className="text-xs uppercase text-ink/60 font-bold">Somatic</span>
+                              <Checkbox
+                                checked={!!formData.components?.somatic}
+                                onCheckedChange={checked => setFormData(prev => ({
+                                  ...prev,
+                                  components: mergeSpellComponents(prev.components, { somatic: !!checked })
+                                }))}
+                              />
+                            </label>
+                            <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3">
+                              <span className="text-xs uppercase text-ink/60 font-bold">Material</span>
+                              <Checkbox
+                                checked={!!formData.components?.material}
+                                onCheckedChange={checked => setFormData(prev => ({
+                                  ...prev,
+                                  components: mergeSpellComponents(prev.components, { material: !!checked })
+                                }))}
+                              />
+                            </label>
+                          </div>
+                          <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Material Text</Label>
+                              <Input
+                                value={formData.components?.materialText || ''}
+                                onChange={e => setFormData(prev => ({
+                                  ...prev,
+                                  components: mergeSpellComponents(prev.components, { materialText: e.target.value })
+                                }))}
+                                className="bg-background/50 border-gold/10 focus:border-gold"
+                                placeholder="a tiny ball of bat guano and sulfur"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Cost</Label>
+                              <Input
+                                value={formData.components?.cost || ''}
+                                onChange={e => setFormData(prev => ({
+                                  ...prev,
+                                  components: mergeSpellComponents(prev.components, { cost: e.target.value })
+                                }))}
+                                className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+                                placeholder="100 gp"
+                              />
+                            </div>
+                            <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-3 self-end">
+                              <span className="text-[10px] uppercase text-ink/60 font-bold tracking-widest">Consumed</span>
                               <Checkbox
                                 checked={!!formData.components?.consumed}
                                 onCheckedChange={checked => setFormData(prev => ({
@@ -1060,160 +1067,322 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                                 }))}
                               />
                             </label>
-                            <div className="space-y-1">
-                              <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Cost</Label>
+                          </div>
+                          <p className="text-[10px] text-ink/40">
+                            Spell metadata stays lightweight here. Runtime behavior lives in Activities.
+                          </p>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="targeting" className="mt-0 space-y-4">
+                        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Range &amp; Duration</h3>
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Range</Label>
+                              <div className="grid grid-cols-[1fr_70px_70px] gap-2">
+                                <select
+                                  value={formData.range.units || 'self'}
+                                  onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, units: e.target.value } }))}
+                                  className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                                >
+                                  {RANGE_UNITS.map(([value, label]) => (
+                                    <option key={value} value={value}>{label}</option>
+                                  ))}
+                                </select>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={String(formData.range.value ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                  disabled={formData.range.units === 'self' || formData.range.units === 'touch'}
+                                  placeholder="Value"
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                                />
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={String(formData.range.long ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, long: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                  disabled={formData.range.units === 'self' || formData.range.units === 'touch'}
+                                  placeholder="Long"
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                                />
+                              </div>
                               <Input
-                                value={formData.components?.cost || ''}
-                                onChange={e => setFormData(prev => ({
-                                  ...prev,
-                                  components: mergeSpellComponents(prev.components, { cost: e.target.value })
-                                }))}
-                                className="bg-background/50 border-gold/10 focus:border-gold"
-                                placeholder="100 gp"
+                                value={formData.range.special || ''}
+                                onChange={e => setFormData(prev => ({ ...prev, range: { ...prev.range, special: e.target.value } }))}
+                                placeholder='e.g. "Sight" (optional)'
+                                className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
                               />
+                              <p className="text-[10px] text-ink/40">
+                                Long range is only meaningful for ranged-attack spells (Firebolt, Eldritch Blast); most spells leave it blank.
+                              </p>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Duration</Label>
+                              <div className="grid grid-cols-[1fr_80px] gap-2">
+                                <select
+                                  value={formData.duration.units || 'inst'}
+                                  onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, units: e.target.value } }))}
+                                  className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                                >
+                                  {DURATION_UNITS.map(([value, label]) => (
+                                    <option key={value} value={value}>{label}</option>
+                                  ))}
+                                </select>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  value={String(formData.duration.value ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, duration: { ...prev.duration, value: e.target.value === '' ? '' : Number(e.target.value) } }))}
+                                  disabled={formData.duration.units === 'inst' || formData.duration.units === 'perm' || formData.duration.units === 'spec'}
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50"
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>
-                        <p className="text-[10px] text-ink/40">
-                          Spell metadata should stay lightweight here. Runtime behavior should live in native-style activities below.
-                        </p>
-                      </div>
-                    </div>
 
-                    {/* Target — AoE templates + creature affects.
-                      * Two distinct sub-shapes per dnd5e 5.x schema:
-                      *   - template.{type,size,width,height,units}
-                      *   - affects.{type,count,choice,special}
-                      * See `item-spell-spell-fire-shield.json` in the
-                      * Foundry-JSON samples for the round-trip shape. */}
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Target</h3>
-                      <div className="grid gap-4 lg:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Area Template</Label>
-                          <div className="grid grid-cols-[1fr_70px] gap-2">
-                            <select
-                              value={formData.target.template.type || ''}
-                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, type: e.target.value } } }))}
-                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                            >
-                              <option value="">None</option>
-                              <option value="cone">Cone</option>
-                              <option value="cube">Cube</option>
-                              <option value="cylinder">Cylinder</option>
-                              <option value="line">Line</option>
-                              <option value="radius">Radius</option>
-                              <option value="sphere">Sphere</option>
-                              <option value="square">Square</option>
-                              <option value="wall">Wall</option>
-                            </select>
-                            <select
-                              value={formData.target.template.units || 'ft'}
-                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, units: e.target.value } } }))}
-                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
-                              disabled={!formData.target.template.type}
-                            >
-                              <option value="ft">ft</option>
-                              <option value="mi">mi</option>
-                              <option value="m">m</option>
-                              <option value="km">km</option>
-                            </select>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Input
-                              value={String(formData.target.template.size ?? '')}
-                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, size: e.target.value } } }))}
-                              placeholder="Size"
-                              disabled={!formData.target.template.type}
-                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
-                            />
-                            <Input
-                              value={String(formData.target.template.width ?? '')}
-                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, width: e.target.value } } }))}
-                              placeholder="Width"
-                              disabled={!['line', 'wall'].includes(formData.target.template.type)}
-                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
-                            />
-                            <Input
-                              value={String(formData.target.template.height ?? '')}
-                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, height: e.target.value } } }))}
-                              placeholder="Height"
-                              disabled={!['cylinder', 'wall'].includes(formData.target.template.type)}
-                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
-                            />
-                          </div>
-                        </div>
+                        {/* Target — AoE templates + creature affects.
+                          * Two distinct sub-shapes per dnd5e 5.x schema:
+                          *   - template.{type,size,width,height,units}
+                          *   - affects.{type,count,choice,special}
+                          * See `item-spell-spell-fire-shield.json` in the
+                          * Foundry-JSON samples for the round-trip shape. */}
+                        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                          <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Target</h3>
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Area Template</Label>
+                              <div className="grid grid-cols-[1fr_70px] gap-2">
+                                <select
+                                  value={formData.target.template.type || ''}
+                                  onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, type: e.target.value } } }))}
+                                  className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                                >
+                                  <option value="">None</option>
+                                  <option value="cone">Cone</option>
+                                  <option value="cube">Cube</option>
+                                  <option value="cylinder">Cylinder</option>
+                                  <option value="line">Line</option>
+                                  <option value="radius">Radius</option>
+                                  <option value="sphere">Sphere</option>
+                                  <option value="square">Square</option>
+                                  <option value="wall">Wall</option>
+                                </select>
+                                <select
+                                  value={formData.target.template.units || 'ft'}
+                                  onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, units: e.target.value } } }))}
+                                  className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+                                  disabled={!formData.target.template.type}
+                                >
+                                  <option value="ft">ft</option>
+                                  <option value="mi">mi</option>
+                                  <option value="m">m</option>
+                                  <option value="km">km</option>
+                                </select>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <Input
+                                  value={String(formData.target.template.size ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, size: e.target.value } } }))}
+                                  placeholder="Size"
+                                  disabled={!formData.target.template.type}
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                                />
+                                <Input
+                                  value={String(formData.target.template.width ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, width: e.target.value } } }))}
+                                  placeholder="Width"
+                                  disabled={!['line', 'wall'].includes(formData.target.template.type)}
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                                />
+                                <Input
+                                  value={String(formData.target.template.height ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, height: e.target.value } } }))}
+                                  placeholder="Height"
+                                  disabled={!['cylinder', 'wall'].includes(formData.target.template.type)}
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                                />
+                              </div>
+                            </div>
 
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Affects</Label>
-                          <div className="grid grid-cols-[1fr_70px] gap-2">
-                            <select
-                              value={formData.target.affects.type || ''}
-                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, type: e.target.value } } }))}
-                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
-                            >
-                              <option value="">None</option>
-                              <option value="self">Self</option>
-                              <option value="creature">Creature</option>
-                              <option value="enemy">Enemy</option>
-                              <option value="ally">Ally</option>
-                              <option value="object">Object</option>
-                              <option value="space">Space</option>
-                            </select>
+                            <div className="space-y-2">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Affects</Label>
+                              <div className="grid grid-cols-[1fr_70px] gap-2">
+                                <select
+                                  value={formData.target.affects.type || ''}
+                                  onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, type: e.target.value } } }))}
+                                  className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                                >
+                                  <option value="">None</option>
+                                  <option value="self">Self</option>
+                                  <option value="creature">Creature</option>
+                                  <option value="enemy">Enemy</option>
+                                  <option value="ally">Ally</option>
+                                  <option value="object">Object</option>
+                                  <option value="space">Space</option>
+                                </select>
+                                <Input
+                                  value={String(formData.target.affects.count ?? '')}
+                                  onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, count: e.target.value } } }))}
+                                  placeholder="Count"
+                                  disabled={!formData.target.affects.type || formData.target.affects.type === 'self'}
+                                  className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                                />
+                              </div>
+                              <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-2.5">
+                                <span className="text-[10px] uppercase text-ink/60 font-bold tracking-widest">Caster chooses</span>
+                                <Checkbox
+                                  checked={!!formData.target.affects.choice}
+                                  onCheckedChange={checked => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, choice: !!checked } } }))}
+                                />
+                              </label>
+                              <Input
+                                value={formData.target.affects.special || ''}
+                                onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, special: e.target.value } } }))}
+                                placeholder='Special override (e.g. "any number")'
+                                className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-ink/40">
+                            Touch / self spells can leave both blank. AoE spells use Template; single-target spells use Affects.
+                          </p>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="uses" className="mt-0 space-y-4">
+                        {/* Limited Uses — rare on spells but real for
+                          * artifact-bound or once-per-day homebrew. Mirrors
+                          * the FeatsEditor / ActivityEditor ConsumptionTab
+                          * recovery editor (same constants, same row
+                          * layout) so authors don't learn a second UI for
+                          * the same concept. Empty recovery list = uses
+                          * persist until manually reset. */}
+                        <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                          <div className="flex items-baseline justify-between">
+                            <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Limited Uses</h3>
+                            <span className="text-[10px] text-ink/40">Optional — leave blank for unlimited.</span>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Max (formula or number)</Label>
                             <Input
-                              value={String(formData.target.affects.count ?? '')}
-                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, count: e.target.value } } }))}
-                              placeholder="Count"
-                              disabled={!formData.target.affects.type || formData.target.affects.type === 'self'}
-                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                              value={formData.uses.max || ''}
+                              onChange={e => setFormData(prev => ({ ...prev, uses: { ...prev.uses, max: e.target.value } }))}
+                              placeholder="e.g. @prof or 3"
+                              className="bg-background/50 border-gold/10 focus:border-gold text-xs font-mono"
                             />
                           </div>
-                          <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-2.5">
-                            <span className="text-[10px] uppercase text-ink/60 font-bold tracking-widest">Caster chooses</span>
-                            <Checkbox
-                              checked={!!formData.target.affects.choice}
-                              onCheckedChange={checked => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, choice: !!checked } } }))}
-                            />
-                          </label>
-                          <Input
-                            value={formData.target.affects.special || ''}
-                            onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, special: e.target.value } } }))}
-                            placeholder='Special override (e.g. "any number")'
-                            className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
-                          />
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-ink/40">
-                        Touch / self spells can leave both blank. AoE spells use Template; single-target spells use Affects.
-                      </p>
-                    </div>
 
-                    {/* Limited Uses — rare for spells but real for
-                      * artifact-bound or once-per-day homebrew. Just
-                      * `max` for now; recovery rows can be authored on
-                      * the Foundry side until we need them in this
-                      * editor too. */}
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <div className="flex items-baseline justify-between">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Limited Uses</h3>
-                        <span className="text-[10px] text-ink/40">Optional — leave blank for unlimited.</span>
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Max (formula or number)</Label>
-                          <Input
-                            value={formData.uses.max || ''}
-                            onChange={e => setFormData(prev => ({ ...prev, uses: { ...prev.uses, max: e.target.value } }))}
-                            placeholder="e.g. @prof or 3"
-                            className="bg-background/50 border-gold/10 focus:border-gold text-xs font-mono"
-                          />
+                          <div className="space-y-2 border-t border-gold/8 pt-3">
+                            <div className="flex items-baseline justify-between">
+                              <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Recovery Rules</Label>
+                              <span className="text-[10px] text-ink/40">Lands at <code className="font-mono">system.uses.recovery[]</code></span>
+                            </div>
+                            <div className="space-y-2">
+                              {formData.uses.recovery.map((entry, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex gap-2 items-center p-2.5 bg-gold/3 border border-gold/8 rounded"
+                                >
+                                  <SingleSelectSearch
+                                    value={entry.period || ''}
+                                    onChange={(val) => {
+                                      const next = formData.uses.recovery.slice();
+                                      next[idx] = { ...entry, period: val };
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        uses: { ...prev.uses, recovery: next },
+                                      }));
+                                    }}
+                                    options={RECOVERY_PERIOD_OPTIONS.map((o) => ({
+                                      id: o.value,
+                                      name: o.label,
+                                      hint: o.hint,
+                                    }))}
+                                    placeholder="Period"
+                                    triggerClassName="flex-1"
+                                  />
+                                  <SingleSelectSearch
+                                    value={entry.type || ''}
+                                    onChange={(val) => {
+                                      const next = formData.uses.recovery.slice();
+                                      next[idx] = { ...entry, type: val };
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        uses: { ...prev.uses, recovery: next },
+                                      }));
+                                    }}
+                                    options={RECOVERY_TYPE_OPTIONS.map((o) => ({
+                                      id: o.value,
+                                      name: o.label,
+                                    }))}
+                                    placeholder="Type"
+                                    triggerClassName="flex-1"
+                                  />
+                                  <Input
+                                    value={entry.formula || ''}
+                                    onChange={(e) => {
+                                      const next = formData.uses.recovery.slice();
+                                      next[idx] = { ...entry, formula: e.target.value };
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        uses: { ...prev.uses, recovery: next },
+                                      }));
+                                    }}
+                                    className="h-7 text-[10px] font-mono bg-background/40 border-gold/10 flex-1"
+                                    placeholder="1d4 or @prof"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        uses: {
+                                          ...prev.uses,
+                                          recovery: prev.uses.recovery.filter((_, i) => i !== idx),
+                                        },
+                                      }))
+                                    }
+                                    className="text-blood/60 hover:text-blood shrink-0 transition-colors"
+                                    aria-label="Remove recovery rule"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              {formData.uses.recovery.length === 0 && (
+                                <p className="text-center py-3 text-ink/30 italic text-[10px]">No recovery rules.</p>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    uses: {
+                                      ...prev.uses,
+                                      recovery: [
+                                        ...prev.uses.recovery,
+                                        { period: '', type: '', formula: '' },
+                                      ],
+                                    },
+                                  }))
+                                }
+                                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[10px] uppercase tracking-widest font-black text-gold/50 hover:text-gold border border-dashed border-gold/15 hover:border-gold/30 rounded transition-colors"
+                              >
+                                <Plus className="w-3 h-3" /> Add Recovery Rule
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-ink/40">
+                            Period + Type drive Foundry's automatic recovery on rest. Formula optional — populate it for "recover 1d4 charges" patterns.
+                          </p>
                         </div>
-                        <p className="text-[10px] text-ink/40 self-end">
-                          Recovery period and refresh formula can be authored on the Foundry sheet
-                          for now; we round-trip the whole `uses` object through `foundry_data`.
-                        </p>
-                      </div>
-                    </div>
+                      </TabsContent>
+                    </Tabs>
                   </TabsContent>
 
                   <TabsContent value="tags" className="mt-0 space-y-4">
