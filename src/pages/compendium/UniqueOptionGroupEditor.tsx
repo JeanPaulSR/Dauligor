@@ -781,6 +781,120 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
                   />
                 </div>
 
+                {/* USAGE — Limited uses + recovery rules. Same UI shape as
+                    ClassEditor / SubclassEditor's per-feature usage block,
+                    so authors don't learn a second UI for the same concept.
+                    Persists to `uses_max` and `uses_recovery` on the
+                    uniqueOptionItems row (already wired in save). Empty
+                    recovery list = uses persist until manually reset. */}
+                {(() => {
+                  const recovery: any[] = Array.isArray(editingItem?.usesRecovery)
+                    ? editingItem.usesRecovery
+                    : (Array.isArray(editingItem?.uses_recovery) ? editingItem.uses_recovery : []);
+                  const setRecovery = (rows: any[]) =>
+                    setEditingItem((prev: any) => ({ ...(prev || {}), usesRecovery: rows }));
+                  const addRecovery = () =>
+                    setRecovery([...recovery, { period: 'lr', type: 'recoverAll' }]);
+                  const removeRecovery = (i: number) =>
+                    setRecovery(recovery.filter((_: any, ri: number) => ri !== i));
+                  const patchRecovery = (i: number, patch: any) =>
+                    setRecovery(recovery.map((r: any, ri: number) => ri === i ? { ...r, ...patch } : r));
+                  return (
+                    <div className="space-y-0 pt-2 border-t border-gold/10 divide-y divide-gold/5">
+                      <div className="flex items-center justify-between pb-2">
+                        <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Usage</p>
+                      </div>
+                      <div className="flex items-center gap-4 py-2">
+                        <label className="text-xs font-semibold text-ink/70 shrink-0 w-36">Limited Uses</label>
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Spent</span>
+                            <Input
+                              type="number"
+                              value={editingItem?.usesSpent ?? editingItem?.uses_spent ?? 0}
+                              onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), usesSpent: parseInt(e.target.value) || 0 }))}
+                              className="h-7 w-16 text-center text-xs bg-background/50 border-gold/10 focus:border-gold"
+                            />
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Max</span>
+                            <Input
+                              value={editingItem?.usesMax || editingItem?.uses_max || ''}
+                              onChange={e => setEditingItem((prev: any) => ({ ...(prev || {}), usesMax: e.target.value }))}
+                              placeholder="—"
+                              className="h-7 w-28 text-center text-xs bg-background/50 border-gold/10 focus:border-gold"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[9px] uppercase tracking-[0.2em] font-black text-gold/50 select-none">Recovery</p>
+                          <button type="button" onClick={addRecovery} className="text-[10px] font-black text-gold/60 hover:text-gold transition-colors px-1">+ ADD</button>
+                        </div>
+                        {recovery.length === 0 && (
+                          <p className="text-xs text-ink/30 italic py-1">No recovery rules. Click + ADD to add one.</p>
+                        )}
+                        <div className="space-y-1.5">
+                          {recovery.map((row: any, i: number) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <div className="flex flex-col gap-0.5 flex-1">
+                                {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Period</span>}
+                                <select value={row.period || 'lr'} onChange={e => patchRecovery(i, { period: e.target.value, ...(e.target.value === 'recharge' ? { type: 'recoverAll', formula: '6' } : { formula: undefined }) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                  <option value="lr">Long Rest</option>
+                                  <option value="sr">Short Rest</option>
+                                  <option value="day">Daily</option>
+                                  <option value="dawn">Dawn</option>
+                                  <option value="dusk">Dusk</option>
+                                  <option value="initiative">Initiative</option>
+                                  <option value="turnStart">Turn Start</option>
+                                  <option value="turnEnd">Turn End</option>
+                                  <option value="turn">Each Turn</option>
+                                  <option value="recharge">Recharge</option>
+                                </select>
+                              </div>
+                              {row.period === 'recharge' ? (
+                                <div className="flex flex-col gap-0.5 flex-1">
+                                  {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Value</span>}
+                                  <select value={row.formula || '6'} onChange={e => patchRecovery(i, { formula: e.target.value })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                    <option value="6">Recharge 6</option>
+                                    <option value="5">Recharge 5–6</option>
+                                    <option value="4">Recharge 4–6</option>
+                                    <option value="3">Recharge 3–6</option>
+                                    <option value="2">Recharge 2–6</option>
+                                  </select>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex flex-col gap-0.5 flex-1">
+                                    {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Recovery</span>}
+                                    <select value={row.type || 'recoverAll'} onChange={e => patchRecovery(i, { type: e.target.value, ...(e.target.value !== 'formula' ? { formula: undefined } : {}) })} className="h-7 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs text-ink w-full">
+                                      <option value="recoverAll">Recover All Uses</option>
+                                      <option value="loseAll">Lose All Uses</option>
+                                      <option value="formula">Custom Formula</option>
+                                    </select>
+                                  </div>
+                                  {row.type === 'formula' && (
+                                    <div className="flex flex-col gap-0.5 flex-1">
+                                      {i === 0 && <span className="text-[9px] uppercase text-ink/40 font-black tracking-wider">Formula</span>}
+                                      <Input value={row.formula || ''} onChange={e => patchRecovery(i, { formula: e.target.value })} placeholder="2 + @class.level" className="h-7 text-xs font-mono bg-background/50 border-gold/10 focus:border-gold" />
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              <div className={i === 0 ? 'pt-3.5' : ''}>
+                                <button type="button" onClick={() => removeRecovery(i)} className="h-7 w-7 flex items-center justify-center text-ink/30 hover:text-blood transition-colors rounded border border-transparent hover:border-blood/20">
+                                  <span className="text-sm leading-none">−</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="flex items-center gap-2 pt-2 border-t border-gold/10">
                   <input
                     type="checkbox"
