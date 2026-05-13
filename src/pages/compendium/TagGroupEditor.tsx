@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
-import { fetchTagUsageMap, summarizeBreakdown, type TagUsageBreakdown } from '../../lib/tagUsage';
+import { fetchTagUsageMap, invalidateTagUsageCache, summarizeBreakdown, type TagUsageBreakdown } from '../../lib/tagUsage';
 
 // Migration 20260512-1418 narrowed tag uniqueness from `(group_id, slug)`
 // to `(group_id, COALESCE(parent_tag_id, ''), slug)`, so duplicates only
@@ -304,6 +304,11 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
       }
       await deleteDocument('tags', tagId);
       setTags(prev => prev.filter(t => t.id !== tagId && (t.parent_tag_id ?? t.parentTagId) !== tagId));
+      // Counts for the deleted tag's references are now stale —
+      // invalidate so the next group view fetches fresh numbers.
+      // (Local state for THIS group's pill row goes away with the
+      // setTags filter above, so we don't need to also re-fetch here.)
+      invalidateTagUsageCache();
       toast.success(children.length > 0
         ? `Deleted tag and ${children.length} subtag${children.length === 1 ? '' : 's'}`
         : 'Tag deleted');
