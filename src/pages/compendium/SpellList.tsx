@@ -21,11 +21,14 @@ import {
   PROPERTY_ORDER,
   RANGE_LABELS,
   RANGE_ORDER,
+  SHAPE_LABELS,
+  SHAPE_ORDER,
   deriveSpellFilterFacets,
   type ActivationBucket,
   type DurationBucket,
   type PropertyFilter,
   type RangeBucket,
+  type ShapeBucket,
 } from '../../lib/spellFilters';
 
 type SourceRecord = {
@@ -95,6 +98,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [activationFilters, setActivationFilters] = useState<ActivationBucket[]>([]);
   const [rangeFilters, setRangeFilters] = useState<RangeBucket[]>([]);
   const [durationFilters, setDurationFilters] = useState<DurationBucket[]>([]);
+  const [shapeFilters, setShapeFilters] = useState<ShapeBucket[]>([]);
   const [propertyFilters, setPropertyFilters] = useState<PropertyFilter[]>([]);
   const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
@@ -193,9 +197,10 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         && (activationFilters.length === 0 || activationFilters.includes(spell.activationBucket))
         && (rangeFilters.length === 0 || rangeFilters.includes(spell.rangeBucket))
         && (durationFilters.length === 0 || durationFilters.includes(spell.durationBucket))
+        && (shapeFilters.length === 0 || shapeFilters.includes(spell.shapeBucket))
         && (propertyFilters.length === 0 || propertyFilters.every((p) => spell[p]));
     });
-  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, propertyFilters, parentByTagId]);
+  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, shapeFilters, propertyFilters, parentByTagId]);
 
   useEffect(() => {
     if (!selectedSpellId) return;
@@ -212,6 +217,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     + activationFilters.length
     + rangeFilters.length
     + durationFilters.length
+    + shapeFilters.length
     + propertyFilters.length;
 
   const toggleSelection = (value: string, selected: string[], setSelected: React.Dispatch<React.SetStateAction<string[]>>) => {
@@ -234,6 +240,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     setActivationFilters([]);
     setRangeFilters([]);
     setDurationFilters([]);
+    setShapeFilters([]);
     setPropertyFilters([]);
   };
 
@@ -347,6 +354,15 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                 onToggle={(value) => toggleSelection(value as RangeBucket, rangeFilters as string[], setRangeFilters as React.Dispatch<React.SetStateAction<string[]>>)}
                 onIncludeAll={() => setRangeFilters([...RANGE_ORDER])}
                 onClear={() => setRangeFilters([])}
+              />
+
+              <FilterSection
+                title="Shape"
+                values={SHAPE_ORDER.map((b) => ({ value: b, label: SHAPE_LABELS[b] }))}
+                selected={shapeFilters}
+                onToggle={(value) => toggleSelection(value as ShapeBucket, shapeFilters as string[], setShapeFilters as React.Dispatch<React.SetStateAction<string[]>>)}
+                onIncludeAll={() => setShapeFilters([...SHAPE_ORDER])}
+                onClear={() => setShapeFilters([])}
               />
 
               <FilterSection

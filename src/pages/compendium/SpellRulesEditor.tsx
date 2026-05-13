@@ -22,12 +22,15 @@ import {
   PROPERTY_ORDER,
   RANGE_LABELS,
   RANGE_ORDER,
+  SHAPE_LABELS,
+  SHAPE_ORDER,
   deriveSpellFilterFacets,
   type ActivationBucket,
   type DurationBucket,
   type PropertyFilter,
   type RangeBucket,
   type RuleQuery,
+  type ShapeBucket,
   type SpellMatchInput,
 } from '../../lib/spellFilters';
 import {
@@ -351,6 +354,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       + (q.activationFilters?.length ?? 0)
       + (q.rangeFilters?.length ?? 0)
       + (q.durationFilters?.length ?? 0)
+      + (q.shapeFilters?.length ?? 0)
       + (q.propertyFilters?.length ?? 0);
   }, [draft]);
 
@@ -591,6 +595,14 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           onToggle={v => toggleFromQueryArray('rangeFilters', v as RangeBucket)}
                           onIncludeAll={() => updateQuery({ rangeFilters: [...RANGE_ORDER] })}
                           onClear={() => updateQuery({ rangeFilters: [] })}
+                        />
+                        <RuleFilterSection
+                          title="Shape"
+                          values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
+                          selected={draft.query.shapeFilters || []}
+                          onToggle={v => toggleFromQueryArray('shapeFilters', v as ShapeBucket)}
+                          onIncludeAll={() => updateQuery({ shapeFilters: [...SHAPE_ORDER] })}
+                          onClear={() => updateQuery({ shapeFilters: [] })}
                         />
                         <RuleFilterSection
                           title="Duration"

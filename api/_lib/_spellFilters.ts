@@ -16,6 +16,7 @@ export type ActivationBucket = 'action' | 'bonus' | 'reaction' | 'minute' | 'hou
 export type RangeBucket = 'self' | 'touch' | '5ft' | '30ft' | '60ft' | '120ft' | 'long' | 'other';
 export type DurationBucket = 'inst' | 'round' | 'minute' | 'hour' | 'day' | 'perm' | 'special';
 export type PropertyFilter = 'concentration' | 'ritual' | 'vocal' | 'somatic' | 'material';
+export type ShapeBucket = 'cone' | 'cube' | 'cylinder' | 'line' | 'radius' | 'sphere' | 'square' | 'wall' | 'none';
 
 export function bucketActivation(activation: any): ActivationBucket {
   const type = String(activation?.type ?? '').trim();
@@ -27,21 +28,40 @@ export function bucketActivation(activation: any): ActivationBucket {
   return 'special';
 }
 
+// Distance-band bucketing. See src/lib/spellFilters.ts for the
+// rationale — earlier exact-value match dropped off-canonical
+// distances (10/25/90ft etc) into "Other"; bands fix it. Values stay
+// as `5ft`/`30ft`/`60ft`/`120ft`/`long`/`other` for stored-rule
+// back-compat; labels (UI-side) read as Close/Short/Medium/Long/Far.
 export function bucketRange(range: any): RangeBucket {
   const units = String(range?.units ?? '').trim();
   const value = Number(range?.value ?? 0);
   if (units === 'self') return 'self';
   if (units === 'touch') return 'touch';
   if (units === 'ft') {
-    if (value === 5) return '5ft';
-    if (value === 30) return '30ft';
-    if (value === 60) return '60ft';
-    if (value === 120) return '120ft';
-    if (value > 120) return 'long';
-    return 'other';
+    if (value <= 5)   return '5ft';   // Close
+    if (value <= 30)  return '30ft';  // Short
+    if (value <= 60)  return '60ft';  // Medium
+    if (value <= 120) return '120ft'; // Long
+    return 'long';                    // Far (>120)
   }
   if (units === 'mi' || units === 'any' || units === 'unlimited') return 'long';
   return 'other';
+}
+
+export function bucketShape(target: any): ShapeBucket {
+  const type = String(target?.template?.type ?? '').trim();
+  switch (type) {
+    case 'cone':     return 'cone';
+    case 'cube':     return 'cube';
+    case 'cylinder': return 'cylinder';
+    case 'line':     return 'line';
+    case 'radius':   return 'radius';
+    case 'sphere':   return 'sphere';
+    case 'square':   return 'square';
+    case 'wall':     return 'wall';
+    default:         return 'none';
+  }
 }
 
 export function bucketDuration(duration: any): DurationBucket {
@@ -67,6 +87,7 @@ export type SpellFilterFacets = {
   activationBucket: ActivationBucket;
   rangeBucket: RangeBucket;
   durationBucket: DurationBucket;
+  shapeBucket: ShapeBucket;
   concentration: boolean;
   ritual: boolean;
   vocal: boolean;
@@ -81,6 +102,7 @@ export function deriveSpellFilterFacets(row: any): SpellFilterFacets {
     activationBucket: bucketActivation(system?.activation),
     rangeBucket: bucketRange(system?.range),
     durationBucket: bucketDuration(system?.duration),
+    shapeBucket: bucketShape(system?.target),
     concentration: properties.includes('concentration') || Boolean(row?.concentration),
     ritual: properties.includes('ritual') || Boolean(row?.ritual),
     vocal: properties.includes('vocal') || Boolean(row?.components_vocal),
@@ -97,6 +119,7 @@ export type RuleQuery = {
   activationFilters?: ActivationBucket[];
   rangeFilters?: RangeBucket[];
   durationFilters?: DurationBucket[];
+  shapeFilters?: ShapeBucket[];
   propertyFilters?: PropertyFilter[];
 };
 
@@ -157,6 +180,7 @@ export function matchSpellAgainstRule(
   if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) return false;
   if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) return false;
   if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) return false;
+  if (query.shapeFilters?.length && !query.shapeFilters.includes(spell.shapeBucket)) return false;
   if (query.propertyFilters?.length && !query.propertyFilters.every(p => Boolean((spell as any)[p]))) return false;
   return true;
 }

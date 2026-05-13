@@ -12,10 +12,13 @@ import {
   PROPERTY_ORDER,
   RANGE_LABELS,
   RANGE_ORDER,
+  SHAPE_LABELS,
+  SHAPE_ORDER,
   type ActivationBucket,
   type DurationBucket,
   type PropertyFilter,
   type RangeBucket,
+  type ShapeBucket,
 } from '../../lib/spellFilters';
 import type { UseSpellFiltersResult } from '../../hooks/useSpellFilters';
 
@@ -149,6 +152,14 @@ export default function SpellFilterShell({
                   onClear={() => filters.setRangeFilters([])}
                 />
                 <ShellFilterSection
+                  title="Shape"
+                  values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
+                  selected={filters.shapeFilters}
+                  onToggle={v => toggleArray(filters.shapeFilters, filters.setShapeFilters, v as ShapeBucket)}
+                  onIncludeAll={() => filters.setShapeFilters([...SHAPE_ORDER])}
+                  onClear={() => filters.setShapeFilters([])}
+                />
+                <ShellFilterSection
                   title="Duration"
                   values={DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] }))}
                   selected={filters.durationFilters}
@@ -200,6 +211,9 @@ export default function SpellFilterShell({
           ))}
           {filters.durationFilters.map(b => (
             <FilterChip key={`dur-${b}`} label={`Dur: ${DURATION_LABELS[b]}`} onRemove={() => filters.setDurationFilters(prev => prev.filter(x => x !== b))} />
+          ))}
+          {filters.shapeFilters.map(b => (
+            <FilterChip key={`shp-${b}`} label={`Shape: ${SHAPE_LABELS[b]}`} onRemove={() => filters.setShapeFilters(prev => prev.filter(x => x !== b))} />
           ))}
           {filters.propertyFilters.map(p => (
             <FilterChip key={`prop-${p}`} label={PROPERTY_LABELS[p]} onRemove={() => filters.setPropertyFilters(prev => prev.filter(x => x !== p))} />

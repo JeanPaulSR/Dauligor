@@ -40,11 +40,14 @@ import {
   PROPERTY_ORDER,
   RANGE_LABELS,
   RANGE_ORDER,
+  SHAPE_LABELS,
+  SHAPE_ORDER,
   deriveSpellFilterFacets,
   type ActivationBucket,
   type DurationBucket,
   type PropertyFilter,
   type RangeBucket,
+  type ShapeBucket,
 } from '../../lib/spellFilters';
 
 const LIST_HEIGHT = 720;
@@ -64,6 +67,7 @@ type SpellRow = {
   activationBucket: ActivationBucket;
   rangeBucket: RangeBucket;
   durationBucket: DurationBucket;
+  shapeBucket: ShapeBucket;
   concentration: boolean;
   ritual: boolean;
   vocal: boolean;
@@ -122,6 +126,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const [activationFilters, setActivationFilters] = useState<ActivationBucket[]>([]);
   const [rangeFilters, setRangeFilters] = useState<RangeBucket[]>([]);
   const [durationFilters, setDurationFilters] = useState<DurationBucket[]>([]);
+  const [shapeFilters, setShapeFilters] = useState<ShapeBucket[]>([]);
   const [propertyFilters, setPropertyFilters] = useState<PropertyFilter[]>([]);
   const [showOnlyInList, setShowOnlyInList] = useState(false);
   const [showOrphansOnly, setShowOrphansOnly] = useState(false);
@@ -282,6 +287,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       if (activationFilters.length > 0 && !activationFilters.includes(s.activationBucket)) continue;
       if (rangeFilters.length > 0 && !rangeFilters.includes(s.rangeBucket)) continue;
       if (durationFilters.length > 0 && !durationFilters.includes(s.durationBucket)) continue;
+      if (shapeFilters.length > 0 && !shapeFilters.includes(s.shapeBucket)) continue;
       // Property filters are strict AND — Concentration ∩ V means both must hold.
       if (propertyFilters.length > 0 && !propertyFilters.every(p => s[p])) continue;
 
@@ -297,7 +303,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       out.push({ spell: s, matchedTagNames });
     }
     return out;
-  }, [spells, classListIds, search, levelFilters, schoolFilters, sourceFilterIds, tagFilterIds, activationFilters, rangeFilters, durationFilters, propertyFilters, showOnlyInList, showOrphansOnly, spellMembershipsBySpellId, tagsById]);
+  }, [spells, classListIds, search, levelFilters, schoolFilters, sourceFilterIds, tagFilterIds, activationFilters, rangeFilters, durationFilters, shapeFilters, propertyFilters, showOnlyInList, showOrphansOnly, spellMembershipsBySpellId, tagsById, parentByTagId]);
 
   const activeFilterCount =
     sourceFilterIds.length
@@ -307,6 +313,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     + activationFilters.length
     + rangeFilters.length
     + durationFilters.length
+    + shapeFilters.length
     + propertyFilters.length;
 
   const resetFilters = () => {
@@ -317,6 +324,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     setActivationFilters([]);
     setRangeFilters([]);
     setDurationFilters([]);
+    setShapeFilters([]);
     setPropertyFilters([]);
   };
 
@@ -611,6 +619,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         activationBucket: s.activationBucket,
         rangeBucket: s.rangeBucket,
         durationBucket: s.durationBucket,
+        shapeBucket: s.shapeBucket,
         concentration: s.concentration,
         ritual: s.ritual,
         vocal: s.vocal,
@@ -790,6 +799,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     onToggle={v => toggleFromArray(v as RangeBucket, rangeFilters, setRangeFilters)}
                     onIncludeAll={() => setRangeFilters([...RANGE_ORDER])}
                     onClear={() => setRangeFilters([])}
+                  />
+                  <FilterSection
+                    title="Shape"
+                    values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
+                    selected={shapeFilters}
+                    onToggle={v => toggleFromArray(v as ShapeBucket, shapeFilters, setShapeFilters)}
+                    onIncludeAll={() => setShapeFilters([...SHAPE_ORDER])}
+                    onClear={() => setShapeFilters([])}
                   />
                   <FilterSection
                     title="Duration"

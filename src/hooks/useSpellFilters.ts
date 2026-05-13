@@ -5,6 +5,7 @@ import {
   type PropertyFilter,
   type RangeBucket,
   type RuleQuery,
+  type ShapeBucket,
   type SpellMatchInput,
 } from '../lib/spellFilters';
 import { expandTagsWithAncestors } from '../lib/tagHierarchy';
@@ -35,6 +36,8 @@ export type UseSpellFiltersResult = {
   setRangeFilters: React.Dispatch<React.SetStateAction<RangeBucket[]>>;
   durationFilters: DurationBucket[];
   setDurationFilters: React.Dispatch<React.SetStateAction<DurationBucket[]>>;
+  shapeFilters: ShapeBucket[];
+  setShapeFilters: React.Dispatch<React.SetStateAction<ShapeBucket[]>>;
   propertyFilters: PropertyFilter[];
   setPropertyFilters: React.Dispatch<React.SetStateAction<PropertyFilter[]>>;
 
@@ -74,6 +77,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
   const [activationFilters, setActivationFilters] = useState<ActivationBucket[]>([]);
   const [rangeFilters, setRangeFilters] = useState<RangeBucket[]>([]);
   const [durationFilters, setDurationFilters] = useState<DurationBucket[]>([]);
+  const [shapeFilters, setShapeFilters] = useState<ShapeBucket[]>([]);
   const [propertyFilters, setPropertyFilters] = useState<PropertyFilter[]>([]);
 
   const activeFilterCount =
@@ -84,12 +88,13 @@ export function useSpellFilters(): UseSpellFiltersResult {
     + activationFilters.length
     + rangeFilters.length
     + durationFilters.length
+    + shapeFilters.length
     + propertyFilters.length;
 
   const query: RuleQuery = useMemo(() => ({
     sourceFilterIds, levelFilters, schoolFilters, tagFilterIds,
-    activationFilters, rangeFilters, durationFilters, propertyFilters,
-  }), [sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, propertyFilters]);
+    activationFilters, rangeFilters, durationFilters, shapeFilters, propertyFilters,
+  }), [sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, shapeFilters, propertyFilters]);
 
   const resetAll = useCallback(() => {
     setSourceFilterIds([]);
@@ -99,6 +104,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
     setActivationFilters([]);
     setRangeFilters([]);
     setDurationFilters([]);
+    setShapeFilters([]);
     setPropertyFilters([]);
   }, []);
 
@@ -129,6 +135,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
       if (activationFilters.length > 0 && !activationFilters.includes(s.activationBucket)) continue;
       if (rangeFilters.length > 0 && !rangeFilters.includes(s.rangeBucket)) continue;
       if (durationFilters.length > 0 && !durationFilters.includes(s.durationBucket)) continue;
+      if (shapeFilters.length > 0 && !shapeFilters.includes(s.shapeBucket)) continue;
       if (propertyFilters.length > 0 && !propertyFilters.every(p => Boolean((s as any)[p]))) continue;
 
       const matchedTagNames: string[] = [];
@@ -154,6 +161,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
     activationFilters, setActivationFilters,
     rangeFilters, setRangeFilters,
     durationFilters, setDurationFilters,
+    shapeFilters, setShapeFilters,
     propertyFilters, setPropertyFilters,
     query,
     activeFilterCount,
