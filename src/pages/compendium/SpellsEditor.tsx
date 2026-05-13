@@ -1204,130 +1204,59 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="tags" className="mt-0 space-y-6">
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <div className="flex items-baseline justify-between">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tags</h3>
-                        <span className="text-[10px] text-ink/40">Descriptive · what spell rules query against (e.g. "fire", "divine").</span>
-                      </div>
+                  <TabsContent value="tags" className="mt-0 space-y-4">
+                    {/* Sub-tabs: Descriptive (what the spell IS) vs.
+                      * Prerequisites (what the caster must have).
+                      * Same picker shape for both; routes through the
+                      * shared <SpellTagPicker> below so the filter +
+                      * collapse + selected-summary affordances stay
+                      * in sync between the two. Replaces the previous
+                      * "show every group twice in one long scroll"
+                      * layout that exposed 100+ chips at once. */}
+                    <Tabs defaultValue="descriptive" className="space-y-3">
+                      <TabsList variant="line" className="gap-2 bg-transparent p-0">
+                        <TabsTrigger value="descriptive" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
+                          Descriptive {formData.tags.length > 0 && <span className="ml-1 text-gold/70">({formData.tags.length})</span>}
+                        </TabsTrigger>
+                        <TabsTrigger value="prereqs" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
+                          Prerequisites {formData.requiredTags.length > 0 && <span className="ml-1 text-gold/70">({formData.requiredTags.length})</span>}
+                        </TabsTrigger>
+                      </TabsList>
 
-                      <div className="space-y-2">
-                        {tags.length === 0 ? (
-                          <p className="text-xs text-ink/40 italic">No tags loaded yet.</p>
-                        ) : (
-                          <div className="space-y-3">
-                            {tagGroups.map(group => {
-                              const groupTags = orderTagsAsTree(tags.filter(t => t.groupId === group.id));
-                              if (groupTags.length === 0) return null;
-                              return (
-                                <div key={`desc-${group.id}`} className="space-y-1.5">
-                                  <span className="text-[10px] uppercase tracking-widest text-ink/50">{group.name}</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {groupTags.map(tag => {
-                                      const active = formData.tags.includes(tag.id);
-                                      const isSubtag = !!tag.parentTagId;
-                                      return (
-                                        <button
-                                          key={tag.id}
-                                          type="button"
-                                          onClick={() => setFormData(prev => ({
-                                            ...prev,
-                                            tags: active
-                                              ? prev.tags.filter(id => id !== tag.id)
-                                              : [...prev.tags, tag.id],
-                                          }))}
-                                          className={cn(
-                                            'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
-                                            active
-                                              ? 'border-gold/60 bg-gold/15 text-gold'
-                                              : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80'
-                                          )}
-                                        >
-                                          {isSubtag && <span className="opacity-60 mr-1">↳</span>}
-                                          {tag.name}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        <p className="text-[10px] text-ink/40">
-                          Tag rules + class spell list rules use these to decide which spells they include.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
-                      <div className="flex items-baseline justify-between">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Prerequisites</h3>
-                        <span className="text-[10px] text-ink/40">Character-level gates · evaluated at the player's spellbook, not at the class master list.</span>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Required Tags</Label>
-                        {tags.length === 0 ? (
-                          <p className="text-xs text-ink/40 italic">No tags loaded yet.</p>
-                        ) : (
-                          <div className="space-y-3">
-                            {tagGroups.map(group => {
-                              const groupTags = orderTagsAsTree(tags.filter(t => t.groupId === group.id));
-                              if (groupTags.length === 0) return null;
-                              return (
-                                <div key={group.id} className="space-y-1.5">
-                                  <span className="text-[10px] uppercase tracking-widest text-ink/50">{group.name}</span>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {groupTags.map(tag => {
-                                      const active = formData.requiredTags.includes(tag.id);
-                                      const isSubtag = !!tag.parentTagId;
-                                      return (
-                                        <button
-                                          key={tag.id}
-                                          type="button"
-                                          onClick={() => setFormData(prev => ({
-                                            ...prev,
-                                            requiredTags: active
-                                              ? prev.requiredTags.filter(id => id !== tag.id)
-                                              : [...prev.requiredTags, tag.id],
-                                          }))}
-                                          className={cn(
-                                            'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
-                                            active
-                                              ? 'border-gold/60 bg-gold/15 text-gold'
-                                              : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80'
-                                          )}
-                                        >
-                                          {isSubtag && <span className="opacity-60 mr-1">↳</span>}
-                                          {tag.name}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        <p className="text-[10px] text-ink/40">
-                          A character must have all selected tags on their effective tag set to use this spell.
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
-                        <Input
-                          value={formData.prerequisiteText}
-                          onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
-                          placeholder='e.g. "Must have cast Detect Magic in the past hour"'
-                          className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+                      <TabsContent value="descriptive" className="mt-0">
+                        <SpellTagPicker
+                          tags={tags}
+                          tagGroups={tagGroups}
+                          selectedIds={formData.tags}
+                          onChange={(next) => setFormData(prev => ({ ...prev, tags: next }))}
+                          hint="Tag rules + class spell list rules use these to decide which spells they include."
+                          emptyHint="No tags loaded yet."
                         />
-                        <p className="text-[10px] text-ink/40">
-                          Free-text fallback for prerequisites that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
-                        </p>
-                      </div>
-                    </div>
+                      </TabsContent>
+
+                      <TabsContent value="prereqs" className="mt-0 space-y-4">
+                        <SpellTagPicker
+                          tags={tags}
+                          tagGroups={tagGroups}
+                          selectedIds={formData.requiredTags}
+                          onChange={(next) => setFormData(prev => ({ ...prev, requiredTags: next }))}
+                          hint="A character must have all selected tags on their effective tag set to use this spell."
+                          emptyHint="No tags loaded yet."
+                        />
+                        <div className="space-y-1 border border-gold/10 rounded-md p-3 bg-background/20">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
+                          <Input
+                            value={formData.prerequisiteText}
+                            onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
+                            placeholder='e.g. "Must have cast Detect Magic in the past hour"'
+                            className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+                          />
+                          <p className="text-[10px] text-ink/40">
+                            Free-text fallback for prereqs that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
+                          </p>
+                        </div>
+                      </TabsContent>
+                    </Tabs>
                   </TabsContent>
 
                   <TabsContent value="activities" className="mt-0 space-y-6">
@@ -1371,6 +1300,220 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// =============================================================================
+// SpellTagPicker — collapsible per-group chip picker
+// =============================================================================
+//
+// Replaces the old "show every group's chips inline, twice" layout with a
+// focused picker:
+//
+//   - Single filter input scoped to this picker (matches tag names).
+//   - "Selected" summary chip row at the top — quick at-a-glance + one-click
+//     remove. Hidden when no selections.
+//   - Per-group collapsible sections. Closed by default to avoid overwhelming
+//     authors with 100+ chips at once. Auto-open if any tag in the group is
+//     currently selected on mount, and force-open while a filter is active
+//     so matches don't hide behind a closed group.
+//   - Selection-count badge per group header so admins can see at a glance
+//     which groups have picks without expanding them.
+//
+// Used twice inside the Tags tab — once for descriptive tags, once for
+// prerequisite tags. Component is pure: it owns its own UI state (filter,
+// open-groups) but selection state lives in the parent SpellsEditor's
+// formData so the form save path is unchanged.
+// =============================================================================
+
+interface SpellTagPickerProps {
+  tags: { id: string; name: string; groupId: string | null; parentTagId: string | null }[];
+  tagGroups: { id: string; name: string }[];
+  selectedIds: string[];
+  onChange: (next: string[]) => void;
+  hint: string;
+  emptyHint: string;
+}
+
+function SpellTagPicker({ tags, tagGroups, selectedIds, onChange, hint, emptyHint }: SpellTagPickerProps) {
+  const [filter, setFilter] = useState('');
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    // Auto-open every group that has any tag currently selected so
+    // editing an existing spell doesn't bury the picks behind closed
+    // sections. Computed once on mount; further toggles are user-driven.
+    const open = new Set<string>();
+    for (const tagId of selectedIds) {
+      const tag = tags.find(t => t.id === tagId);
+      if (tag?.groupId) open.add(tag.groupId);
+    }
+    return open;
+  });
+
+  const filterTerm = filter.trim().toLowerCase();
+  const isFiltering = !!filterTerm;
+
+  const groupData = useMemo(() => {
+    return tagGroups
+      .map(group => {
+        const groupTags = orderTagsAsTree(tags.filter(t => t.groupId === group.id));
+        const matching = isFiltering
+          ? groupTags.filter(t => String(t.name).toLowerCase().includes(filterTerm))
+          : groupTags;
+        const selectedInGroup = groupTags.filter(t => selectedIds.includes(t.id)).length;
+        return { group, groupTags, matching, selectedInGroup };
+      })
+      // Hide empty groups always; while filtering, hide groups with no matches.
+      .filter(d => d.groupTags.length > 0 && (!isFiltering || d.matching.length > 0));
+  }, [tagGroups, tags, isFiltering, filterTerm, selectedIds]);
+
+  const selectedTagsOrdered = useMemo(() => {
+    return selectedIds
+      .map(id => tags.find(t => t.id === id))
+      .filter(Boolean) as { id: string; name: string; parentTagId: string | null }[];
+  }, [selectedIds, tags]);
+
+  const toggleGroup = (id: string) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleTag = (tagId: string) => {
+    onChange(
+      selectedIds.includes(tagId)
+        ? selectedIds.filter(id => id !== tagId)
+        : [...selectedIds, tagId],
+    );
+  };
+
+  if (tags.length === 0) {
+    return (
+      <div className="border border-gold/10 rounded-md p-4 bg-background/20">
+        <p className="text-xs text-ink/40 italic">{emptyHint}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 border border-gold/10 rounded-md p-4 bg-background/20">
+      {/* Filter row */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+        <Input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Filter tags…"
+          className="h-8 pl-8 pr-7 text-xs bg-background/50 border-gold/10 focus:border-gold"
+        />
+        {filter && (
+          <button
+            type="button"
+            onClick={() => setFilter('')}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-ink/40 hover:text-ink"
+            title="Clear filter"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      {/* Selected summary — only when something is picked */}
+      {selectedTagsOrdered.length > 0 && (
+        <div className="space-y-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-ink/50">
+            Selected ({selectedTagsOrdered.length})
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {selectedTagsOrdered.map(tag => (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => toggleTag(tag.id)}
+                className="rounded border border-gold/60 bg-gold/15 text-gold px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide hover:bg-gold/25 inline-flex items-center gap-1"
+                title="Remove from selection"
+              >
+                {tag.parentTagId && <span className="opacity-60">↳</span>}
+                {tag.name}
+                <X className="w-3 h-3 opacity-70" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Collapsible per-group sections */}
+      <div className="space-y-1.5">
+        {groupData.length === 0 ? (
+          <p className="text-xs text-ink/40 italic">No tags match "{filter}".</p>
+        ) : groupData.map(({ group, groupTags, matching, selectedInGroup }) => {
+          const isOpen = isFiltering || openGroups.has(group.id);
+          const visibleTags = isFiltering ? matching : groupTags;
+          return (
+            <div key={group.id} className="border border-gold/10 rounded bg-background/30 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => { if (!isFiltering) toggleGroup(group.id); }}
+                className={cn(
+                  'w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors',
+                  isFiltering ? 'cursor-default' : 'hover:bg-gold/5 cursor-pointer',
+                )}
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  {!isFiltering && (
+                    isOpen
+                      ? <ChevronDown className="w-3.5 h-3.5 text-ink/50 shrink-0" />
+                      : <ChevronRight className="w-3.5 h-3.5 text-ink/50 shrink-0" />
+                  )}
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-ink/70 truncate">
+                    {group.name}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  {selectedInGroup > 0 && (
+                    <span className="text-[10px] font-bold tabular-nums bg-gold/15 text-gold border border-gold/30 px-1.5 py-0.5">
+                      {selectedInGroup}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-ink/40 tabular-nums">
+                    {isFiltering && matching.length !== groupTags.length
+                      ? `${matching.length} / ${groupTags.length}`
+                      : groupTags.length}
+                  </span>
+                </span>
+              </button>
+              {isOpen && (
+                <div className="px-3 pb-2.5 pt-1 flex flex-wrap gap-1.5">
+                  {visibleTags.map(tag => {
+                    const active = selectedIds.includes(tag.id);
+                    const isSubtag = !!tag.parentTagId;
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => toggleTag(tag.id)}
+                        className={cn(
+                          'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
+                          active
+                            ? 'border-gold/60 bg-gold/15 text-gold'
+                            : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
+                        )}
+                      >
+                        {isSubtag && <span className="opacity-60 mr-1">↳</span>}
+                        {tag.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[10px] text-ink/40">{hint}</p>
     </div>
   );
 }
