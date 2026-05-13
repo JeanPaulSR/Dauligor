@@ -136,31 +136,74 @@ export function buildCharacterEffectiveTagSet(sources: EffectiveTagSetSources): 
 }
 
 /**
+ * Build the EXPANDED effective tag set — every tag the character has,
+ * plus every ancestor of those tags. So a character with the subtag
+ * `Conjure.Manifest` semantically also has `Conjure`. Used for prereq
+ * checks so a "requires Conjure" spell accepts a character who only
+ * carries the more-specific `Conjure.Manifest`.
+ *
+ * The reverse direction is NOT covered (and shouldn't be): a "requires
+ * Conjure.Manifest" spell stays unsatisfied by a character with only
+ * the bare `Conjure` — the prereq asks for the specific subtag.
+ *
+ * When `parentByTagId` is omitted (or empty), this returns the input
+ * Set unchanged — back-compat for callers that don't have hierarchy.
+ */
+export function expandEffectiveTagSetWithAncestors(
+  effectiveTagSet: Set<string>,
+  parentByTagId?: Map<string, string | null>,
+): Set<string> {
+  if (!parentByTagId || parentByTagId.size === 0) return effectiveTagSet;
+  const out = new Set<string>(effectiveTagSet);
+  for (const tagId of effectiveTagSet) {
+    let cursor: string | null = parentByTagId.get(tagId) ?? null;
+    const visited = new Set<string>();
+    while (cursor && !visited.has(cursor)) {
+      visited.add(cursor);
+      out.add(cursor);
+      cursor = parentByTagId.get(cursor) ?? null;
+    }
+  }
+  return out;
+}
+
+/**
  * True if the character's effective tag set covers all of the spell's
  * `required_tags`. Returns true for spells with no prerequisites (the common
  * case). The free-text `prerequisite_text` is informational only and never
  * blocks here — surface it in UI for the player to read.
+ *
+ * Pass `parentByTagId` to enable HIERARCHICAL satisfaction — a character
+ * carrying a subtag implicitly satisfies the parent tag's requirement.
+ * Without the map, matching stays flat (exact-id only) for back-compat.
  */
 export function characterMeetsSpellPrerequisites(
   effectiveTagSet: Set<string>,
   spell: { requiredTags?: string[] | null },
+  parentByTagId?: Map<string, string | null>,
 ): boolean {
   const required = Array.isArray(spell.requiredTags) ? spell.requiredTags : [];
   if (required.length === 0) return true;
+  const effective = expandEffectiveTagSetWithAncestors(effectiveTagSet, parentByTagId);
   for (const tagId of required) {
-    if (!effectiveTagSet.has(tagId)) return false;
+    if (!effective.has(tagId)) return false;
   }
   return true;
 }
 
 /**
  * The subset of `required_tags` the character is missing. Empty array means
- * the spell's prereqs are met.
+ * the spell's prereqs are met. Honors the same hierarchical-satisfaction
+ * semantics as `characterMeetsSpellPrerequisites` when `parentByTagId` is
+ * supplied.
  */
 export function missingPrerequisiteTags(
   effectiveTagSet: Set<string>,
   spell: { requiredTags?: string[] | null },
+  parentByTagId?: Map<string, string | null>,
 ): string[] {
   const required = Array.isArray(spell.requiredTags) ? spell.requiredTags : [];
-  return required.filter((tagId) => !effectiveTagSet.has(tagId));
+  if (required.length === 0) return [];
+  const effective = expandEffectiveTagSetWithAncestors(effectiveTagSet, parentByTagId);
+  return required.filter((tagId) => !effective.has(tagId));
 }

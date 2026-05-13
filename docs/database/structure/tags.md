@@ -58,6 +58,17 @@ Call sites that pass `parentByTagId` to the matcher today:
 
 Module-side `requirements-walker.js` does NOT need an explicit hierarchy walk because allowlists are baked server-side and already include subtag-derived matches.
 
+### Hierarchical prereq satisfaction (required_tags)
+
+Spell `required_tags` checks against the character's **effective tag set** use the same hierarchy rule, applied in the symmetric direction:
+
+- A spell that requires `Conjure` is satisfied by a character carrying `Conjure`, `Conjure.Manifest`, or `Conjure.Summon` — having a more-specific descendant covers the generic requirement.
+- A spell that requires `Conjure.Manifest` is NOT satisfied by a character carrying only the bare `Conjure` or the sibling `Conjure.Summon`. The prereq asks for that exact subtag.
+
+Implemented in [`src/lib/characterTags.ts`](../../../src/lib/characterTags.ts) — `characterMeetsSpellPrerequisites` and `missingPrerequisiteTags` both accept an optional `parentByTagId: Map<string, string | null>` and call `expandEffectiveTagSetWithAncestors` on the character's set before comparing. Without the map, matching falls back to flat exact-id comparison (back-compat).
+
+Currently consumed by `src/pages/characters/CharacterBuilder.tsx` (Spell Manager — block-add and missing-tag highlight); the helpers are exported for any future surface that needs prereq evaluation.
+
 ### Migration traps — read before authoring another `tags` migration
 
 1. **D1 forbids `BEGIN TRANSACTION` / `COMMIT` / `PRAGMA` in user SQL.** wrangler errors out with the `state.storage.transaction()` message. D1 wraps the file atomically on its side; write plain DDL only. (See the header of `20260512-1418_tags_parent_aware_unique.sql`.)

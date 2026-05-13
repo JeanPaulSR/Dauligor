@@ -2645,6 +2645,16 @@ export default function CharacterBuilder({
     () => new Set(effectiveTagAttributions.keys()),
     [effectiveTagAttributions],
   );
+  // Subtag-aware prereq matching: lets a character carrying
+  // `Conjure.Manifest` satisfy a spell's `Conjure` requirement. Built
+  // from spellManagerTags which preserves `parentTagId` per row. When
+  // tags haven't loaded yet the map is empty and prereq matching
+  // degrades to flat exact-id compare. See src/lib/characterTags.ts.
+  const tagParentMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const t of spellManagerTags) map.set(t.id, t.parentTagId ?? null);
+    return map;
+  }, [spellManagerTags]);
 
   const classProgressionSummaries = progressionClassGroups
     .map((entry: any) => {
@@ -3162,6 +3172,10 @@ export default function CharacterBuilder({
             id: t.id,
             name: t.name || "",
             groupId: t.groupId || t.group_id || null,
+            // Preserve parent for hierarchical prereq matching — a
+            // character carrying `Conjure.Manifest` satisfies a spell's
+            // `Conjure` requirement. See src/lib/characterTags.ts.
+            parentTagId: t.parent_tag_id ?? t.parentTagId ?? null,
           })),
         );
         setSpellManagerTagGroups(tagGroups);
@@ -6837,7 +6851,7 @@ export default function CharacterBuilder({
                       spellRequiredTags.length > 0 &&
                       !characterMeetsSpellPrerequisites(effectiveTagSet, {
                         requiredTags: spellRequiredTags,
-                      })
+                      }, tagParentMap)
                     ) {
                       return prev;
                     }
@@ -7398,6 +7412,7 @@ export default function CharacterBuilder({
                                   const missingTags = missingPrerequisiteTags(
                                     effectiveTagSet,
                                     { requiredTags },
+                                    tagParentMap,
                                   );
                                   const prereqBlocked =
                                     !isKnown && !isGranted && missingTags.length > 0;
