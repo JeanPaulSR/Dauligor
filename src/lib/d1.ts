@@ -407,10 +407,14 @@ export async function upsertDocumentBatch(collectionName: string, entries: { id:
   if (entries.length === 0) return [];
 
   const tableName = getTableName(collectionName);
-  const sqls: string[] = [];
-  const paramsList: any[][] = [];
-
-  for (const { id, data } of entries) {
+  // Build a per-entry { sql, params } pair for `batchQueryD1`. The
+  // previous shape (parallel sqls[] + paramsList[][] passed to
+  // `queryD1`) tripped `queryD1`'s `sql.trim()` line because that
+  // function only ever expected a single string — runtime error was
+  // `TypeError: e.trim is not a function` on the Foundry workbench's
+  // "Import Visible" batch click. `batchQueryD1` already POSTs the
+  // correct array-of-statements shape that the Worker expects.
+  const queries: { sql: string; params: any[] }[] = entries.map(({ id, data }) => {
     const resolvedId = id || crypto.randomUUID();
     const entryData = dropUndefined(Object.entries(data));
     const columns = ['id', ...entryData.map(([key]) => key)];
@@ -422,11 +426,10 @@ export async function upsertDocumentBatch(collectionName: string, entries: { id:
       : 'DO NOTHING';
 
     const sql = `INSERT INTO ${tableName} (${columns.map(q).join(', ')}) VALUES (${placeholders}) ON CONFLICT(id) ${updateClause}`;
-    sqls.push(sql);
-    paramsList.push(values);
-  }
+    return { sql, params: values };
+  });
 
-  return queryD1<any>(sqls, paramsList);
+  return batchQueryD1(queries);
 }
 
 /**
