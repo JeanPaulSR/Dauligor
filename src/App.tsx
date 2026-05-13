@@ -37,8 +37,7 @@ import SpellcastingScalingEditor from './pages/compendium/scaling/SpellcastingSc
 import SpellsKnownScalingEditor from './pages/compendium/scaling/SpellsKnownScalingEditor';
 import UniqueOptionGroupList from './pages/compendium/UniqueOptionGroupList';
 import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor';
-import TagManager from './pages/compendium/TagManager';
-import TagGroupEditor from './pages/compendium/TagGroupEditor';
+import TagsExplorer from './pages/compendium/TagsExplorer';
 import SkillsEditor from './pages/compendium/SkillsEditor';
 import SpellList from './pages/compendium/SpellList';
 import ToolsEditor from './pages/compendium/ToolsEditor';
@@ -278,8 +277,8 @@ export default function App() {
                   <Route path="/compendium/unique-options" element={<UniqueOptionGroupList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/new" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/edit/:id" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/tags" element={<TagManager userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/tags/:id" element={<TagGroupEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/tags" element={<TagsExplorer userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/tags/:id" element={<TagsExplorer userProfile={effectiveProfile} />} />
                   
                   <Route path="/map" element={<Map userProfile={effectiveProfile} />} />
                   <Route path="/admin/users" element={<AdminUsers userProfile={effectiveProfile} />} />
