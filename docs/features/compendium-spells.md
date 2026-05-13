@@ -63,7 +63,9 @@ Spell descriptions are stored as BBCode (converted from Foundry HTML on import v
 | `@... [status||Frightened]` | `Frightened` |
 | `@...[status]` (unlabelled) | `Status` |
 
-When exporting back to Foundry, the BBCode → Foundry-friendly HTML converter restores the inline syntax.
+**Display precedence:** the detail panel renders `spells.description` (BBCode → `bbcodeToHtml`) first; the raw Foundry HTML at `foundryDocument.system.description.value` is only used as a fallback for legacy rows that predate BBCode conversion. Edits made in the manual editor flow through BBCode, not raw HTML.
+
+**Round-trip back to Foundry:** on save in the manual editor, the BBCode description is converted via `bbcodeToHtml` and written into `foundryDocument.system.description.value` so the next Foundry read (pairing-module import, actor-bundle re-export) ships the user's edits as HTML. Inline Foundry syntax tokens (`[[/r ...]]`, `@...[status||...]`) survive a BBCode round-trip because the BBCode pipeline doesn't recognize them — they pass through as literal text and Foundry re-interprets them on the receiving end.
 
 ## Spell importer (`SpellImportWorkbench`)
 

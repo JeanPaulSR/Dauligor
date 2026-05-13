@@ -11,6 +11,7 @@ import { upsertSpell, deleteSpell, fetchSpell } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
 import { orderTagsAsTree, normalizeTagRow } from '../../lib/tagHierarchy';
 import { slugify } from '../../lib/utils';
+import { bbcodeToHtml } from '../../lib/bbcode';
 import { Database, CloudOff } from 'lucide-react';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import { parseFoundrySystem as parseFoundrySystemForEditor } from '../../lib/spellFilters';
@@ -469,8 +470,19 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       const existingSystem = editingId
         ? (parseFoundrySystemForEditor(spellDetailsById[editingId]?.foundry_data ?? spellDetailsById[editingId]?.foundryData) || {})
         : {};
+      // Mirror the BBCode description back into the Foundry-shape description.value
+      // as HTML so that next time the pairing module reads this spell (or the actor
+      // bundle re-exports it) Foundry receives the user's edits. The app itself
+      // reads `description` (BBCode) for display — this is purely the round-trip
+      // payload. See docs/features/compendium-spells.md.
+      const descriptionHtmlForFoundry = bbcodeToHtml(String(formData.description || ''));
+
       const mergedFoundryData = {
         ...existingSystem,
+        description: {
+          ...(existingSystem.description || {}),
+          value: descriptionHtmlForFoundry,
+        },
         activation: { ...(existingSystem.activation || {}), ...formData.activation },
         range:      { ...(existingSystem.range      || {}), ...formData.range      },
         duration:   { ...(existingSystem.duration   || {}), ...formData.duration   },

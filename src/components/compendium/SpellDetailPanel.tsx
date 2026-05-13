@@ -148,11 +148,16 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
   };
 
   const getDescriptionHtml = (s: SpellRecord) => {
+    // Prefer the BBCode `description` — it's the authoritative source after import
+    // (Foundry HTML → BBCode runs on every import) and reflects any in-app edits.
+    // Foundry's raw HTML at `foundryDocument.system.description.value` is kept only
+    // as a round-trip payload + legacy fallback for rows that predate the BBCode
+    // conversion. See docs/features/compendium-spells.md.
+    const bbcodeDescription = String(s.description || '').trim();
+    if (bbcodeDescription) return formatFoundrySpellDescriptionForDisplay(bbcodeToHtml(bbcodeDescription));
     const rawFoundryHtml = String(s.foundryDocument?.system?.description?.value || '').trim();
     if (rawFoundryHtml) return formatFoundrySpellDescriptionForDisplay(rawFoundryHtml);
-    const bbcodeDescription = String(s.description || '').trim();
-    if (!bbcodeDescription) return '';
-    return formatFoundrySpellDescriptionForDisplay(bbcodeToHtml(bbcodeDescription));
+    return '';
   };
 
   const getShell = (s: SpellRecord) => s.foundryShell || s.foundryDocument?.system || {};
