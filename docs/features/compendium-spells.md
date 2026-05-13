@@ -36,9 +36,18 @@ Filters (top toolbar):
 - Sources (multi-select)
 - Spell level (0–9 multi-select)
 - Spell school (multi-select)
-- Custom tags (Tag Manager-defined)
+- Custom tags (Tag Manager-defined; **hierarchical** — filtering on a parent tag also matches spells tagged with any subtag of it; see [../database/structure/tags.md](../database/structure/tags.md#hierarchical-query-matching))
+- Casting time bucket (Action / Bonus / Reaction / Minute / Hour / Special)
+- Range bucket (Self / Touch / Close ≤5 / Short ≤30 / Medium ≤60 / Long ≤120 / Far >120)
+- Shape bucket (Cone / Cube / Cylinder / Line / Radius / Sphere / Square / Wall / None) — from `system.target.template.type`
+- Duration bucket (Instantaneous / Round / Minute / Hour / Day / Permanent / Special)
+- Properties (Concentration / Ritual / V / S / M)
+
+Range and shape are orthogonal — a "self (15 ft cone)" spell has range bucket `Self` and shape bucket `Cone`.
 
 Filter UI is built on the shared [FilterBar](../../src/components/compendium/FilterBar.tsx). Same modal language as `ClassList` (no spell-specific variation): `ADVANCED FILTERS` title, section headers with `Include All / Clear`, `filter-tag` toggles for options.
+
+> **Range bucket gotcha:** the bucket VALUES (`5ft`, `30ft`, `60ft`, `120ft`, `long`, `other`) are exact-distance strings carried over from an earlier exact-value implementation. The labels (`Close`, `Short`, `Medium`, `Long`, `Far`) are band-based. The mismatch is intentional — renaming values would break stored spell-rule queries. See `src/lib/spellFilters.ts` `RangeBucket` type comment.
 
 ### Selection-only image loading
 Spell icons aren't rendered in the table rows (too noisy). The right detail pane shows the icon at native 126×126 inside an `overflow-hidden` wrapper so there's no inline gap below the art. Image loading goes through [src/components/compendium/SpellArtPreview.tsx](../../src/components/compendium/SpellArtPreview.tsx), which preloads the next spell's image and shows a gold spinner while loading.
@@ -86,13 +95,27 @@ The manual editor mirrors the importer rhythm:
 - Left column — virtualised draft list with search; same visual language as the importer's left pane
 - Right column — dedicated editor form (no `DevelopmentCompendiumManager` wrapper)
 
-Editor sections:
-- Compact icon uploader (top-left) using `ImageUpload` with `imageType="icon"` and `compact`
-- Description editor with **steady 300px baseline** (`autoSizeToContent={false}`) so swapping spells doesn't re-grow
-- Shell fields: level, school, components, range, duration, target, casting time
-- Materials (consumed flag, cost, supply text)
-- Preparation mode (Foundry-native values; default `spell`, not the legacy `prepared`)
-- Source + page + tags
+Form is split across **inner tabs** for focus instead of one long scroll:
+
+| Tab | Holds |
+|---|---|
+| **Basics** | Icon, name, identifier, source, level, school, preparation mode |
+| **Description** | MarkdownEditor (kept its own tab — it's the long one) |
+| **Mechanics** | Casting time, range, duration, ritual, concentration, V/S/M components, material text/cost/consumed |
+| **Activities** | `ActivityEditor` + raw effects JSON textarea |
+| **Tags & Prereqs** | `SpellTagPicker` for descriptive tags AND a second instance for `required_tags`; per-tag-group collapsible sections, parent-row + indented-subtag-row layout |
+
+Save / Delete / Reset live in the Card header above the TabsList, so the action bar is one click away regardless of which tab is showing. Form state is fully controlled (every input is bound to `formData`), so `Radix Tabs` unmounting inactive tab content does NOT lose unsaved values on tab switch.
+
+### `SpellTagPicker` layout
+
+Per-tag-group collapsible card with header showing selected/total counts. When expanded:
+
+- Each **root tag** gets its own row.
+- Its **subtags** (if any) get an indented sub-row directly below, with a thin gold left-border as the tree hint. No `↳` glyph on chips — the indent does the work.
+- Orphaned subtags (parent not in the visible set, rare with consistent data) fall to a separate amber-edged sub-row so they don't disappear when filtering.
+
+Used twice in the Tags & Prereqs tab: once for descriptive tags (`spells.tags`), once for prerequisites (`spells.required_tags`).
 
 ### Admin actions
 
