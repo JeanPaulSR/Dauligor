@@ -28,23 +28,25 @@
 -- CASCADE` from migration 0003. Renaming tags→tags_old first would
 -- rewrite that FK to reference tags_old, and dropping tags_old would
 -- leave it dangling at a non-existent table. The order below keeps the
--- inbound FK pointing at "tags" the whole time — it's momentarily
--- dangling between DROP and RENAME, which is fine with foreign_keys=OFF.
-
-PRAGMA foreign_keys=OFF;
-
-BEGIN TRANSACTION;
+-- inbound FK pointing at "tags" the whole time.
+--
+-- D1 SPECIFICS: Cloudflare D1 rejects user-supplied `BEGIN TRANSACTION`
+-- / `COMMIT` and `PRAGMA` statements — transactions are managed by the
+-- platform, and PRAGMA toggles aren't honored at the wrangler exec
+-- layer. wrangler executes each statement individually; D1 wraps the
+-- batch atomically on its side. Production has 0 rows in
+-- lore_article_tags, so the brief window where the FK is dangling
+-- (between DROP and RENAME) is risk-free — there are no rows whose
+-- references would suddenly point at a non-existent table.
 
 CREATE TABLE tags_new (
     id TEXT PRIMARY KEY,
     group_id TEXT NOT NULL REFERENCES tag_groups(id),
     name TEXT NOT NULL,
     slug TEXT NOT NULL,
-    -- Self-reference via the temp name. RENAME below auto-rewrites
+    -- Self-reference via the temp name. The RENAME below auto-rewrites
     -- this to `REFERENCES tags(id)` (still a self-reference) per
-    -- SQLite's FK-rewrite-on-rename behavior — same mechanism that
-    -- would have hurt us with the inverted order, used in our favor
-    -- here.
+    -- SQLite's FK-rewrite-on-rename behavior.
     parent_tag_id TEXT REFERENCES tags_new(id),
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -53,6 +55,7 @@ INSERT INTO tags_new (id, group_id, name, slug, parent_tag_id, updated_at)
 SELECT id, group_id, name, slug, parent_tag_id, updated_at FROM tags;
 
 DROP TABLE tags;
+
 ALTER TABLE tags_new RENAME TO tags;
 
 -- Recreate the indexes that lived on the old table.
@@ -64,14 +67,3 @@ CREATE INDEX IF NOT EXISTS idx_tags_parent_tag ON tags(parent_tag_id);
 -- the empty-string bucket so duplicate roots are still blocked.
 CREATE UNIQUE INDEX IF NOT EXISTS tags_group_parent_slug_uniq
     ON tags(group_id, COALESCE(parent_tag_id, ''), slug);
-
--- Informational: report any orphaned FK targets surfaced by the
--- rebuild. A non-zero count means something went wrong; SQLite won't
--- auto-rollback on a SELECT result, so review the output before
--- moving on. With the correct order above and FK auto-rewrite on
--- RENAME, this should always be 0.
-SELECT 'foreign_key_check rows: ' || COUNT(*) FROM pragma_foreign_key_check;
-
-COMMIT;
-
-PRAGMA foreign_keys=ON;
