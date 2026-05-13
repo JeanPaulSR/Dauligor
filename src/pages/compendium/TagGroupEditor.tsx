@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
+import { fetchTagUsageMap, summarizeBreakdown, type TagUsageBreakdown } from '../../lib/tagUsage';
 
 // Migration 20260512-1418 narrowed tag uniqueness from `(group_id, slug)`
 // to `(group_id, COALESCE(parent_tag_id, ''), slug)`, so duplicates only
@@ -72,6 +73,23 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
   //    nothing visible.
   const [tagFilter, setTagFilter] = useState('');
   const [collapsedRoots, setCollapsedRoots] = useState<Set<string>>(new Set());
+
+  // Tag usage map — populated in a background fetch after the tag list
+  // mounts. While `null`, pills are simply not rendered (cleaner than a
+  // shimmer for the half-second the scan takes). The scan covers every
+  // tag-consumer table in one shot via fetchTagUsageMap, so refreshing
+  // the map on every tag add/rename/delete inside this editor would be
+  // wasteful — we only refresh on mount, and on group-id change.
+  const [tagUsage, setTagUsage] = useState<Map<string, TagUsageBreakdown> | null>(null);
+
+  useEffect(() => {
+    if (!id || !isAdmin) return;
+    let active = true;
+    fetchTagUsageMap()
+      .then((map) => { if (active) setTagUsage(map); })
+      .catch((err) => console.warn('[TagGroupEditor] tag usage scan failed:', err));
+    return () => { active = false; };
+  }, [id, isAdmin]);
 
   const toggleRootCollapsed = (rootId: string) => {
     setCollapsedRoots(prev => {
@@ -257,10 +275,28 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
     // clause — the prompt gives the user a count and a chance to bail
     // before destructive work, which an FK can't.
     const children = tags.filter(t => (t.parent_tag_id ?? t.parentTagId) === tagId);
-    const message = children.length > 0
+
+    // Blast-radius preview: sum the parent's usage with every subtag's
+    // usage so the admin sees the full footprint before confirming.
+    // Falls back to a quieter message when usage hasn't loaded yet — we
+    // don't want to lie about "Used by 0" while the scan is still
+    // running.
+    const idsBeingDeleted = [tagId, ...children.map(c => c.id)];
+    let usageLine = '';
+    if (tagUsage) {
+      const totalRefs = idsBeingDeleted.reduce(
+        (acc, id) => acc + (tagUsage.get(id)?.total ?? 0),
+        0,
+      );
+      if (totalRefs > 0) {
+        usageLine = `\n\nThis will affect ${totalRefs} reference${totalRefs === 1 ? '' : 's'} across the compendium.`;
+      }
+    }
+
+    const baseMessage = children.length > 0
       ? `Delete this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`
       : 'Delete this tag?';
-    if (!window.confirm(message)) return;
+    if (!window.confirm(baseMessage + usageLine)) return;
 
     try {
       for (const child of children) {
@@ -581,23 +617,51 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                                 </span>
                               )}
                             </span>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {isRoot && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setAddingSubtagOfId(tag.id);
-                                    setNewSubtagName('');
-                                  }}
-                                  className="h-7 px-2 text-[10px] text-ink/40 hover:text-gold"
-                                  title="Add a subtag under this tag"
-                                >
-                                  <Plus className="w-3 h-3 mr-1" /> Subtag
-                                </Button>
-                              )}
-                              <Button variant="ghost" size="sm" onClick={() => { setEditingTagId(tag.id); setEditingTagName(tag.name); }} className="h-7 w-7 p-0 text-ink/40 hover:text-gold"><Edit2 className="w-3.5 h-3.5" /></Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteTag(tag.id)} className="h-7 w-7 p-0 text-ink/40 hover:text-blood hover:bg-blood/5"><Trash2 className="w-3.5 h-3.5" /></Button>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Usage pill — always visible (not hover-
+                                * gated, unlike the action buttons).
+                                * Colors follow the style guide:
+                                * `text-gold/80` for in-use, `text-ink/30`
+                                * for unused. The `title` attribute carries
+                                * the per-kind breakdown so admins can
+                                * inspect blast radius before deletion
+                                * without leaving the page. */}
+                              {tagUsage && (() => {
+                                const breakdown = tagUsage.get(tag.id);
+                                const total = breakdown?.total ?? 0;
+                                const tooltip = summarizeBreakdown(breakdown);
+                                return (
+                                  <span
+                                    className={cn(
+                                      "text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 border whitespace-nowrap",
+                                      total > 0
+                                        ? "bg-gold/10 border-gold/20 text-gold/80"
+                                        : "bg-background/30 border-ink/10 text-ink/30 italic"
+                                    )}
+                                    title={tooltip}
+                                  >
+                                    {total > 0 ? `Used by ${total}` : 'Unused'}
+                                  </span>
+                                );
+                              })()}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {isRoot && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setAddingSubtagOfId(tag.id);
+                                      setNewSubtagName('');
+                                    }}
+                                    className="h-7 px-2 text-[10px] text-ink/40 hover:text-gold"
+                                    title="Add a subtag under this tag"
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" /> Subtag
+                                  </Button>
+                                )}
+                                <Button variant="ghost" size="sm" onClick={() => { setEditingTagId(tag.id); setEditingTagName(tag.name); }} className="h-7 w-7 p-0 text-ink/40 hover:text-gold"><Edit2 className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteTag(tag.id)} className="h-7 w-7 p-0 btn-danger"><Trash2 className="w-3.5 h-3.5" /></Button>
+                              </div>
                             </div>
                           </>
                         )}
