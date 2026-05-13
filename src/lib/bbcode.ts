@@ -9,6 +9,43 @@ export interface BbcodeViewContext {
   isStaff?: boolean;
 }
 
+/**
+ * Cross-reference tag — pipe-delimited so the syntax survives the XSS
+ * escape pass without needing &quot; gymnastics. Kinds the app
+ * understands today: `spell`, `class`, `condition`. (`creature` is
+ * intentionally not wired in until the creatures compendium exists;
+ * a [ref|creature|...] would render as a styled badge with no link.)
+ *
+ * Storage form:   [ref|<kind>|<id>]Display Name[/ref]
+ * Display form:   <a class="ref-link ref-<kind>" data-ref-kind="<kind>"
+ *                   data-ref-id="<id>" href="<route>">Display Name</a>
+ *
+ * Routes are picked by `resolveRefRoute()` below. The data-ref-*
+ * attributes are what htmlToBbcode and the (future) Foundry-export
+ * converter key off — `class="ref-link"` alone wouldn't survive a
+ * TipTap round-trip clean enough.
+ */
+export type RefKind = 'spell' | 'class' | 'condition' | 'creature';
+
+function resolveRefRoute(kind: string, id: string): string | null {
+  const safeId = encodeURIComponent(id);
+  switch (kind) {
+    case 'spell':     return `/compendium/spells?focus=${safeId}`;
+    case 'class':     return `/compendium/classes/view/${safeId}`;
+    case 'condition': return `/admin/statuses?focus=${safeId}`;
+    case 'creature':  return null; // no destination yet
+    default:          return null;
+  }
+}
+
+function escapeAttr(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string {
   if (!text) return '';
 
@@ -56,6 +93,29 @@ export function bbcodeToHtml(text: string, context?: BbcodeViewContext): string 
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+
+  // Cross-references — [ref|kind|id]Display[/ref]. Done early (right
+  // after the XSS escape pass) so the generated <a> survives the rest
+  // of the converter; later passes only fire on remaining bbcode markers
+  // and don't re-touch raw <a> tags.
+  html = html.replace(
+    /\[ref\|([a-z]+)\|([^\]|]+)\]([\s\S]*?)\[\/ref\]/gi,
+    (_match, rawKind, rawId, display) => {
+      const kind = String(rawKind || '').toLowerCase();
+      const id = String(rawId || '').trim();
+      const text = String(display || '').trim() || id;
+      const route = resolveRefRoute(kind, id);
+      const safeKind = escapeAttr(kind);
+      const safeId = escapeAttr(id);
+      if (route) {
+        return `<a class="ref-link ref-${safeKind}" data-ref-kind="${safeKind}" data-ref-id="${safeId}" href="${escapeAttr(route)}">${text}</a>`;
+      }
+      // No destination (creatures today, or unknown kinds) — styled
+      // badge with the data-* attrs preserved for round-trip / future
+      // wiring. Same class so styling cascades.
+      return `<span class="ref-link ref-${safeKind} ref-dangling" data-ref-kind="${safeKind}" data-ref-id="${safeId}">${text}</span>`;
+    }
+  );
 
   // Basic formatting
   html = html.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '<strong>$1</strong>');
@@ -205,6 +265,29 @@ export function htmlToBbcode(html: string): string {
   bbcode = bbcode.replace(/<sub>([\s\S]*?)<\/sub>/gi, '[sub]$1[/sub]');
   bbcode = bbcode.replace(/<sup>([\s\S]*?)<\/sup>/gi, '[sup]$1[/sup]');
   
+  // Cross-references — recognize ref-link anchors AND ref-link spans
+  // (dangling, no destination) before the generic <a> -> [url] pass so
+  // they're captured by kind+id rather than collapsed to a plain url.
+  // Attributes can come in any order, so use lookups per attribute.
+  bbcode = bbcode.replace(
+    /<a\b[^>]*\bclass="[^"]*\bref-link\b[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
+    (match, text) => {
+      const kindMatch = match.match(/\bdata-ref-kind="([^"]+)"/i);
+      const idMatch = match.match(/\bdata-ref-id="([^"]+)"/i);
+      if (!kindMatch || !idMatch) return text; // malformed -> drop tag
+      return `[ref|${kindMatch[1]}|${idMatch[1]}]${text}[/ref]`;
+    }
+  );
+  bbcode = bbcode.replace(
+    /<span\b[^>]*\bclass="[^"]*\bref-link\b[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
+    (match, text) => {
+      const kindMatch = match.match(/\bdata-ref-kind="([^"]+)"/i);
+      const idMatch = match.match(/\bdata-ref-id="([^"]+)"/i);
+      if (!kindMatch || !idMatch) return text;
+      return `[ref|${kindMatch[1]}|${idMatch[1]}]${text}[/ref]`;
+    }
+  );
+
   // Links
   bbcode = bbcode.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (match, url, text) => {
     if (url === text) return `[url]${url}[/url]`;

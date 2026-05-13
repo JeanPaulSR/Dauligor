@@ -229,6 +229,17 @@
   .prose u   { @apply underline decoration-gold/40; }
   .prose sub, .prose sup { @apply text-[0.7em] text-gold/60; }
 
+  /* Cross-references: [ref|kind|id]Display[/ref] BBCode tag.
+     Anchor (linked) variant gets full color + underline on hover; the
+     span (dangling, no destination yet — `creature` today) is the same
+     colorway but no cursor, no underline, so it reads as "this is a
+     thing, but you can't click it (yet)". */
+  .prose .ref-link {
+    @apply text-gold/85 underline decoration-gold/30 decoration-dotted underline-offset-2 transition-colors;
+  }
+  .prose a.ref-link:hover { @apply text-gold decoration-gold/70 decoration-solid; }
+  .prose span.ref-link.ref-dangling { @apply text-gold/55 cursor-help no-underline; }
+
   /* Conditional era/campaign content blocks (staff view) */
   .prose .conditional-block {
     @apply my-4 rounded-lg border-l-4 border-gold/40 bg-gold/5 overflow-hidden;

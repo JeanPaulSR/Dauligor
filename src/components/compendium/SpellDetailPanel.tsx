@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import {
@@ -52,11 +53,25 @@ type Props = {
 };
 
 export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spell from the list to view its details.' }: Props) {
+  const navigate = useNavigate();
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [spellsById, setSpellsById] = useState<Record<string, SpellRecord>>({});
   const [membershipsBySpellId, setMembershipsBySpellId] = useState<Record<string, ClassMembership[]>>({});
   const [loading, setLoading] = useState(false);
+
+  // Intercept clicks on cross-reference anchors so they SPA-navigate
+  // instead of full-page-reloading. Targets only `.ref-link` so external
+  // links and `[url]` BBCode anchors keep their default behavior.
+  const handleDescriptionClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as HTMLElement).closest?.('a.ref-link') as HTMLAnchorElement | null;
+    if (!anchor) return;
+    const href = anchor.getAttribute('href') || '';
+    if (!href.startsWith('/')) return; // only intercept in-app routes
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; // let new-tab/new-window through
+    event.preventDefault();
+    navigate(href);
+  }, [navigate]);
 
   // Sources + tags load once. Both are small static foundation data; the d1 cache
   // makes repeated mounts essentially free.
@@ -201,6 +216,7 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
       <div className="space-y-6 px-6 py-5">
         <div
           className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
+          onClick={handleDescriptionClick}
           dangerouslySetInnerHTML={{ __html: getDescriptionHtml(spell) || '<p>No description available.</p>' }}
         />
 

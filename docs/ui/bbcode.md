@@ -46,6 +46,24 @@ Contains the core logic for:
 | `[br]` | Line Break | `<br>` |
 | `[small]` | Small Text | `<small>` |
 | `[spoiler]` | Spoiler | `<span class="spoiler">` |
+| `[ref\|kind\|id]Display[/ref]` | Cross-reference to another Dauligor compendium entry — see below | `<a class="ref-link ref-<kind>" data-ref-kind="..." data-ref-id="..." href="...">` |
+
+### Cross-references (`[ref]`)
+
+Pipe-delimited (`[ref|spell|fire-bolt]Fire Bolt[/ref]`) rather than attribute style so the syntax survives the early XSS-escape pass in `bbcodeToHtml` without needing `&quot;` gymnastics.
+
+| Kind | Resolves to | Notes |
+|---|---|---|
+| `spell` | `/compendium/spells?focus=<id>` | The spell list deep-links to selection via the `focus` query param |
+| `class` | `/compendium/classes/view/<id>` | |
+| `condition` | `/admin/statuses?focus=<id>` | Admin-only page; non-admins still see the styled link (which 404s for them — intentional, since conditions are author-only) |
+| `creature` | (no destination yet) | Renders as a styled non-clickable badge until a creatures compendium lands. The `[ref]` is preserved for future wiring. |
+
+**Rendering**: anchors with `class="ref-link ref-<kind>"` get gold-dotted-underline styling on `.prose` (see `src/index.css`). Click handlers on description containers (e.g. `SpellDetailPanel`) intercept anchors with `class="ref-link"` and route via `useNavigate` to avoid full-page reloads. Modifier-clicks (Ctrl/Cmd/Shift) and middle-clicks pass through to the browser's open-in-new-tab default.
+
+**Round-trip**: `htmlToBbcode` recognizes the same `class="ref-link"` + `data-ref-kind`/`data-ref-id` shape and converts back to `[ref|kind|id]Display[/ref]` so TipTap edits don't drop the reference. The dangling-creature span gets the same round-trip.
+
+**Foundry export**: not yet wired (Phase 3) — the converter will rewrite `[ref|...|...]Display[/ref]` to `<a href="https://www.dauligor.com/compendium/...">Display</a>` so the references point back to the Dauligor app rather than Foundry's compendium.
 
 ## 4. Technical Implementation Details
 

@@ -259,8 +259,14 @@ export function formatFoundrySpellDescriptionForDisplay(html: string) {
     .replace(/\[\[\/damage\s+([^\]\s]+)\s+type=([a-z-]+)(?:[^\]]*)\]\]/giu, '$1 $2')
     .replace(/\[\[\/damage\s+([^\]]+?)\]\]/giu, '$1')
     .replace(/@[^[]+\[([^|\]]+)(?:\|\|([^\]]+))?\]/giu, (_match, raw, display) => display || toDisplayTokenLabel(raw))
-    .replace(/\sdata-[a-z0-9-]+="[^"]*"/giu, '')
-    .replace(/\sclass="[^"]*"/giu, '')
+    // Strip Foundry HTML noise but preserve our own cross-reference
+    // markers: data-ref-* and any class containing `ref-` (e.g.
+    // `ref-link ref-spell`). bbcodeToHtml emits those when rendering
+    // [ref|kind|id]...[/ref] tags; without this allowlist they get
+    // stripped here and the SPA click intercept loses the kind+id
+    // signal it needs to route correctly.
+    .replace(/\sdata-(?!ref-)[a-z0-9-]+="[^"]*"/giu, '')
+    .replace(/\sclass="(?![^"]*\bref-)[^"]*"/giu, '')
     .replace(/<p>\s*<\/p>/giu, '')
     .trim();
 }
