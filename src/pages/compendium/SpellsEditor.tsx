@@ -4,6 +4,7 @@ import { ChevronLeft, Edit3, Plus, Save, Search, Trash2, Wand2 } from 'lucide-re
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
+import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, deleteSpell, fetchSpell } from '../../lib/compendium';
@@ -54,7 +55,12 @@ type SpellFormData = {
   imageUrl: string;
   description: string;
   activities: any[];
-  effectsStr: string;
+  // Item-level Active Effects authored through the shared
+  // `<ActiveEffectEditor>` — same component class features, feats, and
+  // option items use. Stored as a parsed array on the form; the
+  // `spells.effects` column round-trips as a JSON string at the d1
+  // layer.
+  effects: any[];
   level: number;
   school: string;
   preparationMode: string;
@@ -73,6 +79,22 @@ type SpellFormData = {
   activation: { type: string; value: number | string; condition: string };
   range: { value: number | string; units: string; special: string };
   duration: { value: number | string; units: string };
+  // dnd5e 5.x splits target into `template` (AoE shape) + `affects`
+  // (who/what is targeted). Both are optional — touch spells leave
+  // both empty, AoE spells fill `template`, single-target spells fill
+  // `affects`. See `docs/database/structure/tags.md` peer files for
+  // the round-trip pattern. Stored under foundry_data.target.
+  target: {
+    template: { type: string; size: string; width: string; height: string; units: string };
+    affects: { type: string; count: string; choice: boolean; special: string };
+  };
+  // Limited-use spells (artifact-bound, once-per-day homebrew, etc.).
+  // `recovery` is an array of period rows — empty for unlimited-use
+  // (the common case). Stored under foundry_data.uses.
+  uses: {
+    max: string;
+    recovery: { period: string; type: string; formula: string }[];
+  };
   // Descriptive tags — what classifies the spell (e.g. "fire", "divine",
   // "necrotic"). Spell rules + class spell list rules query against these.
   // Stored on the spells.tags JSON column.
@@ -122,7 +144,7 @@ const SPELL_DEFAULTS: Omit<SpellFormData, 'sourceId'> & { sourceId?: string } = 
   imageUrl: '',
   description: '',
   activities: [],
-  effectsStr: '[]',
+  effects: [],
   level: 0,
   school: 'evo',
   preparationMode: 'spell',
@@ -139,6 +161,11 @@ const SPELL_DEFAULTS: Omit<SpellFormData, 'sourceId'> & { sourceId?: string } = 
   activation: { type: 'action', value: 1, condition: '' },
   range: { value: 0, units: 'self', special: '' },
   duration: { value: 0, units: 'inst' },
+  target: {
+    template: { type: '', size: '', width: '', height: '', units: 'ft' },
+    affects: { type: '', count: '', choice: false, special: '' },
+  },
+  uses: { max: '', recovery: [] },
   tags: [],
   requiredTags: [],
   prerequisiteText: '',
@@ -331,7 +358,17 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           : Array.isArray(entry.activities)
             ? entry.activities
             : [],
-        effectsStr: JSON.stringify(entry.automation?.effects || entry.effects || [], null, 2),
+        // Effects round-trip as a JSON-encoded array on the
+        // `spells.effects` column. Accept either a pre-parsed array
+        // (e.g. from automation.effects) or a JSON string (raw column
+        // value). Same parse pattern FeatsEditor uses.
+        effects: Array.isArray(entry.automation?.effects)
+          ? entry.automation.effects
+          : Array.isArray(entry.effects)
+            ? entry.effects
+            : parseStringArray(entry.effects).length
+              ? parseStringArray(entry.effects)
+              : (() => { try { const v = JSON.parse(entry.effects ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; } })(),
         level: Number(entry.level || 0),
         school: entry.school || 'evo',
         preparationMode: entry.preparationMode || 'spell',
@@ -358,6 +395,25 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         duration: {
           value: system?.duration?.value ?? defaults.duration.value,
           units: String(system?.duration?.units ?? defaults.duration.units),
+        },
+        target: {
+          template: {
+            type:   String(system?.target?.template?.type   ?? ''),
+            size:   String(system?.target?.template?.size   ?? ''),
+            width:  String(system?.target?.template?.width  ?? ''),
+            height: String(system?.target?.template?.height ?? ''),
+            units:  String(system?.target?.template?.units  ?? 'ft'),
+          },
+          affects: {
+            type:    String(system?.target?.affects?.type    ?? ''),
+            count:   String(system?.target?.affects?.count   ?? ''),
+            choice:  !!system?.target?.affects?.choice,
+            special: String(system?.target?.affects?.special ?? ''),
+          },
+        },
+        uses: {
+          max: String(system?.uses?.max ?? ''),
+          recovery: Array.isArray(system?.uses?.recovery) ? system.uses.recovery : [],
         },
         tags: parseStringArray(entry.tags ?? entry.tagIds),
         requiredTags: parseStringArray(entry.requiredTags ?? entry.required_tags),
@@ -404,29 +460,33 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       return;
     }
 
-    let parsedEffects: any[] = [];
-    try {
-      parsedEffects = formData.effectsStr ? JSON.parse(formData.effectsStr) : [];
-      if (!Array.isArray(parsedEffects)) throw new Error('Effects must be a JSON array');
-    } catch (error: any) {
-      toast.error(error.message || 'Effects must be valid JSON');
-      return;
-    }
-
     setSaving(true);
     try {
-      // Merge new casting/range/duration values into the existing foundry_data system
-      // object so we don't clobber other Foundry-only fields (target, materials, etc.)
-      // when an imported spell is edited from the manual form.
+      // Merge new casting/range/duration/target/uses values into the
+      // existing foundry_data system object so we don't clobber other
+      // Foundry-only fields (materials, properties set, etc.) when an
+      // imported spell is edited from the manual form.
       const existingSystem = editingId
         ? (parseFoundrySystemForEditor(spellDetailsById[editingId]?.foundry_data ?? spellDetailsById[editingId]?.foundryData) || {})
         : {};
       const mergedFoundryData = {
         ...existingSystem,
         activation: { ...(existingSystem.activation || {}), ...formData.activation },
-        range: { ...(existingSystem.range || {}), ...formData.range },
-        duration: { ...(existingSystem.duration || {}), ...formData.duration },
+        range:      { ...(existingSystem.range      || {}), ...formData.range      },
+        duration:   { ...(existingSystem.duration   || {}), ...formData.duration   },
+        target: {
+          ...(existingSystem.target || {}),
+          template: { ...((existingSystem.target || {}).template || {}), ...formData.target.template },
+          affects:  { ...((existingSystem.target || {}).affects  || {}), ...formData.target.affects  },
+        },
+        uses: {
+          ...(existingSystem.uses || {}),
+          max:      formData.uses.max,
+          recovery: formData.uses.recovery,
+        },
       };
+
+      const effectsArr = Array.isArray(formData.effects) ? formData.effects : [];
 
       const payload: Record<string, any> = {
         ...formData,
@@ -435,7 +495,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           activities: Array.isArray(formData.activities)
             ? formData.activities
             : Object.values(formData.activities || {}),
-          effects: parsedEffects
+          effects: effectsArr,
         },
         updatedAt: new Date().toISOString(),
         status: 'development',
@@ -448,11 +508,16 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
       delete payload.id;
       delete payload.activities;
-      delete payload.effectsStr;
+      // effects is delivered via `automation.effects`; the d1 layer
+      // round-trips it onto `spells.effects` as JSON. Drop the
+      // top-level copy so we don't write the same data twice.
+      delete payload.effects;
       // These live in foundry_data, not as top-level columns on the spells table.
       delete payload.activation;
       delete payload.range;
       delete payload.duration;
+      delete payload.target;
+      delete payload.uses;
 
       Object.keys(payload).forEach((key) => {
         if (payload[key] === undefined) delete payload[key];
@@ -713,11 +778,11 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     </div>
                   </div>
                   <TabsList variant="line" className="gap-2 bg-transparent p-0">
-                    <TabsTrigger value="basics"      className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Basics</TabsTrigger>
-                    <TabsTrigger value="description" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Description</TabsTrigger>
-                    <TabsTrigger value="mechanics"   className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Mechanics</TabsTrigger>
-                    <TabsTrigger value="activities"  className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Activities</TabsTrigger>
-                    <TabsTrigger value="tags"        className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Tags & Prereqs</TabsTrigger>
+                    <TabsTrigger value="basics"     className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Basics</TabsTrigger>
+                    <TabsTrigger value="mechanics"  className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Mechanics</TabsTrigger>
+                    <TabsTrigger value="activities" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Activities</TabsTrigger>
+                    <TabsTrigger value="effects"    className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Effects</TabsTrigger>
+                    <TabsTrigger value="tags"       className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Tags & Prereqs</TabsTrigger>
                   </TabsList>
                 </div>
 
@@ -804,9 +869,11 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </div>
                       </div>
                     </div>
-                  </TabsContent>
 
-                  <TabsContent value="description" className="mt-0 space-y-6">
+                    {/* Description lives inside Basics — the page has
+                      * enough vertical room and keeping it adjacent to
+                      * name/identifier matches how the Foundry sheet's
+                      * Description tab is the first thing you see. */}
                     <MarkdownEditor
                       key={editingId || 'new-spell'}
                       value={formData.description}
@@ -1000,6 +1067,141 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </p>
                       </div>
                     </div>
+
+                    {/* Target — AoE templates + creature affects.
+                      * Two distinct sub-shapes per dnd5e 5.x schema:
+                      *   - template.{type,size,width,height,units}
+                      *   - affects.{type,count,choice,special}
+                      * See `item-spell-spell-fire-shield.json` in the
+                      * Foundry-JSON samples for the round-trip shape. */}
+                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Target</h3>
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Area Template</Label>
+                          <div className="grid grid-cols-[1fr_70px] gap-2">
+                            <select
+                              value={formData.target.template.type || ''}
+                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, type: e.target.value } } }))}
+                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                            >
+                              <option value="">None</option>
+                              <option value="cone">Cone</option>
+                              <option value="cube">Cube</option>
+                              <option value="cylinder">Cylinder</option>
+                              <option value="line">Line</option>
+                              <option value="radius">Radius</option>
+                              <option value="sphere">Sphere</option>
+                              <option value="square">Square</option>
+                              <option value="wall">Wall</option>
+                            </select>
+                            <select
+                              value={formData.target.template.units || 'ft'}
+                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, units: e.target.value } } }))}
+                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs"
+                              disabled={!formData.target.template.type}
+                            >
+                              <option value="ft">ft</option>
+                              <option value="mi">mi</option>
+                              <option value="m">m</option>
+                              <option value="km">km</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <Input
+                              value={String(formData.target.template.size ?? '')}
+                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, size: e.target.value } } }))}
+                              placeholder="Size"
+                              disabled={!formData.target.template.type}
+                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                            />
+                            <Input
+                              value={String(formData.target.template.width ?? '')}
+                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, width: e.target.value } } }))}
+                              placeholder="Width"
+                              disabled={!['line', 'wall'].includes(formData.target.template.type)}
+                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                            />
+                            <Input
+                              value={String(formData.target.template.height ?? '')}
+                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, template: { ...prev.target.template, height: e.target.value } } }))}
+                              placeholder="Height"
+                              disabled={!['cylinder', 'wall'].includes(formData.target.template.type)}
+                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Affects</Label>
+                          <div className="grid grid-cols-[1fr_70px] gap-2">
+                            <select
+                              value={formData.target.affects.type || ''}
+                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, type: e.target.value } } }))}
+                              className="h-9 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm"
+                            >
+                              <option value="">None</option>
+                              <option value="self">Self</option>
+                              <option value="creature">Creature</option>
+                              <option value="enemy">Enemy</option>
+                              <option value="ally">Ally</option>
+                              <option value="object">Object</option>
+                              <option value="space">Space</option>
+                            </select>
+                            <Input
+                              value={String(formData.target.affects.count ?? '')}
+                              onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, count: e.target.value } } }))}
+                              placeholder="Count"
+                              disabled={!formData.target.affects.type || formData.target.affects.type === 'self'}
+                              className="h-9 bg-background/50 border-gold/10 focus:border-gold disabled:opacity-50 text-xs"
+                            />
+                          </div>
+                          <label className="flex items-center justify-between gap-3 border border-gold/10 rounded-md p-2.5">
+                            <span className="text-[10px] uppercase text-ink/60 font-bold tracking-widest">Caster chooses</span>
+                            <Checkbox
+                              checked={!!formData.target.affects.choice}
+                              onCheckedChange={checked => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, choice: !!checked } } }))}
+                            />
+                          </label>
+                          <Input
+                            value={formData.target.affects.special || ''}
+                            onChange={e => setFormData(prev => ({ ...prev, target: { ...prev.target, affects: { ...prev.target.affects, special: e.target.value } } }))}
+                            placeholder='Special override (e.g. "any number")'
+                            className="h-9 bg-background/50 border-gold/10 focus:border-gold text-xs"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-ink/40">
+                        Touch / self spells can leave both blank. AoE spells use Template; single-target spells use Affects.
+                      </p>
+                    </div>
+
+                    {/* Limited Uses — rare for spells but real for
+                      * artifact-bound or once-per-day homebrew. Just
+                      * `max` for now; recovery rows can be authored on
+                      * the Foundry side until we need them in this
+                      * editor too. */}
+                    <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
+                      <div className="flex items-baseline justify-between">
+                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Limited Uses</h3>
+                        <span className="text-[10px] text-ink/40">Optional — leave blank for unlimited.</span>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Max (formula or number)</Label>
+                          <Input
+                            value={formData.uses.max || ''}
+                            onChange={e => setFormData(prev => ({ ...prev, uses: { ...prev.uses, max: e.target.value } }))}
+                            placeholder="e.g. @prof or 3"
+                            className="bg-background/50 border-gold/10 focus:border-gold text-xs font-mono"
+                          />
+                        </div>
+                        <p className="text-[10px] text-ink/40 self-end">
+                          Recovery period and refresh formula can be authored on the Foundry sheet
+                          for now; we round-trip the whole `uses` object through `foundry_data`.
+                        </p>
+                      </div>
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="tags" className="mt-0 space-y-6">
@@ -1129,28 +1331,36 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                   </TabsContent>
 
                   <TabsContent value="activities" className="mt-0 space-y-6">
-                    <div className="space-y-3">
-                      <div className="border-t border-gold/10 pt-4">
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
-                        <ActivityEditor
-                          activities={formData.activities}
-                          onChange={(activities) => setFormData(prev => ({ ...prev, activities }))}
-                          context="spell"
-                        />
-                      </div>
+                    {/* Same ActivityEditor + availableEffects pattern
+                      * that FeatsEditor / ClassEditor / OptionGroup
+                      * use, so Apply Effects on save/utility/cast
+                      * activities can reference this spell's authored
+                      * effects (see Effects tab) by id. */}
+                    <div className="border-t border-gold/10 pt-4">
+                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
+                      <ActivityEditor
+                        activities={formData.activities}
+                        onChange={(activities) => setFormData(prev => ({ ...prev, activities }))}
+                        availableEffects={formData.effects}
+                        context="spell"
+                      />
+                    </div>
+                  </TabsContent>
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Effects (JSON)</Label>
-                        <textarea
-                          value={formData.effectsStr}
-                          onChange={e => setFormData(prev => ({ ...prev, effectsStr: e.target.value }))}
-                          className="w-full min-h-[160px] rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-xs font-mono p-3 custom-scrollbar"
-                          placeholder="[]"
-                        />
-                        <p className="text-[10px] text-ink/40">
-                          Raw effect scaffolding for now. Activities should be the primary runtime surface, with effects for persistent states and automation support.
-                        </p>
-                      </div>
+                  <TabsContent value="effects" className="mt-0 space-y-6">
+                    {/* Item-level Active Effects — replaces the raw
+                      * JSON textarea that used to live in Activities.
+                      * Routes through `<ActiveEffectEditor>`, the same
+                      * authoring surface feats / class features / option
+                      * items use. Effects round-trip onto the
+                      * `spells.effects` JSON column at the d1 layer. */}
+                    <div className="border-t border-gold/10 pt-4">
+                      <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Active Effects</h3>
+                      <ActiveEffectEditor
+                        effects={formData.effects}
+                        onChange={(effects) => setFormData(prev => ({ ...prev, effects }))}
+                        defaultImg={formData.imageUrl || null}
+                      />
                     </div>
                   </TabsContent>
                   </form>
