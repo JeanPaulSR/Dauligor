@@ -649,7 +649,19 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
             <Card className="border-gold/20 bg-card/50">
               <CardContent className="p-0">
-                <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5">
+                {/* Form is segmented into Tabs so admins can jump
+                  * between sections (Basics, Description, Mechanics,
+                  * Activities, Tags & Prereqs) instead of scrolling
+                  * past everything. The header (title + Save buttons)
+                  * stays mounted above the tab list so save is always
+                  * one click away regardless of which tab is showing.
+                  *
+                  * Inactive TabsContent unmounts by default in Radix;
+                  * the form's `onSubmit` reads from `formData` state
+                  * (every input is controlled), so unmounted fields
+                  * still contribute on save. No need for forceMount. */}
+                <Tabs defaultValue="basics" className="flex flex-col">
+                <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
@@ -700,10 +712,18 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       </Button>
                     </div>
                   </div>
+                  <TabsList variant="line" className="gap-2 bg-transparent p-0">
+                    <TabsTrigger value="basics"      className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Basics</TabsTrigger>
+                    <TabsTrigger value="description" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Description</TabsTrigger>
+                    <TabsTrigger value="mechanics"   className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Mechanics</TabsTrigger>
+                    <TabsTrigger value="activities"  className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Activities</TabsTrigger>
+                    <TabsTrigger value="tags"        className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Tags & Prereqs</TabsTrigger>
+                  </TabsList>
                 </div>
 
                 <div className="max-h-[78vh] overflow-y-auto custom-scrollbar px-6 py-5">
                   <form id="spell-manual-editor-form" onSubmit={handleSave} className="space-y-6">
+                  <TabsContent value="basics" className="mt-0 space-y-6">
                     <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
                       <ImageUpload
                         currentImageUrl={formData.imageUrl}
@@ -784,7 +804,9 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </div>
                       </div>
                     </div>
+                  </TabsContent>
 
+                  <TabsContent value="description" className="mt-0 space-y-6">
                     <MarkdownEditor
                       key={editingId || 'new-spell'}
                       value={formData.description}
@@ -794,7 +816,9 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       minHeight="300px"
                       autoSizeToContent={false}
                     />
+                  </TabsContent>
 
+                  <TabsContent value="mechanics" className="mt-0 space-y-6">
                     <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
                       <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Casting · Range · Duration</h3>
                       <div className="grid gap-4 lg:grid-cols-3">
@@ -976,7 +1000,9 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </p>
                       </div>
                     </div>
+                  </TabsContent>
 
+                  <TabsContent value="tags" className="mt-0 space-y-6">
                     <div className="space-y-4 border border-gold/10 rounded-md p-4 bg-background/20">
                       <div className="flex items-baseline justify-between">
                         <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">Tags</h3>
@@ -1100,7 +1126,9 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </p>
                       </div>
                     </div>
+                  </TabsContent>
 
+                  <TabsContent value="activities" className="mt-0 space-y-6">
                     <div className="space-y-3">
                       <div className="border-t border-gold/10 pt-4">
                         <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold mb-2">Activities</h3>
@@ -1124,8 +1152,10 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </p>
                       </div>
                     </div>
+                  </TabsContent>
                   </form>
                 </div>
+                </Tabs>
               </CardContent>
             </Card>
           </div>
