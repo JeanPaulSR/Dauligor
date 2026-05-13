@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { toast } from 'sonner';
-import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight } from 'lucide-react';
+import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 
@@ -62,6 +62,24 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
   // null), so we never reach sub-sub-tags.
   const [addingSubtagOfId, setAddingSubtagOfId] = useState<string | null>(null);
   const [newSubtagName, setNewSubtagName] = useState('');
+
+  // List polish:
+  //  - `tagFilter` filters visible tags by name (case-insensitive). When
+  //    a filter is active we force every root expanded so matches can't
+  //    hide behind a collapsed parent.
+  //  - `collapsedRoots` tracks which root-tag ids are visually collapsed.
+  //    A root with no subtags has no chevron — collapsing it would do
+  //    nothing visible.
+  const [tagFilter, setTagFilter] = useState('');
+  const [collapsedRoots, setCollapsedRoots] = useState<Set<string>>(new Set());
+
+  const toggleRootCollapsed = (rootId: string) => {
+    setCollapsedRoots(prev => {
+      const next = new Set(prev);
+      next.has(rootId) ? next.delete(rootId) : next.add(rootId);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!id || !isAdmin) return;
@@ -383,17 +401,63 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
         {/* Right Col: Tags List */}
         <div className="md:col-span-2 space-y-4">
           <Card className="border-gold/20 bg-card overflow-hidden flex flex-col h-[600px] shadow-lg">
-            <div className="p-4 border-b border-gold/10 bg-gold/5 flex items-center justify-between">
-              <h3 className="h3-title text-gold flex items-center gap-2">
+            <div className="p-4 border-b border-gold/10 bg-gold/5 flex items-center justify-between gap-3">
+              <h3 className="h3-title text-gold flex items-center gap-2 shrink-0">
                 <TagsIcon className="w-5 h-5" /> Tags
                 <span className="text-xs bg-gold/20 text-gold px-2 py-0.5">{tags.length}</span>
               </h3>
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+                <Input
+                  value={tagFilter}
+                  onChange={e => setTagFilter(e.target.value)}
+                  placeholder="Filter..."
+                  className="h-7 pl-8 pr-7 text-xs bg-background/50 border-gold/20"
+                />
+                {tagFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setTagFilter('')}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-ink/40 hover:text-ink"
+                    title="Clear filter"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-1">
-              <div className="grid grid-cols-[1fr_auto] gap-2 mb-2 p-2 border-b border-gold/20 pb-2">
+              <div className="grid grid-cols-[1fr_auto] gap-2 mb-2 p-2 border-b border-gold/20 pb-2 items-center">
                 <span className="label-text text-ink/40 pl-2">Name</span>
-                <span className="label-text text-ink/40 text-right pr-2">Actions</span>
+                {/* Expand/collapse-all controls only appear when at
+                  * least one root has subtags — otherwise the controls
+                  * have nothing to act on. */}
+                {(() => {
+                  const rootsWithKids = tags.filter((t: any) => {
+                    const pid = t.parent_tag_id ?? t.parentTagId ?? null;
+                    if (pid) return false;
+                    return tags.some((c: any) => (c.parent_tag_id ?? c.parentTagId) === t.id);
+                  });
+                  if (rootsWithKids.length === 0) {
+                    return <span className="label-text text-ink/40 text-right pr-2">Actions</span>;
+                  }
+                  const allCollapsed = rootsWithKids.length > 0 && rootsWithKids.every(r => collapsedRoots.has(r.id));
+                  return (
+                    <div className="flex items-center gap-2 pr-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (allCollapsed) setCollapsedRoots(new Set());
+                          else setCollapsedRoots(new Set(rootsWithKids.map(r => r.id)));
+                        }}
+                        className="text-[10px] uppercase tracking-widest font-bold text-ink/40 hover:text-gold flex items-center gap-1"
+                      >
+                        {allCollapsed ? <><ChevronDown className="w-3 h-3" /> Expand all</> : <><ChevronRight className="w-3 h-3" /> Collapse all</>}
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
               {tags.length === 0 ? (
                 <div className="text-center py-10 text-ink/40 italic">No tags in this group. Add one below.</div>
@@ -418,11 +482,49 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                     arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
                   }
 
+                  // Filter-aware visibility: when the user types a
+                  // filter, we keep any tag whose name matches OR whose
+                  // parent matches (so a parent stays visible when one
+                  // of its subtags matches, providing context). We also
+                  // force-expand all roots while a filter is active.
+                  const filterTerm = tagFilter.trim().toLowerCase();
+                  const visibleIds: Set<string> | null = (() => {
+                    if (!filterTerm) return null;
+                    const matches = new Set<string>();
+                    for (const t of tags) {
+                      if (String(t.name).toLowerCase().includes(filterTerm)) {
+                        matches.add(t.id);
+                        const pid = parentIdOf(t);
+                        if (pid) matches.add(pid);
+                      }
+                    }
+                    // Promote roots whose subtags match (so the parent
+                    // shows up as context) — already handled by the pid
+                    // add above. Children whose parent matched also
+                    // become visible to give the picker breathing room.
+                    for (const t of tags) {
+                      const pid = parentIdOf(t);
+                      if (pid && matches.has(pid)) matches.add(t.id);
+                    }
+                    return matches;
+                  })();
+                  const isVisible = (t: any) => !visibleIds || visibleIds.has(t.id);
+
                   // Renders one row at a given depth. Same edit/delete
                   // affordances at both levels; subtags omit the
-                  // "+ Subtag" button to enforce 2-level nesting.
-                  const renderRow = (tag: any, depth: 0 | 1, zebraIdx: number) => {
+                  // "+ Subtag" button to enforce 2-level nesting. Root
+                  // rows with subtags also render a chevron toggle and
+                  // a subtag-count badge — both useful when a group
+                  // grows large enough that subtag rows overwhelm the
+                  // scroll. While a filter is active we force the
+                  // collapse state to expanded regardless of state,
+                  // so matched children can't hide behind a parent.
+                  const isFiltering = !!filterTerm;
+                  const renderRow = (tag: any, depth: 0 | 1, zebraIdx: number, subtagCount = 0) => {
                     const isEditing = editingTagId === tag.id;
+                    const isRoot = depth === 0;
+                    const isCollapsed = isRoot && !isFiltering && collapsedRoots.has(tag.id);
+                    const hasSubtags = isRoot && subtagCount > 0;
                     return (
                       <div key={tag.id} className={cn(
                         "flex items-center justify-between group p-1 hover:bg-gold/5 transition-colors border-l-4 border-transparent hover:border-gold",
@@ -444,12 +546,43 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                           </div>
                         ) : (
                           <>
-                            <span className="font-bold text-ink pl-2 truncate flex items-center gap-2">
-                              {depth === 1 && <CornerDownRight className="w-3.5 h-3.5 text-ink/30 shrink-0" />}
-                              {tag.name}
+                            <span className="font-bold text-ink pl-1 truncate flex items-center gap-1.5 min-w-0">
+                              {/* Chevron slot — always 14px wide so root
+                                * names align vertically whether or not a
+                                * given root has subtags. */}
+                              {isRoot ? (
+                                hasSubtags ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleRootCollapsed(tag.id)}
+                                    className="w-3.5 h-3.5 flex items-center justify-center text-ink/50 hover:text-gold shrink-0"
+                                    title={isCollapsed ? 'Expand subtags' : 'Collapse subtags'}
+                                  >
+                                    {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                  </button>
+                                ) : (
+                                  <span className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                )
+                              ) : (
+                                <CornerDownRight className="w-3.5 h-3.5 text-ink/30 shrink-0" />
+                              )}
+                              <span className="truncate">{tag.name}</span>
+                              {hasSubtags && (
+                                <span
+                                  className={cn(
+                                    "text-[9px] font-bold uppercase tracking-widest px-1 py-0.5 border shrink-0",
+                                    isCollapsed
+                                      ? "bg-amber-500/10 border-amber-500/30 text-amber-500"
+                                      : "bg-gold/10 border-gold/20 text-gold/80"
+                                  )}
+                                  title={`${subtagCount} subtag${subtagCount === 1 ? '' : 's'}`}
+                                >
+                                  ↳ {subtagCount}
+                                </span>
+                              )}
                             </span>
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {depth === 0 && (
+                              {isRoot && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -499,14 +632,27 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                   let zebra = 0;
                   const out: React.ReactNode[] = [];
                   for (const root of roots) {
-                    out.push(renderRow(root, 0, zebra++));
+                    if (!isVisible(root)) continue;
                     const children = childrenByParent.get(root.id) ?? [];
-                    for (const child of children) {
-                      out.push(renderRow(child, 1, zebra++));
+                    out.push(renderRow(root, 0, zebra++, children.length));
+                    const expanded = isFiltering || !collapsedRoots.has(root.id);
+                    if (expanded) {
+                      for (const child of children) {
+                        if (!isVisible(child)) continue;
+                        out.push(renderRow(child, 1, zebra++));
+                      }
                     }
                     if (addingSubtagOfId === root.id) {
                       out.push(renderInlineSubtagForm(root.id));
                     }
+                  }
+
+                  if (out.length === 0 && isFiltering) {
+                    return (
+                      <div className="text-center py-8 text-ink/40 italic text-sm">
+                        No tags match "{tagFilter}".
+                      </div>
+                    );
                   }
                   return out;
                 })()

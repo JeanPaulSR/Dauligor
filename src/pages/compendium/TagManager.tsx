@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
-import { 
-  Tags as TagsIcon, 
-  Trash2, 
-  Edit, 
+import {
+  Tags as TagsIcon,
+  Trash2,
+  Edit,
   ChevronRight,
   ChevronDown,
   X,
@@ -15,11 +15,16 @@ import {
   Filter,
   Check,
   Plus,
-  Settings
+  Settings,
+  CornerDownRight,
+  Star,
+  Layers,
+  Hash
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 import { Database, CloudOff } from 'lucide-react';
+import { normalizeTagRow, orderTagsAsTree } from '../../lib/tagHierarchy';
 
 const SYSTEM_CLASSIFICATIONS = [
   'class',
@@ -64,7 +69,12 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
         setTagGroups(groupsData);
 
         setIsUsingD1(tagsData.length > 0 || groupsData.length > 0);
-        setTags(tagsData);
+        // Normalize tags so downstream code can rely on a consistent
+        // shape (`groupId`, `parentTagId`) without sprinkling
+        // `t.group_id ?? t.groupId` / `t.parent_tag_id ?? t.parentTagId`
+        // ternaries everywhere. The handleDeleteGroup cascade below
+        // also reads `groupId` via this normalized shape.
+        setTags(tagsData.map(normalizeTagRow));
       } catch (err) {
         console.error("Error loading tags data:", err);
       } finally {
@@ -132,13 +142,13 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
     e?.stopPropagation();
     if (window.confirm('Delete this group and all its tags?')) {
       try {
-        const groupTags = tags.filter(t => (t.group_id || t.groupId) === id);
+        const groupTags = tags.filter(t => t.groupId === id);
         for (const tag of groupTags) {
           await deleteDocument('tags', tag.id);
         }
         await deleteDocument('tagGroups', id);
         setTagGroups(prev => prev.filter(g => g.id !== id));
-        setTags(prev => prev.filter(t => (t.group_id || t.groupId) !== id));
+        setTags(prev => prev.filter(t => t.groupId !== id));
         toast.success('Tag group deleted');
       } catch (error) {
         console.error('Error deleting tag group:', error);
@@ -157,6 +167,29 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
   // Dynamically compute all unique classifications across all tag groups to construct tabs
   const allDynamicClassifications = Array.from(new Set(tagGroups.flatMap(g => g.classifications || (g.category ? [g.category] : []))));
   const allTabs = Array.from(new Set([...SYSTEM_CLASSIFICATIONS, ...allDynamicClassifications])).sort();
+
+  // Per-group ordered tag list (roots followed by their subtags), built
+  // once and reused by the stats banner + the card render. Keyed by
+  // group id for O(1) lookup inside the .map().
+  const orderedTagsByGroup = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    for (const tag of tags) {
+      if (!tag.groupId) continue;
+      (map[tag.groupId] = map[tag.groupId] || []).push(tag);
+    }
+    for (const gid in map) map[gid] = orderTagsAsTree(map[gid]);
+    return map;
+  }, [tags]);
+
+  // Stats banner data — same numbers admins glance for during cleanup
+  // sessions (catching empty groups, runaway hierarchies, etc.).
+  const stats = useMemo(() => {
+    const totalGroups = tagGroups.length;
+    const totalTags = tags.length;
+    const subtags = tags.filter(t => t.parentTagId).length;
+    const rootTags = totalTags - subtags;
+    return { totalGroups, totalTags, rootTags, subtags };
+  }, [tagGroups, tags]);
 
   const filteredGroups = tagGroups.filter(group => {
     const matchesSearch = group.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -305,6 +338,27 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
 
         {/* Right Side: List */}
         <div className="lg:col-span-8 space-y-6">
+          {/* Stats banner — quick at-a-glance numbers admins use during
+            * cleanup ("are there empty groups?", "how many subtags?"). */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Groups',    value: stats.totalGroups, icon: Layers,            tint: 'text-gold' },
+              { label: 'Tags',      value: stats.totalTags,   icon: Hash,              tint: 'text-emerald-500' },
+              { label: 'Root Tags', value: stats.rootTags,    icon: Star,              tint: 'text-sky-500' },
+              { label: 'Subtags',   value: stats.subtags,     icon: CornerDownRight,   tint: 'text-amber-500' },
+            ].map(({ label, value, icon: Icon, tint }) => (
+              <Card key={label} className="border-gold/10 bg-card/40 p-3 flex items-center gap-3">
+                <div className={cn("w-9 h-9 rounded bg-background/50 flex items-center justify-center", tint)}>
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-widest text-ink/50">{label}</div>
+                  <div className="text-xl font-bold text-ink leading-tight">{value}</div>
+                </div>
+              </Card>
+            ))}
+          </div>
+
           <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-4">
             {['all', ...allTabs].map(tab => (
               <button
@@ -334,64 +388,126 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
           ) : (
             <div className="space-y-4">
               {filteredGroups.map(group => {
-                const groupTags = tags.filter(t => (t.group_id || t.groupId) === group.id);
+                const groupTags = orderedTagsByGroup[group.id] ?? [];
+                const subtagCount = groupTags.filter(t => t.parentTagId).length;
+                const rootCount = groupTags.length - subtagCount;
                 const classifications = group.classifications || (group.category ? [group.category] : []);
+
+                // First 6 tags as a preview row. Subtags inherit their
+                // root's adjacency from `orderedTagsByGroup` (the helper
+                // groups parent + children). "+N more" rolls up the rest.
+                const PREVIEW_CAP = 6;
+                const previewTags = groupTags.slice(0, PREVIEW_CAP);
+                const moreCount = Math.max(0, groupTags.length - PREVIEW_CAP);
+                const isEmpty = groupTags.length === 0;
 
                 return (
                   <Card key={group.id} className="border border-gold/20 hover:border-gold/50 transition-all overflow-hidden bg-card/50 hover:shadow-md hover:shadow-gold/5 cursor-pointer">
-                    <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full text-left" onClick={() => navigate(`/compendium/tags/${group.id}`)}>
-                      <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-4">
-                        <div className="w-10 h-10 bg-gold/10 text-gold flex items-center justify-center font-bold text-sm shrink-0 border border-gold/20">
-                          {groupTags.length}
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-ink flex items-center gap-2">
-                            {group.name}
-                          </h3>
-                          {classifications.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {classifications.map((cls: string) => (
-                                <span key={cls} className="text-[9px] uppercase tracking-widest font-bold text-gold/80 bg-gold/10 border border-gold/10 px-1.5 py-0.5">
-                                  {cls}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {group.description && <p className="text-sm text-ink/60 mt-1 line-clamp-2">{group.description}</p>}
-                        </div>
+                    <div className="p-4 flex flex-col sm:flex-row sm:items-stretch gap-4 w-full text-left" onClick={() => navigate(`/compendium/tags/${group.id}`)}>
+                      {/* Count tile — primary number is roots, secondary
+                       *  small line shows "+N subtags" only when non-zero
+                       *  so the common case (no hierarchy) stays clean. */}
+                      <div className={cn(
+                        "w-12 shrink-0 flex flex-col items-center justify-center border",
+                        isEmpty
+                          ? "bg-background/30 text-ink/30 border-gold/10"
+                          : "bg-gold/10 text-gold border-gold/20",
+                      )}>
+                        <span className="font-bold text-base leading-none">{rootCount}</span>
+                        {subtagCount > 0 && (
+                          <span className="text-[9px] mt-1 text-amber-500/80 font-bold tracking-wide flex items-center gap-0.5">
+                            <CornerDownRight className="w-2.5 h-2.5" />
+                            {subtagCount}
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-1 sm:ml-4 shrink-0">
-                        <Button 
-                          variant="ghost" size="sm" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingGroup(group);
-                            setGroupName(group.name);
-                            setGroupClassifications(classifications);
-                            setGroupDescription(group.description || '');
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                          className="w-8 h-8 p-0 text-ink/40 hover:text-gold"
-                          title="Edit Group Details"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" size="sm" 
-                          onClick={(e) => handleDeleteGroup(group.id, e)}
-                          className="w-8 h-8 p-0 text-ink/40 hover:text-blood hover:bg-blood/5"
-                          title="Delete Group"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost" size="sm"
-                          className="w-full sm:w-auto mt-2 sm:mt-0 text-xs text-gold/60 hover:text-gold border border-transparent hover:border-gold/20"
-                        >
-                          <Settings className="w-4 h-4 sm:mr-1" />
-                          <span className="hidden sm:inline">Manage Tags</span>
-                        </Button>
+                      <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="text-lg font-bold text-ink flex items-center gap-2 leading-tight">
+                              {group.name}
+                              {isEmpty && (
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-ink/30 border border-ink/10 px-1.5 py-0.5">Empty</span>
+                              )}
+                            </h3>
+                            {classifications.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {classifications.map((cls: string) => (
+                                  <span key={cls} className="text-[9px] uppercase tracking-widest font-bold text-gold/80 bg-gold/10 border border-gold/10 px-1.5 py-0.5">
+                                    {cls}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              variant="ghost" size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingGroup(group);
+                                setGroupName(group.name);
+                                setGroupClassifications(classifications);
+                                setGroupDescription(group.description || '');
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="w-8 h-8 p-0 text-ink/40 hover:text-gold"
+                              title="Edit Group Details"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm"
+                              onClick={(e) => handleDeleteGroup(group.id, e)}
+                              className="w-8 h-8 p-0 text-ink/40 hover:text-blood hover:bg-blood/5"
+                              title="Delete Group"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="text-xs text-gold/60 hover:text-gold border border-transparent hover:border-gold/20"
+                            >
+                              <Settings className="w-4 h-4 sm:mr-1" />
+                              <span className="hidden sm:inline">Manage</span>
+                            </Button>
+                          </div>
+                        </div>
+
+                        {group.description && (
+                          <p className="text-sm text-ink/60 line-clamp-1">{group.description}</p>
+                        )}
+
+                        {/* Tag preview row — subtags get the same `↳`
+                         *  glyph used in the spell pickers and the
+                         *  per-group editor, so the visual vocabulary
+                         *  stays consistent across the surface. */}
+                        {groupTags.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {previewTags.map(tag => (
+                              <span
+                                key={tag.id}
+                                className={cn(
+                                  "text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 border",
+                                  tag.parentTagId
+                                    ? "bg-amber-500/5 border-amber-500/20 text-amber-500/90"
+                                    : "bg-gold/5 border-gold/15 text-ink/70"
+                                )}
+                              >
+                                {tag.parentTagId && <span className="opacity-60 mr-0.5">↳</span>}
+                                {tag.name}
+                              </span>
+                            ))}
+                            {moreCount > 0 && (
+                              <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 text-ink/40">
+                                +{moreCount} more
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-[11px] italic text-ink/30 mt-1">No tags yet — click Manage to add some.</p>
+                        )}
                       </div>
                     </div>
                   </Card>
