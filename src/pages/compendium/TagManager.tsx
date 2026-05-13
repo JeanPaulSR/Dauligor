@@ -16,10 +16,7 @@ import {
   Check,
   Plus,
   Settings,
-  CornerDownRight,
-  Star,
-  Layers,
-  Hash
+  CornerDownRight
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
@@ -169,8 +166,8 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
   const allTabs = Array.from(new Set([...SYSTEM_CLASSIFICATIONS, ...allDynamicClassifications])).sort();
 
   // Per-group ordered tag list (roots followed by their subtags), built
-  // once and reused by the stats banner + the card render. Keyed by
-  // group id for O(1) lookup inside the .map().
+  // once and reused by the card render. Keyed by group id for O(1)
+  // lookup inside the .map().
   const orderedTagsByGroup = useMemo(() => {
     const map: Record<string, any[]> = {};
     for (const tag of tags) {
@@ -180,16 +177,6 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
     for (const gid in map) map[gid] = orderTagsAsTree(map[gid]);
     return map;
   }, [tags]);
-
-  // Stats banner data — same numbers admins glance for during cleanup
-  // sessions (catching empty groups, runaway hierarchies, etc.).
-  const stats = useMemo(() => {
-    const totalGroups = tagGroups.length;
-    const totalTags = tags.length;
-    const subtags = tags.filter(t => t.parentTagId).length;
-    const rootTags = totalTags - subtags;
-    return { totalGroups, totalTags, rootTags, subtags };
-  }, [tagGroups, tags]);
 
   const filteredGroups = tagGroups.filter(group => {
     const matchesSearch = group.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -338,27 +325,6 @@ export default function TagManager({ userProfile }: { userProfile: any }) {
 
         {/* Right Side: List */}
         <div className="lg:col-span-8 space-y-6">
-          {/* Stats banner — quick at-a-glance numbers admins use during
-            * cleanup ("are there empty groups?", "how many subtags?"). */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: 'Groups',    value: stats.totalGroups, icon: Layers,            tint: 'text-gold' },
-              { label: 'Tags',      value: stats.totalTags,   icon: Hash,              tint: 'text-emerald-500' },
-              { label: 'Root Tags', value: stats.rootTags,    icon: Star,              tint: 'text-sky-500' },
-              { label: 'Subtags',   value: stats.subtags,     icon: CornerDownRight,   tint: 'text-amber-500' },
-            ].map(({ label, value, icon: Icon, tint }) => (
-              <Card key={label} className="border-gold/10 bg-card/40 p-3 flex items-center gap-3">
-                <div className={cn("w-9 h-9 rounded bg-background/50 flex items-center justify-center", tint)}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold uppercase tracking-widest text-ink/50">{label}</div>
-                  <div className="text-xl font-bold text-ink leading-tight">{value}</div>
-                </div>
-              </Card>
-            ))}
-          </div>
-
           <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-4">
             {['all', ...allTabs].map(tab => (
               <button
