@@ -1,4 +1,4 @@
-import { upsertDocument, deleteDocument, fetchDocument, upsertDocumentBatch } from './d1';
+import { upsertDocument, deleteDocument, fetchDocument, upsertDocumentBatch, queryD1 } from './d1';
 import { slugify, makeFoundryId } from './utils';
 
 /**
@@ -370,6 +370,25 @@ export async function fetchSpell(id: string) {
 
 export async function deleteSpell(id: string) {
   return deleteDocument('spells', id);
+}
+
+/**
+ * Admin maintenance: nuke every spell row. Used to recover from a bad
+ * import state (e.g. the May 2026 column-name bug that shipped empty
+ * foundry_data for ~540 rows). Single DELETE — no FK children cascade
+ * off `spells.id` at the time of writing, so this is a clean wipe.
+ *
+ * Returns the number of rows removed so the admin button can surface
+ * a toast count.
+ */
+export async function purgeAllSpells(): Promise<number> {
+  // SELECT first so we can report the count back to the UI; D1's
+  // result shape doesn't surface changes() the same way a local
+  // SQLite driver would.
+  const countRows = await queryD1<{ n: number }>('SELECT COUNT(*) AS n FROM spells');
+  const before = Number(countRows?.[0]?.n ?? 0);
+  await queryD1('DELETE FROM spells');
+  return before;
 }
 
 /**

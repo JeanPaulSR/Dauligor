@@ -7,7 +7,7 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
-import { upsertSpell, deleteSpell, fetchSpell } from '../../lib/compendium';
+import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
 import { orderTagsAsTree, normalizeTagRow } from '../../lib/tagHierarchy';
 import { slugify } from '../../lib/utils';
@@ -218,11 +218,12 @@ function mergeSpellComponents(
 export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const isAdmin = userProfile?.role === 'admin';
   const [backfilling, setBackfilling] = useState(false);
+  const [purging, setPurging] = useState(false);
 
   const handleBackfillDescriptions = async () => {
     if (!confirm(
       'This will regenerate the BBCode description of every spell from its ' +
-      'preserved Foundry HTML payload (foundry_data.system.description.value). ' +
+      'preserved Foundry HTML payload (foundry_data.description.value). ' +
       'Existing descriptions will be overwritten. Spells without a Foundry ' +
       'payload are skipped. Continue?'
     )) return;
@@ -244,9 +245,35 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
+  const handlePurgeAllSpells = async () => {
+    // Two-stage confirm because the action is irreversible. The second
+    // prompt requires the user to type the literal string so muscle-
+    // memory enter-presses don't blow away the catalogue.
+    if (!confirm(
+      'PURGE ALL SPELLS will delete every row in the spells table — ' +
+      'manual entries, Foundry imports, descriptions, tags, everything. ' +
+      'This is meant for clean-slating before a fresh import. ' +
+      'Are you sure?'
+    )) return;
+    const phrase = prompt('Type "DELETE ALL SPELLS" exactly to confirm:');
+    if (phrase !== 'DELETE ALL SPELLS') {
+      toast.error('Phrase did not match. Nothing deleted.');
+      return;
+    }
+    setPurging(true);
+    try {
+      const removed = await purgeAllSpells();
+      toast.success(`Purged ${removed} spells.`);
+    } catch (err: any) {
+      toast.error(`Purge failed: ${err?.message ?? err}`);
+    } finally {
+      setPurging(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-4 justify-between">
+      <div className="flex items-center gap-4 justify-between flex-wrap">
         <Link to="/compendium/spells">
           <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
@@ -254,17 +281,32 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
           </Button>
         </Link>
         {isAdmin && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleBackfillDescriptions}
-            disabled={backfilling}
-            className="border-gold/30 text-gold/80 hover:bg-gold/5 hover:text-gold text-xs uppercase tracking-widest"
-          >
-            <Wand2 className="w-3.5 h-3.5 mr-1.5" />
-            {backfilling ? 'Backfilling…' : 'Backfill Descriptions from Foundry HTML'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleBackfillDescriptions}
+              disabled={backfilling || purging}
+              className="border-gold/30 text-gold/80 hover:bg-gold/5 hover:text-gold text-xs uppercase tracking-widest"
+              title="Regenerate every spell's BBCode description from its preserved Foundry HTML payload."
+            >
+              <Wand2 className="w-3.5 h-3.5 mr-1.5" />
+              {backfilling ? 'Backfilling…' : 'Backfill Descriptions'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handlePurgeAllSpells}
+              disabled={backfilling || purging}
+              className="border-blood/30 text-blood/80 hover:bg-blood/5 hover:text-blood text-xs uppercase tracking-widest"
+              title="Delete every row in the spells table. Meant for clean-slate before reimport."
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              {purging ? 'Purging…' : 'Purge All Spells'}
+            </Button>
+          </div>
         )}
       </div>
 
