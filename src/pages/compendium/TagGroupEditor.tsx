@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { toast } from 'sonner';
-import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight, Search, ChevronDown, ChevronRight, Info, ArrowRightLeft, Move, CornerLeftUp } from 'lucide-react';
+import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight, Search, ChevronDown, ChevronRight, ArrowRightLeft, Move, CornerLeftUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { fetchTagUsageMap, invalidateTagUsageCache, summarizeBreakdown, type TagUsageBreakdown } from '../../lib/tagUsage';
@@ -752,7 +752,6 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                                     <Plus className="w-3 h-3 mr-1" /> Subtag
                                   </Button>
                                 )}
-                                <Button variant="ghost" size="sm" onClick={() => openTagDetail(tag.id)} className="h-7 w-7 p-0 text-ink/40 hover:text-gold" title="Details, merge, move"><Info className="w-3.5 h-3.5" /></Button>
                                 <Button variant="ghost" size="sm" onClick={() => { setEditingTagId(tag.id); setEditingTagName(tag.name); }} className="h-7 w-7 p-0 text-ink/40 hover:text-gold" title="Rename"><Edit2 className="w-3.5 h-3.5" /></Button>
                                 <Button variant="ghost" size="sm" onClick={() => handleDeleteTag(tag.id)} className="h-7 w-7 p-0 btn-danger" title="Delete"><Trash2 className="w-3.5 h-3.5" /></Button>
                               </div>
