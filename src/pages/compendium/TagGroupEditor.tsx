@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { toast } from 'sonner';
-import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { Tags as TagsIcon, ArrowLeft, Plus, X, Trash2, Edit2, Check, Database, CloudOff, CornerDownRight, Search, ChevronDown, ChevronRight, Info, ArrowRightLeft, Move, CornerLeftUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { fetchTagUsageMap, invalidateTagUsageCache, summarizeBreakdown, type TagUsageBreakdown } from '../../lib/tagUsage';
+import { mergeTagInto } from '../../lib/tagMerge';
+import { moveTagToParent } from '../../lib/tagMove';
 
 // Migration 20260512-1418 narrowed tag uniqueness from `(group_id, slug)`
 // to `(group_id, COALESCE(parent_tag_id, ''), slug)`, so duplicates only
@@ -74,6 +77,29 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
   const [tagFilter, setTagFilter] = useState('');
   const [collapsedRoots, setCollapsedRoots] = useState<Set<string>>(new Set());
 
+  // Tag detail dialog — opens when an admin clicks the "Used by N" pill
+  // or the info action button. The dialog hosts three sub-views via
+  // `dialogMode`: the default usage breakdown, the Merge picker, and
+  // the Move picker. `pickerSearch` and `actionInFlight` live alongside
+  // so a slow merge can show a spinner without re-rendering the whole
+  // editor.
+  const [detailTagId, setDetailTagId] = useState<string | null>(null);
+  const [dialogMode, setDialogMode] = useState<'detail' | 'merge' | 'move'>('detail');
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [actionInFlight, setActionInFlight] = useState(false);
+
+  const openTagDetail = (tagId: string) => {
+    setDetailTagId(tagId);
+    setDialogMode('detail');
+    setPickerSearch('');
+  };
+  const closeTagDetail = () => {
+    setDetailTagId(null);
+    setDialogMode('detail');
+    setPickerSearch('');
+    setActionInFlight(false);
+  };
+
   // Tag usage map — populated in a background fetch after the tag list
   // mounts. While `null`, pills are simply not rendered (cleaner than a
   // shimmer for the half-second the scan takes). The scan covers every
@@ -97,6 +123,23 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
       next.has(rootId) ? next.delete(rootId) : next.add(rootId);
       return next;
     });
+  };
+
+  // Hoisted from inside the mount useEffect so merge / move handlers can
+  // call it after they finish a write. Re-reads the group metadata + the
+  // tag list from D1 so the local UI reflects the latest hierarchy.
+  const reloadTags = async () => {
+    if (!id || !isAdmin) return;
+    try {
+      const tagsData = await fetchCollection('tags', {
+        where: 'group_id = ?',
+        params: [id],
+        orderBy: 'name ASC',
+      });
+      setTags(tagsData);
+    } catch (err) {
+      console.error("Error reloading tags:", err);
+    }
   };
 
   useEffect(() => {
@@ -137,6 +180,49 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
 
     loadData();
   }, [id, navigate, isAdmin]);
+
+  // ── Merge / move handlers ────────────────────────────────────────────
+  //
+  // Both call into the lib helpers (`tagMerge.ts` / `tagMove.ts`) which
+  // own the validation + SQL. The component just owns the UX layer:
+  // disable the picker buttons while the write is in flight, refresh
+  // tags + usage on success, surface helper error messages on failure.
+
+  const handleMerge = async (sourceId: string, targetId: string) => {
+    if (actionInFlight) return;
+    setActionInFlight(true);
+    try {
+      await mergeTagInto({ sourceId, targetId });
+      await reloadTags();
+      // Refresh usage map — invalidate was called by the helper, so the
+      // next fetchTagUsageMap will hit the live counts.
+      const fresh = await fetchTagUsageMap();
+      setTagUsage(fresh);
+      toast.success('Tag merged.');
+      closeTagDetail();
+    } catch (err) {
+      console.error('Error merging tag:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to merge tag.';
+      toast.error(msg);
+      setActionInFlight(false);
+    }
+  };
+
+  const handleMove = async (tagId: string, newParentId: string | null) => {
+    if (actionInFlight) return;
+    setActionInFlight(true);
+    try {
+      await moveTagToParent({ tagId, newParentId });
+      await reloadTags();
+      toast.success(newParentId ? 'Moved tag under new parent.' : 'Promoted to root tag.');
+      closeTagDetail();
+    } catch (err) {
+      console.error('Error moving tag:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to move tag.';
+      toast.error(msg);
+      setActionInFlight(false);
+    }
+  };
 
   const handleSaveGroupInfo = async () => {
     if (!groupName.trim()) {
@@ -634,19 +720,21 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                               {tagUsage && (() => {
                                 const breakdown = tagUsage.get(tag.id);
                                 const total = breakdown?.total ?? 0;
-                                const tooltip = summarizeBreakdown(breakdown);
+                                const tooltip = summarizeBreakdown(breakdown) + ' · click for details';
                                 return (
-                                  <span
+                                  <button
+                                    type="button"
+                                    onClick={() => openTagDetail(tag.id)}
                                     className={cn(
-                                      "text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 border whitespace-nowrap",
+                                      "text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 border whitespace-nowrap cursor-pointer transition-colors",
                                       total > 0
-                                        ? "bg-gold/10 border-gold/20 text-gold/80"
-                                        : "bg-background/30 border-ink/10 text-ink/30 italic"
+                                        ? "bg-gold/10 border-gold/20 text-gold/80 hover:bg-gold/20 hover:text-gold"
+                                        : "bg-background/30 border-ink/10 text-ink/30 italic hover:text-ink/60 hover:border-ink/20"
                                     )}
                                     title={tooltip}
                                   >
                                     {total > 0 ? `Used by ${total}` : 'Unused'}
-                                  </span>
+                                  </button>
                                 );
                               })()}
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -664,8 +752,9 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
                                     <Plus className="w-3 h-3 mr-1" /> Subtag
                                   </Button>
                                 )}
-                                <Button variant="ghost" size="sm" onClick={() => { setEditingTagId(tag.id); setEditingTagName(tag.name); }} className="h-7 w-7 p-0 text-ink/40 hover:text-gold"><Edit2 className="w-3.5 h-3.5" /></Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteTag(tag.id)} className="h-7 w-7 p-0 btn-danger"><Trash2 className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="sm" onClick={() => openTagDetail(tag.id)} className="h-7 w-7 p-0 text-ink/40 hover:text-gold" title="Details, merge, move"><Info className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="sm" onClick={() => { setEditingTagId(tag.id); setEditingTagName(tag.name); }} className="h-7 w-7 p-0 text-ink/40 hover:text-gold" title="Rename"><Edit2 className="w-3.5 h-3.5" /></Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteTag(tag.id)} className="h-7 w-7 p-0 btn-danger" title="Delete"><Trash2 className="w-3.5 h-3.5" /></Button>
                               </div>
                             </div>
                           </>
@@ -730,10 +819,10 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
 
             <div className="p-4 border-t border-gold/10 bg-background/50">
               <form onSubmit={handleAddTag} className="flex gap-2">
-                <Input 
-                  value={newTagName} 
-                  onChange={e => setNewTagName(e.target.value)} 
-                  placeholder="New tag name..." 
+                <Input
+                  value={newTagName}
+                  onChange={e => setNewTagName(e.target.value)}
+                  placeholder="New tag name..."
                   className="flex-1 bg-card border-gold/20 focus:border-gold"
                 />
                 <Button type="submit" disabled={!newTagName.trim()} className="btn-gold-solid gap-2">
@@ -744,6 +833,312 @@ export default function TagGroupEditor({ userProfile }: { userProfile: any }) {
           </Card>
         </div>
       </div>
+
+      <TagDetailDialog
+        open={detailTagId !== null}
+        onClose={closeTagDetail}
+        tags={tags}
+        groupName={group?.name ?? ''}
+        detailTagId={detailTagId}
+        usage={tagUsage}
+        mode={dialogMode}
+        setMode={setDialogMode}
+        pickerSearch={pickerSearch}
+        setPickerSearch={setPickerSearch}
+        actionInFlight={actionInFlight}
+        onMerge={handleMerge}
+        onMove={handleMove}
+      />
     </div>
+  );
+}
+
+// =============================================================================
+// Tag detail dialog
+// =============================================================================
+//
+// Hosted in the same file because it's tightly coupled to TagGroupEditor's
+// state (tag list, usage map, in-flight flag). Three modes:
+//
+//   - detail: usage breakdown + action buttons (Merge into..., Move...)
+//   - merge:  searchable picker of other tags in the same group
+//   - move:   list of valid reparent destinations + "Promote to root"
+//
+// All three live in a single Dialog so opening / closing is one event.
+// The picker modes replace the dialog body but keep the same header so
+// the admin keeps context about which tag they're acting on.
+// =============================================================================
+
+interface TagDetailDialogProps {
+  open: boolean;
+  onClose: () => void;
+  tags: any[];
+  groupName: string;
+  detailTagId: string | null;
+  usage: Map<string, TagUsageBreakdown> | null;
+  mode: 'detail' | 'merge' | 'move';
+  setMode: (m: 'detail' | 'merge' | 'move') => void;
+  pickerSearch: string;
+  setPickerSearch: (s: string) => void;
+  actionInFlight: boolean;
+  onMerge: (sourceId: string, targetId: string) => void;
+  onMove: (tagId: string, newParentId: string | null) => void;
+}
+
+function TagDetailDialog({
+  open, onClose, tags, groupName, detailTagId, usage, mode, setMode,
+  pickerSearch, setPickerSearch, actionInFlight, onMerge, onMove,
+}: TagDetailDialogProps) {
+  // Look up the focused tag + (if it's a subtag) its parent. Recomputed
+  // each render — cheap, the tag list is small.
+  const tag = detailTagId ? tags.find(t => t.id === detailTagId) : null;
+  const parentTagId = tag ? (tag.parent_tag_id ?? tag.parentTagId ?? null) : null;
+  const parentTag = parentTagId ? tags.find(t => t.id === parentTagId) : null;
+  const isSubtag = !!parentTagId;
+  const childCount = useMemo(
+    () => (tag ? tags.filter(t => (t.parent_tag_id ?? t.parentTagId) === tag.id).length : 0),
+    [tag, tags],
+  );
+  const breakdown = (tag && usage) ? usage.get(tag.id) : undefined;
+  const total = breakdown?.total ?? 0;
+
+  // Merge target candidates: every OTHER tag in this group. Subtags of
+  // the source itself are EXCLUDED because merging a tag into its own
+  // child would also drop the parent that the child belongs to. (The
+  // helper would reject this anyway — we just don't show invalid
+  // options.)
+  const mergeCandidates = useMemo(() => {
+    if (!tag) return [];
+    const term = pickerSearch.trim().toLowerCase();
+    return tags
+      .filter(t => t.id !== tag.id)
+      .filter(t => (t.parent_tag_id ?? t.parentTagId) !== tag.id)
+      .filter(t => !term || String(t.name).toLowerCase().includes(term))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [tag, tags, pickerSearch]);
+
+  // Move target candidates: root tags in this group, excluding self.
+  // If the focused tag has subtags, every move-to-parent option becomes
+  // invalid (would create depth 3) — we surface a guard message
+  // instead of an empty list.
+  const moveCandidates = useMemo(() => {
+    if (!tag) return [];
+    const term = pickerSearch.trim().toLowerCase();
+    return tags
+      .filter(t => !(t.parent_tag_id ?? t.parentTagId))
+      .filter(t => t.id !== tag.id)
+      .filter(t => !term || String(t.name).toLowerCase().includes(term))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [tag, tags, pickerSearch]);
+
+  if (!tag) return null;
+
+  const breadcrumb = (
+    <span className="text-xs text-ink/50">
+      <span>{groupName}</span>
+      {parentTag && (
+        <>
+          <span className="mx-1.5 text-ink/30">›</span>
+          <span>{parentTag.name}</span>
+        </>
+      )}
+      <span className="mx-1.5 text-ink/30">›</span>
+      <span className="text-ink/70 font-bold">{tag.name}</span>
+    </span>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="dialog-content max-w-xl">
+        <DialogHeader className="dialog-header">
+          <DialogTitle className="dialog-title flex items-center gap-2">
+            {isSubtag && <CornerDownRight className="w-4 h-4 text-ink/40" />}
+            {tag.name}
+          </DialogTitle>
+          <div className="px-4 pb-2">{breadcrumb}</div>
+        </DialogHeader>
+
+        {mode === 'detail' && (
+          <div className="dialog-body space-y-4">
+            <section className="space-y-2">
+              <h4 className="label-text text-gold">Usage</h4>
+              {usage ? (
+                total > 0 ? (
+                  <div>
+                    <p className="text-sm text-ink">
+                      <span className="font-bold text-gold">{total}</span>{' '}
+                      reference{total === 1 ? '' : 's'} across the compendium.
+                    </p>
+                    <p className="field-hint mt-1">{summarizeBreakdown(breakdown)}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-ink/50 italic">Not used anywhere yet — safe to delete or repurpose.</p>
+                )
+              ) : (
+                <p className="text-sm text-ink/40 italic">Counting…</p>
+              )}
+            </section>
+
+            {childCount > 0 && (
+              <section className="space-y-1">
+                <h4 className="label-text text-gold">Hierarchy</h4>
+                <p className="field-hint">
+                  Has <span className="text-ink font-bold">{childCount}</span> subtag{childCount === 1 ? '' : 's'}.
+                  Merge and demote-under-parent are disabled while subtags exist —
+                  promote or delete them first.
+                </p>
+              </section>
+            )}
+
+            <section className="space-y-2">
+              <h4 className="label-text text-gold">Actions</h4>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="btn-gold gap-2"
+                  disabled={childCount > 0}
+                  title={childCount > 0 ? 'Resolve subtags first' : 'Merge this tag into another'}
+                  onClick={() => { setPickerSearch(''); setMode('merge'); }}
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" /> Merge into…
+                </Button>
+                {isSubtag ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="btn-gold gap-2"
+                    disabled={actionInFlight}
+                    onClick={() => onMove(tag.id, null)}
+                    title="Make this a root tag"
+                  >
+                    <CornerLeftUp className="w-3.5 h-3.5" /> Promote to root
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="btn-gold gap-2"
+                    disabled={childCount > 0}
+                    title={childCount > 0 ? 'Promote subtags first — moving a root with children would create depth-3 nesting' : 'Make this a subtag of another root'}
+                    onClick={() => { setPickerSearch(''); setMode('move'); }}
+                  >
+                    <Move className="w-3.5 h-3.5" /> Move under…
+                  </Button>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {mode === 'merge' && (
+          <div className="dialog-body space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h4 className="label-text text-gold">Merge into which tag?</h4>
+              <button
+                type="button"
+                onClick={() => setMode('detail')}
+                className="text-[10px] uppercase tracking-widest text-ink/40 hover:text-gold"
+              >
+                ← Back
+              </button>
+            </div>
+            <p className="field-hint">
+              Everything currently tagged <span className="text-ink font-bold">{tag.name}</span> will
+              be retagged to the tag you pick. The source tag will then be deleted. This is
+              not reversible.
+            </p>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+              <Input
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                placeholder="Filter tags…"
+                className="h-8 pl-8 field-input"
+              />
+            </div>
+            <div className="data-table">
+              <div className="data-table-body max-h-72">
+                {mergeCandidates.length === 0 ? (
+                  <p className="text-sm text-ink/40 italic px-3 py-4">No other tags in this group match.</p>
+                ) : mergeCandidates.map(candidate => {
+                  const candidateBreakdown = usage?.get(candidate.id);
+                  const candidateTotal = candidateBreakdown?.total ?? 0;
+                  const candidateIsSubtag = !!(candidate.parent_tag_id ?? candidate.parentTagId);
+                  return (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      disabled={actionInFlight}
+                      onClick={() => onMerge(tag.id, candidate.id)}
+                      className="data-table-row grid grid-cols-[1fr_auto] gap-2 px-3 py-2 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <span className="text-sm text-ink truncate flex items-center gap-1.5">
+                        {candidateIsSubtag && <CornerDownRight className="w-3 h-3 text-ink/30 shrink-0" />}
+                        {candidate.name}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-ink/50">
+                        {candidateTotal > 0 ? `${candidateTotal} use${candidateTotal === 1 ? '' : 's'}` : 'unused'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mode === 'move' && (
+          <div className="dialog-body space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h4 className="label-text text-gold">Move under which root?</h4>
+              <button
+                type="button"
+                onClick={() => setMode('detail')}
+                className="text-[10px] uppercase tracking-widest text-ink/40 hover:text-gold"
+              >
+                ← Back
+              </button>
+            </div>
+            <p className="field-hint">
+              <span className="text-ink font-bold">{tag.name}</span> will become a subtag of the
+              root you pick. Its usage counts and id stay the same.
+            </p>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
+              <Input
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                placeholder="Filter root tags…"
+                className="h-8 pl-8 field-input"
+              />
+            </div>
+            <div className="data-table">
+              <div className="data-table-body max-h-72">
+                {moveCandidates.length === 0 ? (
+                  <p className="text-sm text-ink/40 italic px-3 py-4">No other root tags in this group.</p>
+                ) : moveCandidates.map(candidate => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    disabled={actionInFlight}
+                    onClick={() => onMove(tag.id, candidate.id)}
+                    className="data-table-row grid grid-cols-[1fr] gap-2 px-3 py-2 text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-sm text-ink truncate">{candidate.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="dialog-footer">
+          <Button variant="ghost" onClick={onClose} className="muted-text" disabled={actionInFlight}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
