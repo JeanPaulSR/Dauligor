@@ -360,6 +360,16 @@ export async function deleteFeat(id: string) {
  */
 export async function upsertSpell(id: string, data: Record<string, any>) {
   const normalized = normalizeCompendiumData(data);
+  // The spells table column is `tags` (JSON array), not `tag_ids` like
+  // classes / subclasses use. Editors and the import workbench carry
+  // the selected list as `tagIds` for cross-entity consistency, so
+  // remap on the way in to avoid the "no such column: tagIds" SQLite
+  // error. Mirrors the identical remap inside `upsertFeature` for the
+  // features table, which has the same shape.
+  if (normalized.tagIds !== undefined) {
+    normalized.tags = normalized.tagIds;
+    delete normalized.tagIds;
+  }
   return upsertDocument('spells', id, normalized);
 }
 
@@ -395,10 +405,17 @@ export async function purgeAllSpells(): Promise<number> {
  * Executes a batch of spell upserts.
  */
 export async function upsertSpellBatch(entries: { id: string | null, data: Record<string, any> }[]) {
-  const normalizedEntries = entries.map(entry => ({
-    id: entry.id,
-    data: normalizeCompendiumData(entry.data)
-  }));
+  const normalizedEntries = entries.map(entry => {
+    const normalized = normalizeCompendiumData(entry.data);
+    // Mirror the tagIds -> tags remap from upsertSpell. The "Import
+    // Visible" button on the workbench hits this batch path, not the
+    // per-spell one, so it needs the same fix.
+    if (normalized.tagIds !== undefined) {
+      normalized.tags = normalized.tagIds;
+      delete normalized.tagIds;
+    }
+    return { id: entry.id, data: normalized };
+  });
   return upsertDocumentBatch('spells', normalizedEntries);
 }
 
