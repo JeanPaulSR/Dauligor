@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Wand2, Lock, Star, ChevronUp, ChevronDown, Columns3 } from 'lucide-react';
+import { Wand2, Lock, Star, ChevronUp, ChevronDown, Settings } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
@@ -111,6 +111,32 @@ const COL_WIDTHS: Record<SpellColumnKey, string> = {
   source: '60px',
 };
 
+// Pixel widths for the NON-name columns, used to compute how wide the
+// outer list pane needs to be to display all visible columns plus a
+// comfortable name budget. Must stay in sync with COL_WIDTHS above.
+const COL_PX: Record<Exclude<SpellColumnKey, 'name'>, number> = {
+  level: 36,
+  time: 80,
+  school: 60,
+  concentration: 24,
+  range: 80,
+  source: 60,
+};
+
+// How wide we want the Name column to be when other columns are
+// visible. Calibrated against the longest in-corpus spell names —
+// "Raulothim's Psychic Lance" and "Body Warping of Gorgoroth" — both
+// fit comfortably at 280px in font-serif text-sm with the favorite
+// star and any small inline icons (e.g. concentration sigil) included.
+const NAME_IDEAL_PX = 280;
+// Floor for the list pane and the description pane respectively. Below
+// these widths legibility drops sharply (the description is body text
+// — anything under ~320px wraps every 4-5 words and feels cramped).
+const LIST_MIN_PX = 280;
+const DETAIL_MIN_PX = 360;
+const LIST_GAP_PX = 8;       // matches gap-2 in the list grid
+const LIST_PADDING_PX = 24;  // matches px-3 (12 + 12) on the list grid
+
 const COL_LABELS: Record<SpellColumnKey, string> = {
   name: 'Name',
   level: 'Lv',
@@ -165,6 +191,23 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     () => visibleColumns.map(c => COL_WIDTHS[c]).join(' '),
     [visibleColumns],
   );
+
+  // Outer-grid sizing: how wide the LIST pane should be at the xl
+  // breakpoint, derived from which columns are visible. Formula:
+  //   name budget + sum(visible non-name col widths) + gaps + padding.
+  // We feed this into the outer grid via a CSS custom property
+  // (--list-cap) so hiding a column shrinks the list pane and yields
+  // the freed width to the detail pane (description). See the JSX
+  // below where this is applied as a CSS variable, plus the
+  // `min(LIST_MIN_PX, var(--list-cap))` in the grid template so that
+  // when *only* Name is visible the list collapses down to a tight
+  // column rather than padding itself with empty space.
+  const listCapPx = useMemo(() => {
+    const otherCols = visibleColumns.filter(c => c !== 'name') as Exclude<SpellColumnKey, 'name'>[];
+    const otherWidths = otherCols.reduce((sum, c) => sum + COL_PX[c], 0);
+    const gaps = Math.max(0, visibleColumns.length - 1) * LIST_GAP_PX;
+    return NAME_IDEAL_PX + otherWidths + gaps + LIST_PADDING_PX;
+  }, [visibleColumns]);
   const toggleColumn = (col: SpellColumnKey) => {
     if (ALWAYS_VISIBLE.has(col)) return;
     setHiddenColumns(prev => {
@@ -559,6 +602,54 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* Settings popover — open to all viewers. Currently holds the
+              column-visibility toggles (moved out of the list card so it
+              shares space with admin-gated actions like Spell Manager);
+              future per-user list preferences can live here too. */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-gold/20 text-gold hover:bg-gold/5 gap-2"
+                title="List settings"
+              >
+                <Settings className="w-4 h-4" />
+                Settings
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-56 p-2">
+              <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/10">
+                Visible columns
+              </div>
+              <div className="space-y-0.5">
+                {ALL_COLUMNS.filter(c => !ALWAYS_VISIBLE.has(c)).map((col) => {
+                  const visible = !hiddenColumns.has(col);
+                  return (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => toggleColumn(col)}
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs hover:bg-gold/5"
+                    >
+                      <span>{COL_LABELS[col]}</span>
+                      <span className={cn(
+                        'inline-flex items-center justify-center w-4 h-4 rounded border text-[10px]',
+                        visible
+                          ? 'border-gold/40 bg-gold/15 text-gold'
+                          : 'border-gold/10 text-transparent'
+                      )}>
+                        {visible ? '✓' : ''}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-[10px] text-ink/40 px-1 pt-1.5 mt-1 border-t border-gold/10 italic">
+                Hiding columns widens the description pane.
+              </div>
+            </PopoverContent>
+          </Popover>
           {userProfile?.role === 'admin' ? (
             <Link to="/compendium/spells/manage">
               <Button type="button" variant="outline" className="border-gold/20 text-gold hover:bg-gold/5">
@@ -733,12 +824,23 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
         {/* Three-column layout: favorites pane (left) | main spell list
             (middle) | detail panel (right).
-            Stretch policy: the middle list column grows from 440 up to
-            760px first (so wider viewports give more room to the Name
-            column where it's most useful), THEN any remaining width
-            spills into the detail pane (description). On smaller
-            viewports the favorites pane stacks above the list. */}
-        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(440px,760px)_minmax(0,1fr)]">
+            Stretch policy: the list pane caps at `--list-cap`, which is
+            recomputed every render from `visibleColumns` (see
+            `listCapPx`). When the user hides columns the cap shrinks
+            and the freed width spills into the detail pane — that's
+            what makes "fewer columns → wider description" actually
+            work. The inner min() clamp lets the list collapse below
+            LIST_MIN_PX when the cap is itself smaller than LIST_MIN_PX
+            (e.g. only Name visible), instead of leaving dead whitespace
+            inside the list pane. Detail has a hard DETAIL_MIN_PX floor
+            so the description never wraps to gibberish on narrow xl
+            viewports. Below xl the grid drops to two columns
+            (favorites | list) and the detail card flows to a second
+            row underneath. */}
+        <div
+          className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(min(280px,var(--list-cap)),var(--list-cap))_minmax(360px,1fr)]"
+          style={{ '--list-cap': `${listCapPx}px` } as React.CSSProperties}
+        >
           {/* Favorites pane — only renders favorited spells. Pulled
               from the same filteredSpells source so the favorites pane
               respects active filters too, but it's "the same UI for a
@@ -804,8 +906,8 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           {/* Main spell list. Columns: Name | Lv | Time | School | C. |
               Range | Src. Each header is a sort toggle (click to sort by
               that column; click again to flip direction). Columns past
-              Name can be hidden via the popover at the right of the
-              header — user preference persists to localStorage. */}
+              Name can be hidden via Settings in the page header bar —
+              user preference persists to localStorage. */}
           <Card className="border-gold/10 bg-card/50 overflow-hidden">
             <CardContent className="p-0">
               {/* Header row + columns popover. The grid template here is
@@ -841,53 +943,6 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                     );
                   })}
                 </div>
-                {/* Columns popover lives outside the grid so it doesn't
-                    contend for a column slot — fixed at the right edge. */}
-                <div className="absolute" />
-              </div>
-              {/* Column-visibility popover button — small, top-right of
-                  the list card. Doesn't take a grid column. */}
-              <div className="flex justify-end px-2 py-1 border-b border-gold/5">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 h-6 px-2 text-[10px] uppercase tracking-widest text-ink/55 hover:text-gold transition-colors rounded border border-transparent hover:border-gold/20"
-                      title="Show / hide columns"
-                    >
-                      <Columns3 className="w-3 h-3" />
-                      Columns
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-44 p-2">
-                    <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/10">
-                      Visible columns
-                    </div>
-                    <div className="space-y-0.5">
-                      {ALL_COLUMNS.filter(c => !ALWAYS_VISIBLE.has(c)).map((col) => {
-                        const visible = !hiddenColumns.has(col);
-                        return (
-                          <button
-                            key={col}
-                            type="button"
-                            onClick={() => toggleColumn(col)}
-                            className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded text-xs hover:bg-gold/5"
-                          >
-                            <span>{COL_LABELS[col]}</span>
-                            <span className={cn(
-                              'inline-flex items-center justify-center w-4 h-4 rounded border text-[10px]',
-                              visible
-                                ? 'border-gold/40 bg-gold/15 text-gold'
-                                : 'border-gold/10 text-transparent'
-                            )}>
-                              {visible ? '✓' : ''}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </PopoverContent>
-                </Popover>
               </div>
               {loadingSpells ? (
                 <div className="px-6 py-12 text-center text-ink/45">
