@@ -5,7 +5,8 @@ import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
-import { FilterBar } from '../../components/compendium/FilterBar';
+import { FilterBar, AxisFilterSection } from '../../components/compendium/FilterBar';
+import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
 import FeatDetailPanel from '../../components/compendium/FeatDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
 import {
@@ -67,9 +68,11 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedFeatId, setSelectedFeatId] = useState('');
-  const [sourceFilterIds, setSourceFilterIds] = useState<string[]>([]);
-  const [typeFilters, setTypeFilters] = useState<FeatTypeValue[]>([]);
-  const [propertyFilters, setPropertyFilters] = useState<FeatPropertyFilter[]>([]);
+  // Rich live filter state — uniform with the other compendium list
+  // pages. Each axis: { states (chip 1=include / 2=exclude),
+  // combineMode, exclusionMode } keyed by axis name.
+  type AxisState = { states: Record<string, number>; combineMode?: 'AND' | 'OR' | 'XOR'; exclusionMode?: 'AND' | 'OR' | 'XOR' };
+  const [axisFilters, setAxisFilters] = useState<Record<string, AxisState>>({});
   const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   useEffect(() => {
@@ -134,21 +137,23 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
         || String(feat.featSubtype ?? '').toLowerCase().includes(lowered)
         || sourceAbbrev.includes(lowered);
 
-      // The property filters are AND: a feat must satisfy every selected
-      // property chip to pass. Type and source filters are OR within their
-      // own list (multi-select OR) but AND across categories — same as
-      // SpellList's semantics.
-      const passesProperty = propertyFilters.every((p) => (feat as any)[p === 'repeatable' ? 'repeatableFlag' : p]);
-
+      // Properties are multi-valued — collect the flag set the feat
+      // carries and route through the shared multi-axis matcher.
+      // `repeatable` lives on `repeatableFlag` for legacy reasons; the
+      // others are direct boolean column copies (see deriveFeatPropertyFlags).
+      const propsHave = new Set<string>();
+      for (const p of FEAT_PROPERTY_ORDER) {
+        const flagKey = p === 'repeatable' ? 'repeatableFlag' : p;
+        if ((feat as any)[flagKey]) propsHave.add(p);
+      }
       return (
         matchesSearch
-        && (sourceFilterIds.length === 0 || sourceFilterIds.includes(String(feat.sourceId ?? '')))
-        && (typeFilters.length === 0
-          || typeFilters.includes(feat.featType as FeatTypeValue))
-        && passesProperty
+        && matchesSingleAxisFilter(String(feat.sourceId ?? ''), axisFilters.source)
+        && matchesSingleAxisFilter(String(feat.featType ?? ''), axisFilters.type)
+        && matchesMultiAxisFilter(propsHave, axisFilters.property)
       );
     });
-  }, [feats, sourceById, search, sourceFilterIds, typeFilters, propertyFilters]);
+  }, [feats, sourceById, search, axisFilters]);
 
   // Drop the selected feat if the active filter set hides it. Prevents
   // the detail pane from continuing to show a row the user can no longer
@@ -161,16 +166,51 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   }, [filteredFeats, selectedFeatId]);
 
   const activeFilterCount =
-    sourceFilterIds.length + typeFilters.length + propertyFilters.length;
+    Object.keys(axisFilters.source?.states ?? {}).length
+    + Object.keys(axisFilters.type?.states ?? {}).length
+    + Object.keys(axisFilters.property?.states ?? {}).length;
 
-  const toggleSelection = <T extends string>(
-    value: T,
-    selected: T[],
-    setSelected: React.Dispatch<React.SetStateAction<T[]>>,
-  ) => {
-    setSelected((current) =>
-      current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value],
-    );
+  // Per-axis updaters — same generic pattern every list page uses.
+  const cycleAxisState = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      const s = states[value] || 0;
+      const nextState = s === 0 ? 1 : s === 1 ? 2 : 0;
+      if (nextState === 0) delete states[value];
+      else states[value] = nextState;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const cycleAxisCombineMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
+  const cycleAxisExclusionMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const axisIncludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 1;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisClear = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      return { ...prev, [axisKey]: { ...cur, states: {} } };
+    });
   };
 
   const renderSourceAbbreviation = (feat: FeatRow) => {
@@ -179,9 +219,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   };
 
   const resetFilters = () => {
-    setSourceFilterIds([]);
-    setTypeFilters([]);
-    setPropertyFilters([]);
+    setAxisFilters({});
   };
 
   return (
@@ -232,49 +270,41 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
           resetLabel="Reset Filters"
           renderFilters={
             <>
-              <FilterSection
+              <AxisFilterSection
                 title="Sources"
-                values={sources.map((source) => ({
-                  value: source.id,
-                  label: String(source.abbreviation || source.shortName || source.name || source.id),
-                }))}
-                selected={sourceFilterIds}
-                onToggle={(value) => toggleSelection(value, sourceFilterIds, setSourceFilterIds)}
-                onIncludeAll={() => setSourceFilterIds(sources.map((s) => s.id))}
-                onClear={() => setSourceFilterIds([])}
+                values={sources.map((source) => ({ value: source.id, label: String(source.abbreviation || source.shortName || source.name || source.id) }))}
+                states={axisFilters.source?.states || {}}
+                cycleState={(v) => cycleAxisState('source', v)}
+                combineMode={axisFilters.source?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('source')}
+                exclusionMode={axisFilters.source?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('source')}
+                includeAll={() => axisIncludeAll('source', sources.map(s => s.id))}
+                clearAll={() => axisClear('source')}
               />
-
-              <FilterSection
+              <AxisFilterSection
                 title="Feat Type"
                 values={FEAT_TYPE_ORDER.map((value) => ({ value, label: FEAT_TYPE_LABELS[value] }))}
-                selected={typeFilters}
-                onToggle={(value) =>
-                  toggleSelection(
-                    value as FeatTypeValue,
-                    typeFilters as string[],
-                    setTypeFilters as React.Dispatch<React.SetStateAction<string[]>>,
-                  )
-                }
-                onIncludeAll={() => setTypeFilters([...FEAT_TYPE_ORDER])}
-                onClear={() => setTypeFilters([])}
+                states={axisFilters.type?.states || {}}
+                cycleState={(v) => cycleAxisState('type', v)}
+                combineMode={axisFilters.type?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('type')}
+                exclusionMode={axisFilters.type?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('type')}
+                includeAll={() => axisIncludeAll('type', FEAT_TYPE_ORDER as readonly string[])}
+                clearAll={() => axisClear('type')}
               />
-
-              <FilterSection
+              <AxisFilterSection
                 title="Properties"
-                values={FEAT_PROPERTY_ORDER.map((value) => ({
-                  value,
-                  label: FEAT_PROPERTY_LABELS[value],
-                }))}
-                selected={propertyFilters}
-                onToggle={(value) =>
-                  toggleSelection(
-                    value as FeatPropertyFilter,
-                    propertyFilters as string[],
-                    setPropertyFilters as React.Dispatch<React.SetStateAction<string[]>>,
-                  )
-                }
-                onIncludeAll={() => setPropertyFilters([...FEAT_PROPERTY_ORDER])}
-                onClear={() => setPropertyFilters([])}
+                values={FEAT_PROPERTY_ORDER.map((value) => ({ value, label: FEAT_PROPERTY_LABELS[value] }))}
+                states={axisFilters.property?.states || {}}
+                cycleState={(v) => cycleAxisState('property', v)}
+                combineMode={axisFilters.property?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('property')}
+                exclusionMode={axisFilters.property?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('property')}
+                includeAll={() => axisIncludeAll('property', FEAT_PROPERTY_ORDER as readonly string[])}
+                clearAll={() => axisClear('property')}
               />
             </>
           }
@@ -369,56 +399,6 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   );
 }
 
-// Lifted from SpellList.tsx (same internal helper there) — same chip
-// row + Include All / Clear shortcuts. Local because the spell file's
-// FilterSection isn't exported. If a third surface needs it, extract.
-function FilterSection({
-  title,
-  values,
-  selected,
-  onToggle,
-  onIncludeAll,
-  onClear,
-}: {
-  title: string;
-  values: { value: string; label: string }[];
-  selected: string[];
-  onToggle: (value: string) => void;
-  onIncludeAll: () => void;
-  onClear: () => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="h3-title uppercase text-ink">{title}</span>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onIncludeAll} className="label-text hover:underline">
-            Include All
-          </button>
-          <span className="text-gold/20">|</span>
-          <button type="button" onClick={onClear} className="label-text hover:underline">
-            Clear
-          </button>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {values.map((entry) => {
-          const active = selected.includes(entry.value);
-          return (
-            <button
-              key={entry.value}
-              type="button"
-              onClick={() => onToggle(entry.value)}
-              className={cn(
-                'filter-tag',
-                active ? 'btn-gold-solid border-gold shadow-lg shadow-gold/20' : 'btn-gold',
-              )}
-            >
-              {entry.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+// FilterSection (include-only chip row) was removed when the page
+// migrated to the rich AxisFilterSection from FilterBar.tsx. Kept the
+// removal record so future grep-blame doesn't go looking for it.
