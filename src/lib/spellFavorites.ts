@@ -83,11 +83,14 @@ async function authHeaders(): Promise<HeadersInit | null> {
   };
 }
 
-async function fetchCloudFavorites(): Promise<Set<string>> {
+async function fetchCloudFavorites(scope: FavoriteScope): Promise<Set<string>> {
   const headers = await authHeaders();
   if (!headers) return new Set();
   try {
-    const res = await fetch(ENDPOINT, { method: 'GET', headers });
+    const url = scope
+      ? `${ENDPOINT}?characterId=${encodeURIComponent(scope.characterId)}`
+      : ENDPOINT;
+    const res = await fetch(url, { method: 'GET', headers });
     if (!res.ok) return new Set();
     const data = await res.json();
     const ids = Array.isArray(data?.spellIds) ? data.spellIds : [];
@@ -99,14 +102,25 @@ async function fetchCloudFavorites(): Promise<Set<string>> {
   }
 }
 
-async function postFavorite(action: 'add' | 'remove' | 'bulkAdd', payload: Record<string, unknown>): Promise<void> {
+async function postFavorite(
+  action: 'add' | 'remove' | 'bulkAdd',
+  payload: Record<string, unknown>,
+  scope: FavoriteScope,
+): Promise<void> {
   const headers = await authHeaders();
   if (!headers) return;
   try {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ action, ...payload }),
+      // characterId is part of the body so the action handler can
+      // route to the right table (and verify ownership). Universal
+      // scope omits it.
+      body: JSON.stringify({
+        action,
+        ...payload,
+        ...(scope ? { characterId: scope.characterId } : {}),
+      }),
     });
     if (!res.ok) {
       // eslint-disable-next-line no-console
@@ -137,20 +151,21 @@ export type UseSpellFavoritesResult = {
  * Hook entry point.
  *
  * Universal scope (default, `scope === null`):
- *   Pass the current user id (or null/undefined for anonymous). On
- *   mount: read localStorage immediately (synchronous, paints
- *   favorites without waiting on the network), then fire a
- *   cloud-sync that merges local ↔ cloud both ways and writes the
- *   union back to both layers. `userId` changes (login / logout)
- *   re-trigger the sync.
+ *   localStorage key `dauligor.spellFavorites` + cloud-sync via
+ *   /api/spell-favorites. On mount/userId-change: synchronous read
+ *   from localStorage paints favorites immediately, then a cloud
+ *   fetch merges local ↔ cloud both ways and writes the union back.
  *
  * Character scope (`scope.characterId` set):
- *   Per-character favorites — stored in localStorage under a key
- *   that includes the character id, no cloud sync. Switching the
- *   scope (e.g. selecting a different character in the dropdown)
- *   reloads from the new key so the favorites set always reflects
- *   the active scope. Cloud sync for per-character favorites is a
- *   follow-up — it needs a new D1 table and endpoint.
+ *   localStorage key `dauligor.spellFavorites.character.<id>` +
+ *   cloud-sync via /api/spell-favorites?characterId=<id>. Same
+ *   union-merge pattern as universal. The server enforces that the
+ *   caller actually owns the character — if not, the GET 404s and
+ *   the hook silently falls back to localStorage-only.
+ *
+ * Switching scopes (e.g. picking a different character in the
+ * dropdown) re-runs the effect with the new key and reloads the
+ * matching favorites set.
  */
 export function useSpellFavorites(
   userId: string | null | undefined,
@@ -158,39 +173,38 @@ export function useSpellFavorites(
 ): UseSpellFavoritesResult {
   const scopeKey = scope?.characterId ?? null;
   const [favorites, setFavorites] = useState<Set<string>>(() => readLocal(scope));
-  const [hydrating, setHydrating] = useState<boolean>(Boolean(userId) && !scope);
+  const [hydrating, setHydrating] = useState<boolean>(Boolean(userId));
 
-  // Re-read localStorage whenever the scope changes (e.g. user
-  // switches from "Universal Favorite" to a character). For the
-  // universal scope this is followed by a cloud-sync merge; for
-  // character scope it's the final read.
+  // Cloud sync — runs whenever userId or scope changes. For both
+  // scopes we do the same merge: read local, fetch cloud, take the
+  // union, promote local-only entries to cloud, write the union back
+  // to local. The endpoint URL/body change but the algorithm is
+  // identical.
   useEffect(() => {
     let cancelled = false;
-    if (scope) {
-      // Character scope — local-only. No cloud sync (yet).
-      setFavorites(readLocal(scope));
-      setHydrating(false);
-      return;
-    }
     if (!userId) {
-      // Anonymous universal session — local is the only source.
-      setFavorites(readLocal(null));
+      // Anonymous session — local is the only source (no cloud
+      // identity to associate writes with). Re-read in case the
+      // scope changed since the initial state.
+      setFavorites(readLocal(scope));
       setHydrating(false);
       return;
     }
     setHydrating(true);
     (async () => {
-      const cloud = await fetchCloudFavorites();
-      const local = readLocal(null);
-      // Union: any starred on either device counts. (Removing a
+      const cloud = await fetchCloudFavorites(scope);
+      const local = readLocal(scope);
+      // Union: any starred in either place counts. (Removing a
       // favorite is rare enough that this asymmetric "merge then
       // promote" wins simplicity vs. last-write timestamps.)
       const union = new Set<string>([...cloud, ...local]);
-      // Promote local-only entries to cloud (login migration).
+      // Promote local-only entries to cloud (login / scope-switch
+      // migration). The cloud endpoint is idempotent under
+      // ON CONFLICT DO NOTHING so this is safe to re-run.
       const onlyInLocal = Array.from(local).filter((id) => !cloud.has(id));
-      if (onlyInLocal.length > 0) await postFavorite('bulkAdd', { spellIds: onlyInLocal });
+      if (onlyInLocal.length > 0) await postFavorite('bulkAdd', { spellIds: onlyInLocal }, scope);
       if (cancelled) return;
-      writeLocal(union, null);
+      writeLocal(union, scope);
       setFavorites(union);
       setHydrating(false);
     })();
@@ -208,11 +222,11 @@ export function useSpellFavorites(
       if (wasStarred) next.delete(spellId);
       else next.add(spellId);
       writeLocal(next, scope);
-      // Cloud sync only fires for the universal scope. Character-
-      // scoped favorites are localStorage-only for now.
-      if (!scope && userId) {
-        if (wasStarred) void postFavorite('remove', { spellId });
-        else void postFavorite('add', { spellId });
+      // Cloud-sync the single-spell change for any signed-in user,
+      // regardless of scope. Anonymous users stay localStorage-only.
+      if (userId) {
+        if (wasStarred) void postFavorite('remove', { spellId }, scope);
+        else void postFavorite('add', { spellId }, scope);
       }
       return next;
     });
