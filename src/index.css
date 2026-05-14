@@ -524,3 +524,30 @@
   margin: 0;
 }
 .no-number-spin { -moz-appearance: textfield; }
+
+/* Fullscreen-page overrides. Pages that want to occupy the entire
+   visible viewport (currently just /compendium/spells) opt in by
+   adding `spell-list-fullscreen` to <body> on mount (and removing it
+   on unmount). The rules below:
+     1. Strip the default `<main container mx-auto px-4 py-8>` padding
+        and max-width constraint so the page can extend to the edges
+        of the right-hand column (sidebar still occupies its track).
+     2. Hide the global footer for the duration the page is mounted
+        (footer is rendered by App.tsx outside the route component, so
+        the only way to remove it conditionally is via CSS).
+     3. Lock body scroll to the viewport so the page itself doesn't
+        gain a scroll wheel — each pane inside the page handles its
+        own overflow.
+   A class-based opt-in (rather than route-aware logic in App.tsx)
+   keeps App.tsx route-agnostic and lets any future page reuse the
+   same behavior with a single useEffect. */
+body.spell-list-fullscreen main {
+  padding: 0 !important;
+  max-width: none !important;
+}
+body.spell-list-fullscreen footer {
+  display: none !important;
+}
+body.spell-list-fullscreen {
+  overflow: hidden;
+}

@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Wand2, Lock, Star, ChevronUp, ChevronDown, Settings } from 'lucide-react';
+import { Lock, Star, ChevronUp, ChevronDown, Settings } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
 import { fetchCollection } from '../../lib/d1';
-import { Database, CloudOff } from 'lucide-react';
 import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -73,15 +72,11 @@ type SpellRecord = {
 };
 
 // Rough height of the sort-button header strip above the virtualized
-// list. Used to compute the virtualized-list height so the entire
-// list card stays within PANE_MAX_HEIGHT_PX. If the header gains rows
-// or the type ramp changes, bump this — slight overestimate is fine
-// (it just leaves a thin gap above the bottom of the card).
+// list. Used to compute the inner virtualized-list height so the
+// entire list card stays within the viewport-derived `paneHeight`
+// (see the component below). Slight overestimate is fine — it just
+// leaves a thin gap above the bottom of the card.
 const LIST_HEADER_PX = 40;
-// The virtualized inner list height. Derived from the pane max so the
-// list, favorites, and detail panes all line up at the same overall
-// row height regardless of which spell is selected.
-const SPELL_LIST_HEIGHT = 780; // = PANE_MAX_HEIGHT_PX (820) - LIST_HEADER_PX (40)
 // SPELL_ROW_HEIGHT was 78 when each row showed Name/Level/School/Source
 // as a tall flex-y card. The denser 7-column layout (Name/Lv/Time/School/
 // C./Range/Src) uses 48px per row — see VirtualizedList itemHeight in the
@@ -137,11 +132,9 @@ const COL_WIDTHS: Record<SpellColumnKey, string> = {
 // Values are inlined as literals in the xl:grid-cols-[...] class
 // below (Tailwind can't read variables at build time).
 //
-// Shared max-height for the list, favorites, and detail panes so the
-// row keeps a stable height regardless of which spell is selected.
-// Each pane gets its own internal scrollbar when content overflows.
-// Matches SPELL_LIST_HEIGHT above so the column tops/bottoms align.
-const PANE_MAX_HEIGHT_PX = 820;
+// Pane heights are no longer a fixed compile-time constant — they're
+// derived from window.innerHeight on mount + resize, so the grid
+// fills the viewport exactly (see `paneHeight` in the component).
 
 const COL_LABELS: Record<SpellColumnKey, string> = {
   name: 'Name',
@@ -183,6 +176,41 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   // users. See src/lib/spellFavorites.ts. Anonymous users still get
   // localStorage-only state so the favorites pane works without login.
   const { favorites, isFavorite, toggleFavorite } = useSpellFavorites(userProfile?.id || null);
+
+  // Fullscreen-page opt-in. Adds a body class on mount (and removes on
+  // unmount) that triggers the CSS overrides in src/index.css —
+  // hiding the global footer, stripping <main>'s container padding,
+  // and locking body scroll to the viewport. The page-level scroll
+  // wheel goes away; each pane inside the spell-list grid handles its
+  // own overflow.
+  useEffect(() => {
+    document.body.classList.add('spell-list-fullscreen');
+    return () => document.body.classList.remove('spell-list-fullscreen');
+  }, []);
+
+  // Viewport-derived height for the three panes (favorites, list,
+  // detail). Tracks window.innerHeight so the spell grid always fills
+  // exactly "viewport minus the bits above it" (navbar at the top of
+  // the right-hand column, FilterBar row, and a tiny vertical gap).
+  // Magic constants are conservative — slight underestimate is fine
+  // (leaves a few px of margin), overestimate would cause a page
+  // scroll wheel (the thing we explicitly removed).
+  const [paneHeight, setPaneHeight] = useState<number>(() =>
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 140),
+  );
+  useEffect(() => {
+    const onResize = () => {
+      // Layout chrome above the grid: navbar (~56px) + filter row
+      // (~56px) + the page's own vertical spacing (~28px) ≈ 140px.
+      setPaneHeight(Math.max(420, window.innerHeight - 140));
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  // Inner VirtualizedList height — leave room for the sort-button
+  // header strip above the rows.
+  const listInnerHeight = Math.max(200, paneHeight - LIST_HEADER_PX);
 
   // Sortable / hideable column state. Default sort is alphabetical by
   // name, ascending. Hidden columns persist to localStorage.
@@ -244,7 +272,13 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [tagStates, setTagStates] = useState<Record<string, number>>({});
   const [groupCombineModes, setGroupCombineModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
   const [groupExclusionModes, setGroupExclusionModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
+  // `isFoundationUsingD1` used to drive a "Foundation Linked" badge in
+  // the page header. The header is gone in the fullscreen layout, so
+  // the state is unused — but the load path below still sets it as a
+  // load-success signal that the foundation tables are reachable, so
+  // we keep the no-op setters to preserve that diagnostic write path.
+  // Suppress the "unused" warning by destructuring the setter only.
+  const [, setIsFoundationUsingD1] = useState(false);
 
   useEffect(() => {
     const loadSpells = async () => {
@@ -566,90 +600,80 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     setGroupExclusionModes({});
   };
 
-  return (
-    <div className="max-w-7xl mx-auto space-y-8 pb-20">
-      <div className="flex flex-col gap-4 border-b border-gold/10 pb-4 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3 text-gold">
-            <Wand2 className="h-6 w-6" />
-            <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <h1 className="h1-title">Spell List</h1>
-            {isFoundationUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-              </div>
-            )}
-          </div>
+  // Settings popover — page-level UI preferences (currently just the
+  // column-visibility toggles, but designed to host future per-user
+  // settings too). Shown to all viewers; lives in the FilterBar's
+  // trailingActions slot now that the page header is gone.
+  const settingsPopover = (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 border-gold/20 text-gold hover:bg-gold/5 gap-2"
+          title="List settings"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          Settings
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-56 p-2">
+        <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/10">
+          Visible columns
         </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Settings popover — open to all viewers. Currently holds the
-              column-visibility toggles (moved out of the list card so it
-              shares space with admin-gated actions like Spell Manager);
-              future per-user list preferences can live here too. */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
+        <div className="space-y-0.5">
+          {ALL_COLUMNS.filter(c => !ALWAYS_VISIBLE.has(c)).map((col) => {
+            const visible = !hiddenColumns.has(col);
+            return (
+              <button
+                key={col}
                 type="button"
-                variant="outline"
-                className="border-gold/20 text-gold hover:bg-gold/5 gap-2"
-                title="List settings"
+                onClick={() => toggleColumn(col)}
+                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs hover:bg-gold/5"
               >
-                <Settings className="w-4 h-4" />
-                Settings
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-56 p-2">
-              <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/10">
-                Visible columns
-              </div>
-              <div className="space-y-0.5">
-                {ALL_COLUMNS.filter(c => !ALWAYS_VISIBLE.has(c)).map((col) => {
-                  const visible = !hiddenColumns.has(col);
-                  return (
-                    <button
-                      key={col}
-                      type="button"
-                      onClick={() => toggleColumn(col)}
-                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs hover:bg-gold/5"
-                    >
-                      <span>{COL_LABELS[col]}</span>
-                      <span className={cn(
-                        'inline-flex items-center justify-center w-4 h-4 rounded border text-[10px]',
-                        visible
-                          ? 'border-gold/40 bg-gold/15 text-gold'
-                          : 'border-gold/10 text-transparent'
-                      )}>
-                        {visible ? '✓' : ''}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="text-[10px] text-ink/40 px-1 pt-1.5 mt-1 border-t border-gold/10 italic">
-                Hiding columns widens the description pane.
-              </div>
-            </PopoverContent>
-          </Popover>
-          {userProfile?.role === 'admin' ? (
-            <Link to="/compendium/spells/manage">
-              <Button type="button" variant="outline" className="border-gold/20 text-gold hover:bg-gold/5">
-                Spell Manager
-              </Button>
-            </Link>
-          ) : null}
+                <span>{COL_LABELS[col]}</span>
+                <span className={cn(
+                  'inline-flex items-center justify-center w-4 h-4 rounded border text-[10px]',
+                  visible
+                    ? 'border-gold/40 bg-gold/15 text-gold'
+                    : 'border-gold/10 text-transparent'
+                )}>
+                  {visible ? '✓' : ''}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      </div>
+        <div className="text-[10px] text-ink/40 px-1 pt-1.5 mt-1 border-t border-gold/10 italic">
+          Hiding columns widens the description pane.
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 
-      <div className="space-y-4">
+  // Filtered/total result count — matches the 5etools "1384/1936"
+  // pattern. `filteredSpells.length` reflects search + filters + all
+  // axis chip states; `spells.length` is the loaded corpus total.
+  // While the corpus is still loading we render a placeholder so the
+  // slot doesn't shift width when data arrives.
+  const resultCount = (
+    <div
+      className="text-[11px] font-mono tabular-nums text-ink/55 whitespace-nowrap px-1"
+      title={`${filteredSpells.length} spells match the current filters out of ${spells.length} total`}
+    >
+      {loadingSpells ? '— / —' : `${filteredSpells.length} / ${spells.length}`}
+    </div>
+  );
+
+  return (
+    // h-full so the page fills the viewport-derived space that the
+    // CSS overrides (body.spell-list-fullscreen) freed up by hiding
+    // the footer and zeroing <main>'s padding. flex-col so the
+    // FilterBar sits above the spell grid and the grid takes the
+    // remaining vertical space.
+    <div className="h-full flex flex-col gap-2 p-2">
+      <div className="shrink-0">
         <FilterBar
           search={search}
           setSearch={setSearch}
@@ -660,6 +684,24 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           searchPlaceholder="Search spell name, source, or identifier"
           filterTitle="Advanced Filters"
           resetLabel="Reset Filters"
+          trailingActions={
+            <>
+              {resultCount}
+              {settingsPopover}
+              {userProfile?.role === 'admin' ? (
+                <Link to="/compendium/spells/manage">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 border-gold/20 text-gold hover:bg-gold/5"
+                  >
+                    Spell Manager
+                  </Button>
+                </Link>
+              ) : null}
+            </>
+          }
           renderFilters={
             <>
               {/* Base filter sections — each gets 3-state include/exclude
@@ -810,31 +852,38 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             </>
           }
         />
+      </div>
 
-        {/* Three-column layout: favorites pane (left) | main spell list
-            (middle) | detail panel (right).
-            Sizing policy (see the doc-block above PANE_MAX_HEIGHT_PX
-            for the full rationale and history):
-              - List pane is FIXED at 520px. It doesn't grow when the
-                viewport widens — wider viewports give all the extra
-                width to the description instead. It doesn't shrink
-                when columns are hidden either; the freed width inside
-                the list goes to the Name column (which is the only
-                `minmax(0,1fr)` cell in the internal grid).
-              - Description floors at 360px so body text stays
-                legible (anything narrower wraps every 4-5 words).
-              - Below xl the grid drops to two columns and the detail
-                card wraps to a second row. */}
-        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_520px_minmax(360px,1fr)]">
+      {/* Three-column layout: favorites pane (left) | main spell list
+          (middle) | detail panel (right).
+          Sizing policy (see the doc-block at the top of the file for
+          rationale and history):
+            - List pane is FIXED at 520px. It doesn't grow when the
+              viewport widens — wider viewports give all the extra
+              width to the description instead. It doesn't shrink
+              when columns are hidden either; the freed width inside
+              the list goes to the Name column (which is the only
+              `minmax(0,1fr)` cell in the internal grid).
+            - Description floors at 360px so body text stays
+              legible (anything narrower wraps every 4-5 words).
+            - Below xl the grid drops to two columns and the detail
+              card wraps to a second row.
+          Pane heights use the viewport-derived `paneHeight` so the
+          whole row fills the available vertical space between the
+          FilterBar and the bottom of the viewport. `flex-1 min-h-0`
+          on the wrapper lets the grid claim the leftover height
+          inside the parent flex column without forcing the page to
+          scroll. */}
+      <div className="flex-1 min-h-0 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_520px_minmax(360px,1fr)]">
           {/* Favorites pane — only renders favorited spells. Pulled
               from the same filteredSpells source so the favorites pane
               respects active filters too, but it's "the same UI for a
               smaller list" rather than a parallel data path. */}
           <Card
             className="border-gold/10 bg-card/50 overflow-hidden"
-            style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+            style={{ maxHeight: `${paneHeight}px` }}
           >
-            <CardContent className="p-0 flex flex-col" style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}>
+            <CardContent className="p-0 flex flex-col" style={{ maxHeight: `${paneHeight}px` }}>
               <div className="flex items-center justify-between gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
                 <div className="flex items-center gap-2">
                   <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
@@ -896,12 +945,12 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
               that column; click again to flip direction). Columns past
               Name can be hidden via Settings in the page header bar —
               user preference persists to localStorage. The card is
-              capped at PANE_MAX_HEIGHT_PX; VirtualizedList already
+              capped at the viewport-derived paneHeight; VirtualizedList already
               handles its own scrolling internally (height = PANE max
               minus the header strip). */}
           <Card
             className="border-gold/10 bg-card/50 overflow-hidden"
-            style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+            style={{ maxHeight: `${paneHeight}px` }}
           >
             <CardContent className="p-0">
               {/* Header row + columns popover. The grid template here is
@@ -949,7 +998,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
               ) : (
                 <VirtualizedList
                   items={sortedSpells}
-                  height={SPELL_LIST_HEIGHT}
+                  height={listInnerHeight}
                   itemHeight={48}
                   className="custom-scrollbar overflow-y-auto"
                   innerClassName="divide-y divide-gold/5"
@@ -1054,17 +1103,17 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
           {/* Detail pane — image+info inline (horizontal), tags grouped by
               category, favorite star in the header. The card has a fixed
-              max-height matching the list pane (PANE_MAX_HEIGHT_PX) and
+              max-height matching the list pane (paneHeight) and
               its CardContent scrolls internally. Without this, long
               descriptions would push the entire row taller than the
               list and make the column heights ragged. */}
           <Card
             className="border-gold/10 bg-card/50 overflow-hidden"
-            style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+            style={{ maxHeight: `${paneHeight}px` }}
           >
             <CardContent
               className="p-0 overflow-y-auto custom-scrollbar"
-              style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+              style={{ maxHeight: `${paneHeight}px` }}
             >
               <SpellDetailPanel
                 spellId={selectedSpellId || null}
@@ -1074,8 +1123,6 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             </CardContent>
           </Card>
         </div>
-      </div>
-
     </div>
   );
 }

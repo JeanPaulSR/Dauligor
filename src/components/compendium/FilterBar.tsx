@@ -91,6 +91,14 @@ export interface FilterBarProps {
   resetLabel?: string;
   applyLabel?: string;
   renderFilters?: ReactNode;
+  /**
+   * Optional slot rendered to the right of the Filter button on the
+   * same row as the search input. Used by pages that want page-level
+   * actions (Settings, edit-mode entry points, result counts) inline
+   * with the filter controls rather than in a separate header.
+   * Children flex-shrink-0 and align center with the Filter button.
+   */
+  trailingActions?: ReactNode;
 }
 
 export function FilterBar({
@@ -112,7 +120,8 @@ export function FilterBar({
   filterSubtitle,
   resetLabel = 'Reset All Filters',
   applyLabel = 'Apply & Close',
-  renderFilters
+  renderFilters,
+  trailingActions
 }: FilterBarProps) {
   const defaultFilterContent = (
     <>
@@ -190,6 +199,14 @@ export function FilterBar({
             </Badge>
           )}
         </Button>
+        {trailingActions && (
+          // shrink-0 so the page-level actions (Settings, Spell Manager,
+          // result count, etc.) keep their natural width when the search
+          // input expands. They share the same horizontal row.
+          <div className="flex items-center gap-2 shrink-0">
+            {trailingActions}
+          </div>
+        )}
       </div>
 
       {isFilterOpen && (
