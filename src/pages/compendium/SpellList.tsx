@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Wand2, Lock } from 'lucide-react';
-import { expandTagsWithAncestors } from '../../lib/tagHierarchy';
+import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
 import { fetchCollection } from '../../lib/d1';
 import { Database, CloudOff } from 'lucide-react';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
-import { FilterBar } from '../../components/compendium/FilterBar';
+import { FilterBar, TagGroupFilter, matchesTagFilters } from '../../components/compendium/FilterBar';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
 import { fetchSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
@@ -101,7 +101,16 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [sourceFilterIds, setSourceFilterIds] = useState<string[]>([]);
   const [levelFilters, setLevelFilters] = useState<string[]>([]);
   const [schoolFilters, setSchoolFilters] = useState<string[]>([]);
-  const [tagFilterIds, setTagFilterIds] = useState<string[]>([]);
+  // Rich tag filter state — matches ClassList's shape so the shared
+  // <TagGroupFilter> from FilterBar works. `tagStates`: 0=neutral,
+  // 1=include, 2=exclude. `groupCombineModes` controls how multiple
+  // include chips within one group combine (AND/OR/XOR). Same for
+  // `groupExclusionModes`. Previously this page had a flat
+  // `tagFilterIds: string[]` toggle which couldn't express exclude or
+  // combinator preference.
+  const [tagStates, setTagStates] = useState<Record<string, number>>({});
+  const [groupCombineModes, setGroupCombineModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
+  const [groupExclusionModes, setGroupExclusionModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
   const [activationFilters, setActivationFilters] = useState<ActivationBucket[]>([]);
   const [rangeFilters, setRangeFilters] = useState<RangeBucket[]>([]);
   const [durationFilters, setDurationFilters] = useState<DurationBucket[]>([]);
@@ -144,7 +153,12 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
         setSources(sourcesData);
         setTagGroups(tagGroupsData);
-        setAllTags(tagsData);
+        // Normalize tag rows (snake_case D1 columns -> camelCase the
+        // TagGroupFilter / hierarchical layout expects). Same coercion
+        // as ClassList. Without this, tagsByGroup's `tag.groupId`
+        // lookup is undefined for every row and no tag filter chips
+        // render at all.
+        setAllTags(tagsData.map((t: any) => ({ ...t, ...normalizeTagRow(t) })));
 
         if (sourcesData.length > 0) setIsFoundationUsingD1(true);
       } catch (err) {
@@ -200,10 +214,19 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         || sourceAbbrev.toLowerCase().includes(search.trim().toLowerCase())
         || String(spell.identifier ?? '').toLowerCase().includes(search.trim().toLowerCase());
 
-      const tagFilterMatches = tagFilterIds.length === 0 || (() => {
-        const effective = new Set(expandTagsWithAncestors(spellTagIds, parentByTagId));
-        return tagFilterIds.every((tagId) => effective.has(tagId));
-      })();
+      // Subtag-aware effective tag set: expand the spell's tags with
+      // their ancestors so a filter on `Conjure` matches spells tagged
+      // `Conjure.Manifest`. Then route through the shared
+      // include/exclude + AND/OR/XOR matcher used by every list page.
+      const effectiveTagIds = Array.from(expandTagsWithAncestors(spellTagIds, parentByTagId));
+      const tagFilterMatches = matchesTagFilters(
+        effectiveTagIds,
+        tagGroups,
+        tagsByGroup,
+        tagStates,
+        groupCombineModes,
+        groupExclusionModes,
+      );
 
       return matchesSearch
         && (sourceFilterIds.length === 0 || sourceFilterIds.includes(String(spell.sourceId ?? '')))
@@ -216,7 +239,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         && (shapeFilters.length === 0 || shapeFilters.includes(spell.shapeBucket))
         && (propertyFilters.length === 0 || propertyFilters.every((p) => spell[p]));
     });
-  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagFilterIds, activationFilters, rangeFilters, durationFilters, shapeFilters, propertyFilters, parentByTagId]);
+  }, [spells, sourceById, search, sourceFilterIds, levelFilters, schoolFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, activationFilters, rangeFilters, durationFilters, shapeFilters, propertyFilters, parentByTagId]);
 
   useEffect(() => {
     if (!selectedSpellId) return;
@@ -245,7 +268,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     sourceFilterIds.length
     + levelFilters.length
     + schoolFilters.length
-    + tagFilterIds.length
+    + Object.keys(tagStates).length
     + activationFilters.length
     + rangeFilters.length
     + durationFilters.length
@@ -254,6 +277,32 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
   const toggleSelection = (value: string, selected: string[], setSelected: React.Dispatch<React.SetStateAction<string[]>>) => {
     setSelected((current) => current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value]);
+  };
+
+  // 3-state cycle: 0 (neutral, not in record) -> 1 (include) -> 2 (exclude) -> 0
+  const cycleTagState = (tagId: string) => {
+    setTagStates(prev => {
+      const next = { ...prev };
+      const state = next[tagId] || 0;
+      if (state === 0) next[tagId] = 1;
+      else if (state === 1) next[tagId] = 2;
+      else delete next[tagId];
+      return next;
+    });
+  };
+  const cycleGroupMode = (groupId: string) => {
+    setGroupCombineModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: nextMode };
+    });
+  };
+  const cycleExclusionMode = (groupId: string) => {
+    setGroupExclusionModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: nextMode };
+    });
   };
 
   const renderSourceAbbreviation = (spell: SpellRecord) => {
@@ -268,7 +317,9 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     setSourceFilterIds([]);
     setLevelFilters([]);
     setSchoolFilters([]);
-    setTagFilterIds([]);
+    setTagStates({});
+    setGroupCombineModes({});
+    setGroupExclusionModes({});
     setActivationFilters([]);
     setRangeFilters([]);
     setDurationFilters([]);
@@ -354,21 +405,26 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                 onClear={() => setSchoolFilters([])}
               />
 
-              {tagGroups.map((group) => {
-                const tags = tagsByGroup[group.id] || [];
-                if (!tags.length) return null;
-                return (
-                  <FilterSection
-                    key={group.id}
-                    title={group.name || 'Tags'}
-                    values={tags.map((tag) => ({ value: tag.id, label: String(tag.name || tag.id) }))}
-                    selected={tagFilterIds}
-                    onToggle={(value) => toggleSelection(value, tagFilterIds, setTagFilterIds)}
-                    onIncludeAll={() => setTagFilterIds((current) => Array.from(new Set([...current, ...tags.map((tag) => tag.id)])))}
-                    onClear={() => setTagFilterIds((current) => current.filter((tagId) => !tags.some((tag) => tag.id === tagId)))}
-                  />
-                );
-              })}
+              {/* Tag groups now use the shared rich tag filter: 3-state
+                  include/exclude chips with per-group AND/OR/XOR
+                  combinator + exclusion-mode toggles, AND hierarchical
+                  subtag rendering (parent row + indented subtag row).
+                  Matches the class-list filter UX so authors learn one
+                  control set across the compendium. */}
+              {tagGroups.map((group) => (
+                <TagGroupFilter
+                  key={group.id}
+                  group={group}
+                  tags={(tagsByGroup[group.id] || []) as any}
+                  tagStates={tagStates}
+                  setTagStates={setTagStates}
+                  cycleTagState={cycleTagState}
+                  combineMode={groupCombineModes[group.id]}
+                  cycleGroupMode={cycleGroupMode}
+                  exclusionMode={groupExclusionModes[group.id]}
+                  cycleExclusionMode={cycleExclusionMode}
+                />
+              ))}
 
               <FilterSection
                 title="Casting Time"

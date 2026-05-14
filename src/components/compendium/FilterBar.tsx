@@ -54,138 +54,20 @@ export function FilterBar({
 }: FilterBarProps) {
   const defaultFilterContent = (
     <>
-      {tagGroups.map(group => {
-        const groupTags = tagsByGroup[group.id] || [];
-        if (groupTags.length === 0) return null;
-        const mode = groupCombineModes[group.id] || 'OR';
-        const exMode = groupExclusionModes[group.id] || 'OR';
-
-        // Hierarchical layout: roots get their own chip-row; subtags
-        // (parent_tag_id / parentTagId pointing to a tag in this group)
-        // get an indented chip-row directly under their parent. Mirrors
-        // the SpellTagPicker layout — keeps tag groups with many
-        // subtags from collapsing into one "clumped up mess" wall of
-        // chips. Orphaned subtags (parent missing from the group's tag
-        // set, rare with consistent data) fall to a separate amber-
-        // edged row so they don't disappear when filtering.
-        const idSet = new Set(groupTags.map(t => t.id));
-        const getParent = (t: any): string | null => {
-          const p = t?.parentTagId ?? t?.parent_tag_id ?? null;
-          return p && idSet.has(p) ? p : null;
-        };
-        const roots = groupTags.filter(t => !getParent(t)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-        const childrenByParent = new Map<string, any[]>();
-        for (const t of groupTags) {
-          const p = getParent(t);
-          if (!p) continue;
-          if (!childrenByParent.has(p)) childrenByParent.set(p, []);
-          childrenByParent.get(p)!.push(t);
-        }
-        for (const arr of childrenByParent.values()) {
-          arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-        }
-        const orphans = groupTags.filter(t => {
-          const raw = t?.parentTagId ?? t?.parent_tag_id ?? null;
-          return raw && !idSet.has(raw);
-        });
-
-        const renderChip = (tag: any) => {
-          const state = tagStates[tag.id] || 0;
-          return (
-            <button
-              key={tag.id}
-              onClick={() => cycleTagState?.(tag.id)}
-              className={cn(
-                "filter-tag",
-                state === 1 ? "btn-gold-solid border-gold shadow-lg shadow-gold/20" : state === 2 ? "btn-danger border-blood" : "btn-gold"
-              )}
-            >
-              {/* Subtags render as `Parent.Name` for ambiguity-free
-                  scanning when the chip wraps to a new line and loses
-                  its left-border indent context. tagPickerLabel returns
-                  the `Parent.Child` shape when parentTagId is present. */}
-              {String(tag.name)}
-            </button>
-          );
-        };
-
-        return (
-          <div key={group.id} className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <span className="h3-title uppercase text-ink">{group.name}</span>
-                <div className="flex items-center gap-4">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => cycleGroupMode?.(group.id)}
-                    className="h-6 px-3 btn-gold text-[9px]"
-                  >
-                    {mode}
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <span className="label-text text-blood/60">Exclusion Logic</span>
-                    <Button
-                      size="sm"
-                      onClick={() => cycleExclusionMode?.(group.id)}
-                      className="h-6 px-3 btn-danger"
-                    >
-                      {exMode}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    if (!setTagStates) return;
-                    const newStates: Record<string, number> = { ...tagStates };
-                    groupTags.forEach(t => newStates[t.id] = 1);
-                    setTagStates(newStates);
-                  }}
-                  className="label-text hover:underline"
-                >
-                  Include All
-                </button>
-                <span className="text-gold/20">|</span>
-                <button
-                  onClick={() => {
-                    if (!setTagStates) return;
-                    const newStates: Record<string, number> = { ...tagStates };
-                    groupTags.forEach(t => delete newStates[t.id]);
-                    setTagStates(newStates);
-                  }}
-                  className="label-text hover:underline"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {roots.map(root => {
-                const children = childrenByParent.get(root.id) || [];
-                return (
-                  <React.Fragment key={root.id}>
-                    <div className="flex flex-wrap gap-2">
-                      {renderChip(root)}
-                    </div>
-                    {children.length > 0 && (
-                      <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-2">
-                        {children.map(renderChip)}
-                      </div>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-              {orphans.length > 0 && (
-                <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-2" title="Subtags whose parent is not in this group's visible tag set.">
-                  {orphans.map(renderChip)}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {tagGroups.map(group => (
+        <TagGroupFilter
+          key={group.id}
+          group={group}
+          tags={tagsByGroup[group.id] || []}
+          tagStates={tagStates}
+          setTagStates={setTagStates}
+          cycleTagState={cycleTagState}
+          combineMode={groupCombineModes[group.id]}
+          cycleGroupMode={cycleGroupMode}
+          exclusionMode={groupExclusionModes[group.id]}
+          cycleExclusionMode={cycleExclusionMode}
+        />
+      ))}
     </>
   );
 
@@ -218,9 +100,9 @@ export function FilterBar({
 
       {isFilterOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10">
-          <div 
-            className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-in fade-in duration-200" 
-            onClick={() => setIsFilterOpen(false)} 
+          <div
+            className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setIsFilterOpen(false)}
           />
           <Card className="relative w-full max-w-4xl max-h-full overflow-hidden flex flex-col border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
             <div className="flex items-center justify-between p-6 border-b border-gold/10 bg-gold/5">
@@ -257,6 +139,228 @@ export function FilterBar({
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Apply 3-state tag chip filtering with per-group AND/OR/XOR
+ * (inclusion) and AND/OR/XOR (exclusion) modes. Returns true if the
+ * entity's effective tag ID set passes every group's rules.
+ *
+ * `entityTagIds` should already be expanded with ancestors via
+ * `expandTagsWithAncestors` so subtag matching works (a class tagged
+ * `Conjure.Manifest` matches a filter on `Conjure`).
+ *
+ * Lifted out of ClassList's inline match logic so SpellList and
+ * SpellListManager can share it instead of reinventing the
+ * group-result accumulator each.
+ */
+export function matchesTagFilters(
+  entityTagIds: string[],
+  tagGroups: Array<{ id: string }>,
+  tagsByGroup: Record<string, Array<{ id: string }>>,
+  tagStates: Record<string, number>,
+  groupCombineModes: Record<string, 'AND' | 'OR' | 'XOR'>,
+  groupExclusionModes: Record<string, 'AND' | 'OR' | 'XOR'>,
+): boolean {
+  if (Object.keys(tagStates).length === 0) return true;
+
+  const groupResults = tagGroups.map(group => {
+    const groupTags = tagsByGroup[group.id] || [];
+    const includedInGroup = groupTags.filter(t => tagStates[t.id] === 1);
+    const excludedInGroup = groupTags.filter(t => tagStates[t.id] === 2);
+    if (includedInGroup.length === 0 && excludedInGroup.length === 0) return null;
+
+    const entityTagsInGroup = entityTagIds.filter(tid => groupTags.some(gt => gt.id === tid));
+
+    let inclusionMatch = true;
+    if (includedInGroup.length > 0) {
+      const mode = groupCombineModes[group.id] || 'OR';
+      if (mode === 'OR') inclusionMatch = includedInGroup.some(st => entityTagsInGroup.includes(st.id));
+      else if (mode === 'AND') inclusionMatch = includedInGroup.every(st => entityTagsInGroup.includes(st.id));
+      else inclusionMatch = includedInGroup.filter(st => entityTagsInGroup.includes(st.id)).length === 1;
+    }
+
+    let exclusionMatch = false;
+    if (excludedInGroup.length > 0) {
+      const mode = groupExclusionModes[group.id] || 'OR';
+      if (mode === 'OR') exclusionMatch = excludedInGroup.some(st => entityTagsInGroup.includes(st.id));
+      else if (mode === 'AND') exclusionMatch = excludedInGroup.every(st => entityTagsInGroup.includes(st.id));
+      else exclusionMatch = excludedInGroup.filter(st => entityTagsInGroup.includes(st.id)).length === 1;
+    }
+
+    return {
+      inclusionMatch,
+      exclusionMatch,
+      hasInclusions: includedInGroup.length > 0,
+    };
+  });
+
+  const activeResults = groupResults.filter(r => r !== null) as Array<{ inclusionMatch: boolean; exclusionMatch: boolean; hasInclusions: boolean }>;
+  if (activeResults.length === 0) return true;
+  if (activeResults.some(r => r.exclusionMatch)) return false;
+  const activeInclusions = activeResults.filter(r => r.hasInclusions);
+  if (activeInclusions.length > 0) return activeInclusions.every(r => r.inclusionMatch);
+  return true;
+}
+
+/**
+ * Tag-group filter section with 3-state include/exclude chips and the
+ * AND/OR/XOR group-mode toggles. Lifted out of FilterBar's default
+ * content so pages with mixed filter axes (SpellList, SpellListManager
+ * — sources + level + school + tag groups + activation + range + ...)
+ * can embed it inside their custom `renderFilters` without losing the
+ * rich tag UX. ClassList's filter modal still goes through FilterBar's
+ * default content path, which routes through this same component.
+ *
+ * Hierarchical layout: roots get their own chip-row; subtags get an
+ * indented chip-row directly under their parent with a thin gold left-
+ * border. Mirrors the SpellTagPicker layout from the subtag rollout.
+ * Orphaned subtags (parent missing from the group's visible set) fall
+ * to a separate amber-edged row.
+ */
+export interface TagGroupFilterProps {
+  group: { id: string; name?: string };
+  tags: Array<{ id: string; name: string; parent_tag_id?: string | null; parentTagId?: string | null }>;
+  tagStates: Record<string, number>;
+  setTagStates?: (val: any) => void;
+  cycleTagState?: (tagId: string) => void;
+  combineMode?: 'AND' | 'OR' | 'XOR';
+  cycleGroupMode?: (groupId: string) => void;
+  exclusionMode?: 'AND' | 'OR' | 'XOR';
+  cycleExclusionMode?: (groupId: string) => void;
+}
+
+export function TagGroupFilter({
+  group,
+  tags,
+  tagStates,
+  setTagStates,
+  cycleTagState,
+  combineMode,
+  cycleGroupMode,
+  exclusionMode,
+  cycleExclusionMode,
+}: TagGroupFilterProps) {
+  if (tags.length === 0) return null;
+  const mode = combineMode || 'OR';
+  const exMode = exclusionMode || 'OR';
+
+  const idSet = new Set(tags.map(t => t.id));
+  const getParent = (t: any): string | null => {
+    const p = t?.parentTagId ?? t?.parent_tag_id ?? null;
+    return p && idSet.has(p) ? p : null;
+  };
+  const roots = tags.filter(t => !getParent(t)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const childrenByParent = new Map<string, any[]>();
+  for (const t of tags) {
+    const p = getParent(t);
+    if (!p) continue;
+    if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+    childrenByParent.get(p)!.push(t);
+  }
+  for (const arr of childrenByParent.values()) {
+    arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }
+  const orphans = tags.filter(t => {
+    const raw = t?.parentTagId ?? t?.parent_tag_id ?? null;
+    return raw && !idSet.has(raw);
+  });
+
+  const renderChip = (tag: any) => {
+    const state = tagStates[tag.id] || 0;
+    return (
+      <button
+        key={tag.id}
+        onClick={() => cycleTagState?.(tag.id)}
+        className={cn(
+          "filter-tag",
+          state === 1 ? "btn-gold-solid border-gold shadow-lg shadow-gold/20" : state === 2 ? "btn-danger border-blood" : "btn-gold"
+        )}
+        title={state === 0 ? 'Click to include' : state === 1 ? 'Click to exclude' : 'Click to clear'}
+      >
+        {String(tag.name)}
+      </button>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-6 flex-wrap">
+          <span className="h3-title uppercase text-ink">{group.name}</span>
+          <div className="flex items-center gap-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => cycleGroupMode?.(group.id)}
+              className="h-6 px-3 btn-gold text-[9px]"
+              title="Inclusion logic: AND requires every included tag, OR requires any, XOR requires exactly one."
+            >
+              {mode}
+            </Button>
+            <div className="flex items-center gap-2">
+              <span className="label-text text-blood/60">Exclusion Logic</span>
+              <Button
+                size="sm"
+                onClick={() => cycleExclusionMode?.(group.id)}
+                className="h-6 px-3 btn-danger"
+                title="Exclusion logic for tags toggled to exclude (red)."
+              >
+                {exMode}
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              if (!setTagStates) return;
+              const newStates: Record<string, number> = { ...tagStates };
+              tags.forEach(t => newStates[t.id] = 1);
+              setTagStates(newStates);
+            }}
+            className="label-text hover:underline"
+          >
+            Include All
+          </button>
+          <span className="text-gold/20">|</span>
+          <button
+            onClick={() => {
+              if (!setTagStates) return;
+              const newStates: Record<string, number> = { ...tagStates };
+              tags.forEach(t => delete newStates[t.id]);
+              setTagStates(newStates);
+            }}
+            className="label-text hover:underline"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {roots.map(root => {
+          const children = childrenByParent.get(root.id) || [];
+          return (
+            <React.Fragment key={root.id}>
+              <div className="flex flex-wrap gap-2">
+                {renderChip(root)}
+              </div>
+              {children.length > 0 && (
+                <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-2">
+                  {children.map(renderChip)}
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+        {orphans.length > 0 && (
+          <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-2" title="Subtags whose parent is not in this group's visible tag set.">
+            {orphans.map(renderChip)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
