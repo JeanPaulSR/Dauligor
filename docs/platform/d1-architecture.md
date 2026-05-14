@@ -186,6 +186,17 @@ for (const sel of selections)  ops.push({ sql: '...', params: [...] });
 await batchQueryD1(ops);
 ```
 
+## Per-user / per-character tables
+
+Two tables back the [spell-favourites](../features/spell-favorites.md) system. Both go through a dedicated Vercel route ([api/spell-favorites.ts](../../api/spell-favorites.ts)) rather than the generic `/api/d1/query` because they're auth-gated to "any signed-in user" (not staff) — `requireAuthenticatedUser` enforces that the row's `user_id` is always the verified-token uid, never a request-body field.
+
+| Table | Migration | Composite PK | Notes |
+|---|---|---|---|
+| `user_spell_favorites` | [20260514-1522_user_spell_favorites.sql](../../worker/migrations/20260514-1522_user_spell_favorites.sql) | `(user_id, spell_id)` | Universal scope (account-level favourites). |
+| `character_spell_favorites` | [20260514-2030_character_spell_favorites.sql](../../worker/migrations/20260514-2030_character_spell_favorites.sql) | `(user_id, character_id, spell_id)` | Per-character scope. `user_id` is denormalised so the WHERE clause can short-circuit ownership checks without joining `characters`. |
+
+Both use `ON CONFLICT(...) DO NOTHING` on INSERT so the client can re-issue an add safely (the bulk-add path during local↔cloud merge relies on this idempotence).
+
 ## Server-side D1 access
 
 Some flows (e.g., Foundry export, scheduled jobs) need to run D1 queries from the proxy layer without going through a browser. Use `executeD1QueryInternal` from `api/_lib/d1-proxy.ts`:

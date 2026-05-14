@@ -67,6 +67,29 @@ Shape: page-level component calls library functions (`upsertLoreArticle`, `fetch
 Good for: parent-with-children entities (lore article + 4 metadata table variants + 5 junction tables; planned for class + features + scaling + advancements).
 Best practice for transactional integrity.
 
+### Pattern E — Fullscreen list + editor + side-panel (browser-parity)
+
+**Used by**: the Manual Editor side of [SpellsEditor.tsx](../../src/pages/compendium/SpellsEditor.tsx).
+
+Shape: when an editor's list of entities benefits from the same scanning rhythm as the **public browser** of that entity type, mirror the browser's layout instead of building a bespoke sidebar. Specifically:
+
+- Body opts into fullscreen via a `spell-list-fullscreen` body class (CSS in [src/index.css](../../src/index.css) hides the global footer and strips `<main>`'s container padding).
+- Top toolbar is a `<FilterBar>` instance with `trailingActions` carrying per-page actions (count badge, New Entity button, admin maintenance buttons).
+- Working area is a 3-column grid: compact list (~280px) | the editor itself (`1fr`) | a side panel for whatever's both bulky and orthogonal to the form's tab flow (in `SpellsEditor`, the descriptive-tag picker — moved out of the editor's tabs so it lives next to whatever Mechanics / Activities / Effects tab is open).
+- Pane heights derive from `window.innerHeight - <chrome_offset>`; resize listener keeps the panes live.
+- The list rows reuse the BROWSER's column shape (compact, sortable headers, virtualised) so a user familiar with the public browser doesn't have to relearn the layout in the editor.
+
+Good for: entities where the list of "all rows" is a real authoring tool (you scroll through dozens of spells to find one to tweak), where the editor form has enough structure to want side-panel surfaces that don't fit in a tab strip, and where you want browser↔editor consistency.
+
+Post-save behaviour worth copying — `SpellsEditor.handleSave` captures `editingIdAtStart` + `savedId` BEFORE the await, refreshes the saved row's cache after, and only adopts the new id as `editingId` if the user hasn't navigated away during the save (tracked via `editingIdRef`). Prevents the classic "save → jump to New Spell → user typed in B and clicked Save → data wiped" race.
+
+Reusable bits that any future editor in this pattern should pick up:
+- `<FilterBar>` `trailingActions` slot (see [../ui/filters.md](../ui/filters.md#main-row----filterbar-toolbar)).
+- `spell-list-fullscreen` body class (rename to `compendium-fullscreen` if we ever need a less-spell-specific variant; the CSS rules are page-agnostic).
+- `paneHeight` state + resize listener idiom.
+
+Limitations: the inline tag picker in `SpellsEditor` is still file-local (not extracted to its own component). If a third editor adopts Pattern E, lift the picker (and probably the toolbar-with-FilterBar template) into shared components.
+
 ---
 
 ## Decision tree
@@ -77,6 +100,7 @@ Best practice for transactional integrity.
 | A new simple taxonomy (`id`, `name`, `identifier`, `order`, `description`) | **C** | (just add a tab to `AdminProficiencies` with a new `<SimplePropertyEditor collectionName="...">` invocation) |
 | A new entity with custom UX needs | **B** | [SkillsEditor.tsx](../../src/pages/compendium/SkillsEditor.tsx) |
 | A new entity with multiple FK tables / junctions | **D** | Build a new `src/lib/<entity>.ts`; see [lore.ts](../../src/lib/lore.ts) |
+| A new editor that should feel like its public browser (compact list + tabbed editor + side panel) | **E** | [SpellsEditor.tsx](../../src/pages/compendium/SpellsEditor.tsx) — see also [../features/compendium-spells-editor.md](../features/compendium-spells-editor.md) |
 
 If your new entity has 0 junctions and just sits in a table, pick A or C. If it has children, pick D from day one — refactoring from B-with-implicit-junctions to D later is painful.
 

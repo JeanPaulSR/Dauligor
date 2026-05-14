@@ -135,6 +135,21 @@ ADVANCED FILTERS                               [×]
 
 Bulk controls are implemented as monotonic version counters in `FilterBarContext` (not booleans) so a click after a manual toggle still fires. Sections subscribe via the `useFilterSectionHidden()` hook.
 
+### Main row — `<FilterBar>` toolbar
+
+```
+[🔍 search…]  [▼ Filters (N)]  [↺ Reset]   <trailingActions slot>
+```
+
+| Control | Effect |
+|---|---|
+| Search input | Free-text search; consumer-owned via `setSearch`. |
+| Filters button | Opens the modal. Badge shows `activeFilterCount` (number of non-neutral chips across all axes). |
+| Reset (inline) | Always rendered. When `activeFilterCount > 0 \|\| search.length > 0`, one click clears both filters and search via `resetFilters()` + `setSearch('')`. When there's nothing to reset, the button dims and shows a "Nothing to reset" tooltip — the affordance stays discoverable. Blood-tinted hover signals it's destructive. |
+| `trailingActions` slot | Optional `ReactNode` prop rendered after Reset. Children get `flex items-center gap-2 shrink-0`. Used by pages that want page-level actions inline with the filter controls — e.g., Settings popovers, edit-mode entry points, result counts. |
+
+The trailing slot is how `SpellList` puts its `count + Settings + Spell Manager` chips on the same row as Filters, and how `SpellsEditor` puts `count + New Spell` there. Pages without trailing controls leave the prop omitted.
+
 ## Tag groups — section-expand pattern
 
 Tag groups have a 2-level hierarchy (root → subtag). Rendering them as flat chip rows wastes vertical real-estate; rendering them as parent-indented blocks pushes every parent onto its own line. The current model splits the difference:

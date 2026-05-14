@@ -70,9 +70,27 @@ Roughly what happens between page load and ready-to-render:
 
 ## Browser router quirks
 
-- **Page reloads in nested routes** require Vercel rewrites (already configured in [vercel.json](../../vercel.json)). In local dev, the Express server serves `index.html` for all non-API paths.
+- **Page reloads in nested routes** require Vercel rewrites (already configured in [vercel.json](../../vercel.json)) — see [SPA fallback](#spa-fallback). In local dev, the Express server serves `index.html` for all non-API paths.
 - **Anchor links** (`#section`) work but should be rare; prefer programmatic scroll in editors.
 - **Trailing slashes** are stripped — don't link to `/wiki/`.
+
+## SPA fallback
+
+Vercel serves static files first and serverless functions at `/api/*`. Client-side routes like `/compendium/spells` don't exist on the filesystem, so a hard refresh or shared deep link would 404 without a rewrite. The catch-all in [vercel.json](../../vercel.json) sends every non-API path to `/index.html` so the SPA bundle loads and React Router resolves the route:
+
+```json
+{
+  "rewrites": [
+    { "source": "/api/module/(.*)",  "destination": "/api/module" },
+    { "source": "/api/module",       "destination": "/api/module" },
+    { "source": "/((?!api/).*)",     "destination": "/index.html" }
+  ]
+}
+```
+
+The negative lookahead `(?!api/)` skips paths under `/api/` so the serverless functions still resolve normally. Static files in `/public` and built assets in `/assets` are served from the filesystem before rewrites are evaluated, so they're unaffected by the catch-all.
+
+When you add a new route, you don't have to update `vercel.json` — the catch-all handles every new client-side path automatically.
 
 ## Navigation patterns
 

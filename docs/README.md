@@ -44,7 +44,10 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 
 - [wiki-lore.md](features/wiki-lore.md) — articles, secrets, DM notes, nesting, era/campaign visibility
 - [compendium-classes.md](features/compendium-classes.md) — classes, subclasses, features, advancements
-- [compendium-spells.md](features/compendium-spells.md) — spell list, importer, summary index
+- [compendium-spells.md](features/compendium-spells.md) — spell index (data layer, summary index, common tasks) → splits into:
+  - [compendium-spells-browser.md](features/compendium-spells-browser.md) — public `/compendium/spells` browser (3-pane fullscreen, sort/hide cols, favourites pane)
+  - [compendium-spells-editor.md](features/compendium-spells-editor.md) — admin `/compendium/spells/manage` (list | editor | tags+prereqs)
+  - [spell-favorites.md](features/spell-favorites.md) — favourites storage + per-character scope + cloud sync
 - [compendium-feats-items.md](features/compendium-feats-items.md) — feats and item records
 - [compendium-scaling.md](features/compendium-scaling.md) — scaling columns, spellcasting/pact-magic/spells-known progressions
 - [compendium-options.md](features/compendium-options.md) — unique option groups, items, tags, requirements tree
