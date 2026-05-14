@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Wand2, Lock, Star } from 'lucide-react';
+import { Wand2, Lock, Star, ChevronUp, ChevronDown, Columns3 } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
 import { fetchCollection } from '../../lib/d1';
 import { Database, CloudOff } from 'lucide-react';
-import { SCHOOL_LABELS } from '../../lib/spellImport';
+import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -88,11 +89,101 @@ const SCHOOL_OPTIONS = [
   ...Object.entries(SCHOOL_LABELS).map(([value, label]) => ({ value, label }))
 ];
 
+// ---------------------------------------------------------------------------
+// Spell list columns — sortable + user-hideable. Name is always visible (it's
+// the row identifier); every other column can be toggled off via the
+// Columns popover. Widths are CSS values (e.g. "minmax(0,1fr)", "64px").
+// Each column knows how to extract its sort value from a spell row.
+//
+// Persisted to localStorage so a user's column preferences survive across
+// sessions on the same browser (no D1 sync needed — it's a UI preference).
+// ---------------------------------------------------------------------------
+type SpellColumnKey = 'name' | 'level' | 'time' | 'school' | 'concentration' | 'range' | 'source';
+type SortDir = 'asc' | 'desc';
+
+const COL_WIDTHS: Record<SpellColumnKey, string> = {
+  name: 'minmax(0,1fr)',
+  level: '36px',
+  time: '80px',
+  school: '60px',
+  concentration: '24px',
+  range: '80px',
+  source: '60px',
+};
+
+const COL_LABELS: Record<SpellColumnKey, string> = {
+  name: 'Name',
+  level: 'Lv',
+  time: 'Time',
+  school: 'School',
+  concentration: 'C.',
+  range: 'Range',
+  source: 'Src',
+};
+
+const ALL_COLUMNS: SpellColumnKey[] = ['name', 'level', 'time', 'school', 'concentration', 'range', 'source'];
+const ALWAYS_VISIBLE: ReadonlySet<SpellColumnKey> = new Set<SpellColumnKey>(['name']);
+
+const HIDDEN_COLS_LS_KEY = 'dauligor.spellList.hiddenColumns';
+function readHiddenColumns(): Set<SpellColumnKey> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = window.localStorage.getItem(HIDDEN_COLS_LS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((v): v is SpellColumnKey => typeof v === 'string' && ALL_COLUMNS.includes(v as SpellColumnKey)));
+  } catch {
+    return new Set();
+  }
+}
+function writeHiddenColumns(hidden: Set<SpellColumnKey>) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(HIDDEN_COLS_LS_KEY, JSON.stringify(Array.from(hidden)));
+  } catch {
+    /* quota full or disabled */
+  }
+}
+
 export default function SpellList({ userProfile }: { userProfile: any }) {
   // Per-user spell favorites — local-first with D1 sync for logged-in
   // users. See src/lib/spellFavorites.ts. Anonymous users still get
   // localStorage-only state so the favorites pane works without login.
   const { favorites, isFavorite, toggleFavorite } = useSpellFavorites(userProfile?.id || null);
+
+  // Sortable / hideable column state. Default sort is alphabetical by
+  // name, ascending. Hidden columns persist to localStorage.
+  const [sortBy, setSortBy] = useState<SpellColumnKey>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [hiddenColumns, setHiddenColumns] = useState<Set<SpellColumnKey>>(() => readHiddenColumns());
+  const visibleColumns = useMemo(
+    () => ALL_COLUMNS.filter(c => !hiddenColumns.has(c)),
+    [hiddenColumns],
+  );
+  const gridTemplate = useMemo(
+    () => visibleColumns.map(c => COL_WIDTHS[c]).join(' '),
+    [visibleColumns],
+  );
+  const toggleColumn = (col: SpellColumnKey) => {
+    if (ALWAYS_VISIBLE.has(col)) return;
+    setHiddenColumns(prev => {
+      const next = new Set(prev);
+      if (next.has(col)) next.delete(col);
+      else next.add(col);
+      writeHiddenColumns(next);
+      return next;
+    });
+  };
+  const handleSort = (col: SpellColumnKey) => {
+    if (sortBy === col) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(col);
+      setSortDir('asc');
+    }
+  };
+
   const [spells, setSpells] = useState<SpellSummaryRecord[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [tagGroups, setTagGroups] = useState<TagGroupRecord[]>([]);
@@ -255,6 +346,64 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         && matchesMultiAxisFilter(propsHave, axisFilters.property);
     });
   }, [spells, sourceById, search, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId]);
+
+  // Sortable list — derives from filteredSpells. Numeric sort keys
+  // (level, range distance) bypass localeCompare; everything else
+  // falls back to string compare. `name` is the stable secondary key
+  // so equal primary keys produce a deterministic order.
+  const sortedSpells = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const getKey = (spell: any): { primary: number | string; secondary: string } => {
+      const name = String(spell?.name ?? '');
+      const secondary = name.toLowerCase();
+      switch (sortBy) {
+        case 'name': return { primary: secondary, secondary };
+        case 'level': return { primary: Number(spell?.level ?? 0), secondary };
+        case 'time': {
+          const label = formatActivationLabel(spell?.foundryShell?.activation);
+          return { primary: String(label).toLowerCase(), secondary };
+        }
+        case 'school': return { primary: String(SCHOOL_LABELS[spell?.school ?? ''] ?? spell?.school ?? '').toLowerCase(), secondary };
+        case 'concentration': return { primary: spell?.concentration ? 1 : 0, secondary };
+        case 'range': {
+          // Numeric distance when available (so "30 ft" < "120 ft"),
+          // fall back to label string. self / touch / special go to
+          // negative sentinel values so they group at one end under
+          // numeric sort.
+          const r = spell?.foundryShell?.range;
+          const units = String(r?.units ?? '').toLowerCase();
+          const value = Number(r?.value ?? NaN);
+          if (units === 'self') return { primary: -3, secondary };
+          if (units === 'touch') return { primary: -2, secondary };
+          if (Number.isFinite(value)) {
+            // Crudely normalize to feet (mi -> feet) so the sort is
+            // monotonic in real distance. m / km go after imperial,
+            // sorted by their numeric value alone — rare for spells.
+            const fac = units === 'mi' ? 5280 : units === 'km' ? 3280 : units === 'm' ? 3.28 : 1;
+            return { primary: value * fac, secondary };
+          }
+          return { primary: Number.MAX_SAFE_INTEGER, secondary };
+        }
+        case 'source': return { primary: renderSourceAbbreviation(spell as any).toLowerCase(), secondary };
+        default: return { primary: secondary, secondary };
+      }
+    };
+    return [...filteredSpells].sort((a, b) => {
+      const ka = getKey(a);
+      const kb = getKey(b);
+      if (typeof ka.primary === 'number' && typeof kb.primary === 'number') {
+        const d = (ka.primary - kb.primary) * dir;
+        if (d !== 0) return d;
+      } else {
+        const pa = String(ka.primary);
+        const pb = String(kb.primary);
+        const d = pa.localeCompare(pb) * dir;
+        if (d !== 0) return d;
+      }
+      return ka.secondary.localeCompare(kb.secondary);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSpells, sortBy, sortDir]);
 
   useEffect(() => {
     if (!selectedSpellId) return;
@@ -583,9 +732,13 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         />
 
         {/* Three-column layout: favorites pane (left) | main spell list
-            (middle) | detail panel (right). Favorites and detail collapse
-            to stacked rows below the list on narrower viewports. */}
-        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_520px_minmax(0,1fr)]">
+            (middle) | detail panel (right).
+            Stretch policy: the middle list column grows from 440 up to
+            760px first (so wider viewports give more room to the Name
+            column where it's most useful), THEN any remaining width
+            spills into the detail pane (description). On smaller
+            viewports the favorites pane stacks above the list. */}
+        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(440px,760px)_minmax(0,1fr)]">
           {/* Favorites pane — only renders favorited spells. Pulled
               from the same filteredSpells source so the favorites pane
               respects active filters too, but it's "the same UI for a
@@ -648,31 +801,105 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             </CardContent>
           </Card>
 
-          {/* Main spell list. Columns inspired by the 5etools list view:
-              Name | Lv | Time | School | C. | Range | Src. Compact rows
-              so the filter-narrowed catalogue stays scannable. */}
+          {/* Main spell list. Columns: Name | Lv | Time | School | C. |
+              Range | Src. Each header is a sort toggle (click to sort by
+              that column; click again to flip direction). Columns past
+              Name can be hidden via the popover at the right of the
+              header — user preference persists to localStorage. */}
           <Card className="border-gold/10 bg-card/50 overflow-hidden">
             <CardContent className="p-0">
-              <div className="grid grid-cols-[minmax(0,1fr)_36px_64px_56px_24px_70px_56px] gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70">
-                <span>Name</span>
-                <span className="text-center">Lv</span>
-                <span className="text-center">Time</span>
-                <span className="text-center">School</span>
-                <span className="text-center" title="Concentration">C.</span>
-                <span className="text-center">Range</span>
-                <span className="text-center">Src</span>
+              {/* Header row + columns popover. The grid template here is
+                  derived from `visibleColumns` so hiding a column also
+                  removes its header cell. */}
+              <div className="border-b border-gold/10 bg-background/35">
+                <div
+                  className="grid gap-2 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 items-center"
+                  style={{ gridTemplateColumns: gridTemplate }}
+                >
+                  {visibleColumns.map((col) => {
+                    const isActive = sortBy === col;
+                    const isName = col === 'name';
+                    return (
+                      <button
+                        key={col}
+                        type="button"
+                        onClick={() => handleSort(col)}
+                        className={cn(
+                          'flex items-center gap-1 transition-colors',
+                          isName ? 'justify-start' : 'justify-center',
+                          isActive ? 'text-gold' : 'hover:text-gold/90',
+                        )}
+                        title={`Sort by ${COL_LABELS[col]}${isActive ? ` (${sortDir})` : ''}`}
+                      >
+                        <span>{COL_LABELS[col]}</span>
+                        {isActive && (
+                          sortDir === 'asc'
+                            ? <ChevronUp className="w-3 h-3" />
+                            : <ChevronDown className="w-3 h-3" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Columns popover lives outside the grid so it doesn't
+                    contend for a column slot — fixed at the right edge. */}
+                <div className="absolute" />
+              </div>
+              {/* Column-visibility popover button — small, top-right of
+                  the list card. Doesn't take a grid column. */}
+              <div className="flex justify-end px-2 py-1 border-b border-gold/5">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 h-6 px-2 text-[10px] uppercase tracking-widest text-ink/55 hover:text-gold transition-colors rounded border border-transparent hover:border-gold/20"
+                      title="Show / hide columns"
+                    >
+                      <Columns3 className="w-3 h-3" />
+                      Columns
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-44 p-2">
+                    <div className="text-[10px] uppercase tracking-widest text-ink/45 px-1 pb-1.5 mb-1 border-b border-gold/10">
+                      Visible columns
+                    </div>
+                    <div className="space-y-0.5">
+                      {ALL_COLUMNS.filter(c => !ALWAYS_VISIBLE.has(c)).map((col) => {
+                        const visible = !hiddenColumns.has(col);
+                        return (
+                          <button
+                            key={col}
+                            type="button"
+                            onClick={() => toggleColumn(col)}
+                            className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded text-xs hover:bg-gold/5"
+                          >
+                            <span>{COL_LABELS[col]}</span>
+                            <span className={cn(
+                              'inline-flex items-center justify-center w-4 h-4 rounded border text-[10px]',
+                              visible
+                                ? 'border-gold/40 bg-gold/15 text-gold'
+                                : 'border-gold/10 text-transparent'
+                            )}>
+                              {visible ? '✓' : ''}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               {loadingSpells ? (
                 <div className="px-6 py-12 text-center text-ink/45">
                   Loading spells...
                 </div>
-              ) : filteredSpells.length === 0 ? (
+              ) : sortedSpells.length === 0 ? (
                 <div className="px-6 py-12 text-center text-ink/45">
                   No spells match the current search and filters.
                 </div>
               ) : (
                 <VirtualizedList
-                  items={filteredSpells}
+                  items={sortedSpells}
                   height={SPELL_LIST_HEIGHT}
                   itemHeight={48}
                   className="custom-scrollbar overflow-y-auto"
@@ -681,31 +908,21 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                     const sourceLabel = renderSourceAbbreviation(spell);
                     const selected = selectedSpellId === spell.id;
                     const facets = spell as any; // derived facets attached at load time
-                    const activationLabel = (() => {
-                      const bucket = facets.activationBucket as ActivationBucket | undefined;
-                      if (!bucket) return '—';
-                      return ACTIVATION_LABELS[bucket] || '—';
-                    })();
-                    const rangeLabel = (() => {
-                      const bucket = facets.rangeBucket as RangeBucket | undefined;
-                      if (!bucket) return '—';
-                      return RANGE_LABELS[bucket] || '—';
-                    })();
+                    // Range shows the real value (e.g. "60 ft", "Self") —
+                    // the bucket is just the filter axis. formatRangeLabel
+                    // falls back to "Special" when units/value are missing.
+                    const activationLabel = formatActivationLabel(facets.foundryShell?.activation);
+                    const rangeLabel = formatRangeLabel(facets.foundryShell?.range);
                     const schoolAbbrev = (() => {
                       const full = SCHOOL_LABELS[String(spell.school ?? '')];
                       if (!full) return String(spell.school ?? '').slice(0, 4).toUpperCase() || '—';
                       return full.length > 6 ? full.slice(0, 4) + '.' : full;
                     })();
-                    return (
-                      <button
-                        key={spell.id}
-                        type="button"
-                        onClick={() => setSelectedSpellId(spell.id)}
-                        className={cn(
-                          'grid h-[48px] w-full grid-cols-[minmax(0,1fr)_36px_64px_56px_24px_70px_56px] gap-2 items-center px-3 text-left transition-colors',
-                          selected ? 'bg-gold/10' : 'hover:bg-gold/5'
-                        )}
-                      >
+                    // Renderers keyed by column key — same set we
+                    // iterate through for the header. Cells render only
+                    // when their column is in `visibleColumns`.
+                    const cellRenderers: Record<SpellColumnKey, () => React.ReactNode> = {
+                      name: () => (
                         <div className="min-w-0 flex items-center gap-1.5">
                           <span className="truncate font-serif text-sm text-ink">{spell.name}</span>
                           {isFavorite(spell.id) && (
@@ -731,16 +948,53 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                             );
                           })()}
                         </div>
+                      ),
+                      level: () => (
                         <div className="text-xs text-ink/75 text-center">
                           {Number(spell.level ?? 0) === 0 ? 'C' : spell.level}
                         </div>
-                        <div className="text-xs text-ink/75 text-center truncate">{activationLabel}</div>
-                        <div className="text-xs text-ink/75 text-center truncate" title={SCHOOL_LABELS[String(spell.school ?? '')] || ''}>{schoolAbbrev}</div>
+                      ),
+                      time: () => (
+                        <div className="text-xs text-ink/75 text-center truncate" title={activationLabel}>
+                          {activationLabel}
+                        </div>
+                      ),
+                      school: () => (
+                        <div
+                          className="text-xs text-ink/75 text-center truncate"
+                          title={SCHOOL_LABELS[String(spell.school ?? '')] || ''}
+                        >
+                          {schoolAbbrev}
+                        </div>
+                      ),
+                      concentration: () => (
                         <div className="text-xs text-blood/70 text-center" title="Concentration">
                           {facets.concentration ? '◆' : ''}
                         </div>
-                        <div className="text-xs text-ink/75 text-center truncate">{rangeLabel}</div>
+                      ),
+                      range: () => (
+                        <div className="text-xs text-ink/75 text-center truncate" title={rangeLabel}>
+                          {rangeLabel}
+                        </div>
+                      ),
+                      source: () => (
                         <div className="text-xs font-bold text-gold/80 text-center truncate">{sourceLabel}</div>
+                      ),
+                    };
+                    return (
+                      <button
+                        key={spell.id}
+                        type="button"
+                        onClick={() => setSelectedSpellId(spell.id)}
+                        className={cn(
+                          'grid h-[48px] w-full gap-2 items-center px-3 text-left transition-colors',
+                          selected ? 'bg-gold/10' : 'hover:bg-gold/5'
+                        )}
+                        style={{ gridTemplateColumns: gridTemplate }}
+                      >
+                        {visibleColumns.map((col) => (
+                          <React.Fragment key={col}>{cellRenderers[col]()}</React.Fragment>
+                        ))}
                       </button>
                     );
                   }}
