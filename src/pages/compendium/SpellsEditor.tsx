@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Edit3, Plus, Save, Search, Trash2, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
+import { FilterBar, AxisFilterSection } from '../../components/compendium/FilterBar';
+import { matchesSingleAxisFilter } from '../../lib/spellFilters';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
@@ -371,6 +373,16 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
+  // Filter modal state. Mirrors the AxisFilter shape from
+  // src/pages/compendium/SpellList.tsx so the modal layout +
+  // chip semantics (3-state include/exclude + per-axis combine
+  // modes) match the public browser. Scoped to the three axes
+  // most useful for editing — Source, Level, School. Adding more
+  // axes is a matter of declaring more AxisFilterSection entries
+  // in renderFilters below.
+  type AxisState = { states: Record<string, number>; combineMode?: 'AND' | 'OR' | 'XOR'; exclusionMode?: 'AND' | 'OR' | 'XOR' };
+  const [axisFilters, setAxisFilters] = useState<Record<string, AxisState>>({});
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   // Mirror of `editingId` for use inside async handlers — captures
   // the CURRENT selection at the moment the await resolves, not the
   // one closed over at function-call time. Lets the save handler
@@ -481,19 +493,106 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
   const filteredEntries = useMemo(() => {
     const lowered = search.trim().toLowerCase();
-    if (!lowered) return entries;
     return entries.filter((entry) => {
-      const sourceLabel = String(sourceNameById[entry.sourceId] || '').toLowerCase();
-      return String(entry.name || '').toLowerCase().includes(lowered)
-        || String(entry.identifier || '').toLowerCase().includes(lowered)
-        || sourceLabel.includes(lowered);
+      // Search match — name / identifier / source label substring.
+      if (lowered) {
+        const sourceLabel = String(sourceNameById[entry.sourceId] || '').toLowerCase();
+        const matchesSearch = String(entry.name || '').toLowerCase().includes(lowered)
+          || String(entry.identifier || '').toLowerCase().includes(lowered)
+          || sourceLabel.includes(lowered);
+        if (!matchesSearch) return false;
+      }
+      // Axis filters — Source, Level, School. matchesSingleAxisFilter
+      // returns true when the axis has no chip activity, so an
+      // undefined filter state is the "match anything" default.
+      if (!matchesSingleAxisFilter(String(entry.sourceId ?? ''), axisFilters.source)) return false;
+      if (!matchesSingleAxisFilter(String(Number(entry.level ?? 0)), axisFilters.level)) return false;
+      if (!matchesSingleAxisFilter(String(entry.school ?? ''), axisFilters.school)) return false;
+      return true;
     });
-  }, [entries, search, sourceNameById]);
+  }, [entries, search, sourceNameById, axisFilters]);
 
   const resetForm = () => {
     setEditingId(null);
     setFormData(makeInitialSpellForm(sources));
   };
+
+  // ============================================================
+  // Filter helpers — mirror the SpellList browser implementation
+  // so the chip semantics (3-state + AND/OR/XOR combine + invert)
+  // match exactly. Each helper acts on a named axis (`source`,
+  // `level`, `school`) inside the unified `axisFilters` record.
+  // ============================================================
+  const cycleAxisState = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const state = cur.states[value] || 0;
+      const next = (state + 1) % 3;
+      const states = { ...cur.states };
+      if (next === 0) delete states[value]; else states[value] = next;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const cycleAxisCombineMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = cur.combineMode || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
+  const cycleAxisExclusionMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = cur.exclusionMode || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const axisIncludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = {};
+      for (const v of values) states[v] = 1;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisExcludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = {};
+      for (const v of values) states[v] = 2;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisClear = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const next = { ...prev };
+      delete next[axisKey];
+      return next;
+    });
+  };
+
+  const activeFilterCount =
+    Object.keys(axisFilters.source?.states ?? {}).length
+    + Object.keys(axisFilters.level?.states ?? {}).length
+    + Object.keys(axisFilters.school?.states ?? {}).length;
+
+  const resetAllFilters = () => {
+    setAxisFilters({});
+  };
+
+  // Options for the filter modal sections. Levels: 0-9. Schools:
+  // pulled from the SPELL_SCHOOLS const used elsewhere in this
+  // file so the labels match the editor's school dropdown.
+  const LEVEL_FILTER_OPTIONS = useMemo(
+    () => Array.from({ length: 10 }, (_, i) => ({ value: String(i), label: i === 0 ? 'Cantrip' : `Level ${i}` })),
+    [],
+  );
+  const SCHOOL_FILTER_OPTIONS = useMemo(
+    () => SPELL_SCHOOLS.map(([value, label]) => ({ value, label })),
+    [],
+  );
 
   useEffect(() => {
     if (!editingId) return;
@@ -801,60 +900,92 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     // so editor + browser share the same rhythm. No outer padding
     // because the parent Tabs root (in SpellsEditor) already pads.
     <div className="h-full flex flex-col gap-2">
-      {/* Toolbar — search + reset + result count + New Spell. The
-          per-spell actions (Save / Delete / Reset Form) live in the
-          editor card's header further down because they only make
-          sense when there's a spell loaded. */}
-      <div className="shrink-0 flex flex-col sm:flex-row gap-3 items-center bg-card p-2 rounded-lg border border-gold/10 shadow-sm">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search spell name, source, or identifier"
-            className="bg-background/50 border-gold/10 pl-8 h-8 focus:border-gold"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </div>
-        {search.length > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setSearch('')}
-            className="h-8 gap-2 border-gold/20 text-ink/70 hover:bg-blood/5 hover:text-blood hover:border-blood/30"
-            title="Clear search"
-          >
-            <X className="w-3 h-3" /> Reset
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled
-            className="h-8 gap-2 border-gold/20 text-ink/30 cursor-not-allowed"
-            title="Nothing to reset"
-          >
-            <X className="w-3 h-3" /> Reset
-          </Button>
-        )}
-        <div
-          className="text-[11px] font-mono tabular-nums text-ink/55 whitespace-nowrap px-1"
-          title={`${filteredEntries.length} of ${entries.length} total`}
-        >
-          {loading ? '— / —' : `${filteredEntries.length} / ${entries.length}`}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={resetForm}
-          className="h-8 gap-2 border-gold/20 text-gold hover:bg-gold/5"
-        >
-          <Plus className="w-3 h-3" /> New Spell
-        </Button>
+      {/* Toolbar — uses the shared FilterBar component for search +
+          Filters modal + inline Reset. trailingActions slot carries
+          the result count and the New Spell button. Per-spell
+          actions (Save / Delete / Reset Form) live in the editor
+          card header further down because they only make sense
+          when there's a spell loaded. */}
+      <div className="shrink-0">
+        <FilterBar
+          search={search}
+          setSearch={setSearch}
+          isFilterOpen={isFilterOpen}
+          setIsFilterOpen={setIsFilterOpen}
+          activeFilterCount={activeFilterCount}
+          resetFilters={resetAllFilters}
+          searchPlaceholder="Search spell name, source, or identifier"
+          filterTitle="Advanced Filters"
+          resetLabel="Reset Filters"
+          trailingActions={
+            <>
+              <div
+                className="text-[11px] font-mono tabular-nums text-ink/55 whitespace-nowrap px-1"
+                title={`${filteredEntries.length} of ${entries.length} total`}
+              >
+                {loading ? '— / —' : `${filteredEntries.length} / ${entries.length}`}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={resetForm}
+                className="h-8 gap-2 border-gold/20 text-gold hover:bg-gold/5"
+              >
+                <Plus className="w-3 h-3" /> New Spell
+              </Button>
+            </>
+          }
+          renderFilters={
+            <>
+              {/* Source / Level / School filter chips with the same
+                  3-state include/exclude semantics as the public
+                  Spell List browser. */}
+              <AxisFilterSection
+                title="Sources"
+                values={sources.map((source) => ({
+                  value: source.id,
+                  label: String(source.abbreviation || source.shortName || source.name || source.id),
+                }))}
+                states={axisFilters.source?.states || {}}
+                cycleState={(v) => cycleAxisState('source', v)}
+                combineMode={axisFilters.source?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('source')}
+                exclusionMode={axisFilters.source?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('source')}
+                includeAll={() => axisIncludeAll('source', sources.map((s) => s.id))}
+                excludeAll={() => axisExcludeAll('source', sources.map((s) => s.id))}
+                clearAll={() => axisClear('source')}
+              />
+              <AxisFilterSection
+                title="Spell Level"
+                values={LEVEL_FILTER_OPTIONS}
+                states={axisFilters.level?.states || {}}
+                cycleState={(v) => cycleAxisState('level', v)}
+                combineMode={axisFilters.level?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('level')}
+                exclusionMode={axisFilters.level?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('level')}
+                includeAll={() => axisIncludeAll('level', LEVEL_FILTER_OPTIONS.map((o) => o.value))}
+                excludeAll={() => axisExcludeAll('level', LEVEL_FILTER_OPTIONS.map((o) => o.value))}
+                clearAll={() => axisClear('level')}
+              />
+              <AxisFilterSection
+                title="Spell School"
+                values={SCHOOL_FILTER_OPTIONS}
+                states={axisFilters.school?.states || {}}
+                cycleState={(v) => cycleAxisState('school', v)}
+                combineMode={axisFilters.school?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('school')}
+                exclusionMode={axisFilters.school?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('school')}
+                includeAll={() => axisIncludeAll('school', SCHOOL_FILTER_OPTIONS.map((o) => o.value))}
+                excludeAll={() => axisExcludeAll('school', SCHOOL_FILTER_OPTIONS.map((o) => o.value))}
+                clearAll={() => axisClear('school')}
+              />
+            </>
+          }
+        />
       </div>
 
       {/* 3-column grid: spell list (left, narrow) | editor (middle,
