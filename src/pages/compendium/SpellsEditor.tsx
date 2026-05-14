@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Edit3, Plus, Save, Search, Trash2, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -220,6 +220,16 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const [backfilling, setBackfilling] = useState(false);
   const [purging, setPurging] = useState(false);
 
+  // Fullscreen-page opt-in — hides the global footer and strips
+  // <main>'s container padding so the editor (and the Foundry
+  // Import workbench when its tab is active) gets the full viewport.
+  // Lives on the outer wrapper, not just the manual editor, so the
+  // class is set regardless of which tab is active.
+  useEffect(() => {
+    document.body.classList.add('spell-list-fullscreen');
+    return () => document.body.classList.remove('spell-list-fullscreen');
+  }, []);
+
   const handleBackfillDescriptions = async () => {
     if (!confirm(
       'This will regenerate the BBCode description of every spell from its ' +
@@ -272,27 +282,51 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-4 justify-between flex-wrap">
+    // Fullscreen page wrapper. The body class strips <main>'s padding,
+    // and `h-full` here makes us fill the available viewport-minus-
+    // navbar. flex-col lets the toolbar shrink to its natural height
+    // and the active tab claim the rest.
+    <Tabs defaultValue="manual-editor" className="h-full flex flex-col gap-2 p-2">
+      {/* Single consolidated top toolbar — Back link + tab switcher +
+          admin maintenance actions (Backfill / Purge) all on one row
+          so the editor content below doesn't get pushed off-screen.
+          Previously these were spread across three separate rows. */}
+      <div className="shrink-0 flex items-center gap-2 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
         <Link to="/compendium/spells">
-          <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
+          <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
             Back To Spells
           </Button>
         </Link>
+        <TabsList variant="line" className="gap-1 bg-transparent p-0">
+          <TabsTrigger
+            value="foundry-import"
+            className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+          >
+            Foundry Import
+          </TabsTrigger>
+          <TabsTrigger
+            value="manual-editor"
+            className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+          >
+            Manual Editor
+          </TabsTrigger>
+        </TabsList>
+        {/* Spacer pushes admin maintenance actions to the right. */}
+        <div className="flex-1" />
         {isAdmin && (
-          <div className="flex items-center gap-2">
+          <>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleBackfillDescriptions}
               disabled={backfilling || purging}
-              className="border-gold/30 text-gold/80 hover:bg-gold/5 hover:text-gold text-xs uppercase tracking-widest"
+              className="h-8 border-gold/30 text-gold/80 hover:bg-gold/5 hover:text-gold text-xs uppercase tracking-widest"
               title="Regenerate every spell's BBCode description from its preserved Foundry HTML payload."
             >
               <Wand2 className="w-3.5 h-3.5 mr-1.5" />
-              {backfilling ? 'Backfilling…' : 'Backfill Descriptions'}
+              {backfilling ? 'Backfilling…' : 'Backfill'}
             </Button>
             <Button
               type="button"
@@ -300,35 +334,27 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
               size="sm"
               onClick={handlePurgeAllSpells}
               disabled={backfilling || purging}
-              className="border-blood/30 text-blood/80 hover:bg-blood/5 hover:text-blood text-xs uppercase tracking-widest"
+              className="h-8 border-blood/30 text-blood/80 hover:bg-blood/5 hover:text-blood text-xs uppercase tracking-widest"
               title="Delete every row in the spells table. Meant for clean-slate before reimport."
             >
               <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-              {purging ? 'Purging…' : 'Purge All Spells'}
+              {purging ? 'Purging…' : 'Purge All'}
             </Button>
-          </div>
+          </>
         )}
       </div>
 
-      <Tabs defaultValue="foundry-import" className="space-y-6">
-        <TabsList variant="line" className="gap-2 bg-transparent p-0">
-          <TabsTrigger value="foundry-import" className="rounded-md border border-gold/15 bg-background/30 px-4 py-2 text-sm uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
-            Foundry Import
-          </TabsTrigger>
-          <TabsTrigger value="manual-editor" className="rounded-md border border-gold/15 bg-background/30 px-4 py-2 text-sm uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
-            Manual Editor
-          </TabsTrigger>
-        </TabsList>
+      {/* flex-1 min-h-0 = "fill the rest of the viewport but allow my
+          children to clip when they overflow". Without this, long
+          editor content would force the page to scroll. */}
+      <TabsContent value="foundry-import" className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <SpellImportWorkbench userProfile={userProfile} />
+      </TabsContent>
 
-        <TabsContent value="foundry-import">
-          <SpellImportWorkbench userProfile={userProfile} />
-        </TabsContent>
-
-        <TabsContent value="manual-editor">
-          <SpellManualEditor userProfile={userProfile} />
-        </TabsContent>
-      </Tabs>
-    </div>
+      <TabsContent value="manual-editor" className="flex-1 min-h-0">
+        <SpellManualEditor userProfile={userProfile} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -345,28 +371,27 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
+  // Mirror of `editingId` for use inside async handlers — captures
+  // the CURRENT selection at the moment the await resolves, not the
+  // one closed over at function-call time. Lets the save handler
+  // tell "user navigated away while the save was in flight" from
+  // "user still on this spell" so we can update the form
+  // appropriately (or leave their nav alone).
+  const editingIdRef = useRef<string | null>(null);
+  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
   const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
-  // Fullscreen-page opt-in. Same body-class trigger the public Spell
-  // List uses — hides the global footer, strips <main>'s container
-  // padding, and locks body scroll. CSS rules live in src/index.css
-  // under `body.spell-list-fullscreen` (the class is shared across
-  // any compendium page that wants edge-to-edge layout).
-  useEffect(() => {
-    if (!isAdmin) return;
-    document.body.classList.add('spell-list-fullscreen');
-    return () => document.body.classList.remove('spell-list-fullscreen');
-  }, [isAdmin]);
-
-  // Viewport-derived pane height so the three columns always fill
-  // exactly "viewport minus toolbar minus chrome". Tracks resize so
-  // the panes adjust live. The number subtracted is conservative —
-  // slight underestimate is fine.
+  // Viewport-derived pane height. The chrome we subtract for: navbar
+  // (~56) + outer page toolbar with Back / tab switcher / Backfill /
+  // Purge (~50) + this manual editor's search toolbar (~50) + page
+  // padding/gaps (~24) = ~180. Slight underestimate is fine.
+  // (Body-class fullscreen toggle moved to the outer SpellsEditor
+  // wrapper so it applies regardless of which tab is active.)
   const [paneHeight, setPaneHeight] = useState<number>(() =>
-    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 140),
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 200),
   );
   useEffect(() => {
-    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 140));
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 200));
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -663,22 +688,23 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         if (payload[key] === undefined) delete payload[key];
       });
 
-      if (editingId) {
-        await upsertSpell(editingId, {
-          ...payload,
-          createdAt: formData.createdAt || new Date().toISOString()
-        });
-        toast.success('Spell updated');
-      } else {
-        const createdId = crypto.randomUUID();
-        await upsertSpell(createdId, {
-          ...payload,
-          createdAt: new Date().toISOString()
-        });
-        toast.success('Spell created');
-      }
+      // Determine the id we're saving against up front so subsequent
+      // refresh logic has a stable target even if editingId changes
+      // while the await is in flight.
+      const editingIdAtStart = editingId;
+      const wasCreate = !editingIdAtStart;
+      const savedId = editingIdAtStart || crypto.randomUUID();
 
-      // Refresh entries list
+      await upsertSpell(savedId, {
+        ...payload,
+        createdAt: editingIdAtStart
+          ? (formData.createdAt || new Date().toISOString())
+          : new Date().toISOString(),
+      });
+      toast.success(wasCreate ? 'Spell created' : 'Spell updated');
+
+      // Refresh entries list so the left column reflects the new
+      // name / level / source / etc. without a full page reload.
       const updatedData = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
       const mapped = updatedData.map(row => ({
         ...row,
@@ -690,8 +716,38 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         tagIds: Array.isArray(row.tags) ? row.tags : []
       }));
       setEntries(mapped);
-      
-      resetForm();
+
+      // Refresh the just-saved spell's cache. Two reasons:
+      //   1. If the user clicks away and back, they see fresh data
+      //      instead of the pre-save snapshot we had cached when
+      //      they first selected it.
+      //   2. Server normalization (slugified identifier, timestamp,
+      //      etc.) only shows up in the next read, so the in-memory
+      //      cache would diverge from D1 otherwise.
+      try {
+        const refreshed = await fetchSpell(savedId);
+        if (refreshed) {
+          setSpellDetailsById(prev => ({ ...prev, [savedId]: refreshed }));
+        }
+      } catch (err) {
+        // Refresh is best-effort — the save itself already
+        // succeeded. Don't surface to the user.
+        // eslint-disable-next-line no-console
+        console.warn('[SpellsEditor] post-save refresh failed:', err);
+      }
+
+      // If the user is still on the spell they were saving (or just
+      // created a new spell and hasn't navigated yet), adopt the
+      // saved id as the editing target. This:
+      //   - On UPDATE: no-op (editingId already === savedId).
+      //   - On CREATE: switches from "New Spell" mode to "editing
+      //     the just-created spell" so subsequent edits route to
+      //     the same row instead of creating duplicates.
+      // If the user navigated away during the save, leave their
+      // current selection alone — don't yank them back.
+      if (editingIdRef.current === editingIdAtStart) {
+        setEditingId(savedId);
+      }
     } catch (error) {
       console.error('Error saving spell:', error);
       toast.error('Failed to save spell');
@@ -742,8 +798,9 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   return (
     // Fullscreen layout — toolbar on top, 3-column grid filling the
     // remaining viewport. Mirrors src/pages/compendium/SpellList.tsx
-    // so editor + browser share the same rhythm.
-    <div className="h-full flex flex-col gap-2 p-2">
+    // so editor + browser share the same rhythm. No outer padding
+    // because the parent Tabs root (in SpellsEditor) already pads.
+    <div className="h-full flex flex-col gap-2">
       {/* Toolbar — search + reset + result count + New Spell. The
           per-spell actions (Save / Delete / Reset Form) live in the
           editor card's header further down because they only make
