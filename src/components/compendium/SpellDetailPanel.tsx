@@ -237,7 +237,12 @@ export default function SpellDetailPanel({
   }
 
   return (
-    <div className="space-y-0">
+    // Flex column at full panel height so the source/tag block can
+    // pin itself to the bottom via mt-auto. When the description is
+    // short there's empty space between description and sources;
+    // when long, the source block sits at the natural end of content
+    // and CardContent's overflow-y handles the scroll.
+    <div className="flex flex-col min-h-full">
       {/* Header: title + source + level/school + favorite star.
           Hero image now sits inline next to the info rows (see the
           horizontal-stacked block below) rather than under the title
@@ -295,31 +300,45 @@ export default function SpellDetailPanel({
         </div>
       </div>
 
-      <div className="space-y-6 px-6 py-5">
-        <div
-          className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
-          onClick={handleDescriptionClick}
-          dangerouslySetInnerHTML={{ __html: getDescriptionHtml(spell) || '<p>No description available.</p>' }}
-        />
+      {/* Body. flex-1 fills the remaining vertical space inside the
+          detail card; inside we group "top content" (description +
+          prerequisites) and "bottom content" (source meta + tags
+          toggle + tags chip rows). The bottom group uses mt-auto to
+          pin to the bottom of the available space — when description
+          is short there's empty space between the two groups, when
+          long the bottom group sits at the natural end and the
+          CardContent scrollbar takes over. */}
+      <div className="flex-1 flex flex-col px-6 py-5">
+        <div className="space-y-6">
+          <div
+            className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
+            onClick={handleDescriptionClick}
+            dangerouslySetInnerHTML={{ __html: getDescriptionHtml(spell) || '<p>No description available.</p>' }}
+          />
 
-        {(spell.requiredTags?.length || spell.prerequisiteText) ? (
-          <div className="border border-blood/30 bg-blood/[0.04] rounded-md px-4 py-3 space-y-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-blood/80">Prerequisites</span>
-              <span className="text-[9px] uppercase tracking-widest text-ink/35">character-level gate</span>
-            </div>
-            {spell.requiredTags?.length ? (
-              <div className="text-sm text-ink/85">
-                <span className="text-ink/60">Requires tags:</span>{' '}
-                {spell.requiredTags.map(id => tagsById[id]?.name || id).join(', ')}
+          {(spell.requiredTags?.length || spell.prerequisiteText) ? (
+            <div className="border border-blood/30 bg-blood/[0.04] rounded-md px-4 py-3 space-y-2">
+              <div className="flex items-baseline gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-blood/80">Prerequisites</span>
+                <span className="text-[9px] uppercase tracking-widest text-ink/35">character-level gate</span>
               </div>
-            ) : null}
-            {spell.prerequisiteText ? (
-              <div className="text-sm text-ink/85 italic">{spell.prerequisiteText}</div>
-            ) : null}
-          </div>
-        ) : null}
+              {spell.requiredTags?.length ? (
+                <div className="text-sm text-ink/85">
+                  <span className="text-ink/60">Requires tags:</span>{' '}
+                  {spell.requiredTags.map(id => tagsById[id]?.name || id).join(', ')}
+                </div>
+              ) : null}
+              {spell.prerequisiteText ? (
+                <div className="text-sm text-ink/85 italic">{spell.prerequisiteText}</div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
+        {/* Bottom group — pinned to the bottom via mt-auto. pt-6
+            keeps a sensible minimum gap from the description when
+            content is just long enough to crowd it. */}
+        <div className="mt-auto pt-6 space-y-3">
         <div className="border-t border-gold/10 pt-4 text-sm text-ink/70 space-y-2">
           <div>
             <span className="font-bold text-ink">Source:</span>{' '}
@@ -361,7 +380,7 @@ export default function SpellDetailPanel({
             <button
               type="button"
               onClick={() => setShowTags(s => !s)}
-              className="-mt-2 w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
               aria-expanded={showTags}
             >
               <span className="flex items-center gap-2">
@@ -374,7 +393,7 @@ export default function SpellDetailPanel({
               {showTags ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
             {showTags && (
-              <div className="space-y-3 -mt-3">
+              <div className="space-y-3">
                 {groupedTags.map(({ group, tags: groupTagList }) => (
                   <div key={group.id} className="space-y-1.5">
                     <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/45">
@@ -396,6 +415,7 @@ export default function SpellDetailPanel({
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   );

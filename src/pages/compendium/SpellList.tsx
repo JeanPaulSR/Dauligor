@@ -1211,17 +1211,19 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           </Card>
 
           {/* Detail pane — image+info inline (horizontal), tags grouped by
-              category, favorite star in the header. The card has a fixed
-              max-height matching the list pane (paneHeight) and
-              its CardContent scrolls internally. Without this, long
-              descriptions would push the entire row taller than the
-              list and make the column heights ragged. */}
+              category, favorite star in the header. The card has a
+              FIXED height (not just max) so the inner panel can flex
+              the source/tag block to the bottom of the available
+              space. Without an explicit height, the card would shrink
+              to its content and mt-auto inside SpellDetailPanel
+              would have nothing to push against. Long descriptions
+              still scroll internally via CardContent's overflow-y. */}
           <Card
             className="border-gold/10 bg-card/50 overflow-hidden"
-            style={{ maxHeight: `${paneHeight}px` }}
+            style={{ height: `${paneHeight}px` }}
           >
             <CardContent
-              className="p-0 overflow-y-auto custom-scrollbar"
+              className="p-0 overflow-y-auto custom-scrollbar h-full"
               style={{ maxHeight: `${paneHeight}px` }}
             >
               <SpellDetailPanel
