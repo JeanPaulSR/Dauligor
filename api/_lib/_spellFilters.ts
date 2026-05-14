@@ -112,22 +112,29 @@ export function deriveSpellFilterFacets(row: any): SpellFilterFacets {
 }
 
 export type RuleQuery = {
+  // Legacy include-only axis arrays — still honored on load for back-compat.
   sourceFilterIds?: string[];
   levelFilters?: string[];
   schoolFilters?: string[];
   tagFilterIds?: string[];
-  // Rich tag filter (mirror of src/lib/spellFilters.ts). New rules write
-  // tagStates + groupCombineModes + groupExclusionModes; legacy rules
-  // still use the flat tagFilterIds array. Matcher prefers rich state
-  // when present.
-  tagStates?: Record<string, number>;
-  groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
-  groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   activationFilters?: ActivationBucket[];
   rangeFilters?: RangeBucket[];
   durationFilters?: DurationBucket[];
   shapeFilters?: ShapeBucket[];
   propertyFilters?: PropertyFilter[];
+  // Rich tag filter (per-group combinators).
+  tagStates?: Record<string, number>;
+  groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  // Rich per-axis filters. Take priority over legacy arrays when present.
+  source?: AxisFilter;
+  level?: AxisFilter;
+  school?: AxisFilter;
+  activation?: AxisFilter<ActivationBucket>;
+  range?: AxisFilter<RangeBucket>;
+  duration?: AxisFilter<DurationBucket>;
+  shape?: AxisFilter<ShapeBucket>;
+  property?: AxisFilter<PropertyFilter>;
 };
 
 export type TagIndex = {
@@ -135,6 +142,82 @@ export type TagIndex = {
   groupByTagId: Map<string, string | null>;
   tagIdsByGroup: Map<string, string[]>;
 };
+
+// Rich per-axis filter — mirror of src/lib/spellFilters.ts. Keep in sync.
+export type AxisFilter<V extends string = string> = {
+  states?: Record<V, number>;
+  combineMode?: 'AND' | 'OR' | 'XOR';
+  exclusionMode?: 'AND' | 'OR' | 'XOR';
+};
+
+function matchesSingleAxisFilter<V extends string>(
+  spellValue: V | null | undefined,
+  axis: AxisFilter<V> | undefined,
+): boolean {
+  if (!axis) return true;
+  const states = axis.states;
+  if (!states || Object.keys(states).length === 0) return true;
+  const value = spellValue ?? ('' as V);
+  const includes: V[] = [];
+  const excludes: V[] = [];
+  for (const [v, state] of Object.entries(states) as [V, number][]) {
+    if (state === 1) includes.push(v);
+    else if (state === 2) excludes.push(v);
+  }
+  if (excludes.length > 0) {
+    const matchCount = excludes.includes(value) ? 1 : 0;
+    const mode = axis.exclusionMode || 'OR';
+    let excluded = false;
+    if (mode === 'OR') excluded = matchCount > 0;
+    else if (mode === 'AND') excluded = matchCount === excludes.length;
+    else excluded = matchCount === 1;
+    if (excluded) return false;
+  }
+  if (includes.length > 0) {
+    const matchCount = includes.includes(value) ? 1 : 0;
+    const mode = axis.combineMode || 'OR';
+    let included = false;
+    if (mode === 'OR') included = matchCount > 0;
+    else if (mode === 'AND') included = matchCount === includes.length;
+    else included = matchCount === 1;
+    if (!included) return false;
+  }
+  return true;
+}
+
+function matchesMultiAxisFilter<V extends string>(
+  spellValues: ReadonlySet<V>,
+  axis: AxisFilter<V> | undefined,
+): boolean {
+  if (!axis) return true;
+  const states = axis.states;
+  if (!states || Object.keys(states).length === 0) return true;
+  const includes: V[] = [];
+  const excludes: V[] = [];
+  for (const [v, state] of Object.entries(states) as [V, number][]) {
+    if (state === 1) includes.push(v);
+    else if (state === 2) excludes.push(v);
+  }
+  if (excludes.length > 0) {
+    const matchCount = excludes.filter(v => spellValues.has(v)).length;
+    const mode = axis.exclusionMode || 'OR';
+    let excluded = false;
+    if (mode === 'OR') excluded = matchCount > 0;
+    else if (mode === 'AND') excluded = matchCount === excludes.length;
+    else excluded = matchCount === 1;
+    if (excluded) return false;
+  }
+  if (includes.length > 0) {
+    const matchCount = includes.filter(v => spellValues.has(v)).length;
+    const mode = axis.combineMode || 'OR';
+    let included = false;
+    if (mode === 'OR') included = matchCount > 0;
+    else if (mode === 'AND') included = matchCount === includes.length;
+    else included = matchCount === 1;
+    if (!included) return false;
+  }
+  return true;
+}
 
 export type SpellMatchInput = SpellFilterFacets & {
   level: number;
@@ -182,9 +265,21 @@ export function matchSpellAgainstRule(
   parentByTagId?: Map<string, string | null>,
   tagIndex?: TagIndex,
 ): boolean {
-  if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) return false;
-  if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) return false;
-  if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) return false;
+  if (query.source) {
+    if (!matchesSingleAxisFilter(String(spell.source_id ?? ''), query.source)) return false;
+  } else if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) {
+    return false;
+  }
+  if (query.level) {
+    if (!matchesSingleAxisFilter(String(spell.level), query.level)) return false;
+  } else if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) {
+    return false;
+  }
+  if (query.school) {
+    if (!matchesSingleAxisFilter(spell.school, query.school)) return false;
+  } else if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) {
+    return false;
+  }
 
   // Rich tag matching (see src/lib/spellFilters.ts for rationale + drift contract).
   const richTagStates = query.tagStates;
@@ -204,11 +299,37 @@ export function matchSpellAgainstRule(
     if (!query.tagFilterIds.every(t => effective.has(t))) return false;
   }
 
-  if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) return false;
-  if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) return false;
-  if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) return false;
-  if (query.shapeFilters?.length && !query.shapeFilters.includes(spell.shapeBucket)) return false;
-  if (query.propertyFilters?.length && !query.propertyFilters.every(p => Boolean((spell as any)[p]))) return false;
+  if (query.activation) {
+    if (!matchesSingleAxisFilter(spell.activationBucket, query.activation)) return false;
+  } else if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) {
+    return false;
+  }
+  if (query.range) {
+    if (!matchesSingleAxisFilter(spell.rangeBucket, query.range)) return false;
+  } else if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) {
+    return false;
+  }
+  if (query.duration) {
+    if (!matchesSingleAxisFilter(spell.durationBucket, query.duration)) return false;
+  } else if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) {
+    return false;
+  }
+  if (query.shape) {
+    if (!matchesSingleAxisFilter(spell.shapeBucket, query.shape)) return false;
+  } else if (query.shapeFilters?.length && !query.shapeFilters.includes(spell.shapeBucket)) {
+    return false;
+  }
+  if (query.property) {
+    const have = new Set<PropertyFilter>();
+    if ((spell as any).concentration) have.add('concentration');
+    if ((spell as any).ritual) have.add('ritual');
+    if ((spell as any).vocal) have.add('vocal');
+    if ((spell as any).somatic) have.add('somatic');
+    if ((spell as any).material) have.add('material');
+    if (!matchesMultiAxisFilter(have, query.property)) return false;
+  } else if (query.propertyFilters?.length && !query.propertyFilters.every(p => Boolean((spell as any)[p]))) {
+    return false;
+  }
   return true;
 }
 

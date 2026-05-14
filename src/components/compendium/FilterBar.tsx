@@ -364,3 +364,111 @@ export function TagGroupFilter({
     </div>
   );
 }
+
+/**
+ * Generic single-axis filter (level / school / source / activation / range /
+ * duration / shape / property). Same 3-state chip + AND/OR/XOR combinator +
+ * Exclusion Logic vocabulary as <TagGroupFilter>, applied to a flat (non-
+ * grouped) value list.
+ *
+ * For axes where the spell carries exactly one value (level, school,
+ * source, bucket), AND across multiple include chips can never match and
+ * XOR collapses to OR. The matcher is still correct under those modes;
+ * the controls are exposed uniformly so authors don't have to learn
+ * which axes "support" which combinator.
+ */
+export interface AxisFilterSectionProps<V extends string = string> {
+  title: string;
+  values: Array<{ value: V; label: string }>;
+  /** value -> 0 (neutral, omit) | 1 (include) | 2 (exclude). */
+  states: Record<string, number>;
+  cycleState: (value: V) => void;
+  combineMode?: 'AND' | 'OR' | 'XOR';
+  cycleCombineMode?: () => void;
+  exclusionMode?: 'AND' | 'OR' | 'XOR';
+  cycleExclusionMode?: () => void;
+  includeAll?: () => void;
+  clearAll?: () => void;
+}
+
+export function AxisFilterSection<V extends string = string>({
+  title,
+  values,
+  states,
+  cycleState,
+  combineMode,
+  cycleCombineMode,
+  exclusionMode,
+  cycleExclusionMode,
+  includeAll,
+  clearAll,
+}: AxisFilterSectionProps<V>) {
+  if (values.length === 0) return null;
+  const mode = combineMode || 'OR';
+  const exMode = exclusionMode || 'OR';
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-6 flex-wrap">
+          <span className="h3-title uppercase text-ink">{title}</span>
+          <div className="flex items-center gap-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={cycleCombineMode}
+              className="h-6 px-3 btn-gold text-[9px]"
+              title="Inclusion logic: AND requires every include chip, OR any, XOR exactly one."
+            >
+              {mode}
+            </Button>
+            <div className="flex items-center gap-2">
+              <span className="label-text text-blood/60">Exclusion Logic</span>
+              <Button
+                size="sm"
+                onClick={cycleExclusionMode}
+                className="h-6 px-3 btn-danger"
+                title="Exclusion logic for tags toggled to exclude (red)."
+              >
+                {exMode}
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {includeAll && (
+            <>
+              <button type="button" onClick={includeAll} className="label-text hover:underline">Include All</button>
+              <span className="text-gold/20">|</span>
+            </>
+          )}
+          {clearAll && (
+            <button type="button" onClick={clearAll} className="label-text hover:underline">Clear</button>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {values.map(({ value, label }) => {
+          const state = states[value] || 0;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => cycleState(value)}
+              className={cn(
+                'filter-tag',
+                state === 1
+                  ? 'btn-gold-solid border-gold shadow-lg shadow-gold/20'
+                  : state === 2
+                    ? 'btn-danger border-blood'
+                    : 'btn-gold'
+              )}
+              title={state === 0 ? 'Click to include' : state === 1 ? 'Click to exclude' : 'Click to clear'}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

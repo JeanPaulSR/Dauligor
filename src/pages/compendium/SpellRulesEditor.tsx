@@ -7,7 +7,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
-import { FilterBar, TagGroupFilter } from '../../components/compendium/FilterBar';
+import { FilterBar, TagGroupFilter, AxisFilterSection } from '../../components/compendium/FilterBar';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
@@ -168,19 +168,51 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     }
     const rule = rules.find(r => r.id === selectedRuleId) || null;
     if (rule) {
-      // Auto-migrate legacy rules at load time: a rule saved before the
-      // rich tag filter rollout has `tagFilterIds: string[]` and no
-      // `tagStates`. Treat each legacy id as an include chip (state=1)
-      // so the editor opens with the existing selection visible. The
-      // migration is transparent — when the user saves, the legacy
-      // field is cleared (see updateQuery handlers in the tag-group
-      // render).
+      // Auto-migrate legacy include-only arrays to the rich AxisFilter
+      // shape at load time. The editor only ever writes the rich shape
+      // (see the per-axis cycle handlers below), so legacy fields are
+      // cleared as part of the migration. Authors don't see a behavior
+      // change — every legacy entry becomes an `include` chip with the
+      // default OR combinator.
       const q = rule.query;
-      const hasRichTags = q.tagStates && Object.keys(q.tagStates).length > 0;
-      if (!hasRichTags && q.tagFilterIds && q.tagFilterIds.length > 0) {
-        const migrated: Record<string, number> = {};
-        for (const id of q.tagFilterIds) migrated[id] = 1;
-        setDraft({ ...rule, query: { ...q, tagStates: migrated, tagFilterIds: undefined } });
+      const migrated: Partial<typeof q> = {};
+      const arrToStates = (arr?: string[]): Record<string, number> | undefined => {
+        if (!arr || arr.length === 0) return undefined;
+        const out: Record<string, number> = {};
+        for (const v of arr) out[v] = 1;
+        return out;
+      };
+      // Tags: rich tagStates already covers this — same logic, kept in
+      // case a rule has BOTH the legacy and the rich (rare/partial).
+      if ((!q.tagStates || Object.keys(q.tagStates).length === 0) && q.tagFilterIds?.length) {
+        migrated.tagStates = arrToStates(q.tagFilterIds);
+        migrated.tagFilterIds = undefined;
+      }
+      // Per-axis migration. Each promotes legacy array -> rich filter
+      // and nulls the legacy field so saves write only the new shape.
+      const promoteAxis = (
+        legacyKey: 'sourceFilterIds' | 'levelFilters' | 'schoolFilters' | 'activationFilters' | 'rangeFilters' | 'durationFilters' | 'shapeFilters' | 'propertyFilters',
+        axisKey: 'source' | 'level' | 'school' | 'activation' | 'range' | 'duration' | 'shape' | 'property',
+      ) => {
+        const legacy = q[legacyKey] as string[] | undefined;
+        const rich = q[axisKey] as any;
+        const hasRich = rich && rich.states && Object.keys(rich.states).length > 0;
+        if (!hasRich && legacy && legacy.length > 0) {
+          (migrated as any)[axisKey] = { states: arrToStates(legacy) };
+          (migrated as any)[legacyKey] = undefined;
+        }
+      };
+      promoteAxis('sourceFilterIds', 'source');
+      promoteAxis('levelFilters', 'level');
+      promoteAxis('schoolFilters', 'school');
+      promoteAxis('activationFilters', 'activation');
+      promoteAxis('rangeFilters', 'range');
+      promoteAxis('durationFilters', 'duration');
+      promoteAxis('shapeFilters', 'shape');
+      promoteAxis('propertyFilters', 'property');
+
+      if (Object.keys(migrated).length > 0) {
+        setDraft({ ...rule, query: { ...q, ...migrated } });
       } else {
         setDraft({ ...rule });
       }
@@ -274,6 +306,51 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     if (!draft) return;
     setDraft({ ...draft, query: { ...draft.query, ...patch } });
     setDraftDirty(true);
+  };
+
+  // Per-axis helpers. `axisKey` is the canonical RuleQuery field
+  // (source / level / school / activation / range / duration / shape /
+  // property); `legacyKey` is the corresponding include-only array kept
+  // for back-compat (sourceFilterIds / levelFilters / …). Every write
+  // through the editor produces the rich shape and nulls the legacy
+  // field so saves persist the new format only.
+  type AxisFieldName = 'source' | 'level' | 'school' | 'activation' | 'range' | 'duration' | 'shape' | 'property';
+  type LegacyFieldName = 'sourceFilterIds' | 'levelFilters' | 'schoolFilters' | 'activationFilters' | 'rangeFilters' | 'durationFilters' | 'shapeFilters' | 'propertyFilters';
+  const cycleAxisState = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, value: string) => {
+    if (!draft) return;
+    const axis = (draft.query[axisKey] as any) || {};
+    const states = { ...(axis.states || {}) } as Record<string, number>;
+    const cur = states[value] || 0;
+    const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
+    if (nextState === 0) delete states[value];
+    else states[value] = nextState;
+    updateQuery({ [axisKey]: { ...axis, states }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
+  const cycleAxisCombineMode = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
+    if (!draft) return;
+    const axis = (draft.query[axisKey] as any) || {};
+    const cur = (axis.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+    const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+    updateQuery({ [axisKey]: { ...axis, combineMode: next }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
+  const cycleAxisExclusionMode = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
+    if (!draft) return;
+    const axis = (draft.query[axisKey] as any) || {};
+    const cur = (axis.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+    const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+    updateQuery({ [axisKey]: { ...axis, exclusionMode: next }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
+  const axisIncludeAll = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, values: readonly string[]) => {
+    if (!draft) return;
+    const axis = (draft.query[axisKey] as any) || {};
+    const states: Record<string, number> = { ...(axis.states || {}) };
+    for (const v of values) states[v] = 1;
+    updateQuery({ [axisKey]: { ...axis, states }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
+  const axisClear = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
+    if (!draft) return;
+    const axis = (draft.query[axisKey] as any) || {};
+    updateQuery({ [axisKey]: { ...axis, states: {} }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
 
   const handleSave = async () => {
@@ -372,6 +449,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const queryActiveCount = useMemo(() => {
     if (!draft) return 0;
     const q = draft.query;
+    const axisCount = (a: { states?: Record<string, number> } | undefined) => Object.keys(a?.states ?? {}).length;
     return (q.sourceFilterIds?.length ?? 0)
       + (q.levelFilters?.length ?? 0)
       + (q.schoolFilters?.length ?? 0)
@@ -381,7 +459,15 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       + (q.rangeFilters?.length ?? 0)
       + (q.durationFilters?.length ?? 0)
       + (q.shapeFilters?.length ?? 0)
-      + (q.propertyFilters?.length ?? 0);
+      + (q.propertyFilters?.length ?? 0)
+      + axisCount(q.source)
+      + axisCount(q.level)
+      + axisCount(q.school)
+      + axisCount(q.activation)
+      + axisCount(q.range)
+      + axisCount(q.duration)
+      + axisCount(q.shape)
+      + axisCount(q.property);
   }, [draft]);
 
   return (
@@ -563,109 +649,149 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     filterTitle="Rule Filters"
                     renderFilters={
                       <>
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Source"
                           values={sources.map(s => ({ value: s.id, label: String(s.abbreviation || s.shortName || s.name || s.id) }))}
-                          selected={draft.query.sourceFilterIds || []}
-                          onToggle={v => toggleFromQueryArray('sourceFilterIds', v)}
-                          onIncludeAll={() => updateQuery({ sourceFilterIds: sources.map(s => s.id) })}
-                          onClear={() => updateQuery({ sourceFilterIds: [] })}
+                          states={draft.query.source?.states || {}}
+                          cycleState={(v) => cycleAxisState('source', 'sourceFilterIds', v)}
+                          combineMode={draft.query.source?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('source', 'sourceFilterIds')}
+                          exclusionMode={draft.query.source?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('source', 'sourceFilterIds')}
+                          includeAll={() => axisIncludeAll('source', 'sourceFilterIds', sources.map(s => s.id))}
+                          clearAll={() => axisClear('source', 'sourceFilterIds')}
                         />
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Spell Level"
                           values={LEVEL_VALUES.map(lvl => ({ value: lvl, label: lvl === '0' ? 'Cantrip' : `Level ${lvl}` }))}
-                          selected={draft.query.levelFilters || []}
-                          onToggle={v => toggleFromQueryArray('levelFilters', v)}
-                          onIncludeAll={() => updateQuery({ levelFilters: [...LEVEL_VALUES] })}
-                          onClear={() => updateQuery({ levelFilters: [] })}
+                          states={draft.query.level?.states || {}}
+                          cycleState={(v) => cycleAxisState('level', 'levelFilters', v)}
+                          combineMode={draft.query.level?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('level', 'levelFilters')}
+                          exclusionMode={draft.query.level?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('level', 'levelFilters')}
+                          includeAll={() => axisIncludeAll('level', 'levelFilters', LEVEL_VALUES)}
+                          clearAll={() => axisClear('level', 'levelFilters')}
                         />
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Spell School"
                           values={Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label }))}
-                          selected={draft.query.schoolFilters || []}
-                          onToggle={v => toggleFromQueryArray('schoolFilters', v)}
-                          onIncludeAll={() => updateQuery({ schoolFilters: Object.keys(SCHOOL_LABELS) })}
-                          onClear={() => updateQuery({ schoolFilters: [] })}
+                          states={draft.query.school?.states || {}}
+                          cycleState={(v) => cycleAxisState('school', 'schoolFilters', v)}
+                          combineMode={draft.query.school?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('school', 'schoolFilters')}
+                          exclusionMode={draft.query.school?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('school', 'schoolFilters')}
+                          includeAll={() => axisIncludeAll('school', 'schoolFilters', Object.keys(SCHOOL_LABELS))}
+                          clearAll={() => axisClear('school', 'schoolFilters')}
                         />
-                        {/* Tag groups use the rich TagGroupFilter: 3-state
-                            include/exclude chips per tag + per-group
-                            AND/OR/XOR combinator and exclusion mode. Mirrors
-                            the /compendium/classes and /compendium/spells
-                            filter UX. The rule's `query.tagStates` /
-                            `query.groupCombineModes` / `query.groupExclusionModes`
-                            are the rich shape; legacy rules with only
-                            `tagFilterIds` are loaded into tagStates with all
-                            entries marked include (state=1) so the migration
-                            is transparent at open-time (see normalizeQueryForRichTags). */}
-                        {tagGroups.map(group => (
-                          <TagGroupFilter
-                            key={group.id}
-                            group={group}
-                            tags={(tagsByGroup[group.id] || []) as any}
-                            tagStates={draft.query.tagStates || {}}
-                            setTagStates={(next) => updateQuery({ tagStates: typeof next === 'function' ? next(draft.query.tagStates || {}) : next, tagFilterIds: undefined })}
-                            cycleTagState={(tagId) => {
-                              const cur = (draft.query.tagStates || {})[tagId] || 0;
-                              const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
-                              const nextStates = { ...(draft.query.tagStates || {}) };
-                              if (nextState === 0) delete nextStates[tagId];
-                              else nextStates[tagId] = nextState;
-                              updateQuery({ tagStates: nextStates, tagFilterIds: undefined });
-                            }}
-                            combineMode={(draft.query.groupCombineModes || {})[group.id]}
-                            cycleGroupMode={(groupId) => {
-                              const cur = (draft.query.groupCombineModes || {})[groupId] || 'OR';
-                              const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-                              updateQuery({ groupCombineModes: { ...(draft.query.groupCombineModes || {}), [groupId]: nextMode } });
-                            }}
-                            exclusionMode={(draft.query.groupExclusionModes || {})[group.id]}
-                            cycleExclusionMode={(groupId) => {
-                              const cur = (draft.query.groupExclusionModes || {})[groupId] || 'OR';
-                              const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-                              updateQuery({ groupExclusionModes: { ...(draft.query.groupExclusionModes || {}), [groupId]: nextMode } });
-                            }}
-                          />
-                        ))}
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Casting Time"
                           values={ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] }))}
-                          selected={draft.query.activationFilters || []}
-                          onToggle={v => toggleFromQueryArray('activationFilters', v as ActivationBucket)}
-                          onIncludeAll={() => updateQuery({ activationFilters: [...ACTIVATION_ORDER] })}
-                          onClear={() => updateQuery({ activationFilters: [] })}
+                          states={draft.query.activation?.states || {}}
+                          cycleState={(v) => cycleAxisState('activation', 'activationFilters', v)}
+                          combineMode={draft.query.activation?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('activation', 'activationFilters')}
+                          exclusionMode={draft.query.activation?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('activation', 'activationFilters')}
+                          includeAll={() => axisIncludeAll('activation', 'activationFilters', ACTIVATION_ORDER as readonly string[])}
+                          clearAll={() => axisClear('activation', 'activationFilters')}
                         />
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Range"
                           values={RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] }))}
-                          selected={draft.query.rangeFilters || []}
-                          onToggle={v => toggleFromQueryArray('rangeFilters', v as RangeBucket)}
-                          onIncludeAll={() => updateQuery({ rangeFilters: [...RANGE_ORDER] })}
-                          onClear={() => updateQuery({ rangeFilters: [] })}
+                          states={draft.query.range?.states || {}}
+                          cycleState={(v) => cycleAxisState('range', 'rangeFilters', v)}
+                          combineMode={draft.query.range?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('range', 'rangeFilters')}
+                          exclusionMode={draft.query.range?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('range', 'rangeFilters')}
+                          includeAll={() => axisIncludeAll('range', 'rangeFilters', RANGE_ORDER as readonly string[])}
+                          clearAll={() => axisClear('range', 'rangeFilters')}
                         />
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Shape"
                           values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
-                          selected={draft.query.shapeFilters || []}
-                          onToggle={v => toggleFromQueryArray('shapeFilters', v as ShapeBucket)}
-                          onIncludeAll={() => updateQuery({ shapeFilters: [...SHAPE_ORDER] })}
-                          onClear={() => updateQuery({ shapeFilters: [] })}
+                          states={draft.query.shape?.states || {}}
+                          cycleState={(v) => cycleAxisState('shape', 'shapeFilters', v)}
+                          combineMode={draft.query.shape?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('shape', 'shapeFilters')}
+                          exclusionMode={draft.query.shape?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('shape', 'shapeFilters')}
+                          includeAll={() => axisIncludeAll('shape', 'shapeFilters', SHAPE_ORDER as readonly string[])}
+                          clearAll={() => axisClear('shape', 'shapeFilters')}
                         />
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Duration"
                           values={DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] }))}
-                          selected={draft.query.durationFilters || []}
-                          onToggle={v => toggleFromQueryArray('durationFilters', v as DurationBucket)}
-                          onIncludeAll={() => updateQuery({ durationFilters: [...DURATION_ORDER] })}
-                          onClear={() => updateQuery({ durationFilters: [] })}
+                          states={draft.query.duration?.states || {}}
+                          cycleState={(v) => cycleAxisState('duration', 'durationFilters', v)}
+                          combineMode={draft.query.duration?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('duration', 'durationFilters')}
+                          exclusionMode={draft.query.duration?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('duration', 'durationFilters')}
+                          includeAll={() => axisIncludeAll('duration', 'durationFilters', DURATION_ORDER as readonly string[])}
+                          clearAll={() => axisClear('duration', 'durationFilters')}
                         />
-                        <RuleFilterSection
+                        <AxisFilterSection
                           title="Properties"
                           values={PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] }))}
-                          selected={draft.query.propertyFilters || []}
-                          onToggle={v => toggleFromQueryArray('propertyFilters', v as PropertyFilter)}
-                          onIncludeAll={() => updateQuery({ propertyFilters: [...PROPERTY_ORDER] })}
-                          onClear={() => updateQuery({ propertyFilters: [] })}
+                          states={draft.query.property?.states || {}}
+                          cycleState={(v) => cycleAxisState('property', 'propertyFilters', v)}
+                          combineMode={draft.query.property?.combineMode}
+                          cycleCombineMode={() => cycleAxisCombineMode('property', 'propertyFilters')}
+                          exclusionMode={draft.query.property?.exclusionMode}
+                          cycleExclusionMode={() => cycleAxisExclusionMode('property', 'propertyFilters')}
+                          includeAll={() => axisIncludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
+                          clearAll={() => axisClear('property', 'propertyFilters')}
                         />
+
+                        {/* Tags + per-group AND/OR/XOR live in an
+                            Advanced Options disclosure. Most rules use
+                            level/school/source/buckets only; tags are
+                            opt-in for the longer-tail queries. */}
+                        <details className="group">
+                          <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
+                              Advanced Options — Tags
+                              {Object.keys(draft.query.tagStates ?? {}).length > 0 && (
+                                <span className="ml-2 text-gold/60">({Object.keys(draft.query.tagStates ?? {}).length} selected)</span>
+                              )}
+                            </span>
+                            <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                          </summary>
+                          <div className="mt-4 space-y-6 pl-1">
+                            {tagGroups.map(group => (
+                              <TagGroupFilter
+                                key={group.id}
+                                group={group}
+                                tags={(tagsByGroup[group.id] || []) as any}
+                                tagStates={draft.query.tagStates || {}}
+                                setTagStates={(next) => updateQuery({ tagStates: typeof next === 'function' ? next(draft.query.tagStates || {}) : next, tagFilterIds: undefined })}
+                                cycleTagState={(tagId) => {
+                                  const cur = (draft.query.tagStates || {})[tagId] || 0;
+                                  const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
+                                  const nextStates = { ...(draft.query.tagStates || {}) };
+                                  if (nextState === 0) delete nextStates[tagId];
+                                  else nextStates[tagId] = nextState;
+                                  updateQuery({ tagStates: nextStates, tagFilterIds: undefined });
+                                }}
+                                combineMode={(draft.query.groupCombineModes || {})[group.id]}
+                                cycleGroupMode={(groupId) => {
+                                  const cur = (draft.query.groupCombineModes || {})[groupId] || 'OR';
+                                  const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+                                  updateQuery({ groupCombineModes: { ...(draft.query.groupCombineModes || {}), [groupId]: nextMode } });
+                                }}
+                                exclusionMode={(draft.query.groupExclusionModes || {})[group.id]}
+                                cycleExclusionMode={(groupId) => {
+                                  const cur = (draft.query.groupExclusionModes || {})[groupId] || 'OR';
+                                  const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+                                  updateQuery({ groupExclusionModes: { ...(draft.query.groupExclusionModes || {}), [groupId]: nextMode } });
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </details>
                       </>
                     }
                   />

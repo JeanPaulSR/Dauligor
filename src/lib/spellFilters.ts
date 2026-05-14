@@ -220,18 +220,34 @@ export function deriveSpellFilterFacets(row: any): SpellFilterFacets {
  * rule), the rich state wins. Empty rich state defaults to legacy behavior.
  */
 export type RuleQuery = {
+  // Legacy include-only axis arrays. Still honored on load for back-
+  // compat (legacy IDs treated as `include` chips with OR combinator).
+  // New saves write the rich AxisFilter shape below.
   sourceFilterIds?: string[];
   levelFilters?: string[];
   schoolFilters?: string[];
   tagFilterIds?: string[];
-  tagStates?: Record<string, number>;
-  groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
-  groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   activationFilters?: ActivationBucket[];
   rangeFilters?: RangeBucket[];
   durationFilters?: DurationBucket[];
   shapeFilters?: ShapeBucket[];
   propertyFilters?: PropertyFilter[];
+  // Rich tag filter (per-group combinators).
+  tagStates?: Record<string, number>;
+  groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  // Rich per-axis filters. Each is independent — empty/missing means
+  // "no constraint on this axis". When present, takes priority over the
+  // legacy array of the same axis (so a rule that's been migrated to
+  // rich won't be double-filtered).
+  source?: AxisFilter;
+  level?: AxisFilter;
+  school?: AxisFilter;
+  activation?: AxisFilter<ActivationBucket>;
+  range?: AxisFilter<RangeBucket>;
+  duration?: AxisFilter<DurationBucket>;
+  shape?: AxisFilter<ShapeBucket>;
+  property?: AxisFilter<PropertyFilter>;
 };
 
 /**
@@ -247,6 +263,104 @@ export type TagIndex = {
   /** group_id -> tag ids in that group (used by AND/XOR mode counts). */
   tagIdsByGroup: Map<string, string[]>;
 };
+
+/**
+ * Rich filter for a single value axis (level / school / source / range
+ * bucket / etc). Same 3-state include/exclude + AND/OR/XOR combinator
+ * vocabulary as <TagGroupFilter>, but for flat (non-grouped) value
+ * lists. Replaces the prior plain-array shape (`levelFilters: string[]`,
+ * etc.) while keeping the old arrays around for back-compat at load
+ * time — legacy queries treat each array entry as an `include` chip.
+ *
+ * For single-valued axes (a spell has exactly one level / school / source),
+ * AND across multiple include chips can never match (a spell can't be
+ * level 1 AND level 2 simultaneously) and XOR collapses to OR. The
+ * matcher is still correct under those modes; the UI exposes them
+ * uniformly so authors don't have to learn which axes "support" what.
+ */
+export type AxisFilter<V extends string = string> = {
+  /** value -> 1 (include) | 2 (exclude). Absent entries are neutral. */
+  states?: Record<V, number>;
+  /** combinator for include chips. Default OR. */
+  combineMode?: 'AND' | 'OR' | 'XOR';
+  /** combinator for exclude chips. Default OR. */
+  exclusionMode?: 'AND' | 'OR' | 'XOR';
+};
+
+/** True if `spell` passes the AxisFilter for a single-valued axis where
+ *  the spell carries exactly one value (level, school, source, bucket). */
+export function matchesSingleAxisFilter<V extends string>(
+  spellValue: V | null | undefined,
+  axis: AxisFilter<V> | undefined,
+): boolean {
+  if (!axis) return true;
+  const states = axis.states;
+  if (!states || Object.keys(states).length === 0) return true;
+  const value = spellValue ?? ('' as V);
+  const includes: V[] = [];
+  const excludes: V[] = [];
+  for (const [v, state] of Object.entries(states) as [V, number][]) {
+    if (state === 1) includes.push(v);
+    else if (state === 2) excludes.push(v);
+  }
+  // Exclusion check first.
+  if (excludes.length > 0) {
+    const matchCount = excludes.includes(value) ? 1 : 0;
+    const mode = axis.exclusionMode || 'OR';
+    let excluded = false;
+    if (mode === 'OR') excluded = matchCount > 0;
+    else if (mode === 'AND') excluded = matchCount === excludes.length; // requires excludes.length === 1
+    else excluded = matchCount === 1; // XOR
+    if (excluded) return false;
+  }
+  // Inclusion check.
+  if (includes.length > 0) {
+    const matchCount = includes.includes(value) ? 1 : 0;
+    const mode = axis.combineMode || 'OR';
+    let included = false;
+    if (mode === 'OR') included = matchCount > 0;
+    else if (mode === 'AND') included = matchCount === includes.length; // single-valued: only matches if 1 include
+    else included = matchCount === 1; // XOR; same as OR for single-valued
+    if (!included) return false;
+  }
+  return true;
+}
+
+/** True if `spell` passes the AxisFilter for a multi-valued axis (e.g.
+ *  property flags — concentration, ritual, V, S, M can all coexist). */
+export function matchesMultiAxisFilter<V extends string>(
+  spellValues: ReadonlySet<V>,
+  axis: AxisFilter<V> | undefined,
+): boolean {
+  if (!axis) return true;
+  const states = axis.states;
+  if (!states || Object.keys(states).length === 0) return true;
+  const includes: V[] = [];
+  const excludes: V[] = [];
+  for (const [v, state] of Object.entries(states) as [V, number][]) {
+    if (state === 1) includes.push(v);
+    else if (state === 2) excludes.push(v);
+  }
+  if (excludes.length > 0) {
+    const matchCount = excludes.filter(v => spellValues.has(v)).length;
+    const mode = axis.exclusionMode || 'OR';
+    let excluded = false;
+    if (mode === 'OR') excluded = matchCount > 0;
+    else if (mode === 'AND') excluded = matchCount === excludes.length;
+    else excluded = matchCount === 1;
+    if (excluded) return false;
+  }
+  if (includes.length > 0) {
+    const matchCount = includes.filter(v => spellValues.has(v)).length;
+    const mode = axis.combineMode || 'OR';
+    let included = false;
+    if (mode === 'OR') included = matchCount > 0;
+    else if (mode === 'AND') included = matchCount === includes.length;
+    else included = matchCount === 1;
+    if (!included) return false;
+  }
+  return true;
+}
 
 /** Shape needed by `matchSpellAgainstRule` — superset of facets + sortable shell columns. */
 export type SpellMatchInput = SpellFilterFacets & {
@@ -279,9 +393,24 @@ export function matchSpellAgainstRule(
   parentByTagId?: Map<string, string | null>,
   tagIndex?: TagIndex,
 ): boolean {
-  if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) return false;
-  if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) return false;
-  if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) return false;
+  // Per-axis matching: prefer the rich AxisFilter if present, otherwise
+  // fall back to the legacy include-only array. Each axis is checked
+  // independently and any failure short-circuits.
+  if (query.source) {
+    if (!matchesSingleAxisFilter(String(spell.source_id ?? ''), query.source)) return false;
+  } else if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) {
+    return false;
+  }
+  if (query.level) {
+    if (!matchesSingleAxisFilter(String(spell.level), query.level)) return false;
+  } else if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) {
+    return false;
+  }
+  if (query.school) {
+    if (!matchesSingleAxisFilter(spell.school, query.school)) return false;
+  } else if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) {
+    return false;
+  }
 
   // Rich tag matching (new shape: tagStates + group combinators). Takes
   // priority when present so a rule migrated from the legacy shape can
@@ -311,11 +440,38 @@ export function matchSpellAgainstRule(
     if (!query.tagFilterIds.every(t => effective.has(t))) return false;
   }
 
-  if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) return false;
-  if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) return false;
-  if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) return false;
-  if (query.shapeFilters?.length && !query.shapeFilters.includes(spell.shapeBucket)) return false;
-  if (query.propertyFilters?.length && !query.propertyFilters.every(p => Boolean(spell[p]))) return false;
+  if (query.activation) {
+    if (!matchesSingleAxisFilter(spell.activationBucket, query.activation)) return false;
+  } else if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) {
+    return false;
+  }
+  if (query.range) {
+    if (!matchesSingleAxisFilter(spell.rangeBucket, query.range)) return false;
+  } else if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) {
+    return false;
+  }
+  if (query.duration) {
+    if (!matchesSingleAxisFilter(spell.durationBucket, query.duration)) return false;
+  } else if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) {
+    return false;
+  }
+  if (query.shape) {
+    if (!matchesSingleAxisFilter(spell.shapeBucket, query.shape)) return false;
+  } else if (query.shapeFilters?.length && !query.shapeFilters.includes(spell.shapeBucket)) {
+    return false;
+  }
+  if (query.property) {
+    // Properties are multi-valued — collect the flags the spell carries.
+    const have = new Set<PropertyFilter>();
+    if (spell.concentration) have.add('concentration');
+    if (spell.ritual) have.add('ritual');
+    if (spell.vocal) have.add('vocal');
+    if (spell.somatic) have.add('somatic');
+    if (spell.material) have.add('material');
+    if (!matchesMultiAxisFilter(have, query.property)) return false;
+  } else if (query.propertyFilters?.length && !query.propertyFilters.every(p => Boolean(spell[p]))) {
+    return false;
+  }
   return true;
 }
 
@@ -376,6 +532,7 @@ function matchesRichTagStates(
 
 /** True if the rule has no filter clauses set — would match every spell (probably a misconfiguration). */
 export function isRuleEmpty(query: RuleQuery): boolean {
+  const axisCount = (a?: AxisFilter): number => Object.keys(a?.states ?? {}).length;
   return !((query.sourceFilterIds?.length ?? 0)
     + (query.levelFilters?.length ?? 0)
     + (query.schoolFilters?.length ?? 0)
@@ -385,5 +542,13 @@ export function isRuleEmpty(query: RuleQuery): boolean {
     + (query.rangeFilters?.length ?? 0)
     + (query.durationFilters?.length ?? 0)
     + (query.shapeFilters?.length ?? 0)
-    + (query.propertyFilters?.length ?? 0));
+    + (query.propertyFilters?.length ?? 0)
+    + axisCount(query.source)
+    + axisCount(query.level)
+    + axisCount(query.school)
+    + axisCount(query.activation)
+    + axisCount(query.range)
+    + axisCount(query.duration)
+    + axisCount(query.shape)
+    + axisCount(query.property));
 }
