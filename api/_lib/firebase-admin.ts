@@ -113,6 +113,22 @@ export async function requireAdminAccess(authHeader?: string | string[]) {
   return checkAccessFromToken(authHeader, ADMIN_ROLES, "Admin access required.");
 }
 
+// Set of every role we currently issue. Used by endpoints that just
+// need a verified user identity (not staff/admin) — e.g. per-user
+// spell favorites, where the user is only allowed to read/write
+// their OWN row.
+const ALL_AUTHENTICATED_ROLES = new Set([
+  'admin',
+  'co-dm',
+  'lore-writer',
+  'trusted-player',
+  'user',
+]);
+
+export async function requireAuthenticatedUser(authHeader?: string | string[]) {
+  return checkAccessFromToken(authHeader, ALL_AUTHENTICATED_ROLES, "Authentication required.");
+}
+
 export function getCredentialErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   const missingCredentials =
