@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Star } from 'lucide-react';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import {
@@ -8,11 +9,12 @@ import {
   formatDurationLabel,
   formatFoundrySpellDescriptionForDisplay,
   formatRangeLabel,
-  formatTargetLabel,
   SCHOOL_LABELS,
 } from '../../lib/spellImport';
 import SpellArtPreview from './SpellArtPreview';
 import { fetchClassesForSpell, type ClassMembership } from '../../lib/classSpellLists';
+import { normalizeTagRow } from '../../lib/tagHierarchy';
+import { cn } from '../../lib/utils';
 
 /**
  * Self-contained right-side spell preview pane. Used by both the public SpellList browser
@@ -50,12 +52,28 @@ type TagRecord = { id: string; name: string };
 type Props = {
   spellId: string | null;
   emptyMessage?: string;
+  /** Optional: render a star/favorite toggle in the header. Caller
+   *  owns the favorited-set state (typically via `useSpellFavorites`)
+   *  so the same toggle reflects + drives the favorites pane on the
+   *  parent page. Both props together turn the affordance on. */
+  isFavorite?: boolean;
+  onToggleFavorite?: (spellId: string) => void;
 };
 
-export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spell from the list to view its details.' }: Props) {
+export default function SpellDetailPanel({
+  spellId,
+  emptyMessage = 'Select a spell from the list to view its details.',
+  isFavorite,
+  onToggleFavorite,
+}: Props) {
   const navigate = useNavigate();
   const [sources, setSources] = useState<SourceRecord[]>([]);
-  const [tags, setTags] = useState<TagRecord[]>([]);
+  // Tags carry the group ID so the detail panel can render the spell's
+  // tag set grouped by category (one row per tag group with a small
+  // header). Loaded via normalizeTagRow so the snake_case `group_id`
+  // becomes the camelCase `groupId` the layout reads.
+  const [tags, setTags] = useState<Array<TagRecord & { groupId?: string | null }>>([]);
+  const [tagGroups, setTagGroups] = useState<Array<{ id: string; name: string }>>([]);
   const [spellsById, setSpellsById] = useState<Record<string, SpellRecord>>({});
   const [membershipsBySpellId, setMembershipsBySpellId] = useState<Record<string, ClassMembership[]>>({});
   const [loading, setLoading] = useState(false);
@@ -73,18 +91,21 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
     navigate(href);
   }, [navigate]);
 
-  // Sources + tags load once. Both are small static foundation data; the d1 cache
-  // makes repeated mounts essentially free.
+  // Sources + tags + tag groups load once. Tag groups feed the
+  // category-grouped chip rows in the detail body; tagsByGroup is
+  // derived from `tag.groupId`. d1 cache keeps repeat mounts cheap.
   useEffect(() => {
     let active = true;
     Promise.all([
       fetchCollection<any>('sources', { orderBy: 'name ASC' }),
       fetchCollection<any>('tags', { orderBy: 'name ASC' }),
+      fetchCollection<any>('tagGroups', { where: "classifications LIKE '%spell%'" }),
     ])
-      .then(([sourceData, tagData]) => {
+      .then(([sourceData, tagData, tagGroupData]) => {
         if (!active) return;
         setSources(sourceData);
-        setTags(tagData.map((t: any) => ({ id: t.id, name: t.name || '' })));
+        setTags(tagData.map((t: any) => ({ ...normalizeTagRow(t), name: t.name || '' })));
+        setTagGroups(tagGroupData.map((g: any) => ({ id: String(g.id), name: String(g.name || '') })));
       })
       .catch(err => console.error('[SpellDetailPanel] failed to load foundation data:', err));
     return () => { active = false; };
@@ -180,11 +201,45 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
   const getShell = (s: SpellRecord) => s.foundryShell || s.foundryDocument?.system || {};
   const shell = getShell(spell);
 
+  // Group the spell's tag IDs by their tag-group for the per-category
+  // chip rows below. Tags with no group, or whose group isn't in the
+  // visible tagGroups list, end up under an "Other" bucket.
+  const tagsForThisSpell = (() => {
+    const ids = spell.tagIds || (spell as any).tags || [];
+    const idSet = new Set(Array.isArray(ids) ? ids.map(String) : []);
+    return tags.filter(t => idSet.has(t.id));
+  })();
+  const groupedTags: Array<{ group: { id: string; name: string }; tags: Array<TagRecord & { groupId?: string | null }> }> = [];
+  const groupBuckets = new Map<string, Array<TagRecord & { groupId?: string | null }>>();
+  for (const tag of tagsForThisSpell) {
+    const gid = (tag.groupId as string) || '__other__';
+    if (!groupBuckets.has(gid)) groupBuckets.set(gid, []);
+    groupBuckets.get(gid)!.push(tag);
+  }
+  for (const group of tagGroups) {
+    const bucket = groupBuckets.get(group.id);
+    if (bucket && bucket.length > 0) {
+      groupedTags.push({ group: { id: group.id, name: group.name }, tags: bucket });
+      groupBuckets.delete(group.id);
+    }
+  }
+  // Anything left over (groups not in our spell-classified list, or
+  // tags with no group at all) goes under "Other".
+  const otherTags: Array<TagRecord & { groupId?: string | null }> = [];
+  for (const bucket of groupBuckets.values()) otherTags.push(...bucket);
+  if (otherTags.length > 0) {
+    groupedTags.push({ group: { id: '__other__', name: 'Other' }, tags: otherTags });
+  }
+
   return (
     <div className="space-y-0">
+      {/* Header: title + source + level/school + favorite star.
+          Hero image now sits inline next to the info rows (see the
+          horizontal-stacked block below) rather than under the title
+          band, freeing vertical room. */}
       <div className="border-b border-gold/10 px-6 py-5">
         <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="font-serif text-3xl xl:text-4xl font-bold uppercase tracking-tight text-gold">
                 {spell.name}
@@ -199,18 +254,38 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
               {SCHOOL_LABELS[String(spell.school ?? '')] || String(spell.school ?? '').toUpperCase()}
             </p>
           </div>
+          {onToggleFavorite && (
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(spell.id)}
+              className={cn(
+                'shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-full border transition-colors',
+                isFavorite
+                  ? 'border-gold/50 bg-gold/15 text-gold hover:bg-gold/25'
+                  : 'border-gold/20 text-ink/40 hover:border-gold/40 hover:text-gold'
+              )}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              aria-pressed={isFavorite}
+            >
+              <Star className={cn('w-4 h-4', isFavorite ? 'fill-gold/80' : '')} />
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Image + info inline, horizontally stacked. Casting Time, Range,
+          Components, Duration sit to the right of the art instead of
+          under it. Target intentionally omitted — its semantics are
+          inconsistent across imported spells and the AoE info is already
+          encoded in Range bucket / shape filter. */}
       <div className="border-b border-gold/10 px-6 py-5">
-        <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
+        <div className="flex flex-wrap items-start gap-6">
           <SpellArtPreview src={spell.imageUrl} alt={spell.name} size={126} />
-          <div className="grid gap-y-3 text-sm text-ink md:grid-cols-2 md:gap-x-8">
+          <div className="flex-1 min-w-[260px] grid gap-y-2 gap-x-6 text-sm text-ink grid-cols-1 sm:grid-cols-2">
             <SpellInfoRow label="Casting Time" value={formatActivationLabel(shell.activation)} />
             <SpellInfoRow label="Range" value={formatRangeLabel(shell.range)} />
             <SpellInfoRow label="Components" value={formatComponentsLabel(Array.from(shell.properties ?? []), shell.materials)} />
             <SpellInfoRow label="Duration" value={formatDurationLabel(shell.duration)} />
-            <SpellInfoRow label="Target" value={formatTargetLabel(shell.target)} />
           </div>
         </div>
       </div>
@@ -262,6 +337,36 @@ export default function SpellDetailPanel({ spellId, emptyMessage = 'Select a spe
             )
           ) : null}
         </div>
+
+        {/* Tags — one header + chip-row per tag group the spell
+            participates in. Read-only (no cycling); the public
+            browser is for browsing, not editing. Tags inside the
+            "Other" bucket are tags whose group isn't classified as
+            a spell tag-group (rare; usually a stale rollover). */}
+        {groupedTags.length > 0 && (
+          <div className="border-t border-gold/10 pt-4 space-y-3">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Tags</div>
+            <div className="space-y-3">
+              {groupedTags.map(({ group, tags: groupTagList }) => (
+                <div key={group.id} className="space-y-1.5">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/45">
+                    {group.name}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {groupTagList.map(t => (
+                      <span
+                        key={t.id}
+                        className="inline-flex items-center rounded border border-gold/20 bg-gold/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold/80"
+                      >
+                        {t.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

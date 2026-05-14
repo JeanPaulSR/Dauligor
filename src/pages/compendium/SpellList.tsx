@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Wand2, Lock } from 'lucide-react';
+import { Wand2, Lock, Star } from 'lucide-react';
+import { useSpellFavorites } from '../../lib/spellFavorites';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
 import { fetchCollection } from '../../lib/d1';
 import { Database, CloudOff } from 'lucide-react';
@@ -71,7 +72,10 @@ type SpellRecord = {
 };
 
 const SPELL_LIST_HEIGHT = 820;
-const SPELL_ROW_HEIGHT = 78;
+// SPELL_ROW_HEIGHT was 78 when each row showed Name/Level/School/Source
+// as a tall flex-y card. The denser 7-column layout (Name/Lv/Time/School/
+// C./Range/Src) uses 48px per row — see VirtualizedList itemHeight in the
+// list render below.
 
 const LEVEL_OPTIONS = [
   { value: 'all', label: 'All Levels' },
@@ -85,6 +89,10 @@ const SCHOOL_OPTIONS = [
 ];
 
 export default function SpellList({ userProfile }: { userProfile: any }) {
+  // Per-user spell favorites — local-first with D1 sync for logged-in
+  // users. See src/lib/spellFavorites.ts. Anonymous users still get
+  // localStorage-only state so the favorites pane works without login.
+  const { favorites, isFavorite, toggleFavorite } = useSpellFavorites(userProfile?.id || null);
   const [spells, setSpells] = useState<SpellSummaryRecord[]>([]);
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [tagGroups, setTagGroups] = useState<TagGroupRecord[]>([]);
@@ -574,14 +582,85 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           }
         />
 
-        <div className="grid gap-6 xl:grid-cols-[460px_minmax(0,1fr)]">
+        {/* Three-column layout: favorites pane (left) | main spell list
+            (middle) | detail panel (right). Favorites and detail collapse
+            to stacked rows below the list on narrower viewports. */}
+        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_520px_minmax(0,1fr)]">
+          {/* Favorites pane — only renders favorited spells. Pulled
+              from the same filteredSpells source so the favorites pane
+              respects active filters too, but it's "the same UI for a
+              smaller list" rather than a parallel data path. */}
           <Card className="border-gold/10 bg-card/50 overflow-hidden">
             <CardContent className="p-0">
-              <div className="grid grid-cols-[minmax(0,1fr)_80px_100px_70px] gap-3 border-b border-gold/10 bg-background/35 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">
+              <div className="flex items-center justify-between gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Favorites</span>
+                </div>
+                <span className="text-[10px] text-ink/45">{favorites.size}</span>
+              </div>
+              {favorites.size === 0 ? (
+                <div className="px-4 py-8 text-center text-xs text-ink/40 italic">
+                  Star a spell to pin it here.
+                </div>
+              ) : (
+                <div className="divide-y divide-gold/5 max-h-[640px] overflow-y-auto custom-scrollbar">
+                  {spells
+                    .filter((s) => favorites.has(s.id))
+                    .map((spell) => {
+                      const selected = selectedSpellId === spell.id;
+                      const sourceLabel = renderSourceAbbreviation(spell);
+                      return (
+                        <button
+                          key={spell.id}
+                          type="button"
+                          onClick={() => setSelectedSpellId(spell.id)}
+                          className={cn(
+                            'flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors',
+                            selected ? 'bg-gold/10' : 'hover:bg-gold/5'
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-serif text-sm text-ink">{spell.name}</div>
+                            <div className="text-[10px] text-ink/45 uppercase tracking-wider">
+                              {Number(spell.level ?? 0) === 0 ? 'Cantrip' : `Lv ${spell.level}`}
+                              {' · '}
+                              {SCHOOL_LABELS[String(spell.school ?? '')] || String(spell.school ?? '').toUpperCase()}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] font-bold text-gold/70">{sourceLabel}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleFavorite(spell.id); }}
+                              className="text-gold/70 hover:text-blood transition-colors"
+                              title="Remove from favorites"
+                              aria-label="Remove from favorites"
+                            >
+                              <Star className="w-3 h-3 fill-current" />
+                            </button>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Main spell list. Columns inspired by the 5etools list view:
+              Name | Lv | Time | School | C. | Range | Src. Compact rows
+              so the filter-narrowed catalogue stays scannable. */}
+          <Card className="border-gold/10 bg-card/50 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="grid grid-cols-[minmax(0,1fr)_36px_64px_56px_24px_70px_56px] gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70">
                 <span>Name</span>
-                <span>Level</span>
-                <span>School</span>
-                <span>Source</span>
+                <span className="text-center">Lv</span>
+                <span className="text-center">Time</span>
+                <span className="text-center">School</span>
+                <span className="text-center" title="Concentration">C.</span>
+                <span className="text-center">Range</span>
+                <span className="text-center">Src</span>
               </div>
               {loadingSpells ? (
                 <div className="px-6 py-12 text-center text-ink/45">
@@ -591,63 +670,77 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                 <div className="px-6 py-12 text-center text-ink/45">
                   No spells match the current search and filters.
                 </div>
-                  ) : (
+              ) : (
                 <VirtualizedList
                   items={filteredSpells}
                   height={SPELL_LIST_HEIGHT}
-                  itemHeight={SPELL_ROW_HEIGHT}
+                  itemHeight={48}
                   className="custom-scrollbar overflow-y-auto"
                   innerClassName="divide-y divide-gold/5"
                   renderItem={(spell) => {
                     const sourceLabel = renderSourceAbbreviation(spell);
                     const selected = selectedSpellId === spell.id;
+                    const facets = spell as any; // derived facets attached at load time
+                    const activationLabel = (() => {
+                      const bucket = facets.activationBucket as ActivationBucket | undefined;
+                      if (!bucket) return '—';
+                      return ACTIVATION_LABELS[bucket] || '—';
+                    })();
+                    const rangeLabel = (() => {
+                      const bucket = facets.rangeBucket as RangeBucket | undefined;
+                      if (!bucket) return '—';
+                      return RANGE_LABELS[bucket] || '—';
+                    })();
+                    const schoolAbbrev = (() => {
+                      const full = SCHOOL_LABELS[String(spell.school ?? '')];
+                      if (!full) return String(spell.school ?? '').slice(0, 4).toUpperCase() || '—';
+                      return full.length > 6 ? full.slice(0, 4) + '.' : full;
+                    })();
                     return (
                       <button
                         key={spell.id}
                         type="button"
                         onClick={() => setSelectedSpellId(spell.id)}
                         className={cn(
-                          'grid h-[78px] w-full grid-cols-[minmax(0,1fr)_80px_100px_70px] gap-3 px-4 py-3 text-left transition-colors',
+                          'grid h-[48px] w-full grid-cols-[minmax(0,1fr)_36px_64px_56px_24px_70px_56px] gap-2 items-center px-3 text-left transition-colors',
                           selected ? 'bg-gold/10' : 'hover:bg-gold/5'
                         )}
                       >
-                        <div className="min-w-0">
-                          <div className="truncate font-serif text-lg text-ink flex items-center gap-1.5">
-                            <span className="truncate">{spell.name}</span>
-                            {(() => {
-                              const reqTagIds = Array.isArray((spell as any).required_tags)
-                                ? (spell as any).required_tags
-                                : [];
-                              const hasFreeText = !!(spell as any).prerequisite_text;
-                              if (reqTagIds.length === 0 && !hasFreeText) return null;
-                              const tagLabel = reqTagIds
-                                .map(
-                                  (tid: string) =>
-                                    allTags.find((t: any) => t.id === tid)?.name || tid,
-                                )
-                                .join(', ');
-                              const title = [
-                                tagLabel ? `Requires: ${tagLabel}` : null,
-                                hasFreeText
-                                  ? `Note: ${(spell as any).prerequisite_text}`
-                                  : null,
-                              ]
-                                .filter(Boolean)
-                                .join(' · ');
-                              return (
-                                <span title={title} className="shrink-0 inline-flex">
-                                  <Lock
-                                    className="w-3 h-3 text-blood/70"
-                                    aria-label="Has prerequisites"
-                                  />
-                                </span>
-                              );
-                            })()}
-                          </div>
+                        <div className="min-w-0 flex items-center gap-1.5">
+                          <span className="truncate font-serif text-sm text-ink">{spell.name}</span>
+                          {isFavorite(spell.id) && (
+                            <Star className="w-3 h-3 text-gold/70 fill-gold/40 shrink-0" aria-label="Favorite" />
+                          )}
+                          {(() => {
+                            const reqTagIds = Array.isArray((spell as any).required_tags)
+                              ? (spell as any).required_tags
+                              : [];
+                            const hasFreeText = !!(spell as any).prerequisite_text;
+                            if (reqTagIds.length === 0 && !hasFreeText) return null;
+                            const tagLabel = reqTagIds
+                              .map((tid: string) => allTags.find((t: any) => t.id === tid)?.name || tid)
+                              .join(', ');
+                            const title = [
+                              tagLabel ? `Requires: ${tagLabel}` : null,
+                              hasFreeText ? `Note: ${(spell as any).prerequisite_text}` : null,
+                            ].filter(Boolean).join(' · ');
+                            return (
+                              <span title={title} className="shrink-0 inline-flex">
+                                <Lock className="w-3 h-3 text-blood/70" aria-label="Has prerequisites" />
+                              </span>
+                            );
+                          })()}
                         </div>
-                        <div className="text-sm text-ink/75">{Number(spell.level ?? 0) === 0 ? 'Cantrip' : spell.level}</div>
-                        <div className="text-sm text-ink/75">{SCHOOL_LABELS[String(spell.school ?? '')] || String(spell.school ?? '').toUpperCase()}</div>
-                        <div className="text-sm font-bold text-gold/80">{sourceLabel}</div>
+                        <div className="text-xs text-ink/75 text-center">
+                          {Number(spell.level ?? 0) === 0 ? 'C' : spell.level}
+                        </div>
+                        <div className="text-xs text-ink/75 text-center truncate">{activationLabel}</div>
+                        <div className="text-xs text-ink/75 text-center truncate" title={SCHOOL_LABELS[String(spell.school ?? '')] || ''}>{schoolAbbrev}</div>
+                        <div className="text-xs text-blood/70 text-center" title="Concentration">
+                          {facets.concentration ? '◆' : ''}
+                        </div>
+                        <div className="text-xs text-ink/75 text-center truncate">{rangeLabel}</div>
+                        <div className="text-xs font-bold text-gold/80 text-center truncate">{sourceLabel}</div>
                       </button>
                     );
                   }}
@@ -656,9 +749,15 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             </CardContent>
           </Card>
 
+          {/* Detail pane — image+info inline (horizontal), tags grouped by
+              category, favorite star in the header. See SpellDetailPanel. */}
           <Card className="border-gold/10 bg-card/50 overflow-hidden">
             <CardContent className="p-0">
-              <SpellDetailPanel spellId={selectedSpellId || null} />
+              <SpellDetailPanel
+                spellId={selectedSpellId || null}
+                isFavorite={selectedSpellId ? isFavorite(selectedSpellId) : false}
+                onToggleFavorite={toggleFavorite}
+              />
             </CardContent>
           </Card>
         </div>
