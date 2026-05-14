@@ -60,6 +60,55 @@ export function FilterBar({
         const mode = groupCombineModes[group.id] || 'OR';
         const exMode = groupExclusionModes[group.id] || 'OR';
 
+        // Hierarchical layout: roots get their own chip-row; subtags
+        // (parent_tag_id / parentTagId pointing to a tag in this group)
+        // get an indented chip-row directly under their parent. Mirrors
+        // the SpellTagPicker layout — keeps tag groups with many
+        // subtags from collapsing into one "clumped up mess" wall of
+        // chips. Orphaned subtags (parent missing from the group's tag
+        // set, rare with consistent data) fall to a separate amber-
+        // edged row so they don't disappear when filtering.
+        const idSet = new Set(groupTags.map(t => t.id));
+        const getParent = (t: any): string | null => {
+          const p = t?.parentTagId ?? t?.parent_tag_id ?? null;
+          return p && idSet.has(p) ? p : null;
+        };
+        const roots = groupTags.filter(t => !getParent(t)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        const childrenByParent = new Map<string, any[]>();
+        for (const t of groupTags) {
+          const p = getParent(t);
+          if (!p) continue;
+          if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+          childrenByParent.get(p)!.push(t);
+        }
+        for (const arr of childrenByParent.values()) {
+          arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+        }
+        const orphans = groupTags.filter(t => {
+          const raw = t?.parentTagId ?? t?.parent_tag_id ?? null;
+          return raw && !idSet.has(raw);
+        });
+
+        const renderChip = (tag: any) => {
+          const state = tagStates[tag.id] || 0;
+          return (
+            <button
+              key={tag.id}
+              onClick={() => cycleTagState?.(tag.id)}
+              className={cn(
+                "filter-tag",
+                state === 1 ? "btn-gold-solid border-gold shadow-lg shadow-gold/20" : state === 2 ? "btn-danger border-blood" : "btn-gold"
+              )}
+            >
+              {/* Subtags render as `Parent.Name` for ambiguity-free
+                  scanning when the chip wraps to a new line and loses
+                  its left-border indent context. tagPickerLabel returns
+                  the `Parent.Child` shape when parentTagId is present. */}
+              {String(tag.name)}
+            </button>
+          );
+        };
+
         return (
           <div key={group.id} className="space-y-4">
             <div className="flex items-center justify-between">
@@ -112,22 +161,27 @@ export function FilterBar({
                 </button>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {groupTags.map(tag => {
-                const state = tagStates[tag.id] || 0;
+            <div className="space-y-2">
+              {roots.map(root => {
+                const children = childrenByParent.get(root.id) || [];
                 return (
-                  <button
-                    key={tag.id}
-                    onClick={() => cycleTagState?.(tag.id)}
-                    className={cn(
-                      "filter-tag",
-                      state === 1 ? "btn-gold-solid border-gold shadow-lg shadow-gold/20" : state === 2 ? "btn-danger border-blood" : "btn-gold"
+                  <React.Fragment key={root.id}>
+                    <div className="flex flex-wrap gap-2">
+                      {renderChip(root)}
+                    </div>
+                    {children.length > 0 && (
+                      <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-2">
+                        {children.map(renderChip)}
+                      </div>
                     )}
-                  >
-                    {tag.name}
-                  </button>
+                  </React.Fragment>
                 );
               })}
+              {orphans.length > 0 && (
+                <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-2" title="Subtags whose parent is not in this group's visible tag set.">
+                  {orphans.map(renderChip)}
+                </div>
+              )}
             </div>
           </div>
         );

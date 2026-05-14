@@ -43,6 +43,7 @@ import {
 } from "../../components/ui/dialog";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { FilterBar } from '../../components/compendium/FilterBar';
+import { normalizeTagRow, expandTagsWithAncestors, buildTagParentMap } from '../../lib/tagHierarchy';
 import {
   importClassSemantic
 } from '../../lib/classExport';
@@ -181,7 +182,15 @@ export function ClassList({
           ...tg,
           classifications: typeof tg.classifications === 'string' ? JSON.parse(tg.classifications) : (tg.classifications || [])
         })));
-        setAllTags(tagsData);
+        // Normalize tag rows on load. Raw D1 rows come back as snake_case
+        // (`group_id`, `parent_tag_id`); the FilterBar default content
+        // and the in-component `tagsByGroup` index assume `groupId` and
+        // `parentTagId`. Without this normalize step every tag bucketed
+        // under `map[undefined]` and no filter chips rendered at all —
+        // that's the "class list filters broken" symptom. `normalizeTagRow`
+        // centralizes the coercion so SpellListManager, SpellsEditor,
+        // ClassList, etc. all share the same picker shape.
+        setAllTags(tagsData.map((t: any) => ({ ...t, ...normalizeTagRow(t) })));
         setAllSkills(skillsData);
         setAllTools(toolsData);
         setAllToolCategories(toolCatsData);
@@ -268,25 +277,37 @@ export function ClassList({
     return map;
   }, [allTags]);
 
+  // Subtag-aware matching: a class tagged `Conjure.Manifest` should be
+  // treated as also carrying its ancestor `Conjure`, so a filter on
+  // `Conjure` matches the subtag-tagged class. Mirrors the spell-side
+  // logic in SpellList / SpellListManager. The map is rebuilt only
+  // when the tag set itself changes.
+  const parentByTagId = React.useMemo(() => buildTagParentMap(allTags), [allTags]);
+
   const filteredClasses = React.useMemo(() => {
     return classes.filter(c => {
       const sourceName = sources[c.sourceId]?.name || '';
       const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
         sourceName.toLowerCase().includes(search.toLowerCase());
-      
+
       if (!matchesSearch) return false;
-      
+
       const activeTagIds = Object.keys(tagStates);
       if (activeTagIds.length === 0) return true;
 
-      const classTagIds = Array.isArray(c.tagIds) ? c.tagIds : [];
+      // Expand the class's tag IDs with their ancestors so an
+      // include/exclude on a parent tag also matches subtags. This is
+      // the inverse of the SpellRule path (which expands at query time);
+      // here we expand the entity's effective tag set.
+      const rawClassTagIds = Array.isArray(c.tagIds) ? c.tagIds : [];
+      const classTagIds = Array.from(expandTagsWithAncestors(rawClassTagIds, parentByTagId));
 
       // Group-based filtering
       const groupResults = tagGroups.map(group => {
         const groupTags = tagsByGroup[group.id] || [];
         const includedInGroup = groupTags.filter(t => tagStates[t.id] === 1);
         const excludedInGroup = groupTags.filter(t => tagStates[t.id] === 2);
-        
+
         if (includedInGroup.length === 0 && excludedInGroup.length === 0) return null;
 
         const classTagsInGroup = classTagIds.filter((tid: string) => groupTags.some(gt => gt.id === tid));
@@ -331,7 +352,7 @@ export function ClassList({
 
       return true;
     });
-  }, [classes, sources, search, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes]);
+  }, [classes, sources, search, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId]);
 
   const activeFilterCount = Object.keys(tagStates).length;
 
