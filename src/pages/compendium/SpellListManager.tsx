@@ -52,8 +52,14 @@ import {
   type ShapeBucket,
 } from '../../lib/spellFilters';
 
-const LIST_HEIGHT = 720;
-const ROW_HEIGHT = 76;
+// Inner virtualized list height — derived from the page's viewport
+// paneHeight at render time so the list fills exactly the leftover
+// vertical space after toolbar(s) and header strip. ROW_HEIGHT is
+// the per-row cell height; matches the SpellList browser's compact
+// 48px rhythm so a class curator and a reader scanning the public
+// catalogue see the same visual cadence.
+const ROW_HEIGHT = 48;
+const LIST_HEADER_PX = 38; // sort/column-label strip above the rows
 
 const LEVEL_VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
@@ -102,6 +108,33 @@ type FilteredEntry = {
 export default function SpellListManager({ userProfile }: { userProfile: any }) {
   const isAdmin = userProfile?.role === 'admin';
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Fullscreen-page opt-in. Same body class /compendium/spells and
+  // /compendium/spells/manage use — strips <main>'s container
+  // padding, hides the footer, locks body scroll so each pane
+  // handles its own overflow.
+  useEffect(() => {
+    if (!isAdmin) return;
+    document.body.classList.add('spell-list-fullscreen');
+    return () => document.body.classList.remove('spell-list-fullscreen');
+  }, [isAdmin]);
+
+  // Viewport-derived pane height. The chrome above the working
+  // grid is: navbar (~56) + page toolbar (~50) + FilterBar row
+  // (~56) + maybe rules / chip strips when present + small gaps
+  // ≈ 200-260 depending on whether the rules strip is showing.
+  // We use a single conservative offset; the small underestimate
+  // just leaves a few pixels of breathing room at the bottom of
+  // the panes.
+  const [paneHeight, setPaneHeight] = useState<number>(() =>
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 260),
+  );
+  useEffect(() => {
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 260));
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [spells, setSpells] = useState<SpellRow[]>([]);
@@ -749,80 +782,69 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-4">
+    // Fullscreen layout — toolbar rows shrink to natural height,
+    // working-area grid (list | detail) fills the remaining viewport.
+    // Mirrors /compendium/spells and /compendium/spells/manage.
+    <div className="h-full flex flex-col gap-2 p-2">
+      {/* Consolidated top toolbar: Back link + class picker + summary.
+          Replaces the old gradient-header card so the page chrome
+          shrinks from ~200px to a single ~48px row. */}
+      <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
         <Link to="/compendium/classes">
-          <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
+          <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
-            Back To Classes
+            Back
           </Button>
         </Link>
+        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 shrink-0">Class</span>
+        <select
+          value={selectedClassId}
+          onChange={(e) => setSelectedClassId(e.target.value)}
+          className="h-8 rounded-md border border-gold/20 bg-background/40 px-2 py-1 text-sm text-ink focus:border-gold/50 focus:outline-none"
+          disabled={loading}
+        >
+          <option value="">— Select a class —</option>
+          {classes.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {selectedClass ? (
+          <div className="text-xs text-ink/60 flex items-center gap-2 min-w-0">
+            <span className="text-gold font-bold tabular-nums">{inListCount}</span>
+            <span className="shrink-0">spell{inListCount === 1 ? '' : 's'} on {selectedClass.name}'s list</span>
+            {inListCount > 0 ? (
+              <span className="text-ink/40 truncate">
+                ({Object.entries(inListByLevel).sort(([a], [b]) => Number(a) - Number(b)).map(([lvl, n]) => `${lvl === '0' ? 'C' : `L${lvl}`}:${n}`).join(' · ')})
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
-      <Card className="border-gold/20 bg-card/50 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%),linear-gradient(180deg,rgba(12,16,24,0.75),rgba(12,16,24,0.98))] p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-gold">
-                  <Wand2 className="h-5 w-5" />
-                  <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium Development</span>
-                </div>
-                <h2 className="text-3xl font-serif font-bold uppercase tracking-tight text-ink">Spell List Manager</h2>
-                <p className="text-sm text-ink/60">
-                  Curate which spells each class can prepare or learn. Spells you toggle here become the master list
-                  consumed by character builders.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2 min-w-[280px]">
-                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Class</label>
-                <select
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full rounded-md border border-gold/20 bg-background/40 px-3 py-2 text-sm text-ink focus:border-gold/50 focus:outline-none"
-                  disabled={loading}
-                >
-                  <option value="">— Select a class —</option>
-                  {classes.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                {selectedClass ? (
-                  <div className="text-xs text-ink/60">
-                    <span className="text-gold font-bold">{inListCount}</span> spell{inListCount === 1 ? '' : 's'} on {selectedClass.name}'s list
-                    {inListCount > 0 ? (
-                      <span className="ml-2 text-ink/40">
-                        ({Object.entries(inListByLevel).sort(([a], [b]) => Number(a) - Number(b)).map(([lvl, n]) => `${lvl === '0' ? 'C' : `L${lvl}`}:${n}`).join(' · ')})
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+      {/* Linked-rules strip — only when a class is selected. The
+          panel itself already has an internal collapse/expand for
+          the rule list, so it shrinks naturally when not in use. */}
       {selectedClassId ? (
-        <LinkedRulesPanel
-          linkedRules={linkedRules}
-          rebuildPending={rebuildPending}
-          ruleMatchCounts={ruleMatchCounts}
-          totalLinkedRuleMatches={totalLinkedRuleMatches}
-          expanded={linkedRulesExpanded}
-          onToggleExpanded={() => setLinkedRulesExpanded(v => !v)}
-          onUnlink={handleUnlinkRule}
-          onOpenLinkPicker={() => setLinkRuleDialogOpen(true)}
-          onRebuild={handleOpenRebuildPreview}
-          lastRebuildAt={lastRebuildAt}
-        />
+        <div className="shrink-0">
+          <LinkedRulesPanel
+            linkedRules={linkedRules}
+            rebuildPending={rebuildPending}
+            ruleMatchCounts={ruleMatchCounts}
+            totalLinkedRuleMatches={totalLinkedRuleMatches}
+            expanded={linkedRulesExpanded}
+            onToggleExpanded={() => setLinkedRulesExpanded(v => !v)}
+            onUnlink={handleUnlinkRule}
+            onOpenLinkPicker={() => setLinkRuleDialogOpen(true)}
+            onRebuild={handleOpenRebuildPreview}
+            lastRebuildAt={lastRebuildAt}
+          />
+        </div>
       ) : null}
 
-      <div className="bg-background border border-gold/20 rounded-md p-4 space-y-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-[280px]">
-            <FilterBar
+      {/* FilterBar + extras row. The toggle buttons + count live in
+          the trailingActions slot so everything stays on one line. */}
+      <div className="shrink-0 space-y-2">
+          <FilterBar
               search={search}
               setSearch={setSearch}
               isFilterOpen={filterOpen}
@@ -970,35 +992,44 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                   </details>
                 </>
               }
+              trailingActions={
+                <>
+                  <div
+                    className="text-[11px] font-mono tabular-nums text-ink/55 whitespace-nowrap px-1"
+                    title={`${filteredSpells.length} of ${spells.length} total`}
+                  >
+                    {loading ? '— / —' : `${filteredSpells.length} / ${spells.length}`}
+                  </div>
+                  <Button
+                    type="button"
+                    variant={showOnlyInList ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowOnlyInList(v => !v)}
+                    className={cn(
+                      'h-8 border-gold/20 text-[10px] uppercase tracking-[0.18em] shrink-0',
+                      showOnlyInList ? 'bg-gold/15 text-gold hover:bg-gold/20' : 'text-ink/70 hover:bg-gold/5'
+                    )}
+                    disabled={!selectedClassId}
+                    title={selectedClassId ? "Toggle list to show only spells already on this class's list" : 'Pick a class first'}
+                  >
+                    On list
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={showOrphansOnly ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowOrphansOnly(v => !v)}
+                    className={cn(
+                      'h-8 border-gold/20 text-[10px] uppercase tracking-[0.18em] shrink-0',
+                      showOrphansOnly ? 'bg-blood/15 text-blood hover:bg-blood/20' : 'text-ink/70 hover:bg-gold/5'
+                    )}
+                    title="Spells not on any class's spell list"
+                  >
+                    Orphans
+                  </Button>
+                </>
+              }
             />
-          </div>
-          <Button
-            type="button"
-            variant={showOnlyInList ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowOnlyInList(v => !v)}
-            className={cn(
-              'border-gold/20 text-xs uppercase tracking-[0.18em] shrink-0',
-              showOnlyInList ? 'bg-gold/15 text-gold hover:bg-gold/20' : 'text-ink/70 hover:bg-gold/5'
-            )}
-            disabled={!selectedClassId}
-          >
-            {showOnlyInList ? 'Showing only on list' : 'Show only on list'}
-          </Button>
-          <Button
-            type="button"
-            variant={showOrphansOnly ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowOrphansOnly(v => !v)}
-            className={cn(
-              'border-gold/20 text-xs uppercase tracking-[0.18em] shrink-0',
-              showOrphansOnly ? 'bg-blood/15 text-blood hover:bg-blood/20' : 'text-ink/70 hover:bg-gold/5'
-            )}
-            title="Spells not on any class's spell list"
-          >
-            {showOrphansOnly ? 'Showing orphans' : 'Show orphans'}
-          </Button>
-        </div>
 
         {(activeFilterCount > 0 || showOnlyInList || showOrphansOnly || search.trim()) ? (
           <ActiveFilterChips
@@ -1073,156 +1104,181 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         ) : null}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-      <Card className="border-gold/20 bg-card/50 overflow-hidden">
-        <CardContent className="p-0">
-          {!selectedClassId ? (
-            <div className="px-8 py-20 text-center text-ink/45">
-              Pick a class to begin curating its spell list.
-            </div>
-          ) : loading || classListLoading ? (
-            <div className="px-8 py-20 text-center text-ink/45">Loading...</div>
-          ) : filteredSpells.length === 0 ? (
-            <div className="px-8 py-20 text-center text-ink/45">No spells match the current filters.</div>
-          ) : (
-            <>
-              <div className="grid grid-cols-[36px_40px_minmax(0,1fr)_70px_120px_70px_110px] gap-3 border-b border-gold/10 bg-background/35 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">
-                <div className="flex items-center justify-center">
-                  <SelectionBox
-                    state={allVisibleSelected ? 'checked' : someVisibleSelected ? 'mixed' : 'unchecked'}
-                    onToggle={toggleAllVisible}
-                    ariaLabel="Select all visible spells"
-                  />
-                </div>
-                <span></span>
-                <span>Name</span>
-                <span>Level</span>
-                <span>School</span>
-                <span>Source</span>
-                <span className="text-right">Action</span>
+      {/* Working area — list (flex-1) | detail panel (420px). The
+          list pane scrolls internally via VirtualizedList; the
+          detail card scrolls via overflow-y-auto. Outer flex-1
+          min-h-0 lets the grid claim the viewport's leftover
+          vertical space without forcing the page to scroll. */}
+      <div className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_420px]">
+        <Card
+          className="border-gold/20 bg-card/50 overflow-hidden"
+          style={{ height: `${paneHeight}px` }}
+        >
+          <CardContent className="p-0 h-full flex flex-col">
+            {!selectedClassId ? (
+              <div className="px-8 py-20 text-center text-ink/45">
+                Pick a class to begin curating its spell list.
               </div>
-              <VirtualizedList
-                items={filteredSpells}
-                height={LIST_HEIGHT}
-                itemHeight={ROW_HEIGHT}
-                className="custom-scrollbar overflow-y-auto"
-                innerClassName="divide-y divide-gold/5"
-                renderItem={(entry) => {
-                  const { spell, matchedTagNames } = entry;
-                  const onList = classListIds.has(spell.id);
-                  const isPending = pendingSpellIds.has(spell.id);
-                  const isSelected = selectedSpellIds.has(spell.id);
-                  const isPreviewing = previewSpellId === spell.id;
-                  const sourceRecord = sourceById[spell.source_id || ''];
-                  const sourceLabel = sourceRecord?.abbreviation || sourceRecord?.shortName || '—';
-                  const otherClasses = (spellMembershipsBySpellId.get(spell.id) || [])
-                    .filter(c => c.id !== selectedClassId);
-                  const query = search.trim();
-                  return (
-                    <div
-                      key={spell.id}
-                      onClick={() => setPreviewSpellId(spell.id)}
-                      className={cn(
-                        'grid h-[76px] w-full grid-cols-[36px_40px_minmax(0,1fr)_70px_120px_70px_110px] gap-3 items-center px-4 transition-colors cursor-pointer',
-                        onList ? 'bg-gold/[0.04]' : '',
-                        isSelected ? 'ring-1 ring-inset ring-gold/30' : '',
-                        isPreviewing ? 'bg-gold/15' : 'hover:bg-gold/[0.06]'
-                      )}
-                    >
-                      <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                        <SelectionBox
-                          state={isSelected ? 'checked' : 'unchecked'}
-                          onToggle={() => toggleSelected(spell.id)}
-                          ariaLabel={`Select ${spell.name}`}
-                        />
-                      </div>
-                      <div className="flex items-center justify-center">
-                        {onList ? (
-                          <Check className="w-4 h-4 text-emerald-500" aria-label="On list" />
-                        ) : (
-                          <span className="w-4 h-4 rounded-full border border-gold/20" aria-hidden />
+            ) : loading || classListLoading ? (
+              <div className="px-8 py-20 text-center text-ink/45">Loading...</div>
+            ) : filteredSpells.length === 0 ? (
+              <div className="px-8 py-20 text-center text-ink/45">No spells match the current filters.</div>
+            ) : (
+              <>
+                {/* Header strip — column labels above the rows. Same
+                    grid template the rows use so labels line up with
+                    cell content. */}
+                <div className="grid grid-cols-[32px_28px_minmax(0,1fr)_40px_64px_56px_88px] gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 shrink-0">
+                  <div className="flex items-center justify-center">
+                    <SelectionBox
+                      state={allVisibleSelected ? 'checked' : someVisibleSelected ? 'mixed' : 'unchecked'}
+                      onToggle={toggleAllVisible}
+                      ariaLabel="Select all visible spells"
+                    />
+                  </div>
+                  <span></span>
+                  <span>Name</span>
+                  <span className="text-center">Lv</span>
+                  <span className="text-center">School</span>
+                  <span className="text-center">Src</span>
+                  <span className="text-right">Action</span>
+                </div>
+                <VirtualizedList
+                  items={filteredSpells}
+                  height={Math.max(200, paneHeight - LIST_HEADER_PX)}
+                  itemHeight={ROW_HEIGHT}
+                  className="custom-scrollbar overflow-y-auto"
+                  innerClassName="divide-y divide-gold/5"
+                  renderItem={(entry) => {
+                    const { spell, matchedTagNames } = entry;
+                    const onList = classListIds.has(spell.id);
+                    const isPending = pendingSpellIds.has(spell.id);
+                    const isSelected = selectedSpellIds.has(spell.id);
+                    const isPreviewing = previewSpellId === spell.id;
+                    const sourceRecord = sourceById[spell.source_id || ''];
+                    const sourceLabel = sourceRecord?.abbreviation || sourceRecord?.shortName || '—';
+                    const otherClasses = (spellMembershipsBySpellId.get(spell.id) || [])
+                      .filter(c => c.id !== selectedClassId);
+                    const query = search.trim();
+                    // Compose the row's title attribute so the dropped
+                    // "Also on / via tag" sub-line still surfaces on
+                    // hover. Keeps the row scannable while preserving
+                    // the diagnostic data curators relied on.
+                    const reqTagIds = Array.isArray((spell as any).required_tags)
+                      ? (spell as any).required_tags as string[]
+                      : [];
+                    const hasFreeText = !!(spell as any).prerequisite_text;
+                    const tooltipParts: string[] = [];
+                    if (otherClasses.length > 0) {
+                      tooltipParts.push(`Also on: ${otherClasses.map(c => c.name).join(', ')}`);
+                    }
+                    if (matchedTagNames.length > 0) {
+                      tooltipParts.push(`Via tag: ${matchedTagNames.join(', ')}`);
+                    }
+                    if (reqTagIds.length > 0) {
+                      tooltipParts.push(`Requires: ${reqTagIds.map(tid => tagsById[tid]?.name || tid).join(', ')}`);
+                    }
+                    if (hasFreeText) {
+                      tooltipParts.push(`Note: ${(spell as any).prerequisite_text}`);
+                    }
+                    const rowTitle = tooltipParts.join('  ·  ') || spell.name;
+                    return (
+                      <div
+                        key={spell.id}
+                        onClick={() => setPreviewSpellId(spell.id)}
+                        title={rowTitle}
+                        className={cn(
+                          'grid w-full grid-cols-[32px_28px_minmax(0,1fr)_40px_64px_56px_88px] gap-2 items-center px-3 transition-colors cursor-pointer border-b border-gold/5',
+                          onList ? 'bg-gold/[0.04]' : '',
+                          isSelected ? 'ring-1 ring-inset ring-gold/30' : '',
+                          isPreviewing ? 'bg-gold/15' : 'hover:bg-gold/[0.06]',
                         )}
-                      </div>
-                      <div className="min-w-0 flex flex-col justify-center gap-0.5">
-                        <div className="truncate font-serif text-base text-ink flex items-center gap-1.5">
-                          <HighlightedText text={spell.name} query={query} />
+                        style={{ height: ROW_HEIGHT }}
+                      >
+                        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                          <SelectionBox
+                            state={isSelected ? 'checked' : 'unchecked'}
+                            onToggle={() => toggleSelected(spell.id)}
+                            ariaLabel={`Select ${spell.name}`}
+                          />
+                        </div>
+                        <div className="flex items-center justify-center">
+                          {onList ? (
+                            <Check className="w-4 h-4 text-emerald-500" aria-label="On list" />
+                          ) : (
+                            <span className="w-3 h-3 rounded-full border border-gold/20" aria-hidden />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex items-center gap-1.5">
+                          <span className="truncate font-serif text-sm text-ink">
+                            <HighlightedText text={spell.name} query={query} />
+                          </span>
+                          {(reqTagIds.length > 0 || hasFreeText) && (
+                            <Lock className="w-3 h-3 text-blood/70 shrink-0" aria-label="Has prerequisites" />
+                          )}
+                          {(otherClasses.length > 0 || matchedTagNames.length > 0) && (
+                            <span
+                              className="text-[9px] text-ink/35 truncate ml-1"
+                              aria-hidden
+                            >
+                              {otherClasses.length > 0 ? `+${otherClasses.length}` : ''}
+                              {otherClasses.length > 0 && matchedTagNames.length > 0 ? ' · ' : ''}
+                              {matchedTagNames.length > 0 ? 'tag' : ''}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-ink/75 text-center">
+                          {spell.level === 0 ? 'C' : spell.level}
+                        </div>
+                        <div className="text-xs text-ink/75 text-center truncate" title={SCHOOL_LABELS[spell.school] || ''}>
                           {(() => {
-                            const reqTagIds = Array.isArray((spell as any).required_tags)
-                              ? (spell as any).required_tags
-                              : [];
-                            const hasFreeText = !!(spell as any).prerequisite_text;
-                            if (reqTagIds.length === 0 && !hasFreeText) return null;
-                            const tagLabel = reqTagIds
-                              .map((tid: string) => tagsById[tid]?.name || tid)
-                              .join(', ');
-                            const title = [
-                              tagLabel ? `Requires: ${tagLabel}` : null,
-                              hasFreeText ? `Note: ${(spell as any).prerequisite_text}` : null,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ');
-                            return (
-                              <span title={title} className="shrink-0 inline-flex">
-                                <Lock
-                                  className="w-3 h-3 text-blood/70"
-                                  aria-label="Has prerequisites"
-                                />
-                              </span>
-                            );
+                            const full = SCHOOL_LABELS[spell.school] || spell.school?.toUpperCase() || '—';
+                            return full.length > 6 ? full.slice(0, 4) + '.' : full;
                           })()}
                         </div>
-                        {(otherClasses.length > 0 || matchedTagNames.length > 0) ? (
-                          <div className="truncate text-[10px] text-ink/40 leading-tight">
-                            {otherClasses.length > 0 ? (
-                              <span>
-                                <span className="uppercase tracking-widest text-gold/40">Also on:</span>{' '}
-                                {otherClasses.map(c => c.name).join(', ')}
-                              </span>
-                            ) : null}
-                            {otherClasses.length > 0 && matchedTagNames.length > 0 ? <span className="mx-2 text-ink/20">·</span> : null}
-                            {matchedTagNames.length > 0 ? (
-                              <span className="italic">via tag: {matchedTagNames.join(', ')}</span>
-                            ) : null}
-                          </div>
-                        ) : null}
+                        <div className="text-[10px] font-bold text-gold/80 text-center truncate">{sourceLabel}</div>
+                        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            type="button"
+                            variant={onList ? 'outline' : 'default'}
+                            size="sm"
+                            onClick={() => handleToggleSpell(spell.id)}
+                            disabled={isPending}
+                            className={cn(
+                              'h-7 px-2 text-[10px] uppercase tracking-[0.16em]',
+                              onList
+                                ? 'border-gold/30 text-ink/70 hover:bg-blood/10 hover:text-blood hover:border-blood/40'
+                                : 'bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25',
+                            )}
+                          >
+                            {isPending ? '…' : onList ? 'Remove' : <><Plus className="w-3 h-3 mr-0.5" />Add</>}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="text-sm text-ink/75">{spell.level === 0 ? 'Cantrip' : spell.level}</div>
-                      <div className="text-sm text-ink/75">{SCHOOL_LABELS[spell.school] || spell.school?.toUpperCase() || '—'}</div>
-                      <div className="text-sm font-bold text-gold/80">{sourceLabel}</div>
-                      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          type="button"
-                          variant={onList ? 'outline' : 'default'}
-                          size="sm"
-                          onClick={() => handleToggleSpell(spell.id)}
-                          disabled={isPending}
-                          className={cn(
-                            'h-7 px-3 text-[10px] uppercase tracking-[0.18em]',
-                            onList
-                              ? 'border-gold/30 text-ink/70 hover:bg-blood/10 hover:text-blood hover:border-blood/40'
-                              : 'bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25'
-                          )}
-                        >
-                          {isPending ? '…' : onList ? 'Remove' : <><Plus className="w-3 h-3 mr-1" />Add</>}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                }}
-              />
-            </>
-          )}
-        </CardContent>
-      </Card>
+                    );
+                  }}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card className="border-gold/20 bg-card/50 overflow-hidden self-start">
-        <CardContent className="p-0">
-          <SpellDetailPanel
-            spellId={previewSpellId}
-            emptyMessage="Click a spell to preview its details here."
-          />
-        </CardContent>
-      </Card>
+        {/* Detail card — fixed height so its content area scrolls
+            internally regardless of which spell is selected. */}
+        <Card
+          className="border-gold/20 bg-card/50 overflow-hidden hidden xl:block"
+          style={{ height: `${paneHeight}px` }}
+        >
+          <CardContent
+            className="p-0 overflow-y-auto custom-scrollbar h-full"
+            style={{ maxHeight: `${paneHeight}px` }}
+          >
+            <SpellDetailPanel
+              spellId={previewSpellId}
+              emptyMessage="Click a spell to preview its details here."
+            />
+          </CardContent>
+        </Card>
       </div>
 
       {/* Pre-rebuild preview — show toAdd / toRemove counts before mutating. */}
