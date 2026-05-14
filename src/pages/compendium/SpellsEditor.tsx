@@ -3,8 +3,24 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Edit3, Plus, Save, Search, Trash2, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
-import { FilterBar, AxisFilterSection } from '../../components/compendium/FilterBar';
-import { matchesSingleAxisFilter } from '../../lib/spellFilters';
+import { FilterBar, AxisFilterSection, TagGroupFilter, matchesTagFilters } from '../../components/compendium/FilterBar';
+import {
+  matchesSingleAxisFilter,
+  matchesMultiAxisFilter,
+  deriveSpellFilterFacets,
+  ACTIVATION_ORDER,
+  ACTIVATION_LABELS,
+  RANGE_ORDER,
+  RANGE_LABELS,
+  DURATION_ORDER,
+  DURATION_LABELS,
+  SHAPE_ORDER,
+  SHAPE_LABELS,
+  PROPERTY_ORDER,
+  PROPERTY_LABELS,
+  type PropertyFilter,
+} from '../../lib/spellFilters';
+import { expandTagsWithAncestors } from '../../lib/tagHierarchy';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
@@ -382,6 +398,14 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   // in renderFilters below.
   type AxisState = { states: Record<string, number>; combineMode?: 'AND' | 'OR' | 'XOR'; exclusionMode?: 'AND' | 'OR' | 'XOR' };
   const [axisFilters, setAxisFilters] = useState<Record<string, AxisState>>({});
+  // Rich tag filter state — same shape used everywhere else in the
+  // app (SpellList, SpellRulesEditor, SpellListManager). 3-state
+  // tagStates (0=neutral, 1=include, 2=exclude), per-group AND/OR/XOR
+  // include and exclusion combinators. Lets admins slice the spell
+  // list by tag membership to audit consistency.
+  const [tagStates, setTagStates] = useState<Record<string, number>>({});
+  const [groupCombineModes, setGroupCombineModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
+  const [groupExclusionModes, setGroupExclusionModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   // Mirror of `editingId` for use inside async handlers — captures
   // the CURRENT selection at the moment the await resolves, not the
@@ -409,24 +433,45 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Single mapping function so all three spell-load sites (initial,
+  // post-save refresh, post-delete refresh) produce identical entry
+  // shapes — including the derived filter facets (activationBucket,
+  // rangeBucket, durationBucket, shapeBucket, properties, etc.) the
+  // filter modal needs. Without facets the bucket axes can't match
+  // anything because filteredEntries reads `entry.activationBucket`
+  // and friends. Matches the same mapping SpellList.tsx does so the
+  // editor's filter chips slice the catalogue identically.
+  const mapSpellRow = (row: any) => {
+    // d1.ts's queryD1 auto-parses fixed JSON columns including `tags`
+    // and `foundry_data` — so we usually already see arrays / objects.
+    // The string fallbacks here are defensive in case a future code
+    // path bypasses that auto-parse (e.g. raw worker output).
+    const parseJsonCol = <T,>(v: unknown, fallback: T): T => {
+      if (typeof v === 'string') {
+        try { return JSON.parse(v) as T; } catch { return fallback; }
+      }
+      return (v ?? fallback) as T;
+    };
+    return {
+      ...row,
+      sourceId: row.source_id,
+      imageUrl: row.image_url,
+      level: Number(row.level || 0),
+      school: row.school,
+      preparationMode: row.preparation_mode,
+      tagIds: parseJsonCol<string[]>(row.tags, []),
+      foundryShell: parseJsonCol<any>(row.foundry_data, null),
+      ...deriveSpellFilterFacets(row),
+    };
+  };
+
   useEffect(() => {
     if (!isAdmin) return;
 
     const loadEntries = async () => {
       try {
         const data = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
-        
-        // Map D1 results to what the UI expects (camelCase)
-        const mapped = data.map(row => ({
-          ...row,
-          sourceId: row.source_id,
-          imageUrl: row.image_url,
-          level: Number(row.level || 0),
-          school: row.school,
-          preparationMode: row.preparation_mode,
-          tagIds: Array.isArray(row.tags) ? row.tags : []
-        }));
-        
+        const mapped = data.map(mapSpellRow);
         setEntries(mapped);
         setLoading(false);
       } catch (err) {
@@ -480,6 +525,26 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     [sources]
   );
 
+  // Tag indices used by the rich tag filter and matchesTagFilters:
+  //   - tagsByGroup: group_id -> tag[] (drives the TagGroupFilter sections).
+  //   - parentByTagId: tag_id -> parent_tag_id|null (used by
+  //     matchesTagFilters to do subtag-aware matching).
+  const tagsByGroup = useMemo(() => {
+    const out: Record<string, any[]> = {};
+    for (const tag of tags) {
+      const gid = String(tag.groupId ?? '');
+      if (!gid) continue;
+      if (!out[gid]) out[gid] = [];
+      out[gid].push(tag);
+    }
+    return out;
+  }, [tags]);
+  const parentByTagId = useMemo(() => {
+    const out = new Map<string, string | null>();
+    for (const tag of tags) out.set(String(tag.id), tag.parentTagId ? String(tag.parentTagId) : null);
+    return out;
+  }, [tags]);
+
   // Abbreviation lookup for the compact left-column spell rows. Falls
   // back through abbreviation → shortName → name → id so a row always
   // has SOMETHING in the Src column.
@@ -502,15 +567,40 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           || sourceLabel.includes(lowered);
         if (!matchesSearch) return false;
       }
-      // Axis filters — Source, Level, School. matchesSingleAxisFilter
-      // returns true when the axis has no chip activity, so an
-      // undefined filter state is the "match anything" default.
+      // Axis filters. matchesSingleAxisFilter returns true when the
+      // axis has no chip activity (i.e. an undefined filter state is
+      // "match anything"). Multi-valued Properties uses
+      // matchesMultiAxisFilter (a spell can have V+S+M simultaneously).
       if (!matchesSingleAxisFilter(String(entry.sourceId ?? ''), axisFilters.source)) return false;
       if (!matchesSingleAxisFilter(String(Number(entry.level ?? 0)), axisFilters.level)) return false;
       if (!matchesSingleAxisFilter(String(entry.school ?? ''), axisFilters.school)) return false;
+      if (!matchesSingleAxisFilter(entry.activationBucket, axisFilters.activation)) return false;
+      if (!matchesSingleAxisFilter(entry.rangeBucket,      axisFilters.range))      return false;
+      if (!matchesSingleAxisFilter(entry.durationBucket,   axisFilters.duration))   return false;
+      if (!matchesSingleAxisFilter(entry.shapeBucket,      axisFilters.shape))      return false;
+
+      // Properties (multi-valued) — assemble the "what this spell
+      // has" set from the entry's facet flags so the chip set checks
+      // against an accurate membership.
+      const propsHave = new Set<PropertyFilter>();
+      if (entry.concentration) propsHave.add('concentration');
+      if (entry.ritual) propsHave.add('ritual');
+      if (entry.hasV) propsHave.add('vocal');
+      if (entry.hasS) propsHave.add('somatic');
+      if (entry.hasM) propsHave.add('material');
+      if (!matchesMultiAxisFilter(propsHave, axisFilters.property)) return false;
+
+      // Tag filtering — ancestor-expand the entry's tags so a parent
+      // include-chip matches a spell tagged with any subtag of it,
+      // then run the rich tag matcher. matchesTagFilters arg order:
+      // (entityTagIds, tagGroups, tagsByGroup, tagStates, combine, exclusion).
+      const tagIds: string[] = Array.isArray(entry.tagIds) ? entry.tagIds : [];
+      const effectiveTags = expandTagsWithAncestors(tagIds, parentByTagId);
+      if (!matchesTagFilters(effectiveTags, tagGroups, tagsByGroup, tagStates, groupCombineModes, groupExclusionModes)) return false;
+
       return true;
     });
-  }, [entries, search, sourceNameById, axisFilters]);
+  }, [entries, search, sourceNameById, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -576,10 +666,46 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const activeFilterCount =
     Object.keys(axisFilters.source?.states ?? {}).length
     + Object.keys(axisFilters.level?.states ?? {}).length
-    + Object.keys(axisFilters.school?.states ?? {}).length;
+    + Object.keys(axisFilters.school?.states ?? {}).length
+    + Object.keys(axisFilters.activation?.states ?? {}).length
+    + Object.keys(axisFilters.range?.states ?? {}).length
+    + Object.keys(axisFilters.duration?.states ?? {}).length
+    + Object.keys(axisFilters.shape?.states ?? {}).length
+    + Object.keys(axisFilters.property?.states ?? {}).length
+    + Object.values(tagStates).filter(s => s === 1 || s === 2).length;
 
   const resetAllFilters = () => {
     setAxisFilters({});
+    setTagStates({});
+    setGroupCombineModes({});
+    setGroupExclusionModes({});
+  };
+
+  // Tag filter helpers — single-tag cycle and per-group combinator
+  // cycles. Match the same handlers SpellList.tsx wires into
+  // <TagGroupFilter>.
+  const cycleTagState = (tagId: string) => {
+    setTagStates(prev => {
+      const cur = prev[tagId] || 0;
+      const next = (cur + 1) % 3;
+      const out = { ...prev };
+      if (next === 0) delete out[tagId]; else out[tagId] = next;
+      return out;
+    });
+  };
+  const cycleGroupMode = (groupId: string) => {
+    setGroupCombineModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
+  };
+  const cycleGroupExclusionMode = (groupId: string) => {
+    setGroupExclusionModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
   };
 
   // Options for the filter modal sections. Levels: 0-9. Schools:
@@ -805,16 +931,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       // Refresh entries list so the left column reflects the new
       // name / level / source / etc. without a full page reload.
       const updatedData = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
-      const mapped = updatedData.map(row => ({
-        ...row,
-        sourceId: row.source_id,
-        imageUrl: row.image_url,
-        level: Number(row.level || 0),
-        school: row.school,
-        preparationMode: row.preparation_mode,
-        tagIds: Array.isArray(row.tags) ? row.tags : []
-      }));
-      setEntries(mapped);
+      setEntries(updatedData.map(mapSpellRow));
 
       // Refresh the just-saved spell's cache. Two reasons:
       //   1. If the user clicks away and back, they see fresh data
@@ -866,17 +983,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       
       // Refresh entries list
       const updatedData = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
-      const mapped = updatedData.map(row => ({
-        ...row,
-        sourceId: row.source_id,
-        imageUrl: row.image_url,
-        level: Number(row.level || 0),
-        school: row.school,
-        preparationMode: row.preparation_mode,
-        tagIds: Array.isArray(row.tags) ? row.tags : []
-      }));
-      setEntries(mapped);
-      
+      setEntries(updatedData.map(mapSpellRow));
+
       resetForm();
     } catch (error) {
       console.error('Error deleting spell:', error);
@@ -983,6 +1091,104 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                 excludeAll={() => axisExcludeAll('school', SCHOOL_FILTER_OPTIONS.map((o) => o.value))}
                 clearAll={() => axisClear('school')}
               />
+              {/* Bucket axes — Casting Time, Range, Duration, Shape.
+                  Same constants the public browser uses so the editor's
+                  filter vocabulary matches `/compendium/spells`. */}
+              <AxisFilterSection
+                title="Casting Time"
+                values={ACTIVATION_ORDER.map((b) => ({ value: b, label: ACTIVATION_LABELS[b] }))}
+                states={axisFilters.activation?.states || {}}
+                cycleState={(v) => cycleAxisState('activation', v)}
+                combineMode={axisFilters.activation?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('activation')}
+                exclusionMode={axisFilters.activation?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('activation')}
+                includeAll={() => axisIncludeAll('activation', ACTIVATION_ORDER as readonly string[])}
+                excludeAll={() => axisExcludeAll('activation', ACTIVATION_ORDER as readonly string[])}
+                clearAll={() => axisClear('activation')}
+              />
+              <AxisFilterSection
+                title="Range"
+                values={RANGE_ORDER.map((b) => ({ value: b, label: RANGE_LABELS[b] }))}
+                states={axisFilters.range?.states || {}}
+                cycleState={(v) => cycleAxisState('range', v)}
+                combineMode={axisFilters.range?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('range')}
+                exclusionMode={axisFilters.range?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('range')}
+                includeAll={() => axisIncludeAll('range', RANGE_ORDER as readonly string[])}
+                excludeAll={() => axisExcludeAll('range', RANGE_ORDER as readonly string[])}
+                clearAll={() => axisClear('range')}
+              />
+              <AxisFilterSection
+                title="Duration"
+                values={DURATION_ORDER.map((b) => ({ value: b, label: DURATION_LABELS[b] }))}
+                states={axisFilters.duration?.states || {}}
+                cycleState={(v) => cycleAxisState('duration', v)}
+                combineMode={axisFilters.duration?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('duration')}
+                exclusionMode={axisFilters.duration?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('duration')}
+                includeAll={() => axisIncludeAll('duration', DURATION_ORDER as readonly string[])}
+                excludeAll={() => axisExcludeAll('duration', DURATION_ORDER as readonly string[])}
+                clearAll={() => axisClear('duration')}
+              />
+              <AxisFilterSection
+                title="Shape"
+                values={SHAPE_ORDER.map((b) => ({ value: b, label: SHAPE_LABELS[b] }))}
+                states={axisFilters.shape?.states || {}}
+                cycleState={(v) => cycleAxisState('shape', v)}
+                combineMode={axisFilters.shape?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('shape')}
+                exclusionMode={axisFilters.shape?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('shape')}
+                includeAll={() => axisIncludeAll('shape', SHAPE_ORDER as readonly string[])}
+                excludeAll={() => axisExcludeAll('shape', SHAPE_ORDER as readonly string[])}
+                clearAll={() => axisClear('shape')}
+              />
+              <AxisFilterSection
+                title="Properties"
+                values={PROPERTY_ORDER.map((b) => ({ value: b, label: PROPERTY_LABELS[b] }))}
+                states={axisFilters.property?.states || {}}
+                cycleState={(v) => cycleAxisState('property', v)}
+                combineMode={axisFilters.property?.combineMode}
+                cycleCombineMode={() => cycleAxisCombineMode('property')}
+                exclusionMode={axisFilters.property?.exclusionMode}
+                cycleExclusionMode={() => cycleAxisExclusionMode('property')}
+                includeAll={() => axisIncludeAll('property', PROPERTY_ORDER as readonly string[])}
+                excludeAll={() => axisExcludeAll('property', PROPERTY_ORDER as readonly string[])}
+                clearAll={() => axisClear('property')}
+              />
+              {/* Tag groups — collapsible Advanced Options below the
+                  base axes. Same components SpellList uses, so the
+                  tagging-consistency audit experience matches the
+                  public browser. */}
+              <details className="border border-gold/10 rounded-md bg-background/20">
+                <summary className="px-3 py-2 text-xs uppercase tracking-[0.18em] text-ink/65 cursor-pointer hover:bg-gold/5">
+                  Tag Groups
+                  {Object.values(tagStates).filter(s => s === 1 || s === 2).length > 0 && (
+                    <span className="ml-2 text-gold/70 normal-case tracking-normal">
+                      ({Object.values(tagStates).filter(s => s === 1 || s === 2).length} chips active)
+                    </span>
+                  )}
+                </summary>
+                <div className="px-3 py-3 space-y-3 border-t border-gold/10">
+                  {tagGroups.map(group => (
+                    <TagGroupFilter
+                      key={group.id}
+                      group={group}
+                      tags={tagsByGroup[group.id] || []}
+                      tagStates={tagStates}
+                      setTagStates={setTagStates}
+                      cycleTagState={cycleTagState}
+                      combineMode={groupCombineModes[group.id]}
+                      cycleGroupMode={cycleGroupMode}
+                      exclusionMode={groupExclusionModes[group.id]}
+                      cycleExclusionMode={cycleGroupExclusionMode}
+                    />
+                  ))}
+                </div>
+              </details>
             </>
           }
         />
