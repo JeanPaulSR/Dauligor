@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import { Star, ChevronDown, ChevronUp, Tag } from 'lucide-react';
 import { bbcodeToHtml } from '../../lib/bbcode';
 import { fetchCollection, fetchDocument } from '../../lib/d1';
 import {
@@ -77,6 +77,11 @@ export default function SpellDetailPanel({
   const [spellsById, setSpellsById] = useState<Record<string, SpellRecord>>({});
   const [membershipsBySpellId, setMembershipsBySpellId] = useState<Record<string, ClassMembership[]>>({});
   const [loading, setLoading] = useState(false);
+  // Tags are hidden by default — most readers don't need them inline.
+  // The toggle persists across spell selections inside the same
+  // session: a user who opts in to tag visibility keeps it for the
+  // rest of their browsing. Closing the page resets to hidden.
+  const [showTags, setShowTags] = useState(false);
 
   // Intercept clicks on cross-reference anchors so they SPA-navigate
   // instead of full-page-reloading. Targets only `.ref-link` so external
@@ -338,34 +343,58 @@ export default function SpellDetailPanel({
           ) : null}
         </div>
 
-        {/* Tags — one header + chip-row per tag group the spell
-            participates in. Read-only (no cycling); the public
+        {/* Tags — hidden by default, revealed by a toggle button right
+            after the Source block. The button sits visually attached
+            to the bottom of the source-meta section so the natural
+            reading order is description → prerequisites → sources →
+            (optional) tags. One header + chip-row per tag group the
+            spell participates in. Read-only (no cycling); the public
             browser is for browsing, not editing. Tags inside the
             "Other" bucket are tags whose group isn't classified as
             a spell tag-group (rare; usually a stale rollover). */}
         {groupedTags.length > 0 && (
-          <div className="border-t border-gold/10 pt-4 space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Tags</div>
-            <div className="space-y-3">
-              {groupedTags.map(({ group, tags: groupTagList }) => (
-                <div key={group.id} className="space-y-1.5">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/45">
-                    {group.name}
+          <>
+            {/* Tag-visibility toggle. Shows the total tag count so the
+                user knows what they're getting before expanding. The
+                whole thing is a single full-width button so the click
+                target stays generous on touch. */}
+            <button
+              type="button"
+              onClick={() => setShowTags(s => !s)}
+              className="-mt-2 w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+              aria-expanded={showTags}
+            >
+              <span className="flex items-center gap-2">
+                <Tag className="w-3 h-3" />
+                {showTags ? 'Hide tags' : 'Show tags'}
+                <span className="text-ink/45 normal-case tracking-normal font-normal">
+                  ({groupedTags.reduce((sum, g) => sum + g.tags.length, 0)})
+                </span>
+              </span>
+              {showTags ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+            {showTags && (
+              <div className="space-y-3 -mt-3">
+                {groupedTags.map(({ group, tags: groupTagList }) => (
+                  <div key={group.id} className="space-y-1.5">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/45">
+                      {group.name}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {groupTagList.map(t => (
+                        <span
+                          key={t.id}
+                          className="inline-flex items-center rounded border border-gold/20 bg-gold/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold/80"
+                        >
+                          {t.name}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {groupTagList.map(t => (
-                      <span
-                        key={t.id}
-                        className="inline-flex items-center rounded border border-gold/20 bg-gold/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold/80"
-                      >
-                        {t.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
