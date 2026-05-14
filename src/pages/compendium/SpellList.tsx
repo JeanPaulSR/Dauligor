@@ -4,7 +4,7 @@ import { Lock, Star, ChevronUp, ChevronDown, Settings } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
-import { fetchCollection } from '../../lib/d1';
+import { fetchCollection, queryD1 } from '../../lib/d1';
 import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -172,10 +172,47 @@ function writeHiddenColumns(hidden: Set<SpellColumnKey>) {
 }
 
 export default function SpellList({ userProfile }: { userProfile: any }) {
-  // Per-user spell favorites — local-first with D1 sync for logged-in
-  // users. See src/lib/spellFavorites.ts. Anonymous users still get
-  // localStorage-only state so the favorites pane works without login.
-  const { favorites, isFavorite, toggleFavorite } = useSpellFavorites(userProfile?.id || null);
+  // Spell favorites — local-first with optional cloud sync. Two
+  // scopes:
+  //   - Universal Favorite (default): one set per logged-in user,
+  //     synced to D1 via /api/spell-favorites so it follows the
+  //     player across devices.
+  //   - Per-character: when the favorites-pane scope dropdown picks
+  //     a character, favorites live under a character-specific key
+  //     in localStorage (no cloud sync yet).
+  // The scope state drives which set the toggle writes to AND which
+  // set the star indicators in the spell list rows read from.
+  const [favoriteScope, setFavoriteScope] = useState<{ characterId: string; characterName: string } | null>(null);
+  const { favorites, isFavorite, toggleFavorite } = useSpellFavorites(
+    userProfile?.id || null,
+    favoriteScope ? { characterId: favoriteScope.characterId } : null,
+  );
+
+  // User's characters — populates the favorites-scope dropdown.
+  // Loaded once when the user id resolves; staff don't get a special
+  // case here (they pick from their OWN characters like everyone
+  // else). Falls back to an empty list on any load error so the
+  // dropdown still renders with just the "Universal Favorite"
+  // option.
+  const [myCharacters, setMyCharacters] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    if (!userProfile?.id) {
+      setMyCharacters([]);
+      return;
+    }
+    (async () => {
+      try {
+        const rows = await queryD1<any>(
+          'SELECT id, name FROM characters WHERE user_id = ? ORDER BY updated_at DESC',
+          [userProfile.id],
+        );
+        setMyCharacters(rows.map((r: any) => ({ id: String(r.id), name: String(r.name || 'Unnamed') })));
+      } catch (err) {
+        console.warn('[SpellList] Failed to load characters for favorites scope:', err);
+        setMyCharacters([]);
+      }
+    })();
+  }, [userProfile?.id]);
 
   // Fullscreen-page opt-in. Adds a body class on mount (and removes on
   // unmount) that triggers the CSS overrides in src/index.css —
@@ -884,12 +921,76 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             style={{ maxHeight: `${paneHeight}px` }}
           >
             <CardContent className="p-0 flex flex-col" style={{ maxHeight: `${paneHeight}px` }}>
-              <div className="flex items-center justify-between gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
-                <div className="flex items-center gap-2">
-                  <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
-                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Favorites</span>
+              <div className="flex flex-col gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Favorites</span>
+                  </div>
+                  <span className="text-[10px] text-ink/45">{favorites.size}</span>
                 </div>
-                <span className="text-[10px] text-ink/45">{favorites.size}</span>
+                {/* Favorites-scope dropdown. Default is the "Universal
+                    Favorite" set (user-level, cloud-synced). When the
+                    user has saved characters they can select one and
+                    subsequent toggles save to that character's
+                    per-character favorites list instead. If they
+                    have no characters, the popover content says so
+                    explicitly — the dropdown still opens so the user
+                    knows it's there. */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded border border-gold/15 bg-card/60 hover:border-gold/30 hover:bg-gold/[0.06] transition-colors text-[11px] text-ink/85"
+                      aria-label="Select favorites scope"
+                    >
+                      <span className="truncate">
+                        {favoriteScope ? favoriteScope.characterName : 'Universal Favorite'}
+                      </span>
+                      <ChevronDown className="w-3 h-3 text-ink/45 shrink-0" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-56 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setFavoriteScope(null)}
+                      className={cn(
+                        'w-full text-left px-2 py-1.5 rounded text-xs hover:bg-gold/5 transition-colors',
+                        !favoriteScope ? 'bg-gold/10 text-gold font-bold' : 'text-ink/85',
+                      )}
+                    >
+                      Universal Favorite
+                    </button>
+                    {myCharacters.length === 0 ? (
+                      <div className="px-2 py-1.5 text-[11px] text-ink/45 italic border-t border-gold/10 mt-1">
+                        You have no saved characters.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-[9px] font-bold uppercase tracking-widest text-ink/45 px-2 pt-2 pb-1 border-t border-gold/10 mt-1">
+                          Characters
+                        </div>
+                        {myCharacters.map((c) => {
+                          const active = favoriteScope?.characterId === c.id;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => setFavoriteScope({ characterId: c.id, characterName: c.name })}
+                              className={cn(
+                                'w-full text-left px-2 py-1.5 rounded text-xs hover:bg-gold/5 transition-colors truncate',
+                                active ? 'bg-gold/10 text-gold font-bold' : 'text-ink/85',
+                              )}
+                              title={c.name}
+                            >
+                              {c.name}
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+                  </PopoverContent>
+                </Popover>
               </div>
               {favorites.size === 0 ? (
                 <div className="px-4 py-8 text-center text-xs text-ink/40 italic">
