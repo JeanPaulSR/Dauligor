@@ -347,6 +347,31 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
   const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
+  // Fullscreen-page opt-in. Same body-class trigger the public Spell
+  // List uses — hides the global footer, strips <main>'s container
+  // padding, and locks body scroll. CSS rules live in src/index.css
+  // under `body.spell-list-fullscreen` (the class is shared across
+  // any compendium page that wants edge-to-edge layout).
+  useEffect(() => {
+    if (!isAdmin) return;
+    document.body.classList.add('spell-list-fullscreen');
+    return () => document.body.classList.remove('spell-list-fullscreen');
+  }, [isAdmin]);
+
+  // Viewport-derived pane height so the three columns always fill
+  // exactly "viewport minus toolbar minus chrome". Tracks resize so
+  // the panes adjust live. The number subtracted is conservative —
+  // slight underestimate is fine.
+  const [paneHeight, setPaneHeight] = useState<number>(() =>
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 140),
+  );
+  useEffect(() => {
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 140));
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
 
@@ -415,6 +440,17 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
   const sourceNameById = useMemo(
     () => Object.fromEntries(sources.map((source) => [source.id, source.name || source.abbreviation || source.shortName || source.id])),
+    [sources]
+  );
+
+  // Abbreviation lookup for the compact left-column spell rows. Falls
+  // back through abbreviation → shortName → name → id so a row always
+  // has SOMETHING in the Src column.
+  const sourceAbbrevById = useMemo(
+    () => Object.fromEntries(sources.map((source) => [
+      source.id,
+      source.abbreviation || source.shortName || source.name || source.id,
+    ])),
     [sources]
   );
 
@@ -699,139 +735,160 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     return <div className="text-center py-20">Access Denied. Admins only.</div>;
   }
 
+  // Inner-list height for the left column's VirtualizedList. Pane
+  // minus the small header strip (~36px) above the rows.
+  const listInnerHeight = Math.max(200, paneHeight - 40);
+
   return (
-    <div className="space-y-6">
-      <Card className="border-gold/20 bg-card/50 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="border-b border-gold/10 bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%),linear-gradient(180deg,rgba(12,16,24,0.75),rgba(12,16,24,0.98))] p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-gold">
-                  <Wand2 className="h-5 w-5" />
-                  <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium Development</span>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-4">
-                  <h2 className="text-3xl font-serif font-bold uppercase tracking-tight text-ink">Spell Manager</h2>
-                  {isFoundationUsingD1 ? (
-                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                      <Database className="w-3.5 h-3.5 text-emerald-500" />
-                      <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                      <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                      <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-                    </div>
-                  )}
-                </div>
-                  <p className="max-w-3xl font-serif italic text-ink/60">
-                    Draft and refine spell records with the same selector rhythm as the importer while keeping the right pane dedicated to the actual spell editor.
-                  </p>
-                </div>
-              </div>
+    // Fullscreen layout — toolbar on top, 3-column grid filling the
+    // remaining viewport. Mirrors src/pages/compendium/SpellList.tsx
+    // so editor + browser share the same rhythm.
+    <div className="h-full flex flex-col gap-2 p-2">
+      {/* Toolbar — search + reset + result count + New Spell. The
+          per-spell actions (Save / Delete / Reset Form) live in the
+          editor card's header further down because they only make
+          sense when there's a spell loaded. */}
+      <div className="shrink-0 flex flex-col sm:flex-row gap-3 items-center bg-card p-2 rounded-lg border border-gold/10 shadow-sm">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search spell name, source, or identifier"
+            className="bg-background/50 border-gold/10 pl-8 h-8 focus:border-gold"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+        {search.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSearch('')}
+            className="h-8 gap-2 border-gold/20 text-ink/70 hover:bg-blood/5 hover:text-blood hover:border-blood/30"
+            title="Clear search"
+          >
+            <X className="w-3 h-3" /> Reset
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled
+            className="h-8 gap-2 border-gold/20 text-ink/30 cursor-not-allowed"
+            title="Nothing to reset"
+          >
+            <X className="w-3 h-3" /> Reset
+          </Button>
+        )}
+        <div
+          className="text-[11px] font-mono tabular-nums text-ink/55 whitespace-nowrap px-1"
+          title={`${filteredEntries.length} of ${entries.length} total`}
+        >
+          {loading ? '— / —' : `${filteredEntries.length} / ${entries.length}`}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={resetForm}
+          className="h-8 gap-2 border-gold/20 text-gold hover:bg-gold/5"
+        >
+          <Plus className="w-3 h-3" /> New Spell
+        </Button>
+      </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
-                  onClick={resetForm}
-                >
-                  <Plus className="h-4 w-4" />
-                  New Spell
-                </Button>
+      {/* 3-column grid: spell list (left, narrow) | editor (middle,
+          widest) | tag picker (right, narrow-medium). flex-1 + min-h-0
+          lets the grid fill the leftover vertical space inside the
+          flex column without forcing the page to scroll. */}
+      <div className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+        {/* Left column — compact spell list (Name | Lv | Src). Rows
+            mirror the SpellList browser's compact rhythm; columns are
+            tighter because the editor needs the middle column for
+            actual editing. */}
+        <Card
+          className="border-gold/10 bg-card/50 overflow-hidden"
+          style={{ height: `${paneHeight}px` }}
+        >
+          <CardContent className="p-0 flex flex-col h-full">
+            <div className="border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
+              <div
+                className="grid gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 items-center"
+                style={{ gridTemplateColumns: 'minmax(0,1fr) 28px 52px' }}
+              >
+                <span>Name</span>
+                <span className="text-center">Lv</span>
+                <span className="text-center">Src</span>
               </div>
             </div>
-          </div>
+            {loading ? (
+              <div className="px-6 py-12 text-center text-ink/45">Loading…</div>
+            ) : filteredEntries.length === 0 ? (
+              <div className="px-6 py-12 text-center text-ink/45">No spells match the current search.</div>
+            ) : (
+              <VirtualizedList
+                items={filteredEntries}
+                height={listInnerHeight}
+                itemHeight={36}
+                className="custom-scrollbar overflow-y-auto"
+                renderItem={(entry: SpellSummaryRecord) => {
+                  const selected = entry.id === editingId;
+                  const srcAbbrev = String(sourceAbbrevById[entry.sourceId] || entry.sourceId || '—');
+                  const lvl = Number(entry.level ?? 0);
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => startEditing(entry)}
+                      className={cn(
+                        'grid h-[36px] w-full gap-2 items-center px-3 text-left transition-colors border-b border-gold/5',
+                        selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+                      )}
+                      style={{ gridTemplateColumns: 'minmax(0,1fr) 28px 52px' }}
+                      title={entry.name || '(Untitled Spell)'}
+                    >
+                      <span className="truncate font-serif text-sm text-ink">
+                        {entry.name || <em className="text-ink/40">Untitled</em>}
+                      </span>
+                      <span className="text-xs text-ink/75 text-center">
+                        {lvl === 0 ? 'C' : lvl}
+                      </span>
+                      <span className="text-[10px] font-bold text-gold/80 text-center truncate">
+                        {srcAbbrev}
+                      </span>
+                    </button>
+                  );
+                }}
+              />
+            )}
+          </CardContent>
+        </Card>
 
-          <div className="grid gap-6 p-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Search</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink/30" />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search spell name, source, or identifier"
-                    className="bg-background/50 border-gold/10 pl-9 focus:border-gold"
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                </div>
-              </div>
-
-              <Card className="border-gold/10 bg-background/20">
-                <CardContent className="p-0">
-                  <div className="border-b border-gold/10 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">
-                    Spell Drafts
-                  </div>
-                  <div className="max-h-[78vh] space-y-2 overflow-y-auto custom-scrollbar p-3 pr-2">
-                    {loading ? (
-                      <div className="px-3 py-8 text-sm text-ink/40 italic">Loading...</div>
-                    ) : filteredEntries.length === 0 ? (
-                      <div className="px-3 py-8 text-sm text-ink/40 italic">No spells match the current search.</div>
-                    ) : (
-                      <VirtualizedList
-                        items={filteredEntries}
-                        height={MANAGER_LIST_HEIGHT}
-                        itemHeight={MANAGER_ROW_HEIGHT}
-                        className="custom-scrollbar overflow-y-auto"
-                        innerClassName="space-y-2"
-                        renderItem={(entry: SpellSummaryRecord) => {
-                          const selected = entry.id === editingId;
-                          const sourceLabel = String(sourceNameById[entry.sourceId] || entry.sourceId || 'Unknown Source');
-                          return (
-                            <button
-                              type="button"
-                              key={entry.id}
-                              onClick={() => startEditing(entry)}
-                              className={cn(
-                                'h-[94px] w-full rounded-xl border p-3 text-left transition-colors',
-                                selected
-                                  ? 'border-gold/50 bg-gold/10 shadow-[0_0_0_1px_rgba(192,160,96,0.2)]'
-                                  : 'border-gold/10 bg-background/30 hover:border-gold/30 hover:bg-background/50'
-                              )}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="font-serif text-lg text-ink">{entry.name || '(Untitled Spell)'}</div>
-                                  <div className="text-[10px] uppercase tracking-[0.2em] text-gold/70">
-                                    {Number(entry.level ?? 0) === 0 ? 'Cantrip' : `Level ${entry.level ?? 0}`} {SCHOOL_LABELS[String(entry.school ?? '')] || String(entry.school ?? '').toUpperCase()}
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-mono text-ink/35">{sourceLabel}</span>
-                              </div>
-
-                              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-ink/55">
-                                <span>{PREPARATION_MODES.find(([value]) => value === 'spell')?.[1] || 'Spell'}</span>
-                                <span className="text-right font-mono">{entry.identifier || '(no identifier)'}</span>
-                              </div>
-                            </button>
-                          );
-                        }}
-                      />
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Card className="border-gold/20 bg-card/50">
-              <CardContent className="p-0">
+        {/* Middle column — the editor itself. Same Tabs structure as
+            before (Basics / Mechanics / Activities / Effects / Prereqs);
+            descriptive Tags moved out to the right column below. */}
+        <Card className="border-gold/20 bg-card/50 overflow-hidden" style={{ height: `${paneHeight}px` }}>
+              <CardContent className="p-0 h-full flex flex-col">
                 {/* Form is segmented into Tabs so admins can jump
                   * between sections (Basics, Description, Mechanics,
-                  * Activities, Tags & Prereqs) instead of scrolling
-                  * past everything. The header (title + Save buttons)
+                  * Activities, Prereqs) instead of scrolling past
+                  * everything. The header (title + Save buttons)
                   * stays mounted above the tab list so save is always
                   * one click away regardless of which tab is showing.
                   *
                   * Inactive TabsContent unmounts by default in Radix;
                   * the form's `onSubmit` reads from `formData` state
                   * (every input is controlled), so unmounted fields
-                  * still contribute on save. No need for forceMount. */}
-                <Tabs defaultValue="basics" className="flex flex-col">
+                  * still contribute on save. No need for forceMount.
+                  *
+                  * `flex-1 min-h-0` lets the Tabs subtree fill the
+                  * card's height; the form's scroll area inside uses
+                  * `flex-1 overflow-y-auto` instead of `max-h-[78vh]`
+                  * so the editor uses ALL available height. */}
+                <Tabs defaultValue="basics" className="flex-1 min-h-0 flex flex-col">
                 <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
@@ -888,11 +945,11 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     <TabsTrigger value="mechanics"  className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Mechanics</TabsTrigger>
                     <TabsTrigger value="activities" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Activities</TabsTrigger>
                     <TabsTrigger value="effects"    className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Effects</TabsTrigger>
-                    <TabsTrigger value="tags"       className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Tags & Prereqs</TabsTrigger>
+                    <TabsTrigger value="prereqs"    className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Prereqs</TabsTrigger>
                   </TabsList>
                 </div>
 
-                <div className="max-h-[78vh] overflow-y-auto custom-scrollbar px-6 py-5">
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 py-5">
                   {/* `autoComplete="off"` blocks browser autofill on the
                     * form's text inputs; `spellCheck={false}` cascades to
                     * every contained input so spell names and identifiers
@@ -1468,59 +1525,33 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     </Tabs>
                   </TabsContent>
 
-                  <TabsContent value="tags" className="mt-0 space-y-4">
-                    {/* Sub-tabs: Descriptive (what the spell IS) vs.
-                      * Prerequisites (what the caster must have).
-                      * Same picker shape for both; routes through the
-                      * shared <SpellTagPicker> below so the filter +
-                      * collapse + selected-summary affordances stay
-                      * in sync between the two. Replaces the previous
-                      * "show every group twice in one long scroll"
-                      * layout that exposed 100+ chips at once. */}
-                    <Tabs defaultValue="descriptive" className="space-y-3">
-                      <TabsList variant="line" className="gap-2 bg-transparent p-0">
-                        <TabsTrigger value="descriptive" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
-                          Descriptive {formData.tags.length > 0 && <span className="ml-1 text-gold/70">({formData.tags.length})</span>}
-                        </TabsTrigger>
-                        <TabsTrigger value="prereqs" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">
-                          Prerequisites {formData.requiredTags.length > 0 && <span className="ml-1 text-gold/70">({formData.requiredTags.length})</span>}
-                        </TabsTrigger>
-                      </TabsList>
-
-                      <TabsContent value="descriptive" className="mt-0">
-                        <SpellTagPicker
-                          tags={tags}
-                          tagGroups={tagGroups}
-                          selectedIds={formData.tags}
-                          onChange={(next) => setFormData(prev => ({ ...prev, tags: next }))}
-                          hint="Tag rules + class spell list rules use these to decide which spells they include."
-                          emptyHint="No tags loaded yet."
-                        />
-                      </TabsContent>
-
-                      <TabsContent value="prereqs" className="mt-0 space-y-4">
-                        <SpellTagPicker
-                          tags={tags}
-                          tagGroups={tagGroups}
-                          selectedIds={formData.requiredTags}
-                          onChange={(next) => setFormData(prev => ({ ...prev, requiredTags: next }))}
-                          hint="A character must have all selected tags on their effective tag set to use this spell."
-                          emptyHint="No tags loaded yet."
-                        />
-                        <div className="space-y-1 border border-gold/10 rounded-md p-3 bg-background/20">
-                          <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
-                          <Input
-                            value={formData.prerequisiteText}
-                            onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
-                            placeholder='e.g. "Must have cast Detect Magic in the past hour"'
-                            className="bg-background/50 border-gold/10 focus:border-gold text-xs"
-                          />
-                          <p className="text-[10px] text-ink/40">
-                            Free-text fallback for prereqs that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
-                          </p>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
+                  <TabsContent value="prereqs" className="mt-0 space-y-4">
+                    {/* Prereqs — gating tags + free-text fallback.
+                      * Descriptive tags (what the spell IS) moved out
+                      * to the right column so the picker has its own
+                      * dedicated pane; what stays here is the gate
+                      * (what the caster must HAVE to use the spell).
+                      */}
+                    <SpellTagPicker
+                      tags={tags}
+                      tagGroups={tagGroups}
+                      selectedIds={formData.requiredTags}
+                      onChange={(next) => setFormData(prev => ({ ...prev, requiredTags: next }))}
+                      hint="A character must have all selected tags on their effective tag set to use this spell."
+                      emptyHint="No tags loaded yet."
+                    />
+                    <div className="space-y-1 border border-gold/10 rounded-md p-3 bg-background/20">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
+                      <Input
+                        value={formData.prerequisiteText}
+                        onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
+                        placeholder='e.g. "Must have cast Detect Magic in the past hour"'
+                        className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+                      />
+                      <p className="text-[10px] text-ink/40">
+                        Free-text fallback for prereqs that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
+                      </p>
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="activities" className="mt-0 space-y-6">
@@ -1561,9 +1592,32 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                 </Tabs>
               </CardContent>
             </Card>
-          </div>
-        </CardContent>
-      </Card>
+
+        {/* Right column — dedicated descriptive-tag picker. Pulled
+            out of the editor tabs so authors can browse tag groups
+            side-by-side with the form they're editing. Internally
+            scrolls when the tag tree exceeds the pane height. */}
+        <Card className="border-gold/10 bg-card/50 overflow-hidden" style={{ height: `${paneHeight}px` }}>
+          <CardContent className="p-0 h-full flex flex-col">
+            <div className="border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Tags</span>
+              <span className="text-[10px] text-ink/45">
+                {formData.tags.length > 0 ? `${formData.tags.length} selected` : ''}
+              </span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3">
+              <SpellTagPicker
+                tags={tags}
+                tagGroups={tagGroups}
+                selectedIds={formData.tags}
+                onChange={(next) => setFormData(prev => ({ ...prev, tags: next }))}
+                hint="Tag rules + class spell list rules use these to decide which spells they include."
+                emptyHint="No tags loaded yet."
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
