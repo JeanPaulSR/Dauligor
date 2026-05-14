@@ -377,11 +377,31 @@ function computeSpellBuckets(foundryData: any): {
   range_bucket: string | null;
   duration_bucket: string | null;
   shape_bucket: string | null;
+  // Display-scalar fields. The slim spell summary drops foundry_data
+  // entirely, so the column values become the source of truth for
+  // SpellList's "60 ft" / "1 action" labels in the Range / Time
+  // columns. mapSpellRow reconstructs a faux foundryShell from
+  // these so the existing format* helpers keep working unchanged.
+  activation_type: string | null;
+  activation_value: string | null;
+  activation_condition: string | null;
+  range_units: string | null;
+  range_value: number | null;
+  range_special: string | null;
+  duration_units: string | null;
+  duration_value: string | null;
 } {
   const system = (typeof foundryData === 'string')
     ? (() => { try { return JSON.parse(foundryData); } catch { return null; } })()
     : foundryData;
-  if (!system) return { activation_bucket: null, range_bucket: null, duration_bucket: null, shape_bucket: null };
+  if (!system) {
+    return {
+      activation_bucket: null, range_bucket: null, duration_bucket: null, shape_bucket: null,
+      activation_type: null, activation_value: null, activation_condition: null,
+      range_units: null, range_value: null, range_special: null,
+      duration_units: null, duration_value: null,
+    };
+  }
 
   // Activation
   const actType = String(system?.activation?.type ?? '').trim();
@@ -414,7 +434,33 @@ function computeSpellBuckets(foundryData: any): {
   const shape_bucket =
     ['cone', 'cube', 'cylinder', 'line', 'radius', 'sphere', 'square', 'wall'].includes(sType) ? sType : 'none';
 
-  return { activation_bucket, range_bucket, duration_bucket, shape_bucket };
+  // Display scalars — preserve the raw input as written by the editor
+  // / importer so format* helpers can reconstruct labels without
+  // foundry_data. Numbers stored as REAL (range_value) so the column
+  // sorts naturally on D1; other fields stored as their original
+  // strings (Foundry sometimes carries "1" not 1 for activation
+  // value etc., so coerce-to-string is the safe round-trip).
+  const stringOrNull = (v: any): string | null => {
+    if (v === null || v === undefined || v === '') return null;
+    return String(v);
+  };
+  const numberOrNull = (v: any): number | null => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  return {
+    activation_bucket, range_bucket, duration_bucket, shape_bucket,
+    activation_type:      stringOrNull(system?.activation?.type),
+    activation_value:     stringOrNull(system?.activation?.value),
+    activation_condition: stringOrNull(system?.activation?.condition),
+    range_units:          stringOrNull(system?.range?.units),
+    range_value:          numberOrNull(system?.range?.value),
+    range_special:        stringOrNull(system?.range?.special),
+    duration_units:       stringOrNull(system?.duration?.units),
+    duration_value:       stringOrNull(system?.duration?.value),
+  };
 }
 
 /**

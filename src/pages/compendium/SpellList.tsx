@@ -326,13 +326,35 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       setLoadingSpells(true);
       try {
         const records = await fetchSpellSummaries('name ASC');
-        
+
         const mapped = records.map(row => ({
           ...row,
           sourceId: row.source_id,
           imageUrl: row.image_url,
           tagIds: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags ?? []),
-          foundryShell: typeof row.foundry_data === 'string' ? JSON.parse(row.foundry_data) : (row.foundry_data ?? null),
+          // Reconstruct `foundryShell` from the per-field scalar
+          // columns the summary projection now carries instead of
+          // the heavy `foundry_data` blob. Keeps the rest of the
+          // SpellList unchanged — every place that read
+          // `spell.foundryShell.activation` etc. continues to work.
+          // See worker/migrations/20260514-2300_spells_display_scalars.sql
+          // for the columns.
+          foundryShell: {
+            activation: {
+              type:      row.activation_type ?? '',
+              value:     row.activation_value ?? '',
+              condition: row.activation_condition ?? '',
+            },
+            range: {
+              units:   row.range_units ?? '',
+              value:   row.range_value ?? '',
+              special: row.range_special ?? '',
+            },
+            duration: {
+              units: row.duration_units ?? '',
+              value: row.duration_value ?? '',
+            },
+          },
           ...deriveSpellFilterFacets(row),
         }));
 

@@ -27,6 +27,7 @@ import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
+import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { orderTagsAsTree, normalizeTagRow } from '../../lib/tagHierarchy';
 import { slugify } from '../../lib/utils';
 import { bbcodeToHtml } from '../../lib/bbcode';
@@ -460,7 +461,28 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       school: row.school,
       preparationMode: row.preparation_mode,
       tagIds: parseJsonCol<string[]>(row.tags, []),
-      foundryShell: parseJsonCol<any>(row.foundry_data, null),
+      // foundryShell reconstructed from per-field scalar columns
+      // (activation_type / range_units / range_value / etc.) so
+      // we don't carry the heavy foundry_data blob through the
+      // entries list. Same shape format* helpers downstream expect.
+      // foundry_data is still present in summary rows (legacy),
+      // prefer the scalars and fall through to it when absent.
+      foundryShell: row.activation_type !== undefined || row.range_units !== undefined ? {
+        activation: {
+          type:      row.activation_type ?? '',
+          value:     row.activation_value ?? '',
+          condition: row.activation_condition ?? '',
+        },
+        range: {
+          units:   row.range_units ?? '',
+          value:   row.range_value ?? '',
+          special: row.range_special ?? '',
+        },
+        duration: {
+          units: row.duration_units ?? '',
+          value: row.duration_value ?? '',
+        },
+      } : parseJsonCol<any>(row.foundry_data, null),
       ...deriveSpellFilterFacets(row),
     };
   };
@@ -470,7 +492,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
     const loadEntries = async () => {
       try {
-        const data = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+        const data = await fetchSpellSummaries('name ASC');
         const mapped = data.map(mapSpellRow);
         setEntries(mapped);
         setLoading(false);
@@ -930,7 +952,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
       // Refresh entries list so the left column reflects the new
       // name / level / source / etc. without a full page reload.
-      const updatedData = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+      const updatedData = await fetchSpellSummaries('name ASC');
       setEntries(updatedData.map(mapSpellRow));
 
       // Refresh the just-saved spell's cache. Two reasons:
@@ -982,7 +1004,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       toast.success('Spell deleted');
       
       // Refresh entries list
-      const updatedData = await fetchCollection<any>('spells', { orderBy: 'name ASC' });
+      const updatedData = await fetchSpellSummaries('name ASC');
       setEntries(updatedData.map(mapSpellRow));
 
       resetForm();

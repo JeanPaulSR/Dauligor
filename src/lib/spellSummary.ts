@@ -5,45 +5,49 @@ import { fetchCollection } from './d1';
  *
  * Pulls every column needed to render a row, derive filter facets,
  * and check prerequisites — but skips the heavy `description`,
- * `activities`, and `effects` blobs. Detail panes fetch the full
- * row on demand via `fetchDocument('spells', id)`.
+ * `activities`, `effects`, AND `foundry_data` blobs. Detail panes
+ * fetch the full row on demand via `fetchDocument('spells', id)`.
  *
- * Bucket columns (activation_bucket / range_bucket / duration_bucket
- * / shape_bucket) added 2026-05-14 — populated by the migration in
- * worker/migrations/20260514-2200_spells_bucket_columns.sql and
- * kept in sync on every save by upsertSpell/upsertSpellBatch. They
- * let `deriveSpellFilterFacets` skip a JSON parse on every row at
- * filter time. Tiny cost (~40 bytes / spell) for a real speedup
- * once the catalogue grows.
+ * The "every column needed to render" trick is that the catalogue
+ * doesn't carry the Foundry `system` object at all — instead it
+ * carries the eight scalar fields the display path actually reads
+ * (activation_type / activation_value / activation_condition /
+ * range_units / range_value / range_special / duration_units /
+ * duration_value) plus the four pre-computed filter buckets
+ * (activation_bucket / range_bucket / duration_bucket /
+ * shape_bucket). Both sets are kept in sync with foundry_data on
+ * every save by upsertSpell + upsertSpellBatch in
+ * src/lib/compendium.ts.
  *
- * `foundry_data` is STILL here despite the bucket columns because
- * the SpellList browser reads the raw `activation` / `range` /
- * `duration` shapes via `formatActivationLabel(facets.foundryShell
- * .activation)` etc. to render the human-readable column labels
- * ("60 ft", "1 action"). Buckets alone are too coarse for display.
+ * Per-spell summary payload after this slim:
+ *   ~300-500 bytes (down from ~3-5 KB when foundry_data was
+ *   present).
  *
- * **Known scaling concern (5000-spell target):** the foundry_data
- * column is the bulk of the per-spell payload here (~3-5 KB each).
- * At 5000 spells that's 15-25 MB, well past the ~5 MB sessionStorage
- * per-origin budget. The cache layer in src/lib/d1.ts handles the
- * overflow gracefully (size-guarded write + try/catch), but cross-
- * session persistence is lost for the spells query at that scale.
+ * Scale headroom: 5000 spells × ~400 bytes = ~2 MB total, well
+ * under the ~5 MB sessionStorage per-origin browser quota. The
+ * cache layer (src/lib/d1.ts) keeps the size-guard for safety in
+ * case the catalogue grows past expectations.
  *
- * The clean fix is to materialise the display-relevant scalar
- * fields as columns too (activation_type / activation_value /
- * range_units / range_value / duration_units / duration_value)
- * and then drop foundry_data from this projection. That dropped
- * the summary payload from ~3-5 KB → ~300-500 bytes per spell.
- * Deferred until after the layout polish work on SpellListManager
- * + SpellRulesEditor lands.
+ * Migrations that materialised the dropped data:
+ *   worker/migrations/20260514-2200_spells_bucket_columns.sql
+ *   worker/migrations/20260514-2230_spells_bucket_columns_fix_paths.sql
+ *   worker/migrations/20260514-2300_spells_display_scalars.sql
+ *
+ * Consumer note: pages that need the full `foundry_data` (the
+ * manual editor's Mechanics tab, the detail panel's components
+ * list, etc.) call `fetchSpell(id)` or `fetchDocument('spells',
+ * id)` — those return the full row.
  */
 const SPELL_SUMMARY_COLUMNS = [
   'id', 'name', 'identifier',
   'level', 'school', 'source_id', 'image_url',
-  'tags', 'foundry_data',
+  'tags',
   'concentration', 'ritual',
   'components_vocal', 'components_somatic', 'components_material',
   'activation_bucket', 'range_bucket', 'duration_bucket', 'shape_bucket',
+  'activation_type', 'activation_value', 'activation_condition',
+  'range_units', 'range_value', 'range_special',
+  'duration_units', 'duration_value',
   'required_tags', 'prerequisite_text',
   'created_at', 'updated_at',
 ].join(', ');
