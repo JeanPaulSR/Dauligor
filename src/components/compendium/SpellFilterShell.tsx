@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { FilterBar } from './FilterBar';
+import { FilterBar, AxisFilterSection, TagGroupFilter } from './FilterBar';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
@@ -14,11 +14,6 @@ import {
   RANGE_ORDER,
   SHAPE_LABELS,
   SHAPE_ORDER,
-  type ActivationBucket,
-  type DurationBucket,
-  type PropertyFilter,
-  type RangeBucket,
-  type ShapeBucket,
 } from '../../lib/spellFilters';
 import type { UseSpellFiltersResult } from '../../hooks/useSpellFilters';
 
@@ -29,7 +24,7 @@ export type SpellFilterShellProps = {
   /** Source records — for the Source filter section + chip labels. */
   sources: { id: string; name?: string; abbreviation?: string; shortName?: string }[];
   /** Tag records — for the per-group tag filter sections + chip labels. */
-  tags: { id: string; name: string; groupId: string | null }[];
+  tags: { id: string; name: string; groupId: string | null; parentTagId?: string | null }[];
   /** Tag group records — for grouping the tag filter sections. */
   tagGroups: { id: string; name: string }[];
   /** Optional extra controls rendered next to the search/filter row (e.g., per-page toggles). */
@@ -43,11 +38,18 @@ export type SpellFilterShellProps = {
 };
 
 /**
- * Reusable filter shell for spell-browsing surfaces. Renders the FilterBar modal
- * (with all eight standard filter sections) plus an optional active-filter chip
- * strip below. Pages provide their own filter-state via the `useSpellFilters` hook
- * and add page-specific controls / chips through the `extraControls` / `extraChips`
- * slots.
+ * Reusable filter shell for spell-browsing surfaces. Renders the FilterBar
+ * modal with every axis (Source / Spell Level / Spell School / Casting Time
+ * / Range / Shape / Duration / Properties) as a rich `<AxisFilterSection>`
+ * — 3-state include/exclude chips + per-section AND/OR/XOR combinator +
+ * Exclusion Logic toggle. Tag groups live in a collapsible Advanced
+ * Options disclosure at the bottom. Same vocabulary as
+ * /compendium/spells and /compendium/spell-rules so authors don't learn
+ * a different control set when they swap between surfaces.
+ *
+ * Pages provide their own filter-state via the `useSpellFilters` hook
+ * and add page-specific controls / chips through the `extraControls` /
+ * `extraChips` slots.
  */
 export default function SpellFilterShell({
   filters,
@@ -62,7 +64,7 @@ export default function SpellFilterShell({
   const [filterOpen, setFilterOpen] = useState(false);
 
   const tagsById = useMemo(
-    () => Object.fromEntries(tags.map(t => [t.id, t])) as Record<string, { id: string; name: string; groupId: string | null }>,
+    () => Object.fromEntries(tags.map(t => [t.id, t])) as Record<string, { id: string; name: string; groupId: string | null; parentTagId?: string | null }>,
     [tags],
   );
   const sourceById = useMemo(
@@ -77,6 +79,14 @@ export default function SpellFilterShell({
     }
     return map;
   }, [tags]);
+
+  // Helpers to derive include-only arrays from the rich axisFilters
+  // state — used by the active-filter chip strip below to render the
+  // currently-active includes as removable chips.
+  const includesFor = (axisKey: string): string[] =>
+    Object.entries(filters.axisFilters[axisKey]?.states ?? {})
+      .filter(([, s]) => s === 1)
+      .map(([v]) => v);
 
   const trimmed = filters.search.trim();
   const showChips = showActiveChips && (filters.activeFilterCount > 0 || trimmed || extraChips);
@@ -96,85 +106,132 @@ export default function SpellFilterShell({
             filterTitle="Spell Filters"
             renderFilters={
               <>
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Source"
                   values={sources.map(s => ({ value: s.id, label: String(s.abbreviation || s.shortName || s.name || s.id) }))}
-                  selected={filters.sourceFilterIds}
-                  onToggle={v => toggleArray(filters.sourceFilterIds, filters.setSourceFilterIds, v)}
-                  onIncludeAll={() => filters.setSourceFilterIds(sources.map(s => s.id))}
-                  onClear={() => filters.setSourceFilterIds([])}
+                  states={filters.axisFilters.source?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('source', v)}
+                  combineMode={filters.axisFilters.source?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('source')}
+                  exclusionMode={filters.axisFilters.source?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('source')}
+                  includeAll={() => filters.axisIncludeAll('source', sources.map(s => s.id))}
+                  clearAll={() => filters.axisClear('source')}
                 />
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Spell Level"
                   values={LEVEL_VALUES.map(lvl => ({ value: lvl, label: lvl === '0' ? 'Cantrip' : `Level ${lvl}` }))}
-                  selected={filters.levelFilters}
-                  onToggle={v => toggleArray(filters.levelFilters, filters.setLevelFilters, v)}
-                  onIncludeAll={() => filters.setLevelFilters([...LEVEL_VALUES])}
-                  onClear={() => filters.setLevelFilters([])}
+                  states={filters.axisFilters.level?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('level', v)}
+                  combineMode={filters.axisFilters.level?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('level')}
+                  exclusionMode={filters.axisFilters.level?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('level')}
+                  includeAll={() => filters.axisIncludeAll('level', LEVEL_VALUES)}
+                  clearAll={() => filters.axisClear('level')}
                 />
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Spell School"
                   values={Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label }))}
-                  selected={filters.schoolFilters}
-                  onToggle={v => toggleArray(filters.schoolFilters, filters.setSchoolFilters, v)}
-                  onIncludeAll={() => filters.setSchoolFilters(Object.keys(SCHOOL_LABELS))}
-                  onClear={() => filters.setSchoolFilters([])}
+                  states={filters.axisFilters.school?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('school', v)}
+                  combineMode={filters.axisFilters.school?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('school')}
+                  exclusionMode={filters.axisFilters.school?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('school')}
+                  includeAll={() => filters.axisIncludeAll('school', Object.keys(SCHOOL_LABELS))}
+                  clearAll={() => filters.axisClear('school')}
                 />
-                {tagGroups.map(group => {
-                  const groupTags = tagsByGroup[group.id] || [];
-                  if (!groupTags.length) return null;
-                  return (
-                    <ShellFilterSection
-                      key={group.id}
-                      title={group.name}
-                      values={groupTags.map(t => ({ value: t.id, label: t.name }))}
-                      selected={filters.tagFilterIds}
-                      onToggle={v => toggleArray(filters.tagFilterIds, filters.setTagFilterIds, v)}
-                      onIncludeAll={() => filters.setTagFilterIds(prev => Array.from(new Set([...prev, ...groupTags.map(t => t.id)])))}
-                      onClear={() => filters.setTagFilterIds(prev => prev.filter(id => !groupTags.some(t => t.id === id)))}
-                    />
-                  );
-                })}
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Casting Time"
                   values={ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] }))}
-                  selected={filters.activationFilters}
-                  onToggle={v => toggleArray(filters.activationFilters, filters.setActivationFilters, v as ActivationBucket)}
-                  onIncludeAll={() => filters.setActivationFilters([...ACTIVATION_ORDER])}
-                  onClear={() => filters.setActivationFilters([])}
+                  states={filters.axisFilters.activation?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('activation', v)}
+                  combineMode={filters.axisFilters.activation?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('activation')}
+                  exclusionMode={filters.axisFilters.activation?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('activation')}
+                  includeAll={() => filters.axisIncludeAll('activation', ACTIVATION_ORDER as readonly string[])}
+                  clearAll={() => filters.axisClear('activation')}
                 />
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Range"
                   values={RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] }))}
-                  selected={filters.rangeFilters}
-                  onToggle={v => toggleArray(filters.rangeFilters, filters.setRangeFilters, v as RangeBucket)}
-                  onIncludeAll={() => filters.setRangeFilters([...RANGE_ORDER])}
-                  onClear={() => filters.setRangeFilters([])}
+                  states={filters.axisFilters.range?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('range', v)}
+                  combineMode={filters.axisFilters.range?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('range')}
+                  exclusionMode={filters.axisFilters.range?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('range')}
+                  includeAll={() => filters.axisIncludeAll('range', RANGE_ORDER as readonly string[])}
+                  clearAll={() => filters.axisClear('range')}
                 />
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Shape"
                   values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
-                  selected={filters.shapeFilters}
-                  onToggle={v => toggleArray(filters.shapeFilters, filters.setShapeFilters, v as ShapeBucket)}
-                  onIncludeAll={() => filters.setShapeFilters([...SHAPE_ORDER])}
-                  onClear={() => filters.setShapeFilters([])}
+                  states={filters.axisFilters.shape?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('shape', v)}
+                  combineMode={filters.axisFilters.shape?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('shape')}
+                  exclusionMode={filters.axisFilters.shape?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('shape')}
+                  includeAll={() => filters.axisIncludeAll('shape', SHAPE_ORDER as readonly string[])}
+                  clearAll={() => filters.axisClear('shape')}
                 />
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Duration"
                   values={DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] }))}
-                  selected={filters.durationFilters}
-                  onToggle={v => toggleArray(filters.durationFilters, filters.setDurationFilters, v as DurationBucket)}
-                  onIncludeAll={() => filters.setDurationFilters([...DURATION_ORDER])}
-                  onClear={() => filters.setDurationFilters([])}
+                  states={filters.axisFilters.duration?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('duration', v)}
+                  combineMode={filters.axisFilters.duration?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('duration')}
+                  exclusionMode={filters.axisFilters.duration?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('duration')}
+                  includeAll={() => filters.axisIncludeAll('duration', DURATION_ORDER as readonly string[])}
+                  clearAll={() => filters.axisClear('duration')}
                 />
-                <ShellFilterSection
+                <AxisFilterSection
                   title="Properties"
                   values={PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] }))}
-                  selected={filters.propertyFilters}
-                  onToggle={v => toggleArray(filters.propertyFilters, filters.setPropertyFilters, v as PropertyFilter)}
-                  onIncludeAll={() => filters.setPropertyFilters([...PROPERTY_ORDER])}
-                  onClear={() => filters.setPropertyFilters([])}
+                  states={filters.axisFilters.property?.states || {}}
+                  cycleState={(v) => filters.cycleAxisState('property', v)}
+                  combineMode={filters.axisFilters.property?.combineMode}
+                  cycleCombineMode={() => filters.cycleAxisCombineMode('property')}
+                  exclusionMode={filters.axisFilters.property?.exclusionMode}
+                  cycleExclusionMode={() => filters.cycleAxisExclusionMode('property')}
+                  includeAll={() => filters.axisIncludeAll('property', PROPERTY_ORDER as readonly string[])}
+                  clearAll={() => filters.axisClear('property')}
                 />
+
+                {/* Tags — collapsed by default. Same Advanced Options
+                    pattern as /compendium/spells. */}
+                <details className="group">
+                  <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
+                    <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
+                      Advanced Options — Tags
+                      {Object.keys(filters.tagStates).length > 0 && (
+                        <span className="ml-2 text-gold/60">({Object.keys(filters.tagStates).length} selected)</span>
+                      )}
+                    </span>
+                    <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                  </summary>
+                  <div className="mt-4 space-y-6 pl-1">
+                    {tagGroups.map(group => (
+                      <TagGroupFilter
+                        key={group.id}
+                        group={group}
+                        tags={(tagsByGroup[group.id] || []) as any}
+                        tagStates={filters.tagStates}
+                        setTagStates={filters.setTagStates}
+                        cycleTagState={filters.cycleTagState}
+                        combineMode={filters.groupCombineModes[group.id]}
+                        cycleGroupMode={filters.cycleGroupMode}
+                        exclusionMode={filters.groupExclusionModes[group.id]}
+                        cycleExclusionMode={filters.cycleExclusionMode}
+                      />
+                    ))}
+                  </div>
+                </details>
               </>
             }
           />
@@ -188,35 +245,41 @@ export default function SpellFilterShell({
             <FilterChip label={<>Search: "{trimmed}"</>} onRemove={() => filters.setSearch('')} />
           ) : null}
           {extraChips}
-          {filters.sourceFilterIds.map(id => {
+          {includesFor('source').map(id => {
             const s = sourceById[id];
             const label = s?.abbreviation || s?.shortName || s?.name || id;
-            return <FilterChip key={`src-${id}`} label={`Source: ${label}`} onRemove={() => filters.setSourceFilterIds(prev => prev.filter(x => x !== id))} />;
+            return <FilterChip key={`src-${id}`} label={`Source: ${label}`} onRemove={() => filters.removeAxisValue('source', id)} />;
           })}
-          {filters.levelFilters.slice().sort((a, b) => Number(a) - Number(b)).map(lvl => (
-            <FilterChip key={`lvl-${lvl}`} label={lvl === '0' ? 'Cantrip' : `Level ${lvl}`} onRemove={() => filters.setLevelFilters(prev => prev.filter(x => x !== lvl))} />
+          {includesFor('level').slice().sort((a, b) => Number(a) - Number(b)).map(lvl => (
+            <FilterChip key={`lvl-${lvl}`} label={lvl === '0' ? 'Cantrip' : `Level ${lvl}`} onRemove={() => filters.removeAxisValue('level', lvl)} />
           ))}
-          {filters.schoolFilters.map(k => (
-            <FilterChip key={`sch-${k}`} label={SCHOOL_LABELS[k] || k} onRemove={() => filters.setSchoolFilters(prev => prev.filter(x => x !== k))} />
+          {includesFor('school').map(k => (
+            <FilterChip key={`sch-${k}`} label={SCHOOL_LABELS[k] || k} onRemove={() => filters.removeAxisValue('school', k)} />
           ))}
-          {filters.tagFilterIds.map(id => {
+          {Object.entries(filters.tagStates).filter(([, s]) => s === 1).map(([id]) => {
             const t = tagsById[id];
-            return <FilterChip key={`tag-${id}`} label={`Tag: ${t?.name || id}`} onRemove={() => filters.setTagFilterIds(prev => prev.filter(x => x !== id))} />;
+            return (
+              <FilterChip
+                key={`tag-${id}`}
+                label={`Tag: ${t?.name || id}`}
+                onRemove={() => filters.setTagStates(prev => { const next = { ...prev }; delete next[id]; return next; })}
+              />
+            );
           })}
-          {filters.activationFilters.map(b => (
-            <FilterChip key={`act-${b}`} label={`Cast: ${ACTIVATION_LABELS[b]}`} onRemove={() => filters.setActivationFilters(prev => prev.filter(x => x !== b))} />
+          {includesFor('activation').map(b => (
+            <FilterChip key={`act-${b}`} label={`Cast: ${ACTIVATION_LABELS[b as keyof typeof ACTIVATION_LABELS] || b}`} onRemove={() => filters.removeAxisValue('activation', b)} />
           ))}
-          {filters.rangeFilters.map(b => (
-            <FilterChip key={`rng-${b}`} label={`Range: ${RANGE_LABELS[b]}`} onRemove={() => filters.setRangeFilters(prev => prev.filter(x => x !== b))} />
+          {includesFor('range').map(b => (
+            <FilterChip key={`rng-${b}`} label={`Range: ${RANGE_LABELS[b as keyof typeof RANGE_LABELS] || b}`} onRemove={() => filters.removeAxisValue('range', b)} />
           ))}
-          {filters.durationFilters.map(b => (
-            <FilterChip key={`dur-${b}`} label={`Dur: ${DURATION_LABELS[b]}`} onRemove={() => filters.setDurationFilters(prev => prev.filter(x => x !== b))} />
+          {includesFor('duration').map(b => (
+            <FilterChip key={`dur-${b}`} label={`Dur: ${DURATION_LABELS[b as keyof typeof DURATION_LABELS] || b}`} onRemove={() => filters.removeAxisValue('duration', b)} />
           ))}
-          {filters.shapeFilters.map(b => (
-            <FilterChip key={`shp-${b}`} label={`Shape: ${SHAPE_LABELS[b]}`} onRemove={() => filters.setShapeFilters(prev => prev.filter(x => x !== b))} />
+          {includesFor('shape').map(b => (
+            <FilterChip key={`shp-${b}`} label={`Shape: ${SHAPE_LABELS[b as keyof typeof SHAPE_LABELS] || b}`} onRemove={() => filters.removeAxisValue('shape', b)} />
           ))}
-          {filters.propertyFilters.map(p => (
-            <FilterChip key={`prop-${p}`} label={PROPERTY_LABELS[p]} onRemove={() => filters.setPropertyFilters(prev => prev.filter(x => x !== p))} />
+          {includesFor('property').map(p => (
+            <FilterChip key={`prop-${p}`} label={PROPERTY_LABELS[p as keyof typeof PROPERTY_LABELS] || p} onRemove={() => filters.removeAxisValue('property', p)} />
           ))}
           {(filters.activeFilterCount > 0 || trimmed) ? (
             <button
@@ -233,70 +296,19 @@ export default function SpellFilterShell({
   );
 }
 
-function toggleArray<T extends string>(list: T[], set: React.Dispatch<React.SetStateAction<T[]>>, value: T) {
-  set(list.includes(value) ? list.filter(v => v !== value) : [...list, value]);
-}
-
-function ShellFilterSection({
-  title,
-  values,
-  selected,
-  onToggle,
-  onIncludeAll,
-  onClear,
-}: {
-  title: string;
-  values: { value: string; label: string }[];
-  selected: string[];
-  onToggle: (value: string) => void;
-  onIncludeAll: () => void;
-  onClear: () => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="h3-title uppercase text-ink">{title}</span>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onIncludeAll} className="label-text hover:underline">Include All</button>
-          <span className="text-gold/20">|</span>
-          <button type="button" onClick={onClear} className="label-text hover:underline">Clear</button>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {values.map(({ value, label }) => {
-          const active = selected.includes(value);
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onToggle(value)}
-              className={cn(
-                'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
-                active
-                  ? 'border-gold/60 bg-gold/15 text-gold'
-                  : 'border-gold/15 text-ink/55 hover:border-gold/30 hover:text-gold/80',
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function FilterChip({ label, onRemove }: { label: React.ReactNode; onRemove: () => void }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 pl-2 pr-1 py-0.5 text-[10px] uppercase tracking-widest text-gold">
+    <span className={cn(
+      'inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold/90'
+    )}>
       {label}
       <button
         type="button"
+        aria-label="Remove"
         onClick={onRemove}
-        aria-label="Remove filter"
-        className="rounded-full hover:bg-gold/20 p-0.5"
+        className="ml-0.5 -mr-0.5 rounded-full hover:bg-gold/20 p-0.5 transition-colors"
       >
-        <X className="w-3 h-3" />
+        <X className="w-2.5 h-2.5" />
       </button>
     </span>
   );
