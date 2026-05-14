@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Filter, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Filter, X, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -199,6 +199,24 @@ export function FilterBar({
             </Badge>
           )}
         </Button>
+        {/* Inline Reset button. Only renders when there's actually
+            something to reset (active filters OR a non-empty search)
+            so it doesn't clutter the bar in the default state. One
+            click clears both filters and the search box — same
+            effect as opening the modal and clicking "Reset Filters"
+            then clearing the search, but in one motion. */}
+        {(activeFilterCount > 0 || search.length > 0) && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => { resetFilters(); setSearch(''); }}
+            className="h-8 gap-2 w-full sm:w-auto border-gold/20 text-ink/70 hover:bg-blood/5 hover:text-blood hover:border-blood/30"
+            title="Clear search and all filters"
+          >
+            <RotateCcw className="w-3 h-3" /> Reset
+          </Button>
+        )}
         {trailingActions && (
           // shrink-0 so the page-level actions (Settings, Spell Manager,
           // result count, etc.) keep their natural width when the search
