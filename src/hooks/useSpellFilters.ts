@@ -41,6 +41,7 @@ export type UseSpellFiltersResult = {
   cycleAxisCombineMode: (axisKey: string) => void;
   cycleAxisExclusionMode: (axisKey: string) => void;
   axisIncludeAll: (axisKey: string, values: readonly string[]) => void;
+  axisExcludeAll: (axisKey: string, values: readonly string[]) => void;
   axisClear: (axisKey: string) => void;
   removeAxisValue: (axisKey: string, value: string) => void;
 
@@ -119,6 +120,14 @@ export function useSpellFilters(): UseSpellFiltersResult {
       const cur = prev[axisKey] || { states: {} };
       const states: Record<string, number> = { ...cur.states };
       for (const v of values) states[v] = 1;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  }, []);
+  const axisExcludeAll = useCallback((axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 2;
       return { ...prev, [axisKey]: { ...cur, states } };
     });
   }, []);
@@ -273,6 +282,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
     cycleAxisCombineMode,
     cycleAxisExclusionMode,
     axisIncludeAll,
+    axisExcludeAll,
     axisClear,
     removeAxisValue,
     tagStates, setTagStates,

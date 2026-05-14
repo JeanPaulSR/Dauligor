@@ -1,11 +1,73 @@
 import React from 'react';
-import { Search, Filter, X } from 'lucide-react';
+import { Search, Filter, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Card } from '../ui/card';
 import { cn } from '../../lib/utils';
 import type { ReactNode } from 'react';
+
+/**
+ * Cross-section coordination for the filter modal — chip-label search
+ * and Show All / Hide All bulk-collapse signals. Sections (Tag group
+ * and Axis) subscribe via `useFilterBarContext()`; FilterBar provides
+ * the value via <FilterBarContext.Provider>. Using context (not prop
+ * drilling through `renderFilters`) keeps the consumer API unchanged
+ * — pages still pass `renderFilters` as a plain ReactNode.
+ *
+ * `chipSearch` filters which chips render; case-insensitive substring
+ * match against the chip label. Empty string means "show all".
+ *
+ * `hideAllVersion` / `showAllVersion` are monotonic counters. Sections
+ * track them via useEffect; whenever the counter increments, the
+ * section sets its internal `hidden` state to true / false respectively.
+ * Use counters (not booleans) so sections can react every time the
+ * button is clicked, even if state would otherwise be idempotent.
+ */
+type FilterBarContextValue = {
+  chipSearch: string;
+  hideAllVersion: number;
+  showAllVersion: number;
+};
+const FilterBarContext = React.createContext<FilterBarContextValue>({
+  chipSearch: '',
+  hideAllVersion: 0,
+  showAllVersion: 0,
+});
+function useFilterBarContext() {
+  return React.useContext(FilterBarContext);
+}
+
+/**
+ * Section-level state hook — internal `hidden` flag plus subscription
+ * to the bulk Show All / Hide All counters from FilterBarContext.
+ * Effects are guarded against the initial mount so opening the modal
+ * doesn't collapse everything just because the counters happen to be
+ * non-zero from a previous session.
+ */
+function useFilterSectionHidden(): [boolean, () => void] {
+  const { hideAllVersion, showAllVersion } = useFilterBarContext();
+  const [hidden, setHidden] = React.useState(false);
+  const mounted = React.useRef(false);
+  React.useEffect(() => {
+    if (!mounted.current) return;
+    setHidden(true);
+  }, [hideAllVersion]);
+  React.useEffect(() => {
+    if (!mounted.current) return;
+    setHidden(false);
+  }, [showAllVersion]);
+  React.useEffect(() => {
+    mounted.current = true;
+  }, []);
+  return [hidden, () => setHidden((h) => !h)];
+}
+
+/** Case-insensitive substring match for chip-label filtering. */
+function chipMatchesSearch(label: string, search: string): boolean {
+  if (!search) return true;
+  return String(label).toLowerCase().includes(search.toLowerCase());
+}
 
 export interface FilterBarProps {
   search: string;
@@ -71,21 +133,32 @@ export function FilterBar({
     </>
   );
 
+  // Modal-scoped state: chip-label search box + Show All / Hide All
+  // counters that sections subscribe to via FilterBarContext.
+  const [chipSearch, setChipSearch] = React.useState('');
+  const [hideAllVersion, setHideAllVersion] = React.useState(0);
+  const [showAllVersion, setShowAllVersion] = React.useState(0);
+  const ctxValue = React.useMemo<FilterBarContextValue>(() => ({
+    chipSearch,
+    hideAllVersion,
+    showAllVersion,
+  }), [chipSearch, hideAllVersion, showAllVersion]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-4 items-center bg-card p-2 rounded-lg border border-gold/10 shadow-sm">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
-          <Input 
+          <Input
             placeholder={searchPlaceholder}
             className="field-input pl-8 h-8 focus:border-gold"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button 
-          variant={isFilterOpen ? "default" : "outline"} 
-          size="sm" 
+        <Button
+          variant={isFilterOpen ? "default" : "outline"}
+          size="sm"
           onClick={() => setIsFilterOpen(true)}
           className={`h-8 gap-2 w-full sm:w-auto ${isFilterOpen ? 'bg-gold text-white' : 'border-gold/20 text-gold hover:bg-gold/10'}`}
         >
@@ -105,37 +178,85 @@ export function FilterBar({
             onClick={() => setIsFilterOpen(false)}
           />
           <Card className="relative w-full max-w-4xl max-h-full overflow-hidden flex flex-col border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gold/10 bg-gold/5">
-              <div className="flex items-center gap-6">
-                <div className="space-y-1">
-                  <h2 className="h2-title uppercase text-ink">{filterTitle}</h2>
-                  {filterSubtitle ? (
-                    <p className="text-sm text-ink/55">{filterSubtitle}</p>
-                  ) : null}
+            <FilterBarContext.Provider value={ctxValue}>
+              <div className="flex flex-col gap-3 p-5 border-b border-gold/10 bg-gold/5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h2 className="h2-title uppercase text-ink">{filterTitle}</h2>
+                    {filterSubtitle ? (
+                      <p className="text-sm text-ink/55">{filterSubtitle}</p>
+                    ) : null}
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setIsFilterOpen(false)} className="text-ink/40 hover:text-gold transition-colors">
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
+
+                {/* Modal-wide affordances inspired by 5etools' filter
+                    header: chip-label search filters which chips render
+                    in every section; Show All / Hide All bulk-collapse
+                    every section. Each section keeps its own collapsed
+                    state but listens to the counters from
+                    FilterBarContext to apply the bulk command. */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
+                    <Input
+                      placeholder="Filter chip labels…"
+                      className="h-7 text-xs pl-8 bg-background/40 border-gold/15 focus:border-gold"
+                      value={chipSearch}
+                      onChange={(e) => setChipSearch(e.target.value)}
+                    />
+                    {chipSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setChipSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-ink/40 hover:text-ink"
+                        title="Clear chip search"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowAllVersion((v) => v + 1)}
+                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/20 text-ink/70 hover:bg-gold/5"
+                    title="Expand every section"
+                  >
+                    Show All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setHideAllVersion((v) => v + 1)}
+                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/20 text-ink/70 hover:bg-gold/5"
+                    title="Collapse every section to its header"
+                  >
+                    Hide All
+                  </Button>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setIsFilterOpen(false)} className="text-ink/40 hover:text-gold transition-colors">
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-12 custom-scrollbar">
-              {renderFilters || defaultFilterContent}
-            </div>
+              <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+                {renderFilters || defaultFilterContent}
+              </div>
 
-            <div className="p-6 border-t border-gold/10 bg-gold/5 flex items-center justify-between">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={resetFilters}
-                className="label-text text-ink/40 hover:text-blood"
-              >
-                {resetLabel}
-              </Button>
-              <Button onClick={() => setIsFilterOpen(false)} className="btn-gold-solid px-10 h-10 shadow-lg shadow-gold/20">
-                {applyLabel}
-              </Button>
-            </div>
+              <div className="p-5 border-t border-gold/10 bg-gold/5 flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetFilters}
+                  className="label-text text-ink/40 hover:text-blood"
+                >
+                  {resetLabel}
+                </Button>
+                <Button onClick={() => setIsFilterOpen(false)} className="btn-gold-solid px-10 h-10 shadow-lg shadow-gold/20">
+                  {applyLabel}
+                </Button>
+              </div>
+            </FilterBarContext.Provider>
           </Card>
         </div>
       )}
@@ -243,6 +364,9 @@ export function TagGroupFilter({
   exclusionMode,
   cycleExclusionMode,
 }: TagGroupFilterProps) {
+  // All hooks before any early returns — React rules.
+  const { chipSearch } = useFilterBarContext();
+  const [hidden, toggleHidden] = useFilterSectionHidden();
   if (tags.length === 0) return null;
   const mode = combineMode || 'OR';
   const exMode = exclusionMode || 'OR';
@@ -269,6 +393,7 @@ export function TagGroupFilter({
   });
 
   const renderChip = (tag: any) => {
+    if (!chipMatchesSearch(String(tag.name), chipSearch)) return null;
     const state = tagStates[tag.id] || 0;
     return (
       <button
@@ -286,81 +411,125 @@ export function TagGroupFilter({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-6 flex-wrap">
-          <span className="h3-title uppercase text-ink">{group.name}</span>
-          <div className="flex items-center gap-4">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => cycleGroupMode?.(group.id)}
-              className="h-6 px-3 btn-gold text-[9px]"
-              title="Inclusion logic: AND requires every included tag, OR requires any, XOR requires exactly one."
-            >
-              {mode}
-            </Button>
-            <div className="flex items-center gap-2">
-              <span className="label-text text-blood/60">Exclusion Logic</span>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={toggleHidden}
+            className="flex items-center gap-1 text-ink/55 hover:text-gold transition-colors"
+            title={hidden ? 'Expand section' : 'Collapse section'}
+          >
+            {hidden ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            <span className="h3-title uppercase text-ink">{group.name}</span>
+          </button>
+          {!hidden && (
+            <div className="flex items-center gap-3">
               <Button
                 size="sm"
-                onClick={() => cycleExclusionMode?.(group.id)}
-                className="h-6 px-3 btn-danger"
-                title="Exclusion logic for tags toggled to exclude (red)."
+                variant="outline"
+                onClick={() => cycleGroupMode?.(group.id)}
+                className="h-6 px-2 btn-gold text-[9px]"
+                title="Inclusion logic: AND requires every included tag, OR requires any, XOR requires exactly one."
               >
-                {exMode}
+                {mode}
               </Button>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              if (!setTagStates) return;
-              const newStates: Record<string, number> = { ...tagStates };
-              tags.forEach(t => newStates[t.id] = 1);
-              setTagStates(newStates);
-            }}
-            className="label-text hover:underline"
-          >
-            Include All
-          </button>
-          <span className="text-gold/20">|</span>
-          <button
-            onClick={() => {
-              if (!setTagStates) return;
-              const newStates: Record<string, number> = { ...tagStates };
-              tags.forEach(t => delete newStates[t.id]);
-              setTagStates(newStates);
-            }}
-            className="label-text hover:underline"
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-      <div className="space-y-2">
-        {roots.map(root => {
-          const children = childrenByParent.get(root.id) || [];
-          return (
-            <React.Fragment key={root.id}>
-              <div className="flex flex-wrap gap-2">
-                {renderChip(root)}
+              <div className="flex items-center gap-1.5">
+                <span className="label-text text-blood/60">Excl</span>
+                <Button
+                  size="sm"
+                  onClick={() => cycleExclusionMode?.(group.id)}
+                  className="h-6 px-2 btn-danger text-[9px]"
+                  title="Exclusion logic for tags toggled to exclude (red)."
+                >
+                  {exMode}
+                </Button>
               </div>
-              {children.length > 0 && (
-                <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-2">
-                  {children.map(renderChip)}
-                </div>
-              )}
-            </React.Fragment>
-          );
-        })}
-        {orphans.length > 0 && (
-          <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-2" title="Subtags whose parent is not in this group's visible tag set.">
-            {orphans.map(renderChip)}
+            </div>
+          )}
+        </div>
+        {!hidden && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (!setTagStates) return;
+                const newStates: Record<string, number> = { ...tagStates };
+                tags.forEach(t => newStates[t.id] = 1);
+                setTagStates(newStates);
+              }}
+              className="label-text hover:underline"
+              title="Set every chip to include"
+            >
+              All
+            </button>
+            <span className="text-gold/20">|</span>
+            <button
+              onClick={() => {
+                if (!setTagStates) return;
+                const newStates: Record<string, number> = { ...tagStates };
+                tags.forEach(t => newStates[t.id] = 2);
+                setTagStates(newStates);
+              }}
+              className="label-text hover:underline"
+              title="Set every chip to exclude"
+            >
+              None
+            </button>
+            <span className="text-gold/20">|</span>
+            <button
+              onClick={() => {
+                if (!setTagStates) return;
+                const newStates: Record<string, number> = { ...tagStates };
+                tags.forEach(t => delete newStates[t.id]);
+                setTagStates(newStates);
+              }}
+              className="label-text hover:underline"
+              title="Reset every chip to neutral"
+            >
+              Clear
+            </button>
+            <span className="text-gold/20">|</span>
+            <button
+              onClick={toggleHidden}
+              className="label-text hover:underline"
+              title="Collapse section"
+            >
+              Hide
+            </button>
           </div>
         )}
       </div>
+      {!hidden && (
+        <div className="space-y-1.5">
+          {roots.map(root => {
+            const children = childrenByParent.get(root.id) || [];
+            const rootChip = renderChip(root);
+            const childChips = children.map(renderChip).filter(Boolean);
+            // If the root and all children are filtered out by chipSearch,
+            // omit the row entirely so the layout doesn't leave gaps.
+            if (!rootChip && childChips.length === 0) return null;
+            return (
+              <React.Fragment key={root.id}>
+                {rootChip && <div className="flex flex-wrap gap-1.5">{rootChip}</div>}
+                {childChips.length > 0 && (
+                  <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-1.5">
+                    {childChips}
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
+          {orphans.length > 0 && (() => {
+            const orphanChips = orphans.map(renderChip).filter(Boolean);
+            if (orphanChips.length === 0) return null;
+            return (
+              <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-1.5" title="Subtags whose parent is not in this group's visible tag set.">
+                {orphanChips}
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </div>
   );
 }
@@ -389,6 +558,10 @@ export interface AxisFilterSectionProps<V extends string = string> {
   cycleExclusionMode?: () => void;
   includeAll?: () => void;
   clearAll?: () => void;
+  /** Optional: set every value's chip to state=2 (exclude). Pairs with
+   *  includeAll/clearAll as the "None" preset. When omitted the
+   *  section's header omits the None button. */
+  excludeAll?: () => void;
 }
 
 export function AxisFilterSection<V extends string = string>({
@@ -402,73 +575,104 @@ export function AxisFilterSection<V extends string = string>({
   cycleExclusionMode,
   includeAll,
   clearAll,
+  excludeAll,
 }: AxisFilterSectionProps<V>) {
+  // Hooks before early-return per React rules.
+  const { chipSearch } = useFilterBarContext();
+  const [hidden, toggleHidden] = useFilterSectionHidden();
   if (values.length === 0) return null;
   const mode = combineMode || 'OR';
   const exMode = exclusionMode || 'OR';
+  const visibleValues = values.filter(({ label }) => chipMatchesSearch(label, chipSearch));
+  // Hide the whole section if chip-search filters out every value.
+  if (chipSearch && visibleValues.length === 0) return null;
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-6 flex-wrap">
-          <span className="h3-title uppercase text-ink">{title}</span>
-          <div className="flex items-center gap-4">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={cycleCombineMode}
-              className="h-6 px-3 btn-gold text-[9px]"
-              title="Inclusion logic: AND requires every include chip, OR any, XOR exactly one."
-            >
-              {mode}
-            </Button>
-            <div className="flex items-center gap-2">
-              <span className="label-text text-blood/60">Exclusion Logic</span>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={toggleHidden}
+            className="flex items-center gap-1 text-ink/55 hover:text-gold transition-colors"
+            title={hidden ? 'Expand section' : 'Collapse section'}
+          >
+            {hidden ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            <span className="h3-title uppercase text-ink">{title}</span>
+          </button>
+          {!hidden && (
+            <div className="flex items-center gap-3">
               <Button
                 size="sm"
-                onClick={cycleExclusionMode}
-                className="h-6 px-3 btn-danger"
-                title="Exclusion logic for tags toggled to exclude (red)."
+                variant="outline"
+                onClick={cycleCombineMode}
+                className="h-6 px-2 btn-gold text-[9px]"
+                title="Inclusion logic: AND requires every include chip, OR any, XOR exactly one."
               >
-                {exMode}
+                {mode}
               </Button>
+              <div className="flex items-center gap-1.5">
+                <span className="label-text text-blood/60">Excl</span>
+                <Button
+                  size="sm"
+                  onClick={cycleExclusionMode}
+                  className="h-6 px-2 btn-danger text-[9px]"
+                  title="Exclusion logic for chips toggled to exclude (red)."
+                >
+                  {exMode}
+                </Button>
+              </div>
             </div>
+          )}
+        </div>
+        {!hidden && (
+          <div className="flex items-center gap-2">
+            {includeAll && (
+              <>
+                <button type="button" onClick={includeAll} className="label-text hover:underline" title="Set every chip to include">All</button>
+                <span className="text-gold/20">|</span>
+              </>
+            )}
+            {excludeAll && (
+              <>
+                <button type="button" onClick={excludeAll} className="label-text hover:underline" title="Set every chip to exclude">None</button>
+                <span className="text-gold/20">|</span>
+              </>
+            )}
+            {clearAll && (
+              <>
+                <button type="button" onClick={clearAll} className="label-text hover:underline" title="Reset every chip to neutral">Clear</button>
+                <span className="text-gold/20">|</span>
+              </>
+            )}
+            <button type="button" onClick={toggleHidden} className="label-text hover:underline" title="Collapse section">Hide</button>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {includeAll && (
-            <>
-              <button type="button" onClick={includeAll} className="label-text hover:underline">Include All</button>
-              <span className="text-gold/20">|</span>
-            </>
-          )}
-          {clearAll && (
-            <button type="button" onClick={clearAll} className="label-text hover:underline">Clear</button>
-          )}
-        </div>
+        )}
       </div>
-      <div className="flex flex-wrap gap-2">
-        {values.map(({ value, label }) => {
-          const state = states[value] || 0;
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => cycleState(value)}
-              className={cn(
-                'filter-tag',
-                state === 1
-                  ? 'btn-gold-solid border-gold shadow-lg shadow-gold/20'
-                  : state === 2
-                    ? 'btn-danger border-blood'
-                    : 'btn-gold'
-              )}
-              title={state === 0 ? 'Click to include' : state === 1 ? 'Click to exclude' : 'Click to clear'}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      {!hidden && (
+        <div className="flex flex-wrap gap-1.5">
+          {visibleValues.map(({ value, label }) => {
+            const state = states[value] || 0;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => cycleState(value)}
+                className={cn(
+                  'filter-tag',
+                  state === 1
+                    ? 'btn-gold-solid border-gold shadow-lg shadow-gold/20'
+                    : state === 2
+                      ? 'btn-danger border-blood'
+                      : 'btn-gold'
+                )}
+                title={state === 0 ? 'Click to include' : state === 1 ? 'Click to exclude' : 'Click to clear'}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

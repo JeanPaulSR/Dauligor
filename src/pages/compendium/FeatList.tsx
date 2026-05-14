@@ -206,6 +206,14 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       return { ...prev, [axisKey]: { ...cur, states } };
     });
   };
+  const axisExcludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 2;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
   const axisClear = (axisKey: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
@@ -280,6 +288,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
                 exclusionMode={axisFilters.source?.exclusionMode}
                 cycleExclusionMode={() => cycleAxisExclusionMode('source')}
                 includeAll={() => axisIncludeAll('source', sources.map(s => s.id))}
+                excludeAll={() => axisExcludeAll('source', sources.map(s => s.id))}
                 clearAll={() => axisClear('source')}
               />
               <AxisFilterSection
@@ -292,6 +301,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
                 exclusionMode={axisFilters.type?.exclusionMode}
                 cycleExclusionMode={() => cycleAxisExclusionMode('type')}
                 includeAll={() => axisIncludeAll('type', FEAT_TYPE_ORDER as readonly string[])}
+                excludeAll={() => axisExcludeAll('type', FEAT_TYPE_ORDER as readonly string[])}
                 clearAll={() => axisClear('type')}
               />
               <AxisFilterSection
@@ -304,6 +314,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
                 exclusionMode={axisFilters.property?.exclusionMode}
                 cycleExclusionMode={() => cycleAxisExclusionMode('property')}
                 includeAll={() => axisIncludeAll('property', FEAT_PROPERTY_ORDER as readonly string[])}
+                excludeAll={() => axisExcludeAll('property', FEAT_PROPERTY_ORDER as readonly string[])}
                 clearAll={() => axisClear('property')}
               />
             </>

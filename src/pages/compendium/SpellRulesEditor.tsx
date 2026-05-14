@@ -347,6 +347,13 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     for (const v of values) states[v] = 1;
     updateQuery({ [axisKey]: { ...axis, states }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
+  const axisExcludeAll = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, values: readonly string[]) => {
+    if (!draft) return;
+    const axis = (draft.query[axisKey] as any) || {};
+    const states: Record<string, number> = { ...(axis.states || {}) };
+    for (const v of values) states[v] = 2;
+    updateQuery({ [axisKey]: { ...axis, states }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
   const axisClear = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
     if (!draft) return;
     const axis = (draft.query[axisKey] as any) || {};
@@ -659,6 +666,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.source?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('source', 'sourceFilterIds')}
                           includeAll={() => axisIncludeAll('source', 'sourceFilterIds', sources.map(s => s.id))}
+                          excludeAll={() => axisExcludeAll('source', 'sourceFilterIds', sources.map(s => s.id))}
                           clearAll={() => axisClear('source', 'sourceFilterIds')}
                         />
                         <AxisFilterSection
@@ -671,6 +679,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.level?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('level', 'levelFilters')}
                           includeAll={() => axisIncludeAll('level', 'levelFilters', LEVEL_VALUES)}
+                          excludeAll={() => axisExcludeAll('level', 'levelFilters', LEVEL_VALUES)}
                           clearAll={() => axisClear('level', 'levelFilters')}
                         />
                         <AxisFilterSection
@@ -683,6 +692,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.school?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('school', 'schoolFilters')}
                           includeAll={() => axisIncludeAll('school', 'schoolFilters', Object.keys(SCHOOL_LABELS))}
+                          excludeAll={() => axisExcludeAll('school', 'schoolFilters', Object.keys(SCHOOL_LABELS))}
                           clearAll={() => axisClear('school', 'schoolFilters')}
                         />
                         <AxisFilterSection
@@ -695,6 +705,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.activation?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('activation', 'activationFilters')}
                           includeAll={() => axisIncludeAll('activation', 'activationFilters', ACTIVATION_ORDER as readonly string[])}
+                          excludeAll={() => axisExcludeAll('activation', 'activationFilters', ACTIVATION_ORDER as readonly string[])}
                           clearAll={() => axisClear('activation', 'activationFilters')}
                         />
                         <AxisFilterSection
@@ -707,6 +718,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.range?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('range', 'rangeFilters')}
                           includeAll={() => axisIncludeAll('range', 'rangeFilters', RANGE_ORDER as readonly string[])}
+                          excludeAll={() => axisExcludeAll('range', 'rangeFilters', RANGE_ORDER as readonly string[])}
                           clearAll={() => axisClear('range', 'rangeFilters')}
                         />
                         <AxisFilterSection
@@ -719,6 +731,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.shape?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('shape', 'shapeFilters')}
                           includeAll={() => axisIncludeAll('shape', 'shapeFilters', SHAPE_ORDER as readonly string[])}
+                          excludeAll={() => axisExcludeAll('shape', 'shapeFilters', SHAPE_ORDER as readonly string[])}
                           clearAll={() => axisClear('shape', 'shapeFilters')}
                         />
                         <AxisFilterSection
@@ -731,6 +744,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.duration?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('duration', 'durationFilters')}
                           includeAll={() => axisIncludeAll('duration', 'durationFilters', DURATION_ORDER as readonly string[])}
+                          excludeAll={() => axisExcludeAll('duration', 'durationFilters', DURATION_ORDER as readonly string[])}
                           clearAll={() => axisClear('duration', 'durationFilters')}
                         />
                         <AxisFilterSection
@@ -743,6 +757,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           exclusionMode={draft.query.property?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('property', 'propertyFilters')}
                           includeAll={() => axisIncludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
+                          excludeAll={() => axisExcludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
                           clearAll={() => axisClear('property', 'propertyFilters')}
                         />
 

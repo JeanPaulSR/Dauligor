@@ -116,6 +116,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.source?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('source')}
                   includeAll={() => filters.axisIncludeAll('source', sources.map(s => s.id))}
+                  excludeAll={() => filters.axisExcludeAll('source', sources.map(s => s.id))}
                   clearAll={() => filters.axisClear('source')}
                 />
                 <AxisFilterSection
@@ -128,6 +129,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.level?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('level')}
                   includeAll={() => filters.axisIncludeAll('level', LEVEL_VALUES)}
+                  excludeAll={() => filters.axisExcludeAll('level', LEVEL_VALUES)}
                   clearAll={() => filters.axisClear('level')}
                 />
                 <AxisFilterSection
@@ -140,6 +142,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.school?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('school')}
                   includeAll={() => filters.axisIncludeAll('school', Object.keys(SCHOOL_LABELS))}
+                  excludeAll={() => filters.axisExcludeAll('school', Object.keys(SCHOOL_LABELS))}
                   clearAll={() => filters.axisClear('school')}
                 />
                 <AxisFilterSection
@@ -152,6 +155,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.activation?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('activation')}
                   includeAll={() => filters.axisIncludeAll('activation', ACTIVATION_ORDER as readonly string[])}
+                  excludeAll={() => filters.axisExcludeAll('activation', ACTIVATION_ORDER as readonly string[])}
                   clearAll={() => filters.axisClear('activation')}
                 />
                 <AxisFilterSection
@@ -164,6 +168,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.range?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('range')}
                   includeAll={() => filters.axisIncludeAll('range', RANGE_ORDER as readonly string[])}
+                  excludeAll={() => filters.axisExcludeAll('range', RANGE_ORDER as readonly string[])}
                   clearAll={() => filters.axisClear('range')}
                 />
                 <AxisFilterSection
@@ -176,6 +181,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.shape?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('shape')}
                   includeAll={() => filters.axisIncludeAll('shape', SHAPE_ORDER as readonly string[])}
+                  excludeAll={() => filters.axisExcludeAll('shape', SHAPE_ORDER as readonly string[])}
                   clearAll={() => filters.axisClear('shape')}
                 />
                 <AxisFilterSection
@@ -188,6 +194,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.duration?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('duration')}
                   includeAll={() => filters.axisIncludeAll('duration', DURATION_ORDER as readonly string[])}
+                  excludeAll={() => filters.axisExcludeAll('duration', DURATION_ORDER as readonly string[])}
                   clearAll={() => filters.axisClear('duration')}
                 />
                 <AxisFilterSection
@@ -200,6 +207,7 @@ export default function SpellFilterShell({
                   exclusionMode={filters.axisFilters.property?.exclusionMode}
                   cycleExclusionMode={() => filters.cycleAxisExclusionMode('property')}
                   includeAll={() => filters.axisIncludeAll('property', PROPERTY_ORDER as readonly string[])}
+                  excludeAll={() => filters.axisExcludeAll('property', PROPERTY_ORDER as readonly string[])}
                   clearAll={() => filters.axisClear('property')}
                 />
 

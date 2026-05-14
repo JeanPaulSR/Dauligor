@@ -476,9 +476,14 @@
   .btn-danger {
     @apply text-blood hover:bg-blood/10;
   }
-  /* Three-state filter tag — pair with btn-gold / btn-gold-solid / btn-danger for active state */
+  /* Three-state filter tag — pair with btn-gold / btn-gold-solid / btn-danger for active state.
+     Density target: roughly matches 5etools chip rows so a typical
+     filter modal fits multiple sections without scroll. The previous
+     `px-3 py-1` produced very tall pills with lots of dead space; the
+     new values keep ~28px clickable height while halving horizontal
+     padding. */
   .filter-tag {
-    @apply px-3 py-1 text-[10px] font-black uppercase tracking-widest border transition-all;
+    @apply px-2 py-0.5 text-[10px] font-black uppercase tracking-widest border transition-all;
   }
 
   /* ── Map Primitives ───────────────────────────────────────────── */

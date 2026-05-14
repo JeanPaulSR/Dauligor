@@ -361,6 +361,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       return { ...prev, [axisKey]: { ...cur, states } };
     });
   };
+  const axisExcludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 2;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
   const axisClear = (axisKey: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
@@ -835,6 +843,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.source?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('source')}
                     includeAll={() => axisIncludeAll('source', sources.map(s => s.id))}
+                    excludeAll={() => axisExcludeAll('source', sources.map(s => s.id))}
                     clearAll={() => axisClear('source')}
                   />
                   <AxisFilterSection
@@ -847,6 +856,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.level?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('level')}
                     includeAll={() => axisIncludeAll('level', LEVEL_VALUES)}
+                    excludeAll={() => axisExcludeAll('level', LEVEL_VALUES)}
                     clearAll={() => axisClear('level')}
                   />
                   <AxisFilterSection
@@ -859,6 +869,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.school?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('school')}
                     includeAll={() => axisIncludeAll('school', Object.keys(SCHOOL_LABELS))}
+                    excludeAll={() => axisExcludeAll('school', Object.keys(SCHOOL_LABELS))}
                     clearAll={() => axisClear('school')}
                   />
                   <AxisFilterSection
@@ -871,6 +882,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.activation?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('activation')}
                     includeAll={() => axisIncludeAll('activation', ACTIVATION_ORDER as readonly string[])}
+                    excludeAll={() => axisExcludeAll('activation', ACTIVATION_ORDER as readonly string[])}
                     clearAll={() => axisClear('activation')}
                   />
                   <AxisFilterSection
@@ -883,6 +895,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.range?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('range')}
                     includeAll={() => axisIncludeAll('range', RANGE_ORDER as readonly string[])}
+                    excludeAll={() => axisExcludeAll('range', RANGE_ORDER as readonly string[])}
                     clearAll={() => axisClear('range')}
                   />
                   <AxisFilterSection
@@ -895,6 +908,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.shape?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('shape')}
                     includeAll={() => axisIncludeAll('shape', SHAPE_ORDER as readonly string[])}
+                    excludeAll={() => axisExcludeAll('shape', SHAPE_ORDER as readonly string[])}
                     clearAll={() => axisClear('shape')}
                   />
                   <AxisFilterSection
@@ -907,6 +921,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.duration?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('duration')}
                     includeAll={() => axisIncludeAll('duration', DURATION_ORDER as readonly string[])}
+                    excludeAll={() => axisExcludeAll('duration', DURATION_ORDER as readonly string[])}
                     clearAll={() => axisClear('duration')}
                   />
                   <AxisFilterSection
@@ -919,6 +934,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     exclusionMode={axisFilters.property?.exclusionMode}
                     cycleExclusionMode={() => cycleAxisExclusionMode('property')}
                     includeAll={() => axisIncludeAll('property', PROPERTY_ORDER as readonly string[])}
+                    excludeAll={() => axisExcludeAll('property', PROPERTY_ORDER as readonly string[])}
                     clearAll={() => axisClear('property')}
                   />
 
