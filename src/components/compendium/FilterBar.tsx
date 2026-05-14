@@ -138,6 +138,22 @@ export function FilterBar({
   const [chipSearch, setChipSearch] = React.useState('');
   const [hideAllVersion, setHideAllVersion] = React.useState(0);
   const [showAllVersion, setShowAllVersion] = React.useState(0);
+
+  // Body-scroll lock while the modal is open. Sets `overflow: hidden`
+  // on <body> on open and restores the prior value on close. Backdrop
+  // clicks remain captured by the absolutely-positioned overlay
+  // element (its onClick closes the modal) and chip / button clicks
+  // inside the Card aren't affected — the lock only suppresses
+  // scrolling, not pointer events.
+  React.useEffect(() => {
+    if (!isFilterOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFilterOpen]);
+
   const ctxValue = React.useMemo<FilterBarContextValue>(() => ({
     chipSearch,
     hideAllVersion,
@@ -164,7 +180,12 @@ export function FilterBar({
         >
           <Filter className="w-3 h-3" /> Filters
           {activeFilterCount > 0 && (
-            <Badge className="bg-white text-gold h-4 px-1 min-w-[1rem] flex items-center justify-center text-[10px]">
+            // Bare numeric badge — no background pill, inherits the
+            // button's text color so it reads as a count next to the
+            // label rather than a chip. Override the default <Badge>
+            // background/padding/border via `!` modifiers so the
+            // component's own bg-primary etc. don't sneak back in.
+            <Badge className="!bg-transparent !border-0 !p-0 !shadow-none text-current text-[10px] font-bold leading-none">
               {activeFilterCount}
             </Badge>
           )}
