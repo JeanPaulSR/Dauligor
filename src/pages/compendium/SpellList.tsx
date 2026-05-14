@@ -183,6 +183,10 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   // The scope state drives which set the toggle writes to AND which
   // set the star indicators in the spell list rows read from.
   const [favoriteScope, setFavoriteScope] = useState<{ characterId: string; characterName: string } | null>(null);
+  // Controlled state for the favorites-scope dropdown so option
+  // clicks dismiss it (Base UI's Popover doesn't close on inner
+  // clicks by default — only on outside click or Escape).
+  const [scopeOpen, setScopeOpen] = useState(false);
   const { favorites, isFavorite, toggleFavorite } = useSpellFavorites(
     userProfile?.id || null,
     favoriteScope ? { characterId: favoriteScope.characterId } : null,
@@ -936,8 +940,12 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                     per-character favorites list instead. If they
                     have no characters, the popover content says so
                     explicitly — the dropdown still opens so the user
-                    knows it's there. */}
-                <Popover>
+                    knows it's there.
+                    Controlled open state so selecting an option auto-
+                    dismisses the popover (Base UI's Popover doesn't
+                    close on inner-button click by default, unlike a
+                    native <select>). */}
+                <Popover open={scopeOpen} onOpenChange={setScopeOpen}>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
@@ -953,7 +961,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                   <PopoverContent align="start" className="w-56 p-1">
                     <button
                       type="button"
-                      onClick={() => setFavoriteScope(null)}
+                      onClick={() => { setFavoriteScope(null); setScopeOpen(false); }}
                       className={cn(
                         'w-full text-left px-2 py-1.5 rounded text-xs hover:bg-gold/5 transition-colors',
                         !favoriteScope ? 'bg-gold/10 text-gold font-bold' : 'text-ink/85',
@@ -976,7 +984,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                             <button
                               key={c.id}
                               type="button"
-                              onClick={() => setFavoriteScope({ characterId: c.id, characterName: c.name })}
+                              onClick={() => { setFavoriteScope({ characterId: c.id, characterName: c.name }); setScopeOpen(false); }}
                               className={cn(
                                 'w-full text-left px-2 py-1.5 rounded text-xs hover:bg-gold/5 transition-colors truncate',
                                 active ? 'bg-gold/10 text-gold font-bold' : 'text-ink/85',
