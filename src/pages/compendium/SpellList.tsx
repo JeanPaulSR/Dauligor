@@ -72,7 +72,16 @@ type SpellRecord = {
   [key: string]: any;
 };
 
-const SPELL_LIST_HEIGHT = 820;
+// Rough height of the sort-button header strip above the virtualized
+// list. Used to compute the virtualized-list height so the entire
+// list card stays within PANE_MAX_HEIGHT_PX. If the header gains rows
+// or the type ramp changes, bump this — slight overestimate is fine
+// (it just leaves a thin gap above the bottom of the card).
+const LIST_HEADER_PX = 40;
+// The virtualized inner list height. Derived from the pane max so the
+// list, favorites, and detail panes all line up at the same overall
+// row height regardless of which spell is selected.
+const SPELL_LIST_HEIGHT = 780; // = PANE_MAX_HEIGHT_PX (820) - LIST_HEADER_PX (40)
 // SPELL_ROW_HEIGHT was 78 when each row showed Name/Level/School/Source
 // as a tall flex-y card. The denser 7-column layout (Name/Lv/Time/School/
 // C./Range/Src) uses 48px per row — see VirtualizedList itemHeight in the
@@ -111,31 +120,28 @@ const COL_WIDTHS: Record<SpellColumnKey, string> = {
   source: '60px',
 };
 
-// Pixel widths for the NON-name columns, used to compute how wide the
-// outer list pane needs to be to display all visible columns plus a
-// comfortable name budget. Must stay in sync with COL_WIDTHS above.
-const COL_PX: Record<Exclude<SpellColumnKey, 'name'>, number> = {
-  level: 36,
-  time: 80,
-  school: 60,
-  concentration: 24,
-  range: 80,
-  source: 60,
-};
-
-// How wide we want the Name column to be when other columns are
-// visible. Calibrated against the longest in-corpus spell names —
-// "Raulothim's Psychic Lance" and "Body Warping of Gorgoroth" — both
-// fit comfortably at 280px in font-serif text-sm with the favorite
-// star and any small inline icons (e.g. concentration sigil) included.
-const NAME_IDEAL_PX = 280;
-// Floor for the list pane and the description pane respectively. Below
-// these widths legibility drops sharply (the description is body text
-// — anything under ~320px wraps every 4-5 words and feels cramped).
-const LIST_MIN_PX = 280;
-const DETAIL_MIN_PX = 360;
-const LIST_GAP_PX = 8;       // matches gap-2 in the list grid
-const LIST_PADDING_PX = 24;  // matches px-3 (12 + 12) on the list grid
+// Outer-grid sizing policy. After several iterations the settled
+// behavior is:
+//   - List pane: FIXED width at 520px. Doesn't grow when the viewport
+//     widens, doesn't shrink when columns are hidden. This keeps the
+//     description as the primary "stretch target" — wider screens
+//     give more room to the description, never to the list.
+//   - When the user hides a column, the freed width inside the list
+//     pane goes to the NAME column (which is `minmax(0,1fr)` in the
+//     internal grid). So column-hiding is the mechanism for "show
+//     longer spell names" — the description is unaffected.
+//   - Description: 1fr with a 360px floor so body text stays legible
+//     (under ~320px it wraps every 4-5 words and feels cramped).
+// The 520px width reproduces the "original good size" the user
+// validated — see the screenshot in commit 0e5a2a8.
+// Values are inlined as literals in the xl:grid-cols-[...] class
+// below (Tailwind can't read variables at build time).
+//
+// Shared max-height for the list, favorites, and detail panes so the
+// row keeps a stable height regardless of which spell is selected.
+// Each pane gets its own internal scrollbar when content overflows.
+// Matches SPELL_LIST_HEIGHT above so the column tops/bottoms align.
+const PANE_MAX_HEIGHT_PX = 820;
 
 const COL_LABELS: Record<SpellColumnKey, string> = {
   name: 'Name',
@@ -191,23 +197,6 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     () => visibleColumns.map(c => COL_WIDTHS[c]).join(' '),
     [visibleColumns],
   );
-
-  // Outer-grid sizing: how wide the LIST pane should be at the xl
-  // breakpoint, derived from which columns are visible. Formula:
-  //   name budget + sum(visible non-name col widths) + gaps + padding.
-  // We feed this into the outer grid via a CSS custom property
-  // (--list-cap) so hiding a column shrinks the list pane and yields
-  // the freed width to the detail pane (description). See the JSX
-  // below where this is applied as a CSS variable, plus the
-  // `min(LIST_MIN_PX, var(--list-cap))` in the grid template so that
-  // when *only* Name is visible the list collapses down to a tight
-  // column rather than padding itself with empty space.
-  const listCapPx = useMemo(() => {
-    const otherCols = visibleColumns.filter(c => c !== 'name') as Exclude<SpellColumnKey, 'name'>[];
-    const otherWidths = otherCols.reduce((sum, c) => sum + COL_PX[c], 0);
-    const gaps = Math.max(0, visibleColumns.length - 1) * LIST_GAP_PX;
-    return NAME_IDEAL_PX + otherWidths + gaps + LIST_PADDING_PX;
-  }, [visibleColumns]);
   const toggleColumn = (col: SpellColumnKey) => {
     if (ALWAYS_VISIBLE.has(col)) return;
     setHiddenColumns(prev => {
@@ -824,30 +813,29 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
 
         {/* Three-column layout: favorites pane (left) | main spell list
             (middle) | detail panel (right).
-            Stretch policy: the list pane caps at `--list-cap`, which is
-            recomputed every render from `visibleColumns` (see
-            `listCapPx`). When the user hides columns the cap shrinks
-            and the freed width spills into the detail pane — that's
-            what makes "fewer columns → wider description" actually
-            work. The inner min() clamp lets the list collapse below
-            LIST_MIN_PX when the cap is itself smaller than LIST_MIN_PX
-            (e.g. only Name visible), instead of leaving dead whitespace
-            inside the list pane. Detail has a hard DETAIL_MIN_PX floor
-            so the description never wraps to gibberish on narrow xl
-            viewports. Below xl the grid drops to two columns
-            (favorites | list) and the detail card flows to a second
-            row underneath. */}
-        <div
-          className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_minmax(min(280px,var(--list-cap)),var(--list-cap))_minmax(360px,1fr)]"
-          style={{ '--list-cap': `${listCapPx}px` } as React.CSSProperties}
-        >
+            Sizing policy (see the doc-block above PANE_MAX_HEIGHT_PX
+            for the full rationale and history):
+              - List pane is FIXED at 520px. It doesn't grow when the
+                viewport widens — wider viewports give all the extra
+                width to the description instead. It doesn't shrink
+                when columns are hidden either; the freed width inside
+                the list goes to the Name column (which is the only
+                `minmax(0,1fr)` cell in the internal grid).
+              - Description floors at 360px so body text stays
+                legible (anything narrower wraps every 4-5 words).
+              - Below xl the grid drops to two columns and the detail
+                card wraps to a second row. */}
+        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[260px_520px_minmax(360px,1fr)]">
           {/* Favorites pane — only renders favorited spells. Pulled
               from the same filteredSpells source so the favorites pane
               respects active filters too, but it's "the same UI for a
               smaller list" rather than a parallel data path. */}
-          <Card className="border-gold/10 bg-card/50 overflow-hidden">
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5">
+          <Card
+            className="border-gold/10 bg-card/50 overflow-hidden"
+            style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+          >
+            <CardContent className="p-0 flex flex-col" style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}>
+              <div className="flex items-center justify-between gap-2 border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
                 <div className="flex items-center gap-2">
                   <Star className="w-3.5 h-3.5 text-gold/80 fill-gold/40" />
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Favorites</span>
@@ -859,7 +847,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                   Star a spell to pin it here.
                 </div>
               ) : (
-                <div className="divide-y divide-gold/5 max-h-[640px] overflow-y-auto custom-scrollbar">
+                <div className="divide-y divide-gold/5 flex-1 overflow-y-auto custom-scrollbar">
                   {spells
                     .filter((s) => favorites.has(s.id))
                     .map((spell) => {
@@ -907,8 +895,14 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
               Range | Src. Each header is a sort toggle (click to sort by
               that column; click again to flip direction). Columns past
               Name can be hidden via Settings in the page header bar —
-              user preference persists to localStorage. */}
-          <Card className="border-gold/10 bg-card/50 overflow-hidden">
+              user preference persists to localStorage. The card is
+              capped at PANE_MAX_HEIGHT_PX; VirtualizedList already
+              handles its own scrolling internally (height = PANE max
+              minus the header strip). */}
+          <Card
+            className="border-gold/10 bg-card/50 overflow-hidden"
+            style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+          >
             <CardContent className="p-0">
               {/* Header row + columns popover. The grid template here is
                   derived from `visibleColumns` so hiding a column also
@@ -1059,9 +1053,19 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           </Card>
 
           {/* Detail pane — image+info inline (horizontal), tags grouped by
-              category, favorite star in the header. See SpellDetailPanel. */}
-          <Card className="border-gold/10 bg-card/50 overflow-hidden">
-            <CardContent className="p-0">
+              category, favorite star in the header. The card has a fixed
+              max-height matching the list pane (PANE_MAX_HEIGHT_PX) and
+              its CardContent scrolls internally. Without this, long
+              descriptions would push the entire row taller than the
+              list and make the column heights ragged. */}
+          <Card
+            className="border-gold/10 bg-card/50 overflow-hidden"
+            style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+          >
+            <CardContent
+              className="p-0 overflow-y-auto custom-scrollbar"
+              style={{ maxHeight: `${PANE_MAX_HEIGHT_PX}px` }}
+            >
               <SpellDetailPanel
                 spellId={selectedSpellId || null}
                 isFavorite={selectedSpellId ? isFavorite(selectedSpellId) : false}
