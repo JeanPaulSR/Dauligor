@@ -768,19 +768,97 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     onIncludeAll={() => setSchoolFilters(Object.keys(SCHOOL_LABELS))}
                     onClear={() => setSchoolFilters([])}
                   />
+                  {/* Tag groups render hierarchically — roots on their
+                      own chip-row, subtags on an indented chip-row
+                      directly under their parent (thin gold left-
+                      border as the tree hint). Mirrors the
+                      SpellTagPicker pattern from the subtag rollout.
+                      We keep the flat tagFilterIds shape here because
+                      SpellRule's query schema only stores AND-of-tag-IDs;
+                      a richer 3-state toggle would need a SpellRule
+                      schema change. */}
                   {tagGroups.map(group => {
                     const groupTags = tagsByGroup[group.id] || [];
                     if (!groupTags.length) return null;
+                    const idSet = new Set(groupTags.map(t => t.id));
+                    const getParent = (t: any): string | null => {
+                      const p = t?.parentTagId ?? null;
+                      return p && idSet.has(p) ? p : null;
+                    };
+                    const roots = groupTags.filter(t => !getParent(t)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                    const childrenByParent = new Map<string, any[]>();
+                    for (const t of groupTags) {
+                      const p = getParent(t);
+                      if (!p) continue;
+                      if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+                      childrenByParent.get(p)!.push(t);
+                    }
+                    for (const arr of childrenByParent.values()) {
+                      arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                    }
+                    const orphans = groupTags.filter(t => {
+                      const raw = t?.parentTagId ?? null;
+                      return raw && !idSet.has(raw);
+                    });
+
+                    const renderChip = (tag: any) => {
+                      const active = tagFilterIds.includes(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleFromArray(tag.id, tagFilterIds, setTagFilterIds)}
+                          className={cn(
+                            'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
+                            active
+                              ? 'border-gold bg-gold text-background shadow-md shadow-gold/30'
+                              : 'border-gold/20 bg-background/60 text-ink/70 hover:border-gold/50 hover:text-ink'
+                          )}
+                        >
+                          {String(tag.name)}
+                        </button>
+                      );
+                    };
+
                     return (
-                      <FilterSection
-                        key={group.id}
-                        title={group.name}
-                        values={groupTags.map(t => ({ value: t.id, label: tagPickerLabel(t) }))}
-                        selected={tagFilterIds}
-                        onToggle={v => toggleFromArray(v, tagFilterIds, setTagFilterIds)}
-                        onIncludeAll={() => setTagFilterIds(prev => Array.from(new Set([...prev, ...groupTags.map(t => t.id)])))}
-                        onClear={() => setTagFilterIds(prev => prev.filter(id => !groupTags.some(t => t.id === id)))}
-                      />
+                      <div key={group.id} className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="h3-title uppercase text-ink">{group.name}</span>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setTagFilterIds(prev => Array.from(new Set([...prev, ...groupTags.map(t => t.id)])))}
+                              className="label-text hover:underline"
+                            >Include All</button>
+                            <span className="text-gold/20">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setTagFilterIds(prev => prev.filter(id => !groupTags.some(t => t.id === id)))}
+                              className="label-text hover:underline"
+                            >Clear</button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {roots.map(root => {
+                            const children = childrenByParent.get(root.id) || [];
+                            return (
+                              <React.Fragment key={root.id}>
+                                <div className="flex flex-wrap gap-2">{renderChip(root)}</div>
+                                {children.length > 0 && (
+                                  <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-2">
+                                    {children.map(renderChip)}
+                                  </div>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                          {orphans.length > 0 && (
+                            <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-2" title="Subtags whose parent is not in this group's visible tag set.">
+                              {orphans.map(renderChip)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
 
