@@ -99,7 +99,7 @@ For any list-on-left, detail-on-right component (class features, unique option g
 The sidebar width is set via `w-[Xpx]` or `style={{ width }}`. The class itself is layout-only.
 
 ### `FilterBar` (`src/components/compendium/FilterBar.tsx`)
-Shared filter modal shell used by `ClassList`, `SpellList`, etc. Supports custom filter sections and labels so each list can supply its own filter UI through the same modal frame.
+Shared filter modal shell used by every list / browse surface in the compendium. Wraps the modal frame, search bar, and bulk affordances (chip-label search, Show All / Hide All); pages provide their own filter sections via the `renderFilters` prop. Companion components in the same file: `<AxisFilterSection>` (single-value axes with 3-state include/exclude + AND/OR/XOR combinators) and `<TagGroupFilter>` (per-group tag filter with subtag section-expand pattern). Full design + roadmap in [filters.md](filters.md).
 
 ## Rich text
 

@@ -32,10 +32,10 @@ Layout: two-pane split.
 - **Left** — virtualised summary table (`VirtualizedList`): name, level, school, source abbreviation
 - **Right** — selected spell detail view (image, description, activities)
 
-Filters (top toolbar):
-- Sources (multi-select)
-- Spell level (0–9 multi-select)
-- Spell school (multi-select)
+Filter axes (top toolbar):
+- Sources
+- Spell level (0–9)
+- Spell school
 - Custom tags (Tag Manager-defined; **hierarchical** — filtering on a parent tag also matches spells tagged with any subtag of it; see [../database/structure/tags.md](../database/structure/tags.md#hierarchical-query-matching))
 - Casting time bucket (Action / Bonus / Reaction / Minute / Hour / Special)
 - Range bucket (Self / Touch / Close ≤5 / Short ≤30 / Medium ≤60 / Long ≤120 / Far >120)
@@ -45,7 +45,7 @@ Filters (top toolbar):
 
 Range and shape are orthogonal — a "self (15 ft cone)" spell has range bucket `Self` and shape bucket `Cone`.
 
-Filter UI is built on the shared [FilterBar](../../src/components/compendium/FilterBar.tsx). Same modal language as `ClassList` (no spell-specific variation): `ADVANCED FILTERS` title, section headers with `Include All / Clear`, `filter-tag` toggles for options.
+Filter UI is the shared modal — every axis uses 3-state chips (gold include / blood exclude / neutral) with per-section AND/OR/XOR include + Exclusion Logic combinators. Tags live in a collapsible **Advanced Options** disclosure at the bottom of the modal so the base axes stay scannable. Full vocabulary + the section-expand pattern for tag subtags: [../ui/filters.md](../ui/filters.md).
 
 > **Range bucket gotcha:** the bucket VALUES (`5ft`, `30ft`, `60ft`, `120ft`, `long`, `other`) are exact-distance strings carried over from an earlier exact-value implementation. The labels (`Close`, `Short`, `Medium`, `Long`, `Far`) are band-based. The mismatch is intentional — renaming values would break stored spell-rule queries. See `src/lib/spellFilters.ts` `RangeBucket` type comment.
 

@@ -17,6 +17,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 | Adding a Vercel function or Express route | [platform/runtime.md](platform/runtime.md) |
 | Permissions / RBAC change | [architecture/permissions-rbac.md](architecture/permissions-rbac.md) |
 | BBCode tag / TipTap extension | [ui/bbcode.md](ui/bbcode.md) |
+| Filter modal / chip combinators | [ui/filters.md](ui/filters.md) |
 | FoundryVTT pairing or export | [architecture/foundry-integration.md](architecture/foundry-integration.md) |
 | Debugging an error | [operations/troubleshooting.md](operations/troubleshooting.md) |
 | Backing up or restoring D1 | [operations/backup-restore.md](operations/backup-restore.md) |
@@ -65,6 +66,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [bbcode.md](ui/bbcode.md) — supported tags, parser, TipTap extension config
 - [content-rendering.md](ui/content-rendering.md) — `BBCodeRenderer` vs `Markdown`, recursive content shapes
 - [components.md](ui/components.md) — Navbar, Sidebar, Dialog, FilterBar conventions
+- [filters.md](ui/filters.md) — shared filter modal: 3-state chips, AND/OR/XOR combinators per section, tag section-expand pattern, modal-level chip search
 
 ### [architecture/](architecture/) — cross-cutting design
 *Things that span multiple features.*

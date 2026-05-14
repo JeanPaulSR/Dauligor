@@ -79,6 +79,10 @@ Defaults are `OR` / `OR` when unset. Saved rule queries carry the three records 
 
 Matcher entry point: `matchSpellAgainstRule(spell, query, parentByTagId, tagIndex)`. The new `tagIndex` arg (built via `buildTagIndex(tagRows)` in `tagHierarchy.ts`) supplies the `groupByTagId` and `tagIdsByGroup` lookups the per-group AND/XOR counts need. Callers passing legacy `tagFilterIds`-only queries can omit `tagIndex`; rich-tagStates queries fail-safe to "match" when `tagIndex` is missing (defensive, so a forgotten plumbing change can't accidentally empty a class spell list).
 
+### Rendering — section-expand pattern
+
+The `<TagGroupFilter>` UI component (see [docs/ui/filters.md](../../ui/filters.md)) renders root tags horizontally in one wrap-row; each root with subtags gains a small `▸` / `▾` chevron button to its right. Subtags are collapsed by default — clicking the chevron opens a labelled drawer below the roots panel showing that parent's subtags. Auto-expand on (a) a subtag with non-neutral state and (b) a chip-label search match means an active subtag filter is never hidden. Orphaned subtags (parent absent from the visible group) keep their amber-edged row, labelled `Orphaned:`. Same vocabulary regardless of which page hosts the filter.
+
 ### Hierarchical prereq satisfaction (required_tags)
 
 Spell `required_tags` checks against the character's **effective tag set** use the same hierarchy rule, applied in the symmetric direction:
