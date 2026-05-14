@@ -7,6 +7,10 @@
     {
       "source": "/api/module",
       "destination": "/api/module"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }
