@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
 import VirtualizedList from '../../components/ui/VirtualizedList';
-import { FilterBar } from '../../components/compendium/FilterBar';
+import { FilterBar, TagGroupFilter, AxisFilterSection, matchesTagFilters } from '../../components/compendium/FilterBar';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
@@ -43,6 +43,8 @@ import {
   SHAPE_LABELS,
   SHAPE_ORDER,
   deriveSpellFilterFacets,
+  matchesSingleAxisFilter,
+  matchesMultiAxisFilter,
   type ActivationBucket,
   type DurationBucket,
   type PropertyFilter,
@@ -119,15 +121,16 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
 
   const [search, setSearch] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
-  const [levelFilters, setLevelFilters] = useState<string[]>([]);
-  const [schoolFilters, setSchoolFilters] = useState<string[]>([]);
-  const [sourceFilterIds, setSourceFilterIds] = useState<string[]>([]);
-  const [tagFilterIds, setTagFilterIds] = useState<string[]>([]);
-  const [activationFilters, setActivationFilters] = useState<ActivationBucket[]>([]);
-  const [rangeFilters, setRangeFilters] = useState<RangeBucket[]>([]);
-  const [durationFilters, setDurationFilters] = useState<DurationBucket[]>([]);
-  const [shapeFilters, setShapeFilters] = useState<ShapeBucket[]>([]);
-  const [propertyFilters, setPropertyFilters] = useState<PropertyFilter[]>([]);
+  // Rich live filter state — uniform with SpellList. Every axis lives
+  // under one record keyed by axis name (source / level / school /
+  // activation / range / duration / shape / property). Per-axis state:
+  // { states (chip 1=include / 2=exclude), combineMode, exclusionMode }.
+  type AxisState = { states: Record<string, number>; combineMode?: 'AND' | 'OR' | 'XOR'; exclusionMode?: 'AND' | 'OR' | 'XOR' };
+  const [axisFilters, setAxisFilters] = useState<Record<string, AxisState>>({});
+  // Rich tag filter state — same shape as every other list page.
+  const [tagStates, setTagStates] = useState<Record<string, number>>({});
+  const [groupCombineModes, setGroupCombineModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
+  const [groupExclusionModes, setGroupExclusionModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
   const [showOnlyInList, setShowOnlyInList] = useState(false);
   const [showOrphansOnly, setShowOrphansOnly] = useState(false);
   const [linkedRules, setLinkedRules] = useState<SpellRule[]>([]);
@@ -277,19 +280,25 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     for (const s of spells) {
       if (showOnlyInList && !classListIds.has(s.id)) continue;
       if (showOrphansOnly && (spellMembershipsBySpellId.get(s.id)?.length ?? 0) > 0) continue;
-      if (levelFilters.length > 0 && !levelFilters.includes(String(s.level))) continue;
-      if (schoolFilters.length > 0 && !schoolFilters.includes(s.school)) continue;
-      if (sourceFilterIds.length > 0 && !sourceFilterIds.includes(String(s.source_id ?? ''))) continue;
-      if (tagFilterIds.length > 0) {
-        const effective = new Set(expandTagsWithAncestors(s.tags, parentByTagId));
-        if (!tagFilterIds.every(tid => effective.has(tid))) continue;
-      }
-      if (activationFilters.length > 0 && !activationFilters.includes(s.activationBucket)) continue;
-      if (rangeFilters.length > 0 && !rangeFilters.includes(s.rangeBucket)) continue;
-      if (durationFilters.length > 0 && !durationFilters.includes(s.durationBucket)) continue;
-      if (shapeFilters.length > 0 && !shapeFilters.includes(s.shapeBucket)) continue;
-      // Property filters are strict AND — Concentration ∩ V means both must hold.
-      if (propertyFilters.length > 0 && !propertyFilters.every(p => s[p])) continue;
+      // Rich axis filters — same matcher functions every page uses.
+      if (!matchesSingleAxisFilter(String(s.level), axisFilters.level)) continue;
+      if (!matchesSingleAxisFilter(s.school, axisFilters.school)) continue;
+      if (!matchesSingleAxisFilter(String(s.source_id ?? ''), axisFilters.source)) continue;
+      // Subtag-aware tag matching via the rich tag-state matcher.
+      const effectiveTagIds = Array.from(expandTagsWithAncestors(s.tags, parentByTagId));
+      if (!matchesTagFilters(effectiveTagIds, tagGroups, tagsByGroup, tagStates, groupCombineModes, groupExclusionModes)) continue;
+      if (!matchesSingleAxisFilter(s.activationBucket, axisFilters.activation)) continue;
+      if (!matchesSingleAxisFilter(s.rangeBucket, axisFilters.range)) continue;
+      if (!matchesSingleAxisFilter(s.durationBucket, axisFilters.duration)) continue;
+      if (!matchesSingleAxisFilter(s.shapeBucket, axisFilters.shape)) continue;
+      // Properties: multi-valued axis (a spell can have V + S + M).
+      const propsHave = new Set<string>();
+      if ((s as any).concentration) propsHave.add('concentration');
+      if ((s as any).ritual) propsHave.add('ritual');
+      if ((s as any).vocal) propsHave.add('vocal');
+      if ((s as any).somatic) propsHave.add('somatic');
+      if ((s as any).material) propsHave.add('material');
+      if (!matchesMultiAxisFilter(propsHave, axisFilters.property)) continue;
 
       let matchedTagNames: string[] = [];
       if (q) {
@@ -303,29 +312,104 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       out.push({ spell: s, matchedTagNames });
     }
     return out;
-  }, [spells, classListIds, search, levelFilters, schoolFilters, sourceFilterIds, tagFilterIds, activationFilters, rangeFilters, durationFilters, shapeFilters, propertyFilters, showOnlyInList, showOrphansOnly, spellMembershipsBySpellId, tagsById, parentByTagId]);
+  }, [spells, classListIds, search, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, showOnlyInList, showOrphansOnly, spellMembershipsBySpellId, tagsById, parentByTagId]);
 
   const activeFilterCount =
-    sourceFilterIds.length
-    + levelFilters.length
-    + schoolFilters.length
-    + tagFilterIds.length
-    + activationFilters.length
-    + rangeFilters.length
-    + durationFilters.length
-    + shapeFilters.length
-    + propertyFilters.length;
+    Object.keys(axisFilters.source?.states ?? {}).length
+    + Object.keys(axisFilters.level?.states ?? {}).length
+    + Object.keys(axisFilters.school?.states ?? {}).length
+    + Object.keys(tagStates).length
+    + Object.keys(axisFilters.activation?.states ?? {}).length
+    + Object.keys(axisFilters.range?.states ?? {}).length
+    + Object.keys(axisFilters.duration?.states ?? {}).length
+    + Object.keys(axisFilters.shape?.states ?? {}).length
+    + Object.keys(axisFilters.property?.states ?? {}).length;
+
+  // Per-axis updaters — same generic pattern as SpellList.
+  const cycleAxisState = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      const s = states[value] || 0;
+      const nextState = s === 0 ? 1 : s === 1 ? 2 : 0;
+      if (nextState === 0) delete states[value];
+      else states[value] = nextState;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const cycleAxisCombineMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
+  const cycleAxisExclusionMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const axisIncludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 1;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisClear = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      return { ...prev, [axisKey]: { ...cur, states: {} } };
+    });
+  };
+  // Direct removal — clicks on the X of an active-filter chip in the
+  // ActiveFilterChips strip clear that single value (any state) back to
+  // neutral. Not a cycle; the strip's interaction model is "click X to
+  // remove" rather than the modal's 3-state cycle.
+  const cycleAxisStateRemove = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      delete states[value];
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+
+  const cycleTagState = (tagId: string) => {
+    setTagStates(prev => {
+      const next = { ...prev };
+      const state = next[tagId] || 0;
+      if (state === 0) next[tagId] = 1;
+      else if (state === 1) next[tagId] = 2;
+      else delete next[tagId];
+      return next;
+    });
+  };
+  const cycleGroupMode = (groupId: string) => {
+    setGroupCombineModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: nextMode };
+    });
+  };
+  const cycleExclusionMode = (groupId: string) => {
+    setGroupExclusionModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: nextMode };
+    });
+  };
 
   const resetFilters = () => {
-    setSourceFilterIds([]);
-    setLevelFilters([]);
-    setSchoolFilters([]);
-    setTagFilterIds([]);
-    setActivationFilters([]);
-    setRangeFilters([]);
-    setDurationFilters([]);
-    setShapeFilters([]);
-    setPropertyFilters([]);
+    setAxisFilters({});
+    setTagStates({});
+    setGroupCombineModes({});
+    setGroupExclusionModes({});
   };
 
   const inListCount = classListIds.size;
@@ -741,167 +825,133 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               filterTitle="Spell Filters"
               renderFilters={
                 <>
-                  <FilterSection
+                  <AxisFilterSection
                     title="Source"
-                    values={sources.map(s => ({
-                      value: s.id,
-                      label: String(s.abbreviation || s.shortName || s.name || s.id),
-                    }))}
-                    selected={sourceFilterIds}
-                    onToggle={v => toggleFromArray(v, sourceFilterIds, setSourceFilterIds)}
-                    onIncludeAll={() => setSourceFilterIds(sources.map(s => s.id))}
-                    onClear={() => setSourceFilterIds([])}
+                    values={sources.map(s => ({ value: s.id, label: String(s.abbreviation || s.shortName || s.name || s.id) }))}
+                    states={axisFilters.source?.states || {}}
+                    cycleState={(v) => cycleAxisState('source', v)}
+                    combineMode={axisFilters.source?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('source')}
+                    exclusionMode={axisFilters.source?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('source')}
+                    includeAll={() => axisIncludeAll('source', sources.map(s => s.id))}
+                    clearAll={() => axisClear('source')}
                   />
-                  <FilterSection
+                  <AxisFilterSection
                     title="Spell Level"
                     values={LEVEL_VALUES.map(lvl => ({ value: lvl, label: lvl === '0' ? 'Cantrip' : `Level ${lvl}` }))}
-                    selected={levelFilters}
-                    onToggle={v => toggleFromArray(v, levelFilters, setLevelFilters)}
-                    onIncludeAll={() => setLevelFilters([...LEVEL_VALUES])}
-                    onClear={() => setLevelFilters([])}
+                    states={axisFilters.level?.states || {}}
+                    cycleState={(v) => cycleAxisState('level', v)}
+                    combineMode={axisFilters.level?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('level')}
+                    exclusionMode={axisFilters.level?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('level')}
+                    includeAll={() => axisIncludeAll('level', LEVEL_VALUES)}
+                    clearAll={() => axisClear('level')}
                   />
-                  <FilterSection
+                  <AxisFilterSection
                     title="Spell School"
                     values={Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label }))}
-                    selected={schoolFilters}
-                    onToggle={v => toggleFromArray(v, schoolFilters, setSchoolFilters)}
-                    onIncludeAll={() => setSchoolFilters(Object.keys(SCHOOL_LABELS))}
-                    onClear={() => setSchoolFilters([])}
+                    states={axisFilters.school?.states || {}}
+                    cycleState={(v) => cycleAxisState('school', v)}
+                    combineMode={axisFilters.school?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('school')}
+                    exclusionMode={axisFilters.school?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('school')}
+                    includeAll={() => axisIncludeAll('school', Object.keys(SCHOOL_LABELS))}
+                    clearAll={() => axisClear('school')}
                   />
-                  {/* Tag groups render hierarchically — roots on their
-                      own chip-row, subtags on an indented chip-row
-                      directly under their parent (thin gold left-
-                      border as the tree hint). Mirrors the
-                      SpellTagPicker pattern from the subtag rollout.
-                      We keep the flat tagFilterIds shape here because
-                      SpellRule's query schema only stores AND-of-tag-IDs;
-                      a richer 3-state toggle would need a SpellRule
-                      schema change. */}
-                  {tagGroups.map(group => {
-                    const groupTags = tagsByGroup[group.id] || [];
-                    if (!groupTags.length) return null;
-                    const idSet = new Set(groupTags.map(t => t.id));
-                    const getParent = (t: any): string | null => {
-                      const p = t?.parentTagId ?? null;
-                      return p && idSet.has(p) ? p : null;
-                    };
-                    const roots = groupTags.filter(t => !getParent(t)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-                    const childrenByParent = new Map<string, any[]>();
-                    for (const t of groupTags) {
-                      const p = getParent(t);
-                      if (!p) continue;
-                      if (!childrenByParent.has(p)) childrenByParent.set(p, []);
-                      childrenByParent.get(p)!.push(t);
-                    }
-                    for (const arr of childrenByParent.values()) {
-                      arr.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-                    }
-                    const orphans = groupTags.filter(t => {
-                      const raw = t?.parentTagId ?? null;
-                      return raw && !idSet.has(raw);
-                    });
-
-                    const renderChip = (tag: any) => {
-                      const active = tagFilterIds.includes(tag.id);
-                      return (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          onClick={() => toggleFromArray(tag.id, tagFilterIds, setTagFilterIds)}
-                          className={cn(
-                            'rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors',
-                            active
-                              ? 'border-gold bg-gold text-background shadow-md shadow-gold/30'
-                              : 'border-gold/20 bg-background/60 text-ink/70 hover:border-gold/50 hover:text-ink'
-                          )}
-                        >
-                          {String(tag.name)}
-                        </button>
-                      );
-                    };
-
-                    return (
-                      <div key={group.id} className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="h3-title uppercase text-ink">{group.name}</span>
-                          <div className="flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setTagFilterIds(prev => Array.from(new Set([...prev, ...groupTags.map(t => t.id)])))}
-                              className="label-text hover:underline"
-                            >Include All</button>
-                            <span className="text-gold/20">|</span>
-                            <button
-                              type="button"
-                              onClick={() => setTagFilterIds(prev => prev.filter(id => !groupTags.some(t => t.id === id)))}
-                              className="label-text hover:underline"
-                            >Clear</button>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          {roots.map(root => {
-                            const children = childrenByParent.get(root.id) || [];
-                            return (
-                              <React.Fragment key={root.id}>
-                                <div className="flex flex-wrap gap-2">{renderChip(root)}</div>
-                                {children.length > 0 && (
-                                  <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-2">
-                                    {children.map(renderChip)}
-                                  </div>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                          {orphans.length > 0 && (
-                            <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-2" title="Subtags whose parent is not in this group's visible tag set.">
-                              {orphans.map(renderChip)}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  <FilterSection
+                  <AxisFilterSection
                     title="Casting Time"
                     values={ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] }))}
-                    selected={activationFilters}
-                    onToggle={v => toggleFromArray(v as ActivationBucket, activationFilters, setActivationFilters)}
-                    onIncludeAll={() => setActivationFilters([...ACTIVATION_ORDER])}
-                    onClear={() => setActivationFilters([])}
+                    states={axisFilters.activation?.states || {}}
+                    cycleState={(v) => cycleAxisState('activation', v)}
+                    combineMode={axisFilters.activation?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('activation')}
+                    exclusionMode={axisFilters.activation?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('activation')}
+                    includeAll={() => axisIncludeAll('activation', ACTIVATION_ORDER as readonly string[])}
+                    clearAll={() => axisClear('activation')}
                   />
-                  <FilterSection
+                  <AxisFilterSection
                     title="Range"
                     values={RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] }))}
-                    selected={rangeFilters}
-                    onToggle={v => toggleFromArray(v as RangeBucket, rangeFilters, setRangeFilters)}
-                    onIncludeAll={() => setRangeFilters([...RANGE_ORDER])}
-                    onClear={() => setRangeFilters([])}
+                    states={axisFilters.range?.states || {}}
+                    cycleState={(v) => cycleAxisState('range', v)}
+                    combineMode={axisFilters.range?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('range')}
+                    exclusionMode={axisFilters.range?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('range')}
+                    includeAll={() => axisIncludeAll('range', RANGE_ORDER as readonly string[])}
+                    clearAll={() => axisClear('range')}
                   />
-                  <FilterSection
+                  <AxisFilterSection
                     title="Shape"
                     values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
-                    selected={shapeFilters}
-                    onToggle={v => toggleFromArray(v as ShapeBucket, shapeFilters, setShapeFilters)}
-                    onIncludeAll={() => setShapeFilters([...SHAPE_ORDER])}
-                    onClear={() => setShapeFilters([])}
+                    states={axisFilters.shape?.states || {}}
+                    cycleState={(v) => cycleAxisState('shape', v)}
+                    combineMode={axisFilters.shape?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('shape')}
+                    exclusionMode={axisFilters.shape?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('shape')}
+                    includeAll={() => axisIncludeAll('shape', SHAPE_ORDER as readonly string[])}
+                    clearAll={() => axisClear('shape')}
                   />
-                  <FilterSection
+                  <AxisFilterSection
                     title="Duration"
                     values={DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] }))}
-                    selected={durationFilters}
-                    onToggle={v => toggleFromArray(v as DurationBucket, durationFilters, setDurationFilters)}
-                    onIncludeAll={() => setDurationFilters([...DURATION_ORDER])}
-                    onClear={() => setDurationFilters([])}
+                    states={axisFilters.duration?.states || {}}
+                    cycleState={(v) => cycleAxisState('duration', v)}
+                    combineMode={axisFilters.duration?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('duration')}
+                    exclusionMode={axisFilters.duration?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('duration')}
+                    includeAll={() => axisIncludeAll('duration', DURATION_ORDER as readonly string[])}
+                    clearAll={() => axisClear('duration')}
                   />
-                  <FilterSection
+                  <AxisFilterSection
                     title="Properties"
                     values={PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] }))}
-                    selected={propertyFilters}
-                    onToggle={v => toggleFromArray(v as PropertyFilter, propertyFilters, setPropertyFilters)}
-                    onIncludeAll={() => setPropertyFilters([...PROPERTY_ORDER])}
-                    onClear={() => setPropertyFilters([])}
+                    states={axisFilters.property?.states || {}}
+                    cycleState={(v) => cycleAxisState('property', v)}
+                    combineMode={axisFilters.property?.combineMode}
+                    cycleCombineMode={() => cycleAxisCombineMode('property')}
+                    exclusionMode={axisFilters.property?.exclusionMode}
+                    cycleExclusionMode={() => cycleAxisExclusionMode('property')}
+                    includeAll={() => axisIncludeAll('property', PROPERTY_ORDER as readonly string[])}
+                    clearAll={() => axisClear('property')}
                   />
+
+                  {/* Tag-group rich filter — Advanced Options disclosure
+                      to keep the modal scannable; expands to per-group
+                      AND/OR/XOR + Exclusion Logic chips. */}
+                  <details className="group">
+                    <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
+                      <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
+                        Advanced Options — Tags
+                        {Object.keys(tagStates).length > 0 && (
+                          <span className="ml-2 text-gold/60">({Object.keys(tagStates).length} selected)</span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                    </summary>
+                    <div className="mt-4 space-y-6 pl-1">
+                      {tagGroups.map(group => (
+                        <TagGroupFilter
+                          key={group.id}
+                          group={group}
+                          tags={(tagsByGroup[group.id] || []) as any}
+                          tagStates={tagStates}
+                          setTagStates={setTagStates}
+                          cycleTagState={cycleTagState}
+                          combineMode={groupCombineModes[group.id]}
+                          cycleGroupMode={cycleGroupMode}
+                          exclusionMode={groupExclusionModes[group.id]}
+                          cycleExclusionMode={cycleExclusionMode}
+                        />
+                      ))}
+                    </div>
+                  </details>
                 </>
               }
             />
@@ -942,24 +992,28 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
             onClearShowOnlyInList={() => setShowOnlyInList(false)}
             showOrphansOnly={showOrphansOnly}
             onClearShowOrphansOnly={() => setShowOrphansOnly(false)}
-            sourceFilterIds={sourceFilterIds}
-            onRemoveSource={id => setSourceFilterIds(prev => prev.filter(x => x !== id))}
+            // Derive include-only arrays from the rich state for the
+            // active-chip strip. (Exclude chips live in the filter
+            // modal but don't appear up here — we can revisit if the
+            // strip needs to express the full 3-state semantic later.)
+            sourceFilterIds={Object.entries(axisFilters.source?.states ?? {}).filter(([, s]) => s === 1).map(([id]) => id)}
+            onRemoveSource={id => cycleAxisStateRemove('source', id)}
             sourceById={sourceById}
-            levelFilters={levelFilters}
-            onRemoveLevel={lvl => setLevelFilters(prev => prev.filter(x => x !== lvl))}
-            schoolFilters={schoolFilters}
-            onRemoveSchool={k => setSchoolFilters(prev => prev.filter(x => x !== k))}
-            tagFilterIds={tagFilterIds}
-            onRemoveTag={id => setTagFilterIds(prev => prev.filter(x => x !== id))}
+            levelFilters={Object.entries(axisFilters.level?.states ?? {}).filter(([, s]) => s === 1).map(([id]) => id)}
+            onRemoveLevel={lvl => cycleAxisStateRemove('level', lvl)}
+            schoolFilters={Object.entries(axisFilters.school?.states ?? {}).filter(([, s]) => s === 1).map(([id]) => id)}
+            onRemoveSchool={k => cycleAxisStateRemove('school', k)}
+            tagFilterIds={Object.entries(tagStates).filter(([, s]) => s === 1).map(([id]) => id)}
+            onRemoveTag={id => setTagStates(prev => { const next = { ...prev }; delete next[id]; return next; })}
             tagsById={tagsById}
-            activationFilters={activationFilters}
-            onRemoveActivation={b => setActivationFilters(prev => prev.filter(x => x !== b))}
-            rangeFilters={rangeFilters}
-            onRemoveRange={b => setRangeFilters(prev => prev.filter(x => x !== b))}
-            durationFilters={durationFilters}
-            onRemoveDuration={b => setDurationFilters(prev => prev.filter(x => x !== b))}
-            propertyFilters={propertyFilters}
-            onRemoveProperty={p => setPropertyFilters(prev => prev.filter(x => x !== p))}
+            activationFilters={Object.entries(axisFilters.activation?.states ?? {}).filter(([, s]) => s === 1).map(([id]) => id) as ActivationBucket[]}
+            onRemoveActivation={b => cycleAxisStateRemove('activation', b as string)}
+            rangeFilters={Object.entries(axisFilters.range?.states ?? {}).filter(([, s]) => s === 1).map(([id]) => id) as RangeBucket[]}
+            onRemoveRange={b => cycleAxisStateRemove('range', b as string)}
+            durationFilters={Object.entries(axisFilters.duration?.states ?? {}).filter(([, s]) => s === 1).map(([id]) => id) as DurationBucket[]}
+            onRemoveDuration={b => cycleAxisStateRemove('duration', b as string)}
+            propertyFilters={Object.entries(axisFilters.property?.states ?? {}).filter(([, s]) => s === 1).map(([id]) => id) as PropertyFilter[]}
+            onRemoveProperty={p => cycleAxisStateRemove('property', p as string)}
             onResetAll={() => { resetFilters(); setShowOnlyInList(false); setShowOrphansOnly(false); setSearch(''); }}
           />
         ) : null}
