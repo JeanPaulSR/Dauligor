@@ -861,7 +861,14 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           widest) | tag picker (right, narrow-medium). flex-1 + min-h-0
           lets the grid fill the leftover vertical space inside the
           flex column without forcing the page to scroll. */}
-      <div className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_320px]">
+      {/* 3-column grid widths. Bumped the right column from 320 →
+          420 so tag chips have breathing room: a typical tag-group
+          row with 6-8 chips + the ▸/▾ expand button no longer wraps
+          mid-chip, and the per-parent drawer below has enough width
+          to keep subtags on a single line for short tag lists.
+          Middle column is still `1fr` so it absorbs the rest of the
+          viewport. */}
+      <div className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_420px]">
         {/* Left column — compact spell list (Name | Lv | Src). Rows
             mirror the SpellList browser's compact rhythm; columns are
             tighter because the editor needs the middle column for
