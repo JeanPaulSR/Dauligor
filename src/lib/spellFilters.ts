@@ -183,14 +183,46 @@ export type SpellFilterFacets = {
   material: boolean;
 };
 
+/**
+ * Tightening rules:
+ *   1. If the row has a materialised bucket column (activation_bucket /
+ *      range_bucket / duration_bucket / shape_bucket — populated by
+ *      the migration in worker/migrations/20260514-2200_* and kept
+ *      in sync on every save by upsertSpell/upsertSpellBatch), use
+ *      it directly. No JSON parsing needed.
+ *   2. Otherwise, fall back to parsing foundry_data on the fly.
+ *      This keeps legacy rows that pre-date the migration filterable,
+ *      and lets unit tests pass raw spell shapes without going
+ *      through D1.
+ *
+ * The reason this matters: src/lib/spellSummary.ts now omits the
+ * heavy `foundry_data` column from the slim summary projection so
+ * the catalogue fits in sessionStorage at 5000-spell scale. With
+ * foundry_data absent at the row level for normal browse paths,
+ * the bucket columns ARE the source of truth.
+ */
 export function deriveSpellFilterFacets(row: any): SpellFilterFacets {
   const system = parseFoundrySystem(row?.foundry_data);
   const properties: string[] = Array.isArray(system?.properties) ? system.properties.map(String) : [];
+  // Bucket columns when present, otherwise compute from foundry_data.
+  // String casts are defensive — D1 returns TEXT but never hurts.
+  const activationBucket = row?.activation_bucket
+    ? (String(row.activation_bucket) as ActivationBucket)
+    : bucketActivation(system?.activation);
+  const rangeBucket = row?.range_bucket
+    ? (String(row.range_bucket) as RangeBucket)
+    : bucketRange(system?.range);
+  const durationBucket = row?.duration_bucket
+    ? (String(row.duration_bucket) as DurationBucket)
+    : bucketDuration(system?.duration);
+  const shapeBucket = row?.shape_bucket
+    ? (String(row.shape_bucket) as ShapeBucket)
+    : bucketShape(system?.target);
   return {
-    activationBucket: bucketActivation(system?.activation),
-    rangeBucket: bucketRange(system?.range),
-    durationBucket: bucketDuration(system?.duration),
-    shapeBucket: bucketShape(system?.target),
+    activationBucket,
+    rangeBucket,
+    durationBucket,
+    shapeBucket,
     concentration: properties.includes('concentration') || Boolean(row?.concentration),
     ritual: properties.includes('ritual') || Boolean(row?.ritual),
     vocal: properties.includes('vocal') || Boolean(row?.components_vocal),

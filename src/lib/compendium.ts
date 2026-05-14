@@ -358,6 +358,75 @@ export async function deleteFeat(id: string) {
 /**
  * Spells specialized helpers
  */
+
+/**
+ * Compute the four filter-bucket facets from a spell's `foundry_data`
+ * payload (the spells row's Foundry `system` blob — note: stored
+ * directly, not under a `.system` wrapper). Mirrors the bucketers in
+ * src/lib/spellFilters.ts so the materialised columns and the live
+ * filter UI agree on what each bucket means.
+ *
+ * Returns the four bucket values as strings ready to splice into the
+ * D1 row. Returns nulls when foundry_data is missing — the read path
+ * (`deriveSpellFilterFacets`) falls back to parsing foundry_data on
+ * the fly when the columns are null, so a missing payload doesn't
+ * make a row unfilterable.
+ */
+function computeSpellBuckets(foundryData: any): {
+  activation_bucket: string | null;
+  range_bucket: string | null;
+  duration_bucket: string | null;
+  shape_bucket: string | null;
+} {
+  const system = (typeof foundryData === 'string')
+    ? (() => { try { return JSON.parse(foundryData); } catch { return null; } })()
+    : foundryData;
+  if (!system) return { activation_bucket: null, range_bucket: null, duration_bucket: null, shape_bucket: null };
+
+  // Activation
+  const actType = String(system?.activation?.type ?? '').trim();
+  const activation_bucket =
+    ['action', 'bonus', 'reaction', 'minute', 'hour'].includes(actType) ? actType : 'special';
+
+  // Range
+  const rUnits = String(system?.range?.units ?? '').trim();
+  const rValue = Number(system?.range?.value ?? 0);
+  let range_bucket: string;
+  if (rUnits === 'self') range_bucket = 'self';
+  else if (rUnits === 'touch') range_bucket = 'touch';
+  else if (rUnits === 'ft') {
+    if (rValue <= 5) range_bucket = '5ft';
+    else if (rValue <= 30) range_bucket = '30ft';
+    else if (rValue <= 60) range_bucket = '60ft';
+    else if (rValue <= 120) range_bucket = '120ft';
+    else range_bucket = 'long';
+  }
+  else if (['mi', 'any', 'unlimited'].includes(rUnits)) range_bucket = 'long';
+  else range_bucket = 'other';
+
+  // Duration
+  const dUnits = String(system?.duration?.units ?? '').trim();
+  const duration_bucket =
+    ['inst', 'round', 'minute', 'hour', 'day', 'perm'].includes(dUnits) ? dUnits : 'special';
+
+  // Shape
+  const sType = String(system?.target?.template?.type ?? '').trim();
+  const shape_bucket =
+    ['cone', 'cube', 'cylinder', 'line', 'radius', 'sphere', 'square', 'wall'].includes(sType) ? sType : 'none';
+
+  return { activation_bucket, range_bucket, duration_bucket, shape_bucket };
+}
+
+/**
+ * Read foundry_data off a normalized spell payload regardless of
+ * which property name the caller used. The editor sometimes carries
+ * it as camelCased `foundryData`, the importer + d1 layer as snake
+ * `foundry_data`. Either is fine — we look at both.
+ */
+function readFoundryDataField(normalized: Record<string, any>): any {
+  return normalized.foundry_data ?? normalized.foundryData ?? null;
+}
+
 export async function upsertSpell(id: string, data: Record<string, any>) {
   const normalized = normalizeCompendiumData(data);
   // The spells table column is `tags` (JSON array), not `tag_ids` like
@@ -370,6 +439,14 @@ export async function upsertSpell(id: string, data: Record<string, any>) {
     normalized.tags = normalized.tagIds;
     delete normalized.tagIds;
   }
+  // Materialise the four filter-bucket columns from the Foundry
+  // payload on every save so the columns stay in lockstep with
+  // foundry_data. Lets the summary projection drop foundry_data
+  // entirely (see src/lib/spellSummary.ts) — critical for cache /
+  // network payload size at scale.
+  const buckets = computeSpellBuckets(readFoundryDataField(normalized));
+  Object.assign(normalized, buckets);
+
   return upsertDocument('spells', id, normalized);
 }
 
@@ -414,6 +491,11 @@ export async function upsertSpellBatch(entries: { id: string | null, data: Recor
       normalized.tags = normalized.tagIds;
       delete normalized.tagIds;
     }
+    // Same bucket materialisation as upsertSpell — Foundry imports
+    // (which use this batch path) must populate the four bucket
+    // columns or the imported spells won't show in filtered list
+    // views until the next save.
+    Object.assign(normalized, computeSpellBuckets(readFoundryDataField(normalized)));
     return { id: entry.id, data: normalized };
   });
   return upsertDocumentBatch('spells', normalizedEntries);
