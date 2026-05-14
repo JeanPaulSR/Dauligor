@@ -1,5 +1,6 @@
-import { batchQueryD1, queryD1 } from './d1';
-import { matchSpellAgainstRule, type RuleQuery, type SpellMatchInput } from './spellFilters';
+import { batchQueryD1, queryD1, fetchCollection } from './d1';
+import { matchSpellAgainstRule, type RuleQuery, type SpellMatchInput, type TagIndex } from './spellFilters';
+import { buildTagIndex } from './tagHierarchy';
 
 /**
  * Standalone Spell Rules — the bulk-grant spell-curation primitive.
@@ -166,10 +167,19 @@ export async function unapplyRule(
 // Rebuild (class-side; other consumer types are Layer 2 work)
 // ---------------------------------------------------------------------------
 
-/** True if the spell satisfies the rule — query match OR explicit manual_spells inclusion. */
-export function spellMatchesRule(spell: SpellMatchInput & { id: string }, rule: SpellRule): boolean {
+/** True if the spell satisfies the rule — query match OR explicit manual_spells inclusion.
+ *
+ *  Callers that have a TagIndex already in hand (typically the rebuild path,
+ *  which builds it once per run) should pass it so rich tagStates rules
+ *  evaluate correctly. Without it, rich rules short-circuit to "match" via
+ *  the defensive fallback in matchSpellAgainstRule. */
+export function spellMatchesRule(
+  spell: SpellMatchInput & { id: string },
+  rule: SpellRule,
+  tagIndex?: TagIndex,
+): boolean {
   if (rule.manualSpells.includes(spell.id)) return true;
-  return matchSpellAgainstRule(spell, rule.query);
+  return matchSpellAgainstRule(spell, rule.query, tagIndex?.parentByTagId, tagIndex);
 }
 
 /**
@@ -190,12 +200,17 @@ export async function rebuildClassSpellListFromAppliedRules(
 
   if (rules.length === 0) return { added: 0, rules: 0 };
 
+  // Fetch tag rows once (id + parent + group) and build the index that
+  // rich-tag rules need. Cheap compared to the per-spell match loop.
+  const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' });
+  const tagIndex = buildTagIndex(tagRows);
+
   const inserts: { sql: string; params: any[] }[] = [];
   let added = 0;
   for (const rule of rules) {
     const source = `rule:${rule.id}`;
     for (const spell of spells) {
-      if (!spellMatchesRule(spell, rule)) continue;
+      if (!spellMatchesRule(spell, rule, tagIndex)) continue;
       inserts.push({
         sql: `
           INSERT INTO class_spell_lists (id, class_id, spell_id, source)

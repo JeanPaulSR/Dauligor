@@ -116,11 +116,24 @@ export type RuleQuery = {
   levelFilters?: string[];
   schoolFilters?: string[];
   tagFilterIds?: string[];
+  // Rich tag filter (mirror of src/lib/spellFilters.ts). New rules write
+  // tagStates + groupCombineModes + groupExclusionModes; legacy rules
+  // still use the flat tagFilterIds array. Matcher prefers rich state
+  // when present.
+  tagStates?: Record<string, number>;
+  groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   activationFilters?: ActivationBucket[];
   rangeFilters?: RangeBucket[];
   durationFilters?: DurationBucket[];
   shapeFilters?: ShapeBucket[];
   propertyFilters?: PropertyFilter[];
+};
+
+export type TagIndex = {
+  parentByTagId: Map<string, string | null>;
+  groupByTagId: Map<string, string | null>;
+  tagIdsByGroup: Map<string, string[]>;
 };
 
 export type SpellMatchInput = SpellFilterFacets & {
@@ -167,20 +180,73 @@ export function matchSpellAgainstRule(
   spell: SpellMatchInput,
   query: RuleQuery,
   parentByTagId?: Map<string, string | null>,
+  tagIndex?: TagIndex,
 ): boolean {
   if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) return false;
   if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) return false;
   if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) return false;
-  if (query.tagFilterIds?.length) {
+
+  // Rich tag matching (see src/lib/spellFilters.ts for rationale + drift contract).
+  const richTagStates = query.tagStates;
+  const hasRichTags = richTagStates && Object.keys(richTagStates).length > 0;
+  if (hasRichTags) {
+    if (!tagIndex) return true; // defensive — see src twin comment
+    const effective = parentByTagId
+      ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
+      : new Set(spell.tags);
+    if (!matchesRichTagStates(effective, richTagStates, query.groupCombineModes ?? {}, query.groupExclusionModes ?? {}, tagIndex)) {
+      return false;
+    }
+  } else if (query.tagFilterIds?.length) {
     const effective = parentByTagId
       ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
       : new Set(spell.tags);
     if (!query.tagFilterIds.every(t => effective.has(t))) return false;
   }
+
   if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) return false;
   if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) return false;
   if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) return false;
   if (query.shapeFilters?.length && !query.shapeFilters.includes(spell.shapeBucket)) return false;
   if (query.propertyFilters?.length && !query.propertyFilters.every(p => Boolean((spell as any)[p]))) return false;
+  return true;
+}
+
+function matchesRichTagStates(
+  effectiveTagIds: Set<string>,
+  tagStates: Record<string, number>,
+  groupCombineModes: Record<string, 'AND' | 'OR' | 'XOR'>,
+  groupExclusionModes: Record<string, 'AND' | 'OR' | 'XOR'>,
+  tagIndex: TagIndex,
+): boolean {
+  const includesByGroup = new Map<string, string[]>();
+  const excludesByGroup = new Map<string, string[]>();
+  for (const [tagId, state] of Object.entries(tagStates)) {
+    if (state !== 1 && state !== 2) continue;
+    const groupId = tagIndex.groupByTagId.get(tagId);
+    if (!groupId) continue;
+    const bucket = state === 1 ? includesByGroup : excludesByGroup;
+    if (!bucket.has(groupId)) bucket.set(groupId, []);
+    bucket.get(groupId)!.push(tagId);
+  }
+  if (includesByGroup.size === 0 && excludesByGroup.size === 0) return true;
+  for (const [groupId, excludedIds] of excludesByGroup) {
+    const matchCount = excludedIds.filter(tid => effectiveTagIds.has(tid)).length;
+    const mode = groupExclusionModes[groupId] || 'OR';
+    let excluded = false;
+    if (mode === 'OR') excluded = matchCount > 0;
+    else if (mode === 'AND') excluded = matchCount === excludedIds.length;
+    else excluded = matchCount === 1;
+    if (excluded) return false;
+  }
+  for (const [groupId, includedIds] of includesByGroup) {
+    const matchCount = includedIds.filter(tid => effectiveTagIds.has(tid)).length;
+    const mode = groupCombineModes[groupId] || 'OR';
+    let included = false;
+    if (mode === 'OR') included = matchCount > 0;
+    else if (mode === 'AND') included = matchCount === includedIds.length;
+    else included = matchCount === 1;
+    if (!included) return false;
+  }
   return true;
 }

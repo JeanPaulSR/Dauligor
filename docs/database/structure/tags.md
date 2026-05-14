@@ -58,6 +58,27 @@ Call sites that pass `parentByTagId` to the matcher today:
 
 Module-side `requirements-walker.js` does NOT need an explicit hierarchy walk because allowlists are baked server-side and already include subtag-derived matches.
 
+### Rich tag filter (3-state include/exclude + AND/OR/XOR)
+
+Both the live filter UI (`/compendium/classes`, `/compendium/spells`) and saved rule queries (`/compendium/spell-rules`) support a rich tag-filter shape on top of the basic ancestor expansion above:
+
+| State | Stored as | Meaning |
+|---|---|---|
+| neutral | (absent from `tagStates`) | tag plays no role in the filter |
+| include | `tagStates[tagId] = 1` | spell must satisfy this group's inclusion check |
+| exclude | `tagStates[tagId] = 2` | spell must NOT satisfy this group's exclusion check |
+
+Per tag group, two combinator modes control how multiple chips combine:
+
+| Field | Drives | Modes |
+|---|---|---|
+| `groupCombineModes[groupId]` | include chips | `OR` (any include matches), `AND` (every include matches), `XOR` (exactly one) |
+| `groupExclusionModes[groupId]` | exclude chips | `OR` (any exclude matches → fail), `AND`, `XOR` |
+
+Defaults are `OR` / `OR` when unset. Saved rule queries carry the three records inside the JSON `spell_rules.query` column alongside the existing axis arrays; no D1 migration is needed. Legacy rules with only `tagFilterIds: string[]` continue to work — the matcher treats every legacy ID as an `include` chip with `OR` combinator, and SpellRulesEditor auto-migrates the rule into the rich shape on open so further edits write `tagStates`.
+
+Matcher entry point: `matchSpellAgainstRule(spell, query, parentByTagId, tagIndex)`. The new `tagIndex` arg (built via `buildTagIndex(tagRows)` in `tagHierarchy.ts`) supplies the `groupByTagId` and `tagIdsByGroup` lookups the per-group AND/XOR counts need. Callers passing legacy `tagFilterIds`-only queries can omit `tagIndex`; rich-tagStates queries fail-safe to "match" when `tagIndex` is missing (defensive, so a forgotten plumbing change can't accidentally empty a class spell list).
+
 ### Hierarchical prereq satisfaction (required_tags)
 
 Spell `required_tags` checks against the character's **effective tag set** use the same hierarchy rule, applied in the symmetric direction:

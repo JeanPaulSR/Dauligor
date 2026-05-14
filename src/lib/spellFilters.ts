@@ -203,17 +203,49 @@ export function deriveSpellFilterFacets(row: any): SpellFilterFacets {
  * Saved tag-query rule shape. All fields are optional / include-only — empty arrays
  * mean "match anything" for that section, exactly mirroring how the live filter UI
  * behaves. AND semantics across sections.
+ *
+ * Two tag-filter shapes are supported simultaneously for back-compat:
+ *
+ * - `tagFilterIds` (legacy): flat array of "must have ALL these tags". Every rule
+ *   authored before the rich-tag-filter rollout uses this shape. New saves never
+ *   emit it.
+ *
+ * - `tagStates` + `groupCombineModes` + `groupExclusionModes` (rich): per-tag
+ *   include/exclude state (1=include, 2=exclude) with per-group AND/OR/XOR
+ *   combinators for both inclusion and exclusion chips. Matches the
+ *   <TagGroupFilter> UX used in /compendium/classes, /compendium/spells, and
+ *   /compendium/spell-rules.
+ *
+ * Migration semantics: when both shapes are present (e.g. a partially-migrated
+ * rule), the rich state wins. Empty rich state defaults to legacy behavior.
  */
 export type RuleQuery = {
   sourceFilterIds?: string[];
   levelFilters?: string[];
   schoolFilters?: string[];
   tagFilterIds?: string[];
+  tagStates?: Record<string, number>;
+  groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
+  groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   activationFilters?: ActivationBucket[];
   rangeFilters?: RangeBucket[];
   durationFilters?: DurationBucket[];
   shapeFilters?: ShapeBucket[];
   propertyFilters?: PropertyFilter[];
+};
+
+/**
+ * Index for the rich tag matching path — call sites that have the tag set
+ * already in hand can pass it; otherwise the matcher accepts a leaner
+ * function shape via parentByTagId only and falls back to legacy tagFilterIds.
+ */
+export type TagIndex = {
+  /** parent_tag_id resolver for ancestor expansion. */
+  parentByTagId: Map<string, string | null>;
+  /** group_id lookup so the matcher can bucket include/exclude chips per group. */
+  groupByTagId: Map<string, string | null>;
+  /** group_id -> tag ids in that group (used by AND/XOR mode counts). */
+  tagIdsByGroup: Map<string, string[]>;
 };
 
 /** Shape needed by `matchSpellAgainstRule` — superset of facets + sortable shell columns. */
@@ -245,21 +277,100 @@ export function matchSpellAgainstRule(
   spell: SpellMatchInput,
   query: RuleQuery,
   parentByTagId?: Map<string, string | null>,
+  tagIndex?: TagIndex,
 ): boolean {
   if (query.sourceFilterIds?.length && !query.sourceFilterIds.includes(String(spell.source_id ?? ''))) return false;
   if (query.levelFilters?.length && !query.levelFilters.includes(String(spell.level))) return false;
   if (query.schoolFilters?.length && !query.schoolFilters.includes(spell.school)) return false;
-  if (query.tagFilterIds?.length) {
+
+  // Rich tag matching (new shape: tagStates + group combinators). Takes
+  // priority when present so a rule migrated from the legacy shape can
+  // gain include/exclude state without leaving the old `tagFilterIds`
+  // also satisfied. tagIndex is required for the rich path because we
+  // need to bucket include/exclude chips by their tag group.
+  const richTagStates = query.tagStates;
+  const hasRichTags = richTagStates && Object.keys(richTagStates).length > 0;
+  if (hasRichTags) {
+    if (!tagIndex) {
+      // Defensive: callers that opted into rich rules must pass tagIndex.
+      // Falling back to "pass" here rather than "fail" so a missing index
+      // can't accidentally empty out a spell list.
+      return true;
+    }
+    const effective = parentByTagId
+      ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
+      : new Set(spell.tags);
+    if (!matchesRichTagStates(effective, richTagStates, query.groupCombineModes ?? {}, query.groupExclusionModes ?? {}, tagIndex)) {
+      return false;
+    }
+  } else if (query.tagFilterIds?.length) {
+    // Legacy: flat AND-of-tags with ancestor expansion when available.
     const effective = parentByTagId
       ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
       : new Set(spell.tags);
     if (!query.tagFilterIds.every(t => effective.has(t))) return false;
   }
+
   if (query.activationFilters?.length && !query.activationFilters.includes(spell.activationBucket)) return false;
   if (query.rangeFilters?.length && !query.rangeFilters.includes(spell.rangeBucket)) return false;
   if (query.durationFilters?.length && !query.durationFilters.includes(spell.durationBucket)) return false;
   if (query.shapeFilters?.length && !query.shapeFilters.includes(spell.shapeBucket)) return false;
   if (query.propertyFilters?.length && !query.propertyFilters.every(p => Boolean(spell[p]))) return false;
+  return true;
+}
+
+/**
+ * Same rule as the runtime <TagGroupFilter> UI: each tag group accumulates an
+ * inclusion + exclusion result, exclusion-match-anywhere short-circuits to
+ * false, then every group that has include chips must pass its mode-specific
+ * inclusion check (AND requires every include, OR any, XOR exactly one).
+ *
+ * Effective tag set should already be ancestor-expanded (caller's
+ * responsibility) so subtag-tagged spells match parent-tag include chips.
+ */
+function matchesRichTagStates(
+  effectiveTagIds: Set<string>,
+  tagStates: Record<string, number>,
+  groupCombineModes: Record<string, 'AND' | 'OR' | 'XOR'>,
+  groupExclusionModes: Record<string, 'AND' | 'OR' | 'XOR'>,
+  tagIndex: TagIndex,
+): boolean {
+  // Bucket active include / exclude chips per tag group.
+  const includesByGroup = new Map<string, string[]>();
+  const excludesByGroup = new Map<string, string[]>();
+  for (const [tagId, state] of Object.entries(tagStates)) {
+    if (state !== 1 && state !== 2) continue;
+    const groupId = tagIndex.groupByTagId.get(tagId);
+    if (!groupId) continue; // orphaned, skip
+    const bucket = state === 1 ? includesByGroup : excludesByGroup;
+    if (!bucket.has(groupId)) bucket.set(groupId, []);
+    bucket.get(groupId)!.push(tagId);
+  }
+
+  if (includesByGroup.size === 0 && excludesByGroup.size === 0) return true;
+
+  // Exclusion check first — any group matching its exclusion rule
+  // immediately disqualifies the spell.
+  for (const [groupId, excludedIds] of excludesByGroup) {
+    const matchCount = excludedIds.filter(tid => effectiveTagIds.has(tid)).length;
+    const mode = groupExclusionModes[groupId] || 'OR';
+    let excluded = false;
+    if (mode === 'OR') excluded = matchCount > 0;
+    else if (mode === 'AND') excluded = matchCount === excludedIds.length;
+    else excluded = matchCount === 1; // XOR
+    if (excluded) return false;
+  }
+
+  // Inclusion check — every group with include chips must pass.
+  for (const [groupId, includedIds] of includesByGroup) {
+    const matchCount = includedIds.filter(tid => effectiveTagIds.has(tid)).length;
+    const mode = groupCombineModes[groupId] || 'OR';
+    let included = false;
+    if (mode === 'OR') included = matchCount > 0;
+    else if (mode === 'AND') included = matchCount === includedIds.length;
+    else included = matchCount === 1; // XOR
+    if (!included) return false;
+  }
   return true;
 }
 
@@ -269,6 +380,7 @@ export function isRuleEmpty(query: RuleQuery): boolean {
     + (query.levelFilters?.length ?? 0)
     + (query.schoolFilters?.length ?? 0)
     + (query.tagFilterIds?.length ?? 0)
+    + Object.keys(query.tagStates ?? {}).length
     + (query.activationFilters?.length ?? 0)
     + (query.rangeFilters?.length ?? 0)
     + (query.durationFilters?.length ?? 0)

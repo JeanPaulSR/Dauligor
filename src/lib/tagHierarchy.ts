@@ -131,6 +131,39 @@ export function buildTagParentMap(tags: Array<{ id: string; parent_tag_id?: stri
 }
 
 /**
+ * Build the full `TagIndex` the rich-rule matcher needs: parent lookup
+ * (for ancestor expansion), tag-to-group lookup, and group-to-tags
+ * lookup (so AND/XOR mode counts know the active chip set size).
+ * Tolerates snake_case or camelCase rows directly off D1.
+ */
+export function buildTagIndex(tags: Array<{
+  id: string;
+  group_id?: string | null;
+  groupId?: string | null;
+  parent_tag_id?: string | null;
+  parentTagId?: string | null;
+}>): {
+  parentByTagId: Map<string, string | null>;
+  groupByTagId: Map<string, string | null>;
+  tagIdsByGroup: Map<string, string[]>;
+} {
+  const parentByTagId = new Map<string, string | null>();
+  const groupByTagId = new Map<string, string | null>();
+  const tagIdsByGroup = new Map<string, string[]>();
+  for (const tag of tags) {
+    if (!tag?.id) continue;
+    parentByTagId.set(tag.id, (tag.parent_tag_id ?? tag.parentTagId ?? null) as string | null);
+    const groupId = (tag.group_id ?? tag.groupId ?? null) as string | null;
+    groupByTagId.set(tag.id, groupId);
+    if (groupId) {
+      if (!tagIdsByGroup.has(groupId)) tagIdsByGroup.set(groupId, []);
+      tagIdsByGroup.get(groupId)!.push(tag.id);
+    }
+  }
+  return { parentByTagId, groupByTagId, tagIdsByGroup };
+}
+
+/**
  * Return the input tag ids plus every ANCESTOR (parent / grandparent /
  * …) reachable via `parentByTagId`. Result is a flat string array with
  * stable order (input first, ancestors after, deduped).

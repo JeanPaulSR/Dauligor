@@ -7,7 +7,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
-import { FilterBar } from '../../components/compendium/FilterBar';
+import { FilterBar, TagGroupFilter } from '../../components/compendium/FilterBar';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
@@ -167,7 +167,24 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       return;
     }
     const rule = rules.find(r => r.id === selectedRuleId) || null;
-    if (rule) setDraft({ ...rule });
+    if (rule) {
+      // Auto-migrate legacy rules at load time: a rule saved before the
+      // rich tag filter rollout has `tagFilterIds: string[]` and no
+      // `tagStates`. Treat each legacy id as an include chip (state=1)
+      // so the editor opens with the existing selection visible. The
+      // migration is transparent — when the user saves, the legacy
+      // field is cleared (see updateQuery handlers in the tag-group
+      // render).
+      const q = rule.query;
+      const hasRichTags = q.tagStates && Object.keys(q.tagStates).length > 0;
+      if (!hasRichTags && q.tagFilterIds && q.tagFilterIds.length > 0) {
+        const migrated: Record<string, number> = {};
+        for (const id of q.tagFilterIds) migrated[id] = 1;
+        setDraft({ ...rule, query: { ...q, tagStates: migrated, tagFilterIds: undefined } });
+      } else {
+        setDraft({ ...rule });
+      }
+    }
     setDraftDirty(false);
 
     let active = true;
@@ -334,7 +351,15 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     }
   };
 
-  const toggleFromQueryArray = <K extends keyof RuleQuery>(
+  // Narrow K to only the array-typed fields. RuleQuery now has Record
+  // fields too (tagStates / groupCombineModes / groupExclusionModes)
+  // which can't be indexed via `[number]`, so the original signature
+  // broke. Extract just the array-typed keys at the type level.
+  type ArrayQueryKey = {
+    [K in keyof RuleQuery]: RuleQuery[K] extends (infer _T)[] | undefined ? K : never;
+  }[keyof RuleQuery];
+
+  const toggleFromQueryArray = <K extends ArrayQueryKey>(
     field: K,
     value: NonNullable<RuleQuery[K]>[number],
   ) => {
@@ -351,6 +376,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       + (q.levelFilters?.length ?? 0)
       + (q.schoolFilters?.length ?? 0)
       + (q.tagFilterIds?.length ?? 0)
+      + Object.keys(q.tagStates ?? {}).length
       + (q.activationFilters?.length ?? 0)
       + (q.rangeFilters?.length ?? 0)
       + (q.durationFilters?.length ?? 0)
@@ -561,25 +587,45 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           onIncludeAll={() => updateQuery({ schoolFilters: Object.keys(SCHOOL_LABELS) })}
                           onClear={() => updateQuery({ schoolFilters: [] })}
                         />
-                        {tagGroups.map(group => {
-                          const groupTags = tagsByGroup[group.id] || [];
-                          if (!groupTags.length) return null;
-                          return (
-                            <RuleFilterSection
-                              key={group.id}
-                              title={group.name}
-                              values={groupTags.map(t => ({ value: t.id, label: tagPickerLabel(t) }))}
-                              selected={draft.query.tagFilterIds || []}
-                              onToggle={v => toggleFromQueryArray('tagFilterIds', v)}
-                              onIncludeAll={() => updateQuery({
-                                tagFilterIds: Array.from(new Set([...(draft.query.tagFilterIds || []), ...groupTags.map(t => t.id)])),
-                              })}
-                              onClear={() => updateQuery({
-                                tagFilterIds: (draft.query.tagFilterIds || []).filter(id => !groupTags.some(t => t.id === id)),
-                              })}
-                            />
-                          );
-                        })}
+                        {/* Tag groups use the rich TagGroupFilter: 3-state
+                            include/exclude chips per tag + per-group
+                            AND/OR/XOR combinator and exclusion mode. Mirrors
+                            the /compendium/classes and /compendium/spells
+                            filter UX. The rule's `query.tagStates` /
+                            `query.groupCombineModes` / `query.groupExclusionModes`
+                            are the rich shape; legacy rules with only
+                            `tagFilterIds` are loaded into tagStates with all
+                            entries marked include (state=1) so the migration
+                            is transparent at open-time (see normalizeQueryForRichTags). */}
+                        {tagGroups.map(group => (
+                          <TagGroupFilter
+                            key={group.id}
+                            group={group}
+                            tags={(tagsByGroup[group.id] || []) as any}
+                            tagStates={draft.query.tagStates || {}}
+                            setTagStates={(next) => updateQuery({ tagStates: typeof next === 'function' ? next(draft.query.tagStates || {}) : next, tagFilterIds: undefined })}
+                            cycleTagState={(tagId) => {
+                              const cur = (draft.query.tagStates || {})[tagId] || 0;
+                              const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
+                              const nextStates = { ...(draft.query.tagStates || {}) };
+                              if (nextState === 0) delete nextStates[tagId];
+                              else nextStates[tagId] = nextState;
+                              updateQuery({ tagStates: nextStates, tagFilterIds: undefined });
+                            }}
+                            combineMode={(draft.query.groupCombineModes || {})[group.id]}
+                            cycleGroupMode={(groupId) => {
+                              const cur = (draft.query.groupCombineModes || {})[groupId] || 'OR';
+                              const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+                              updateQuery({ groupCombineModes: { ...(draft.query.groupCombineModes || {}), [groupId]: nextMode } });
+                            }}
+                            exclusionMode={(draft.query.groupExclusionModes || {})[group.id]}
+                            cycleExclusionMode={(groupId) => {
+                              const cur = (draft.query.groupExclusionModes || {})[groupId] || 'OR';
+                              const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+                              updateQuery({ groupExclusionModes: { ...(draft.query.groupExclusionModes || {}), [groupId]: nextMode } });
+                            }}
+                          />
+                        ))}
                         <RuleFilterSection
                           title="Casting Time"
                           values={ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] }))}

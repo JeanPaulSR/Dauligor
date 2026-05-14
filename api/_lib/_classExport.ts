@@ -1400,12 +1400,25 @@ export async function exportClassSemantic(
     // rule queries. Built once per bake and threaded through to the
     // matcher. See docs/database/structure/tags.md for the model and
     // src/lib/tagHierarchy.ts for the client copy.
-    const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id' });
+    // Pull `group_id` too so we can build the rich-rule tag index for
+    // tagStates / group-AND-OR-XOR matching alongside the parent map.
+    // DRIFT WARNING: mirrors src/lib/classExport.ts -> buildTagIndex.
+    const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' });
     const parentByTagId = new Map<string, string | null>();
+    const groupByTagId = new Map<string, string | null>();
+    const tagIdsByGroup = new Map<string, string[]>();
     for (const t of tagRows) {
       if (!t?.id) continue;
-      parentByTagId.set(String(t.id), (t.parent_tag_id ?? null) as string | null);
+      const id = String(t.id);
+      parentByTagId.set(id, (t.parent_tag_id ?? null) as string | null);
+      const groupId = (t.group_id ?? null) as string | null;
+      groupByTagId.set(id, groupId);
+      if (groupId) {
+        if (!tagIdsByGroup.has(groupId)) tagIdsByGroup.set(groupId, []);
+        tagIdsByGroup.get(groupId)!.push(id);
+      }
     }
+    const tagIndex = { parentByTagId, groupByTagId, tagIdsByGroup };
     const spellMatchInputs: Array<{ id: string; sourceId: string | null; match: SpellMatchInput }> = spellRows.map((row: any) => {
       const facets = deriveSpellFilterFacets(row);
       const tags = Array.isArray(row.tags)
@@ -1432,7 +1445,7 @@ export async function exportClassSemantic(
       const matchedSourceIds: string[] = [];
       for (const s of spellMatchInputs) {
         if (!s.sourceId) continue;
-        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query, parentByTagId)) {
+        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query, parentByTagId, tagIndex)) {
           matchedSourceIds.push(s.sourceId);
         }
       }

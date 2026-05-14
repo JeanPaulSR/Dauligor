@@ -23,7 +23,7 @@ import {
   type RuleQuery,
   type SpellMatchInput,
 } from './spellFilters';
-import { buildTagParentMap } from './tagHierarchy';
+import { buildTagParentMap, buildTagIndex } from './tagHierarchy';
 
 /**
  * Pluggable fetchers so this module can run from server contexts that don't
@@ -1421,8 +1421,13 @@ export async function exportClassSemantic(
     // the bake-time allowlist reflects this — module-side walker reads
     // pre-baked allowlists, so the change automatically lands on the
     // actor sheet without further plumbing.
-    const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id' });
-    const parentByTagId = buildTagParentMap(tagRows);
+    // Pull `group_id` too so the rich-rule matcher can bucket
+    // include/exclude chips per group. buildTagIndex consumes the same
+    // rows and returns the parent map alongside the group lookups, so
+    // we don't pay for two SELECTs.
+    const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' });
+    const tagIndex = buildTagIndex(tagRows);
+    const parentByTagId = tagIndex.parentByTagId;
     const spellMatchInputs: Array<{ id: string; sourceId: string | null; match: SpellMatchInput }> = spellRows.map((row: any) => {
       const facets = deriveSpellFilterFacets(row);
       const tags = Array.isArray(row.tags)
@@ -1449,7 +1454,7 @@ export async function exportClassSemantic(
       const matchedSourceIds: string[] = [];
       for (const s of spellMatchInputs) {
         if (!s.sourceId) continue;
-        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query, parentByTagId)) {
+        if (manualSet.has(s.id) || matchSpellAgainstRule(s.match, query, parentByTagId, tagIndex)) {
           matchedSourceIds.push(s.sourceId);
         }
       }
