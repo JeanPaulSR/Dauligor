@@ -950,7 +950,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
-                        <h3 className="font-serif text-4xl font-bold text-ink">
+                        <h3 className="font-serif text-2xl xl:text-3xl font-bold text-ink leading-tight break-words">
                           {editingId ? (formData.name || 'Untitled Spell') : 'New Spell'}
                         </h3>
                         {formData.sourceId ? (
@@ -1002,7 +1002,6 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     <TabsTrigger value="mechanics"  className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Mechanics</TabsTrigger>
                     <TabsTrigger value="activities" className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Activities</TabsTrigger>
                     <TabsTrigger value="effects"    className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Effects</TabsTrigger>
-                    <TabsTrigger value="prereqs"    className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Prereqs</TabsTrigger>
                   </TabsList>
                 </div>
 
@@ -1582,35 +1581,6 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     </Tabs>
                   </TabsContent>
 
-                  <TabsContent value="prereqs" className="mt-0 space-y-4">
-                    {/* Prereqs — gating tags + free-text fallback.
-                      * Descriptive tags (what the spell IS) moved out
-                      * to the right column so the picker has its own
-                      * dedicated pane; what stays here is the gate
-                      * (what the caster must HAVE to use the spell).
-                      */}
-                    <SpellTagPicker
-                      tags={tags}
-                      tagGroups={tagGroups}
-                      selectedIds={formData.requiredTags}
-                      onChange={(next) => setFormData(prev => ({ ...prev, requiredTags: next }))}
-                      hint="A character must have all selected tags on their effective tag set to use this spell."
-                      emptyHint="No tags loaded yet."
-                    />
-                    <div className="space-y-1 border border-gold/10 rounded-md p-3 bg-background/20">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
-                      <Input
-                        value={formData.prerequisiteText}
-                        onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
-                        placeholder='e.g. "Must have cast Detect Magic in the past hour"'
-                        className="bg-background/50 border-gold/10 focus:border-gold text-xs"
-                      />
-                      <p className="text-[10px] text-ink/40">
-                        Free-text fallback for prereqs that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
-                      </p>
-                    </div>
-                  </TabsContent>
-
                   <TabsContent value="activities" className="mt-0 space-y-6">
                     {/* Same ActivityEditor + availableEffects pattern
                       * that FeatsEditor / ClassEditor / OptionGroup
@@ -1650,28 +1620,70 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
               </CardContent>
             </Card>
 
-        {/* Right column — dedicated descriptive-tag picker. Pulled
-            out of the editor tabs so authors can browse tag groups
-            side-by-side with the form they're editing. Internally
-            scrolls when the tag tree exceeds the pane height. */}
+        {/* Right column — two-tab picker: Tags (descriptive) and
+            Prereqs (gating tags + free-text notes). Lifting Prereqs
+            out of the middle editor and into the right column groups
+            both tag-shaped concerns in one place. Tabs share the
+            same SpellTagPicker so the chip + tree pattern stays
+            consistent between them. */}
         <Card className="border-gold/10 bg-card/50 overflow-hidden" style={{ height: `${paneHeight}px` }}>
           <CardContent className="p-0 h-full flex flex-col">
-            <div className="border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0 flex items-center justify-between gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">Tags</span>
-              <span className="text-[10px] text-ink/45">
-                {formData.tags.length > 0 ? `${formData.tags.length} selected` : ''}
-              </span>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3">
-              <SpellTagPicker
-                tags={tags}
-                tagGroups={tagGroups}
-                selectedIds={formData.tags}
-                onChange={(next) => setFormData(prev => ({ ...prev, tags: next }))}
-                hint="Tag rules + class spell list rules use these to decide which spells they include."
-                emptyHint="No tags loaded yet."
-              />
-            </div>
+            <Tabs defaultValue="tags" className="flex-1 min-h-0 flex flex-col">
+              <div className="border-b border-gold/10 bg-background/35 px-3 py-2.5 shrink-0">
+                <TabsList variant="line" className="gap-1 bg-transparent p-0">
+                  <TabsTrigger
+                    value="tags"
+                    className="h-7 rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+                  >
+                    Tags {formData.tags.length > 0 && (
+                      <span className="ml-1 text-gold/70">({formData.tags.length})</span>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="prereqs"
+                    className="h-7 rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+                  >
+                    Prereqs {formData.requiredTags.length > 0 && (
+                      <span className="ml-1 text-gold/70">({formData.requiredTags.length})</span>
+                    )}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              <TabsContent value="tags" className="mt-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3">
+                <SpellTagPicker
+                  tags={tags}
+                  tagGroups={tagGroups}
+                  selectedIds={formData.tags}
+                  onChange={(next) => setFormData(prev => ({ ...prev, tags: next }))}
+                  hint="Tag rules + class spell list rules use these to decide which spells they include."
+                  emptyHint="No tags loaded yet."
+                />
+              </TabsContent>
+
+              <TabsContent value="prereqs" className="mt-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 space-y-3">
+                <SpellTagPicker
+                  tags={tags}
+                  tagGroups={tagGroups}
+                  selectedIds={formData.requiredTags}
+                  onChange={(next) => setFormData(prev => ({ ...prev, requiredTags: next }))}
+                  hint="A character must have all selected tags on their effective tag set to use this spell."
+                  emptyHint="No tags loaded yet."
+                />
+                <div className="space-y-1 border border-gold/10 rounded-md p-3 bg-background/20">
+                  <Label className="text-[10px] font-bold uppercase tracking-widest text-ink/60">Prerequisite Notes</Label>
+                  <Input
+                    value={formData.prerequisiteText}
+                    onChange={e => setFormData(prev => ({ ...prev, prerequisiteText: e.target.value }))}
+                    placeholder='e.g. "Must have cast Detect Magic in the past hour"'
+                    className="bg-background/50 border-gold/10 focus:border-gold text-xs"
+                  />
+                  <p className="text-[10px] text-ink/40">
+                    Free-text fallback for prereqs that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
+                  </p>
+                </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>
@@ -1724,6 +1736,19 @@ function SpellTagPicker({ tags, tagGroups, selectedIds, onChange, hint, emptyHin
     }
     return open;
   });
+  // Per-parent "show subtag drawer" state. Mirrors the
+  // TagGroupFilter pattern — clicking the ▸/▾ next to a parent
+  // chip reveals its subtag drawer below the root row. A parent
+  // is also auto-expanded if any of its subtags are currently
+  // selected (so existing selections never hide).
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
+  const toggleParentExpanded = (rootId: string) => {
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      next.has(rootId) ? next.delete(rootId) : next.add(rootId);
+      return next;
+    });
+  };
 
   const filterTerm = filter.trim().toLowerCase();
   const isFiltering = !!filterTerm;
@@ -1757,11 +1782,28 @@ function SpellTagPicker({ tags, tagGroups, selectedIds, onChange, hint, emptyHin
   };
 
   const toggleTag = (tagId: string) => {
-    onChange(
-      selectedIds.includes(tagId)
-        ? selectedIds.filter(id => id !== tagId)
-        : [...selectedIds, tagId],
-    );
+    if (selectedIds.includes(tagId)) {
+      // Deselect. If this is a parent tag, ALSO drop any of its
+      // subtags that are selected — keeps the invariant "a subtag
+      // is only present when its parent is present" intact even
+      // when removing.
+      const childIds = new Set(
+        tags.filter(t => t.parentTagId === tagId).map(t => t.id),
+      );
+      onChange(selectedIds.filter(id => id !== tagId && !childIds.has(id)));
+      return;
+    }
+    // Selecting. If this is a subtag whose parent isn't already
+    // selected, auto-add the parent so the "subtag implies its
+    // super tag" invariant holds (matches the user-visible model
+    // where a subtag is meaningless without its parent).
+    const tag = tags.find(t => t.id === tagId);
+    const parentId = tag?.parentTagId || null;
+    if (parentId && !selectedIds.includes(parentId)) {
+      onChange([...selectedIds, parentId, tagId]);
+    } else {
+      onChange([...selectedIds, tagId]);
+    }
   };
 
   if (tags.length === 0) {
@@ -1860,22 +1902,20 @@ function SpellTagPicker({ tags, tagGroups, selectedIds, onChange, hint, emptyHin
                 </span>
               </button>
               {isOpen && (() => {
-                // Two-level tree render: each root gets its own row;
-                // its subtags (if any) get an indented row below. The
-                // earlier flat layout with `↳` glyphs in front of each
-                // subtag made for compact rows but hard scanning, since
-                // a parent and its subtags interleaved with the next
-                // parent on the same line. Stacking by parent is taller
-                // but reads as a tree at a glance.
-                //
-                // `visibleTags` is already ordered roots-first-then-
-                // children by orderTagsAsTree, and the filter logic
-                // upstream keeps parents in the visible set when a
-                // subtag matches. So a visible subtag whose parent
-                // ALSO isn't in `visibleTags` is rare (synthetic data
-                // / orphaned hierarchy); we surface those at the
-                // bottom as an "ungrouped" sub-row so they don't
-                // disappear.
+                // Hierarchical render that mirrors TagGroupFilter
+                // (src/components/compendium/FilterBar.tsx ~line 580):
+                //   - Roots flow horizontally in a single wrap-row.
+                //     Each root with subtags gets a ▸/▾ button next
+                //     to it; the button controls a per-parent drawer
+                //     rendered BELOW the roots row.
+                //   - A parent is auto-expanded if any of its subtags
+                //     is currently selected OR matches the filter.
+                //     The user can never lose sight of an active
+                //     subtag pick behind a closed drawer.
+                //   - The "only get a subtag if its part of the super
+                //     tag" rule is enforced at toggle time
+                //     (toggleTag auto-adds the parent on subtag
+                //     select; auto-drops subtags on parent deselect).
                 const visibleRoots = visibleTags.filter(t => !t.parentTagId);
                 const subtagsByParentId = new Map<string, typeof visibleTags>();
                 const visibleRootIds = new Set(visibleRoots.map(r => r.id));
@@ -1889,6 +1929,23 @@ function SpellTagPicker({ tags, tagGroups, selectedIds, onChange, hint, emptyHin
                   if (!subtagsByParentId.has(tag.parentTagId)) subtagsByParentId.set(tag.parentTagId, []);
                   subtagsByParentId.get(tag.parentTagId)!.push(tag);
                 }
+
+                // Auto-expand any parent whose subtag is selected
+                // (or matches filter). Combined with the user's
+                // explicit expandedParents set, this drives drawer
+                // visibility.
+                const autoExpandedRoots = new Set<string>();
+                for (const [parentId, children] of subtagsByParentId) {
+                  if (children.some(c => selectedIds.includes(c.id))) {
+                    autoExpandedRoots.add(parentId);
+                    continue;
+                  }
+                  if (isFiltering && children.some(c => String(c.name).toLowerCase().includes(filterTerm))) {
+                    autoExpandedRoots.add(parentId);
+                  }
+                }
+                const isRootExpanded = (rootId: string) =>
+                  expandedParents.has(rootId) || autoExpandedRoots.has(rootId);
 
                 const renderChip = (tag: typeof visibleTags[number]) => {
                   const active = selectedIds.includes(tag.id);
@@ -1910,22 +1967,79 @@ function SpellTagPicker({ tags, tagGroups, selectedIds, onChange, hint, emptyHin
                 };
 
                 return (
-                  <div className="px-3 pb-2.5 pt-1 space-y-1.5">
+                  <div className="px-3 pb-2.5 pt-1 space-y-2">
+                    {/* Roots row — single wrap-row. Expand button
+                        renders inline immediately after each chip
+                        that has subtags so the chip's click target
+                        stays purely "toggle this tag's selection". */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {visibleRoots.map(root => {
+                        const subs = subtagsByParentId.get(root.id) ?? [];
+                        const hasSubs = subs.length > 0;
+                        const expanded = hasSubs && isRootExpanded(root.id);
+                        return (
+                          <span key={root.id} className="inline-flex items-center gap-0.5">
+                            {renderChip(root)}
+                            {hasSubs && (
+                              <button
+                                type="button"
+                                onClick={() => toggleParentExpanded(root.id)}
+                                className={cn(
+                                  'inline-flex items-center justify-center h-[22px] w-[18px] -ml-0.5 rounded border transition-colors',
+                                  expanded
+                                    ? 'border-gold/50 bg-gold/15 text-gold'
+                                    : 'border-gold/20 bg-background/40 text-ink/60 hover:border-gold/40 hover:text-gold',
+                                )}
+                                title={expanded
+                                  ? `Hide ${root.name} subtags (${subs.length})`
+                                  : `Show ${root.name} subtags (${subs.length})`}
+                                aria-expanded={expanded}
+                                aria-label={expanded ? `Collapse ${root.name} subtags` : `Expand ${root.name} subtags`}
+                              >
+                                {expanded
+                                  ? <ChevronDown className="w-3 h-3" />
+                                  : <ChevronRight className="w-3 h-3" />}
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {/* Expanded subtag drawers — one labeled row per
+                        expanded parent, indented under a thin gold
+                        rule so multiple expanded parents don't blur
+                        together. Selecting a subtag here auto-adds
+                        its parent via toggleTag. */}
                     {visibleRoots.map(root => {
+                      if (!isRootExpanded(root.id)) return null;
                       const subs = subtagsByParentId.get(root.id) ?? [];
+                      if (subs.length === 0) return null;
                       return (
-                        <div key={root.id} className="space-y-1">
-                          <div className="flex flex-wrap gap-1.5">{renderChip(root)}</div>
-                          {subs.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pl-5 border-l border-gold/10 ml-1">
-                              {subs.map(renderChip)}
-                            </div>
-                          )}
+                        <div
+                          key={`drawer-${root.id}`}
+                          className="ml-3 pl-3 border-l border-gold/15 flex flex-wrap items-center gap-1.5"
+                        >
+                          <span className="text-[10px] uppercase tracking-widest text-ink/40 mr-1">
+                            {root.name}:
+                          </span>
+                          {subs.map(renderChip)}
                         </div>
                       );
                     })}
+
+                    {/* Orphans — subtags whose parent isn't in this
+                        group's visible set. Surface them in an
+                        amber-edged row so they're not silently
+                        dropped (rare; usually stale hierarchy). */}
                     {orphans.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pl-5 border-l border-amber-500/20 ml-1">
+                      <div
+                        className="ml-3 pl-3 border-l border-amber-500/30 flex flex-wrap items-center gap-1.5"
+                        title="Subtags whose parent isn't in this group's visible tag set."
+                      >
+                        <span className="text-[10px] uppercase tracking-widest text-amber-500/60 mr-1">
+                          Orphaned:
+                        </span>
                         {orphans.map(renderChip)}
                       </div>
                     )}
