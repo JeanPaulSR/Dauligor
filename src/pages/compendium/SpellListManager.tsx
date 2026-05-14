@@ -10,7 +10,7 @@ import { FilterBar, TagGroupFilter, AxisFilterSection, matchesTagFilters } from 
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
-import { expandTagsWithAncestors, normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
+import { expandTagsWithAncestors, normalizeTagRow, orderTagsAsTree, tagPickerLabel, buildTagIndex } from '../../lib/tagHierarchy';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
@@ -649,6 +649,17 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
 
   // ----- Linked Rules (Layer 1 v1.1, restructured) -----
 
+  // Tag-hierarchy index used by every rich-tag rule matcher below.
+  // Without this index, `spellMatchesRule` short-circuits to "match"
+  // for any rule that uses `tagStates` (the defensive fallback in
+  // `matchSpellAgainstRule` in src/lib/spellFilters.ts), so the live
+  // match counts in this page would say "everything matches" and
+  // wildly mislead the user. The server-side rebuild path
+  // (`rebuildClassSpellListFromAppliedRules`) already builds its own
+  // tagIndex, so a real Rebuild produced correct rows even when this
+  // preview lied — fix is purely a UI-correctness one.
+  const tagIndex = useMemo(() => buildTagIndex(tags as any), [tags]);
+
   // Per-rule live match counts. Cheap — runs the matcher across the local spell catalogue.
   const ruleMatchCounts = useMemo(() => {
     const out: Record<string, { matches: number; onList: number }> = {};
@@ -656,24 +667,24 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       let matches = 0;
       let onList = 0;
       for (const s of spells) {
-        if (!spellMatchesRule(s, rule)) continue;
+        if (!spellMatchesRule(s, rule, tagIndex)) continue;
         matches++;
         if (classListIds.has(s.id)) onList++;
       }
       out[rule.id] = { matches, onList };
     }
     return out;
-  }, [linkedRules, spells, classListIds]);
+  }, [linkedRules, spells, classListIds, tagIndex]);
 
   // Total spells contributed by all linked rules (deduped) — for the collapsed summary.
   const totalLinkedRuleMatches = useMemo(() => {
     if (linkedRules.length === 0) return 0;
     const set = new Set<string>();
     for (const rule of linkedRules) {
-      for (const s of spells) if (spellMatchesRule(s, rule)) set.add(s.id);
+      for (const s of spells) if (spellMatchesRule(s, rule, tagIndex)) set.add(s.id);
     }
     return set.size;
-  }, [linkedRules, spells]);
+  }, [linkedRules, spells, tagIndex]);
 
   const handleLinkRule = async (rule: SpellRule) => {
     if (!selectedClassId) return;
@@ -711,7 +722,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       const currentRuleSet = await fetchClassRuleSpellIds(selectedClassId);
       const newRuleSet = new Set<string>();
       for (const rule of linkedRules) {
-        for (const s of spells) if (spellMatchesRule(s, rule)) newRuleSet.add(s.id);
+        for (const s of spells) if (spellMatchesRule(s, rule, tagIndex)) newRuleSet.add(s.id);
       }
       const toAdd: string[] = [];
       const toRemove: string[] = [];

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { FilterBar, TagGroupFilter, AxisFilterSection } from '../../components/compendium/FilterBar';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
-import { normalizeTagRow, orderTagsAsTree, tagPickerLabel } from '../../lib/tagHierarchy';
+import { normalizeTagRow, orderTagsAsTree, tagPickerLabel, buildTagIndex } from '../../lib/tagHierarchy';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
@@ -283,13 +283,22 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     [spells],
   );
 
+  // Tag-hierarchy index required by the rule matcher so rich-tag
+  // rules (tagStates with per-group AND/OR/XOR combinators) actually
+  // bucket their chips by group. Without this, the matcher's
+  // defensive fallback in matchSpellAgainstRule returns true for
+  // every spell — the live "matches" count would lie. The
+  // server-side rebuild path builds its own index; this is for the
+  // UI preview only.
+  const tagIndex = useMemo(() => buildTagIndex(tags as any), [tags]);
+
   // Live match preview for the draft
   const draftMatchCount = useMemo(() => {
     if (!draft) return 0;
     let n = 0;
-    for (const s of spells) if (spellMatchesRule(s, draft)) n++;
+    for (const s of spells) if (spellMatchesRule(s, draft, tagIndex)) n++;
     return n;
-  }, [draft, spells]);
+  }, [draft, spells, tagIndex]);
 
   // Filtered spell suggestions for the manual-spells search
   const manualSpellSuggestions = useMemo(() => {

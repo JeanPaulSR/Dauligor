@@ -134,6 +134,7 @@ import {
 } from "../../lib/spellGrants";
 import { fetchClassSpellList } from "../../lib/classSpellLists";
 import { fetchAllRules, spellMatchesRule, type SpellRule } from "../../lib/spellRules";
+import { buildTagIndex } from "../../lib/tagHierarchy";
 import { fetchSpellSummaries } from "../../lib/spellSummary";
 import { deriveSpellFilterFacets } from "../../lib/spellFilters";
 import { useSpellFilters } from "../../hooks/useSpellFilters";
@@ -2608,18 +2609,28 @@ export default function CharacterBuilder({
   // change. Each rule walks the full catalog once; for ~5k spells this is
   // fast enough for client-side derivation. Manual spells from the rule's
   // `manualSpells` always-include list are merged in by `spellMatchesRule`.
+  // Tag-hierarchy index required by spellMatchesRule for any rule
+  // that uses rich tagStates (per-group AND/OR/XOR chip semantics).
+  // Without this, the matcher's defensive fallback in
+  // matchSpellAgainstRule returns true for every spell — which means
+  // character spell pools would include the entire catalogue for any
+  // rule built with the rich tag-filter UI. (Subtle bug: legacy
+  // tagFilterIds rules would still work without an index; only the
+  // new tagStates shape needs it.)
+  const ruleTagIndex = useMemo(() => buildTagIndex(spellManagerTags as any), [spellManagerTags]);
+
   const ruleResolvedSpellIds = useMemo(() => {
     if (!facetEnrichedSpellSummaries) return {} as Record<string, string[]>;
     const out: Record<string, string[]> = {};
     Object.values(spellRulesById).forEach((rule) => {
       const matches: string[] = [];
       for (const spell of facetEnrichedSpellSummaries) {
-        if (spellMatchesRule(spell, rule)) matches.push(spell.id);
+        if (spellMatchesRule(spell, rule, ruleTagIndex)) matches.push(spell.id);
       }
       out[rule.id] = matches;
     });
     return out;
-  }, [spellRulesById, facetEnrichedSpellSummaries]);
+  }, [spellRulesById, facetEnrichedSpellSummaries, ruleTagIndex]);
 
   const resolveRulePool = useCallback(
     (ruleId: string) => ruleResolvedSpellIds[ruleId] || [],
