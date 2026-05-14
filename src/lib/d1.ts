@@ -27,6 +27,90 @@ const PERSISTENT_TABLES = [
   'spells'
 ];
 
+/**
+ * Approximate size guard for sessionStorage. Browsers typically give
+ * ~5MB total per origin, but we share it with React Router scroll
+ * restoration and any other consumers, so we cap our single-entry
+ * payload to ~3.5MB. Anything larger skips the persistent cache (the
+ * in-memory QUERY_CACHE still works fine for the session).
+ *
+ * Picked empirically: a full `SELECT * FROM spells` over ~540 spells
+ * with their full `foundry_data` payloads can hit 4-6MB stringified.
+ * That was the entry that started throwing QuotaExceededError on
+ * /compendium/spell-lists and /compendium/spell-rules and stopped
+ * spell loads cold because the throw aborted the read path.
+ */
+const SESSION_CACHE_MAX_BYTES = 3_500_000;
+let warnedSessionStorageQuota = false;
+
+/**
+ * Best-effort write of a SELECT result into sessionStorage. Failures
+ * (quota exceeded, security mode, etc.) are non-fatal — the
+ * in-memory QUERY_CACHE has the data either way, and a fresh fetch
+ * on next page load is cheaper than throwing the result on the floor.
+ *
+ * On a quota error we make one attempt to free space by dropping
+ * other `dauligor_cache_*` keys, then retry. If still over budget
+ * (this single payload is bigger than what sessionStorage can hold)
+ * we give up quietly and only warn once per session.
+ */
+function writeSessionCacheEntry(sessionKey: string, parsedResults: any) {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify({ data: parsedResults, timestamp: Date.now() });
+  } catch (err) {
+    // Probably a circular structure — same "skip the cache, keep
+    // the data" tradeoff applies.
+    if (!warnedSessionStorageQuota) {
+      console.warn('[d1] sessionStorage cache write skipped (serialize failed):', err);
+      warnedSessionStorageQuota = true;
+    }
+    return;
+  }
+  if (serialized.length > SESSION_CACHE_MAX_BYTES) {
+    // This entry alone is bigger than our cap; sessionStorage almost
+    // certainly can't hold it, and even if it could, it'd push
+    // everything else out. Skip silently.
+    return;
+  }
+  try {
+    sessionStorage.setItem(sessionKey, serialized);
+    return;
+  } catch (err) {
+    // Most likely QuotaExceededError. Try one round of eviction —
+    // dropping other dauligor cache entries — then retry.
+    const isQuotaError = err && typeof err === 'object' && (
+      (err as any).name === 'QuotaExceededError' || (err as any).code === 22
+    );
+    if (!isQuotaError) {
+      if (!warnedSessionStorageQuota) {
+        console.warn('[d1] sessionStorage cache write skipped:', err);
+        warnedSessionStorageQuota = true;
+      }
+      return;
+    }
+    try {
+      Object.keys(sessionStorage).forEach(k => {
+        if (k.startsWith(SESSION_CACHE_PREFIX) && k !== sessionKey) {
+          sessionStorage.removeItem(k);
+        }
+      });
+      sessionStorage.setItem(sessionKey, serialized);
+    } catch {
+      // Still over budget (this entry alone is too big), or storage
+      // is unavailable. Warn once and move on.
+      if (!warnedSessionStorageQuota) {
+        console.warn(
+          '[d1] sessionStorage cache write skipped (quota exceeded after eviction). ' +
+          'Reads will fall back to network on the next session. Entry size:',
+          serialized.length, 'bytes for', sessionKey.slice(0, 80) + '…',
+        );
+        warnedSessionStorageQuota = true;
+      }
+    }
+  }
+}
+
 export function clearCache(tableName?: string) {
   if (tableName) {
     // Clear in-memory
@@ -216,7 +300,7 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         QUERY_CACHE[cacheKey] = { data: parsedResults, timestamp: Date.now() };
         if (isPersistent) {
           const sessionKey = `${SESSION_CACHE_PREFIX}${cacheKey}`;
-          sessionStorage.setItem(sessionKey, JSON.stringify({ data: parsedResults, timestamp: Date.now() }));
+          writeSessionCacheEntry(sessionKey, parsedResults);
         }
       } else {
         const match = sql.match(/(?:INTO|UPDATE|DELETE FROM|REPLACE INTO)\s+([^\s\(]+)/i);
