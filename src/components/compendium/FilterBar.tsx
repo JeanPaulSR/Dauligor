@@ -367,6 +367,19 @@ export function TagGroupFilter({
   // All hooks before any early returns — React rules.
   const { chipSearch } = useFilterBarContext();
   const [hidden, toggleHidden] = useFilterSectionHidden();
+  // Per-parent expand state — `expandedParents` holds the parent ids
+  // the user has manually opened. Parents with any non-neutral subtag
+  // state are auto-expanded (`autoExpandedParents` below), so the user
+  // never loses sight of an active subtag selection.
+  const [expandedParents, setExpandedParents] = React.useState<Set<string>>(new Set());
+  const toggleExpanded = (parentId: string) => {
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      if (next.has(parentId)) next.delete(parentId);
+      else next.add(parentId);
+      return next;
+    });
+  };
   if (tags.length === 0) return null;
   const mode = combineMode || 'OR';
   const exMode = exclusionMode || 'OR';
@@ -499,37 +512,118 @@ export function TagGroupFilter({
           </div>
         )}
       </div>
-      {!hidden && (
-        <div className="space-y-1.5">
-          {roots.map(root => {
-            const children = childrenByParent.get(root.id) || [];
-            const rootChip = renderChip(root);
-            const childChips = children.map(renderChip).filter(Boolean);
-            // If the root and all children are filtered out by chipSearch,
-            // omit the row entirely so the layout doesn't leave gaps.
-            if (!rootChip && childChips.length === 0) return null;
-            return (
-              <React.Fragment key={root.id}>
-                {rootChip && <div className="flex flex-wrap gap-1.5">{rootChip}</div>}
-                {childChips.length > 0 && (
-                  <div className="ml-4 pl-3 border-l border-gold/15 flex flex-wrap gap-1.5">
-                    {childChips}
-                  </div>
-                )}
-              </React.Fragment>
-            );
-          })}
-          {orphans.length > 0 && (() => {
-            const orphanChips = orphans.map(renderChip).filter(Boolean);
-            if (orphanChips.length === 0) return null;
-            return (
-              <div className="ml-4 pl-3 border-l border-amber-500/30 flex flex-wrap gap-1.5" title="Subtags whose parent is not in this group's visible tag set.">
-                {orphanChips}
-              </div>
-            );
-          })()}
-        </div>
-      )}
+      {!hidden && (() => {
+        // Auto-expand any parent whose subtag has a non-neutral state
+        // OR matches the current chip search — otherwise that subtag
+        // would be hidden and the user couldn't see why a filter is
+        // active (or why their search seemingly missed something).
+        const autoExpanded = new Set<string>();
+        for (const t of tags) {
+          const parent = getParent(t);
+          if (!parent) continue;
+          const state = tagStates[t.id] || 0;
+          const matchesSearch = chipSearch && chipMatchesSearch(String(t.name), chipSearch);
+          if (state !== 0 || matchesSearch) autoExpanded.add(parent);
+        }
+        const isExpanded = (rootId: string) =>
+          expandedParents.has(rootId) || autoExpanded.has(rootId);
+
+        // Filter roots by chipSearch but always keep a root visible
+        // if it has any matching/active subtag — that's how the user
+        // gets to the expanded subtag drawer below.
+        const visibleRoots = roots.filter(r => {
+          if (chipMatchesSearch(String(r.name), chipSearch)) return true;
+          if (autoExpanded.has(r.id)) return true;
+          return false;
+        });
+
+        if (visibleRoots.length === 0 && orphans.every(o => !chipMatchesSearch(String(o.name), chipSearch))) {
+          return null;
+        }
+
+        return (
+          <div className="space-y-2">
+            {/* Roots flow horizontally in a single wrap-row. Each root
+                that has subtags gets a small ▸/▾ button to its right,
+                outside the chip itself so the chip's own click target
+                continues to cycle the include/exclude state cleanly. */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {visibleRoots.map(root => {
+                const rootChip = renderChip(root);
+                const subtags = childrenByParent.get(root.id) || [];
+                const hasSubtags = subtags.length > 0;
+                const expanded = hasSubtags && isExpanded(root.id);
+                return (
+                  <span key={root.id} className="inline-flex items-center gap-0.5">
+                    {/* rootChip can be null if it failed chipSearch but
+                        a child matched (autoExpanded). Render a faint
+                        placeholder pill so the expand affordance still
+                        anchors visually. */}
+                    {rootChip || (
+                      <span className="filter-tag btn-gold opacity-40 cursor-default" title={`${root.name} (filtered out by chip search, expanded for matching subtag)`}>
+                        {String(root.name)}
+                      </span>
+                    )}
+                    {hasSubtags && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(root.id)}
+                        className={cn(
+                          'inline-flex items-center justify-center h-[22px] w-[18px] -ml-0.5 rounded border transition-colors',
+                          expanded
+                            ? 'border-gold/50 bg-gold/15 text-gold'
+                            : 'border-gold/20 bg-background/40 text-ink/60 hover:border-gold/40 hover:text-gold'
+                        )}
+                        title={expanded ? `Hide ${root.name} subtags (${subtags.length})` : `Show ${root.name} subtags (${subtags.length})`}
+                        aria-expanded={expanded}
+                        aria-label={expanded ? `Collapse ${root.name} subtags` : `Expand ${root.name} subtags`}
+                      >
+                        {expanded
+                          ? <ChevronDown className="w-3 h-3" />
+                          : <ChevronRight className="w-3 h-3" />}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Expanded subtag drawers. Each renders below the roots
+                with the parent's name as the label so multiple
+                expanded groups don't blur together. Mirrors the
+                hierarchy intent of the old indented subtag rows but
+                only shows up when the user asks for it. */}
+            {visibleRoots.map(root => {
+              if (!isExpanded(root.id)) return null;
+              const subtags = childrenByParent.get(root.id) || [];
+              const subtagChips = subtags
+                .map(renderChip)
+                .filter(Boolean);
+              if (subtagChips.length === 0) return null;
+              return (
+                <div key={`drawer-${root.id}`} className="ml-3 pl-3 border-l border-gold/15 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-widest text-ink/40 mr-1">{root.name}:</span>
+                  {subtagChips}
+                </div>
+              );
+            })}
+
+            {/* Orphans (subtags whose parent is missing from this
+                group's visible set) — keep their amber-edged row;
+                always shown when any survive chipSearch. */}
+            {orphans.length > 0 && (() => {
+              const orphanChips = orphans.map(renderChip).filter(Boolean);
+              if (orphanChips.length === 0) return null;
+              return (
+                <div className="ml-3 pl-3 border-l border-amber-500/30 flex flex-wrap items-center gap-1.5" title="Subtags whose parent is not in this group's visible tag set.">
+                  <span className="text-[10px] uppercase tracking-widest text-amber-500/60 mr-1">Orphaned:</span>
+                  {orphanChips}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
     </div>
   );
 }
