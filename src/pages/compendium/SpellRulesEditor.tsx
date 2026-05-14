@@ -100,11 +100,36 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const [saving, setSaving] = useState(false);
 
   // UI state
-  const [howOpen, setHowOpen] = useState(true);
+  const [howOpen, setHowOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [manualSpellsSearch, setManualSpellsSearch] = useState('');
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // Fullscreen-page opt-in — mirrors /compendium/spells,
+  // /compendium/spells/manage, /compendium/spell-lists. Hides the
+  // global footer and strips <main>'s container padding so the
+  // working area uses the full viewport.
+  useEffect(() => {
+    if (!isAdmin) return;
+    document.body.classList.add('spell-list-fullscreen');
+    return () => document.body.classList.remove('spell-list-fullscreen');
+  }, [isAdmin]);
+
+  // Viewport-derived pane height. Chrome above the working grid:
+  // navbar (~56) + toolbar (~50) + maybe "How rules work" strip
+  // (collapsed by default; ~36 when collapsed, ~140 when expanded)
+  // + small gaps ≈ 180. Conservative — a small underestimate just
+  // leaves a few pixels at the bottom.
+  const [paneHeight, setPaneHeight] = useState<number>(() =>
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 180),
+  );
+  useEffect(() => {
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 180));
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -478,69 +503,70 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   }, [draft]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 pb-20">
-      <div className="flex items-center gap-4">
+    // Fullscreen layout — toolbar shrinks to its natural height,
+    // working grid (rules list | editor) fills the remaining
+    // viewport. Mirrors /compendium/spells / /compendium/spells/
+    // manage / /compendium/spell-lists.
+    <div className="h-full flex flex-col gap-2 p-2">
+      {/* Consolidated top toolbar: Back link + title chip +
+          "How rules work" disclosure trigger + dirty banner. */}
+      <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
         <Link to="/compendium/classes">
-          <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
-            <ChevronLeft className="w-4 h-4" /> Back To Classes
+          <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
+            <ChevronLeft className="w-4 h-4" />
+            Back
           </Button>
         </Link>
+        <span className="text-xs font-bold uppercase tracking-[0.18em] text-gold/70 shrink-0">Spell Rules</span>
+        <span className="text-[11px] text-ink/45 tabular-nums">{rules.length} rules</span>
+        <button
+          type="button"
+          onClick={() => setHowOpen(v => !v)}
+          className="h-8 inline-flex items-center gap-1.5 px-2 rounded-md border border-gold/15 text-[10px] uppercase tracking-[0.18em] text-ink/65 hover:bg-gold/5 hover:text-gold transition-colors"
+          aria-expanded={howOpen}
+        >
+          {howOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          <Info className="w-3 h-3" />
+          How rules work
+        </button>
+        <div className="flex-1" />
+        {draftDirty ? (
+          <span className="text-[10px] uppercase tracking-[0.2em] text-amber-400 font-bold">Unsaved changes</span>
+        ) : null}
       </div>
 
-      {/* Title + how-rules-work */}
-      <Card className="border-gold/20 bg-card/50 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%),linear-gradient(180deg,rgba(12,16,24,0.75),rgba(12,16,24,0.98))] p-6 space-y-3">
-            <div className="flex items-center gap-3 text-gold">
-              <Wand2 className="h-5 w-5" />
-              <span className="text-xs font-bold uppercase tracking-[0.3em]">Compendium Development</span>
-            </div>
-            <h2 className="text-3xl font-serif font-bold uppercase tracking-tight text-ink">Spell Rules</h2>
-            <p className="text-sm text-ink/60 max-w-3xl">
-              Reusable spell-grant patterns. Define a rule once (filter query + manual additions) and apply
-              it to as many classes, feats, items, etc. as you want.
-            </p>
-          </div>
+      {/* Expanded "How rules work" — only when explicitly opened.
+          Keeps the toolbar slim by default; opens to a fixed-height
+          strip with the full explainer. */}
+      {howOpen ? (
+        <div className="shrink-0 px-4 py-3 bg-background/30 border border-gold/10 rounded-md text-xs text-ink/75 space-y-1.5">
+          <p>
+            <span className="text-gold font-bold">A rule</span> is a saved spell-curation pattern — a
+            <span className="text-gold"> tag query</span> (e.g. "all spells tagged <em>Divine</em> at level 1+")
+            plus a <span className="text-gold">manual list</span> of spell IDs that always match.
+          </p>
+          <p>
+            <span className="text-gold font-bold">Applying a rule</span> links it to a consumer (class, subclass, feat, item, etc.).
+            The same rule can power many consumers — that's the point.
+            For classes, application contributes to <code className="text-gold/80">class_spell_lists</code> at rebuild time;
+            manual class entries are preserved.
+          </p>
+        </div>
+      ) : null}
 
-          <button
-            type="button"
-            onClick={() => setHowOpen(v => !v)}
-            className="w-full flex items-center gap-2 px-6 py-2 border-t border-gold/10 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70 hover:bg-gold/5"
-          >
-            {howOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-            <Info className="w-3.5 h-3.5" />
-            How rules work
-          </button>
-          {howOpen ? (
-            <div className="px-6 pb-5 pt-2 text-sm text-ink/75 space-y-2 border-t border-gold/10 bg-background/30">
-              <p>
-                <span className="text-gold font-bold">A rule</span> is a saved spell-curation pattern. It has a
-                <span className="text-gold"> tag query</span> (e.g. "all spells tagged <em>Divine</em> at level 1+")
-                plus a <span className="text-gold">manual list</span> of spell IDs that always match.
-              </p>
-              <p>
-                <span className="text-gold font-bold">Applying a rule</span> links it to a consumer (a class, subclass,
-                feat, feature, background, item, or option item). The same rule can be applied to many consumers — that's
-                the point. A "Divine — Major" rule could power Cleric and Paladin spell lists from a single source.
-              </p>
-              <p>
-                <span className="text-gold font-bold">For classes</span>, applying a rule means it contributes to the class's
-                master spell list (`class_spell_lists`) at rebuild time. Manual entries on the class are preserved across rebuilds.
-              </p>
-              <p className="text-ink/50 text-xs italic">
-                For non-class consumers, the application is stored but not yet read — that wires up in Layer 2 (`GrantSpells`)
-                when characters can resolve their spell pools.
-              </p>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-        {/* Rule list */}
-        <Card className="border-gold/20 bg-card/50 overflow-hidden self-start">
-          <CardContent className="p-0">
-            <div className="border-b border-gold/10 px-4 py-3 flex items-center justify-between">
+      {/* Working area — rules list (320px) | editor (1fr). Both
+          cards fixed at paneHeight so they scroll internally and
+          the viewport stays anchored. */}
+      <div className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[320px_minmax(0,1fr)]">
+        {/* Rule list — flex column so the header strip pins to the
+            top while the rule rows scroll within the remaining
+            height. */}
+        <Card
+          className="border-gold/20 bg-card/50 overflow-hidden"
+          style={{ height: `${paneHeight}px` }}
+        >
+          <CardContent className="p-0 h-full flex flex-col">
+            <div className="border-b border-gold/10 px-4 py-3 flex items-center justify-between shrink-0">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">All Rules ({rules.length})</h3>
               <Button
                 type="button"
@@ -558,7 +584,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                 No rules yet. Click <strong>New</strong> to create one.
               </div>
             ) : (
-              <div className="max-h-[640px] overflow-y-auto custom-scrollbar divide-y divide-gold/5">
+              <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar divide-y divide-gold/5">
                 {rules.map(rule => {
                   const isSelected = rule.id === selectedRuleId;
                   const apps = appCounts[rule.id] || 0;
@@ -584,9 +610,15 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
           </CardContent>
         </Card>
 
-        {/* Editor */}
-        <Card className="border-gold/20 bg-card/50 overflow-hidden self-start">
-          <CardContent className="p-0">
+        {/* Editor — same paneHeight cap; CardContent scrolls
+            internally so all the editor sections (name, query
+            filters, manual spells, applied-to) stay reachable
+            without a page-level scroll. */}
+        <Card
+          className="border-gold/20 bg-card/50 overflow-hidden"
+          style={{ height: `${paneHeight}px` }}
+        >
+          <CardContent className="p-0 h-full overflow-y-auto custom-scrollbar">
             {!draft ? (
               <div className="px-8 py-20 text-center text-ink/45">
                 Pick a rule from the list, or click <strong>New</strong> to create one.
@@ -652,6 +684,14 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     setIsFilterOpen={setFilterOpen}
                     activeFilterCount={queryActiveCount}
                     resetFilters={() => updateDraft({ query: {} })}
+                    // Filter state on this page IS the document being
+                    // edited (draft.query → spell_rules.query JSON),
+                    // not a transient page-level filter. Override the
+                    // inline button label so "Reset" doesn't read as
+                    // "reset to saved state" — it actually clears
+                    // every chip in the rule's query. The dirty
+                    // banner above the toolbar is the safety net.
+                    resetInlineLabel="Clear query"
                     searchPlaceholder=""
                     filterTitle="Rule Filters"
                     renderFilters={

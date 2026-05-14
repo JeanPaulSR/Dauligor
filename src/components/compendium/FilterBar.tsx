@@ -89,6 +89,15 @@ export interface FilterBarProps {
   filterTitle?: string;
   filterSubtitle?: string;
   resetLabel?: string;
+  /**
+   * Label for the inline Reset button on the main filter row.
+   * Defaults to "Reset". Override when the reset action is
+   * meaningfully different on a specific page — e.g.,
+   * SpellRulesEditor passes "Clear query" because there the
+   * filter state IS the document being edited and "Reset" would
+   * misleadingly imply "back to saved state."
+   */
+  resetInlineLabel?: string;
   applyLabel?: string;
   renderFilters?: ReactNode;
   /**
@@ -119,6 +128,7 @@ export function FilterBar({
   filterTitle = 'Advanced Filters',
   filterSubtitle,
   resetLabel = 'Reset All Filters',
+  resetInlineLabel = 'Reset',
   applyLabel = 'Apply & Close',
   renderFilters,
   trailingActions
@@ -223,7 +233,7 @@ export function FilterBar({
               )}
               title={canReset ? 'Clear search and all filters' : 'Nothing to reset'}
             >
-              <RotateCcw className="w-3 h-3" /> Reset
+              <RotateCcw className="w-3 h-3" /> {resetInlineLabel}
             </Button>
           );
         })()}
