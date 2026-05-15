@@ -145,7 +145,15 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     // every section above is expanded (Linked Rules + filter chips +
     // toolbar). Below that the list gets a vertical scrollbar
     // courtesy of `overflow-y-auto` on the card itself.
-    const measure = () => setPaneHeight(Math.max(240, el.clientHeight));
+    //
+    // `-8` reserves ~8px of breathing room at the bottom of the
+    // measured height — without it, the cards reported as
+    // "matching the viewport" actually clipped 10-20px past the
+    // visible bottom edge (sub-pixel rounding + the parent's
+    // p-2 padding cascading through nested flex/grid). 8px is
+    // small enough that the change is invisible at normal sizes
+    // but reliably keeps the bottom of both cards inside the page.
+    const measure = () => setPaneHeight(Math.max(240, el.clientHeight - 8));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -1311,7 +1319,22 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           detail card scrolls via overflow-y-auto. Outer flex-1
           min-h-0 lets the grid claim the viewport's leftover
           vertical space without forcing the page to scroll. */}
-      <div ref={gridContainerRef} className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_420px]">
+      {/* Outer-grid sizing policy mirrors `/compendium/spells`:
+           - Spell list pane: FIXED at 520px. Doesn't grow when the
+             viewport widens, doesn't shrink when columns are hidden.
+             This keeps the detail pane as the primary "stretch
+             target" — wider screens give more room to reading the
+             spell description, never to widening the already-narrow
+             list columns.
+           - Detail pane: `minmax(360px, 1fr)` — claims everything
+             left of the list, with a 360px floor so body text stays
+             legible (under ~320px it wraps every 4-5 words and feels
+             cramped).
+           Previously this was the inverse split (list 1fr, detail
+           fixed 420px), which left the list with ~1100px of empty
+           horizontal space and the detail panel choked at 420 — the
+           one place a curator actually reads continuous prose. */}
+      <div ref={gridContainerRef} className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[520px_minmax(360px,1fr)]">
         <Card
           className="border-gold/20 bg-card/50 overflow-hidden"
           style={{ height: `${paneHeight}px` }}
