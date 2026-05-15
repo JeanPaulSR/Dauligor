@@ -115,6 +115,7 @@ import {
   Eye,
   Copy,
   ChevronUp,
+  ChevronDown,
   Download,
 } from "lucide-react";
 import { ClassList } from "../compendium/ClassList";
@@ -145,6 +146,7 @@ import {
   characterMeetsSpellPrerequisites,
   missingPrerequisiteTags,
 } from "../../lib/characterTags";
+import { cn } from "../../lib/utils";
 
 const getModifier = (score: number) => {
   const mod = Math.floor((score - 10) / 2);
@@ -870,6 +872,15 @@ export default function CharacterBuilder({
   const [spellManagerTagGroups, setSpellManagerTagGroups] = useState<any[]>([]);
   const [selectedSpellId, setSelectedSpellId] = useState<string | null>(null);
   const spellManagerFilters = useSpellFilters();
+  // Variant C (Spell Manager redesign) — tree-collapse state + Prepare modal trigger.
+  // `spellsCollapsedClasses` keeps a Set of class IDs whose section in the
+  // left tree is collapsed; same with `spellsCollapsedLevels` for the per-
+  // class level sub-headers (key shape: `${classId}:${level}`). The Prepare
+  // button on each class header opens a focused modal scoped to that class
+  // — `spellsPrepModalClass` holds the open class id, or null when closed.
+  const [spellsCollapsedClasses, setSpellsCollapsedClasses] = useState<Set<string>>(new Set());
+  const [spellsCollapsedLevels, setSpellsCollapsedLevels] = useState<Set<string>>(new Set());
+  const [spellsPrepModalClass, setSpellsPrepModalClass] = useState<string | null>(null);
   // Layer 2 rule resolver (Phase 1b.5b): all defined spell rules + the slim
   // spell catalog. Loaded on demand the first time a rule-resolver advancement
   // appears in the visible progression. spellSummaries is the slim projection
@@ -6696,94 +6707,12 @@ export default function CharacterBuilder({
                 activeSpellManagerClassId ||
                 (spellcastingClassIds[0] ?? "");
               const activeClass = activeClassId ? classCache[activeClassId] : null;
-              const basePool = classSpellPools[activeClassId] || [];
-
-              // Resolve extension spell records — fall back to spellNameCache or
-              // a stub if the cache hasn't fetched the row yet.
-              const extSpellIds = extensions
-                .filter((e: any) => e.classId === activeClassId)
-                .map((e: any) => e.spellId);
-              const extEntries = extSpellIds
-                .filter((id: string) => !basePool.some((s: any) => s.id === id))
-                .map((id: string) => {
-                  const cached = spellNameCache[id];
-                  return {
-                    id,
-                    name: cached?.name || id,
-                    level: cached?.level ?? 0,
-                    school: cached?.school || "",
-                    image_url: null,
-                    source_id: null,
-                    tags: [],
-                    membershipId: `ext-${id}`,
-                    membershipSource: "extension",
-                    addedAt: "",
-                    isExtension: true,
-                  };
-                });
-
-              // Pool entries from `fetchClassSpellList` already include derived
-              // filter facets via `deriveSpellFilterFacets` (see classSpellLists.ts).
-              // Extension stubs don't — the back-fill below adds them when the
-              // global catalog is available so filters work uniformly.
-              const fullPool = [...basePool, ...extEntries]
-                .map((spell: any) => {
-                  if (spell.activationBucket) return spell;
-                  // Try to back-fill from the loaded global catalog.
-                  const fromCatalog = facetEnrichedSpellSummaries?.find(
-                    (s: any) => s.id === spell.id,
-                  );
-                  if (fromCatalog) {
-                    return {
-                      ...spell,
-                      ...fromCatalog,
-                    };
-                  }
-                  return spell;
-                })
-                .sort((a, b) => {
-                  if ((a.level || 0) !== (b.level || 0))
-                    return (a.level || 0) - (b.level || 0);
-                  return String(a.name || "").localeCompare(String(b.name || ""));
-                });
-
-              const tagsByIdMap = Object.fromEntries(
-                spellManagerTags.map((t: any) => [t.id, t]),
-              );
-              const filteredEntries = spellManagerFilters.filter(
-                fullPool as any,
-                tagsByIdMap,
-              );
-              let filteredPool = filteredEntries.map((e: any) => e.spell);
-              if (showFavouritesOnly || showWatchlistOnly || showLoadoutOnly) {
-                filteredPool = filteredPool.filter((spell: any) => {
-                  const owned = ownedSpells.find((s: any) => s.id === spell.id);
-                  if (!owned) return false;
-                  if (showFavouritesOnly && !owned.isFavourite) return false;
-                  if (showWatchlistOnly && !owned.isWatchlist) return false;
-                  if (showLoadoutOnly) {
-                    const inActive = (owned.loadoutMembership || []).some((lid: string) =>
-                      activeLoadouts.some((l: any) => l.id === lid),
-                    );
-                    if (!inActive) return false;
-                  }
-                  return true;
-                });
-              }
-
+              // Active-class quick lookup map used by the inline per-spell
+              // rows in the tree below. Per-class pool building happens
+              // inside the tree IIFE (see the body section) so each
+              // class's spells can render in one pass.
               const ownedSpellMap = new Map<string, any>(
                 ownedSpells.map((s: any) => [s.id, s]),
-              );
-
-              // Group by level for clearer browsing
-              const byLevel = new Map<number, any[]>();
-              filteredPool.forEach((spell: any) => {
-                const lvl = Number(spell.level || 0);
-                if (!byLevel.has(lvl)) byLevel.set(lvl, []);
-                byLevel.get(lvl)!.push(spell);
-              });
-              const sortedLevels = Array.from(byLevel.keys()).sort(
-                (a, b) => a - b,
               );
 
               // Counters for the active class. Granted spells with
@@ -7123,20 +7052,100 @@ export default function CharacterBuilder({
                 );
               }
 
+              // ── Variant C (Spell Manager redesign) prep ─────────────
+              // Per-class DC + Atk for the top header strip. Computed from
+              // the spellcastingContributors record (which already resolves
+              // the spellcasting ability) and the character's current
+              // ability scores + proficiency bonus.
+              const abilityMod = (ab: string | null | undefined) => {
+                if (!ab) return 0;
+                const score = Number(character?.stats?.base?.[ab] ?? character?.stats?.base?.[ab?.toUpperCase()] ?? 10);
+                return Math.floor((score - 10) / 2);
+              };
+              const profBonus = Number(character?.proficiencyBonus ?? 2);
+              const contributorByClass = new Map<string, any>();
+              for (const c of spellcastingContributors) {
+                if (c?.classId) contributorByClass.set(c.classId, c);
+              }
+              const dcForClass = (cid: string) => {
+                const ab = contributorByClass.get(cid)?.ability
+                  || String(classCache[cid]?.spellcasting?.ability || '').toUpperCase();
+                return 8 + profBonus + abilityMod(ab);
+              };
+              const atkForClass = (cid: string) => {
+                const ab = contributorByClass.get(cid)?.ability
+                  || String(classCache[cid]?.spellcasting?.ability || '').toUpperCase();
+                const n = profBonus + abilityMod(ab);
+                return n >= 0 ? `+${n}` : `${n}`;
+              };
+
+              const toggleClassCollapsed = (cid: string) => {
+                setSpellsCollapsedClasses(prev => {
+                  const next = new Set(prev);
+                  next.has(cid) ? next.delete(cid) : next.add(cid);
+                  return next;
+                });
+              };
+              const toggleLevelCollapsed = (key: string) => {
+                setSpellsCollapsedLevels(prev => {
+                  const next = new Set(prev);
+                  next.has(key) ? next.delete(key) : next.add(key);
+                  return next;
+                });
+              };
+
               return (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between gap-3 px-1">
-                    <div>
-                      <h2 className="text-2xl font-serif font-black text-ink uppercase tracking-tight flex items-center gap-2">
-                        <Zap className="w-6 h-6 text-gold" />
-                        Spell Manager
-                      </h2>
-                      <p className="text-xs text-ink/55 font-serif italic mt-1">
-                        Browse your class spell list, mark spells known and
-                        prepared. Granted spells are locked.
-                      </p>
+                <div className="space-y-3">
+                  {/* ── Class header strip — Variant C ─────────────
+                       Per-class chips (active highlighted) + Save DC /
+                       Atk for the active class + counters. Replaces
+                       the old "tabs + counters" + "class tabs" rows. */}
+                  <div className="flex items-center gap-3 px-3 py-2 bg-gold/5 border border-gold/15 rounded-md flex-wrap">
+                    <div className="flex gap-1">
+                      {spellcastingClassIds.map((cid) => {
+                        const c = classCache[cid];
+                        const isActive = cid === activeClassId;
+                        return (
+                          <button
+                            key={cid}
+                            type="button"
+                            onClick={() => {
+                              setActiveSpellManagerClassId(cid);
+                              setSelectedSpellId(null);
+                            }}
+                            className={cn(
+                              "px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] border transition-colors",
+                              isActive
+                                ? "bg-gold text-white border-gold"
+                                : "bg-transparent text-ink/55 border-gold/25 hover:border-gold/50 hover:text-ink",
+                            )}
+                          >
+                            {c?.name || `Class ${cid.slice(0, 6)}`}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-ink/55 flex-wrap">
+
+                    <div className="w-px h-7 bg-gold/20" />
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/50">
+                        {activeClass?.name || "Class"} Spell Save DC
+                      </span>
+                      <span className="font-mono text-base font-black text-gold leading-none">
+                        {dcForClass(activeClassId)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/50">
+                        {activeClass?.name || "Class"} Atk Bonus
+                      </span>
+                      <span className="font-mono text-base font-black text-gold leading-none">
+                        {atkForClass(activeClassId)}
+                      </span>
+                    </div>
+
+                    <div className="ml-auto flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-ink/55 flex-wrap">
                       {cantripsCap !== null && (
                         <span>
                           Cantrips:{" "}
@@ -7176,137 +7185,46 @@ export default function CharacterBuilder({
                     </div>
                   </div>
 
-                  {/* Class tabs */}
-                  <div className="flex flex-wrap gap-2 border-b border-gold/15 pb-2">
-                    {spellcastingClassIds.map((cid) => {
-                      const c = classCache[cid];
-                      const isActive = cid === activeClassId;
-                      return (
-                        <button
-                          key={cid}
-                          onClick={() => {
-                            setActiveSpellManagerClassId(cid);
-                            setSelectedSpellId(null);
-                          }}
-                          className={`px-3 py-1.5 text-xs font-bold uppercase tracking-widest rounded-md border transition-colors ${
-                            isActive
-                              ? "bg-gold text-white border-gold"
-                              : "bg-card text-ink/70 border-gold/20 hover:border-gold/50"
-                          }`}
-                        >
-                          {c?.name || `Class ${cid.slice(0, 6)}`}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Filter shell (search + filter button + chips + axes
+                      panel). Lives ABOVE the tree so the search bar
+                      sits next to the class header per the Variant C
+                      design. */}
+                  <SpellFilterShell
+                    filters={spellManagerFilters}
+                    sources={spellManagerSources}
+                    tags={spellManagerTags}
+                    tagGroups={spellManagerTagGroups}
+                    searchPlaceholder="Search this class's spells..."
+                  />
 
-                  {/* Layer 4: Loadouts panel — sized, named, multi-active prepared sets */}
-                  <div className="border border-purple-500/20 bg-purple-500/5 rounded-md p-3 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-purple-700">
-                        Loadouts ({loadouts.length})
-                        {activeLoadouts.length > 0 && (
-                          <span className="ml-2 text-purple-700/60 normal-case font-bold">
-                            · {activeLoadouts.length} active
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={createLoadout}
-                        className="text-[10px] font-bold uppercase tracking-widest text-purple-700 bg-purple-500/10 px-2 py-1 rounded border border-purple-500/30 hover:bg-purple-500/20"
-                      >
-                        + New Loadout
-                      </button>
-                    </div>
-                    {loadouts.length === 0 ? (
-                      <p className="text-[11px] font-serif italic text-ink/45">
-                        Create a loadout to compose your prepared spells. Multiple loadouts
-                        can be active at once.
-                      </p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {loadouts.map((l: any) => {
-                          const memberCount = ownedSpells.filter((s: any) =>
-                            (s.loadoutMembership || []).includes(l.id),
-                          ).length;
-                          const overSize = l.size > 0 && memberCount > l.size;
-                          return (
-                            <div
-                              key={l.id}
-                              className={`flex items-center gap-2 px-2 py-1 rounded border ${
-                                l.isActive
-                                  ? "border-purple-500/40 bg-purple-500/10"
-                                  : "border-gold/15 bg-card/40"
-                              }`}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => updateLoadout(l.id, { isActive: !l.isActive })}
-                                title={l.isActive ? "Deactivate" : "Activate"}
-                                className={`w-3 h-3 rounded border-2 flex-shrink-0 ${
-                                  l.isActive
-                                    ? "bg-purple-600 border-purple-600"
-                                    : "border-purple-500/40"
-                                }`}
-                              />
-                              <input
-                                type="text"
-                                value={l.name}
-                                onChange={(e) => updateLoadout(l.id, { name: e.target.value })}
-                                className="bg-transparent text-xs font-bold text-ink border-0 outline-none focus:ring-1 focus:ring-purple-500/40 rounded px-1 w-24"
-                              />
-                              <span
-                                className={`text-[10px] font-bold uppercase tracking-widest ${overSize ? "text-blood" : "text-ink/45"}`}
-                              >
-                                {memberCount} / {l.size || "?"}
-                              </span>
-                              <input
-                                type="number"
-                                min={0}
-                                value={l.size}
-                                onChange={(e) =>
-                                  updateLoadout(l.id, { size: Math.max(0, Number(e.target.value || 0) || 0) })
-                                }
-                                className="bg-transparent text-[10px] text-ink/55 border border-gold/15 outline-none focus:ring-1 focus:ring-purple-500/40 rounded px-1 w-10 text-center"
-                                title="Size cap (informational)"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => deleteLoadout(l.id)}
-                                title="Delete"
-                                className="text-[10px] text-blood/70 hover:text-blood px-1"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Phase 4 / Layer 4 — character-state filter pills */}
+                  {/* Combined row: state filter pills + Loadouts.
+                      Previously the Loadouts panel was a heavy purple
+                      block that pushed the tree down; collapsed here
+                      to a slim <details> on the right so power-user
+                      functionality is one click away without
+                      dominating the layout. */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => setShowFavouritesOnly(v => !v)}
-                      className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                      className={cn(
+                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors",
                         showFavouritesOnly
                           ? "border-amber-500/60 bg-amber-500/15 text-amber-600"
-                          : "border-gold/15 bg-card/40 text-ink/55 hover:border-amber-500/30"
-                      }`}
+                          : "border-gold/15 bg-card/40 text-ink/55 hover:border-amber-500/30",
+                      )}
                     >
                       ★ Favourites only
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowWatchlistOnly(v => !v)}
-                      className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                      className={cn(
+                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors",
                         showWatchlistOnly
                           ? "border-cyan-500/60 bg-cyan-500/15 text-cyan-700"
-                          : "border-gold/15 bg-card/40 text-ink/55 hover:border-cyan-500/30"
-                      }`}
+                          : "border-gold/15 bg-card/40 text-ink/55 hover:border-cyan-500/30",
+                      )}
                     >
                       ◐ Watchlist only
                     </button>
@@ -7314,15 +7232,114 @@ export default function CharacterBuilder({
                       <button
                         type="button"
                         onClick={() => setShowLoadoutOnly(v => !v)}
-                        className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                        className={cn(
+                          "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border transition-colors",
                           showLoadoutOnly
                             ? "border-purple-500/60 bg-purple-500/15 text-purple-700"
-                            : "border-gold/15 bg-card/40 text-ink/55 hover:border-purple-500/30"
-                        }`}
+                            : "border-gold/15 bg-card/40 text-ink/55 hover:border-purple-500/30",
+                        )}
                       >
                         Active loadouts only
                       </button>
                     )}
+
+                    <details className="ml-auto group">
+                      <summary className="cursor-pointer list-none flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded border border-purple-500/20 bg-purple-500/5 text-purple-700 hover:border-purple-500/40 transition-colors">
+                        <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
+                        <span>
+                          Loadouts ({loadouts.length})
+                          {activeLoadouts.length > 0 && (
+                            <span className="text-purple-700/60 ml-1 normal-case">
+                              · {activeLoadouts.length} active
+                            </span>
+                          )}
+                        </span>
+                      </summary>
+                      <div className="mt-2 p-2 border border-purple-500/20 bg-purple-500/5 rounded-md space-y-2 w-full max-w-xl">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[9px] font-black uppercase tracking-[0.18em] text-purple-700/80">
+                            Compose your prepared sets
+                          </span>
+                          <button
+                            type="button"
+                            onClick={createLoadout}
+                            className="text-[10px] font-bold uppercase tracking-widest text-purple-700 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30 hover:bg-purple-500/20"
+                          >
+                            + New Loadout
+                          </button>
+                        </div>
+                        {loadouts.length === 0 ? (
+                          <p className="text-[11px] font-serif italic text-ink/45">
+                            Create a loadout to compose your prepared spells.
+                            Multiple loadouts can be active at once.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {loadouts.map((l: any) => {
+                              const memberCount = ownedSpells.filter((s: any) =>
+                                (s.loadoutMembership || []).includes(l.id),
+                              ).length;
+                              const overSize = l.size > 0 && memberCount > l.size;
+                              return (
+                                <div
+                                  key={l.id}
+                                  className={cn(
+                                    "flex items-center gap-2 px-2 py-1 rounded border",
+                                    l.isActive
+                                      ? "border-purple-500/40 bg-purple-500/10"
+                                      : "border-gold/15 bg-card/40",
+                                  )}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => updateLoadout(l.id, { isActive: !l.isActive })}
+                                    title={l.isActive ? "Deactivate" : "Activate"}
+                                    className={cn(
+                                      "w-3 h-3 rounded border-2 flex-shrink-0",
+                                      l.isActive
+                                        ? "bg-purple-600 border-purple-600"
+                                        : "border-purple-500/40",
+                                    )}
+                                  />
+                                  <input
+                                    type="text"
+                                    value={l.name}
+                                    onChange={(e) => updateLoadout(l.id, { name: e.target.value })}
+                                    className="bg-transparent text-xs font-bold text-ink border-0 outline-none focus:ring-1 focus:ring-purple-500/40 rounded px-1 w-24"
+                                  />
+                                  <span
+                                    className={cn(
+                                      "text-[10px] font-bold uppercase tracking-widest",
+                                      overSize ? "text-blood" : "text-ink/45",
+                                    )}
+                                  >
+                                    {memberCount} / {l.size || "?"}
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={l.size}
+                                    onChange={(e) =>
+                                      updateLoadout(l.id, { size: Math.max(0, Number(e.target.value || 0) || 0) })
+                                    }
+                                    className="bg-transparent text-[10px] text-ink/55 border border-gold/15 outline-none focus:ring-1 focus:ring-purple-500/40 rounded px-1 w-10 text-center"
+                                    title="Size cap (informational)"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteLoadout(l.id)}
+                                    title="Delete"
+                                    className="text-[10px] text-blood/70 hover:text-blood px-1"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </details>
                   </div>
 
                   {/* Effective tag set — drives spell prerequisite gating */}
@@ -7355,60 +7372,244 @@ export default function CharacterBuilder({
                     </details>
                   )}
 
-                  {/* Filter shell */}
-                  <SpellFilterShell
-                    filters={spellManagerFilters}
-                    sources={spellManagerSources}
-                    tags={spellManagerTags}
-                    tagGroups={spellManagerTagGroups}
-                    searchPlaceholder="Search this class's spells..."
-                  />
-
-                  {/* Two-column layout: list on left, detail pane on right */}
+                  {/* ── Two-pane body — Variant C ─────────────────────
+                       Left pane: grouped Class › Level tree showing
+                       ALL spellcasting classes at once. Class header
+                       is sticky inside the scroll, and the Prepare
+                       button per class opens the focused modal (still
+                       wip — Phase 2 follow-up).
+                       Right pane: SpellDetailPanel for the selected
+                       spell (sticky on lg+ viewports). */}
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
                     <div className="min-w-0">
-                      {/* Active class pool */}
-                      {!classSpellPools[activeClassId] ? (
-                        <div className="text-sm text-ink/45 font-serif italic p-4">
-                          Loading {activeClass?.name || "class"} spell list...
-                        </div>
-                      ) : fullPool.length === 0 ? (
-                        <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
-                          No spells on the {activeClass?.name || "class"} spell
-                          list yet. Curate it in /compendium/spell-lists.
-                        </div>
-                      ) : filteredPool.length === 0 ? (
-                        <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
-                          No spells match the current filters.{" "}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              spellManagerFilters.resetAll();
-                              spellManagerFilters.setSearch("");
-                            }}
-                            className="text-gold hover:underline"
-                          >
-                            Reset filters
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-ink/45 px-1">
-                            {filteredPool.length} of {fullPool.length} spells
-                            {extEntries.length > 0 &&
-                              ` · ${extEntries.length} from extensions`}
-                          </div>
-                          {sortedLevels.map((lvl) => {
-                            const spellsAtLvl = byLevel.get(lvl) || [];
-                            return (
-                              <div key={lvl} className="space-y-1.5">
-                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/70 px-1">
-                                  {lvl === 0 ? "Cantrips" : `Level ${lvl}`}{" "}
-                                  <span className="text-ink/35 font-bold">
-                                    · {spellsAtLvl.length}
-                                  </span>
-                                </div>
-                                {spellsAtLvl.map((spell: any) => {
+                      {(() => {
+                        // Build per-class filtered pools so we can render the
+                        // entire spell tree (all classes) in one pass. The old
+                        // implementation only computed the active class's pool;
+                        // Variant C wants every spellcasting class visible at
+                        // once, with the per-class header doubling as both a
+                        // section divider and an active-class toggle.
+                        const tagsByIdLocal = Object.fromEntries(
+                          spellManagerTags.map((t: any) => [t.id, t]),
+                        );
+
+                        const buildPoolForClass = (cid: string) => {
+                          const base = classSpellPools[cid] || [];
+                          const extIdsForClass = (extensions as any[])
+                            .filter((e: any) => e.classId === cid)
+                            .map((e: any) => e.spellId);
+                          const extEntriesLocal = extIdsForClass
+                            .filter((id: string) => !base.some((s: any) => s.id === id))
+                            .map((id: string) => {
+                              const cached = spellNameCache[id];
+                              return {
+                                id,
+                                name: cached?.name || id,
+                                level: cached?.level ?? 0,
+                                school: cached?.school || "",
+                                image_url: null,
+                                source_id: null,
+                                tags: [],
+                                membershipId: `ext-${id}`,
+                                membershipSource: "extension",
+                                addedAt: "",
+                                isExtension: true,
+                              };
+                            });
+                          return [...base, ...extEntriesLocal]
+                            .map((spell: any) => {
+                              if (spell.activationBucket) return spell;
+                              const fromCatalog = facetEnrichedSpellSummaries?.find(
+                                (s: any) => s.id === spell.id,
+                              );
+                              return fromCatalog ? { ...spell, ...fromCatalog } : spell;
+                            })
+                            .sort((a: any, b: any) => {
+                              if ((a.level || 0) !== (b.level || 0))
+                                return (a.level || 0) - (b.level || 0);
+                              return String(a.name || "").localeCompare(String(b.name || ""));
+                            });
+                        };
+
+                        const applyStatePills = (spells: any[]) => {
+                          if (!showFavouritesOnly && !showWatchlistOnly && !showLoadoutOnly) {
+                            return spells;
+                          }
+                          return spells.filter((spell: any) => {
+                            const owned = ownedSpells.find((s: any) => s.id === spell.id);
+                            if (!owned) return false;
+                            if (showFavouritesOnly && !owned.isFavourite) return false;
+                            if (showWatchlistOnly && !owned.isWatchlist) return false;
+                            if (showLoadoutOnly) {
+                              const inActive = (owned.loadoutMembership || []).some(
+                                (lid: string) => activeLoadouts.some((l: any) => l.id === lid),
+                              );
+                              if (!inActive) return false;
+                            }
+                            return true;
+                          });
+                        };
+
+                        const perClassPools = spellcastingClassIds.map((cid) => {
+                          const baseTotal = (classSpellPools[cid] || []).length;
+                          const pool = buildPoolForClass(cid);
+                          const filteredEntries = spellManagerFilters.filter(
+                            pool as any,
+                            tagsByIdLocal,
+                          );
+                          const filtered = applyStatePills(filteredEntries.map((e: any) => e.spell));
+                          return {
+                            cid,
+                            cls: classCache[cid],
+                            loaded: !!classSpellPools[cid],
+                            baseTotal,
+                            poolTotal: pool.length,
+                            filtered,
+                          };
+                        });
+
+                        const grandTotal = perClassPools.reduce((sum, p) => sum + p.filtered.length, 0);
+                        const grandBase = perClassPools.reduce((sum, p) => sum + p.poolTotal, 0);
+                        const allEmpty = perClassPools.every((p) => p.loaded && p.poolTotal === 0);
+
+                        if (perClassPools.some((p) => !p.loaded)) {
+                          return (
+                            <div className="text-sm text-ink/45 font-serif italic p-4">
+                              Loading class spell lists…
+                            </div>
+                          );
+                        }
+                        if (allEmpty) {
+                          return (
+                            <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
+                              No spells on any of this character's class spell
+                              lists yet. Curate them in /compendium/spell-lists.
+                            </div>
+                          );
+                        }
+                        if (grandTotal === 0) {
+                          return (
+                            <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
+                              No spells match the current filters.{" "}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  spellManagerFilters.resetAll();
+                                  spellManagerFilters.setSearch("");
+                                  setShowFavouritesOnly(false);
+                                  setShowWatchlistOnly(false);
+                                  setShowLoadoutOnly(false);
+                                }}
+                                className="text-gold hover:underline"
+                              >
+                                Reset filters
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="border border-gold/15 rounded-md bg-card overflow-hidden">
+                            <div className="px-3 py-2 border-b border-gold/15 bg-gold/[0.03] flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-ink/45">
+                                {grandTotal} of {grandBase} spells
+                              </span>
+                              <span className="text-[9px] font-bold uppercase tracking-widest text-ink/30">
+                                {spellcastingClassIds.length === 1
+                                  ? "Single class"
+                                  : `${spellcastingClassIds.length} classes`}
+                              </span>
+                            </div>
+                            <div className="max-h-[70vh] overflow-y-auto custom-scrollbar divide-y divide-gold/5">
+                              {perClassPools.map(({ cid, cls, filtered, poolTotal }) => {
+                                if (filtered.length === 0) return null;
+                                const isActive = cid === activeClassId;
+                                const classCollapsed = spellsCollapsedClasses.has(cid);
+
+                                const byLvlMap = new Map<number, any[]>();
+                                filtered.forEach((s: any) => {
+                                  const lv = Number(s.level || 0);
+                                  if (!byLvlMap.has(lv)) byLvlMap.set(lv, []);
+                                  byLvlMap.get(lv)!.push(s);
+                                });
+                                const sortedLvls = Array.from(byLvlMap.keys()).sort((a, b) => a - b);
+
+                                return (
+                                  <div key={cid}>
+                                    {/* Class header — sticky inside the
+                                        scroll. Click the label area to
+                                        switch active class + toggle
+                                        collapse; Prepare button opens the
+                                        per-class modal (Phase 2). */}
+                                    <div
+                                      className={cn(
+                                        "px-3 py-2 border-y border-gold/30 flex items-center gap-2 sticky top-0 z-10",
+                                        isActive
+                                          ? "bg-gold/20"
+                                          : "bg-[color-mix(in_srgb,var(--gold)_10%,var(--card))]",
+                                      )}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveSpellManagerClassId(cid);
+                                          toggleClassCollapsed(cid);
+                                        }}
+                                        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                                        title={`Toggle ${cls?.name || "class"} section · click again to switch active class`}
+                                      >
+                                        <ChevronDown
+                                          className={cn(
+                                            "w-3 h-3 text-ink/40 transition-transform shrink-0",
+                                            classCollapsed && "-rotate-90",
+                                          )}
+                                        />
+                                        <span className="font-serif text-sm font-bold text-ink tracking-tight">
+                                          {cls?.name || `Class ${cid.slice(0, 6)}`}
+                                        </span>
+                                        <span className="font-mono text-[10px] font-bold text-ink/40">
+                                          {filtered.length}
+                                          {filtered.length !== poolTotal && (
+                                            <span className="text-ink/25"> / {poolTotal}</span>
+                                          )}
+                                        </span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSpellsPrepModalClass(cid)}
+                                        className="text-[9px] font-black uppercase tracking-[0.16em] px-2 py-1 border border-gold bg-gold text-white hover:bg-gold/90 transition-colors whitespace-nowrap"
+                                        title={`Prepare spells from the ${cls?.name || "class"} list`}
+                                      >
+                                        Prepare
+                                      </button>
+                                    </div>
+
+                                    {!classCollapsed && sortedLvls.map((lvl) => {
+                                      const spellsAtLvl = byLvlMap.get(lvl) || [];
+                                      const lvlKey = `${cid}:${lvl}`;
+                                      const lvlCollapsed = spellsCollapsedLevels.has(lvlKey);
+                                      return (
+                                        <div key={lvlKey}>
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleLevelCollapsed(lvlKey)}
+                                            className="w-full flex items-center gap-2 px-4 py-1.5 bg-gold/[0.03] border-b border-gold/10 text-left"
+                                          >
+                                            <ChevronDown
+                                              className={cn(
+                                                "w-3 h-3 text-ink/30 transition-transform shrink-0",
+                                                lvlCollapsed && "-rotate-90",
+                                              )}
+                                            />
+                                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-ink/45">
+                                              {lvl === 0 ? "Cantrips" : `Level ${lvl}`}
+                                            </span>
+                                            <span className="flex-1" />
+                                            <span className="font-mono text-[9px] font-bold text-ink/30">
+                                              {spellsAtLvl.length}
+                                            </span>
+                                          </button>
+                                          {!lvlCollapsed && spellsAtLvl.map((spell: any) => {
                                   const owned = ownedSpellMap.get(spell.id);
                                   const isGranted = !!owned?.grantedByAdvancementId;
                                   const isKnown = !!owned;
@@ -7610,12 +7811,17 @@ export default function CharacterBuilder({
                                       </div>
                                     </div>
                                   );
-                                })}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                                          })}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Detail pane (sticky on lg+) */}
@@ -7644,6 +7850,66 @@ export default function CharacterBuilder({
                       <SpellDetailPanel spellId={selectedSpellId} />
                     </div>
                   )}
+
+                  {/* ── PrepareSpellsModal — placeholder (Phase 2) ─────
+                       The class-header "Prepare" button sets
+                       `spellsPrepModalClass`. The full Variant C modal
+                       (Favourites column · filtered class pool · spell
+                       detail) is the Phase 2 follow-up; this stub
+                       documents the wiring + gives the user a clear
+                       hand-off message. All preparing today is done
+                       inline on the main tree rows (★ / ◐ / Prepare). */}
+                  {spellsPrepModalClass && (() => {
+                    const modalClass = classCache[spellsPrepModalClass];
+                    const modalContributor = contributorByClass.get(spellsPrepModalClass);
+                    return (
+                      <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6"
+                        onClick={() => setSpellsPrepModalClass(null)}
+                      >
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full max-w-xl bg-card border border-gold shadow-2xl overflow-hidden"
+                        >
+                          <div className="flex items-center gap-3 px-4 py-3 border-b border-gold bg-gold/10">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline gap-3">
+                                <h3 className="font-serif text-lg font-bold text-ink leading-none">
+                                  Prepare Spells
+                                </h3>
+                                <span className="font-serif text-sm italic text-ink/55">
+                                  · {modalClass?.name || "Class"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-ink/45">
+                                <span>{modalContributor?.preparationType || "prepared"} caster</span>
+                                <span className="text-ink/20">·</span>
+                                <span>DC {dcForClass(spellsPrepModalClass)} · Atk {atkForClass(spellsPrepModalClass)}</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSpellsPrepModalClass(null)}
+                              className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 border border-gold bg-gold text-white hover:bg-gold/90"
+                            >
+                              Done
+                            </button>
+                          </div>
+                          <div className="p-6 space-y-3 text-center">
+                            <p className="text-sm text-ink/60 font-serif italic">
+                              The focused per-class prepare flow is the next
+                              piece of the design handoff. For now, mark
+                              spells prepared directly in the main tree using
+                              the ★ / ◐ / Prepare controls on each row.
+                            </p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-gold/70">
+                              Phase 2 — Coming Next
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()
