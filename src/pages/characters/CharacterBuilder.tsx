@@ -4765,106 +4765,91 @@ export default function CharacterBuilder({
                   walks down the character-stats column. Below xl the
                   columns stack and verso just flows (parent
                   .cb-page-scroll handles overflow). */}
-              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pr-6 space-y-6 min-w-0 xl:overflow-y-auto xl:custom-scrollbar">
-              {/* COMPACT CHARACTER HEADER */}
-              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 border-b-2 border-gold/10 pb-6 md:pb-8 mb-6 md:mb-8">
-                <div className="flex-1 w-full text-center md:text-left space-y-1">
-                  <Input
-                    value={character.name}
-                    onChange={(e) =>
-                      setCharacter({ ...character, name: e.target.value })
-                    }
-                    placeholder="UNNAMED ADVENTURER"
-                    className="text-3xl sm:text-4xl md:text-5xl font-serif font-black text-ink bg-transparent border-none p-0 focus-visible:ring-0 placeholder:text-ink/10 h-auto tracking-tighter uppercase text-center md:text-left"
-                  />
-                  <div className="label-text flex flex-wrap items-center justify-center md:justify-start gap-2 sm:gap-3">
-                    <span className="bg-gold text-white px-1.5 py-0.5 rounded-sm text-[9px] sm:text-[10px]">
-                      LVL {character.level}
-                    </span>
-                    <span className="text-ink/60 truncate max-w-[120px]">
-                      {selectedClassDocument?.name || "No Class"}
-                    </span>
-                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-gold/20 rounded-full" />
-                    <span className="text-ink/60 truncate max-w-[120px]">
-                      {character.raceId || "No Race"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 sm:gap-4 md:gap-6 flex-wrap justify-center border-t border-gold/5 pt-4 md:pt-0 md:border-none">
-                  {/* HEROIC INSPIRATION */}
-                  <div
-                    className="flex flex-col items-center cursor-pointer group"
-                    onClick={() =>
-                      setCharacter({
-                        ...character,
-                        hasInspiration: !character.hasInspiration,
-                      })
-                    }
-                  >
-                    <div
-                      className={`w-12 h-12 border-2 flex items-center justify-center rounded-lg transition-all duration-300 ${character.hasInspiration ? "bg-gold border-gold text-ink shadow-[0_0_15px_rgba(197,160,89,0.5)]" : "bg-transparent border-gold/20 text-gold/20 group-hover:border-gold/50"}`}
-                    >
-                      <Star
-                        className={`w-7 h-7 transition-all duration-500 ${character.hasInspiration ? "scale-110 rotate-[72deg]" : ""}`}
-                        fill={
-                          character.hasInspiration ? "currentColor" : "none"
-                        }
-                      />
-                    </div>
-                    <span className="text-[8px] uppercase font-black text-ink/40 mt-1.5 tracking-[0.1em]">
-                      Inspiration
-                    </span>
-                  </div>
-
-                  {/* EXHAUSTION */}
-                  <div className="flex flex-col items-center">
-                    <div className="w-24 h-12 border-2 border-gold/20 flex items-center justify-between px-2 bg-muted rounded-lg group hover:border-gold/30 transition-colors shadow-sm">
-                      <button
-                        onClick={() =>
-                          setCharacter({
-                            ...character,
-                            exhaustion: Math.max(0, character.exhaustion - 1),
-                          })
-                        }
-                        className="text-ink/40 hover:text-rose-700 transition-colors"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <div className="flex flex-col items-center -space-y-1">
+              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pr-6 flex flex-col gap-6 min-w-0 xl:overflow-y-auto xl:custom-scrollbar">
+              {/* ── IDENTITY STRIP (BookSpread Hand-Off-2) ──────────
+                  Compact header. Title sits flush-left; chips line
+                  below carries LVL + one chip per progression class
+                  ("Sorcerer 3 (Ember Bloodline)") + race chip. The
+                  Inspiration + Exhaustion blocks that used to live
+                  on the right got demoted to compact pips inside the
+                  Vital Hub footer. Subtitle line ("Medium Humanoid ·
+                  Chaotic Good") rides below the chips when the info
+                  block has size/alignment populated. */}
+              <div className="order-1 border-b-2 border-gold/10 pb-5 md:pb-6">
+                <Input
+                  value={character.name}
+                  onChange={(e) =>
+                    setCharacter({ ...character, name: e.target.value })
+                  }
+                  placeholder="UNNAMED ADVENTURER"
+                  className="text-2xl sm:text-3xl md:text-4xl font-serif font-black text-ink bg-transparent border-none p-0 focus-visible:ring-0 placeholder:text-ink/10 h-auto tracking-tight"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="bg-gold text-white px-1.5 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest">
+                    LVL {character.level}
+                  </span>
+                  {/* Per-class chips. progressionClassGroups carries
+                      { classId, className, subclassId, classLevel }
+                      per class. Render one chip per class with
+                      subclass name from subclassCache (when set). */}
+                  {progressionClassGroups.length > 0 ? (
+                    progressionClassGroups.map((g: any) => {
+                      const cls = classCache[g.classId];
+                      const sub = g.subclassId ? subclassCache[g.subclassId] : null;
+                      const label = cls?.name || g.className || "Class";
+                      const subLabel = sub?.name ? ` (${sub.name})` : "";
+                      return (
                         <span
-                          className={`${character.exhaustion > 0 ? "text-rose-700" : "text-ink/20"} text-base font-black`}
+                          key={g.classKey || g.classId}
+                          className="px-1.5 py-0.5 border border-gold/25 rounded-sm text-[10px] font-black uppercase tracking-widest text-ink/65"
+                          title={`${label}${subLabel} · level ${g.classLevel}`}
                         >
-                          {character.exhaustion}
+                          {label} {g.classLevel}
+                          {subLabel}
                         </span>
-                      </div>
-                      <button
-                        onClick={() =>
-                          setCharacter({
-                            ...character,
-                            exhaustion: Math.min(6, character.exhaustion + 1),
-                          })
-                        }
-                        className="text-ink/40 hover:text-rose-700 transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <span className="text-[7px] uppercase font-black text-ink/30 mt-1 tracking-widest">
-                      Exhaustion
+                      );
+                    })
+                  ) : (
+                    <span className="px-1.5 py-0.5 border border-gold/25 rounded-sm text-[10px] font-black uppercase tracking-widest text-ink/40">
+                      No Class
                     </span>
-                  </div>
+                  )}
+                  {/* Race chip. character.raceId is the row id; the
+                      compendium loader stashes the resolved name on
+                      `info.race` for display. Falls back to the id
+                      when the lookup hasn't landed yet. */}
+                  <span className="px-1.5 py-0.5 border border-gold/25 rounded-sm text-[10px] font-black uppercase tracking-widest text-ink/65">
+                    {character.info?.race || character.raceId || "No Race"}
+                  </span>
                 </div>
+                {/* Subtitle line — only renders when at least one of
+                    the descriptor fields is set so a fresh character
+                    doesn't get a wall of dot-separators with nothing
+                    between them. */}
+                {(character.info?.size || character.info?.creatureType || character.info?.alignment) && (
+                  <div className="mt-1.5 text-[11px] font-serif italic text-ink/55 flex flex-wrap items-center gap-1.5">
+                    {character.info?.size && <span>{character.info.size}</span>}
+                    {character.info?.size && character.info?.creatureType && <span className="text-ink/25">·</span>}
+                    {character.info?.creatureType && <span>{character.info.creatureType}</span>}
+                    {(character.info?.size || character.info?.creatureType) && character.info?.alignment && <span className="text-ink/25">·</span>}
+                    {character.info?.alignment && <span>{character.info.alignment}</span>}
+                  </div>
+                )}
               </div>
 
-              {/* ABILITY SCORES - TIGHTER GRID */}
+              {/* ── ABILITIES & SAVES (order-3, after Vital Hub) ───
+                  Flex `order-3` puts this block below the Vital Hub
+                  (`order-2`) per the Hand-Off-2 verso layout. Inner
+                  layout unchanged — header row + 6-ability grid;
+                  compact restyle is parked for a follow-up. */}
+              <div className="order-3 space-y-3">
               {/* Header row exposes the Point Buy modal next to the
                   scores so players don't have to fish for it through
                   an ASI advancement. Pre-fill summary in the badge
                   reflects whether the current scores actually fit a
                   27-point allocation (8–15 only, no double-cost
                   overrun). */}
-              <div className="flex items-baseline justify-between gap-3 mb-3 px-1">
+              <div className="flex items-baseline justify-between gap-3 px-1">
                 <div className="flex items-baseline gap-3">
                   <span className="label-text text-ink/30 border-l-2 border-gold pl-2">
                     Abilities &amp; Saves
@@ -5074,15 +5059,19 @@ export default function CharacterBuilder({
                   );
                 })}
               </div>
+              </div>
+              {/* /order-3 abilities */}
 
-
-              {/* Vital block — Portrait + HP + Hit Dice + Spell Points
-                  + the small vital-stats triplet (Init / Speed / Prof).
-                  Used to be paired in a two-column xl grid with the
-                  standalone Saving Throws card; the Abilities & Saves
-                  unified grid above now subsumes the save column, so
-                  this is a single full-width card. */}
-              <div className="mb-8">
+              {/* ── VITAL HUB (order-2, before Abilities) ──────────
+                  Portrait + HP + Hit Dice + Spell Points + the small
+                  vital-stats triplet (Init / Speed / Prof). `order-2`
+                  hoists this block above the Abilities grid in the
+                  verso column per Hand-Off-2. Used to be paired in a
+                  two-column xl grid with the standalone Saving Throws
+                  card; the Abilities & Saves unified grid above now
+                  subsumes the save column, so this is a single full-
+                  width card. */}
+              <div className="order-2">
                 {/* ── Vital Hub (BookSpread design) ─────────────────
                     Ringed portrait on the left (outer HP arc, optional
                     inner Spell Points arc, center monogram or image,
@@ -5416,8 +5405,17 @@ export default function CharacterBuilder({
                           );
                         })()}
 
-                        {/* VITAL TRIPLET — Initiative / Speed / Proficiency */}
-                        <div className="grid grid-cols-3 gap-2">
+                        {/* ── VITAL STRIP — Init / Speed / Prof +
+                            Inspiration + Exhaustion (Hand-Off-2)
+                            ─────────────────────────────────────────
+                            Used to be three tiles + standalone
+                            Inspiration/Exhaustion blocks in the
+                            identity strip. Demoted those to compact
+                            interactive tiles inside the Vital Hub
+                            footer per Hand-Off-2 — they're status
+                            switches that belong with the rest of the
+                            "current state" reads (HP/SP/AC/Init). */}
+                        <div className="grid grid-cols-5 gap-2">
                           {[
                             {
                               label: "Initiative",
@@ -5452,6 +5450,95 @@ export default function CharacterBuilder({
                               </span>
                             </div>
                           ))}
+
+                          {/* Inspiration tile — gold-filled when set,
+                              click toggles. Same data shape as the
+                              old standalone block (character.hasInspiration). */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCharacter({
+                                ...character,
+                                hasInspiration: !character.hasInspiration,
+                              })
+                            }
+                            title={
+                              character.hasInspiration
+                                ? "Inspired — click to clear"
+                                : "Click to grant inspiration"
+                            }
+                            className={cn(
+                              "p-2 sm:p-3 border-2 rounded flex flex-col items-center justify-center text-center shadow-sm transition-all hover:-translate-y-0.5 cursor-pointer",
+                              character.hasInspiration
+                                ? "bg-gold border-gold text-white shadow-[0_0_12px_rgba(197,160,89,0.4)]"
+                                : "bg-card border-gold/20 text-ink hover:border-gold/40",
+                            )}
+                          >
+                            <Star
+                              className={cn(
+                                "w-5 h-5 sm:w-6 sm:h-6 transition-all",
+                                character.hasInspiration ? "scale-110 rotate-[72deg] text-white" : "text-gold/40",
+                              )}
+                              fill={character.hasInspiration ? "currentColor" : "none"}
+                            />
+                            <span
+                              className={cn(
+                                "text-[8px] sm:text-[9px] font-black uppercase tracking-[0.16em] mt-1.5",
+                                character.hasInspiration ? "text-white/90" : "text-ink/45",
+                              )}
+                            >
+                              Inspired
+                            </span>
+                          </button>
+
+                          {/* Exhaustion tile — count + step controls.
+                              Click cycles 0→1→…→6→0 (left), right-
+                              click steps back. Visual ramp tints the
+                              tile blood/* as the count climbs so it
+                              reads as "this is bad" without needing
+                              an icon. */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCharacter({
+                                ...character,
+                                exhaustion: ((character.exhaustion ?? 0) + 1) % 7,
+                              })
+                            }
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setCharacter({
+                                ...character,
+                                exhaustion:
+                                  ((character.exhaustion ?? 0) + 6) % 7,
+                              });
+                            }}
+                            title="Click +1 exhaustion · right-click -1"
+                            className={cn(
+                              "p-2 sm:p-3 border-2 rounded flex flex-col items-center justify-center text-center shadow-sm transition-all hover:-translate-y-0.5 cursor-pointer",
+                              (character.exhaustion ?? 0) >= 5
+                                ? "bg-blood/15 border-blood text-blood"
+                                : (character.exhaustion ?? 0) >= 3
+                                  ? "bg-blood/8 border-blood/55 text-blood"
+                                  : (character.exhaustion ?? 0) > 0
+                                    ? "bg-blood/[0.04] border-blood/30 text-blood"
+                                    : "bg-card border-gold/20 text-ink/35 hover:border-gold/40",
+                            )}
+                          >
+                            <span className="font-mono text-xl sm:text-2xl font-black leading-none">
+                              {character.exhaustion ?? 0}
+                            </span>
+                            <span
+                              className={cn(
+                                "text-[8px] sm:text-[9px] font-black uppercase tracking-[0.16em] mt-1.5",
+                                (character.exhaustion ?? 0) > 0
+                                  ? "text-blood/85"
+                                  : "text-ink/45",
+                              )}
+                            >
+                              Exhaustion
+                            </span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -5461,8 +5548,11 @@ export default function CharacterBuilder({
 
               {/* Skills (2-col) + Tools + Languages — flat children
                   of the outer verso. Inner grid wrapper from the
-                  previous Phase-4 layout has been unwrapped. */}
-              <div className="p-4 border border-gold/20 bg-card/50 rounded-md">
+                  previous Phase-4 layout has been unwrapped. Both
+                  cards carry `order-4` so they sit at the bottom of
+                  the verso column after Identity / VitalHub /
+                  Abilities. */}
+              <div className="order-4 p-4 border border-gold/20 bg-card/50 rounded-md">
                     <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-gold/10">
                       <span className="label-text flex items-center gap-2">
                         <Package className="w-3 h-3 text-gold" />
@@ -5600,8 +5690,9 @@ export default function CharacterBuilder({
                   {/* Tools + Languages — two word-list cards side by
                       side. Empty states use the design's italic muted
                       copy so the cards stay present even on a fresh
-                      character with no proficiencies authored yet. */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      character with no proficiencies authored yet.
+                      `order-4` keeps these glued under Skills. */}
+                  <div className="order-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="p-3 border border-gold/20 bg-card/50 rounded-md space-y-2">
                       <div className="flex items-baseline justify-between">
                         <span className="label-text flex items-center gap-2">
