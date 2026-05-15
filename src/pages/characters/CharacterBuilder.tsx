@@ -5319,27 +5319,83 @@ export default function CharacterBuilder({
                           )}
                         </div>
 
-                        {/* Hit Dice strip — one card per class once
-                            the model supports it. Today: single card
-                            for the character's primary hit-die type. */}
-                        <div className="flex items-center gap-3 p-2 border border-gold/15 bg-card/30 rounded-md">
-                          <span className="text-[8px] font-black uppercase tracking-widest text-ink/45 pl-1">
-                            Hit Dice
-                          </span>
-                          <div className="flex-1 flex gap-2">
-                            <div className="px-3 py-1.5 border border-gold/20 bg-card rounded flex items-center gap-3">
-                              <span className="font-mono text-base font-black leading-none">
-                                <span className="text-ink">{character.hitDie.current}</span>
-                                <span className="text-ink/25"> / </span>
-                                <span className="text-ink/55">{character.hitDie.max}</span>
+                        {/* Hit Dice strip — one card per class. The
+                            data model carries a `HitPoints` advancement
+                            per class with `configuration.hitDie` set
+                            to the class's hit-die size (see
+                            classProgression.ts, characterLogic.ts ::
+                            normalizeAdvancementList). The character's
+                            total available Hit Dice is therefore the
+                            sum of class levels; each class contributes
+                            `classLevel` dice of its hit-die type.
+                            Per-class spent tracking isn't in the model
+                            yet, so each card renders max/max — when
+                            spent tracking lands the `current` value
+                            wires in here. */}
+                        {(() => {
+                          const classGroups = progressionClassGroups.length > 0
+                            ? progressionClassGroups
+                            : null;
+                          const aggregateMax = Number(character?.hitDie?.max ?? 0) || 0;
+                          const aggregateCurrent = Number(character?.hitDie?.current ?? aggregateMax) || aggregateMax;
+                          return (
+                            <div className="flex flex-wrap items-center gap-3 p-2 border border-gold/15 bg-card/30 rounded-md">
+                              <span className="text-[8px] font-black uppercase tracking-widest text-ink/45 pl-1">
+                                Hit Dice
                               </span>
-                              <span className="w-px h-4 bg-gold/20" />
-                              <span className="text-[10px] font-black uppercase tracking-widest text-gold/75 leading-none">
-                                {character.hitDie.type}
-                              </span>
+                              <div className="flex-1 flex flex-wrap gap-2">
+                                {classGroups ? (
+                                  classGroups.map((group: any) => {
+                                    const classDoc = classCache[group.classId];
+                                    const hitDieFaces = Number(classDoc?.hitDie) || 8;
+                                    const dieLabel = `d${hitDieFaces}`;
+                                    const max = Number(group?.classLevel ?? 0) || 0;
+                                    // Until per-class spent tracking
+                                    // lands, render max/max. Aggregate
+                                    // current is shown on the strip
+                                    // footer below for awareness.
+                                    return (
+                                      <div
+                                        key={group.classKey || group.classId}
+                                        className="px-3 py-1.5 border border-gold/20 bg-card rounded flex items-center gap-3"
+                                      >
+                                        <span className="font-mono text-base font-black leading-none">
+                                          <span className="text-ink">{max}</span>
+                                          <span className="text-ink/25"> / </span>
+                                          <span className="text-ink/55">{max}</span>
+                                        </span>
+                                        <span className="w-px h-4 bg-gold/20" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-gold/75 leading-none">
+                                          {dieLabel}
+                                        </span>
+                                        {classGroups.length > 1 && (
+                                          <span className="text-[9px] font-bold uppercase tracking-widest text-ink/50 truncate max-w-[80px]">
+                                            {group.className || classDoc?.name || ""}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                ) : (
+                                  // Fallback for fresh characters with
+                                  // no progression yet — show the
+                                  // default character.hitDie aggregate.
+                                  <div className="px-3 py-1.5 border border-gold/20 bg-card rounded flex items-center gap-3">
+                                    <span className="font-mono text-base font-black leading-none">
+                                      <span className="text-ink">{aggregateCurrent}</span>
+                                      <span className="text-ink/25"> / </span>
+                                      <span className="text-ink/55">{aggregateMax || 1}</span>
+                                    </span>
+                                    <span className="w-px h-4 bg-gold/20" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/75 leading-none">
+                                      {character?.hitDie?.type || "d10"}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                          );
+                        })()}
 
                         {/* VITAL TRIPLET — Initiative / Speed / Proficiency */}
                         <div className="grid grid-cols-3 gap-2">
@@ -5384,7 +5440,13 @@ export default function CharacterBuilder({
                 })()}
               </div>
 
-              <div className="grid md:grid-cols-5 gap-6 pt-4">
+              {/* ── Book spread — verso / recto ───────────────────
+                  `md:divide-x` draws the spine between the two pages;
+                  per-column padding (md:pr-6 on verso, md:pl-6 on
+                  recto) gives each page its own breathing room. The
+                  grid stays gap-0 on md+ so the divider sits flush
+                  between the columns rather than floating in a gap. */}
+              <div className="grid md:grid-cols-5 gap-6 md:gap-0 md:divide-x md:divide-gold/20 pt-4">
                 {/* ── Verso: Skills (2-col) + Tools + Languages ─────
                     The handoff packs all the at-a-glance proficiency
                     info — 18 skills in a 2-col compact list, tools as
@@ -5392,7 +5454,7 @@ export default function CharacterBuilder({
                     the verso page. Tools and Languages used to live
                     in the Character Info sub-tab; they read better
                     here next to the skills they share a profile with. */}
-                <div className="md:col-span-2 space-y-4">
+                <div className="md:col-span-2 md:pr-6 space-y-4">
                   <div className="p-4 border border-gold/20 bg-card/50 rounded-md">
                     <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-gold/10">
                       <span className="label-text flex items-center gap-2">
@@ -5594,8 +5656,10 @@ export default function CharacterBuilder({
                     player can see how much each tab holds without
                     clicking through. Span 3 of 5 columns so the
                     verso (2 cols) and recto (3 cols) feel like a
-                    2:3 book spread rather than a sidebar split. */}
-                <div className="md:col-span-3 space-y-4">
+                    2:3 book spread rather than a sidebar split. The
+                    md:pl-6 pairs with the verso's md:pr-6 to put
+                    breathing room on both sides of the spine. */}
+                <div className="md:col-span-3 md:pl-6 space-y-4">
                   {(() => {
                     const ownedFeatCount = Array.isArray(character.feats) ? character.feats.length : 0;
                     const ownedSpellsCount = Array.isArray(character.progressionState?.ownedSpells)
