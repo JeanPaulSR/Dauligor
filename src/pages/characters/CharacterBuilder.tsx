@@ -1772,7 +1772,13 @@ export default function CharacterBuilder({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeStep, setActiveStep] = useState("sheet");
-  const [sheetSection, setSheetSection] = useState("info");
+  // Recto sub-tabs — restructured to mirror the BookSpread handoff's
+  // 6-tab strip: Features / Spells / Inventory / Feats / Profs / Bio.
+  // The old "info" tab content split between Profs (senses, damage
+  // traits, armor/weapon profs) and Bio (race, background, alignment
+  // and personal info). Default to Features so a fresh sheet lands on
+  // the most-used view.
+  const [sheetSection, setSheetSection] = useState("features");
   const [isSelectingClass, setIsSelectingClass] = useState(false);
   const [isSelectingSubclass, setIsSelectingSubclass] = useState({
     open: false,
@@ -5581,32 +5587,72 @@ export default function CharacterBuilder({
                   </div>
                 </div>
 
-                {/* Recto — sub-tab content (Character Info / Features
-                    / Spells). Span 3 of 5 columns so the verso (2
-                    cols) and recto (3 cols) feel like a 2:3 book
-                    spread rather than a sidebar/main split. */}
+                {/* Recto — book-spread sub-tabs. 6 tabs matching the
+                    handoff's strip: Features / Spells / Inventory /
+                    Feats / Profs / Bio. Counts (where meaningful)
+                    sit in a small badge inside the button so the
+                    player can see how much each tab holds without
+                    clicking through. Span 3 of 5 columns so the
+                    verso (2 cols) and recto (3 cols) feel like a
+                    2:3 book spread rather than a sidebar split. */}
                 <div className="md:col-span-3 space-y-4">
-                  <div className="flex flex-wrap items-center gap-3 border-b border-gold/10 pb-4">
-                    {[
-                      { id: "info", label: "Character Info" },
-                      { id: "features", label: "Features" },
-                      { id: "spells", label: "Spells" },
-                    ].map((section) => (
-                      <button
-                        key={section.id}
-                        onClick={() => setSheetSection(section.id)}
-                        className={`px-4 py-2 border text-xs font-black uppercase tracking-widest transition-colors ${
-                          sheetSection === section.id
-                            ? "bg-gold/15 border-gold text-gold"
-                            : "bg-card/30 border-gold/20 text-ink/45 hover:border-gold/50 hover:text-gold"
-                        }`}
-                      >
-                        {section.label}
-                      </button>
-                    ))}
-                  </div>
+                  {(() => {
+                    const ownedFeatCount = Array.isArray(character.feats) ? character.feats.length : 0;
+                    const ownedSpellsCount = Array.isArray(character.progressionState?.ownedSpells)
+                      ? character.progressionState.ownedSpells.length
+                      : 0;
+                    const ownedFeaturesCount = Array.isArray(character.progressionState?.ownedFeatures)
+                      ? character.progressionState.ownedFeatures.length
+                      : 0;
+                    const inventoryCount = Array.isArray(character.inventory) ? character.inventory.length : 0;
+                    const tabs = [
+                      { id: "features",  label: "Features",  count: ownedFeaturesCount },
+                      { id: "spells",    label: "Spells",    count: ownedSpellsCount },
+                      { id: "inventory", label: "Inventory", count: inventoryCount },
+                      { id: "feats",     label: "Feats",     count: ownedFeatCount },
+                      { id: "profs",     label: "Profs",     count: null },
+                      { id: "bio",       label: "Bio",       count: null },
+                    ];
+                    return (
+                      <div className="flex flex-wrap items-center gap-2 border-b border-gold/10 pb-3">
+                        {tabs.map((t) => {
+                          const active = sheetSection === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setSheetSection(t.id)}
+                              className={cn(
+                                "px-3 py-2 border text-xs font-black uppercase tracking-widest transition-colors flex items-center gap-2",
+                                active
+                                  ? "bg-gold/15 border-gold text-gold"
+                                  : "bg-card/30 border-gold/20 text-ink/45 hover:border-gold/50 hover:text-gold",
+                              )}
+                            >
+                              <span>{t.label}</span>
+                              {t.count != null && t.count > 0 && (
+                                <span
+                                  className={cn(
+                                    "font-mono text-[9px] px-1.5 py-0.5 rounded-sm leading-none",
+                                    active ? "bg-gold text-white" : "bg-gold/10 text-gold/70",
+                                  )}
+                                >
+                                  {t.count}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
-                  {sheetSection === "info" && (
+                  {/* Profs tab — senses, damage traits, and the
+                      Identity-stack (Race/Creature Type/Background +
+                      Armor/Weapon proficiencies). Renamed from the
+                      legacy "info" tab; Bio (personal info) is now a
+                      separate tab below. */}
+                  {sheetSection === "profs" && (
                   <div className="grid md:grid-cols-2 gap-6">
                     {/* SENSES & DEFENSES */}
                     <div className="space-y-6">
@@ -6595,6 +6641,218 @@ export default function CharacterBuilder({
                           </div>
                         );
                       })()}
+                    </div>
+                  )}
+
+                  {/* ── Inventory tab ─────────────────────────────────
+                       v1 surface: shows the character's items inline
+                       when the inventory array is populated, otherwise
+                       a placeholder pointing to the Equipment step. A
+                       proper inventory editor (carrying weight,
+                       attunement, equipped state) lives in the
+                       Equipment step itself. */}
+                  {sheetSection === "inventory" && (
+                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                            <Package className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
+                            Inventory
+                          </h3>
+                          <p className="text-xs text-ink/55 font-serif italic mt-1">
+                            Carried items + currency. Edit via the Equipment step.
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActiveStep("equipment")}
+                          className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
+                        >
+                          Open Equipment Step
+                        </Button>
+                      </div>
+                      {Array.isArray(character.inventory) && character.inventory.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {character.inventory.map((item: any, idx: number) => (
+                            <div
+                              key={`inv-${item.id || idx}`}
+                              className="flex items-center justify-between gap-3 px-3 py-2 border border-gold/15 bg-card/60 rounded-md"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="font-serif text-sm text-ink truncate">
+                                  {item.name || "Unnamed item"}
+                                </div>
+                                {item.type && (
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-ink/40 mt-0.5">
+                                    {item.type}
+                                  </div>
+                                )}
+                              </div>
+                              {item.quantity != null && item.quantity > 1 && (
+                                <span className="font-mono text-xs font-black text-gold/70 shrink-0">
+                                  ×{item.quantity}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-gold/25 rounded-md p-6 text-center space-y-2">
+                          <Package className="w-8 h-8 text-gold/30 mx-auto" />
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gold/60">
+                            No items yet
+                          </p>
+                          <p className="text-xs text-ink/40 font-serif italic">
+                            Add carried items from the Equipment step.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Feats tab ────────────────────────────────────
+                       Lists feats the character has been granted. Feats
+                       can come from ASI advancements + race/background
+                       feat picks. */}
+                  {sheetSection === "feats" && (
+                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                            <Star className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
+                            Feats
+                          </h3>
+                          <p className="text-xs text-ink/55 font-serif italic mt-1">
+                            Granted via ASI advancements, race, background, or feat-grant features.
+                          </p>
+                        </div>
+                      </div>
+                      {Array.isArray(character.feats) && character.feats.length > 0 ? (
+                        <div className="space-y-2">
+                          {character.feats.map((feat: any, idx: number) => (
+                            <div
+                              key={`feat-${feat.id || idx}`}
+                              className="p-3 border border-gold/20 bg-card/60 rounded-md"
+                            >
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="font-serif text-sm font-bold text-ink">
+                                  {feat.name || "Unnamed feat"}
+                                </span>
+                                {feat.source && (
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-gold/65 shrink-0">
+                                    {feat.source}
+                                  </span>
+                                )}
+                              </div>
+                              {feat.description && (
+                                <p className="text-[11px] text-ink/60 font-serif leading-relaxed mt-1.5 line-clamp-3">
+                                  {String(feat.description).replace(/\[[^\]]+\]/g, "").trim()}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="border border-dashed border-gold/25 rounded-md p-6 text-center space-y-2">
+                          <Star className="w-8 h-8 text-gold/30 mx-auto" />
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-gold/60">
+                            No feats yet
+                          </p>
+                          <p className="text-xs text-ink/40 font-serif italic">
+                            Feats are granted via the Class step (ASI / feat advancements) or via race &amp; background picks.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Bio tab ──────────────────────────────────────
+                       Personal info — alignment, age, pronouns, plus
+                       the flavour textareas (ideals, bonds, flaws,
+                       appearance). The Identity stack (race / background)
+                       lives in the Profs tab today since those entities
+                       carry proficiency information; Bio focuses on the
+                       human-readable character info. */}
+                  {sheetSection === "bio" && (
+                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
+                            <Scroll className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
+                            Bio
+                          </h3>
+                          <p className="text-xs text-ink/55 font-serif italic mt-1">
+                            Alignment, personal details, and flavour text.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Compact info grid — alignment / age / pronouns
+                          / gender. Each field is a labeled input
+                          writing back into character.info.* on change. */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { key: "alignment", label: "Alignment", placeholder: "Lawful Good" },
+                          { key: "age", label: "Age", placeholder: "—" },
+                          { key: "gender", label: "Pronouns", placeholder: "they/them" },
+                          { key: "deity", label: "Deity", placeholder: "—" },
+                        ].map((field) => (
+                          <div key={field.key} className="space-y-1">
+                            <span className="text-[8px] font-black uppercase tracking-[0.18em] text-ink/45">
+                              {field.label}
+                            </span>
+                            <input
+                              type="text"
+                              value={(character.info && character.info[field.key]) || ""}
+                              onChange={(e) =>
+                                setCharacter({
+                                  ...character,
+                                  info: {
+                                    ...(character.info || {}),
+                                    [field.key]: e.target.value,
+                                  },
+                                })
+                              }
+                              placeholder={field.placeholder}
+                              className="w-full px-2 py-1.5 text-sm font-serif text-ink bg-card border border-gold/20 rounded focus:outline-none focus:border-gold/60 placeholder:text-ink/20"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Flavour textareas — ideals / bonds / flaws /
+                          appearance. Long-form fields that round out
+                          the character's voice. */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                        {[
+                          { key: "ideals", label: "Ideals" },
+                          { key: "bonds", label: "Bonds" },
+                          { key: "flaws", label: "Flaws" },
+                          { key: "appearance", label: "Appearance" },
+                        ].map((field) => (
+                          <div key={field.key} className="space-y-1">
+                            <span className="text-[8px] font-black uppercase tracking-[0.18em] text-ink/45">
+                              {field.label}
+                            </span>
+                            <textarea
+                              value={(character.info && character.info[field.key]) || ""}
+                              onChange={(e) =>
+                                setCharacter({
+                                  ...character,
+                                  info: {
+                                    ...(character.info || {}),
+                                    [field.key]: e.target.value,
+                                  },
+                                })
+                              }
+                              rows={3}
+                              placeholder="—"
+                              className="w-full px-2 py-1.5 text-xs font-serif text-ink bg-card border border-gold/20 rounded focus:outline-none focus:border-gold/60 placeholder:text-ink/20 resize-none leading-relaxed"
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
