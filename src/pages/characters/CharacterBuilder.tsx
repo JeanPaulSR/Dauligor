@@ -4738,13 +4738,17 @@ export default function CharacterBuilder({
         {/* MAIN AREA */}
         <div className="flex-1 min-h-[500px] lg:min-h-[800px]">
           {activeStep === "sheet" ? (
-            // Book-Spread Sheet shell — frames the sheet as an open
-            // tome. Outer wrapper carries the parchment tint + ringed
-            // gold border + 2xl drop shadow; the existing 2-col grid
-            // below renders as the verso/recto pages with a center
-            // spine divider added via absolute positioning so the
-            // children don't have to be re-padded.
-            <div className="space-y-6 bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] p-4 sm:p-6 md:p-8 rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl h-full min-h-[500px]">
+            // Book-Spread Sheet shell. The outer wrapper IS the
+            // book-spread grid: verso (left page, fixed 540-580px)
+            // holds the entire character-stats column — identity
+            // strip, Abilities & Saves, Vital Hub, Skills 2-col,
+            // Tools, Languages. Recto (right page, fluid) holds
+            // the sub-tab strip (Features / Spells / Inventory /
+            // Feats / Profs / Bio) and its content. xl:divide-x is
+            // the visible spine; below xl the columns stack.
+            <div className="bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] p-4 sm:p-6 md:p-8 rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl h-full min-h-[500px] grid grid-cols-1 xl:grid-cols-[minmax(540px,580px)_minmax(0,1fr)] gap-6 xl:gap-0 xl:divide-x xl:divide-gold/25">
+              {/* ── Verso (left page) ──── */}
+              <div className="xl:pr-6 space-y-6 min-w-0">
               {/* COMPACT CHARACTER HEADER */}
               <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 border-b-2 border-gold/10 pb-6 md:pb-8 mb-6 md:mb-8">
                 <div className="flex-1 w-full text-center md:text-left space-y-1">
@@ -5055,8 +5059,6 @@ export default function CharacterBuilder({
               </div>
 
 
-              {true && (
-              <>
               {/* Vital block — Portrait + HP + Hit Dice + Spell Points
                   + the small vital-stats triplet (Init / Speed / Prof).
                   Used to be paired in a two-column xl grid with the
@@ -5440,22 +5442,10 @@ export default function CharacterBuilder({
                 })()}
               </div>
 
-              {/* ── Book spread — verso / recto ───────────────────
-                  `md:divide-x` draws the spine between the two pages;
-                  per-column padding (md:pr-6 on verso, md:pl-6 on
-                  recto) gives each page its own breathing room. The
-                  grid stays gap-0 on md+ so the divider sits flush
-                  between the columns rather than floating in a gap. */}
-              <div className="grid md:grid-cols-5 gap-6 md:gap-0 md:divide-x md:divide-gold/20 pt-4">
-                {/* ── Verso: Skills (2-col) + Tools + Languages ─────
-                    The handoff packs all the at-a-glance proficiency
-                    info — 18 skills in a 2-col compact list, tools as
-                    a word list below, languages as a word list — onto
-                    the verso page. Tools and Languages used to live
-                    in the Character Info sub-tab; they read better
-                    here next to the skills they share a profile with. */}
-                <div className="md:col-span-2 md:pr-6 space-y-4">
-                  <div className="p-4 border border-gold/20 bg-card/50 rounded-md">
+              {/* Skills (2-col) + Tools + Languages — flat children
+                  of the outer verso. Inner grid wrapper from the
+                  previous Phase-4 layout has been unwrapped. */}
+              <div className="p-4 border border-gold/20 bg-card/50 rounded-md">
                     <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-gold/10">
                       <span className="label-text flex items-center gap-2">
                         <Package className="w-3 h-3 text-gold" />
@@ -5647,19 +5637,9 @@ export default function CharacterBuilder({
                       </ul>
                     </div>
                   </div>
-                </div>
-
-                {/* Recto — book-spread sub-tabs. 6 tabs matching the
-                    handoff's strip: Features / Spells / Inventory /
-                    Feats / Profs / Bio. Counts (where meaningful)
-                    sit in a small badge inside the button so the
-                    player can see how much each tab holds without
-                    clicking through. Span 3 of 5 columns so the
-                    verso (2 cols) and recto (3 cols) feel like a
-                    2:3 book spread rather than a sidebar split. The
-                    md:pl-6 pairs with the verso's md:pr-6 to put
-                    breathing room on both sides of the spine. */}
-                <div className="md:col-span-3 md:pl-6 space-y-4">
+              {/* ── End verso · Begin recto ──── */}
+              </div>
+              <div className="xl:pl-6 space-y-4 min-w-0">
                   {(() => {
                     const ownedFeatCount = Array.isArray(character.feats) ? character.feats.length : 0;
                     const ownedSpellsCount = Array.isArray(character.progressionState?.ownedSpells)
@@ -6920,9 +6900,6 @@ export default function CharacterBuilder({
                     </div>
                   )}
                 </div>
-              </div>
-              </>
-              )}
 
             </div>
           ) : activeStep === "class" ? (
