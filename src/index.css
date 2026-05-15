@@ -573,18 +573,17 @@ body.spell-list-fullscreen {
   overflow: hidden;
 }
 
-/* Character-builder wide mode. Two jobs:
+/* Character-builder wide mode. Three jobs:
    1. Strips the global `<main>` max-width (default Tailwind container
-      caps at xl:1280px) so the book-spread sheet can stretch on
-      wider screens.
-   2. Locks body scroll so the page itself doesn't gain a vertical
-      scroll wheel; the BookSpread sheet is viewport-bounded and
-      each `.book-page` inside it (verso/recto) handles its own
-      overflow. Mirrors the `spell-list-fullscreen` pattern but
-      DOESN'T hide the footer — CharacterBuilder positions its
-      content above the footer via h-screen layout math.
-   Footer is hidden so the h-screen math doesn't have to account for
-   it. */
+      caps at xl:1280px) so the book-spread sheet + sticky rail can
+      stretch on wider screens.
+   2. Hides the global footer — CharacterBuilder owns its own bottom
+      edge via the page-scroll layout below.
+   3. Locks the BODY to viewport height with overflow:hidden so the
+      page itself never gains a scroll wheel. Inside CharacterBuilder,
+      the `.page-scroll` div is the single scroll container — flex:1
+      after the header, overflow-y:auto, sticky rail rides along.
+   Mirrors the `spell-list-fullscreen` pattern. */
 body.character-builder-wide main {
   max-width: none !important;
   padding: 0 !important;
@@ -595,4 +594,184 @@ body.character-builder-wide footer {
 body.character-builder-wide {
   overflow: hidden;
   height: 100vh;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   CHARACTER BUILDER LAYOUT (per TAB_RAIL_IMPLEMENTATION.md)
+
+   The CharacterBuilder render is roughly:
+
+     <root  h-screen flex-col overflow-hidden>
+       <Header  shrink-0>
+       <div class="cb-page-scroll">      ← flex-1, overflow-y:auto
+         <div class="cb-page-inner">     ← max-w:1640, mx-auto, padding
+           <div class="cb-body-cols">    ← grid: 1fr + 56px rail
+             <div>                       ← swappable step content
+             <nav class="cb-step-rail">  ← position: sticky; top: 14px
+   ──────────────────────────────────────────────────────────────── */
+
+/* Two-column grid: main content + sticky icon rail.
+   `align-items: start` is CRITICAL — without it the rail column
+   stretches to the content column's height and position:sticky
+   has nothing to grip on. */
+.cb-body-cols {
+  display: grid;
+  grid-template-columns: 1fr clamp(44px, 5vw, 64px);
+  gap: clamp(8px, 1.2vw, 18px);
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .cb-body-cols {
+    grid-template-columns: 1fr 44px;
+    gap: 8px;
+  }
+}
+
+/* Step rail — sticks 14px below the top of .cb-page-scroll. */
+.cb-step-rail {
+  position: sticky;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 0.8vw, 10px);
+  padding-top: 4px;
+  z-index: 5;
+}
+
+/* "Saved 2m ago" status label between the Save button and the
+   step buttons. */
+.cb-step-saved {
+  font-size: 8.5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+  color: color-mix(in srgb, var(--ink) 42%, transparent);
+  text-align: center;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  padding: 0 0 4px;
+}
+.cb-step-saved .ok { color: #10b981; }
+.cb-step-saved-time {
+  display: block;
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  margin-top: 2px;
+}
+
+/* Thin gold divider between rail groups. */
+.cb-step-rail-divider {
+  width: 24px;
+  height: 1px;
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+  margin: 2px 0;
+}
+
+/* Each icon button — Save, the per-step buttons, and Settings. */
+.cb-tab-strip-btn {
+  width: clamp(38px, 4.5vw, 52px);
+  height: clamp(38px, 4.5vw, 52px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    background 120ms,
+    color 120ms,
+    border-color 120ms,
+    transform 120ms;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 0;
+  position: relative;
+}
+.cb-tab-strip-btn:hover {
+  background: color-mix(in srgb, var(--gold) 10%, var(--card));
+  border-color: color-mix(in srgb, var(--gold) 40%, transparent);
+}
+.cb-tab-strip-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.cb-tab-strip-btn.active {
+  background: var(--gold);
+  color: #fff;
+  border-color: var(--gold);
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 40%, transparent);
+}
+/* Save button — always gold, even when no step is "active". */
+.cb-tab-strip-btn.save {
+  background: var(--gold);
+  color: #fff;
+  border-color: var(--gold);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 35%, transparent);
+}
+.cb-tab-strip-btn.save:hover {
+  background: color-mix(in srgb, #fff 8%, var(--gold));
+  border-color: color-mix(in srgb, #fff 8%, var(--gold));
+}
+
+/* Settings popover — opens to the LEFT of the Settings button. */
+.cb-settings-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.cb-settings-menu {
+  position: absolute;
+  right: calc(100% + 10px);
+  bottom: 0;
+  z-index: 41;
+  min-width: 220px;
+  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--gold) 28%, transparent);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+}
+.cb-settings-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink) 75%, transparent);
+  cursor: pointer;
+  border-radius: 3px;
+  text-align: left;
+  white-space: nowrap;
+}
+.cb-settings-menu-item:hover {
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+  color: var(--gold);
+}
+.cb-settings-menu-item.danger { color: var(--blood); }
+.cb-settings-menu-item.danger:hover {
+  background: color-mix(in srgb, var(--blood) 8%, transparent);
+  color: var(--blood);
+}
+.cb-settings-menu-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+}
+.cb-settings-menu-divider {
+  height: 1px;
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
+  margin: 4px 6px;
 }

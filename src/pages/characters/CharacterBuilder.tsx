@@ -117,6 +117,8 @@ import {
   ChevronUp,
   ChevronDown,
   Download,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { ClassList } from "../compendium/ClassList";
 import BBCodeRenderer from "../../components/BBCodeRenderer";
@@ -147,6 +149,8 @@ import {
   missingPrerequisiteTags,
 } from "../../lib/characterTags";
 import { cn } from "../../lib/utils";
+import { deleteDocument } from "../../lib/d1";
+import { toast } from "sonner";
 
 const getModifier = (score: number) => {
   const mod = Math.floor((score - 10) / 2);
@@ -1771,6 +1775,25 @@ export default function CharacterBuilder({
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Timestamp of the last successful save — fuels the "Saved Nm ago"
+  // status pip on the right rail. Null until the first commit lands so
+  // the rail label can switch to a neutral "Unsaved" state instead of
+  // claiming "0s ago" before anything was persisted.
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // Settings popover (rail Settings button) — opens to the LEFT of the
+  // button per TAB_RAIL_IMPLEMENTATION.md, with View JSON / Export /
+  // Delete Character entries. Local boolean since the popover is fully
+  // contained within the rail and doesn't need cross-component wiring.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Ticker — bumps once a minute so the "Saved Nm ago" label keeps
+  // pace with wall clock without forcing the rest of the builder to
+  // re-render on every animation frame.
+  const [, setSavedAgoTick] = useState(0);
+  useEffect(() => {
+    if (!lastSavedAt) return;
+    const t = setInterval(() => setSavedAgoTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [lastSavedAt]);
   const [activeStep, setActiveStep] = useState("sheet");
   // Recto sub-tabs — restructured to mirror the BookSpread handoff's
   // 6-tab strip: Features / Spells / Inventory / Feats / Profs / Bio.
@@ -3300,6 +3323,10 @@ export default function CharacterBuilder({
       // — the sidebar's listener just runs one indexed D1 query.
       window.dispatchEvent(new Event("characterListUpdated"));
 
+      // Record the wall-clock instant the commit landed. The rail's
+      // "Saved Nm ago" label diffs against this on every minute-tick.
+      setLastSavedAt(new Date());
+
       if (isNew) {
         navigate(`/characters/builder/${charId}`);
       }
@@ -3308,6 +3335,56 @@ export default function CharacterBuilder({
     } finally {
       setSaving(false);
     }
+  };
+
+  // Delete the current character — fired from the rail's Settings
+  // popover. Walks through deleteDocument('characters', id) so D1's FK
+  // cascade wipes progression / selections / inventory / spells in one
+  // shot (see project_d1_upsert_idiom.md). Dispatches the sidebar
+  // refresh event so the recent-characters sub-list shrinks
+  // immediately, then bounces the user back to /characters.
+  const handleDeleteCharacter = async () => {
+    if (!id || id === "new") {
+      setSettingsOpen(false);
+      navigate("/characters");
+      return;
+    }
+    if (!window.confirm("Permanently delete this character? This cannot be undone.")) return;
+    try {
+      await deleteDocument("characters", id);
+      window.dispatchEvent(new Event("characterListUpdated"));
+      toast.success("Character deleted.");
+      setSettingsOpen(false);
+      navigate("/characters");
+    } catch (err: any) {
+      console.error("[CharacterBuilder] Failed to delete character:", err);
+      toast.error(`Couldn't delete character: ${err?.message ?? "unknown error"}`);
+    }
+  };
+
+  // Friendly "saved 2m ago" formatter. Granularity steps:
+  //   < 5s        → "Just now"
+  //   < 60s       → "Ns ago"
+  //   < 60m       → "Nm ago"
+  //   < 24h       → "Nh ago"
+  //   otherwise   → locale date string
+  // Returns null if no save has happened yet (so the rail can show
+  // an "Unsaved" placeholder instead). Computed inline (no useMemo)
+  // because the surrounding ticker bumps a state variable every 30s
+  // to force a re-render — useMemo would need the tick state listed
+  // as a dep to recompute, which is more bookkeeping than just
+  // running the maths each render.
+  const formatSavedAgo = (when: Date | null): string | null => {
+    if (!when) return null;
+    const diffMs = Date.now() - when.getTime();
+    const s = Math.floor(diffMs / 1000);
+    if (s < 5) return "Just now";
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return when.toLocaleDateString();
   };
 
   useKeyboardSave(() => { handleSave(); });
@@ -4601,10 +4678,20 @@ export default function CharacterBuilder({
   if (loading) return null;
 
   return (
-    <div className="max-w-[1800px] mx-auto h-screen flex flex-col px-2 sm:px-4 lg:px-6 pt-4 pb-2 overflow-hidden">
-      {/* Top Header & Save — fixed-height block, sheet/rail flex below
-          takes the remaining viewport. */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gold/20 pb-3 mb-4 shrink-0">
+    // Root: `h-screen flex-col overflow-hidden` — `body.character-builder-wide`
+    // (added by the useEffect above) already locks the document body to
+    // viewport height. The single scroll container is `.cb-page-scroll`
+    // below: it gets the remaining height via flex:1 and handles overflow,
+    // so the sticky rail (inside body-cols) rides along while the content
+    // scrolls. See TAB_RAIL_IMPLEMENTATION.md for the full rationale.
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Top header band — never scrolls (shrink-0). Stays pinned above
+          the page-scroll. The max-width/padding wrapper sits INSIDE the
+          flex root so the band can span edge-to-edge if we ever want a
+          full-bleed treatment, but for now the content is centered to
+          match the page-inner width below. */}
+      <div className="shrink-0 w-full max-w-[1800px] mx-auto px-2 sm:px-4 lg:px-6 pt-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gold/20 pb-3 shrink-0">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -4724,7 +4811,7 @@ export default function CharacterBuilder({
       </div>
 
       {hasLegacyAdvancementSelections && (
-        <div className="mb-6 border border-blood/30 bg-blood/5 rounded-xl p-4">
+        <div className="mt-3 border border-blood/30 bg-blood/5 rounded-xl p-4">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 w-2 h-2 rounded-full bg-blood shrink-0" />
             <div className="space-y-2">
@@ -4745,10 +4832,20 @@ export default function CharacterBuilder({
           </div>
         </div>
       )}
+      </div>
+      {/* /shrink-0 header band */}
 
-      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
-        {/* MAIN AREA */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      {/* Page-scroll: the SINGLE scroll container in the builder. flex-1
+          consumes whatever vertical space the header band left behind, and
+          overflow-y:auto kicks in only when the content column overflows
+          (long class accordion, tall proficiency grid, etc). The sticky
+          rail inside .cb-body-cols stays glued to the top of this scroll
+          container as the content slides past. */}
+      <div className="cb-page-scroll flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <div className="cb-page-inner w-full max-w-[1800px] mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-4">
+          <div className="cb-body-cols">
+            {/* ── Column 1: swappable step content ─────────────── */}
+            <div className="min-w-0">
           {activeStep === "sheet" ? (
             // Book-Spread Sheet shell. The outer wrapper IS the
             // book-spread grid: verso (left page, fixed 540-580px)
@@ -4758,11 +4855,22 @@ export default function CharacterBuilder({
             // the sub-tab strip (Features / Spells / Inventory /
             // Feats / Profs / Bio) and its content. xl:divide-x is
             // the visible spine; below xl the columns stack.
-            <div className="bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(540px,580px)_minmax(0,1fr)] gap-0 xl:divide-x xl:divide-gold/25 overflow-hidden">
+            //
+            // Height: `h-[calc(100vh-7.5rem)]` aims to fill the
+            // viewport below the header band (~80px) with verso/recto
+            // each handling its own internal scroll. `min-h-[600px]`
+            // is a safety floor so the spread stays usable on short
+            // screens — at that point the parent .cb-page-scroll takes
+            // over and the WHOLE spread scrolls inside it. On <xl the
+            // columns stack and we drop the viewport-fit (xl:h-… only)
+            // so the natural stacked height drives page-scroll instead.
+            <div className="bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl xl:h-[calc(100vh-7.5rem)] xl:min-h-[600px] grid grid-cols-1 xl:grid-cols-[minmax(540px,580px)_minmax(0,1fr)] gap-0 xl:divide-x xl:divide-gold/25 overflow-hidden">
               {/* ── Verso (left page) — independent vertical scroll
-                  so the recto stays visible while the player walks
-                  down the character-stats column. */}
-              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pr-6 space-y-6 min-w-0 overflow-y-auto custom-scrollbar">
+                  on xl+ so the recto stays visible while the player
+                  walks down the character-stats column. Below xl the
+                  columns stack and verso just flows (parent
+                  .cb-page-scroll handles overflow). */}
+              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pr-6 space-y-6 min-w-0 xl:overflow-y-auto xl:custom-scrollbar">
               {/* COMPACT CHARACTER HEADER */}
               <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 border-b-2 border-gold/10 pb-6 md:pb-8 mb-6 md:mb-8">
                 <div className="flex-1 w-full text-center md:text-left space-y-1">
@@ -5653,7 +5761,7 @@ export default function CharacterBuilder({
                   </div>
               {/* ── End verso · Begin recto ──── */}
               </div>
-              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pl-6 space-y-4 min-w-0 overflow-y-auto custom-scrollbar">
+              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pl-6 space-y-4 min-w-0 xl:overflow-y-auto xl:custom-scrollbar">
                   {(() => {
                     const ownedFeatCount = Array.isArray(character.feats) ? character.feats.length : 0;
                     const ownedSpellsCount = Array.isArray(character.progressionState?.ownedSpells)
@@ -6917,7 +7025,12 @@ export default function CharacterBuilder({
 
             </div>
           ) : activeStep === "class" ? (
-            <div className="bg-background/50 rounded-xl border border-gold/10 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+            // Class step — long accordion of advancement rows per level.
+            // The parent `.cb-page-scroll` is the scroll container; here
+            // we just render naturally and let the page scroll handle
+            // overflow. No internal scroll = no fighting between the
+            // page-scroll and a div-scroll.
+            <div className="bg-background/50 rounded-xl border border-gold/10">
               {isSelectingClass ? (
                 <div className="p-4 sm:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <ClassList
@@ -8531,7 +8644,7 @@ export default function CharacterBuilder({
 
               if (spellcastingClassIds.length === 0) {
                 return (
-                  <div className="bg-background/50 p-8 rounded-xl border border-gold/10 flex-1 min-h-0 flex flex-col items-center justify-center text-center">
+                  <div className="bg-background/50 p-8 rounded-xl border border-gold/10 min-h-[400px] flex flex-col items-center justify-center text-center">
                     <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
                       <Zap className="w-10 h-10 text-gold" />
                     </div>
@@ -8595,7 +8708,9 @@ export default function CharacterBuilder({
               };
 
               return (
-                <div className="space-y-3 flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-6">
+                // Spell Manager — long browse list, just renders naturally
+                // inside .cb-page-scroll. No internal scroll wrapper.
+                <div className="space-y-3 p-4 sm:p-6 bg-background/50 rounded-xl border border-gold/10">
                   {/* ── Class header strip — Variant C ─────────────
                        Per-class chips (active highlighted) + Save DC /
                        Atk for the active class + counters. Replaces
@@ -9642,7 +9757,9 @@ export default function CharacterBuilder({
               );
 
               return (
-                <div className="bg-background/50 p-4 sm:p-6 rounded-xl border border-gold/10 space-y-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                // Proficiencies — grid of kind-colored cards, renders
+                // naturally inside .cb-page-scroll.
+                <div className="bg-background/50 p-4 sm:p-6 rounded-xl border border-gold/10 space-y-5">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <h2 className="text-xl sm:text-2xl font-serif font-black text-ink uppercase tracking-tight flex items-center gap-2">
@@ -9866,7 +9983,7 @@ export default function CharacterBuilder({
               );
             })()
           ) : (
-            <div className="bg-background/50 p-8 rounded-xl border border-gold/10 flex-1 min-h-0 flex flex-col items-center justify-center text-center">
+            <div className="bg-background/50 p-8 rounded-xl border border-gold/10 min-h-[400px] flex flex-col items-center justify-center text-center">
               <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
                 {STEPS.find((s) => s.id === activeStep)?.icon}
               </div>
@@ -9887,60 +10004,213 @@ export default function CharacterBuilder({
             </div>
           )}
         </div>
+        {/* /content column */}
 
-        {/* ── Right Tab Rail (BookSpread design) ──────────────
-            Vertical 56px icon strip on lg+, horizontal pill row on
-            mobile. Each step is icon-only with a tooltip; active
-            state uses a subtle gold tint + 2px gold left accent
-            bar (the handoff's KIND_META active treatment) rather
-            than the previous gold-fill + scale-110 jump. Settings
-            stub at the bottom — full dropdown (View JSON / Export
-            / Delete) is a follow-up. */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:z-0 bg-background/95 backdrop-blur-md lg:bg-card/40 lg:rounded-xl lg:border lg:border-gold/15 lg:shadow-sm border-t lg:border-t-0 border-gold/10 p-2 sm:p-3 lg:p-1.5 lg:w-14 lg:self-stretch lg:overflow-y-auto custom-scrollbar">
-          <div className="flex lg:flex-col items-center justify-between lg:justify-start gap-1 sm:gap-2 lg:gap-1 max-w-7xl mx-auto">
-            {STEPS.map((step) => {
-              const active = activeStep === step.id;
-              return (
-                <button
-                  key={step.id}
-                  onClick={() => setActiveStep(step.id)}
-                  title={step.label}
-                  className={cn(
-                    "relative w-10 h-10 sm:w-11 sm:h-11 lg:w-11 lg:h-12 rounded-md flex items-center justify-center transition-colors active:scale-95 flex-shrink-0",
-                    active
-                      ? "bg-gold/15 text-gold"
-                      : "bg-transparent text-ink/55 hover:bg-gold/[0.06] hover:text-ink",
-                  )}
-                >
-                  {/* Active left-accent bar — 2px gold rule on the
-                      inner edge of the rail (the handoff's spec for
-                      active step buttons). Mobile orientation: the
-                      bar becomes a top accent so it still reads as
-                      "this is selected." */}
-                  {active && (
-                    <span
-                      aria-hidden="true"
-                      className="absolute lg:left-0 lg:top-1 lg:bottom-1 lg:w-0.5 top-0 left-1 right-1 h-0.5 lg:h-auto bg-gold rounded-sm"
-                    />
-                  )}
-                  {React.cloneElement(
-                    step.icon as React.ReactElement<{ className?: string }>,
-                    { className: "w-4 h-4 sm:w-5 sm:h-5" },
-                  )}
-                </button>
-              );
-            })}
-            <div className="hidden lg:block h-2 w-full border-t border-gold/10 mt-2" />
+        {/* ── Column 2: vertical icon rail ─────────────────────────
+            Per TAB_RAIL_IMPLEMENTATION.md: position:sticky inside
+            .cb-page-scroll. The rail stays glued 14px below the top
+            of the scroll container as long content scrolls past it.
+            Save button is always gold; per-step buttons fill gold +
+            scale 1.08 when active; Settings opens a left-anchored
+            popover with View JSON / Export / Delete. */}
+        <nav
+          className="cb-step-rail"
+          role="tablist"
+          aria-label="Builder steps"
+        >
+          {/* Save — always gold, top of rail. */}
+          <button
+            type="button"
+            className="cb-tab-strip-btn save"
+            title="Commit Changes"
+            aria-label="Commit changes"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* "Saved Nm ago" status pip. */}
+          <div className="cb-step-saved" aria-live="polite">
+            {lastSavedAt ? (
+              <>
+                <span className="ok">●</span> Saved
+                <span className="cb-step-saved-time">{formatSavedAgo(lastSavedAt)}</span>
+              </>
+            ) : (
+              <>
+                <span className="cb-step-saved-time">Unsaved</span>
+              </>
+            )}
+          </div>
+
+          <div className="cb-step-rail-divider" />
+
+          {/* Step buttons — one per builder section. */}
+          {STEPS.map((step) => {
+            const active = activeStep === step.id;
+            return (
+              <button
+                key={step.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-label={step.label}
+                title={step.label}
+                className={cn("cb-tab-strip-btn", active && "active")}
+                onClick={() => setActiveStep(step.id)}
+              >
+                {React.cloneElement(
+                  step.icon as React.ReactElement<{ className?: string }>,
+                  { className: "w-4 h-4" },
+                )}
+              </button>
+            );
+          })}
+
+          <div className="cb-step-rail-divider" />
+
+          {/* Settings popover — anchors a left-opening menu with
+              View JSON / Export / Delete entries. The View JSON
+              entry is admin-only; Export is hidden when the
+              character isn't yet persisted; Delete is hidden on
+              /characters/new (nothing to delete). */}
+          <div style={{ position: "relative" }}>
             <button
               type="button"
-              title="Settings (coming soon)"
-              className="w-10 h-10 sm:w-11 sm:h-11 lg:w-11 lg:h-12 rounded-md bg-transparent text-ink/35 hover:bg-gold/[0.06] hover:text-ink/55 flex items-center justify-center flex-shrink-0 transition-colors"
+              className={cn("cb-tab-strip-btn", settingsOpen && "active")}
+              title="Character settings"
+              aria-label="Character settings"
+              aria-haspopup="menu"
+              aria-expanded={settingsOpen}
+              onClick={() => setSettingsOpen((v) => !v)}
             >
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+              <Settings className="w-4 h-4" />
             </button>
+
+            {settingsOpen && (
+              <>
+                <div
+                  className="cb-settings-menu-backdrop"
+                  onClick={() => setSettingsOpen(false)}
+                />
+                <div className="cb-settings-menu" role="menu">
+                  {isAdmin && (
+                    <Dialog>
+                      <DialogTrigger
+                        render={
+                          <button
+                            type="button"
+                            className="cb-settings-menu-item"
+                            disabled={hasLegacyAdvancementSelections}
+                          >
+                            <span className="cb-settings-menu-icon">
+                              <Eye className="w-3.5 h-3.5" />
+                            </span>
+                            View JSON
+                          </button>
+                        }
+                      />
+                      <DialogContent className="sm:max-w-2xl bg-parchment border-gold/30 p-0 overflow-hidden">
+                        <DialogHeader className="p-6 bg-ink text-gold border-b border-gold/20">
+                          <DialogTitle className="text-xl font-serif font-black uppercase tracking-tight">
+                            Foundry Pairing Output
+                          </DialogTitle>
+                          <DialogDescription className="text-gold/60 font-serif italic">
+                            Formatted for the dauligor-pairing module bridge
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="p-6 bg-card/40">
+                          {hasLegacyAdvancementSelections ? (
+                            <div className="bg-blood/10 border border-blood/20 rounded-lg p-4 text-sm font-serif text-blood">
+                              Export preview is blocked until the legacy
+                              advancement selections listed above are reselected
+                              from the class progression step.
+                            </div>
+                          ) : (
+                            <pre className="bg-ink p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono text-gold/80 border border-gold/10 custom-scrollbar">
+                              {JSON.stringify(generatePairingJson(), null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                        <DialogFooter className="p-4 bg-ink/5 border-t border-gold/10">
+                          <Button
+                            disabled={hasLegacyAdvancementSelections}
+                            className="bg-gold text-white hover:bg-gold/80 gap-2 uppercase tracking-widest text-[10px] font-black"
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                JSON.stringify(generatePairingJson(), null, 2),
+                              );
+                            }}
+                          >
+                            <Copy className="w-3 h-3" /> Copy to Clipboard
+                          </Button>
+                          <DialogClose
+                            render={
+                              <Button
+                                variant="ghost"
+                                className="text-ink/40 hover:text-ink/60 uppercase tracking-widest text-[10px] font-black"
+                              >
+                                Close
+                              </Button>
+                            }
+                          />
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+
+                  {id && id !== "new" && (
+                    <button
+                      type="button"
+                      className="cb-settings-menu-item"
+                      disabled={hasLegacyAdvancementSelections}
+                      onClick={async () => {
+                        setSettingsOpen(false);
+                        try {
+                          await exportCharacterJSON(id as string);
+                        } catch (error) {
+                          console.error(error);
+                        }
+                      }}
+                    >
+                      <span className="cb-settings-menu-icon">
+                        <Download className="w-3.5 h-3.5" />
+                      </span>
+                      Export
+                    </button>
+                  )}
+
+                  {id && id !== "new" && (
+                    <>
+                      <div className="cb-settings-menu-divider" />
+                      <button
+                        type="button"
+                        className="cb-settings-menu-item danger"
+                        onClick={handleDeleteCharacter}
+                      >
+                        <span className="cb-settings-menu-icon">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </span>
+                        Delete Character
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
+        </nav>
         </div>
+        {/* /cb-body-cols */}
+        </div>
+        {/* /cb-page-inner */}
       </div>
+      {/* /cb-page-scroll */}
 
       {optionDialogOpen && (
         <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
