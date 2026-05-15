@@ -13,6 +13,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { FilterBar, TagGroupFilter, AxisFilterSection, matchesTagFilters } from '../../components/compendium/FilterBar';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
+import BackButton from '../../components/ui/BackButton';
 import { fetchSpellSummaries, type SpellSummaryRecord } from '../../lib/spellSummary';
 import {
   ACTIVATION_LABELS,
@@ -799,6 +800,15 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           searchPlaceholder="Search spell name, source, or identifier"
           filterTitle="Advanced Filters"
           resetLabel="Reset Filters"
+          leadingActions={
+            classFilter ? (
+              <BackButton
+                to={`/compendium/classes/view/${classFilter.classId}`}
+                label={`Back to ${classFilter.className}`}
+                title={`Return to the ${classFilter.className} class page`}
+              />
+            ) : null
+          }
           trailingActions={
             <>
               {classFilter ? (

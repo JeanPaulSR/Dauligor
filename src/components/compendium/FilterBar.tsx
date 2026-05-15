@@ -108,6 +108,13 @@ export interface FilterBarProps {
    * Children flex-shrink-0 and align center with the Filter button.
    */
   trailingActions?: ReactNode;
+  /**
+   * Optional slot rendered to the LEFT of the search input on the
+   * main row. Used for navigation chips (Back button when arriving
+   * scoped from another page, etc.). shrink-0 so the search input
+   * still claims the remaining width.
+   */
+  leadingActions?: ReactNode;
 }
 
 export function FilterBar({
@@ -131,7 +138,8 @@ export function FilterBar({
   resetInlineLabel = 'Reset',
   applyLabel = 'Apply & Close',
   renderFilters,
-  trailingActions
+  trailingActions,
+  leadingActions,
 }: FilterBarProps) {
   const defaultFilterContent = (
     <>
@@ -182,6 +190,11 @@ export function FilterBar({
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-4 items-center bg-card p-2 rounded-lg border border-gold/10 shadow-sm">
+        {leadingActions && (
+          <div className="flex items-center gap-2 shrink-0">
+            {leadingActions}
+          </div>
+        )}
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
           <Input
