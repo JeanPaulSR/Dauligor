@@ -4840,7 +4840,7 @@ export default function CharacterBuilder({
               <div className="flex items-baseline justify-between gap-3 mb-3 px-1">
                 <div className="flex items-baseline gap-3">
                   <span className="label-text text-ink/30 border-l-2 border-gold pl-2">
-                    Ability Scores
+                    Abilities &amp; Saves
                   </span>
                   {(() => {
                     const ids = (allAttributes.length > 0
@@ -4886,44 +4886,178 @@ export default function CharacterBuilder({
                   <Edit2 className="w-3 h-3" /> Point Buy
                 </Button>
               </div>
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4 mb-10">
-                {allAttributes.map((attr) => {
+              {/* ── Abilities & Saves unified grid (BookSpread design)
+                  ──────────────────────────────────────────────────
+                  Each ability gets one cell that stacks the score box
+                  (with modifier inside), the raw-score tag, the +/-
+                  controls on hover, AND the save row (prof dot +
+                  "SAVE" label + save total). Clicking the save row
+                  cycles the proficiency state (none → prof → expert
+                  → half → none); right-click cycles in reverse —
+                  same controls the old standalone Saving Throws
+                  block exposed, now consolidated into one place. */}
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4 mb-8">
+                {(allAttributes.length > 0
+                  ? allAttributes
+                  : ["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((id) => ({ id, identifier: id, name: id }))
+                ).map((attr: any) => {
                   const iden = attr.identifier || attr.id;
+                  const attrName = attr.name || iden;
+                  const score = getSafeStat(iden);
+                  const modStr = getSafeModifier(iden);
+
+                  const isProf = character.savingThrows?.includes(iden);
+                  const isExp = character.expertiseSavingThrows?.includes(iden);
+                  const isHalf = character.halfProficientSavingThrows?.includes(iden);
+
+                  const baseMod = Math.floor((score - 10) / 2);
+                  const profBonus = Number(character.proficiencyBonus || 2);
+                  const saveAdd = isExp ? profBonus * 2 : isProf ? profBonus : isHalf ? Math.floor(profBonus / 2) : 0;
+                  const saveTotal = baseMod + saveAdd;
+                  const saveTotalLabel = saveTotal >= 0 ? `+${saveTotal}` : `${saveTotal}`;
+
+                  const cycleSave = (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    let p = [...(character.savingThrows || [])];
+                    let x = [...(character.expertiseSavingThrows || [])];
+                    let h = [...(character.halfProficientSavingThrows || [])];
+                    if (isHalf) h = h.filter((s: string) => s !== iden);
+                    else if (isExp) {
+                      x = x.filter((s: string) => s !== iden);
+                      h.push(iden);
+                    } else if (isProf) {
+                      p = p.filter((s: string) => s !== iden);
+                      x.push(iden);
+                    } else p.push(iden);
+                    setCharacter({
+                      ...character,
+                      savingThrows: p,
+                      expertiseSavingThrows: x,
+                      halfProficientSavingThrows: h,
+                    });
+                  };
+                  const cycleSaveReverse = (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    let p = [...(character.savingThrows || [])];
+                    let x = [...(character.expertiseSavingThrows || [])];
+                    let h = [...(character.halfProficientSavingThrows || [])];
+                    if (isHalf) {
+                      h = h.filter((s: string) => s !== iden);
+                      x.push(iden);
+                    } else if (isExp) {
+                      x = x.filter((s: string) => s !== iden);
+                      p.push(iden);
+                    } else if (isProf) p = p.filter((s: string) => s !== iden);
+                    else h.push(iden);
+                    setCharacter({
+                      ...character,
+                      savingThrows: p,
+                      expertiseSavingThrows: x,
+                      halfProficientSavingThrows: h,
+                    });
+                  };
+
+                  const saveActive = isProf || isExp || isHalf;
+
                   return (
-                    <StatBlock
-                      key={attr.id}
-                      label={attr.name}
-                      value={getSafeModifier(iden)}
-                      score={getSafeStat(iden)}
-                      onPlus={() => handleStatChange(iden, 1)}
-                      onMinus={() => handleStatChange(iden, -1)}
-                    />
+                    <div
+                      key={attr.id || iden}
+                      className="group relative flex flex-col items-stretch"
+                    >
+                      <span className="text-[10px] font-black uppercase tracking-widest text-ink/55 text-center mb-1">
+                        {attrName}
+                      </span>
+                      <div className="bg-card border-2 border-gold/25 rounded-lg p-3 flex flex-col items-center transition-all group-hover:border-gold group-hover:shadow-[0_0_12px_rgba(197,160,89,0.18)]">
+                        <span className="text-2xl sm:text-3xl font-black text-ink leading-none">
+                          {modStr}
+                        </span>
+                        <span className="mt-1.5 px-2 py-0.5 bg-gold/15 border border-gold/30 rounded-sm font-mono text-[10px] font-black text-gold leading-none">
+                          {score}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={cycleSave}
+                          onContextMenu={cycleSaveReverse}
+                          title={
+                            isExp
+                              ? "Expertise save · click for half · right-click for proficient"
+                              : isProf
+                                ? "Proficient save · click for expertise · right-click for none"
+                                : isHalf
+                                  ? "Half-proficient · click for none · right-click for expertise"
+                                  : "Click to cycle proficiency · right-click reverses"
+                          }
+                          className={cn(
+                            "mt-2 pt-2 border-t w-full flex items-center justify-between gap-1.5 transition-colors group/save",
+                            saveActive ? "border-gold/30" : "border-gold/10 hover:border-gold/25",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 transition-all relative overflow-hidden",
+                              isExp
+                                ? "border-gold bg-card"
+                                : isProf
+                                  ? "border-gold bg-gold"
+                                  : isHalf
+                                    ? "border-gold bg-gold"
+                                    : "border-gold/30 group-hover/save:border-gold/60",
+                            )}
+                          >
+                            {isExp && <span className="block w-1.5 h-1.5 rounded-full bg-gold" />}
+                            {isHalf && (
+                              <span
+                                className="absolute inset-0 bg-card"
+                                style={{ clipPath: "polygon(50% 0, 100% 0, 100% 100%, 50% 100%)" }}
+                              />
+                            )}
+                          </span>
+                          <span className="text-[8px] font-black uppercase tracking-widest text-ink/45 leading-none">
+                            Save
+                          </span>
+                          <span
+                            className={cn(
+                              "font-mono text-xs font-black leading-none ml-auto",
+                              saveActive ? "text-gold" : "text-ink/55",
+                            )}
+                          >
+                            {saveTotalLabel}
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="absolute -right-2 top-6 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                        <button
+                          onClick={() => handleStatChange(iden, 1)}
+                          className="p-1 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+                          aria-label={`Increase ${iden}`}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleStatChange(iden, -1)}
+                          className="p-1 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+                          aria-label={`Decrease ${iden}`}
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
-                {allAttributes.length === 0 && ["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((attr) => (
-                  <StatBlock
-                    key={attr}
-                    label={attr}
-                    value={getSafeModifier(attr)}
-                    score={getSafeStat(attr)}
-                    onPlus={() => handleStatChange(attr, 1)}
-                    onMinus={() => handleStatChange(attr, -1)}
-                  />
-                ))}
               </div>
 
 
               {true && (
               <>
-              {/* Book pages — verso (left) and recto (right). Center
-                  spine is rendered via an absolutely-positioned
-                  gradient strip so the existing children inherit the
-                  same grid cells without needing a padding overhaul. */}
-              <div className="grid xl:grid-cols-2 gap-8 relative">
-                <div
-                  aria-hidden="true"
-                  className="hidden xl:block absolute top-4 bottom-4 left-1/2 w-px bg-gradient-to-b from-transparent via-gold/30 to-transparent pointer-events-none"
-                />
+              {/* Vital block — Portrait + HP + Hit Dice + Spell Points
+                  + the small vital-stats triplet (Init / Speed / Prof).
+                  Used to be paired in a two-column xl grid with the
+                  standalone Saving Throws card; the Abilities & Saves
+                  unified grid above now subsumes the save column, so
+                  this is a single full-width card. */}
+              <div className="mb-8">
                 {/* PORTRAIT & CORE STATUS */}
                 <div className="border border-gold/20 p-5 flex flex-col xl:flex-row gap-6 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
                   <div className="w-full sm:w-48 xl:w-36 aspect-[3/4] border-2 border-gold/10 bg-card relative rounded-md overflow-hidden flex-shrink-0 shadow-inner group/portrait mx-auto xl:mx-0 self-center xl:self-start">
@@ -5110,136 +5244,6 @@ export default function CharacterBuilder({
                   </div>
                 </div>
 
-                {/* SAVING THROWS */}
-                <div className="border border-gold/20 p-4 sm:p-6 rounded-lg bg-card/40 shadow-sm group">
-                  <div className="section-header mb-4 sm:mb-6">
-                    <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 flex items-center gap-2 tracking-tight">
-                      <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
-                      Saving Throws
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-1 xs:grid-cols-2 gap-x-6 sm:gap-x-12 gap-y-3 sm:gap-y-4">
-                    {(allAttributes.length > 0 ? allAttributes : [
-                      { id: 'STR', identifier: 'STR', name: 'STR' },
-                      { id: 'DEX', identifier: 'DEX', name: 'DEX' },
-                      { id: 'CON', identifier: 'CON', name: 'CON' },
-                      { id: 'INT', identifier: 'INT', name: 'INT' },
-                      { id: 'WIS', identifier: 'WIS', name: 'WIS' },
-                      { id: 'CHA', identifier: 'CHA', name: 'CHA' }
-                    ]).map((attrObj) => {
-                      const attrIden = attrObj.identifier || attrObj.id;
-                      const attrName = attrObj.name;
-                      const isProficient =
-                        character.savingThrows?.includes(attrIden);
-                      const isExpert =
-                        character.expertiseSavingThrows?.includes(attrIden); 
-                      const isHalf =
-                        character.halfProficientSavingThrows?.includes(attrIden);
-
-                      const baseMod = parseInt(getModifier(getSafeStat(attrIden)));
-                      const bonus = character.proficiencyBonus || 2;
-                      let profBonus = 0;
-                      if (isExpert) profBonus = bonus * 2;
-                      else if (isProficient) profBonus = bonus;
-                      else if (isHalf) profBonus = Math.floor(bonus / 2);
-
-                      const total = baseMod + profBonus;
-
-                      return (
-                        <div
-                          key={attrObj.id}
-                          className="flex items-center justify-between group/row cursor-pointer py-1"
-                          onClick={() => {
-                            let newProf = [...(character.savingThrows || [])];
-                            let newExp = [
-                              ...(character.expertiseSavingThrows || []),
-                            ];
-                            let newHalf = [
-                              ...(character.halfProficientSavingThrows || []),
-                            ];
-                            if (isHalf)
-                              newHalf = newHalf.filter(
-                                (s: string) => s !== attrIden,
-                              );
-                            else if (isExpert) {
-                              newExp = newExp.filter((s: string) => s !== attrIden);
-                              newHalf.push(attrIden);
-                            } else if (isProficient) {
-                              newProf = newProf.filter(
-                                (s: string) => s !== attrIden,
-                              );
-                              newExp.push(attrIden);
-                            } else newProf.push(attrIden);
-                            setCharacter({
-                              ...character,
-                              savingThrows: newProf,
-                              expertiseSavingThrows: newExp,
-                              halfProficientSavingThrows: newHalf,
-                            });
-                          }}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            let newProf = [...(character.savingThrows || [])];
-                            let newExp = [
-                              ...(character.expertiseSavingThrows || []),
-                            ];
-                            let newHalf = [
-                              ...(character.halfProficientSavingThrows || []),
-                            ];
-                            if (isHalf) {
-                              newHalf = newHalf.filter(
-                                (s: string) => s !== attrIden,
-                              );
-                              newExp.push(attrIden);
-                            } else if (isExpert) {
-                              newExp = newExp.filter((s: string) => s !== attrIden);
-                              newProf.push(attrIden);
-                            } else if (isProficient)
-                              newProf = newProf.filter(
-                                (s: string) => s !== attrIden,
-                              );
-                            else newHalf.push(attrIden);
-                            setCharacter({
-                              ...character,
-                              savingThrows: newProf,
-                              expertiseSavingThrows: newExp,
-                              halfProficientSavingThrows: newHalf,
-                            });
-                          }}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div
-                              className={`w-5 h-5 rounded-full border-2 relative transition-all flex items-center justify-center ${isProficient || isExpert || isHalf ? "border-gold" : "border-gold/30 group-hover/row:border-gold/60"} ${isProficient ? "bg-gold" : ""}`}
-                            >
-                              {isExpert && (
-                                <div className="w-full h-full rounded-full bg-gold border-[3px] border-card flex items-center justify-center">
-                                  <div className="w-1.5 h-1.5 bg-gold rounded-full" />
-                                </div>
-                              )}
-                              {isHalf && (
-                                <div
-                                  className="absolute inset-0 bg-gold rounded-full"
-                                  style={{
-                                    clipPath:
-                                      "polygon(0 0, 50% 0, 50% 100%, 0 100%)",
-                                  }}
-                                />
-                              )}
-                            </div>
-                            <span
-                              className={`text-xl font-black tracking-tight transition-colors ${isProficient || isExpert || isHalf ? "text-ink" : "text-ink/40"}`}
-                            >
-                              {attrName}
-                            </span>
-                          </div>
-                          <span className="text-xl font-black text-ink">
-                            {total >= 0 ? `+${total}` : total}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
 
               <div className="grid md:grid-cols-3 gap-6 pt-4">
