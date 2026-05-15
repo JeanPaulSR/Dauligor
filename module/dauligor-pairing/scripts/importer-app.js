@@ -3358,6 +3358,28 @@ async function runDauligorClassImportSequence({
       //     class-root that isn't attached to a feature is handled by
       //     the per-level option-group step above. ────────────────────
 
+      // Spell selection — once per import, after every feature/option
+      // pick. The step fires only when the class has cantrips or
+      // spells-known scaling AND the existing→target level delta is
+      // positive. Selections live on `state.spellSelections` and ride
+      // along in `importSelection` so the embed phase can create the
+      // spell items on the actor.
+      if (workflow.hasSpellcasting) {
+        const spellDelta = computeSpellSelectionDelta(workflow, actor);
+        if (spellDelta.cantripsToPick > 0 || spellDelta.spellsToPick > 0) {
+          const spellStepResult = await runSpellSelectionStep({
+            workflow,
+            sequence,
+            progress,
+            actor,
+            state,
+          });
+          if (spellStepResult === "cancelled") {
+            throw new DauligorImportSequenceCancelledError();
+          }
+        }
+      }
+
       // Hand off to the legacy import pipeline for the document-level
       // work:
       //   - rekey semantic advancement ids to 16-char Foundry ids
@@ -3393,7 +3415,12 @@ async function runDauligorClassImportSequence({
         // `traitSelections[<adv.id>]` — the per-category placeholders
         // (savingThrowSelections / languageSelections) were dead and
         // got removed in the round-7 redundancy pass.
-        traitSelections: {}
+        traitSelections: {},
+        // Cantrips / spells-known picked in runSpellSelectionStep.
+        // Empty arrays when the player skipped that step OR when the
+        // class has no spellcasting / no pending picks. Consumed by
+        // importClassBundleToActor → embedSelectedSpells.
+        spellSelections: state.spellSelections ?? { cantripSourceIds: [], spellSourceIds: [] },
       };
 
       log("Bridging to importClassPayloadToWorld", {
@@ -3691,13 +3718,74 @@ function buildImportSequenceSteps(workflow, { actor = null } = {}) {
     }
   }
 
-  // Spells / starting-equipment placeholder steps stay disabled until the
-  // corresponding flows are wired. `runSpellPlaceholderStep` and
-  // `runEquipmentPlaceholderStep` exist as stubs but aren't called from
-  // the sequence loop yet.
+  // Spell selection step — fires only when the class actually has
+  // cantrips / spells-known to pick at this level (delta > 0). The
+  // checker pulls baked spellsKnownScalings off the workflow to figure
+  // out "how many cantrips does the class know at the existing level
+  // vs the target level" and skips the step if both deltas resolve to
+  // zero. classSpellItems must also be non-empty — a class with no
+  // curated /compendium/spell-lists rows shows the step as a "no spells
+  // available yet" notice rather than dropping it silently.
+  if (workflow?.hasSpellcasting) {
+    const delta = computeSpellSelectionDelta(workflow, actor);
+    if (delta.cantripsToPick > 0 || delta.spellsToPick > 0) {
+      steps.push({ id: "spells", label: "Choose spells" });
+    }
+  }
+
+  // Starting-equipment placeholder stays disabled until that flow is
+  // wired. `runEquipmentPlaceholderStep` exists as a stub.
 
   steps.push({ id: "import", label: "Import class" });
   return steps;
+}
+
+/**
+ * Walk the workflow's spellcasting progression rows and figure out
+ * how many cantrips / spells-known the player needs to pick on this
+ * import. Returns `{ cantripsToPick, spellsToPick, currentCantrips,
+ * currentSpells, targetCantrips, targetSpells }`.
+ *
+ *   - Δ_cantrips = cantrips@targetLevel - cantrips@existingLevel
+ *   - Δ_spells   = spells@targetLevel   - spells@existingLevel
+ *
+ * Negative or unresolvable deltas clamp to zero — the importer never
+ * "removes" spells. `spellcastingRows` is built server-side from the
+ * class's spells-known scaling column; classes without that column
+ * (e.g. Cleric, which prepares from the full list) return all zeros
+ * here and the step gets skipped.
+ */
+function computeSpellSelectionDelta(workflow, _actor = null) {
+  const rows = ensureArray(workflow?.spellcastingRows);
+  const existingLevel = Number(workflow?.existingClassLevel ?? 0) || 0;
+  const targetLevel = Number(workflow?.targetLevel ?? 1) || 1;
+  const findRow = (lvl) => rows.find((r) => Number(r?.level) === Number(lvl)) || null;
+  const cantripsAt = (lvl) => {
+    if (lvl < 1) return 0;
+    const row = findRow(lvl);
+    const raw = row?.cantrips;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const spellsAt = (lvl) => {
+    if (lvl < 1) return 0;
+    const row = findRow(lvl);
+    const raw = row?.spells;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const currentCantrips = cantripsAt(existingLevel);
+  const currentSpells = spellsAt(existingLevel);
+  const targetCantrips = cantripsAt(targetLevel);
+  const targetSpells = spellsAt(targetLevel);
+  return {
+    cantripsToPick: Math.max(0, targetCantrips - currentCantrips),
+    spellsToPick: Math.max(0, targetSpells - currentSpells),
+    currentCantrips,
+    currentSpells,
+    targetCantrips,
+    targetSpells,
+  };
 }
 
 function throwIfSequenceCancelled(sequence) {
@@ -5414,57 +5502,280 @@ function collectLeaves(tree) {
   return [];
 }
 
-async function runSpellPlaceholderStep({ workflow, sequence, progress }) {
+/**
+ * Real spell-selection step. Replaces the older placeholder.
+ *
+ * Renders a per-class spell picker scoped by the level-up delta:
+ *   - "Pick N cantrips" from the class's cantrip pool
+ *   - "Pick M leveled spells" from level-1+ rows the actor doesn't
+ *     already know
+ *
+ * The pool comes from `workflow.classSpellItems` (baked by the server
+ * class export). Already-on-actor spells render as locked rows (they
+ * count against the "already known" tally, not against the N+M
+ * budgets). Confirm is disabled until exactly N cantrips and M spells
+ * are picked, OR the player explicitly skips the step (no spells
+ * embedded).
+ *
+ * Returns one of "confirmed" / "skipped" / "cancelled" and stashes the
+ * selected sourceIds into `state.spellSelections` so the embed phase
+ * can create the spell items on the actor.
+ */
+async function runSpellSelectionStep({ workflow, sequence, progress, actor, state }) {
   const stepId = "spells";
-  progress.markStep(stepId, "active", "Spell selection is still placeholder-only, but the progression summary is available.");
-  progress.setStatus("Showing spell progression placeholder...");
+  const delta = computeSpellSelectionDelta(workflow, actor);
+  const cantripsToPick = delta.cantripsToPick;
+  const spellsToPick = delta.spellsToPick;
 
-  const result = await DauligorSequencePromptApp.prompt({
-    title: "Select Cantrips",
-    subtitle: `${workflow.classItem.name}${workflow.selectedSubclassItem ? ` (${workflow.selectedSubclassItem.name})` : ""}`,
-    width: 1120,
-    height: 780,
-    renderBody: () => `
-      <div class="dauligor-sequence__spells-placeholder">
-        <div class="dauligor-sequence__spells-column">
-          <div class="dauligor-class-browser__empty">Spell selection is not wired up yet. This window is a placeholder for the eventual cantrip and spell chooser.</div>
-        </div>
-        <div class="dauligor-sequence__spells-column dauligor-sequence__spells-column--table">
-          <h3 class="dauligor-sequence__panel-title">${foundry.utils.escapeHTML(workflow.classItem.name)}${workflow.selectedSubclassItem ? ` (${foundry.utils.escapeHTML(workflow.selectedSubclassItem.name)})` : ""}</h3>
-          <div class="dauligor-class-options__spells-table">
-            <div class="dauligor-class-options__spells-header">
-              <span>Level</span>
-              <span>Cantrips</span>
-              <span>Spells Known</span>
-              <span>Slots</span>
-            </div>
-            ${workflow.spellcastingRows.map((row) => `
-              <div class="dauligor-class-options__spells-row ${row.level === workflow.targetLevel ? "is-current" : ""}">
-                <span>${row.level}</span>
-                <span>${row.cantrips}</span>
-                <span>${row.spells}</span>
-                <span>${foundry.utils.escapeHTML(String(row.slots))}</span>
+  // Defensive — sequence builder already gates on (cantripsToPick > 0 ||
+  // spellsToPick > 0), but if a stale call reaches here just mark
+  // complete and move on.
+  if (cantripsToPick <= 0 && spellsToPick <= 0) {
+    progress.markStep(stepId, "complete", "No spell picks required at this level.");
+    return "complete";
+  }
+
+  progress.markStep(stepId, "active", `Pick ${cantripsToPick} cantrip(s) + ${spellsToPick} spell(s).`);
+  progress.setStatus("Choose spells...");
+
+  // Source pool — Foundry-ready spell item shells baked into the
+  // class bundle. Empty when /compendium/spell-lists hasn't been
+  // curated for this class yet; we still let the player advance
+  // (skipping the step) rather than hard-blocking import.
+  const pool = ensureArray(workflow?.classSpellItems);
+  if (pool.length === 0) {
+    progress.markStep(stepId, "skipped", "No class spell list curated yet — skipping spell picks.");
+    return "skipped";
+  }
+
+  // Existing-on-actor sourceIds — these render as locked rows so the
+  // player can SEE the spells they already know without being able to
+  // re-pick them or exceeding the budget. Identifier-based match
+  // mirrors the way features/options are deduped elsewhere.
+  const alreadyOnActorSourceIds = new Set();
+  if (actor?.items) {
+    for (const item of actor.items.contents) {
+      if (item.type !== "spell") continue;
+      const sourceId = item.getFlag?.(MODULE_ID, "sourceId");
+      if (sourceId) alreadyOnActorSourceIds.add(String(sourceId));
+    }
+  }
+
+  // Local picker state. Plain objects + getters/setters so the
+  // re-renders below stay synchronous (DauligorSequencePromptApp
+  // doesn't have a built-in reactive layer).
+  const pickedCantrips = new Set();
+  const pickedSpells = new Set();
+  let selectedSourceId = null;
+
+  const togglePick = (sourceId, level) => {
+    const isCantrip = level === 0;
+    const bucket = isCantrip ? pickedCantrips : pickedSpells;
+    const limit = isCantrip ? cantripsToPick : spellsToPick;
+    if (bucket.has(sourceId)) {
+      bucket.delete(sourceId);
+    } else {
+      if (bucket.size >= limit) return false; // budget exceeded
+      bucket.add(sourceId);
+    }
+    return true;
+  };
+
+  // Group pool by level for the section headers.
+  const byLevel = new Map();
+  for (const item of pool) {
+    const level = Number(item?.flags?.[MODULE_ID]?.level ?? 0);
+    if (!byLevel.has(level)) byLevel.set(level, []);
+    byLevel.get(level).push(item);
+  }
+  const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
+
+  const escapeHtml = (v) => foundry.utils.escapeHTML(String(v ?? ""));
+
+  const renderBody = () => {
+    const cantripsRemaining = cantripsToPick - pickedCantrips.size;
+    const spellsRemaining = spellsToPick - pickedSpells.size;
+    const selectedItem = selectedSourceId
+      ? pool.find((s) => s?.flags?.[MODULE_ID]?.sourceId === selectedSourceId)
+      : null;
+
+    const renderListRows = () => sortedLevels.map((level) => {
+      const items = byLevel.get(level) || [];
+      const isCantrip = level === 0;
+      const limit = isCantrip ? cantripsToPick : spellsToPick;
+      const pickedHere = isCantrip ? pickedCantrips.size : pickedSpells.size;
+      const headerLabel = isCantrip ? "Cantrips" : `Level ${level}`;
+      return `
+        <div class="dauligor-spell-picker__level">
+          <div class="dauligor-spell-picker__level-header">
+            <span class="dauligor-spell-picker__level-name">${escapeHtml(headerLabel)}</span>
+            <span class="dauligor-spell-picker__level-count">
+              ${limit > 0 ? `${pickedHere} / ${limit}` : `${items.length} available`}
+            </span>
+          </div>
+          ${items.map((item) => {
+            const flags = item?.flags?.[MODULE_ID] ?? {};
+            const sourceId = flags.sourceId;
+            const isAlready = alreadyOnActorSourceIds.has(String(sourceId));
+            const isPickedCantrip = isCantrip && pickedCantrips.has(sourceId);
+            const isPickedSpell = !isCantrip && pickedSpells.has(sourceId);
+            const isPicked = isPickedCantrip || isPickedSpell;
+            const isSelected = selectedSourceId === sourceId;
+            const school = String(flags.school ?? "").slice(0, 4).toUpperCase();
+            const concentration = flags.concentration ? "C" : "";
+            const ritual = flags.ritual ? "R" : "";
+            const stateClass = isAlready
+              ? "is-already"
+              : isPicked
+                ? "is-picked"
+                : "";
+            return `
+              <div
+                class="dauligor-spell-picker__row ${stateClass} ${isSelected ? "is-selected" : ""}"
+                data-source-id="${escapeHtml(sourceId)}"
+                data-level="${level}"
+              >
+                <button
+                  type="button"
+                  class="dauligor-spell-picker__toggle"
+                  data-action="toggle-pick"
+                  data-source-id="${escapeHtml(sourceId)}"
+                  data-level="${level}"
+                  ${isAlready ? "disabled" : ""}
+                  title="${isAlready ? "Already on actor" : isPicked ? "Unpick" : "Pick"}"
+                >${isAlready ? "✓" : isPicked ? "●" : "○"}</button>
+                <span class="dauligor-spell-picker__name">${escapeHtml(item.name)}</span>
+                <span class="dauligor-spell-picker__school">${school || "—"}</span>
+                <span class="dauligor-spell-picker__badges">
+                  ${ritual ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--ritual" title="Ritual">${ritual}</span>` : ""}
+                  ${concentration ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--conc" title="Concentration">${concentration}</span>` : ""}
+                </span>
               </div>
-            `).join("")}
+            `;
+          }).join("")}
+        </div>
+      `;
+    }).join("");
+
+    const renderDetail = () => {
+      if (!selectedItem) {
+        return `<div class="dauligor-class-browser__empty">Select a spell to see its details.</div>`;
+      }
+      const sys = selectedItem.system ?? {};
+      const desc = String(sys?.description?.value ?? "").trim();
+      const flags = selectedItem.flags?.[MODULE_ID] ?? {};
+      return `
+        <h3 class="dauligor-sequence__panel-title">${escapeHtml(selectedItem.name)}</h3>
+        <div class="dauligor-spell-picker__meta">
+          <span>${escapeHtml(flags.school || "")} · ${flags.level === 0 ? "Cantrip" : `Level ${flags.level}`}</span>
+          ${flags.ritual ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--ritual">Ritual</span>` : ""}
+          ${flags.concentration ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--conc">Concentration</span>` : ""}
+        </div>
+        <div class="dauligor-spell-picker__desc">${desc || "<em>No description.</em>"}</div>
+      `;
+    };
+
+    return `
+      <div class="dauligor-sequence__spell-picker">
+        <div class="dauligor-sequence__spell-picker-summary">
+          <div>
+            <strong>Cantrips:</strong>
+            <span class="dauligor-spell-picker__tally ${cantripsRemaining === 0 ? "is-complete" : ""}">${pickedCantrips.size} / ${cantripsToPick}</span>
+          </div>
+          <div>
+            <strong>Spells:</strong>
+            <span class="dauligor-spell-picker__tally ${spellsRemaining === 0 ? "is-complete" : ""}">${pickedSpells.size} / ${spellsToPick}</span>
+          </div>
+          ${alreadyOnActorSourceIds.size > 0
+            ? `<div class="dauligor-spell-picker__note">Already known: <strong>${alreadyOnActorSourceIds.size}</strong></div>`
+            : ""}
+        </div>
+        <div class="dauligor-sequence__spell-picker-body">
+          <div class="dauligor-sequence__spell-picker-list">
+            ${renderListRows()}
+          </div>
+          <div class="dauligor-sequence__spell-picker-detail">
+            ${renderDetail()}
           </div>
         </div>
       </div>
-    `,
+    `;
+  };
+
+  const result = await DauligorSequencePromptApp.prompt({
+    title: "Select Spells",
+    subtitle: `${workflow.classItem.name}${workflow.selectedSubclassItem ? ` (${workflow.selectedSubclassItem.name})` : ""}`,
+    width: 1100,
+    height: 720,
+    renderBody,
     actions: [
-      { id: "confirm", label: "OK", primary: true },
+      { id: "confirm", label: "Confirm", primary: true },
+      { id: "skip", label: "Skip" },
       { id: "cancel", label: "Cancel" },
-      { id: "skip", label: "Skip" }
     ],
+    // onRenderBody fires after every re-render of the body region —
+    // re-attach the click listener each time since the previous
+    // listener's host element was just replaced by the innerHTML
+    // refresh.
+    onRenderBody: (app, region) => {
+      region.addEventListener("click", (event) => {
+        const toggleBtn = event.target.closest?.("[data-action='toggle-pick']");
+        if (toggleBtn) {
+          event.stopPropagation();
+          const sourceId = toggleBtn.dataset.sourceId;
+          const level = Number(toggleBtn.dataset.level || 0);
+          if (toggleBtn.disabled) return;
+          togglePick(sourceId, level);
+          app.rerenderPrompt();
+          return;
+        }
+        const row = event.target.closest?.("[data-source-id]");
+        if (row) {
+          selectedSourceId = row.dataset.sourceId;
+          app.rerenderPrompt();
+        }
+      });
+    },
     onAction: async (_app, actionId) => {
       if (actionId === "cancel") return { status: "cancelled" };
       if (actionId === "skip") return { status: "skipped" };
-      return { status: "confirmed" };
-    }
+      // Validate budgets before confirming. If the player hasn't met
+      // their picks, ask them to either fill the remaining slots or
+      // explicitly skip — `return false` keeps the modal open instead
+      // of resolving the prompt.
+      const cantripsRemaining = cantripsToPick - pickedCantrips.size;
+      const spellsRemaining = spellsToPick - pickedSpells.size;
+      if (cantripsRemaining > 0 || spellsRemaining > 0) {
+        const parts = [];
+        if (cantripsRemaining > 0) parts.push(`${cantripsRemaining} cantrip(s)`);
+        if (spellsRemaining > 0) parts.push(`${spellsRemaining} spell(s)`);
+        notifyWarn(`Still need to pick ${parts.join(" + ")}. Use Skip to import without picking.`);
+        return false;
+      }
+      return {
+        status: "confirmed",
+        cantripSourceIds: [...pickedCantrips],
+        spellSourceIds: [...pickedSpells],
+      };
+    },
   }, sequence);
 
   if (result.status === "cancelled") return "cancelled";
-  progress.markStep(stepId, result.status === "skipped" ? "skipped" : "complete", result.status === "skipped" ? "Skipped spell placeholder." : "Reviewed spell progression.");
-  return result.status;
+
+  if (result.status === "confirmed") {
+    state.spellSelections = {
+      cantripSourceIds: result.cantripSourceIds ?? [],
+      spellSourceIds: result.spellSourceIds ?? [],
+    };
+    progress.markStep(stepId, "complete", `Picked ${result.cantripSourceIds?.length ?? 0} cantrip(s) + ${result.spellSourceIds?.length ?? 0} spell(s).`);
+    return "complete";
+  }
+
+  // Skipped — no selections stashed. Embed phase will see empty arrays
+  // and skip its spell-embed pass.
+  state.spellSelections = { cantripSourceIds: [], spellSourceIds: [] };
+  progress.markStep(stepId, "skipped", "Skipped spell selection.");
+  return "skipped";
 }
 
 async function runEquipmentPlaceholderStep({ workflow, sequence, progress }) {

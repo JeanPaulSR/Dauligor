@@ -1650,6 +1650,72 @@ export async function exportClassSemantic(
     if (sourceRow) source = denormalizeSource(sourceRow);
   }
 
+  // ── Bake the class's master spell list into the bundle ──────────────────
+  // The Foundry importer's runSpellSelectionStep needs the per-class spell
+  // pool to render the cantrip / spells-known picker at character creation
+  // and level-up. We ship each row as a Foundry-ready spell item shell so
+  // the importer can hand it straight to `actor.createEmbeddedDocuments`
+  // without an SRD lookup. `foundry_data` on the spells table IS the dnd5e
+  // v5.x `system` block (see spellImport.ts notes) — wrap it in a top-level
+  // item shape with sourceId attribution and the metadata the picker uses
+  // (level, school, prereq tags). Empty array when the class has no
+  // curated spell list yet.
+  let classSpellItems: any[] = [];
+  try {
+    const cslRows = await fetchCollection<any>('classSpellLists', {
+      where: 'class_id = ?',
+      params: [classDataRaw.id],
+    });
+    const classSpellIds = [...new Set(cslRows.map((r: any) => r.spell_id).filter(Boolean))] as string[];
+    if (classSpellIds.length > 0) {
+      const spellRows = await fetchCollection<any>('spells', {
+        where: `id IN (${classSpellIds.map(() => '?').join(',')})`,
+        params: classSpellIds,
+        select:
+          'id, name, identifier, level, school, image_url, source_id, tags, ' +
+          'foundry_data, required_tags, prerequisite_text, concentration, ritual',
+      });
+      classSpellItems = spellRows.map((row: any) => {
+        const foundrySystem = parseJsonField(row.foundry_data, {});
+        const requiredTagIds = parseJsonField(row.required_tags, []);
+        const tagIds = parseJsonField(row.tags, []);
+        return {
+          // Foundry will assign an _id on createEmbeddedDocuments — leave
+          // it out so we don't pin every actor's spell items to the same
+          // id and collide on re-import.
+          name: String(row.name || ''),
+          type: 'spell',
+          img: row.image_url || undefined,
+          system: foundrySystem,
+          effects: [],
+          flags: {
+            'dauligor-pairing': {
+              schemaVersion: 1,
+              entityKind: 'spell',
+              // sourceId is the stable identifier the importer keys against
+              // when checking "does this actor already have this spell?".
+              // Prefer the slug identifier, fall back to the DB id.
+              sourceId: trimString(row.identifier) || `spell-${row.id}`,
+              dbId: String(row.id),
+              classSourceId,
+              level: Number(row.level || 0),
+              school: String(row.school || ''),
+              spellSourceId: row.source_id || null,
+              requiredTagIds: Array.isArray(requiredTagIds) ? requiredTagIds.map(String) : [],
+              prerequisiteText: String(row.prerequisite_text || ''),
+              tagIds: Array.isArray(tagIds) ? tagIds.map(String) : [],
+              concentration: Boolean(row.concentration),
+              ritual: Boolean(row.ritual),
+            },
+          },
+        };
+      });
+    }
+  } catch (err) {
+    console.warn('[classExport] Failed to bake classSpellItems — shipping empty list', err);
+    classSpellItems = [];
+  }
+
   const classData = {
     ...classDataRaw,
     id: classDataRaw.id,
@@ -1695,6 +1761,11 @@ export async function exportClassSemantic(
     // `formatRequirementText`, but the runtime walker's pill row needs
     // names too (otherwise spellRule pills show "(spell rule)").
     spellRuleNameById,
+    // Per-class master spell list as Foundry-ready spell items. Used by
+    // the importer's spell-selection step (runSpellSelectionStep) to
+    // render the cantrip / spells-known picker and to embed the chosen
+    // spells onto the actor at level-up time.
+    classSpellItems,
     source
   };
 }

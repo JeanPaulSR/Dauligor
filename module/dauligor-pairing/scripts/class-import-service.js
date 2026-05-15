@@ -302,6 +302,44 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     })));
   }
 
+  // Cantrips + spells-known picked in runSpellSelectionStep. Each
+  // selection is a flag.dauligor-pairing.sourceId; we match against the
+  // baked `classSpellItems` array on the workflow, then embed the
+  // matching items as Foundry spell documents on the actor. Already-
+  // on-actor sourceIds get skipped naturally because `upsertActorItem`
+  // is idempotent (updates the existing item rather than creating a
+  // duplicate). Skipped when the selection arrays are empty (the
+  // common case for non-spellcasting class imports or when the player
+  // chose Skip in the picker).
+  const importedSpellItems = [];
+  const spellSelections = workflow.selection?.spellSelections ?? null;
+  if (spellSelections && Array.isArray(workflow.classSpellItems)) {
+    const selectedSourceIds = new Set([
+      ...ensureArray(spellSelections.cantripSourceIds).map(String),
+      ...ensureArray(spellSelections.spellSourceIds).map(String),
+    ]);
+    if (selectedSourceIds.size > 0) {
+      for (const spellItem of workflow.classSpellItems) {
+        const sourceId = trimString(spellItem?.flags?.[MODULE_ID]?.sourceId);
+        if (!sourceId || !selectedSourceIds.has(sourceId)) continue;
+        // Reuse the world-item normalizer so the spell picks up the
+        // standard source/book/audit flags. Spells need no class-
+        // sourceId attribution like features do — they live alongside
+        // the class item, not under it.
+        const normalized = normalizeWorldItem(spellItem, payload.source);
+        applyPayloadMetadata(normalized.flags?.[MODULE_ID], { payloadMeta: payload, importMode: "actor" });
+        // Stash the granting class so the actor sheet (and the
+        // Dauligor app's downstream tooling) can attribute the spell
+        // back to its source. Mirrors the granted_by_* shape used on
+        // the app side (see character_spells columns).
+        normalized.flags = normalized.flags ?? {};
+        normalized.flags[MODULE_ID] = normalized.flags[MODULE_ID] ?? {};
+        normalized.flags[MODULE_ID].grantedByClassSourceId = classSourceId;
+        importedSpellItems.push(await upsertActorItem(targetActor, normalized));
+      }
+    }
+  }
+
   // Post-embed: wire option items that declare a Uses Feature to consume
   // from the matching actor item (Battle Master maneuvers → Superiority
   // Dice pool, etc.) and inherit that feature's damage scaling. Runs
@@ -709,6 +747,13 @@ export function buildClassImportWorkflow(payload, {
     // Rule id → display name, used by the picker's pill renderer so
     // spellRule pills show "Knows Fire Spells" instead of "(spell rule)".
     spellRuleNameById: payload.spellRuleNameById ?? {},
+    // Per-class master spell list, baked at export time as an array of
+    // Foundry-ready spell items (`{ name, type:'spell', system, flags }`).
+    // The importer's runSpellSelectionStep uses this to render the
+    // cantrip / spells-known picker and to embed chosen spells onto the
+    // actor at level-up. Empty array when the class hasn't been curated
+    // in /compendium/spell-lists yet.
+    classSpellItems: ensureArray(payload.classSpellItems),
     minSubclassLevel,
     requiresSubclassSelection: Boolean(
       targetActor
@@ -857,6 +902,18 @@ function sanitizeClassImportSelection(selection) {
     optionSelections[normalizedGroupSourceId] = normalizedSourceIds;
   }
 
+  // Spell picks from runSpellSelectionStep. Two parallel arrays so the
+  // embed phase can apply cantrip-cap and spell-cap logic separately if
+  // it ever needs to. Strings are normalised so the embed sees the same
+  // sourceId shape regardless of how the caller passed them in.
+  const rawSpellSelections = selection?.spellSelections ?? null;
+  const spellSelections = rawSpellSelections && typeof rawSpellSelections === "object"
+    ? {
+      cantripSourceIds: [...new Set(ensureArray(rawSpellSelections.cantripSourceIds).map((id) => trimString(id)).filter(Boolean))],
+      spellSourceIds: [...new Set(ensureArray(rawSpellSelections.spellSourceIds).map((id) => trimString(id)).filter(Boolean))],
+    }
+    : { cantripSourceIds: [], spellSourceIds: [] };
+
   return {
     includeSubclass: selection?.includeSubclass === undefined ? null : Boolean(selection.includeSubclass),
     subclassSourceId: trimString(selection?.subclassSourceId) || null,
@@ -864,6 +921,7 @@ function sanitizeClassImportSelection(selection) {
     hpMode: trimString(selection?.hpMode) || null,
     hpCustomFormula: trimString(selection?.hpCustomFormula) || null,
     spellMode: trimString(selection?.spellMode) || null,
+    spellSelections,
     skillSelections: [...new Set(ensureArray(selection?.skillSelections).map((slug) => normalizeSkillSlug(slug)).filter(Boolean))],
     toolSelections: [...new Set(ensureArray(selection?.toolSelections).map((slug) => normalizeToolSlug(slug)).filter(Boolean))],
     savingThrowSelections: [...new Set(ensureArray(selection?.savingThrowSelections).map((code) => normalizeAbilityCode(code)).filter(Boolean))],
