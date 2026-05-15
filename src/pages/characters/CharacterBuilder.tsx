@@ -4601,9 +4601,10 @@ export default function CharacterBuilder({
   if (loading) return null;
 
   return (
-    <div className="max-w-[1700px] mx-auto pb-24 pt-4 px-2 sm:px-4 lg:px-6">
-      {/* Top Header & Save */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gold/20 pb-4 mb-6">
+    <div className="max-w-[1800px] mx-auto h-screen flex flex-col px-2 sm:px-4 lg:px-6 pt-4 pb-2 overflow-hidden">
+      {/* Top Header & Save — fixed-height block, sheet/rail flex below
+          takes the remaining viewport. */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gold/20 pb-3 mb-4 shrink-0">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -4745,9 +4746,9 @@ export default function CharacterBuilder({
         </div>
       )}
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0 overflow-hidden">
         {/* MAIN AREA */}
-        <div className="flex-1 min-h-[500px] lg:min-h-[800px]">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {activeStep === "sheet" ? (
             // Book-Spread Sheet shell. The outer wrapper IS the
             // book-spread grid: verso (left page, fixed 540-580px)
@@ -4757,9 +4758,11 @@ export default function CharacterBuilder({
             // the sub-tab strip (Features / Spells / Inventory /
             // Feats / Profs / Bio) and its content. xl:divide-x is
             // the visible spine; below xl the columns stack.
-            <div className="bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] p-4 sm:p-6 md:p-8 rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl h-full min-h-[500px] grid grid-cols-1 xl:grid-cols-[minmax(540px,580px)_minmax(0,1fr)] gap-6 xl:gap-0 xl:divide-x xl:divide-gold/25">
-              {/* ── Verso (left page) ──── */}
-              <div className="xl:pr-6 space-y-6 min-w-0">
+            <div className="bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(540px,580px)_minmax(0,1fr)] gap-0 xl:divide-x xl:divide-gold/25 overflow-hidden">
+              {/* ── Verso (left page) — independent vertical scroll
+                  so the recto stays visible while the player walks
+                  down the character-stats column. */}
+              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pr-6 space-y-6 min-w-0 overflow-y-auto custom-scrollbar">
               {/* COMPACT CHARACTER HEADER */}
               <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 border-b-2 border-gold/10 pb-6 md:pb-8 mb-6 md:mb-8">
                 <div className="flex-1 w-full text-center md:text-left space-y-1">
@@ -5650,7 +5653,7 @@ export default function CharacterBuilder({
                   </div>
               {/* ── End verso · Begin recto ──── */}
               </div>
-              <div className="xl:pl-6 space-y-4 min-w-0">
+              <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-6 md:py-8 xl:pl-6 space-y-4 min-w-0 overflow-y-auto custom-scrollbar">
                   {(() => {
                     const ownedFeatCount = Array.isArray(character.feats) ? character.feats.length : 0;
                     const ownedSpellsCount = Array.isArray(character.progressionState?.ownedSpells)
@@ -6914,7 +6917,7 @@ export default function CharacterBuilder({
 
             </div>
           ) : activeStep === "class" ? (
-            <div className="bg-background/50 rounded-xl border border-gold/10 h-full min-h-[500px]">
+            <div className="bg-background/50 rounded-xl border border-gold/10 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
               {isSelectingClass ? (
                 <div className="p-4 sm:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <ClassList
@@ -8528,7 +8531,7 @@ export default function CharacterBuilder({
 
               if (spellcastingClassIds.length === 0) {
                 return (
-                  <div className="bg-background/50 p-8 rounded-xl border border-gold/10 h-full flex flex-col items-center justify-center text-center">
+                  <div className="bg-background/50 p-8 rounded-xl border border-gold/10 flex-1 min-h-0 flex flex-col items-center justify-center text-center">
                     <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
                       <Zap className="w-10 h-10 text-gold" />
                     </div>
@@ -8592,7 +8595,7 @@ export default function CharacterBuilder({
               };
 
               return (
-                <div className="space-y-3">
+                <div className="space-y-3 flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-6">
                   {/* ── Class header strip — Variant C ─────────────
                        Per-class chips (active highlighted) + Save DC /
                        Atk for the active class + counters. Replaces
@@ -9639,7 +9642,7 @@ export default function CharacterBuilder({
               );
 
               return (
-                <div className="bg-background/50 p-4 sm:p-6 rounded-xl border border-gold/10 space-y-5">
+                <div className="bg-background/50 p-4 sm:p-6 rounded-xl border border-gold/10 space-y-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <h2 className="text-xl sm:text-2xl font-serif font-black text-ink uppercase tracking-tight flex items-center gap-2">
@@ -9863,7 +9866,7 @@ export default function CharacterBuilder({
               );
             })()
           ) : (
-            <div className="bg-background/50 p-8 rounded-xl border border-gold/10 h-full flex flex-col items-center justify-center text-center">
+            <div className="bg-background/50 p-8 rounded-xl border border-gold/10 flex-1 min-h-0 flex flex-col items-center justify-center text-center">
               <div className="w-24 h-24 bg-gold/5 rounded-full flex items-center justify-center mb-6 border border-gold/20">
                 {STEPS.find((s) => s.id === activeStep)?.icon}
               </div>
@@ -9885,36 +9888,55 @@ export default function CharacterBuilder({
           )}
         </div>
 
-        {/* NAVIGATION RAIL - RESPONSIVE */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:z-0 bg-background/95 backdrop-blur-md lg:bg-transparent border-t lg:border-none border-gold/10 p-2 sm:p-4 lg:p-0 lg:w-16 lg:pt-4">
-          <div className="flex lg:flex-col items-center justify-between lg:justify-start gap-1 sm:gap-2 lg:gap-3 max-w-7xl mx-auto lg:sticky lg:top-24">
-            {STEPS.map((step) => (
-              <button
-                key={step.id}
-                onClick={() => {
-                  setActiveStep(step.id);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                title={step.label}
-                className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 border-2 lg:border-4 flex items-center justify-center transition-all shadow-md active:scale-95 flex-shrink-0 ${
-                  activeStep === step.id
-                    ? "bg-gold text-white border-gold scale-110"
-                    : "bg-card text-ink border-gold/20 hover:bg-gold/10"
-                }`}
-                style={{ borderRadius: "10px" }}
-              >
-                {React.cloneElement(
-                  step.icon as React.ReactElement<{ className?: string }>,
-                  { className: "w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" },
-                )}
-              </button>
-            ))}
-            <div className="hidden lg:block h-4" />
+        {/* ── Right Tab Rail (BookSpread design) ──────────────
+            Vertical 56px icon strip on lg+, horizontal pill row on
+            mobile. Each step is icon-only with a tooltip; active
+            state uses a subtle gold tint + 2px gold left accent
+            bar (the handoff's KIND_META active treatment) rather
+            than the previous gold-fill + scale-110 jump. Settings
+            stub at the bottom — full dropdown (View JSON / Export
+            / Delete) is a follow-up. */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:z-0 bg-background/95 backdrop-blur-md lg:bg-card/40 lg:rounded-xl lg:border lg:border-gold/15 lg:shadow-sm border-t lg:border-t-0 border-gold/10 p-2 sm:p-3 lg:p-1.5 lg:w-14 lg:self-stretch lg:overflow-y-auto custom-scrollbar">
+          <div className="flex lg:flex-col items-center justify-between lg:justify-start gap-1 sm:gap-2 lg:gap-1 max-w-7xl mx-auto">
+            {STEPS.map((step) => {
+              const active = activeStep === step.id;
+              return (
+                <button
+                  key={step.id}
+                  onClick={() => setActiveStep(step.id)}
+                  title={step.label}
+                  className={cn(
+                    "relative w-10 h-10 sm:w-11 sm:h-11 lg:w-11 lg:h-12 rounded-md flex items-center justify-center transition-colors active:scale-95 flex-shrink-0",
+                    active
+                      ? "bg-gold/15 text-gold"
+                      : "bg-transparent text-ink/55 hover:bg-gold/[0.06] hover:text-ink",
+                  )}
+                >
+                  {/* Active left-accent bar — 2px gold rule on the
+                      inner edge of the rail (the handoff's spec for
+                      active step buttons). Mobile orientation: the
+                      bar becomes a top accent so it still reads as
+                      "this is selected." */}
+                  {active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute lg:left-0 lg:top-1 lg:bottom-1 lg:w-0.5 top-0 left-1 right-1 h-0.5 lg:h-auto bg-gold rounded-sm"
+                    />
+                  )}
+                  {React.cloneElement(
+                    step.icon as React.ReactElement<{ className?: string }>,
+                    { className: "w-4 h-4 sm:w-5 sm:h-5" },
+                  )}
+                </button>
+              );
+            })}
+            <div className="hidden lg:block h-2 w-full border-t border-gold/10 mt-2" />
             <button
-              className="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 border-2 lg:border-4 bg-ink/5 border-ink/20 flex items-center justify-center text-ink/40 cursor-not-allowed flex-shrink-0"
-              style={{ borderRadius: "10px" }}
+              type="button"
+              title="Settings (coming soon)"
+              className="w-10 h-10 sm:w-11 sm:h-11 lg:w-11 lg:h-12 rounded-md bg-transparent text-ink/35 hover:bg-gold/[0.06] hover:text-ink/55 flex items-center justify-center flex-shrink-0 transition-colors"
             >
-              <Settings className="w-4 h-4 sm:w-5 sm:h-5 lg:w-5 lg:h-5" />
+              <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>

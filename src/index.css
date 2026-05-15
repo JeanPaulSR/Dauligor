@@ -573,15 +573,26 @@ body.spell-list-fullscreen {
   overflow: hidden;
 }
 
-/* Character-builder wide mode. The default global container caps at
-   xl:1280px which makes the book-spread sheet feel cramped on wider
-   screens. This opt-in (added by CharacterBuilder.tsx on mount, removed
-   on unmount) lifts the global `<main>` max-width AND keeps the rest
-   of the page chrome (sidebar, footer, body scroll) intact — unlike
-   the spell-list-fullscreen mode which strips footer + locks scroll
-   too. CharacterBuilder's own outer wrapper still caps at a generous
-   1700px so the book pages don't stretch comically wide on ultrawide
-   monitors. */
+/* Character-builder wide mode. Two jobs:
+   1. Strips the global `<main>` max-width (default Tailwind container
+      caps at xl:1280px) so the book-spread sheet can stretch on
+      wider screens.
+   2. Locks body scroll so the page itself doesn't gain a vertical
+      scroll wheel; the BookSpread sheet is viewport-bounded and
+      each `.book-page` inside it (verso/recto) handles its own
+      overflow. Mirrors the `spell-list-fullscreen` pattern but
+      DOESN'T hide the footer — CharacterBuilder positions its
+      content above the footer via h-screen layout math.
+   Footer is hidden so the h-screen math doesn't have to account for
+   it. */
 body.character-builder-wide main {
   max-width: none !important;
+  padding: 0 !important;
+}
+body.character-builder-wide footer {
+  display: none !important;
+}
+body.character-builder-wide {
+  overflow: hidden;
+  height: 100vh;
 }
