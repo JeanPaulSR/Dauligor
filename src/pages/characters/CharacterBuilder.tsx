@@ -5058,192 +5058,324 @@ export default function CharacterBuilder({
                   unified grid above now subsumes the save column, so
                   this is a single full-width card. */}
               <div className="mb-8">
-                {/* PORTRAIT & CORE STATUS */}
-                <div className="border border-gold/20 p-5 flex flex-col xl:flex-row gap-6 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
-                  <div className="w-full sm:w-48 xl:w-36 aspect-[3/4] border-2 border-gold/10 bg-card relative rounded-md overflow-hidden flex-shrink-0 shadow-inner group/portrait mx-auto xl:mx-0 self-center xl:self-start">
-                    {character.imageUrl ? (
-                      <img
-                        src={character.imageUrl}
-                        alt="Portrait"
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-ink/40 font-serif italic text-base p-4 text-center bg-muted/20">
-                        <User className="w-12 h-12 mb-3 opacity-20" />
-                        No Portrait
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-ink/60 opacity-0 group-hover/portrait:opacity-100 transition-all flex flex-col items-center justify-center p-2 text-center">
-                      <ImageUpload
-                        currentImageUrl={character.imageUrl}
-                        storagePath={`images/characters/${id || "new"}/`}
-                        onUpload={(url) =>
-                          setCharacter({ ...character, imageUrl: url })
-                        }
-                        className="scale-75"
-                      />
-                    </div>
-                    {/* AC SHIELD */}
-                    <div
-                      className="absolute top-1 left-1 w-11 h-13 bg-gold text-white border border-white/20 flex flex-col items-center justify-center shadow-lg pt-0.5"
-                      style={{
-                        clipPath:
-                          "polygon(0% 0%, 100% 0%, 100% 80%, 50% 100%, 0% 80%)",
-                      }}
-                    >
-                      <span className="text-lg font-black leading-none">
-                        {character.ac}
-                      </span>
-                      <span className="text-[7px] uppercase font-black text-white/80 tracking-tighter">
-                        AC
-                      </span>
-                    </div>
-                  </div>
+                {/* ── Vital Hub (BookSpread design) ─────────────────
+                    Ringed portrait on the left (outer HP arc, optional
+                    inner Spell Points arc, center monogram or image,
+                    AC shield overlay), with the right column carrying
+                    HP/SP/Temp HP side-by-side, the Hit Dice strip, and
+                    the Initiative/Speed/Proficiency triplet.
 
-                  <div className="flex-1 space-y-4 py-1">
-                    {/* HIT POINTS */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-baseline px-0.5">
-                        <h4 className="label-text text-ink/40">Hit Points</h4>
-                        <div className="flex items-baseline gap-1 text-ink font-black leading-none">
-                          <span className="text-xl">
-                            {character.hp.current}
+                    Per-class Hit Dice cards aren't possible yet — the
+                    character model has a single `hitDie` field rather
+                    than a `hitDicePools[]` array. When the model picks
+                    up per-class HD tracking, the single card below
+                    splits into one card per class. */}
+                {(() => {
+                  const hpMax = getEffectiveHpMax(character);
+                  const hpCurrent = Number(character?.hp?.current ?? 0) || 0;
+                  const hpTemp = Number(character?.hp?.temp ?? 0) || 0;
+                  const hpPct = hpMax > 0 ? Math.min(100, Math.max(0, (hpCurrent / hpMax) * 100)) : 0;
+                  const spMax = Number(character?.spellPoints?.max ?? 0) || 0;
+                  const spCurrent = Number(character?.spellPoints?.current ?? 0) || 0;
+                  const hasSP = spMax > 0;
+                  const spPct = hasSP ? Math.min(100, Math.max(0, (spCurrent / spMax) * 100)) : 0;
+
+                  // Ring math — SVG circles render an arc by setting
+                  // strokeDasharray to "<filled> <total>" so we render
+                  // exactly the percentage we want. The whole SVG is
+                  // rotated -90° so 0% lives at the top of the circle.
+                  const RING_SIZE = 160;
+                  const HP_R = 72;
+                  const SP_R = 60;
+                  const HP_CIRC = 2 * Math.PI * HP_R;
+                  const SP_CIRC = 2 * Math.PI * SP_R;
+                  const hpDash = (HP_CIRC * hpPct) / 100;
+                  const spDash = (SP_CIRC * spPct) / 100;
+
+                  const monogram = String(character?.name || "?")
+                    .trim()
+                    .charAt(0)
+                    .toUpperCase() || "?";
+
+                  return (
+                    <div className="border border-gold/20 p-5 flex flex-col xl:flex-row gap-6 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
+                      {/* RINGED PORTRAIT */}
+                      <div
+                        className="relative shrink-0 mx-auto xl:mx-0 group/portrait"
+                        style={{ width: RING_SIZE, height: RING_SIZE }}
+                      >
+                        {/* SVG rings: HP (outer, blood), SP (inner, indigo, conditional). */}
+                        <svg
+                          width={RING_SIZE}
+                          height={RING_SIZE}
+                          viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
+                          style={{ transform: "rotate(-90deg)" }}
+                          className="absolute inset-0 overflow-visible pointer-events-none"
+                        >
+                          <circle
+                            cx={RING_SIZE / 2}
+                            cy={RING_SIZE / 2}
+                            r={HP_R}
+                            fill="none"
+                            stroke="rgba(190,18,60,0.14)"
+                            strokeWidth={8}
+                          />
+                          <circle
+                            cx={RING_SIZE / 2}
+                            cy={RING_SIZE / 2}
+                            r={HP_R}
+                            fill="none"
+                            stroke="#be123c"
+                            strokeWidth={8}
+                            strokeLinecap="butt"
+                            strokeDasharray={`${hpDash} ${HP_CIRC}`}
+                          />
+                          {hasSP && (
+                            <>
+                              <circle
+                                cx={RING_SIZE / 2}
+                                cy={RING_SIZE / 2}
+                                r={SP_R}
+                                fill="none"
+                                stroke="rgba(67,56,202,0.14)"
+                                strokeWidth={5}
+                              />
+                              <circle
+                                cx={RING_SIZE / 2}
+                                cy={RING_SIZE / 2}
+                                r={SP_R}
+                                fill="none"
+                                stroke="#4338ca"
+                                strokeWidth={5}
+                                strokeLinecap="butt"
+                                strokeDasharray={`${spDash} ${SP_CIRC}`}
+                              />
+                            </>
+                          )}
+                        </svg>
+
+                        {/* Portrait core — 96px circle in the dead
+                            center of the rings. Image when present,
+                            else a monogram of the character's first
+                            letter (matches the handoff's V/D monograms). */}
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full overflow-hidden border-2 border-gold/30 bg-card flex items-center justify-center shadow-inner">
+                          {character.imageUrl ? (
+                            <img
+                              src={character.imageUrl}
+                              alt=""
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <span className="font-serif text-4xl font-bold text-gold/55 leading-none select-none">
+                              {monogram}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Hover image-upload overlay — same trigger as
+                            before, scoped to the center circle so it
+                            doesn't fight with the AC shield's hit area. */}
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full bg-ink/65 opacity-0 group-hover/portrait:opacity-100 transition-opacity flex items-center justify-center pointer-events-auto">
+                          <ImageUpload
+                            currentImageUrl={character.imageUrl}
+                            storagePath={`images/characters/${id || "new"}/`}
+                            onUpload={(url) =>
+                              setCharacter({ ...character, imageUrl: url })
+                            }
+                            className="scale-75"
+                          />
+                        </div>
+
+                        {/* AC shield — anchored to the bottom-right of
+                            the ring frame, like a wax seal. */}
+                        <div
+                          className="absolute -bottom-1 -right-1 w-11 h-12 bg-gold text-white border border-white/20 flex flex-col items-center justify-center shadow-lg pt-0.5"
+                          style={{
+                            clipPath: "polygon(0% 0%, 100% 0%, 100% 80%, 50% 100%, 0% 80%)",
+                          }}
+                        >
+                          <span className="text-lg font-black leading-none">
+                            {character.ac}
                           </span>
-                          <span className="text-xs text-ink/20">/</span>
-                          <span className="text-xs text-ink/60">
-                            {getEffectiveHpMax(character)}
+                          <span className="text-[7px] uppercase font-black text-white/80 tracking-tighter">
+                            AC
                           </span>
                         </div>
                       </div>
 
-                      <div className="h-4 bg-muted/50 border border-gold/10 rounded-full group relative overflow-hidden p-[1px]">
-                        <div
-                          className="h-full bg-emerald-600 rounded-full transition-all duration-700 shadow-[inset_0_1px_2px_rgba(255,255,255,0.3)]"
-                          style={{
-                            width: `${Math.min(100, (character.hp.current / Math.max(1, getEffectiveHpMax(character))) * 100)}%`,
-                          }}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-card/10 backdrop-blur-[1px]">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() =>
-                                setCharacter({
-                                  ...character,
-                                  hp: {
-                                    ...character.hp,
-                                    current: Math.min(
-                                      getEffectiveHpMax(character),
-                                      character.hp.current + 1,
-                                    ),
-                                  },
-                                })
-                              }
-                              className="w-5 h-5 bg-card text-ink border border-gold/20 hover:bg-emerald-500 hover:text-white rounded-full flex items-center justify-center shadow-sm"
-                            >
-                              <Plus className="w-2.5 h-2.5" />
-                            </button>
-                            <button
-                              onClick={() =>
-                                setCharacter({
-                                  ...character,
-                                  hp: {
-                                    ...character.hp,
-                                    current: Math.max(
-                                      0,
-                                      character.hp.current - 1,
-                                    ),
-                                  },
-                                })
-                              }
-                              className="w-5 h-5 bg-card text-ink border border-gold/20 hover:bg-rose-500 hover:text-white rounded-full flex items-center justify-center shadow-sm"
-                            >
-                              <Minus className="w-2.5 h-2.5" />
-                            </button>
+                      {/* RIGHT — HP/SP blocks, Hit Dice strip, Vital triplet */}
+                      <div className="flex-1 min-w-0 space-y-3 py-1">
+                        {/* HP + Spell Points blocks (side-by-side) */}
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          {/* HP block */}
+                          <div className="flex-1 p-3 border border-blood/25 bg-blood/[0.04] rounded-md group/hp">
+                            <div className="flex items-end gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[8px] font-black uppercase tracking-widest text-ink/45 leading-none mb-1.5">
+                                  Hit Points
+                                </div>
+                                <div className="flex items-baseline gap-1">
+                                  <span className="font-mono text-2xl sm:text-3xl font-black text-ink leading-none">
+                                    {hpCurrent}
+                                  </span>
+                                  <span className="text-xs text-ink/30 font-bold">
+                                    / {hpMax}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-[8px] font-black uppercase tracking-widest text-sky-700/75 leading-none mb-1.5">
+                                  Temp HP
+                                </div>
+                                <div
+                                  className={cn(
+                                    "font-mono text-lg font-black leading-none",
+                                    hpTemp > 0 ? "text-sky-600" : "text-ink/25",
+                                  )}
+                                >
+                                  {hpTemp}
+                                </div>
+                              </div>
+                              <div className="opacity-0 group-hover/hp:opacity-100 transition-opacity flex flex-col gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCharacter({
+                                      ...character,
+                                      hp: {
+                                        ...character.hp,
+                                        current: Math.min(
+                                          hpMax,
+                                          hpCurrent + 1,
+                                        ),
+                                      },
+                                    })
+                                  }
+                                  aria-label="Increase HP"
+                                  className="w-6 h-6 bg-card text-ink border border-gold/30 hover:bg-emerald-500 hover:text-white rounded flex items-center justify-center shadow-sm transition-colors"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCharacter({
+                                      ...character,
+                                      hp: {
+                                        ...character.hp,
+                                        current: Math.max(0, hpCurrent - 1),
+                                      },
+                                    })
+                                  }
+                                  aria-label="Decrease HP"
+                                  className="w-6 h-6 bg-card text-ink border border-gold/30 hover:bg-rose-500 hover:text-white rounded flex items-center justify-center shadow-sm transition-colors"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                            {/* Slim fill bar — visualises the HP
+                                percentage; supplements the rotating
+                                ring on the portrait. */}
+                            <div className="h-1.5 mt-2 bg-blood/10 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blood/70 rounded-full transition-all duration-700"
+                                style={{ width: `${hpPct}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Spell Points block — only when the
+                              character is a spellcaster with a non-
+                              zero max. Non-casters keep the simpler
+                              HP-only layout. */}
+                          {hasSP && (
+                            <div className="flex-1 p-3 border border-indigo-500/25 bg-indigo-500/[0.04] rounded-md">
+                              <div className="text-[8px] font-black uppercase tracking-widest text-indigo-700/75 leading-none mb-1.5">
+                                Spell Points
+                              </div>
+                              <div className="flex items-baseline gap-1">
+                                <span className="font-mono text-2xl sm:text-3xl font-black text-indigo-700 leading-none">
+                                  {spCurrent}
+                                </span>
+                                <span className="text-xs text-indigo-700/40 font-bold">
+                                  / {spMax}
+                                </span>
+                              </div>
+                              <div className="h-1.5 mt-2 bg-indigo-500/10 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-indigo-600/70 rounded-full transition-all duration-700"
+                                  style={{ width: `${spPct}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Hit Dice strip — one card per class once
+                            the model supports it. Today: single card
+                            for the character's primary hit-die type. */}
+                        <div className="flex items-center gap-3 p-2 border border-gold/15 bg-card/30 rounded-md">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-ink/45 pl-1">
+                            Hit Dice
+                          </span>
+                          <div className="flex-1 flex gap-2">
+                            <div className="px-3 py-1.5 border border-gold/20 bg-card rounded flex items-center gap-3">
+                              <span className="font-mono text-base font-black leading-none">
+                                <span className="text-ink">{character.hitDie.current}</span>
+                                <span className="text-ink/25"> / </span>
+                                <span className="text-ink/55">{character.hitDie.max}</span>
+                              </span>
+                              <span className="w-px h-4 bg-gold/20" />
+                              <span className="text-[10px] font-black uppercase tracking-widest text-gold/75 leading-none">
+                                {character.hitDie.type}
+                              </span>
+                            </div>
                           </div>
                         </div>
+
+                        {/* VITAL TRIPLET — Initiative / Speed / Proficiency */}
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            {
+                              label: "Initiative",
+                              value:
+                                character.initiative >= 0
+                                  ? `+${character.initiative}`
+                                  : `${character.initiative}`,
+                            },
+                            {
+                              label: "Speed",
+                              value: (
+                                <>
+                                  {character.speed}
+                                  <span className="text-xs text-ink/40 font-bold"> ft</span>
+                                </>
+                              ),
+                            },
+                            {
+                              label: "Proficiency",
+                              value: `+${character.proficiencyBonus}`,
+                            },
+                          ].map((stat) => (
+                            <div
+                              key={stat.label}
+                              className="p-2 sm:p-3 border border-gold/20 bg-card rounded flex flex-col items-center justify-center text-center shadow-sm transition-all hover:-translate-y-0.5"
+                            >
+                              <span className="font-mono text-xl sm:text-2xl font-black text-ink leading-none">
+                                {stat.value}
+                              </span>
+                              <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.16em] text-ink/45 mt-1.5">
+                                {stat.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
-
-                    {/* VITAL CORE STATS */}
-                    <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                      {[
-                        {
-                          label: "INITIATIVE",
-                          shortLabel: "INIT",
-                          value:
-                            character.initiative >= 0
-                              ? `+${character.initiative}`
-                              : character.initiative,
-                        },
-                        {
-                          label: "SPEED",
-                          shortLabel: "SPD",
-                          value: `${character.speed}ft`,
-                        },
-                        {
-                          label: "PROFICIENCY",
-                          shortLabel: "PROF",
-                          value: `+${character.proficiencyBonus}`,
-                        },
-                      ].map((stat) => (
-                        <div
-                          key={stat.label}
-                          className="p-1 px-1 sm:p-2 sm:py-3 border border-gold/20 bg-card rounded flex flex-col items-center justify-center shadow-sm transition-all hover:-translate-y-0.5 min-w-0"
-                        >
-                          <span className="text-[7px] sm:text-[8px] xl:text-[7px] 2xl:text-[8px] text-ink/40 font-black tracking-tighter sm:tracking-widest leading-tight uppercase mb-0.5 truncate w-full text-center">
-                            <span className="hidden sm:inline-block xl:hidden 2xl:inline-block">
-                              {stat.label}
-                            </span>
-                            <span className="inline-block sm:hidden xl:inline-block 2xl:hidden">
-                              {stat.shortLabel}
-                            </span>
-                          </span>
-                          <span className="text-[10px] sm:text-xs font-black text-ink leading-none">
-                            {stat.value}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* SLIM RESOURCE METERS */}
-                    <div className="space-y-3 pt-3 border-t border-gold/10">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[8px] uppercase font-black text-ink/40 w-16">
-                          Hit Dice
-                        </span>
-                        <div className="flex-1 h-2 bg-muted rounded-sm border border-gold/5 overflow-hidden">
-                          <div
-                            className="h-full bg-rose-700/70"
-                            style={{
-                              width: `${(character.hitDie.current / character.hitDie.max) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-black text-ink/60 w-6 text-right">
-                          {character.hitDie.current}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[8px] uppercase font-black text-ink/40 w-16">
-                          Spell Points
-                        </span>
-                        <div className="flex-1 h-2 bg-muted rounded-sm border border-gold/5 overflow-hidden">
-                          <div
-                            className="h-full bg-indigo-700/70"
-                            style={{
-                              width: `${character.spellPoints.max > 0 ? (character.spellPoints.current / character.spellPoints.max) * 100 : 0}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-black text-ink/60 w-6 text-right">
-                          {character.spellPoints.current}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
+                  );
+                })()}
               </div>
 
               <div className="grid md:grid-cols-3 gap-6 pt-4">
