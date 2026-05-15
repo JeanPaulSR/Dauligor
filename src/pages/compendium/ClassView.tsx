@@ -6,12 +6,14 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { 
-  Sword, 
+import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
+import {
+  Sword,
   Shield,
   BookOpen,
   ChevronLeft,
   ChevronDown,
+  ChevronUp,
   Edit,
   Scroll,
   Wand2,
@@ -38,9 +40,11 @@ import {
 } from '../../lib/classExport';
 import { fetchClassSpellList, type ClassSpellListSummary } from '../../lib/classSpellLists';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
+import { ACTIVATION_LABELS, RANGE_LABELS } from '../../lib/spellFilters';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import SpellFilterShell from '../../components/compendium/SpellFilterShell';
 import { useSpellFilters } from '../../hooks/useSpellFilters';
+import { cn } from '../../lib/utils';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { toast } from 'sonner';
 import { Database, CloudOff } from 'lucide-react';
@@ -72,6 +76,14 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [subclasses, setSubclasses] = useState<any[]>([]);
   const [selectedSubclassId, setSelectedSubclassId] = useState<string | null>(null);
   const [selectedSubclass, setSelectedSubclass] = useState<any>(null);
+  // Controlled Tabs state so we can react to the active tab when
+  // deciding what auxiliary UI to render. Currently used to hide
+  // the class-meta sidebar on the Spell List tab (gives the
+  // spell content the full content-area width).
+  const [activeTab, setActiveTab] = useState<string>('features');
+  // Subclass picker popover state — opens the per-subclass menu
+  // attached to the new top-bar Subclass button.
+  const [subclassPopoverOpen, setSubclassPopoverOpen] = useState(false);
   const [subclassFeatures, setSubclassFeatures] = useState<any[]>([]);
   const [subclassScalingColumns, setSubclassScalingColumns] = useState<any[]>([]);
   const [subclassSpellcasting, setSubclassSpellcasting] = useState<any>(null);
@@ -915,46 +927,134 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           )}
         </div>
 
-        {/* Bottom Section - Split Layout */}
-        <div className="grid lg:grid-cols-4 gap-12 pt-8">
+        {/* Bottom Section - Split Layout.
+            When the Spell List tab is active we drop the right-hand
+            class-meta sidebar so the spell content (browser-style
+            row layout) gets the full content-area width. The grid
+            collapses to a single column. */}
+        <div className={cn(
+          'grid gap-12 pt-8',
+          activeTab === 'spells' ? 'lg:grid-cols-1' : 'lg:grid-cols-4'
+        )}>
           {/* Features / Tabs - Left (Large) */}
-          <div className="lg:col-span-3">
-            <Tabs defaultValue="features">
-              {/* ── Custom chevron tab bar ─────────────────────────── */}
-              <TabsList className="flex w-full bg-transparent rounded-none p-0 h-auto gap-0 mb-8 overflow-visible border-b border-gold/20">
-                {(() => {
-                  const tabs = [
-                    { value: 'features', label: 'Class Features' },
-                    ...(classData.spellcasting?.hasSpellcasting
-                      ? [{ value: 'spells', label: 'Spell List' }]
-                      : []),
-                    { value: 'info', label: 'Class Information' },
-                    { value: 'flavor', label: 'Flavor Suggestions' },
-                  ];
-                  return tabs.map((tab, i) => (
-                    <TabsTrigger
-                      key={tab.value}
-                      value={tab.value}
-                      style={{
-                        clipPath: i === 0
-                          ? 'polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)'
-                          : 'polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)',
-                      }}
-                      className={`
-                        relative flex-none rounded-none border-none h-auto
-                        min-w-[160px] py-3 px-8 text-[10px] font-black uppercase tracking-[0.12em] text-center whitespace-nowrap
-                        transition-colors duration-150
-                        bg-gold/10 text-gold/50 hover:bg-gold/20 hover:text-gold/70
-                        data-active:bg-gold data-active:text-black data-active:z-10
-                        focus-visible:outline-none focus-visible:ring-0
-                        ${i > 0 ? '-ml-3' : ''}
-                      `}
-                    >
-                      {tab.label}
-                    </TabsTrigger>
-                  ));
-                })()}
-              </TabsList>
+          <div className={activeTab === 'spells' ? '' : 'lg:col-span-3'}>
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              {/* ── Tab row: chevron tab bar (left) + Subclass picker
+                  (right). The subclass picker shares the row so the
+                  class-meta sidebar no longer needs to host it — see
+                  the bottom-of-page sidebar where the old Subclass
+                  section used to live. */}
+              <div className="flex items-end justify-between gap-4 mb-8 border-b border-gold/20">
+                <TabsList className="flex bg-transparent rounded-none p-0 h-auto gap-0 overflow-visible">
+                  {(() => {
+                    const tabs = [
+                      { value: 'features', label: 'Class Features' },
+                      ...(classData.spellcasting?.hasSpellcasting
+                        ? [{ value: 'spells', label: 'Spell List' }]
+                        : []),
+                      { value: 'info', label: 'Class Information' },
+                      { value: 'flavor', label: 'Flavor Suggestions' },
+                    ];
+                    return tabs.map((tab, i) => (
+                      <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        style={{
+                          clipPath: i === 0
+                            ? 'polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)'
+                            : 'polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)',
+                        }}
+                        className={`
+                          relative flex-none rounded-none border-none h-auto
+                          min-w-[160px] py-3 px-8 text-[10px] font-black uppercase tracking-[0.12em] text-center whitespace-nowrap
+                          transition-colors duration-150
+                          bg-gold/10 text-gold/50 hover:bg-gold/20 hover:text-gold/70
+                          data-active:bg-gold data-active:text-black data-active:z-10
+                          focus-visible:outline-none focus-visible:ring-0
+                          ${i > 0 ? '-ml-3' : ''}
+                        `}
+                      >
+                        {tab.label}
+                      </TabsTrigger>
+                    ));
+                  })()}
+                </TabsList>
+
+                {/* Subclass picker — single popover button that opens
+                    a list of the class's subclasses. Was previously a
+                    full sidebar section with one card per subclass —
+                    moved up here so it shares a row with the tabs and
+                    frees the sidebar for class-meta content. Only
+                    renders when the class actually defines subclasses;
+                    classes with no subclasses skip the button entirely. */}
+                {subclasses.length > 0 && (
+                  <div className="pb-2 shrink-0">
+                    <Popover open={subclassPopoverOpen} onOpenChange={setSubclassPopoverOpen}>
+                      <PopoverTrigger
+                        className={cn(
+                          'inline-flex items-center gap-2 h-8 px-3 rounded-md border text-[10px] font-black uppercase tracking-[0.12em] transition-colors whitespace-nowrap',
+                          selectedSubclass
+                            ? 'bg-gold/15 border-gold/40 text-gold hover:bg-gold/25'
+                            : 'bg-transparent border-gold/30 text-gold/70 hover:bg-gold/10 hover:text-gold'
+                        )}
+                        title={selectedSubclass ? `Active ${classData.subclassTitle || 'Subclass'}: ${selectedSubclass.name}` : `Choose a ${classData.subclassTitle || 'Subclass'}`}
+                      >
+                        <span className="truncate max-w-[200px]">
+                          {selectedSubclass
+                            ? selectedSubclass.name
+                            : `Choose ${classData.subclassTitle || 'Subclass'}`}
+                        </span>
+                        <ChevronDown className="w-3 h-3 shrink-0 opacity-70" />
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="end"
+                        sideOffset={6}
+                        className="w-72 p-1.5"
+                      >
+                        <div className="px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-gold/60">
+                          {classData.subclassTitle || 'Subclasses'}
+                        </div>
+                        <div className="max-h-72 overflow-y-auto custom-scrollbar space-y-0.5">
+                          {selectedSubclassId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSubclassId(null);
+                                setSubclassPopoverOpen(false);
+                              }}
+                              className="w-full text-left px-2 py-1.5 rounded text-[11px] font-bold uppercase tracking-widest text-ink/40 hover:bg-gold/5 hover:text-gold/70 transition-colors"
+                            >
+                              Clear selection
+                            </button>
+                          )}
+                          {subclasses.map(sub => {
+                            const isSelected = selectedSubclassId === sub.id;
+                            return (
+                              <button
+                                key={sub.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSubclassId(isSelected ? null : sub.id);
+                                  setSubclassPopoverOpen(false);
+                                }}
+                                className={cn(
+                                  'w-full text-left px-2 py-1.5 rounded text-sm font-bold uppercase tracking-tight transition-colors flex items-center justify-between gap-2',
+                                  isSelected
+                                    ? 'bg-gold text-white'
+                                    : 'text-ink hover:bg-gold/10 hover:text-gold'
+                                )}
+                              >
+                                <span className="truncate">{sub.name}</span>
+                                {isSelected && <Check className="w-4 h-4 shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+              </div>
 
               {/* ── Features Tab ─────────────────────────────────────── */}
               <TabsContent value="features" className="space-y-8">
@@ -1235,48 +1335,14 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             </Tabs>
           </div>
 
-          {/* Sidebar - Right (Small) */}
+          {/* Sidebar - Right (Small).
+              Hidden on the Spell List tab because the spell content
+              uses a wider browser-row layout that benefits from the
+              full content-area width. Subclass picker lives in the
+              tab row above (see TabsList sibling) so it's reachable
+              from every tab, including this one. */}
+          {activeTab !== 'spells' && (
           <div className="space-y-8">
-            {/* Subclass Section */}
-            <div className="space-y-4">
-              <h2 className="font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">
-                {classData.subclassTitle || 'Subclasses'}
-              </h2>
-              <div className="space-y-1">
-                {subclasses.map(sub => (
-                  <div
-                    key={sub.id}
-                    onClick={() => setSelectedSubclassId(selectedSubclassId === sub.id ? null : sub.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        setSelectedSubclassId(selectedSubclassId === sub.id ? null : sub.id);
-                      }
-                    }}
-                    tabIndex={0}
-                    role="button"
-                    className={`w-full text-left p-3 border transition-all relative overflow-hidden group cursor-pointer ${
-                      selectedSubclassId === sub.id
-                      ? 'bg-gold border-gold text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)]'
-                      : 'bg-gold/5 border-gold/20 text-ink hover:border-gold/40 hover:bg-gold/10'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between relative z-10 w-full group/item">
-                      <span className="font-bold uppercase tracking-tight text-sm">{sub.name}</span>
-                      <div className="flex items-center gap-2">
-                        {selectedSubclassId === sub.id && <Check className="w-4 h-4" />}
-                      </div>
-                    </div>
-                    <div className={`absolute inset-0 bg-gold/20 transform -skew-x-12 translate-x-full group-hover:translate-x-0 transition-transform duration-500 ${selectedSubclassId === sub.id ? 'hidden' : ''}`} />
-                  </div>
-                ))}
-                {subclasses.length === 0 && (
-                  <p className="text-ink/40 italic text-center py-4 border border-dashed border-gold/20">
-                    No subclasses found.
-                  </p>
-                )}
-              </div>
-            </div>
-
             {/* Core Traits */}
             <div className="space-y-4">
               <h2 className="font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">Core Traits</h2>
@@ -1539,6 +1605,7 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -1557,6 +1624,36 @@ function TraitItem({ label, value, icon: Icon }: { label: string, value: string,
   );
 }
 
+// Compact row layout for the class Spell List tab. Mirrors the
+// browser-style columns from /compendium/spells (Name | Lv | Time
+// | School | C. | Range | Src) so admins curating a list can
+// eyeball the catalogue at a density comparable to the public
+// browser. Sortable header — click a column to toggle sort
+// direction. Class spell lists are bounded (typically ≤ 200 rows)
+// so we skip virtualization; a flat scrollable list is enough.
+type SpellListColumnKey = 'name' | 'level' | 'time' | 'school' | 'concentration' | 'range' | 'source';
+type SpellListSortDir = 'asc' | 'desc';
+
+const SPELL_LIST_COL_WIDTHS: Record<SpellListColumnKey, string> = {
+  name: 'minmax(0,1fr)',
+  level: '36px',
+  time: '90px',
+  school: '70px',
+  concentration: '24px',
+  range: '90px',
+  source: '60px',
+};
+const SPELL_LIST_COL_LABELS: Record<SpellListColumnKey, string> = {
+  name: 'Name',
+  level: 'Lv',
+  time: 'Time',
+  school: 'School',
+  concentration: 'C.',
+  range: 'Range',
+  source: 'Src',
+};
+const SPELL_LIST_COLS: SpellListColumnKey[] = ['name', 'level', 'time', 'school', 'concentration', 'range', 'source'];
+
 function ClassSpellListTab({
   rows,
   loading,
@@ -1573,6 +1670,10 @@ function ClassSpellListTab({
   const [sources, setSources] = useState<{ id: string; name?: string; abbreviation?: string; shortName?: string }[]>([]);
   const [tags, setTags] = useState<{ id: string; name: string; groupId: string | null }[]>([]);
   const [tagGroups, setTagGroups] = useState<{ id: string; name: string }[]>([]);
+  // Sort state — default is ascending by level, so cantrips lead and
+  // higher levels follow. Same-level rows fall back to name order.
+  const [sortBy, setSortBy] = useState<SpellListColumnKey>('level');
+  const [sortDir, setSortDir] = useState<SpellListSortDir>('asc');
 
   // Foundation for the filter shell (sources + spell-classified tag groups).
   // Cheap: all three are in the d1 PERSISTENT_TABLES so subsequent loads are free.
@@ -1608,16 +1709,62 @@ function ClassSpellListTab({
     [filters, rows, tagsById],
   );
 
-  const grouped = useMemo(() => {
-    const out: Record<string, typeof filteredEntries> = {};
-    for (const entry of filteredEntries) {
-      const key = String(entry.spell.level ?? 0);
-      (out[key] = out[key] || []).push(entry);
-    }
-    return out;
-  }, [filteredEntries]);
+  // Sort helper — extracts the comparable scalar for each column.
+  // Level falls back to name for stable secondary order so cantrips
+  // and 1st-level lists read alphabetically inside their tier.
+  const sortedEntries = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const cmp = (a: typeof filteredEntries[number], b: typeof filteredEntries[number]) => {
+      const sa = a.spell;
+      const sb = b.spell;
+      let primary = 0;
+      switch (sortBy) {
+        case 'name':
+          primary = (sa.name || '').localeCompare(sb.name || '');
+          break;
+        case 'level':
+          primary = (sa.level ?? 0) - (sb.level ?? 0);
+          break;
+        case 'school':
+          primary = (sa.school || '').localeCompare(sb.school || '');
+          break;
+        case 'time':
+          primary = (sa.activationBucket || '').localeCompare(sb.activationBucket || '');
+          break;
+        case 'range':
+          primary = (sa.rangeBucket || '').localeCompare(sb.rangeBucket || '');
+          break;
+        case 'concentration':
+          primary = Number(!!sa.concentration) - Number(!!sb.concentration);
+          break;
+        case 'source': {
+          const aLabel = sourceById[sa.source_id || '']?.abbreviation
+            || sourceById[sa.source_id || '']?.shortName || '';
+          const bLabel = sourceById[sb.source_id || '']?.abbreviation
+            || sourceById[sb.source_id || '']?.shortName || '';
+          primary = aLabel.localeCompare(bLabel);
+          break;
+        }
+      }
+      if (primary !== 0) return dir * primary;
+      // Stable secondary sort by name so equal-bucket rows are
+      // alphabetical inside their tier. Avoid `localeCompare` when
+      // both names are missing (rare; protects against undefined).
+      return (sa.name || '').localeCompare(sb.name || '');
+    };
+    return [...filteredEntries].sort(cmp);
+  }, [filteredEntries, sortBy, sortDir, sourceById]);
 
-  const orderedLevels = Object.keys(grouped).sort((a, b) => Number(a) - Number(b));
+  const handleSort = (col: SpellListColumnKey) => {
+    if (sortBy === col) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(col);
+      setSortDir('asc');
+    }
+  };
+
+  const gridTemplate = SPELL_LIST_COLS.map(c => SPELL_LIST_COL_WIDTHS[c]).join(' ');
 
   if (loading) {
     return <div className="px-8 py-20 text-center text-ink/45">Loading spell list…</div>;
@@ -1656,10 +1803,11 @@ function ClassSpellListTab({
               /compendium/spells browser with this class's spell
               list pre-applied as a scope filter. Useful when the
               spell list is hundreds of rows and the inline tab
-              (grouped-by-level) gets unwieldy. The browser has
-              sortable columns, hideable columns, and the full
-              shared FilterBar vocabulary. Available to every
-              authenticated user — not gated on admin. */}
+              (compact rows, sortable columns) is good for scan
+              but limited compared to the full filter vocabulary
+              and column-toggle controls in the public browser.
+              Available to every authenticated user — not gated on
+              admin. */}
           {classId ? (
             <Link
               to={`/compendium/spells?class=${classId}`}
@@ -1688,52 +1836,108 @@ function ClassSpellListTab({
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="space-y-6">
-          {filteredEntries.length === 0 ? (
-            <div className="px-8 py-20 text-center text-ink/45 border border-dashed border-gold/20 rounded-lg">
-              No spells match the current filters.
-            </div>
-          ) : (
-            orderedLevels.map(level => (
-              <div key={level} className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-bold uppercase tracking-[0.2em] text-gold text-xs shrink-0">
-                    {level === '0' ? 'Cantrips' : `Level ${level}`}
-                  </h3>
-                  <span className="text-[10px] text-ink/40">{grouped[level].length}</span>
-                  <div className="h-px bg-gold/10 flex-1" />
+        {/* Sortable column-row list. Header strip stays visible above
+            the rows; the row list itself scrolls inside a max-height
+            so the page never grows past the viewport when the class
+            has hundreds of spells. */}
+        <Card className="border-gold/10 bg-card/50 overflow-hidden">
+          <CardContent className="p-0">
+            {filteredEntries.length === 0 ? (
+              <div className="px-8 py-20 text-center text-ink/45">
+                No spells match the current filters.
+              </div>
+            ) : (
+              <>
+                <div className="border-b border-gold/10 bg-background/35">
+                  <div
+                    className="grid gap-2 px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 items-center"
+                    style={{ gridTemplateColumns: gridTemplate }}
+                  >
+                    {SPELL_LIST_COLS.map(col => {
+                      const isActive = sortBy === col;
+                      const isName = col === 'name';
+                      return (
+                        <button
+                          key={col}
+                          type="button"
+                          onClick={() => handleSort(col)}
+                          className={cn(
+                            'flex items-center gap-1 transition-colors',
+                            isName ? 'justify-start' : 'justify-center',
+                            isActive ? 'text-gold' : 'hover:text-gold/90',
+                          )}
+                          title={`Sort by ${SPELL_LIST_COL_LABELS[col]}${isActive ? ` (${sortDir})` : ''}`}
+                        >
+                          <span>{SPELL_LIST_COL_LABELS[col]}</span>
+                          {isActive && (
+                            sortDir === 'asc'
+                              ? <ChevronUp className="w-3 h-3" />
+                              : <ChevronDown className="w-3 h-3" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="grid gap-y-1 grid-cols-1 md:grid-cols-2">
-                  {grouped[level].map(({ spell }) => {
+                <div
+                  className="custom-scrollbar overflow-y-auto divide-y divide-gold/5"
+                  style={{ maxHeight: '60vh' }}
+                >
+                  {sortedEntries.map(({ spell }) => {
                     const isPreviewing = previewSpellId === spell.id;
                     const sourceLabel = sourceById[spell.source_id || '']?.abbreviation
                       || sourceById[spell.source_id || '']?.shortName
                       || '';
+                    const schoolAbbrev = (() => {
+                      const full = SCHOOL_LABELS[String(spell.school ?? '')];
+                      if (!full) return String(spell.school ?? '').slice(0, 4).toUpperCase() || '—';
+                      return full.length > 6 ? full.slice(0, 4) + '.' : full;
+                    })();
+                    const timeLabel = ACTIVATION_LABELS[spell.activationBucket as keyof typeof ACTIVATION_LABELS] || '—';
+                    const rangeLabel = RANGE_LABELS[spell.rangeBucket as keyof typeof RANGE_LABELS] || '—';
                     return (
                       <button
                         key={spell.id}
                         type="button"
                         onClick={() => setPreviewSpellId(spell.id)}
-                        className={
-                          'flex items-center gap-2 px-3 py-1.5 rounded text-sm text-left transition-colors '
-                          + (isPreviewing ? 'bg-gold/15' : 'hover:bg-gold/5')
-                        }
+                        className={cn(
+                          'grid h-[44px] w-full gap-2 items-center px-3 text-left transition-colors',
+                          isPreviewing ? 'bg-gold/15' : 'hover:bg-gold/5',
+                        )}
+                        style={{ gridTemplateColumns: gridTemplate }}
                       >
-                        <span className="text-ink truncate flex-1">{spell.name}</span>
-                        {sourceLabel ? (
-                          <span className="text-[10px] font-bold tracking-widest text-gold/60 shrink-0">{sourceLabel}</span>
-                        ) : null}
-                        <span className="text-[10px] uppercase tracking-widest text-ink/40 shrink-0">
-                          {SCHOOL_LABELS[spell.school || ''] || (spell.school || '').toUpperCase() || '—'}
-                        </span>
+                        <div className="min-w-0 flex items-center">
+                          <span className="truncate font-serif text-sm text-ink">{spell.name}</span>
+                        </div>
+                        <div className="text-xs text-ink/75 text-center">
+                          {Number(spell.level ?? 0) === 0 ? 'C' : spell.level}
+                        </div>
+                        <div className="text-xs text-ink/75 text-center truncate" title={timeLabel}>
+                          {timeLabel}
+                        </div>
+                        <div
+                          className="text-xs text-ink/75 text-center truncate"
+                          title={SCHOOL_LABELS[String(spell.school ?? '')] || ''}
+                        >
+                          {schoolAbbrev}
+                        </div>
+                        <div className="text-xs text-blood/70 text-center" title="Concentration">
+                          {spell.concentration ? '◆' : ''}
+                        </div>
+                        <div className="text-xs text-ink/75 text-center truncate" title={rangeLabel}>
+                          {rangeLabel}
+                        </div>
+                        <div className="text-xs font-bold text-gold/80 text-center truncate">
+                          {sourceLabel}
+                        </div>
                       </button>
                     );
                   })}
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         <Card className="border-gold/20 bg-card/50 overflow-hidden self-start">
           <CardContent className="p-0">
