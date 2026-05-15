@@ -4732,7 +4732,13 @@ export default function CharacterBuilder({
         {/* MAIN AREA */}
         <div className="flex-1 min-h-[500px] lg:min-h-[800px]">
           {activeStep === "sheet" ? (
-            <div className="space-y-6 bg-card/10 p-4 sm:p-6 md:p-8 rounded-xl border border-gold/10 relative shadow-inner h-full min-h-[500px]">
+            // Book-Spread Sheet shell — frames the sheet as an open
+            // tome. Outer wrapper carries the parchment tint + ringed
+            // gold border + 2xl drop shadow; the existing 2-col grid
+            // below renders as the verso/recto pages with a center
+            // spine divider added via absolute positioning so the
+            // children don't have to be re-padded.
+            <div className="space-y-6 bg-gradient-to-b from-gold/[0.04] via-card/30 to-gold/[0.02] p-4 sm:p-6 md:p-8 rounded-2xl border-2 border-gold/25 ring-1 ring-inset ring-gold/10 relative shadow-2xl h-full min-h-[500px]">
               {/* COMPACT CHARACTER HEADER */}
               <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 border-b-2 border-gold/10 pb-6 md:pb-8 mb-6 md:mb-8">
                 <div className="flex-1 w-full text-center md:text-left space-y-1">
@@ -4906,168 +4912,18 @@ export default function CharacterBuilder({
                 ))}
               </div>
 
-              {false && (
-              <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
-                    <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
-                      Class Progression
-                    </h3>
-                    <p className="text-xs text-ink/50 font-serif italic mt-1">
-                      Features, scale tracks, and advancement selections currently active on this character.
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setActiveStep("class")}
-                    className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
-                  >
-                    Open Class Step
-                  </Button>
-                </div>
-
-                {sheetClassSummaries.length > 0 ? (
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    {sheetClassSummaries.map((summary: any) => (
-                      <div
-                        key={summary.classId}
-                        className="border border-gold/15 bg-background/40 rounded-lg p-4 space-y-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-lg font-serif font-black text-ink leading-none">
-                              {summary.className}
-                            </div>
-                            <div className="text-[10px] font-black uppercase tracking-[0.22em] text-gold/70 mt-1">
-                              Level {summary.classLevel}
-                              {summary.subclassName ? ` • ${summary.subclassName}` : ""}
-                            </div>
-                          </div>
-                          <div className="px-2 py-1 border border-gold/20 bg-gold/5 rounded text-[10px] font-black uppercase tracking-widest text-ink/50">
-                            {summary.features.length} Features
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                            Scale Values
-                          </div>
-                          {summary.scales.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {summary.scales.map((scale: any) => (
-                                <div
-                                  key={scale.id}
-                                  className="px-2 py-1 border border-gold/20 bg-gold/5 rounded-sm"
-                                >
-                                  <span className="text-[9px] font-black uppercase tracking-widest text-gold/70">
-                                    {scale.name}
-                                  </span>
-                                  <span className="ml-2 text-sm font-black text-ink">
-                                    {String(scale.value)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-xs font-serif italic text-ink/35">
-                              No tracked scale values yet.
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                            Granted Features
-                          </div>
-                          {summary.features.length > 0 ? (
-                            <div className="space-y-1.5">
-                              {summary.features.map((feature: any) => (
-                                <div
-                                  key={`${summary.classId}-${feature.id}`}
-                                  className="flex items-center justify-between gap-3 border-b border-gold/10 pb-1 last:border-b-0 last:pb-0"
-                                >
-                                  <span className="text-sm font-serif text-ink">
-                                    {feature.name}
-                                  </span>
-                                  <span className="text-[9px] font-black uppercase tracking-widest text-ink/35">
-                                    L{feature.level}
-                                    {feature.parentType === "subclass" ? " • Subclass" : ""}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-xs font-serif italic text-ink/35">
-                              No granted features yet.
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                            Granted Items
-                          </div>
-                          {summary.grantedItems.length > 0 ? (
-                            <div className="space-y-1.5">
-                              {summary.grantedItems.map((item: any) => (
-                                <div
-                                  key={`${summary.classId}-item-${item.id}-${item.level}`}
-                                  className="flex items-center justify-between gap-3 border-b border-gold/10 pb-1 last:border-b-0 last:pb-0"
-                                >
-                                  <span className="text-sm font-serif text-ink">
-                                    {item.name}
-                                  </span>
-                                  <span className="text-[9px] font-black uppercase tracking-widest text-ink/35">
-                                    L{item.level}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-xs font-serif italic text-ink/35">
-                              No granted items yet.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm font-serif italic text-ink/35">
-                    No class progression is active yet.
-                  </div>
-                )}
-
-                <div className="space-y-2 pt-2 border-t border-gold/10">
-                  <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                    Selected Advancement Options
-                  </div>
-                  {selectedAdvancementOptionItems.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {selectedAdvancementOptionItems.map((option: any) => (
-                        <span
-                          key={option.id}
-                          className="px-2 py-1 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase"
-                        >
-                          {option.name}
-                          {option.featureType ? ` • ${option.featureType}` : ""}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-xs font-serif italic text-ink/35">
-                      No advancement options selected yet.
-                    </div>
-                  )}
-                </div>
-              </div>
-              )}
 
               {true && (
               <>
-              <div className="grid xl:grid-cols-2 gap-8">
+              {/* Book pages — verso (left) and recto (right). Center
+                  spine is rendered via an absolutely-positioned
+                  gradient strip so the existing children inherit the
+                  same grid cells without needing a padding overhaul. */}
+              <div className="grid xl:grid-cols-2 gap-8 relative">
+                <div
+                  aria-hidden="true"
+                  className="hidden xl:block absolute top-4 bottom-4 left-1/2 w-px bg-gradient-to-b from-transparent via-gold/30 to-transparent pointer-events-none"
+                />
                 {/* PORTRAIT & CORE STATUS */}
                 <div className="border border-gold/20 p-5 flex flex-col xl:flex-row gap-6 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
                   <div className="w-full sm:w-48 xl:w-36 aspect-[3/4] border-2 border-gold/10 bg-card relative rounded-md overflow-hidden flex-shrink-0 shadow-inner group/portrait mx-auto xl:mx-0 self-center xl:self-start">
@@ -6627,116 +6483,6 @@ export default function CharacterBuilder({
               </>
               )}
 
-              {false && (
-                <div className="border border-gold/20 bg-card/40 rounded-xl p-6 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
-                        <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
-                        Spellcasting
-                      </h3>
-                      <p className="text-xs text-ink/50 font-serif italic mt-1">
-                        This sheet pane will reflect prepared or known spell state from the same class progression model.
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActiveStep("class")}
-                      className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
-                    >
-                      Open Class Step
-                    </Button>
-                  </div>
-
-                  {spellcastingContributors.length > 0 ? (
-                    <div className="space-y-4">
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
-                            Casting Level
-                          </div>
-                          <div className="text-xl font-black text-ink">
-                            {totalSpellcastingLevel}
-                          </div>
-                        </div>
-                        <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
-                            Active Sources
-                          </div>
-                          <div className="text-xl font-black text-ink">
-                            {spellcastingContributors.length}
-                          </div>
-                        </div>
-                        <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-2">
-                            Highest Slot
-                          </div>
-                          <div className="text-xl font-black text-ink">
-                            {Math.max(
-                              0,
-                              ...multiclassSpellSlots
-                                .map((count: number, index: number) => (count > 0 ? index + 1 : 0)),
-                            ) || "None"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 md:grid-cols-2">
-                        {spellcastingContributors.map((contributor: any) => (
-                          <div
-                            key={`${contributor.sourceType}-${contributor.label}`}
-                            className="border border-gold/15 bg-background/40 rounded-lg p-4 space-y-2"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="text-sm font-black text-ink">
-                                {contributor.label}
-                              </div>
-                              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gold">
-                                +{contributor.effectiveLevel}
-                              </div>
-                            </div>
-                            <div className="text-[10px] text-ink/50 uppercase tracking-[0.2em] font-black">
-                              {contributor.sourceType} spellcasting
-                            </div>
-                            <div className="text-xs text-ink/70 font-serif">
-                              {contributor.progressionTypeName} • Level {contributor.classLevel}
-                            </div>
-                            <div className="text-[11px] text-ink/50 font-mono">
-                              {contributor.progressionFormula}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="border border-gold/15 bg-background/40 rounded-lg p-4">
-                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40 mb-3">
-                          Multiclass Slot Table Result
-                        </div>
-                        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
-                          {multiclassSpellSlots.map((count: number, index: number) => (
-                            <div
-                              key={`slot-${index + 1}`}
-                              className="border border-gold/10 rounded-md p-2 text-center bg-card/40"
-                            >
-                              <div className="text-[9px] font-black uppercase tracking-[0.2em] text-ink/40">
-                                {index + 1}
-                              </div>
-                              <div className="text-lg font-black text-ink">
-                                {count}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-sm font-serif italic text-ink/35">
-                      No spellcasting progression is active yet.
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ) : activeStep === "class" ? (
             <div className="bg-background/50 rounded-xl border border-gold/10 h-full min-h-[500px]">
