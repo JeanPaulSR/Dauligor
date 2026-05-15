@@ -58,6 +58,13 @@ type Props = {
    *  parent page. Both props together turn the affordance on. */
   isFavorite?: boolean;
   onToggleFavorite?: (spellId: string) => void;
+  /** Tightens the header typography for surfaces that share width
+   *  with other content (CharacterBuilder spell manager, AddSpellsModal
+   *  detail column). The compendium browser uses the default 'normal'
+   *  spacing where the panel owns the full reading surface. The
+   *  difference is purely the title + subtitle font scale; body / tags
+   *  / source rows are unaffected. */
+  size?: 'normal' | 'compact';
 };
 
 export default function SpellDetailPanel({
@@ -65,6 +72,7 @@ export default function SpellDetailPanel({
   emptyMessage = 'Select a spell from the list to view its details.',
   isFavorite,
   onToggleFavorite,
+  size = 'normal',
 }: Props) {
   const navigate = useNavigate();
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -247,19 +255,44 @@ export default function SpellDetailPanel({
           Hero image now sits inline next to the info rows (see the
           horizontal-stacked block below) rather than under the title
           band, freeing vertical room. */}
-      <div className="border-b border-gold/10 px-6 py-5">
+      <div className={cn(
+        "border-b border-gold/10",
+        // Compact tightens the band padding so the smaller title +
+        // info rows don't float in a chunky padded surface. Used by
+        // the CharacterBuilder spell manager.
+        size === "compact" ? "px-4 py-3" : "px-6 py-5",
+      )}>
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="font-serif text-3xl xl:text-4xl font-bold uppercase tracking-tight text-gold">
+              <h2
+                className={cn(
+                  "font-serif font-bold uppercase tracking-tight text-gold",
+                  // `compact` uses a noticeably smaller title (xl on
+                  // small screens, 2xl on xl+) so the header doesn't
+                  // dominate the narrow detail column in the
+                  // CharacterBuilder spell manager. `normal` keeps the
+                  // splashy compendium-page treatment.
+                  size === "compact" ? "text-xl xl:text-2xl" : "text-3xl xl:text-4xl",
+                )}
+              >
                 {spell.name}
               </h2>
-              <span className="text-sm font-bold text-gold/70">{renderSourceAbbreviation(spell)}</span>
+              <span className={cn(
+                "font-bold text-gold/70",
+                size === "compact" ? "text-xs" : "text-sm",
+              )}>{renderSourceAbbreviation(spell)}</span>
               {(spell.page || (spell as any).foundryShell?.source?.page) ? (
-                <span className="text-sm text-ink/35">p{spell.page || (spell as any).foundryShell?.source?.page}</span>
+                <span className={cn(
+                  "text-ink/35",
+                  size === "compact" ? "text-xs" : "text-sm",
+                )}>p{spell.page || (spell as any).foundryShell?.source?.page}</span>
               ) : null}
             </div>
-            <p className="font-serif italic text-ink/70">
+            <p className={cn(
+              "font-serif italic text-ink/70",
+              size === "compact" && "text-sm",
+            )}>
               {Number(spell.level ?? 0) === 0 ? 'Cantrip' : `Level ${spell.level}`}{' '}
               {SCHOOL_LABELS[String(spell.school ?? '')] || String(spell.school ?? '').toUpperCase()}
             </p>
@@ -288,7 +321,13 @@ export default function SpellDetailPanel({
           under it. Target intentionally omitted — its semantics are
           inconsistent across imported spells and the AoE info is already
           encoded in Range bucket / shape filter. */}
-      <div className="border-b border-gold/10 px-6 py-5">
+      <div className={cn(
+        "border-b border-gold/10",
+        // Compact tightens the band padding so the smaller title +
+        // info rows don't float in a chunky padded surface. Used by
+        // the CharacterBuilder spell manager.
+        size === "compact" ? "px-4 py-3" : "px-6 py-5",
+      )}>
         <div className="flex flex-wrap items-start gap-6">
           <SpellArtPreview src={spell.imageUrl} alt={spell.name} size={126} />
           <div className="flex-1 min-w-[260px] grid gap-y-2 gap-x-6 text-sm text-ink grid-cols-1 sm:grid-cols-2">
@@ -308,8 +347,11 @@ export default function SpellDetailPanel({
           is short there's empty space between the two groups, when
           long the bottom group sits at the natural end and the
           CardContent scrollbar takes over. */}
-      <div className="flex-1 flex flex-col px-6 py-5">
-        <div className="space-y-6">
+      <div className={cn(
+        "flex-1 flex flex-col",
+        size === "compact" ? "px-4 py-3" : "px-6 py-5",
+      )}>
+        <div className={size === "compact" ? "space-y-4" : "space-y-6"}>
           <div
             className="prose max-w-none prose-p:text-ink/90 prose-strong:text-ink prose-em:text-ink/80 prose-li:text-ink/85 prose-headings:text-ink"
             onClick={handleDescriptionClick}

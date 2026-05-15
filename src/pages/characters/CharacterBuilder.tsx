@@ -1268,11 +1268,16 @@ function AddSpellsModal(props: AddSpellsModalProps) {
             </div>
           </div>
 
-          {/* RIGHT — detail */}
-          <div className="overflow-hidden">
+          {/* RIGHT — detail. Switched from `overflow-hidden` to
+              `overflow-y-auto` so a long description scrolls inside
+              the column instead of getting clipped at the modal's
+              outer overflow boundary. `size="compact"` matches the
+              main spell-manager pane treatment. */}
+          <div className="overflow-y-auto custom-scrollbar">
             <SpellDetailPanel
               spellId={selId}
               emptyMessage="Select a spell to see its details."
+              size="compact"
             />
           </div>
         </div>
@@ -9549,21 +9554,26 @@ export default function CharacterBuilder({
                                         switch active class + toggle
                                         collapse; "Add Spells" button
                                         opens the per-class picker modal.
-                                        Background uses the gold accent
-                                        color so the header reads as a
-                                        section divider, not a spell
-                                        row — they used to blur together
-                                        when every row had a similar
-                                        bg-card. Active class gets the
-                                        stronger 15% gold tint; inactive
-                                        sits at 5% so they still stand
-                                        apart from rows. */}
+                                        Background uses an OPAQUE
+                                        `color-mix` of gold + card so
+                                        the sticky band fully blocks
+                                        whatever spell rows scroll
+                                        beneath it. The earlier
+                                        `bg-gold/15` was translucent —
+                                        sticky-positioned rows underneath
+                                        showed through the header,
+                                        making the band look "see
+                                        through". 22% gold for active,
+                                        12% for inactive keeps the
+                                        contrast level the same as
+                                        before without the transparency.
+                                        */}
                                     <div
                                       className={cn(
                                         "px-3 py-2 border-y flex items-center gap-2 sticky top-0 z-10",
                                         isActive
-                                          ? "bg-gold/15 border-gold/40"
-                                          : "bg-gold/[0.06] border-gold/20",
+                                          ? "bg-[color-mix(in_srgb,var(--gold)_22%,var(--card))] border-gold/40"
+                                          : "bg-[color-mix(in_srgb,var(--gold)_12%,var(--card))] border-gold/25",
                                       )}
                                     >
                                       <button
@@ -9981,18 +9991,39 @@ export default function CharacterBuilder({
                       })()}
                     </div>
 
-                    {/* Detail pane (sticky on lg+) */}
+                    {/* Detail pane (sticky on lg+).
+                        - Wrapped in a bounded-height scroll container
+                          so a long description scrolls INSIDE the
+                          panel rather than pushing the spell-list
+                          column down (the prior issue: a 1000-word
+                          spell description grew the panel to ~2400px
+                          tall, which made the page itself scroll past
+                          the spell list).
+                        - `max-h-[calc(100vh-120px)]` budgets the panel
+                          to viewport height minus the header band, so
+                          on tall screens the panel uses most of the
+                          viewport and the internal scroll only kicks
+                          in for the longest descriptions.
+                        - `size="compact"` shrinks the title + info
+                          band typography so the panel doesn't visually
+                          fight the spell-list column. */}
                     <div className="hidden lg:block">
                       <div className="lg:sticky lg:top-4">
-                        <SpellDetailPanel
-                          spellId={selectedSpellId}
-                          emptyMessage="Click a spell to see its details."
-                        />
+                        <div className="border border-gold/15 rounded-md bg-card max-h-[calc(100vh-120px)] overflow-y-auto custom-scrollbar">
+                          <SpellDetailPanel
+                            spellId={selectedSpellId}
+                            emptyMessage="Click a spell to see its details."
+                            size="compact"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Mobile detail pane (modal-style, below the list) */}
+                  {/* Mobile detail pane (modal-style, below the list).
+                      Same compact treatment + max-height as the desktop
+                      pane so long descriptions don't trap the user
+                      below an unscrollable wall of text. */}
                   {selectedSpellId && (
                     <div className="lg:hidden border-t-2 border-gold/20 pt-4">
                       <div className="flex justify-end mb-2">
@@ -10004,7 +10035,9 @@ export default function CharacterBuilder({
                           Close detail
                         </button>
                       </div>
-                      <SpellDetailPanel spellId={selectedSpellId} />
+                      <div className="border border-gold/15 rounded-md bg-card max-h-[70vh] overflow-y-auto custom-scrollbar">
+                        <SpellDetailPanel spellId={selectedSpellId} size="compact" />
+                      </div>
                     </div>
                   )}
 
