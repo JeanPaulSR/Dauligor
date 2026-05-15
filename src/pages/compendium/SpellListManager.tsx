@@ -32,7 +32,9 @@ import {
   applyRule,
   fetchAllRules,
   spellMatchesRule,
+  explainSpellMatch,
   type SpellRule,
+  type RuleExplanation,
 } from '../../lib/spellRules';
 import {
   ACTIVATION_LABELS,
@@ -681,6 +683,39 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   // tagIndex, so a real Rebuild produced correct rows even when this
   // preview lied — fix is purely a UI-correctness one.
   const tagIndex = useMemo(() => buildTagIndex(tags as any), [tags]);
+
+  // Tag id → human name. Used by the per-spell rule-match explainer
+  // below to humanize tag-axis failure reasons ("missing Confuse"
+  // instead of "missing 7c780920-..."). Cheap to build; small map.
+  const tagNamesById = useMemo(
+    () => new Map(tags.map((t) => [t.id, t.name] as const)),
+    [tags],
+  );
+
+  // Per-spell rule-match explainer trace. Runs the explainer (in
+  // `lib/spellRules.ts`) for the previewed spell against every rule
+  // linked to the currently-selected class. Each entry carries the
+  // rule + its axes-with-pass-flags trace so the right-pane "Why?"
+  // section can render "✓ Source · ✓ Level · ✗ Tags (missing
+  // Confuse)" per rule. Returns an empty array when nothing is
+  // previewed or the spell-catalog hasn't loaded — avoids a render
+  // pass that immediately gets blown away.
+  const previewSpellRuleExplanations = useMemo<
+    Array<{ rule: SpellRule; explanation: RuleExplanation }>
+  >(() => {
+    if (!previewSpellId || linkedRules.length === 0) return [];
+    const previewSpell = spells.find((s) => s.id === previewSpellId);
+    if (!previewSpell) return [];
+    return linkedRules.map((rule) => ({
+      rule,
+      explanation: explainSpellMatch(
+        previewSpell as any,
+        rule,
+        tagIndex,
+        tagNamesById,
+      ),
+    }));
+  }, [previewSpellId, linkedRules, spells, tagIndex, tagNamesById]);
 
   // Per-rule live match counts. Cheap — runs the matcher across the local spell catalogue.
   const ruleMatchCounts = useMemo(() => {
@@ -1433,6 +1468,109 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               spellId={previewSpellId}
               emptyMessage="Click a spell to preview its details here."
             />
+
+            {/* Rule-match explainer — only when a spell is previewed
+                AND the current class has linked rules. Renders one
+                accordion-style block per linked rule with the
+                rule's per-axis pass/fail breakdown. Passing rules
+                collapse to a single OK chip; failing rules expand to
+                show the failing axis + the reason string from
+                `explainSpellMatch`. Helps admins debug "why is this
+                spell on / off this rule's match set" without
+                reverse-engineering tag groups by hand. */}
+            {previewSpellId && previewSpellRuleExplanations.length > 0 && (
+              <div className="border-t border-gold/15 px-4 py-3 space-y-2">
+                <div className="flex items-baseline justify-between">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.18em] text-gold/65">
+                    Rule Match
+                  </h4>
+                  <span className="text-[10px] font-mono text-ink/35">
+                    {previewSpellRuleExplanations.filter((e) => e.explanation.matched).length}
+                    {' / '}
+                    {previewSpellRuleExplanations.length} match
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {previewSpellRuleExplanations.map(({ rule, explanation }) => {
+                    const isPinned =
+                      explanation.matched
+                      && explanation.axes.length === 1
+                      && explanation.axes[0].reason.startsWith('Manually pinned');
+                    return (
+                      <div
+                        key={rule.id}
+                        className={cn(
+                          'rounded border px-2.5 py-1.5 text-xs',
+                          explanation.matched
+                            ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
+                            : 'border-blood/30 bg-blood/[0.04]',
+                        )}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={cn(
+                              'inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-black shrink-0',
+                              explanation.matched
+                                ? 'bg-emerald-500/20 text-emerald-500'
+                                : 'bg-blood/20 text-blood',
+                            )}
+                          >
+                            {explanation.matched ? '✓' : '✗'}
+                          </span>
+                          <span className="font-bold text-ink truncate">{rule.name}</span>
+                          {isPinned && (
+                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 rounded-sm px-1.5 py-px">
+                              Pinned
+                            </span>
+                          )}
+                        </div>
+                        {/* Axes breakdown — only render when there's
+                            something to say. Passing rules with axes
+                            list them as a comma-separated summary so
+                            you can sanity-check what the rule actually
+                            constrains. Failing rules surface the
+                            specific failing axis + its reason. */}
+                        {explanation.axes.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1 pl-6">
+                            {explanation.matched ? (
+                              <span className="text-[10px] text-ink/50">
+                                Passes all {explanation.axes.length} axis check
+                                {explanation.axes.length === 1 ? '' : 's'}:{' '}
+                                {explanation.axes.map((a) => a.axis).join(', ')}
+                              </span>
+                            ) : (
+                              explanation.axes
+                                .filter((a) => !a.pass)
+                                .map((a, idx) => (
+                                  <span
+                                    key={`${rule.id}-${a.axis}-${idx}`}
+                                    className="text-[10px] text-blood/80 leading-snug"
+                                    title={a.reason}
+                                  >
+                                    <span className="font-bold uppercase tracking-widest mr-1">
+                                      {a.axis}:
+                                    </span>
+                                    {a.reason}
+                                  </span>
+                                ))
+                            )}
+                          </div>
+                        )}
+                        {/* Empty-rule edge case: matcher returns true
+                            with no axes to walk. The UI says so
+                            explicitly so the user doesn't think the
+                            rule mysteriously matched. */}
+                        {explanation.matched && explanation.axes.length === 0 && !isPinned && (
+                          <div className="mt-1 pl-6 text-[10px] italic text-ink/45">
+                            Rule has no filter clauses — matches every spell.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

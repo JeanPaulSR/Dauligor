@@ -562,6 +562,339 @@ function matchesRichTagStates(
   return true;
 }
 
+/**
+ * Per-axis trace of a rule-vs-spell match decision. One entry per
+ * axis the rule actually constrains; axes the rule leaves wide open
+ * are omitted so the explainer UI doesn't carry noise like "Source: ✓
+ * (no filter)" for the four axes most rules don't touch.
+ *
+ * `pass` reflects whether THIS axis approved the spell; `matched` on
+ * the parent `RuleExplanation` is `axes.every(a => a.pass)`. `reason`
+ * is a short human-readable string ready for a chip tooltip, e.g.
+ * "Tag 'Confuse' required but spell isn't tagged it" or "Level 3 in
+ * allowed set [3,4,5]".
+ *
+ * The explainer is structured so the UI can render each axis as a
+ * pass/fail chip with the reason on hover — see `SpellListManager`'s
+ * row-level inspector affordance.
+ */
+export type RuleExplanationAxis = {
+  axis:
+    | 'source'
+    | 'level'
+    | 'school'
+    | 'tags'
+    | 'activation'
+    | 'range'
+    | 'duration'
+    | 'shape'
+    | 'property';
+  pass: boolean;
+  reason: string;
+};
+export type RuleExplanation = {
+  matched: boolean;
+  /** Empty array when the rule has no filter clauses (matches everything). */
+  axes: RuleExplanationAxis[];
+};
+
+/**
+ * `matchSpellAgainstRule` companion that returns per-axis pass/fail
+ * with human-readable reasons. Mirrors the matcher's logic exactly —
+ * if the matcher says yes, the explainer's `matched` is true and every
+ * recorded axis passes; if no, the failing axis has `pass: false` and
+ * its `reason` describes the specific mismatch.
+ *
+ * Used by the `/compendium/spell-lists` row-level inspector so an
+ * admin can tell at a glance why "Antagonize" was the only Sorcerer
+ * match (e.g. "Tag 'Confuse' required + only it carries that tag").
+ *
+ * Slightly duplicated logic vs `matchSpellAgainstRule` — kept separate
+ * so the hot rebuild path stays branch-light and doesn't allocate
+ * reason strings for every spell on every class.
+ */
+export function explainSpellAgainstRule(
+  spell: SpellMatchInput,
+  query: RuleQuery,
+  parentByTagId?: Map<string, string | null>,
+  tagIndex?: TagIndex,
+  tagNamesById?: Map<string, string>,
+): RuleExplanation {
+  const axes: RuleExplanationAxis[] = [];
+  const tagName = (id: string) => tagNamesById?.get(id) || id;
+
+  // ── Source ────────────────────────────────────────────────
+  if (query.source) {
+    const spellSrc = String(spell.source_id ?? '');
+    const pass = matchesSingleAxisFilter(spellSrc, query.source);
+    axes.push({
+      axis: 'source',
+      pass,
+      reason: pass
+        ? `Source ${spellSrc || '(none)'} passes filter`
+        : `Source ${spellSrc || '(none)'} not in allowed set`,
+    });
+  } else if (query.sourceFilterIds?.length) {
+    const pass = query.sourceFilterIds.includes(String(spell.source_id ?? ''));
+    axes.push({
+      axis: 'source',
+      pass,
+      reason: pass
+        ? `Source in allowed set (${query.sourceFilterIds.length} option${query.sourceFilterIds.length === 1 ? '' : 's'})`
+        : `Source ${spell.source_id ?? '(none)'} not in allowed list of ${query.sourceFilterIds.length}`,
+    });
+  }
+
+  // ── Level ─────────────────────────────────────────────────
+  if (query.level) {
+    const lvl = String(spell.level);
+    const pass = matchesSingleAxisFilter(lvl, query.level);
+    axes.push({
+      axis: 'level',
+      pass,
+      reason: pass
+        ? `Level ${lvl} passes filter`
+        : `Level ${lvl} not in allowed set`,
+    });
+  } else if (query.levelFilters?.length) {
+    const pass = query.levelFilters.includes(String(spell.level));
+    axes.push({
+      axis: 'level',
+      pass,
+      reason: pass
+        ? `Level ${spell.level} in allowed list [${query.levelFilters.join(', ')}]`
+        : `Level ${spell.level} not in allowed list [${query.levelFilters.join(', ')}]`,
+    });
+  }
+
+  // ── School ────────────────────────────────────────────────
+  if (query.school) {
+    const sch = spell.school;
+    const pass = matchesSingleAxisFilter(sch, query.school);
+    axes.push({
+      axis: 'school',
+      pass,
+      reason: pass
+        ? `School ${sch || '(none)'} passes filter`
+        : `School ${sch || '(none)'} not in allowed set`,
+    });
+  } else if (query.schoolFilters?.length) {
+    const pass = query.schoolFilters.includes(spell.school);
+    axes.push({
+      axis: 'school',
+      pass,
+      reason: pass
+        ? `School ${spell.school} in allowed list`
+        : `School ${spell.school} not in allowed list`,
+    });
+  }
+
+  // ── Tags (rich or legacy) ────────────────────────────────
+  // Rich tagStates is the modern shape — same explanation logic as
+  // matchesRichTagStates internally, just emitting reasons. Legacy
+  // tagFilterIds (flat AND) is the older shape.
+  const richTagStates = query.tagStates;
+  const hasRichTags = richTagStates && Object.keys(richTagStates).length > 0;
+  if (hasRichTags) {
+    if (!tagIndex) {
+      // Matches the matcher's defensive "pass on missing index" branch.
+      axes.push({
+        axis: 'tags',
+        pass: true,
+        reason: 'Tag index unavailable — defaulting to pass (matcher would do the same)',
+      });
+    } else {
+      const effective = parentByTagId
+        ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
+        : new Set(spell.tags);
+
+      // Bucket include/exclude tags by group, matching matchesRichTagStates.
+      const includesByGroup = new Map<string, string[]>();
+      const excludesByGroup = new Map<string, string[]>();
+      for (const [tagId, state] of Object.entries(richTagStates)) {
+        if (state !== 1 && state !== 2) continue;
+        const groupId = tagIndex.groupByTagId.get(tagId);
+        if (!groupId) continue;
+        const bucket = state === 1 ? includesByGroup : excludesByGroup;
+        if (!bucket.has(groupId)) bucket.set(groupId, []);
+        bucket.get(groupId)!.push(tagId);
+      }
+
+      // Walk excludes first (matcher short-circuits to fail on hit).
+      let failure: string | null = null;
+      for (const [groupId, excludedIds] of excludesByGroup) {
+        const matchedExcludes = excludedIds.filter((tid) => effective.has(tid));
+        const mode = (query.groupExclusionModes ?? {})[groupId] || 'OR';
+        let excluded = false;
+        if (mode === 'OR') excluded = matchedExcludes.length > 0;
+        else if (mode === 'AND') excluded = matchedExcludes.length === excludedIds.length;
+        else excluded = matchedExcludes.length === 1; // XOR
+        if (excluded) {
+          failure = `Excluded by ${mode} tag-exclude in a group: spell carries ${matchedExcludes
+            .map(tagName)
+            .join(', ')}`;
+          break;
+        }
+      }
+
+      if (!failure) {
+        for (const [groupId, includedIds] of includesByGroup) {
+          const matched = includedIds.filter((tid) => effective.has(tid));
+          const mode = (query.groupCombineModes ?? {})[groupId] || 'OR';
+          let included = false;
+          if (mode === 'OR') included = matched.length > 0;
+          else if (mode === 'AND') included = matched.length === includedIds.length;
+          else included = matched.length === 1; // XOR
+          if (!included) {
+            const need = includedIds.map(tagName).join(', ');
+            const have = matched.map(tagName).join(', ') || '(none)';
+            failure = `Tag group requires ${mode} of [${need}]; spell has [${have}]`;
+            break;
+          }
+        }
+      }
+
+      if (failure) {
+        axes.push({ axis: 'tags', pass: false, reason: failure });
+      } else {
+        const groupCount = includesByGroup.size + excludesByGroup.size;
+        axes.push({
+          axis: 'tags',
+          pass: true,
+          reason: `Tag filters pass (${groupCount} group${groupCount === 1 ? '' : 's'})`,
+        });
+      }
+    }
+  } else if (query.tagFilterIds?.length) {
+    const effective = parentByTagId
+      ? new Set(expandTagsWithAncestors(spell.tags, parentByTagId))
+      : new Set(spell.tags);
+    const missing = query.tagFilterIds.filter((t) => !effective.has(t));
+    const pass = missing.length === 0;
+    axes.push({
+      axis: 'tags',
+      pass,
+      reason: pass
+        ? `All ${query.tagFilterIds.length} required tag(s) present`
+        : `Missing tag${missing.length === 1 ? '' : 's'}: ${missing.map(tagName).join(', ')}`,
+    });
+  }
+
+  // ── Activation ───────────────────────────────────────────
+  if (query.activation) {
+    const pass = matchesSingleAxisFilter(spell.activationBucket, query.activation);
+    axes.push({
+      axis: 'activation',
+      pass,
+      reason: pass
+        ? `Activation ${spell.activationBucket} passes filter`
+        : `Activation ${spell.activationBucket} not in allowed set`,
+    });
+  } else if (query.activationFilters?.length) {
+    const pass = query.activationFilters.includes(spell.activationBucket);
+    axes.push({
+      axis: 'activation',
+      pass,
+      reason: pass
+        ? `Activation ${spell.activationBucket} in allowed list`
+        : `Activation ${spell.activationBucket} not in allowed list`,
+    });
+  }
+
+  // ── Range ────────────────────────────────────────────────
+  if (query.range) {
+    const pass = matchesSingleAxisFilter(spell.rangeBucket, query.range);
+    axes.push({
+      axis: 'range',
+      pass,
+      reason: pass
+        ? `Range bucket ${spell.rangeBucket} passes filter`
+        : `Range bucket ${spell.rangeBucket} not in allowed set`,
+    });
+  } else if (query.rangeFilters?.length) {
+    const pass = query.rangeFilters.includes(spell.rangeBucket);
+    axes.push({
+      axis: 'range',
+      pass,
+      reason: pass
+        ? `Range ${spell.rangeBucket} in allowed list`
+        : `Range ${spell.rangeBucket} not in allowed list`,
+    });
+  }
+
+  // ── Duration ─────────────────────────────────────────────
+  if (query.duration) {
+    const pass = matchesSingleAxisFilter(spell.durationBucket, query.duration);
+    axes.push({
+      axis: 'duration',
+      pass,
+      reason: pass
+        ? `Duration ${spell.durationBucket} passes filter`
+        : `Duration ${spell.durationBucket} not in allowed set`,
+    });
+  } else if (query.durationFilters?.length) {
+    const pass = query.durationFilters.includes(spell.durationBucket);
+    axes.push({
+      axis: 'duration',
+      pass,
+      reason: pass
+        ? `Duration ${spell.durationBucket} in allowed list`
+        : `Duration ${spell.durationBucket} not in allowed list`,
+    });
+  }
+
+  // ── Shape ────────────────────────────────────────────────
+  if (query.shape) {
+    const pass = matchesSingleAxisFilter(spell.shapeBucket, query.shape);
+    axes.push({
+      axis: 'shape',
+      pass,
+      reason: pass
+        ? `Shape ${spell.shapeBucket} passes filter`
+        : `Shape ${spell.shapeBucket} not in allowed set`,
+    });
+  } else if (query.shapeFilters?.length) {
+    const pass = query.shapeFilters.includes(spell.shapeBucket);
+    axes.push({
+      axis: 'shape',
+      pass,
+      reason: pass
+        ? `Shape ${spell.shapeBucket} in allowed list`
+        : `Shape ${spell.shapeBucket} not in allowed list`,
+    });
+  }
+
+  // ── Property ─────────────────────────────────────────────
+  if (query.property) {
+    const have = new Set<PropertyFilter>();
+    if (spell.concentration) have.add('concentration');
+    if (spell.ritual) have.add('ritual');
+    if (spell.vocal) have.add('vocal');
+    if (spell.somatic) have.add('somatic');
+    if (spell.material) have.add('material');
+    const pass = matchesMultiAxisFilter(have, query.property);
+    axes.push({
+      axis: 'property',
+      pass,
+      reason: pass
+        ? `Property filter passes (spell has: ${Array.from(have).join(', ') || 'none'})`
+        : `Property filter fails (spell has: ${Array.from(have).join(', ') || 'none'})`,
+    });
+  } else if (query.propertyFilters?.length) {
+    const missing = query.propertyFilters.filter((p) => !spell[p]);
+    const pass = missing.length === 0;
+    axes.push({
+      axis: 'property',
+      pass,
+      reason: pass
+        ? `All required properties present (${query.propertyFilters.join(', ')})`
+        : `Missing required propert${missing.length === 1 ? 'y' : 'ies'}: ${missing.join(', ')}`,
+    });
+  }
+
+  return { matched: axes.every((a) => a.pass), axes };
+}
+
 /** True if the rule has no filter clauses set — would match every spell (probably a misconfiguration). */
 export function isRuleEmpty(query: RuleQuery): boolean {
   const axisCount = (a?: AxisFilter): number => Object.keys(a?.states ?? {}).length;

@@ -1,5 +1,13 @@
 import { batchQueryD1, queryD1, fetchCollection } from './d1';
-import { matchSpellAgainstRule, type RuleQuery, type SpellMatchInput, type TagIndex } from './spellFilters';
+import {
+  explainSpellAgainstRule,
+  matchSpellAgainstRule,
+  type RuleExplanation,
+  type RuleQuery,
+  type SpellMatchInput,
+  type TagIndex,
+} from './spellFilters';
+export type { RuleExplanation, RuleExplanationAxis } from './spellFilters';
 import { buildTagIndex } from './tagHierarchy';
 
 /**
@@ -180,6 +188,53 @@ export function spellMatchesRule(
 ): boolean {
   if (rule.manualSpells.includes(spell.id)) return true;
   return matchSpellAgainstRule(spell, rule.query, tagIndex?.parentByTagId, tagIndex);
+}
+
+/**
+ * Explainer-form companion to `spellMatchesRule`. Returns a structured
+ * trace describing which axes the rule constrains, whether each axis
+ * approved the spell, and the human-readable reason — used by the
+ * SpellListManager row-level inspector so admins can debug "why is
+ * this spell on / off this rule's match set".
+ *
+ * Special cases:
+ *   - Manual-spell membership wins regardless of the query. We emit a
+ *     synthetic single-axis trace so the UI can show "Manually
+ *     pinned" without confusing the user with the underlying filter.
+ *   - Empty rule (no axes constrained anywhere) returns
+ *     `{ matched: true, axes: [] }`. The caller can render this as
+ *     "Matches everything (no filters set)".
+ *
+ * `tagNamesById` is optional and only used to humanize tag-axis
+ * failure reasons ("missing Confuse" instead of "missing
+ * 7c780920-..."). Callers that already have a tag dictionary should
+ * pass it; otherwise the reason carries the raw id.
+ */
+export function explainSpellMatch(
+  spell: SpellMatchInput & { id: string },
+  rule: SpellRule,
+  tagIndex?: TagIndex,
+  tagNamesById?: Map<string, string>,
+): RuleExplanation {
+  if (rule.manualSpells.includes(spell.id)) {
+    return {
+      matched: true,
+      axes: [
+        {
+          axis: 'tags', // arbitrary — UI distinguishes via the `reason`
+          pass: true,
+          reason: 'Manually pinned to this rule (bypasses filters)',
+        },
+      ],
+    };
+  }
+  return explainSpellAgainstRule(
+    spell,
+    rule.query,
+    tagIndex?.parentByTagId,
+    tagIndex,
+    tagNamesById,
+  );
 }
 
 /**
