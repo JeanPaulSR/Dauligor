@@ -679,7 +679,12 @@ type AddSpellsModalProps = {
   tagParentMap: Map<string, string | null>;
   onClose: () => void;
   onTogglePrepared: (spellId: string) => void;
-  onTogglePlayerKnown: (id: string, level: number, requiredTags: string[]) => void;
+  // Adds/removes the spell from the character's sheet. `attributedClassId`
+  // tags the new entry with `countsAsClassId` so the spell only renders
+  // under the class it was picked for in the main sheet view (otherwise
+  // a spell that appears on Cleric + Wizard would show up under both
+  // class sections when only the Cleric picked it).
+  onTogglePlayerKnown: (id: string, level: number, requiredTags: string[], attributedClassId?: string | null) => void;
   onToggleFavourite: (spellId: string) => void;
 };
 
@@ -872,7 +877,7 @@ function AddSpellsModal(props: AddSpellsModalProps) {
       setSelId(spell.id);
       if (isGranted || isAlways) return;
       if (!isKnown && (prereqBlocked || capBlocked)) return;
-      onTogglePlayerKnown(spell.id, Number(spell.level ?? 0), requiredTags);
+      onTogglePlayerKnown(spell.id, Number(spell.level ?? 0), requiredTags, classId);
     };
 
     return (
@@ -8461,6 +8466,7 @@ export default function CharacterBuilder({
                 spellId: string,
                 spellLevel: number,
                 spellRequiredTags: string[] = [],
+                attributedClassId: string | null = null,
               ) => {
                 setCharacter((prev: any) => {
                   const psPrev = prev.progressionState || {};
@@ -8487,6 +8493,13 @@ export default function CharacterBuilder({
                     const isCantrip = spellLevel === 0;
                     if (isCantrip && atCantripsCap) return prev;
                     if (!isCantrip && atSpellsCap) return prev;
+                    // `countsAsClassId` attributes this spell to a class
+                    // for the main sheet's per-class grouping. Without it
+                    // a spell on N class lists shows up under all N — so
+                    // when the modal calls this we always pass the class
+                    // we're picking for. Falls back to the active class
+                    // for non-modal callers (favourite-from-elsewhere,
+                    // future API integrations).
                     nextOwned = [
                       ...owned,
                       {
@@ -8497,7 +8510,8 @@ export default function CharacterBuilder({
                         grantedByType: null,
                         grantedById: null,
                         grantedByAdvancementId: null,
-                        countsAsClassId: null,
+                        countsAsClassId:
+                          attributedClassId || activeClassId || null,
                         doesntCountAgainstPrepared: false,
                         doesntCountAgainstKnown: false,
                         isFavourite: false,
@@ -9110,14 +9124,16 @@ export default function CharacterBuilder({
                   )}
 
                   {/* ── Two-pane body ─────────────────────────────────
-                       Left pane: grouped Class › Level tree showing
-                       ALL spellcasting classes at once. Class header
-                       is sticky inside the scroll, and the per-class
-                       "Add Spells" button opens AddSpellsModal.
-                       Right pane: SpellDetailPanel — width bumped to
-                       ~480px (520px on xl) to match the compendium's
-                       reading surface; sticky on lg+ viewports. */}
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_520px]">
+                       Left pane: FIXED-width spell tree (per Hand-Off-2
+                       /compendium/spells parity). Width is generous
+                       enough for the compact column set
+                       (prep · name · lv · time · school · conc · range
+                       · src + favourite/watchlist) without stretching
+                       cells horizontally — extra screen space goes to
+                       the description pane (the user's primary reading
+                       surface), not to widening already-narrow columns.
+                       Right pane: SpellDetailPanel — sticky on lg+. */}
+                  <div className="grid gap-4 lg:grid-cols-[640px_minmax(380px,1fr)] xl:grid-cols-[680px_minmax(420px,1fr)]">
                     <div className="min-w-0">
                       {(() => {
                         // Build per-class filtered pools so we can render the
@@ -9168,6 +9184,44 @@ export default function CharacterBuilder({
                             });
                         };
 
+                        // Attribution: a spell on the sheet belongs to
+                        // exactly ONE class's section in the main view.
+                        // The class is resolved (in priority order):
+                        //   1. `owned.countsAsClassId` (set when the
+                        //      modal added the spell — explicit user
+                        //      choice or the active class at add time).
+                        //   2. `owned.grantedById` when granted by a
+                        //      class advancement (covers Always-Prepared
+                        //      grants and subclass-feature grants).
+                        //   3. The first spellcasting class on the
+                        //      character whose pool contains the spell
+                        //      — deterministic fallback for legacy data
+                        //      written before `countsAsClassId` was set
+                        //      by the modal.
+                        // Returns the resolved class id or null if no
+                        // class on this character claims the spell
+                        // (shouldn't happen for owned spells, but we
+                        // guard against it).
+                        const attributedClassForSpell = (
+                          spellId: string,
+                          owned: any,
+                        ): string | null => {
+                          if (owned?.countsAsClassId) return String(owned.countsAsClassId);
+                          if (
+                            owned?.grantedByType === "class" &&
+                            owned?.grantedById
+                          ) {
+                            return String(owned.grantedById);
+                          }
+                          for (const otherCid of spellcastingClassIds) {
+                            const otherPool = classSpellPools[otherCid] || [];
+                            if (otherPool.some((s: any) => s.id === spellId)) {
+                              return otherCid;
+                            }
+                          }
+                          return null;
+                        };
+
                         // The main spell-manager view is "what's on this
                         // character's sheet" — strictly the spells the
                         // player has marked known (or that an advancement
@@ -9177,11 +9231,19 @@ export default function CharacterBuilder({
                         // full class pool is browsable. This filter
                         // happens AFTER name/level/source filtering so
                         // the search bar still works for narrowing the
-                        // visible known list.
-                        const applyStatePills = (spells: any[]) => {
+                        // visible known list. The `classId` param scopes
+                        // the keep-set to spells attributed to that class
+                        // (see `attributedClassForSpell` above); a spell
+                        // that's on both Cleric's and Wizard's class
+                        // lists but was picked for Cleric shows up under
+                        // Cleric only.
+                        const applyStatePills = (spells: any[], classId: string) => {
                           return spells.filter((spell: any) => {
                             const owned = ownedSpells.find((s: any) => s.id === spell.id);
                             if (!owned) return false;
+                            if (attributedClassForSpell(spell.id, owned) !== classId) {
+                              return false;
+                            }
                             if (showFavouritesOnly && !owned.isFavourite) return false;
                             if (showWatchlistOnly && !owned.isWatchlist) return false;
                             if (showLoadoutOnly) {
@@ -9201,7 +9263,10 @@ export default function CharacterBuilder({
                             pool as any,
                             tagsByIdLocal,
                           );
-                          const filtered = applyStatePills(filteredEntries.map((e: any) => e.spell));
+                          const filtered = applyStatePills(
+                            filteredEntries.map((e: any) => e.spell),
+                            cid,
+                          );
                           return {
                             cid,
                             cls: classCache[cid],
@@ -9233,6 +9298,20 @@ export default function CharacterBuilder({
                             </div>
                           );
                         }
+                        // Shared row grid template — column header + every
+                        // spell row use this exact string so cells stay
+                        // aligned. Compact widths mirror the compendium
+                        // SpellList COL_WIDTHS (with an extra leading
+                        // prep-toggle cell and a trailing extras cell):
+                        //
+                        //   prep   name        lv   time   school conc  range   src    extras
+                        //   24px   minmax(0,1fr) 28px 70px  40px   18px 70px    38px   auto
+                        //
+                        // Name is the flex column — wider list pane =
+                        // wider name column. Other cells stay fixed.
+                        const SPELL_ROW_TEMPLATE =
+                          "24px minmax(0,1fr) 28px 70px 40px 18px 70px 38px auto";
+
                         // ── No `grandTotal === 0` early return here ──
                         // We deliberately fall through into the per-class
                         // render even when nothing on the sheet matches
@@ -9263,6 +9342,26 @@ export default function CharacterBuilder({
                                   ? "Single class"
                                   : `${spellcastingClassIds.length} classes`}
                               </span>
+                            </div>
+                            {/* Column header row — mirrors the row grid
+                                so each label sits over its column. Same
+                                template string as the rows themselves
+                                (SPELL_ROW_TEMPLATE). Sits ABOVE the
+                                scroll container so it stays visible as
+                                the user scrolls the per-class tree. */}
+                            <div
+                              className="grid items-center gap-2 px-3 py-1.5 bg-background/35 border-b border-l-[3px] border-l-transparent border-gold/10 text-[9px] font-bold uppercase tracking-[0.16em] text-gold/65"
+                              style={{ gridTemplateColumns: SPELL_ROW_TEMPLATE }}
+                            >
+                              <span />
+                              <span>Name</span>
+                              <span className="text-center">Lv</span>
+                              <span className="text-center">Time</span>
+                              <span className="text-center">School</span>
+                              <span className="text-center" title="Concentration">C.</span>
+                              <span className="text-center">Range</span>
+                              <span className="text-center">Src</span>
+                              <span />
                             </div>
                             <div className="max-h-[70vh] overflow-y-auto custom-scrollbar divide-y divide-gold/5">
                               {perClassPools.map(({ cid, cls, filtered, poolTotal }) => {
@@ -9456,22 +9555,13 @@ export default function CharacterBuilder({
                                               : undefined
                                       }
                                       className={cn(
-                                        "grid items-center gap-2 px-3 py-2 rounded-md border transition-colors cursor-pointer",
+                                        "grid items-center gap-2 px-3 py-1.5 transition-colors cursor-pointer border-l-[3px]",
                                         isSelected
-                                          ? "border-gold ring-1 ring-gold/40 bg-gold/10"
-                                          : isGranted
-                                            ? "border-emerald-500/30 bg-emerald-500/5"
-                                            : isKnown
-                                              ? "border-gold/30 bg-gold/5"
-                                              : "border-gold/10 bg-card/40 hover:bg-card/60",
+                                          ? "bg-gold/10 border-l-gold"
+                                          : "border-l-transparent hover:bg-gold/5",
+                                        isGranted && !isSelected && "bg-emerald-500/[0.04]",
                                       )}
-                                      style={{
-                                        // Cells: prep-toggle (28) · name (1fr) · level (24)
-                                        // · activation (84) · school (40) · conc (14)
-                                        // · range (84) · source (32) · extras (auto)
-                                        gridTemplateColumns:
-                                          "28px minmax(0,1fr) 24px 84px 40px 14px 84px 32px auto",
-                                      }}
+                                      style={{ gridTemplateColumns: SPELL_ROW_TEMPLATE }}
                                     >
                                       {/* ── Prep toggle (replaces the
                                           old known/check button — known
