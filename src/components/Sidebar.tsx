@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { fetchDocument } from '../lib/d1';
+import { fetchDocument, queryD1 } from '../lib/d1';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { 
@@ -27,6 +27,10 @@ export default function Sidebar({
 }) {
   const [campaign, setCampaign] = useState<any>(null);
   const [recentArticles, setRecentArticles] = useState<any[]>([]);
+  // User's most recently-updated characters — populates the
+  // Characters nav item's sub-list. Limited to 5 to keep the rail
+  // tidy; full list lives behind the Characters page itself.
+  const [userCharacters, setUserCharacters] = useState<Array<{ id: string; name: string; level: number }>>([]);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     world: true,
     time: true,
@@ -74,6 +78,45 @@ export default function Sidebar({
     return () => window.removeEventListener('articleHistoryUpdated', loadHistory);
   }, []);
 
+  // Pull the user's 5 most-recent characters for the sidebar
+  // sub-list. Re-fetched on a "characterListUpdated" window event so
+  // the rail refreshes after a save in CharacterBuilder, a delete
+  // from the error-boundary fallback, or a new-character flow —
+  // without forcing a page reload.
+  useEffect(() => {
+    if (!userProfile?.id) {
+      setUserCharacters([]);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const rows = await queryD1<any>(
+          'SELECT id, name, level FROM characters WHERE user_id = ? ORDER BY updated_at DESC LIMIT 5',
+          [userProfile.id],
+        );
+        if (cancelled) return;
+        setUserCharacters(
+          rows.map((r: any) => ({
+            id: String(r.id),
+            name: String(r.name || 'Unnamed'),
+            level: Number(r.level ?? 0) || 0,
+          })),
+        );
+      } catch (err) {
+        console.warn('[Sidebar] Failed to load user characters:', err);
+        if (!cancelled) setUserCharacters([]);
+      }
+    };
+    load();
+    const refresh = () => load();
+    window.addEventListener('characterListUpdated', refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('characterListUpdated', refresh);
+    };
+  }, [userProfile?.id]);
+
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -94,10 +137,28 @@ export default function Sidebar({
       { label: 'Journals', icon: Book, path: '/wiki?category=session' },
     ],
     game: [
-      { label: 'Characters', icon: Users, path: '/characters' },
-      { 
-        label: 'Compendium', 
-        icon: BookOpen, 
+      {
+        label: 'Characters',
+        icon: Users,
+        path: '/characters',
+        // Surface the user's recent characters as a sub-list so the
+        // sidebar mirrors the design handoff's "Characters ▸ All
+        // Characters / Veshara · Builder" pattern. Only renders when
+        // the user has at least one character — keeps the rail clean
+        // for fresh accounts.
+        subItems: userCharacters.length > 0
+          ? [
+            { label: 'All Characters', path: '/characters' },
+            ...userCharacters.map((c) => ({
+              label: c.level > 0 ? `${c.name} · L${c.level}` : c.name,
+              path: `/characters/builder/${c.id}`,
+            })),
+          ]
+          : undefined,
+      },
+      {
+        label: 'Compendium',
+        icon: BookOpen,
         path: '/compendium',
         subItems: [
           { label: 'Classes', path: '/compendium/classes' },
@@ -149,13 +210,17 @@ export default function Sidebar({
 
     return (
       <li key={item.label} className="w-full">
-        <Link 
-          to={item.path} 
+        <Link
+          to={item.path}
           onClick={() => onClose?.()}
-          className={`flex items-center gap-2 lg:gap-3 px-2 py-2 text-xs lg:text-sm rounded-md transition-all group ${
-            isActive 
-              ? 'bg-gold/10 text-gold font-bold' 
-              : 'text-ink/70 hover:text-gold hover:bg-gold/5'
+          // 2px left-rail accent on active rows mirrors the design
+          // handoff (`border-left: 2px solid var(--gold)`). Inactive
+          // rows reserve the same 2px with a transparent border so
+          // active toggling doesn't shift content horizontally.
+          className={`flex items-center gap-2 lg:gap-3 pr-2 py-2 text-xs lg:text-sm rounded-md transition-all group border-l-2 ${
+            isActive
+              ? 'bg-gold/10 text-gold font-bold border-gold pl-1.5'
+              : 'text-ink/70 hover:text-gold hover:bg-gold/5 border-transparent pl-1.5'
           }`}
         >
           <item.icon className={`w-4 h-4 lg:w-5 lg:h-5 shrink-0 ${isActive ? 'text-gold' : 'opacity-70 group-hover:opacity-100'}`} />
@@ -164,16 +229,20 @@ export default function Sidebar({
         {item.subItems && (
           <ul className="mt-1 ml-4 border-l border-gold/10 pl-2 space-y-1">
             {item.subItems.map((subItem: any) => {
-              const isSubActive = location.pathname === subItem.path;
+              // Active matching: exact path OR an /:id route (e.g.
+              // /characters/builder/<id>) that this sub-item points at.
+              const isSubActive =
+                location.pathname === subItem.path ||
+                (subItem.path !== '/characters' && location.pathname === subItem.path);
               return (
-                <li key={subItem.label}>
-                  <Link 
-                    to={subItem.path} 
+                <li key={subItem.label + subItem.path}>
+                  <Link
+                    to={subItem.path}
                     onClick={() => onClose?.()}
-                    className={`flex items-center gap-2 px-2 py-1.5 text-[10px] lg:text-xs rounded-md transition-all ${
-                      isSubActive 
-                        ? 'bg-gold/10 text-gold font-bold' 
-                        : 'text-ink/60 hover:text-gold hover:bg-gold/5'
+                    className={`flex items-center gap-2 pr-2 py-1.5 text-[10px] lg:text-xs rounded-md transition-all border-l-2 ${
+                      isSubActive
+                        ? 'bg-gold/10 text-gold font-bold border-gold pl-1.5'
+                        : 'text-ink/60 hover:text-gold hover:bg-gold/5 border-transparent pl-1.5'
                     }`}
                   >
                     <span className="truncate">{subItem.label}</span>

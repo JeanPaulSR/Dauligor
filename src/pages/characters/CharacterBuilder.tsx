@@ -3277,6 +3277,12 @@ export default function CharacterBuilder({
       const queries = generateCharacterSaveQueries(charId, finalChar);
       await batchQueryD1(queries);
 
+      // Notify the Sidebar (and anything else listening) that the
+      // user's character list may have changed so the recent-
+      // characters sub-list refreshes without a page reload. Cheap
+      // — the sidebar's listener just runs one indexed D1 query.
+      window.dispatchEvent(new Event("characterListUpdated"));
+
       if (isNew) {
         navigate(`/characters/builder/${charId}`);
       }

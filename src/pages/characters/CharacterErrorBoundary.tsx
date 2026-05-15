@@ -79,6 +79,10 @@ function CharacterErrorFallback({
       // (progression / selections / inventory / spells / proficiencies /
       // loadouts / extensions). One DELETE = full cleanup.
       await deleteDocument('characters', id);
+      // Tell the Sidebar (and any other listeners) that the user's
+      // character list shrank — its recent-characters sub-list will
+      // re-fetch and drop the deleted row without a page reload.
+      window.dispatchEvent(new Event('characterListUpdated'));
       toast.success('Character deleted.');
       setDeleted(true);
       // Small delay so the toast lands before the route flip.
