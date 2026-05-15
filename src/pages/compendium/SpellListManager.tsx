@@ -124,16 +124,40 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     return () => document.body.classList.remove('spell-list-fullscreen');
   }, [isAdmin]);
 
-  // Pane height — measured from the actual flex-1 grid container
-  // (see `gridContainerRef` below), NOT estimated from
-  // `window.innerHeight - <magic>`. The earlier estimate ignored the
-  // Linked Rules panel's expand/collapse state, so expanding it
-  // pushed the spell-list+detail cards below the viewport. With the
-  // measurement-based approach, when Linked Rules expands the page-
-  // level flex layout shrinks this container, ResizeObserver fires,
-  // paneHeight drops, and both Cards (which are sized off paneHeight)
-  // resize in lockstep — the bottom of the list always sits at the
-  // bottom of the page.
+  // Pane height — derived as
+  //
+  //   paneHeight = viewportHeight - grid.top - bottomBuffer
+  //
+  // where `grid.top` is `gridContainerRef.current.getBoundingClientRect().top`
+  // (so it captures the cumulative height of EVERY rendered element
+  // above the cards: the navbar, the page toolbar with the back/class
+  // selector, the Linked Rules panel in whatever expand state it's
+  // currently in, the filter bar, all of it).
+  //
+  // Earlier approaches:
+  //   - `window.innerHeight - 260` (magic chrome estimate) ignored
+  //     Linked Rules' expand state and pushed cards past the bottom.
+  //   - ResizeObserver on the grid container only fires when the grid
+  //     itself resizes, but in a flex parent whose own height isn't
+  //     bound to viewport (the case here — `<main>` is auto-height
+  //     under `body.spell-list-fullscreen`), the grid's flex-1 doesn't
+  //     actually distribute viewport-minus-chrome — it gets whatever
+  //     leftover space the auto-height parent grants, which is too
+  //     small. Cards collapsed to ~280px tall with a sea of empty
+  //     space underneath.
+  //
+  // Viewport-anchored math is robust to either layout shape: it asks
+  // "how many pixels are between the top of the cards and the bottom
+  // of the viewport" and gives them all to the cards.
+  //
+  // Re-measure triggers:
+  //   - Window resize.
+  //   - ResizeObserver on the PARENT of the grid (the page root). When
+  //     anything inside the root changes height (Linked Rules toggle,
+  //     filter bar expand, toolbar wraps to two lines on a narrow
+  //     viewport), the root's own clientHeight changes and the
+  //     observer fires. We don't care about the new size — we just
+  //     use it as a signal to re-measure the grid's bounding rect.
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
   const [paneHeight, setPaneHeight] = useState<number>(() =>
     typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 260),
@@ -141,23 +165,30 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   useEffect(() => {
     const el = gridContainerRef.current;
     if (!el) return;
-    // Min 240 keeps the list usable on short viewports even when
-    // every section above is expanded (Linked Rules + filter chips +
-    // toolbar). Below that the list gets a vertical scrollbar
-    // courtesy of `overflow-y-auto` on the card itself.
-    //
-    // `-8` reserves ~8px of breathing room at the bottom of the
-    // measured height — without it, the cards reported as
-    // "matching the viewport" actually clipped 10-20px past the
-    // visible bottom edge (sub-pixel rounding + the parent's
-    // p-2 padding cascading through nested flex/grid). 8px is
-    // small enough that the change is invisible at normal sizes
-    // but reliably keeps the bottom of both cards inside the page.
-    const measure = () => setPaneHeight(Math.max(240, el.clientHeight - 8));
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      // 12px bottom buffer: 8 to absorb sub-pixel rounding cascading
+      // through nested flex/grid (same reason as the earlier `-8`),
+      // plus 4 to keep the bottom card edge clear of the viewport
+      // line at standard zoom.
+      const available = window.innerHeight - rect.top - 12;
+      setPaneHeight((prev) => {
+        const next = Math.max(240, available);
+        return next === prev ? prev : next;
+      });
+    };
     measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener('resize', measure);
+    // Observe the page root — its content height changes when chrome
+    // above the grid expands/collapses, even if the grid's own size
+    // stays the same.
+    const root = el.parentElement;
+    const ro = root ? new ResizeObserver(measure) : null;
+    if (root && ro) ro.observe(root);
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro?.disconnect();
+    };
   }, []);
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
