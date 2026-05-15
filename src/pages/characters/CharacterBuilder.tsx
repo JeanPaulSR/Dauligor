@@ -9358,26 +9358,20 @@ export default function CharacterBuilder({
                                   : `${spellcastingClassIds.length} classes`}
                               </span>
                             </div>
-                            {/* Column header row — mirrors the row grid
-                                so each label sits over its column. Same
-                                template string as the rows themselves
-                                (SPELL_ROW_TEMPLATE). Sits ABOVE the
-                                scroll container so it stays visible as
-                                the user scrolls the per-class tree. */}
-                            <div
-                              className="grid items-center gap-2 px-3 py-1.5 bg-background/35 border-b border-l-[3px] border-l-transparent border-gold/10 text-[9px] font-bold uppercase tracking-[0.16em] text-gold/65"
-                              style={{ gridTemplateColumns: SPELL_ROW_TEMPLATE }}
-                            >
-                              <span />
-                              <span>Name</span>
-                              <span className="text-center">Lv</span>
-                              <span className="text-center">Time</span>
-                              <span className="text-center">School</span>
-                              <span className="text-center" title="Concentration">C.</span>
-                              <span className="text-center">Range</span>
-                              <span className="text-center">Src</span>
-                              <span />
-                            </div>
+                            {/* Per-class column header lives INSIDE each
+                                class section (after the class header,
+                                before level sub-headers + rows). The
+                                old single global header sat outside the
+                                scroll viewport, which:
+                                  (a) put the labels at a different
+                                      horizontal offset than the rows
+                                      below (scrollbar gutter caused
+                                      visible misalignment); and
+                                  (b) gave no per-class context — with
+                                      two classes the column titles
+                                      sat once at the very top and the
+                                      user had to look back up while
+                                      reading the second class. */}
                             <div className="max-h-[70vh] overflow-y-auto custom-scrollbar divide-y divide-gold/5">
                               {perClassPools.map(({ cid, cls, filtered, poolTotal }) => {
                                 // The class section ALWAYS renders, even
@@ -9469,6 +9463,44 @@ export default function CharacterBuilder({
                                       </button>
                                     </div>
 
+                                    {/* Per-class column header — sits
+                                        directly under the class band so
+                                        the column titles repeat for each
+                                        class section (instead of just
+                                        once at the top, which forced the
+                                        user to scroll back up for
+                                        context). Indent matches the
+                                        spell rows below (pl-6) so labels
+                                        align with the cells underneath.
+                                        Hidden when collapsed or empty —
+                                        column titles over zero rows
+                                        reads as noise. */}
+                                    {!classCollapsed && !isEmpty && (
+                                      <div
+                                        // Transparent 3px left border
+                                        // matches the row's selected/
+                                        // unselected accent bar so the
+                                        // header's first cell sits at
+                                        // the same x-position as each
+                                        // row's first cell — without
+                                        // this the prep-toggle column
+                                        // shifts 3px left of the header
+                                        // and labels appear misaligned.
+                                        className="grid items-center gap-2 pl-6 pr-3 py-1.5 bg-background/35 border-b border-l-[3px] border-l-transparent border-gold/10 text-[9px] font-bold uppercase tracking-[0.16em] text-gold/65"
+                                        style={{ gridTemplateColumns: SPELL_ROW_TEMPLATE }}
+                                      >
+                                        <span />
+                                        <span>Name</span>
+                                        <span className="text-center">Lv</span>
+                                        <span className="text-center">Time</span>
+                                        <span className="text-center">School</span>
+                                        <span className="text-center" title="Concentration">C.</span>
+                                        <span className="text-center">Range</span>
+                                        <span className="text-center">Src</span>
+                                        <span />
+                                      </div>
+                                    )}
+
                                     {/* Per-class empty-state — shows
                                         when this class has zero spells
                                         on the sheet (or zero matching
@@ -9507,7 +9539,7 @@ export default function CharacterBuilder({
                                           <button
                                             type="button"
                                             onClick={() => toggleLevelCollapsed(lvlKey)}
-                                            className="w-full flex items-center gap-2 px-4 py-1.5 bg-gold/[0.03] border-b border-gold/10 text-left"
+                                            className="w-full flex items-center gap-2 pl-6 pr-3 py-1 bg-gold/[0.03] border-b border-gold/10 text-left"
                                           >
                                             <ChevronDown
                                               className={cn(
@@ -9585,7 +9617,15 @@ export default function CharacterBuilder({
                                               : undefined
                                       }
                                       className={cn(
-                                        "grid items-center gap-2 px-3 py-1.5 transition-colors cursor-pointer border-l-[3px]",
+                                        // pl-6 keeps the row content
+                                        // indented under the per-class
+                                        // column header so spell rows
+                                        // sit visually inside the class
+                                        // band — separates them from
+                                        // both the class header (no
+                                        // indent) and the level sub-
+                                        // header (same indent).
+                                        "grid items-center gap-2 pl-6 pr-3 py-1.5 transition-colors cursor-pointer border-l-[3px]",
                                         isSelected
                                           ? "bg-gold/10 border-l-gold"
                                           : "border-l-transparent hover:bg-gold/5",
