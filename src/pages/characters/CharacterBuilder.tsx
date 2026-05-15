@@ -139,6 +139,7 @@ import { fetchClassSpellList } from "../../lib/classSpellLists";
 import { fetchAllRules, spellMatchesRule, type SpellRule } from "../../lib/spellRules";
 import { buildTagIndex } from "../../lib/tagHierarchy";
 import { fetchSpellSummaries } from "../../lib/spellSummary";
+import { formatActivationLabel, formatRangeLabel } from "../../lib/spellImport";
 import { deriveSpellFilterFacets } from "../../lib/spellFilters";
 import { useSpellFilters } from "../../hooks/useSpellFilters";
 import SpellFilterShell from "../../components/compendium/SpellFilterShell";
@@ -632,16 +633,21 @@ function resolveScaleValueAtLevel(column: any, level: number) {
   return values[String(highestLevel)] ?? null;
 }
 
-// ─── PrepareSpellsModal — Phase 2 of the Spell Manager design handoff ──────
+// ─── AddSpellsModal — per-class "what's on my sheet" picker ──────────────
 //
-// Per-class focused prepare flow. Triggered from the class header
-// "Prepare" button in the main Spell Manager tree (see CharacterBuilder
-// activeStep === "spells" block) — closes back to the main tree on Done
-// or backdrop click.
+// Triggered from the class header "Add Spells" button in the main
+// Spell Manager tree. Closes back to the main tree on Done or
+// backdrop click.
 //
-// Layout matches the Variant C design from the handoff:
-//   - Header strip: class · prep-type badge · prepared / max · cantrips
-//     / max · always count · Done button.
+// The picker's ONLY job is to mark which spells from the class's
+// available pool are on the character's sheet (i.e. "known"). It
+// does NOT toggle prepared / favourite / loadout state — those live
+// on the main sheet, where each per-class block shows only the
+// spells already known and exposes the per-class prep cap.
+//
+// Layout (Hand-Off-2 Variant C):
+//   - Header strip: class · prep-type badge · cantrips known / cap ·
+//     spells known / cap · Done button.
 //   - 3-column body: Favourites (left, 240px) | filtered class pool
 //     (middle, 1fr) | SpellDetailPanel (right, 360px).
 //   - Filter row above the middle pool: search + Filters toggle +
@@ -649,11 +655,13 @@ function resolveScaleValueAtLevel(column: any, level: number) {
 //     School / Source / Properties chip sections — local to the modal,
 //     does NOT mutate the main spell manager's filter state.
 //
-// The modal mutates character state via the three handler props
-// (onTogglePrepared / onTogglePlayerKnown / onToggleFavourite) — same
-// handlers the main tree uses, so the two surfaces stay in sync.
+// Row interaction: clicking anywhere on the row OUTSIDE the favourite
+// star toggles known/unknown (subject to the per-class spells-known +
+// cantrips-known caps the main tree enforces via togglePlayerKnown).
+// `onTogglePrepared` is no longer wired through this modal — it's
+// kept on the props for backwards compat but goes unused.
 
-type PrepareSpellsModalProps = {
+type AddSpellsModalProps = {
   classId: string;
   className: string;
   preparationType: string;
@@ -685,7 +693,7 @@ const PREPARATION_TYPE_LABELS: Record<string, string> = {
   leveled: "Leveled Caster",
 };
 
-function PrepareSpellsModal(props: PrepareSpellsModalProps) {
+function AddSpellsModal(props: AddSpellsModalProps) {
   const {
     classId,
     className,
@@ -848,7 +856,6 @@ function PrepareSpellsModal(props: PrepareSpellsModalProps) {
     const isAlways = !!owned?.isAlwaysPrepared;
     const isGranted = !!owned?.grantedByAdvancementId;
     const isKnown = !!owned;
-    const isPrepared = !!owned?.isPrepared;
     const isFav = !!owned?.isFavourite;
     const isSelected = selId === spell.id;
     const sourceLabel = sourceById[spell.source_id || ""]?.abbreviation
@@ -857,15 +864,44 @@ function PrepareSpellsModal(props: PrepareSpellsModalProps) {
     const { prereqBlocked, capBlocked, missingTags } = blockedFor(spell);
     const requiredTags = Array.isArray(spell.requiredTags) ? spell.requiredTags : [];
 
+    // Row click: SELECT for the detail panel AND toggle known. Granted
+    // spells (advancement-locked) and prereq/cap-blocked rows skip the
+    // toggle but still update the selection so the detail panel can
+    // explain why they're locked.
+    const handleRowClick = () => {
+      setSelId(spell.id);
+      if (isGranted || isAlways) return;
+      if (!isKnown && (prereqBlocked || capBlocked)) return;
+      onTogglePlayerKnown(spell.id, Number(spell.level ?? 0), requiredTags);
+    };
+
     return (
       <div
         key={spell.id}
-        onClick={() => setSelId(spell.id)}
+        onClick={handleRowClick}
+        title={
+          isGranted
+            ? "Granted by an advancement (locked)"
+            : isAlways
+              ? "Always prepared (locked)"
+              : prereqBlocked
+                ? `Missing prerequisite tag${missingTags.length === 1 ? "" : "s"}: ${missingTags
+                    .map((tid) => tagsById[tid]?.name || tid)
+                    .join(", ")}`
+                : capBlocked && !isKnown
+                  ? Number(spell.level ?? 0) === 0
+                    ? `At cantrips-known cap (${cantripsCap})`
+                    : `At spells-known cap (${spellsCap})`
+                  : isKnown
+                    ? "Click to remove from sheet"
+                    : "Click to add to sheet"
+        }
         className={cn(
           "grid items-center cursor-pointer border-b border-gold/5 transition-colors",
           isSelected
             ? "bg-gold/10 border-l-[3px] border-l-gold"
             : "border-l-[3px] border-l-transparent hover:bg-gold/5",
+          !isKnown && (prereqBlocked || capBlocked) && "opacity-60 cursor-not-allowed",
         )}
         style={{
           gridTemplateColumns: showFav
@@ -875,54 +911,33 @@ function PrepareSpellsModal(props: PrepareSpellsModalProps) {
         }}
       >
         <div>
+          {/* Known indicator. Click events bubble to the row handler
+              above, which handles toggle vs locked vs blocked. */}
           {isAlways ? (
-            <span className="text-emerald-500 text-sm font-black" title="Always prepared">✦</span>
+            <span className="text-emerald-500 text-sm font-black" title="Always prepared">
+              ✦
+            </span>
           ) : isGranted ? (
-            <span className="text-emerald-600 text-sm font-black" title="Granted by an advancement">✓</span>
+            <span className="text-emerald-600 text-sm font-black" title="Granted by an advancement">
+              ✓
+            </span>
           ) : isKnown ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTogglePrepared(spell.id);
-              }}
-              title={isPrepared ? "Unprepare" : "Prepare"}
-              className={cn(
-                "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center",
-                isPrepared ? "border-gold bg-gold text-white" : "border-gold/40 hover:border-gold",
-              )}
+            <span
+              className="w-3.5 h-3.5 rounded-sm border-2 border-gold bg-gold flex items-center justify-center text-white"
+              aria-label="On sheet"
             >
-              {isPrepared && <Check className="w-2 h-2" />}
-            </button>
+              <Check className="w-2 h-2" />
+            </span>
           ) : (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (prereqBlocked || capBlocked) return;
-                onTogglePlayerKnown(spell.id, Number(spell.level ?? 0), requiredTags);
-              }}
-              disabled={prereqBlocked || capBlocked}
-              title={
-                prereqBlocked
-                  ? `Missing: ${missingTags
-                      .map((tid) => tagsById[tid]?.name || tid)
-                      .join(", ")}`
-                  : capBlocked
-                    ? Number(spell.level ?? 0) === 0
-                      ? `At cantrips-known cap (${cantripsCap})`
-                      : `At spells-known cap (${spellsCap})`
-                    : "Add to known"
-              }
+            <span
               className={cn(
-                "w-3.5 h-3.5 flex items-center justify-center text-[11px] leading-none border border-dashed",
+                "w-3.5 h-3.5 rounded-sm border-2 border-dashed flex items-center justify-center",
                 prereqBlocked || capBlocked
-                  ? "border-blood/25 text-blood/35 cursor-not-allowed"
-                  : "border-gold/30 text-gold/55 hover:border-gold/60 hover:text-gold",
+                  ? "border-blood/25"
+                  : "border-gold/30",
               )}
-            >
-              +
-            </button>
+              aria-label={prereqBlocked || capBlocked ? "Blocked" : "Add to sheet"}
+            />
           )}
         </div>
         <span
@@ -989,7 +1004,7 @@ function PrepareSpellsModal(props: PrepareSpellsModalProps) {
           <div className="flex flex-col gap-1 min-w-0">
             <div className="flex items-baseline gap-3 flex-wrap">
               <h3 className="font-serif text-xl font-bold text-ink leading-none">
-                Prepare Spells
+                Add Spells
               </h3>
               <span className="font-serif text-sm italic text-ink/55">
                 · {className}
@@ -1006,6 +1021,10 @@ function PrepareSpellsModal(props: PrepareSpellsModalProps) {
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-4">
+            {/* "Known" counters drive the cap. We hide the prepared
+                counter here because the modal is now strictly an
+                add-to-sheet picker — preparation happens on the main
+                sheet, against a cap derived from the known count. */}
             {cantripsCap !== null && (
               <div className="text-right">
                 <div className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/45">
@@ -1019,23 +1038,25 @@ function PrepareSpellsModal(props: PrepareSpellsModalProps) {
             )}
             <div className="text-right">
               <div className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/45">
-                Prepared
+                Known
               </div>
               <div className="font-mono text-base font-black text-gold leading-none">
-                {preparedHere}
+                {spellsKnownCount}
                 {spellsCap !== null && (
                   <span className="text-ink/40 text-xs"> / {spellsCap}</span>
                 )}
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/45">
-                Always
+            {alwaysHere > 0 && (
+              <div className="text-right">
+                <div className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/45">
+                  Always
+                </div>
+                <div className="font-mono text-base font-black text-emerald-600 leading-none">
+                  {alwaysHere}
+                </div>
               </div>
-              <div className="font-mono text-base font-black text-emerald-600 leading-none">
-                {alwaysHere}
-              </div>
-            </div>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -1217,7 +1238,7 @@ function PrepareSpellsModal(props: PrepareSpellsModalProps) {
   );
 }
 
-// Filter chip section used by PrepareSpellsModal. Single-shot
+// Filter chip section used by AddSpellsModal. Single-shot
 // multi-select with Include All / Clear shortcuts on the right —
 // mirrors the FilterChipSection pattern from the design handoff's
 // spell-manager.jsx (Variant C inline-filter panel).
@@ -8493,19 +8514,68 @@ export default function CharacterBuilder({
                 });
               };
 
+              // togglePrepared: flip the prepared flag on an owned spell,
+              // subject to a per-class prepared cap.
+              //
+              // The per-class prepared cap is the count of THAT class's
+              // known leveled spells (per the user's spec: "if a wizard
+              // knows 5 spells and an artificer knows 3, you can prepare
+              // 5 wizard spells AND 3 artificer spells, but you can't
+              // prepare 4 wizard + 4 artificer"). Cantrips and
+              // always-prepared spells are NOT counted against the cap;
+              // always-prepared can't be unprepared. Spells with
+              // `countsAsClassId` set are charged to that class.
               const togglePrepared = (spellId: string) => {
                 setCharacter((prev: any) => {
                   const psPrev = prev.progressionState || {};
-                  const owned = psPrev.ownedSpells || [];
-                  const nextOwned = owned.map((s: any) =>
-                    s.id === spellId
-                      ? {
-                          ...s,
-                          isPrepared: s.isAlwaysPrepared
-                            ? true
-                            : !s.isPrepared,
+                  const owned = (psPrev.ownedSpells || []) as any[];
+                  const target = owned.find((s: any) => s.id === spellId);
+                  if (!target) return prev;
+                  // Always-prepared spells stay prepared. The button
+                  // shouldn't fire here at all, but the no-op guards
+                  // against a stale click landing during a re-render.
+                  if (target.isAlwaysPrepared) return prev;
+                  const willPrepare = !target.isPrepared;
+                  // Cap check fires only when *adding* preparation;
+                  // unpreparing is always allowed.
+                  if (willPrepare) {
+                    const spellInfo = spellNameCache[spellId];
+                    const spellLvl = Number(spellInfo?.level ?? 0);
+                    if (spellLvl > 0) {
+                      // Resolve the class this spell counts towards.
+                      // Default: the active spell-manager class.
+                      // Override: `countsAsClassId` on the owned row
+                      // (e.g. multiclass "this Sorcerer spell counts
+                      // as a Wizard spell" assignments).
+                      const chargeClassId =
+                        String(target.countsAsClassId || activeClassId || "");
+                      if (chargeClassId) {
+                        const knownThisClass = owned.filter((s: any) => {
+                          if (s.isAlwaysPrepared) return false;
+                          const lvl = spellNameCache[s.id]?.level;
+                          if (lvl === undefined || lvl === 0) return false;
+                          const cid = s.countsAsClassId || activeClassId;
+                          return cid === chargeClassId;
+                        }).length;
+                        const preparedThisClass = owned.filter((s: any) => {
+                          if (!s.isPrepared || s.isAlwaysPrepared) return false;
+                          const lvl = spellNameCache[s.id]?.level;
+                          if (lvl === undefined || lvl === 0) return false;
+                          const cid = s.countsAsClassId || activeClassId;
+                          return cid === chargeClassId;
+                        }).length;
+                        // Cap = known count for that class. Toggling on
+                        // the (cap+1)th spell silently no-ops — the
+                        // main sheet hint banner reflects "at cap" so
+                        // the user can see why.
+                        if (preparedThisClass >= knownThisClass) {
+                          return prev;
                         }
-                      : s,
+                      }
+                    }
+                  }
+                  const nextOwned = owned.map((s: any) =>
+                    s.id === spellId ? { ...s, isPrepared: willPrepare } : s,
                   );
                   return {
                     ...prev,
@@ -9039,15 +9109,15 @@ export default function CharacterBuilder({
                     </details>
                   )}
 
-                  {/* ── Two-pane body — Variant C ─────────────────────
+                  {/* ── Two-pane body ─────────────────────────────────
                        Left pane: grouped Class › Level tree showing
                        ALL spellcasting classes at once. Class header
-                       is sticky inside the scroll, and the Prepare
-                       button per class opens the focused modal (still
-                       wip — Phase 2 follow-up).
-                       Right pane: SpellDetailPanel for the selected
-                       spell (sticky on lg+ viewports). */}
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+                       is sticky inside the scroll, and the per-class
+                       "Add Spells" button opens AddSpellsModal.
+                       Right pane: SpellDetailPanel — width bumped to
+                       ~480px (520px on xl) to match the compendium's
+                       reading surface; sticky on lg+ viewports. */}
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_520px]">
                     <div className="min-w-0">
                       {(() => {
                         // Build per-class filtered pools so we can render the
@@ -9098,10 +9168,17 @@ export default function CharacterBuilder({
                             });
                         };
 
+                        // The main spell-manager view is "what's on this
+                        // character's sheet" — strictly the spells the
+                        // player has marked known (or that an advancement
+                        // has granted, which lands as `grantedByAdvancementId`).
+                        // Anything outside that set is reachable through
+                        // the per-class "Add Spells" modal, where the
+                        // full class pool is browsable. This filter
+                        // happens AFTER name/level/source filtering so
+                        // the search bar still works for narrowing the
+                        // visible known list.
                         const applyStatePills = (spells: any[]) => {
-                          if (!showFavouritesOnly && !showWatchlistOnly && !showLoadoutOnly) {
-                            return spells;
-                          }
                           return spells.filter((spell: any) => {
                             const owned = ownedSpells.find((s: any) => s.id === spell.id);
                             if (!owned) return false;
@@ -9150,14 +9227,19 @@ export default function CharacterBuilder({
                           return (
                             <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
                               No spells on any of this character's class spell
-                              lists yet. Curate them in /compendium/spell-lists.
+                              lists yet. Curate them in /compendium/spell-lists,
+                              then use the "Add Spells" button on each class
+                              header to put them on this sheet.
                             </div>
                           );
                         }
                         if (grandTotal === 0) {
                           return (
                             <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
-                              No spells match the current filters.{" "}
+                              No spells on your sheet match the current
+                              filters. Use the "Add Spells" button on each
+                              class header to put more on your sheet, or
+                              clear filters here.{" "}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -9206,14 +9288,19 @@ export default function CharacterBuilder({
                                     {/* Class header — sticky inside the
                                         scroll. Click the label area to
                                         switch active class + toggle
-                                        collapse; Prepare button opens the
-                                        per-class modal (Phase 2). */}
+                                        collapse; "Add Spells" button
+                                        opens the per-class picker modal.
+                                        Background is fully transparent
+                                        per the latest design pass —
+                                        active-class affordance is the
+                                        gold underline below the label,
+                                        not a tinted band. */}
                                     <div
                                       className={cn(
-                                        "px-3 py-2 border-y border-gold/30 flex items-center gap-2 sticky top-0 z-10",
+                                        "px-3 py-2 border-b flex items-center gap-2 sticky top-0 z-10 bg-card",
                                         isActive
-                                          ? "bg-gold/20"
-                                          : "bg-[color-mix(in_srgb,var(--gold)_10%,var(--card))]",
+                                          ? "border-gold"
+                                          : "border-gold/15",
                                       )}
                                     >
                                       <button
@@ -9245,9 +9332,9 @@ export default function CharacterBuilder({
                                         type="button"
                                         onClick={() => setSpellsPrepModalClass(cid)}
                                         className="text-[9px] font-black uppercase tracking-[0.16em] px-2 py-1 border border-gold bg-gold text-white hover:bg-gold/90 transition-colors whitespace-nowrap"
-                                        title={`Prepare spells from the ${cls?.name || "class"} list`}
+                                        title={`Add ${cls?.name || "class"} spells to your sheet`}
                                       >
-                                        Prepare
+                                        Add Spells
                                       </button>
                                     </div>
 
@@ -9302,110 +9389,194 @@ export default function CharacterBuilder({
                                     ((isCantrip && atCantripsCap) ||
                                       (!isCantrip && atSpellsCap));
                                   const isBlocked = prereqBlocked || blockedByCap;
+                                  // Derived label values, mirroring the
+                                  // compendium SpellList row's column set
+                                  // (activation time, school, concentration,
+                                  // range). Falls back to "—" when the
+                                  // facet isn't populated on the row.
+                                  const activationLabel = formatActivationLabel(
+                                    spell?.foundryShell?.activation,
+                                  ) || "—";
+                                  const rangeLabel = formatRangeLabel(
+                                    spell?.foundryShell?.range,
+                                  ) || "—";
+                                  const schoolLabel = String(spell.school || "").slice(0, 4);
+                                  const sourceLabel = spellManagerSources.find(
+                                    (s: any) => s.id === spell.source_id,
+                                  )?.abbreviation || spellManagerSources.find(
+                                    (s: any) => s.id === spell.source_id,
+                                  )?.shortName || "";
+                                  const isConcentration =
+                                    spell?.concentration ?? spell?.foundryShell?.concentration ?? false;
+                                  const lvlGlyph = isCantrip ? "C" : String(spellLvl);
                                   return (
                                     <div
                                       key={spell.id}
                                       onClick={() => setSelectedSpellId(spell.id)}
-                                      className={`flex items-center gap-3 px-3 py-2 rounded-md border transition-colors cursor-pointer ${
+                                      title={
+                                        isGranted
+                                          ? "Granted by an advancement"
+                                          : prereqBlocked
+                                            ? `Missing prerequisite tag${missingTags.length === 1 ? "" : "s"}`
+                                            : blockedByCap
+                                              ? isCantrip
+                                                ? `At cantrips-known cap (${cantripsCap})`
+                                                : `At spells-known cap (${spellsCap})`
+                                              : undefined
+                                      }
+                                      className={cn(
+                                        "grid items-center gap-2 px-3 py-2 rounded-md border transition-colors cursor-pointer",
                                         isSelected
                                           ? "border-gold ring-1 ring-gold/40 bg-gold/10"
                                           : isGranted
                                             ? "border-emerald-500/30 bg-emerald-500/5"
                                             : isKnown
                                               ? "border-gold/30 bg-gold/5"
-                                              : prereqBlocked
-                                                ? "border-blood/15 bg-blood/[0.03] opacity-70"
-                                                : blockedByCap
-                                                  ? "border-gold/5 bg-card/20 opacity-60"
-                                                  : "border-gold/10 bg-card/40 hover:bg-card/60"
-                                      }`}
+                                              : "border-gold/10 bg-card/40 hover:bg-card/60",
+                                      )}
+                                      style={{
+                                        // Cells: prep-toggle (28) · name (1fr) · level (24)
+                                        // · activation (84) · school (40) · conc (14)
+                                        // · range (84) · source (32) · extras (auto)
+                                        gridTemplateColumns:
+                                          "28px minmax(0,1fr) 24px 84px 40px 14px 84px 32px auto",
+                                      }}
                                     >
+                                      {/* ── Prep toggle (replaces the
+                                          old known/check button — known
+                                          is already filtered upstream so
+                                          this column now controls
+                                          preparation directly). Locked
+                                          for always-prepared + granted. */}
                                       <button
+                                        type="button"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          if (!isGranted)
-                                            togglePlayerKnown(spell.id, spellLvl, requiredTags);
+                                          if (owned?.isAlwaysPrepared) return;
+                                          togglePrepared(spell.id);
                                         }}
-                                        disabled={isGranted || isBlocked}
+                                        disabled={!!owned?.isAlwaysPrepared}
                                         title={
-                                          isGranted
-                                            ? "Granted by an advancement (locked)"
-                                            : prereqBlocked
-                                              ? `Missing prerequisite tag${missingTags.length === 1 ? "" : "s"}`
-                                              : blockedByCap
-                                                ? isCantrip
-                                                  ? `At cantrips-known cap (${cantripsCap})`
-                                                  : `At spells-known cap (${spellsCap})`
-                                                : isKnown
-                                                  ? "Remove from known"
-                                                  : "Mark as known"
+                                          owned?.isAlwaysPrepared
+                                            ? "Always prepared (locked)"
+                                            : isPrepared
+                                              ? "Unprepare"
+                                              : "Prepare"
                                         }
-                                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
-                                          isKnown
-                                            ? isGranted
-                                              ? "bg-emerald-600 border-emerald-600 text-white"
-                                              : "bg-gold border-gold text-white"
-                                            : prereqBlocked
-                                              ? "border-blood/30"
-                                              : "border-gold/30 hover:border-gold"
-                                        } ${isGranted || isBlocked ? "cursor-not-allowed" : ""}`}
+                                        className={cn(
+                                          "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                                          owned?.isAlwaysPrepared
+                                            ? "bg-emerald-600 border-emerald-600 text-white cursor-not-allowed"
+                                            : isPrepared
+                                              ? "bg-blood border-blood text-white"
+                                              : "border-gold/40 hover:border-blood/60",
+                                        )}
                                       >
-                                        {isKnown && <Check className="w-3 h-3" />}
+                                        {owned?.isAlwaysPrepared ? (
+                                          <span className="text-[10px] leading-none">✦</span>
+                                        ) : isPrepared ? (
+                                          <Check className="w-3 h-3" />
+                                        ) : null}
                                       </button>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-serif font-bold text-ink text-sm truncate flex items-center gap-1.5">
-                                          <span className="truncate">{spell.name}</span>
-                                          {requiredTags.length > 0 && (
-                                            <span
-                                              className="text-[9px] font-bold uppercase tracking-widest text-blood/70 shrink-0"
-                                              title={`Requires: ${requiredTags.map((tid: string) => spellManagerTags.find((t: any) => t.id === tid)?.name || tid).join(", ")}`}
-                                            >
-                                              ⚷
-                                            </span>
-                                          )}
-                                          {spell.school && (
-                                            <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-ink/40 shrink-0">
-                                              {spell.school}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-1 shrink-0">
+
+                                      {/* ── Name (+ prereq lock icon +
+                                          inline state pills: Extension,
+                                          Granted, Locked) ─────────── */}
+                                      <div className="min-w-0 flex items-center gap-1.5">
+                                        <span className="font-serif font-bold text-ink text-sm truncate">
+                                          {spell.name}
+                                        </span>
+                                        {requiredTags.length > 0 && (
+                                          <span
+                                            className="text-[9px] font-bold uppercase tracking-widest text-blood/70 shrink-0"
+                                            title={`Requires: ${requiredTags
+                                              .map((tid: string) =>
+                                                spellManagerTags.find((t: any) => t.id === tid)?.name || tid,
+                                              )
+                                              .join(", ")}`}
+                                          >
+                                            ⚷
+                                          </span>
+                                        )}
                                         {isExtension && (
-                                          <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-700 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
-                                            Extension
+                                          <span className="text-[8px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-500/10 px-1 py-px rounded border border-cyan-500/20 shrink-0">
+                                            Ext
                                           </span>
                                         )}
                                         {isGranted && (
-                                          <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                          <span className="text-[8px] font-black uppercase tracking-widest text-emerald-700 bg-emerald-500/10 px-1 py-px rounded border border-emerald-500/20 shrink-0">
                                             Granted
                                           </span>
                                         )}
                                         {prereqBlocked && (
-                                          <span
-                                            className="text-[9px] font-bold uppercase tracking-widest text-blood bg-blood/10 px-1.5 py-0.5 rounded border border-blood/30"
-                                            title={`Needs: ${missingTags
-                                              .map(
-                                                (tid: string) =>
-                                                  spellManagerTags.find((t: any) => t.id === tid)?.name ||
-                                                  tid,
-                                              )
-                                              .join(", ")}`}
-                                          >
+                                          <span className="text-[8px] font-black uppercase tracking-widest text-blood bg-blood/10 px-1 py-px rounded border border-blood/30 shrink-0">
                                             Locked
                                           </span>
                                         )}
+                                      </div>
+
+                                      {/* ── Level (C / 1 / 2 …) ──── */}
+                                      <span className="text-xs font-bold text-ink/70 text-center">
+                                        {lvlGlyph}
+                                      </span>
+
+                                      {/* ── Activation (Action / Bonus
+                                          Action / Reaction / 1 minute /
+                                          etc.) ───────────────────── */}
+                                      <span
+                                        className="text-[10px] font-mono text-ink/65 text-center truncate"
+                                        title={activationLabel}
+                                      >
+                                        {activationLabel}
+                                      </span>
+
+                                      {/* ── School abbrev ───────── */}
+                                      <span
+                                        className="text-[10px] font-bold uppercase tracking-widest text-gold/65 text-center truncate"
+                                        title={String(spell.school || "")}
+                                      >
+                                        {schoolLabel}
+                                      </span>
+
+                                      {/* ── Concentration glyph ─── */}
+                                      <span
+                                        className="text-[12px] leading-none text-blood/70 text-center"
+                                        title={isConcentration ? "Concentration" : ""}
+                                      >
+                                        {isConcentration ? "◆" : ""}
+                                      </span>
+
+                                      {/* ── Range ───────────────── */}
+                                      <span
+                                        className="text-[10px] font-mono text-ink/65 text-center truncate"
+                                        title={rangeLabel}
+                                      >
+                                        {rangeLabel}
+                                      </span>
+
+                                      {/* ── Source abbrev ───────── */}
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-ink/45 text-center truncate">
+                                        {sourceLabel}
+                                      </span>
+
+                                      {/* ── Secondary action icons
+                                          (favourite + watchlist +
+                                          loadout chips). Clicks stop
+                                          propagation so they don't
+                                          fire the row's selection. */}
+                                      <div className="flex items-center gap-1 shrink-0">
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             toggleFavourite(spell.id);
                                           }}
                                           title={owned?.isFavourite ? "Unfavourite" : "Favourite"}
-                                          className={`text-sm leading-none px-1 ${
+                                          className={cn(
+                                            "text-sm leading-none px-1",
                                             owned?.isFavourite
                                               ? "text-amber-500"
-                                              : "text-ink/25 hover:text-amber-500"
-                                          }`}
+                                              : "text-ink/25 hover:text-amber-500",
+                                          )}
                                         >
                                           ★
                                         </button>
@@ -9415,11 +9586,12 @@ export default function CharacterBuilder({
                                             toggleWatchlist(spell.id);
                                           }}
                                           title={owned?.isWatchlist ? "Remove from watchlist" : "Watchlist"}
-                                          className={`text-sm leading-none px-1 ${
+                                          className={cn(
+                                            "text-sm leading-none px-1",
                                             owned?.isWatchlist
                                               ? "text-cyan-500"
-                                              : "text-ink/25 hover:text-cyan-500"
-                                          }`}
+                                              : "text-ink/25 hover:text-cyan-500",
+                                          )}
                                         >
                                           ◐
                                         </button>
@@ -9440,40 +9612,18 @@ export default function CharacterBuilder({
                                                     toggleLoadoutMembership(spell.id, l.id)
                                                   }
                                                   title={`${inLoadout ? "Remove from" : "Add to"} ${l.name}`}
-                                                  className={`text-[9px] font-bold uppercase tracking-widest w-4 h-4 rounded border flex items-center justify-center ${
+                                                  className={cn(
+                                                    "text-[9px] font-bold uppercase tracking-widest w-4 h-4 rounded border flex items-center justify-center",
                                                     inLoadout
                                                       ? "border-purple-500/60 bg-purple-500/20 text-purple-700"
-                                                      : "border-gold/15 text-ink/30 hover:border-purple-500/30"
-                                                  }`}
+                                                      : "border-gold/15 text-ink/30 hover:border-purple-500/30",
+                                                  )}
                                                 >
                                                   {l.name.charAt(0).toUpperCase()}
                                                 </button>
                                               );
                                             })}
                                           </div>
-                                        )}
-                                        {isKnown && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              togglePrepared(spell.id);
-                                            }}
-                                            disabled={!!owned?.isAlwaysPrepared}
-                                            title={
-                                              owned?.isAlwaysPrepared
-                                                ? "Always prepared (locked)"
-                                                : isPrepared
-                                                  ? "Unprepare"
-                                                  : "Prepare"
-                                            }
-                                            className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${
-                                              isPrepared || isInActiveLoadout(owned)
-                                                ? "text-blood bg-blood/10 border-blood/30"
-                                                : "text-ink/45 bg-card border-gold/15 hover:border-blood/30"
-                                            } ${owned?.isAlwaysPrepared ? "cursor-not-allowed" : ""}`}
-                                          >
-                                            {isPrepared || isInActiveLoadout(owned) ? "Prepared" : "Prepare"}
-                                          </button>
                                         )}
                                       </div>
                                     </div>
@@ -9518,14 +9668,16 @@ export default function CharacterBuilder({
                     </div>
                   )}
 
-                  {/* ── PrepareSpellsModal — Phase 2 ─────────────────────
-                       Focused per-class prepare flow. Opens from the
-                       class header "Prepare" button (see the tree
-                       above). The component is defined at module level
-                       so it can run its own hooks (search / filter /
-                       selection); state mutations route back through
-                       the same handlers as the main tree so the two
-                       surfaces stay in sync. */}
+                  {/* ── AddSpellsModal ──────────────────────────────────
+                       Per-class picker for "what's on this character's
+                       sheet". Opens from the class header "Add Spells"
+                       button (see the tree above). The component is
+                       defined at module level so it can run its own
+                       hooks (search / filter / selection); state
+                       mutations route back through `togglePlayerKnown`
+                       (and `toggleFavourite` for the favourites pane)
+                       so the two surfaces stay in sync. Preparation
+                       lives on the main sheet, not in this modal. */}
                   {spellsPrepModalClass && (() => {
                     const modalCid = spellsPrepModalClass;
                     const modalClass = classCache[modalCid];
@@ -9618,7 +9770,7 @@ export default function CharacterBuilder({
                     }).length;
 
                     return (
-                      <PrepareSpellsModal
+                      <AddSpellsModal
                         classId={modalCid}
                         className={modalClass?.name || `Class ${modalCid.slice(0, 6)}`}
                         preparationType={modalContributor?.preparationType || "prepared"}
