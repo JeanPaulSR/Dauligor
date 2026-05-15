@@ -402,6 +402,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     }
     setSaving(true);
     try {
+      const wasEdit = !!draft.id;
       const id = await saveRule({
         id: draft.id || null,
         name: draft.name.trim(),
@@ -415,7 +416,29 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       setAppCounts(counts);
       setSelectedRuleId(id);
       setDraftDirty(false);
-      toast(draft.id ? `Saved rule "${draft.name}".` : `Created rule "${draft.name}".`);
+      // Save-time stale signal — when an edit lands on a rule that's
+      // already applied to N CLASSES, those classes' rebuilt spell
+      // lists are now stale (their cached class_spell_lists rows
+      // reflect the pre-edit query). The user has to walk to
+      // /compendium/spell-lists and click Rebuild per class. Surface
+      // the count in the toast so they know what they've affected.
+      //
+      // We deliberately scope this signal to class-typed applications
+      // because that's the only consumer type whose data is currently
+      // baked into a snapshot table. For non-class consumers (feats /
+      // items / etc.) the application row exists but isn't read by
+      // anything yet (see worker/migrations/20260509-1000), so
+      // there's nothing to "rebuild" for those.
+      const refreshedApps = draft.id ? await fetchRuleApplications(draft.id) : [];
+      const classAppCount = refreshedApps.filter(a => a.appliesToType === 'class').length;
+      if (wasEdit && classAppCount > 0) {
+        toast(
+          `Saved "${draft.name}". ${classAppCount} class${classAppCount === 1 ? '' : 'es'} need rebuild — see /compendium/spell-lists.`,
+          { duration: 8000 },
+        );
+      } else {
+        toast(wasEdit ? `Saved rule "${draft.name}".` : `Created rule "${draft.name}".`);
+      }
     } catch (err) {
       console.error('[SpellRulesEditor] Save failed:', err);
       toast.error('Failed to save rule.');
