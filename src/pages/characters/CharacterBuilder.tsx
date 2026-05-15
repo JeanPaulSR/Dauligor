@@ -2092,6 +2092,17 @@ export default function CharacterBuilder({
     [character.progressionState, character.selectedOptions],
   );
 
+  // Opt into the wide-page mode while the builder is mounted. Strips
+  // the global <main> container's max-width so the book-spread sheet
+  // can stretch past xl:1280px on wider screens; CharacterBuilder's
+  // own outer wrapper still caps at 1700px so the book pages don't
+  // stretch comically on ultrawide displays. Mirrors the
+  // `spell-list-fullscreen` pattern in src/index.css.
+  useEffect(() => {
+    document.body.classList.add("character-builder-wide");
+    return () => document.body.classList.remove("character-builder-wide");
+  }, []);
+
   useEffect(() => {
     const fetchSelectedOptions = async () => {
       const allSelectedIds = Object.values(
@@ -4590,7 +4601,7 @@ export default function CharacterBuilder({
   if (loading) return null;
 
   return (
-    <div className="max-w-7xl mx-auto pb-24 pt-4 px-2 sm:px-4 lg:px-6">
+    <div className="max-w-[1700px] mx-auto pb-24 pt-4 px-2 sm:px-4 lg:px-6">
       {/* Top Header & Save */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gold/20 pb-4 mb-6">
         <div className="flex items-center gap-4">
