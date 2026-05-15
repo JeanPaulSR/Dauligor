@@ -5433,15 +5433,15 @@ export default function CharacterBuilder({
                   )}
 
                   {sheetSection === "features" && (
-                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
+                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-5">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
                           <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
                             <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
-                            Class Progression
+                            Granted Features
                           </h3>
                           <p className="text-xs text-ink/50 font-serif italic mt-1">
-                            Features, scale tracks, and advancement selections currently active on this character.
+                            Features, scale tracks, and granted items from your class progression. Manage advancements in the Class step.
                           </p>
                         </div>
                         <Button
@@ -5454,140 +5454,147 @@ export default function CharacterBuilder({
                         </Button>
                       </div>
 
+                      {/* ── Granted Features grid (design handoff) ────────
+                           Per-class section with a 2-col card grid below.
+                           Each card: feature name (serif, semibold) + L#
+                           pill + source tag + optional description. Mirrors
+                           the Features-by-class layout from sheet-v3.jsx. */}
                       {sheetClassSummaries.length > 0 ? (
-                        <div className="grid gap-4 xl:grid-cols-2">
-                          {sheetClassSummaries.map((summary: any) => (
+                        sheetClassSummaries.map((summary: any) => {
+                          const hasFeatures = summary.features.length > 0;
+                          const hasScales = summary.scales.length > 0;
+                          const hasItems = summary.grantedItems.length > 0;
+                          return (
                             <div
                               key={summary.classId}
-                              className="border border-gold/15 bg-background/40 rounded-lg p-4 space-y-4"
+                              className="space-y-3 border-l-[3px] border-gold/40 pl-4"
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="text-lg font-serif font-black text-ink leading-none">
+                              <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                                <div className="flex items-baseline gap-3">
+                                  <span className="text-base font-serif font-bold text-ink">
                                     {summary.className}
-                                  </div>
-                                  <div className="text-[10px] font-black uppercase tracking-[0.22em] text-gold/70 mt-1">
+                                  </span>
+                                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-gold/70">
                                     Level {summary.classLevel}
-                                    {summary.subclassName ? ` • ${summary.subclassName}` : ""}
-                                  </div>
+                                    {summary.subclassName ? ` · ${summary.subclassName}` : ""}
+                                  </span>
                                 </div>
-                                <div className="px-2 py-1 border border-gold/20 bg-gold/5 rounded text-[10px] font-black uppercase tracking-widest text-ink/50">
-                                  {summary.features.length} Features
-                                </div>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-ink/35">
+                                  {summary.features.length} feature{summary.features.length === 1 ? "" : "s"}
+                                </span>
                               </div>
 
-                              <div className="space-y-2">
-                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                                  Scale Values
+                              {hasScales && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {summary.scales.map((scale: any) => (
+                                    <div
+                                      key={scale.id}
+                                      className="px-2 py-0.5 border border-gold/25 bg-gold/5 rounded-sm flex items-baseline gap-1.5"
+                                    >
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-gold/65">
+                                        {scale.name}
+                                      </span>
+                                      <span className="font-mono text-xs font-black text-ink">
+                                        {String(scale.value)}
+                                      </span>
+                                    </div>
+                                  ))}
                                 </div>
-                                {summary.scales.length > 0 ? (
-                                  <div className="flex flex-wrap gap-2">
-                                    {summary.scales.map((scale: any) => (
-                                      <div
-                                        key={scale.id}
-                                        className="px-2 py-1 border border-gold/20 bg-gold/5 rounded-sm"
-                                      >
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-gold/70">
-                                          {scale.name}
-                                        </span>
-                                        <span className="ml-2 text-sm font-black text-ink">
-                                          {String(scale.value)}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs font-serif italic text-ink/35">
-                                    No tracked scale values yet.
-                                  </div>
-                                )}
-                              </div>
+                              )}
 
-                              <div className="space-y-2">
-                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                                  Granted Features
-                                </div>
-                                {summary.features.length > 0 ? (
-                                  <div className="space-y-1.5">
-                                    {summary.features.map((feature: any) => (
+                              {hasFeatures ? (
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  {summary.features.map((feature: any) => {
+                                    const isSubclass = feature.parentType === "subclass";
+                                    return (
                                       <div
                                         key={`${summary.classId}-${feature.id}`}
-                                        className="flex items-center justify-between gap-3 border-b border-gold/10 pb-1 last:border-b-0 last:pb-0"
+                                        className={cn(
+                                          "p-3 rounded-md border bg-card/60 transition-colors hover:bg-card/80",
+                                          isSubclass
+                                            ? "border-amber-500/25"
+                                            : "border-gold/20",
+                                        )}
                                       >
-                                        <span className="text-sm font-serif text-ink">
-                                          {feature.name}
-                                        </span>
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-ink/35">
-                                          L{feature.level}
-                                          {feature.parentType === "subclass" ? " • Subclass" : ""}
-                                        </span>
+                                        <div className="flex items-start justify-between gap-2">
+                                          <span className="font-serif text-sm font-bold text-ink leading-tight">
+                                            {feature.name}
+                                          </span>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <span className="text-[8px] font-black uppercase tracking-[0.16em] text-gold/65 px-1.5 py-0.5 border border-gold/25 rounded-sm">
+                                              L{feature.level}
+                                            </span>
+                                            {isSubclass && (
+                                              <span className="text-[8px] font-black uppercase tracking-[0.16em] text-amber-600/80 px-1.5 py-0.5 border border-amber-500/30 rounded-sm">
+                                                Sub
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {feature.description && (
+                                          <p className="text-[11px] text-ink/55 font-serif leading-relaxed mt-1.5 line-clamp-3">
+                                            {String(feature.description).replace(/\[[^\]]+\]/g, "").trim()}
+                                          </p>
+                                        )}
                                       </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs font-serif italic text-ink/35">
-                                    No granted features yet.
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="space-y-2">
-                                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                                  Granted Items
+                                    );
+                                  })}
                                 </div>
-                                {summary.grantedItems.length > 0 ? (
-                                  <div className="space-y-1.5">
+                              ) : (
+                                <div className="text-xs font-serif italic text-ink/35">
+                                  No granted features yet.
+                                </div>
+                              )}
+
+                              {hasItems && (
+                                <div className="space-y-1 pt-2 border-t border-gold/10">
+                                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/40">
+                                    Granted Items
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
                                     {summary.grantedItems.map((item: any) => (
-                                      <div
+                                      <span
                                         key={`${summary.classId}-item-${item.id}-${item.level}`}
-                                        className="flex items-center justify-between gap-3 border-b border-gold/10 pb-1 last:border-b-0 last:pb-0"
+                                        className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 inline-flex items-center gap-1.5"
                                       >
-                                        <span className="text-sm font-serif text-ink">
-                                          {item.name}
-                                        </span>
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-ink/35">
-                                          L{item.level}
-                                        </span>
-                                      </div>
+                                        <span className="font-serif normal-case">{item.name}</span>
+                                        <span className="text-[8px] font-black tracking-widest text-gold/60">L{item.level}</span>
+                                      </span>
                                     ))}
                                   </div>
-                                ) : (
-                                  <div className="text-xs font-serif italic text-ink/35">
-                                    No granted items yet.
-                                  </div>
-                                )}
-                              </div>
+                                </div>
+                              )}
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })
                       ) : (
                         <div className="text-sm font-serif italic text-ink/35">
                           No class progression is active yet.
                         </div>
                       )}
 
-                      <div className="space-y-2 pt-2 border-t border-gold/10">
-                        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                          Selected Advancement Options
-                        </div>
-                        {selectedAdvancementOptionItems.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
+                      {selectedAdvancementOptionItems.length > 0 && (
+                        <div className="space-y-2 pt-3 border-t border-gold/10">
+                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
+                            Selected Advancement Options
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
                             {selectedAdvancementOptionItems.map((option: any) => (
                               <span
                                 key={option.id}
-                                className="px-2 py-1 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase"
+                                className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase inline-flex items-baseline gap-1.5"
                               >
-                                {option.name}
-                                {option.featureType ? ` • ${option.featureType}` : ""}
+                                <span>{option.name}</span>
+                                {option.featureType && (
+                                  <span className="text-[8px] font-black tracking-widest text-gold/60 normal-case">
+                                    {option.featureType}
+                                  </span>
+                                )}
                               </span>
                             ))}
                           </div>
-                        ) : (
-                          <div className="text-xs font-serif italic text-ink/35">
-                            No advancement options selected yet.
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -8851,6 +8858,394 @@ export default function CharacterBuilder({
                       />
                     );
                   })()}
+                </div>
+              );
+            })()
+          ) : activeStep === "proficiencies" ? (
+            (() => {
+              // ── Proficiencies step (design handoff) ───────────────
+              // Read-only summary view: each proficiency category
+              // (Saves, Skills, Armor, Weapons, Tools, Languages,
+              // Resistances/Immunities/Vulnerabilities, Senses) renders
+              // as a kind-colored card. Tag-cloud body shows the
+              // proficient items; an "Expertise" sub-cloud calls out
+              // skills + tools the character has doubled-proficient.
+              //
+              // Editing happens upstream in the Trait advancement rows
+              // on the Class step (and via race/background/feat picks),
+              // not here — this is the consolidated read-out across
+              // every source.
+
+              const arr = (v: any): string[] => Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+              const profSkillIds: string[] = arr(character.proficientSkills);
+              const expSkillIds: string[] = arr(character.expertiseSkills);
+              const halfSkillIds: string[] = arr(character.halfProficientSkills);
+              const savingThrowIds: string[] = arr(character.savingThrows).map((s) => s.toUpperCase());
+              const expSaveIds: string[] = arr(character.expertiseSavingThrows).map((s) => s.toUpperCase());
+
+              const skillById = new Map(allSkills.map((s: any) => [String(s.id), s]));
+              const attributeById = new Map(allAttributes.map((a: any) => [String(a.identifier || a.id).toUpperCase(), a]));
+
+              const profSkillNames = profSkillIds
+                .map((id) => skillById.get(id)?.name || id)
+                .filter(Boolean) as string[];
+              const expSkillNames = expSkillIds
+                .map((id) => skillById.get(id)?.name || id)
+                .filter(Boolean) as string[];
+              const halfSkillNames = halfSkillIds
+                .map((id) => skillById.get(id)?.name || id)
+                .filter(Boolean) as string[];
+
+              const profSaveNames = savingThrowIds
+                .map((id) => attributeById.get(id)?.name || id)
+                .filter(Boolean) as string[];
+              const expSaveNames = expSaveIds
+                .map((id) => attributeById.get(id)?.name || id)
+                .filter(Boolean) as string[];
+
+              const armorNames = formatTraitValues("armor", character.armorProficiencies || []);
+              const weaponNames = formatTraitValues("weapons", character.weaponProficiencies || []);
+              const toolNames = formatTraitValues("tools", character.toolProficiencies || []);
+              const langNames = formatTraitValues("languages", character.languages || []);
+
+              const resistanceNames = arr(character.resistances);
+              const immunityNames = arr(character.immunities);
+              const vulnerabilityNames = arr(character.vulnerabilities);
+              const conditionImmunityNames = arr(character.conditionImmunities);
+
+              const senses = character.senses || {};
+              const sensesAdditional = String(senses.additional || "").trim();
+
+              // Card definitions — color matches the design handoff's
+              // KIND_META palette (skill/save/armor/weapon/tool/language
+              // /resistance/immunity/sense).
+              const cards = [
+                {
+                  key: "saves",
+                  title: "Saving Throws",
+                  icon: "◈",
+                  color: "#2a5a4a",
+                  bgClass: "bg-emerald-700/[0.04]",
+                  borderClass: "border-emerald-700/25",
+                  textClass: "text-emerald-800",
+                  items: profSaveNames,
+                  expertise: expSaveNames,
+                  emptyText: "No save proficiencies.",
+                },
+                {
+                  key: "skills",
+                  title: "Skills",
+                  icon: "◇",
+                  color: "#3a7ca5",
+                  bgClass: "bg-sky-700/[0.04]",
+                  borderClass: "border-sky-700/25",
+                  textClass: "text-sky-800",
+                  items: profSkillNames,
+                  expertise: expSkillNames,
+                  half: halfSkillNames,
+                  emptyText: "No skill proficiencies.",
+                },
+                {
+                  key: "armor",
+                  title: "Armor",
+                  icon: "▣",
+                  color: "#6b5034",
+                  bgClass: "bg-amber-900/[0.04]",
+                  borderClass: "border-amber-900/25",
+                  textClass: "text-amber-900",
+                  items: armorNames,
+                  emptyText: "No armor proficiencies.",
+                },
+                {
+                  key: "weapons",
+                  title: "Weapons",
+                  icon: "⚔",
+                  color: "#7d2b2b",
+                  bgClass: "bg-blood/[0.04]",
+                  borderClass: "border-blood/25",
+                  textClass: "text-blood",
+                  items: weaponNames,
+                  emptyText: "No weapon proficiencies.",
+                },
+                {
+                  key: "tools",
+                  title: "Tools",
+                  icon: "⚒",
+                  color: "#8a6f37",
+                  bgClass: "bg-gold/5",
+                  borderClass: "border-gold/30",
+                  textClass: "text-gold",
+                  items: toolNames,
+                  emptyText: "No tool proficiencies.",
+                },
+                {
+                  key: "languages",
+                  title: "Languages",
+                  icon: "✎",
+                  color: "#6b4f8a",
+                  bgClass: "bg-purple-700/[0.04]",
+                  borderClass: "border-purple-700/25",
+                  textClass: "text-purple-800",
+                  items: langNames.length > 0 ? langNames : ["Common"],
+                  emptyText: "None.",
+                },
+              ];
+
+              const hasDamageTraits =
+                resistanceNames.length > 0 ||
+                immunityNames.length > 0 ||
+                vulnerabilityNames.length > 0 ||
+                conditionImmunityNames.length > 0;
+
+              const hasSenses =
+                Number(senses.passivePerception ?? 0) > 0 ||
+                Number(senses.passiveInvestigation ?? 0) > 0 ||
+                Number(senses.passiveInsight ?? 0) > 0 ||
+                sensesAdditional.length > 0;
+
+              const renderChips = (
+                items: string[],
+                opts: { color: string; bgClass: string; borderClass: string; textClass: string; emphasize?: boolean },
+              ) => (
+                <div className="flex flex-wrap gap-1.5">
+                  {items.map((item) => (
+                    <span
+                      key={item}
+                      className={cn(
+                        "px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest rounded-sm border",
+                        opts.borderClass,
+                        opts.bgClass,
+                        opts.textClass,
+                        opts.emphasize ? "font-black ring-1 ring-inset ring-gold/30" : "",
+                      )}
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              );
+
+              return (
+                <div className="bg-background/50 p-4 sm:p-6 rounded-xl border border-gold/10 space-y-5">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-serif font-black text-ink uppercase tracking-tight flex items-center gap-2">
+                        <Star className="w-5 h-5 text-gold" />
+                        Proficiencies
+                      </h2>
+                      <p className="text-xs text-ink/55 font-serif italic mt-1">
+                        Consolidated view across class, subclass, race, background, and feats. Edit via the Trait rows on the Class step.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveStep("class")}
+                      className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
+                    >
+                      Open Class Step
+                    </Button>
+                  </div>
+
+                  {/* Category grid */}
+                  <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {cards.map((card) => {
+                      const hasContent = card.items.length > 0;
+                      const expertiseList = card.expertise || [];
+                      const halfList = card.half || [];
+                      return (
+                        <div
+                          key={card.key}
+                          className={cn(
+                            "p-3 sm:p-4 rounded-md border bg-card/50 border-l-[3px]",
+                            card.borderClass,
+                          )}
+                          style={{ borderLeftColor: card.color }}
+                        >
+                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/10">
+                            <div className="flex items-baseline gap-2 min-w-0">
+                              <span
+                                className="text-base font-black leading-none"
+                                style={{ color: card.color }}
+                              >
+                                {card.icon}
+                              </span>
+                              <span className="font-serif text-sm font-bold text-ink truncate">
+                                {card.title}
+                              </span>
+                            </div>
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40 shrink-0">
+                              {card.items.length + expertiseList.length + halfList.length}
+                            </span>
+                          </div>
+
+                          {hasContent ? (
+                            renderChips(card.items, {
+                              color: card.color,
+                              bgClass: card.bgClass,
+                              borderClass: card.borderClass,
+                              textClass: card.textClass,
+                            })
+                          ) : (
+                            <p className="text-[11px] font-serif italic text-ink/35">
+                              {card.emptyText}
+                            </p>
+                          )}
+
+                          {expertiseList.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-gold/10 space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-gold/65">
+                                Expertise
+                              </span>
+                              {renderChips(expertiseList, {
+                                color: card.color,
+                                bgClass: card.bgClass,
+                                borderClass: card.borderClass,
+                                textClass: card.textClass,
+                                emphasize: true,
+                              })}
+                            </div>
+                          )}
+
+                          {halfList.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-gold/10 space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/45">
+                                Half-Proficient
+                              </span>
+                              {renderChips(halfList, {
+                                color: card.color,
+                                bgClass: "bg-card/30",
+                                borderClass: "border-gold/20",
+                                textClass: "text-ink/60",
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Damage traits + senses — variable-presence, rendered
+                      only when the character has anything to show in
+                      these categories. Keeps the grid clean for new
+                      characters. */}
+                  {(hasDamageTraits || hasSenses) && (
+                    <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+                      {hasDamageTraits && (
+                        <div
+                          className="p-3 sm:p-4 rounded-md border bg-card/50 border-l-[3px] border-emerald-700/25"
+                          style={{ borderLeftColor: "#1f6f5c" }}
+                        >
+                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/10">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-base font-black text-emerald-700 leading-none">⛨</span>
+                              <span className="font-serif text-sm font-bold text-ink">
+                                Damage Traits
+                              </span>
+                            </div>
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40">
+                              {resistanceNames.length + immunityNames.length + vulnerabilityNames.length + conditionImmunityNames.length}
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {resistanceNames.length > 0 && (
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700/75">
+                                  Resistances
+                                </span>
+                                {renderChips(resistanceNames, {
+                                  color: "#1f6f5c",
+                                  bgClass: "bg-emerald-700/[0.05]",
+                                  borderClass: "border-emerald-700/25",
+                                  textClass: "text-emerald-800",
+                                })}
+                              </div>
+                            )}
+                            {immunityNames.length > 0 && (
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-800/75">
+                                  Immunities
+                                </span>
+                                {renderChips(immunityNames, {
+                                  color: "#0f5f3f",
+                                  bgClass: "bg-emerald-800/[0.06]",
+                                  borderClass: "border-emerald-800/30",
+                                  textClass: "text-emerald-900",
+                                  emphasize: true,
+                                })}
+                              </div>
+                            )}
+                            {vulnerabilityNames.length > 0 && (
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black uppercase tracking-[0.18em] text-blood/75">
+                                  Vulnerabilities
+                                </span>
+                                {renderChips(vulnerabilityNames, {
+                                  color: "#7d2b2b",
+                                  bgClass: "bg-blood/[0.06]",
+                                  borderClass: "border-blood/25",
+                                  textClass: "text-blood",
+                                })}
+                              </div>
+                            )}
+                            {conditionImmunityNames.length > 0 && (
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700/75">
+                                  Condition Immunities
+                                </span>
+                                {renderChips(conditionImmunityNames, {
+                                  color: "#0f5f3f",
+                                  bgClass: "bg-emerald-700/[0.05]",
+                                  borderClass: "border-emerald-700/25",
+                                  textClass: "text-emerald-800",
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {hasSenses && (
+                        <div
+                          className="p-3 sm:p-4 rounded-md border bg-card/50 border-l-[3px]"
+                          style={{ borderLeftColor: "#5a4a8a" }}
+                        >
+                          <div className="flex items-baseline justify-between gap-2 pb-2 mb-2 border-b border-gold/10">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-base font-black text-purple-700 leading-none">◉</span>
+                              <span className="font-serif text-sm font-bold text-ink">
+                                Senses
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { lbl: "Passive Perception", v: senses.passivePerception },
+                              { lbl: "Passive Investigation", v: senses.passiveInvestigation },
+                              { lbl: "Passive Insight", v: senses.passiveInsight },
+                            ].map((p) => (
+                              <div
+                                key={p.lbl}
+                                className="flex flex-col items-center gap-1 p-2 border border-purple-700/15 bg-purple-700/[0.03] rounded-sm"
+                              >
+                                <span className="font-mono text-base font-black text-purple-900 leading-none">
+                                  {p.v ?? "—"}
+                                </span>
+                                <span className="text-[8px] font-black uppercase tracking-[0.14em] text-purple-700/65 text-center leading-tight">
+                                  {p.lbl.replace("Passive ", "")}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          {sensesAdditional && (
+                            <p className="text-[11px] font-serif text-ink/65 mt-3 pt-2 border-t border-gold/10 leading-relaxed">
+                              {sensesAdditional}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })()
