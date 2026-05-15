@@ -5,6 +5,15 @@ import { Button } from './ui/button';
 
 interface Props {
   children: ReactNode;
+  /**
+   * Optional render prop that replaces the default "Archive Error" card.
+   * Receives the caught error and a `reset()` callback that clears the
+   * boundary's hasError state. Use this when a specific page wants a
+   * tailored recovery flow (e.g. CharacterBuilder shows a Delete +
+   * Back-to-list pair when a stale-schema character crashes the
+   * render path).
+   */
+  fallback?: (error: Error | null, reset: () => void) => ReactNode;
 }
 
 interface State {
@@ -31,8 +40,23 @@ export default class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  // Soft reset — clears the boundary without reloading the page. Used
+  // by custom fallbacks that take their own recovery action (e.g.
+  // navigating away after deleting a broken character) and just need
+  // the boundary out of the way.
+  private softReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
   public render() {
     if (this.state.hasError) {
+      // Custom fallback takes precedence — lets a wrapping page
+      // (CharacterBuilder, etc.) render a domain-specific recovery
+      // UI with hooks-using subcomponents.
+      if (this.props.fallback) {
+        return this.props.fallback(this.state.error, this.softReset);
+      }
+
       let errorMessage = "An unexpected error occurred.";
       let diagnosticInfo = null;
 

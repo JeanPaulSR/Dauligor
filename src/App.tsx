@@ -49,6 +49,7 @@ import FeatList from './pages/compendium/FeatList';
 import ItemsEditor from './pages/compendium/ItemsEditor';
 import CharacterList from './pages/characters/CharacterList';
 import CharacterBuilder from './pages/characters/CharacterBuilder';
+import CharacterErrorBoundary from './pages/characters/CharacterErrorBoundary';
 import { TooltipProvider } from './components/ui/tooltip';
 import CampaignManager from './pages/campaign/CampaignManager';
 import CampaignEditor from './pages/campaign/CampaignEditor';
@@ -293,8 +294,22 @@ export default function App() {
                   <Route path="/profile/:username" element={<Profile viewerProfile={effectiveProfile} />} />
                   <Route path="/construction" element={<Construction />} />
                   <Route path="/characters" element={<CharacterList userProfile={effectiveProfile} />} />
-                  <Route path="/characters/new" element={<CharacterBuilder userProfile={effectiveProfile} />} />
-                  <Route path="/characters/builder/:id" element={<CharacterBuilder userProfile={effectiveProfile} />} />
+                  <Route
+                    path="/characters/new"
+                    element={
+                      <CharacterErrorBoundary>
+                        <CharacterBuilder userProfile={effectiveProfile} />
+                      </CharacterErrorBoundary>
+                    }
+                  />
+                  <Route
+                    path="/characters/builder/:id"
+                    element={
+                      <CharacterErrorBoundary>
+                        <CharacterBuilder userProfile={effectiveProfile} />
+                      </CharacterErrorBoundary>
+                    }
+                  />
                 </Routes>
               </div>
             </ErrorBoundary>
