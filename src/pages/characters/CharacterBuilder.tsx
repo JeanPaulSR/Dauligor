@@ -4769,21 +4769,106 @@ export default function CharacterBuilder({
               {/* ── IDENTITY STRIP (BookSpread Hand-Off-2) ──────────
                   Compact header. Title sits flush-left; chips line
                   below carries LVL + one chip per progression class
-                  ("Sorcerer 3 (Ember Bloodline)") + race chip. The
-                  Inspiration + Exhaustion blocks that used to live
-                  on the right got demoted to compact pips inside the
-                  Vital Hub footer. Subtitle line ("Medium Humanoid ·
-                  Chaotic Good") rides below the chips when the info
-                  block has size/alignment populated. */}
+                  ("Sorcerer 3 (Ember Bloodline)") + race chip.
+                  Inspiration + Exhaustion pills float right-aligned
+                  next to the name input — they're character state,
+                  not Vital Hub numbers, so they sit where the
+                  identity row reads. Subtitle line ("Medium Humanoid
+                  · Chaotic Good") rides below the chips when the
+                  info block has size/alignment populated. */}
               <div className="order-1 border-b-2 border-gold/10 pb-5 md:pb-6">
-                <Input
-                  value={character.name}
-                  onChange={(e) =>
-                    setCharacter({ ...character, name: e.target.value })
-                  }
-                  placeholder="UNNAMED ADVENTURER"
-                  className="text-2xl sm:text-3xl md:text-4xl font-serif font-black text-ink bg-transparent border-none p-0 focus-visible:ring-0 placeholder:text-ink/10 h-auto tracking-tight"
-                />
+                <div className="flex items-center gap-3">
+                  <Input
+                    value={character.name}
+                    onChange={(e) =>
+                      setCharacter({ ...character, name: e.target.value })
+                    }
+                    placeholder="UNNAMED ADVENTURER"
+                    className="flex-1 text-2xl sm:text-3xl md:text-4xl font-serif font-black text-ink bg-transparent border-none p-0 focus-visible:ring-0 placeholder:text-ink/10 h-auto tracking-tight"
+                  />
+                  {/* ── Inspired + Exhaustion pills ─────────────────
+                      Compact icon-pills right-aligned next to the
+                      name input. Inspired toggles on click; Exhaustion
+                      shows the current count (0-6) and cycles 0→1→…→6→0
+                      on click (right-click steps back). Tinted blood
+                      as the count climbs so severity reads without an
+                      icon. */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCharacter({
+                          ...character,
+                          hasInspiration: !character.hasInspiration,
+                        })
+                      }
+                      title={
+                        character.hasInspiration
+                          ? "Inspired — click to clear"
+                          : "Click to grant inspiration"
+                      }
+                      className={cn(
+                        "h-7 px-2 inline-flex items-center gap-1.5 rounded-sm border transition-all",
+                        character.hasInspiration
+                          ? "bg-gold border-gold text-white shadow-[0_0_8px_rgba(197,160,89,0.35)]"
+                          : "bg-card border-gold/25 text-ink/55 hover:border-gold/50",
+                      )}
+                    >
+                      <Star
+                        className={cn(
+                          "w-3.5 h-3.5 transition-all",
+                          character.hasInspiration
+                            ? "text-white scale-110 rotate-[72deg]"
+                            : "text-gold/55",
+                        )}
+                        fill={character.hasInspiration ? "currentColor" : "none"}
+                      />
+                      <span className="text-[9px] font-black uppercase tracking-[0.12em]">
+                        {character.hasInspiration ? "Inspired" : "Inspire"}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCharacter({
+                          ...character,
+                          exhaustion: ((character.exhaustion ?? 0) + 1) % 7,
+                        })
+                      }
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setCharacter({
+                          ...character,
+                          exhaustion: ((character.exhaustion ?? 0) + 6) % 7,
+                        });
+                      }}
+                      title="Click +1 exhaustion · right-click -1"
+                      className={cn(
+                        "h-7 px-2 inline-flex items-center gap-1.5 rounded-sm border transition-all font-mono",
+                        (character.exhaustion ?? 0) >= 5
+                          ? "bg-blood/15 border-blood text-blood"
+                          : (character.exhaustion ?? 0) >= 3
+                            ? "bg-blood/[0.08] border-blood/55 text-blood"
+                            : (character.exhaustion ?? 0) > 0
+                              ? "bg-blood/[0.04] border-blood/30 text-blood"
+                              : "bg-card border-gold/25 text-ink/40 hover:border-gold/50",
+                      )}
+                    >
+                      <span className="text-sm font-black leading-none">
+                        {character.exhaustion ?? 0}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[9px] font-black uppercase tracking-[0.12em] font-sans",
+                          (character.exhaustion ?? 0) > 0 ? "text-blood/85" : "text-ink/55",
+                        )}
+                      >
+                        Exh
+                      </span>
+                    </button>
+                  </div>
+                </div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <span className="bg-gold text-white px-1.5 py-0.5 rounded-sm text-[10px] font-black uppercase tracking-widest">
                     LVL {character.level}
@@ -4842,16 +4927,17 @@ export default function CharacterBuilder({
                   (`order-2`) per the Hand-Off-2 verso layout. Inner
                   layout unchanged — header row + 6-ability grid;
                   compact restyle is parked for a follow-up. */}
-              <div className="order-3 space-y-3">
-              {/* Header row exposes the Point Buy modal next to the
-                  scores so players don't have to fish for it through
-                  an ASI advancement. Pre-fill summary in the badge
-                  reflects whether the current scores actually fit a
-                  27-point allocation (8–15 only, no double-cost
-                  overrun). */}
-              <div className="flex items-baseline justify-between gap-3 px-1">
+              <div className="order-3 space-y-2">
+              {/* ── ABILITIES & SAVES section header (Hand-Off-2 .sec-h)
+                  ────────────────────────────────────────────────────
+                  Gold uppercase title left + mono meta right with
+                  1px gold-tinted border-bottom. Meta carries the
+                  Point Buy link (text-only, opens the modal — used
+                  to be an outline Button which read as "another
+                  step" instead of "edit this section"). */}
+              <div className="flex items-baseline justify-between gap-3 pb-1.5 border-b border-gold/20">
                 <div className="flex items-baseline gap-3">
-                  <span className="label-text text-ink/30 border-l-2 border-gold pl-2">
+                  <span className="text-[11px] font-black uppercase tracking-[0.18em] text-gold leading-none">
                     Abilities &amp; Saves
                   </span>
                   {(() => {
@@ -4868,7 +4954,7 @@ export default function CharacterBuilder({
                     const isPB = String(character?.stats?.method || "") === "point-buy";
                     if (!inRange) {
                       return (
-                        <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40">
+                        <span className="text-[10px] font-bold text-ink/40 font-mono">
                           Custom range
                         </span>
                       );
@@ -4878,43 +4964,39 @@ export default function CharacterBuilder({
                     return (
                       <span
                         className={cn(
-                          "text-[9px] font-bold uppercase tracking-widest",
+                          "text-[10px] font-bold font-mono",
                           isPB ? "text-gold" : "text-ink/45",
                         )}
                         title="Whether the current scores fit a standard 27-point allocation."
                       >
-                        {isPB ? "Point Buy · " : "Fits Point Buy · "}
+                        {isPB ? "Point Buy · " : "Fits PB · "}
                         {remaining >= 0 ? `${remaining} unspent` : `${-remaining} over`}
                       </span>
                     );
                   })()}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
+                  type="button"
                   onClick={() => setShowPointBuy(true)}
-                  className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black gap-2"
+                  className="text-[11px] font-bold font-mono text-ink/55 hover:text-gold transition-colors"
                 >
-                  <Edit2 className="w-3 h-3" /> Point Buy
-                </Button>
+                  Point Buy
+                </button>
               </div>
-              {/* ── Abilities & Saves unified grid (BookSpread design)
-                  ──────────────────────────────────────────────────
-                  Each ability gets one cell that stacks the score box
-                  (with modifier inside), the raw-score tag, the +/-
-                  controls on hover, AND the save row (prof dot +
-                  "SAVE" label + save total). Clicking the save row
-                  cycles the proficiency state (none → prof → expert
-                  → half → none); right-click cycles in reverse —
-                  same controls the old standalone Saving Throws
-                  block exposed, now consolidated into one place. */}
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4 mb-8">
+
+              {/* ── .ability-save-grid — 6 equal columns, tight gap.
+                  Each cell stacks: STR label / +mod box (big mod
+                  inside a faint-gold inset) / score tag (small mono)
+                  / save row (prof dot + save mod). Right-click on
+                  the save row cycles proficiency in reverse; hover
+                  exposes ±1 stat-step controls.
+                  Matches `.ability-save-cell` in sheet-v3.css. */}
+              <div className="grid grid-cols-6 gap-1.5">
                 {(allAttributes.length > 0
                   ? allAttributes
                   : ["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((id) => ({ id, identifier: id, name: id }))
                 ).map((attr: any) => {
                   const iden = attr.identifier || attr.id;
-                  const attrName = attr.name || iden;
                   const score = getSafeStat(iden);
                   const modStr = getSafeModifier(iden);
 
@@ -4974,85 +5056,92 @@ export default function CharacterBuilder({
                   return (
                     <div
                       key={attr.id || iden}
-                      className="group relative flex flex-col items-stretch"
+                      className="group relative flex flex-col items-center gap-1 px-1 pt-1.5 pb-1.5 bg-card border border-gold/20"
                     >
-                      <span className="text-[10px] font-black uppercase tracking-widest text-ink/55 text-center mb-1">
-                        {attrName}
+                      {/* `.ab-label` — STR / DEX / CON / INT / WIS / CHA */}
+                      <span className="text-[10px] font-black uppercase tracking-[0.1em] text-ink leading-none">
+                        {iden}
                       </span>
-                      <div className="bg-card border-2 border-gold/25 rounded-lg p-3 flex flex-col items-center transition-all group-hover:border-gold group-hover:shadow-[0_0_12px_rgba(197,160,89,0.18)]">
-                        <span className="text-2xl sm:text-3xl font-black text-ink leading-none">
+                      {/* `.ab-mod-box` — full-width 38px panel with
+                          a faint gold inset; the big modifier sits
+                          centered inside. */}
+                      <div className="w-full h-9 bg-gold/[0.06] border border-gold/25 flex items-center justify-center">
+                        <span className="text-lg font-black text-ink leading-none tracking-tight">
                           {modStr}
                         </span>
-                        <span className="mt-1.5 px-2 py-0.5 bg-gold/15 border border-gold/30 rounded-sm font-mono text-[10px] font-black text-gold leading-none">
-                          {score}
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={cycleSave}
-                          onContextMenu={cycleSaveReverse}
-                          title={
-                            isExp
-                              ? "Expertise save · click for half · right-click for proficient"
-                              : isProf
-                                ? "Proficient save · click for expertise · right-click for none"
-                                : isHalf
-                                  ? "Half-proficient · click for none · right-click for expertise"
-                                  : "Click to cycle proficiency · right-click reverses"
-                          }
+                      </div>
+                      {/* `.ab-score-tag` — raw score in mono */}
+                      <span className="font-mono text-[10px] font-bold text-ink/55 leading-none">
+                        {score}
+                      </span>
+                      {/* `.ab-save` — bordered row with prof dot + save mod */}
+                      <button
+                        type="button"
+                        onClick={cycleSave}
+                        onContextMenu={cycleSaveReverse}
+                        title={
+                          isExp
+                            ? "Expertise save · click for half · right-click for proficient"
+                            : isProf
+                              ? "Proficient save · click for expertise · right-click for none"
+                              : isHalf
+                                ? "Half-proficient · click for none · right-click for expertise"
+                                : "Click to cycle save proficiency · right-click reverses"
+                        }
+                        className={cn(
+                          "w-full flex items-center justify-center gap-1 px-1 py-0.5 border transition-colors cursor-pointer",
+                          saveActive
+                            ? "bg-gold/[0.08] border-gold/30"
+                            : "bg-background/70 border-gold/12 hover:border-gold/25",
+                        )}
+                      >
+                        {/* prof dot — matches `.prof-dot` 4-state shape */}
+                        <span
                           className={cn(
-                            "mt-2 pt-2 border-t w-full flex items-center justify-between gap-1.5 transition-colors group/save",
-                            saveActive ? "border-gold/30" : "border-gold/10 hover:border-gold/25",
+                            "w-3 h-3 rounded-full border-2 shrink-0 relative overflow-hidden transition-all",
+                            isExp
+                              ? "border-gold bg-gold shadow-[inset_0_0_0_2px_white]"
+                              : isProf
+                                ? "border-gold bg-gold"
+                                : isHalf
+                                  ? "border-gold bg-gold"
+                                  : "border-gold/30 group-hover:border-gold/60",
                           )}
                         >
-                          <span
-                            className={cn(
-                              "w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 transition-all relative overflow-hidden",
-                              isExp
-                                ? "border-gold bg-card"
-                                : isProf
-                                  ? "border-gold bg-gold"
-                                  : isHalf
-                                    ? "border-gold bg-gold"
-                                    : "border-gold/30 group-hover/save:border-gold/60",
-                            )}
-                          >
-                            {isExp && <span className="block w-1.5 h-1.5 rounded-full bg-gold" />}
-                            {isHalf && (
-                              <span
-                                className="absolute inset-0 bg-card"
-                                style={{ clipPath: "polygon(50% 0, 100% 0, 100% 100%, 50% 100%)" }}
-                              />
-                            )}
-                          </span>
-                          <span className="text-[8px] font-black uppercase tracking-widest text-ink/45 leading-none">
-                            Save
-                          </span>
-                          <span
-                            className={cn(
-                              "font-mono text-xs font-black leading-none ml-auto",
-                              saveActive ? "text-gold" : "text-ink/55",
-                            )}
-                          >
-                            {saveTotalLabel}
-                          </span>
-                        </button>
-                      </div>
+                          {isHalf && (
+                            <span
+                              className="absolute inset-0 bg-card"
+                              style={{
+                                clipPath: "polygon(50% 0, 100% 0, 100% 100%, 50% 100%)",
+                              }}
+                            />
+                          )}
+                        </span>
+                        <span
+                          className={cn(
+                            "font-mono text-[11px] font-black leading-none",
+                            saveActive ? "text-ink" : "text-ink/55",
+                          )}
+                        >
+                          {saveTotalLabel}
+                        </span>
+                      </button>
 
-                      <div className="absolute -right-2 top-6 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                      {/* ±1 stat-step controls — hidden until cell hover */}
+                      <div className="absolute -right-1.5 top-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                         <button
                           onClick={() => handleStatChange(iden, 1)}
-                          className="p-1 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+                          className="p-0.5 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
                           aria-label={`Increase ${iden}`}
                         >
-                          <Plus className="w-3 h-3" />
+                          <Plus className="w-2.5 h-2.5" />
                         </button>
                         <button
                           onClick={() => handleStatChange(iden, -1)}
-                          className="p-1 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
+                          className="p-0.5 bg-ink text-gold rounded border border-gold/30 shadow-lg hover:bg-gold hover:text-white transition-all active:scale-90"
                           aria-label={`Decrease ${iden}`}
                         >
-                          <Minus className="w-3 h-3" />
+                          <Minus className="w-2.5 h-2.5" />
                         </button>
                       </div>
                     </div>
