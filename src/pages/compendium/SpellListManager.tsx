@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, Wand2, Plus, Check, X, ChevronDown, ChevronRight, Lock } from 'lucide-react';
+import { ChevronLeft, Wand2, Plus, Check, X, ChevronDown, ChevronRight, ChevronUp, Lock, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -232,6 +232,12 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const [selectedSpellIds, setSelectedSpellIds] = useState<Set<string>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
   const [previewSpellId, setPreviewSpellId] = useState<string | null>(null);
+  // Right-pane "Show Rule Match" disclosure — collapsed by default,
+  // mirrors the "Show Tags" disclosure pattern in SpellDetailPanel.
+  // When closed the rule-match block is a single toggle row so the
+  // description gets the full reading surface; when opened the trace
+  // expands below it.
+  const [showRuleMatch, setShowRuleMatch] = useState(false);
   // Cross-class stale audit. Populated on mount + after any
   // rebuild / link / unlink so the count stays current. Drives the
   // toolbar "Rebuild Stale (N)" affordance and the per-row
@@ -1534,27 +1540,38 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               emptyMessage="Click a spell to preview its details here."
             />
 
-            {/* Rule-match explainer — only when a spell is previewed
-                AND the current class has linked rules. Renders one
-                accordion-style block per linked rule with the
-                rule's per-axis pass/fail breakdown. Passing rules
-                collapse to a single OK chip; failing rules expand to
-                show the failing axis + the reason string from
-                `explainSpellMatch`. Helps admins debug "why is this
-                spell on / off this rule's match set" without
-                reverse-engineering tag groups by hand. */}
+            {/* Rule-match explainer — collapsed by default behind a
+                "Show Rule Match" disclosure that mirrors the "Show
+                Tags" pattern in SpellDetailPanel. Keeps the
+                description surface clean for the common read-only
+                case (admin browsing spells); the explainer is
+                one click away when debugging "why is this on/off
+                the class list". Pass count + total in the disclosure
+                label so the user sees the summary without expanding. */}
             {previewSpellId && previewSpellRuleExplanations.length > 0 && (
               <div className="border-t border-gold/15 px-4 py-3 space-y-2">
-                <div className="flex items-baseline justify-between">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.18em] text-gold/65">
-                    Rule Match
-                  </h4>
-                  <span className="text-[10px] font-mono text-ink/35">
-                    {previewSpellRuleExplanations.filter((e) => e.explanation.matched).length}
-                    {' / '}
-                    {previewSpellRuleExplanations.length} match
+                <button
+                  type="button"
+                  onClick={() => setShowRuleMatch((s) => !s)}
+                  aria-expanded={showRuleMatch}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <Scale className="w-3 h-3" />
+                    {showRuleMatch ? 'Hide rule match' : 'Show rule match'}
+                    <span className="text-ink/45 normal-case tracking-normal font-normal">
+                      ({previewSpellRuleExplanations.filter((e) => e.explanation.matched).length}
+                      {' / '}
+                      {previewSpellRuleExplanations.length} match)
+                    </span>
                   </span>
-                </div>
+                  {showRuleMatch ? (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                {showRuleMatch && (
                 <div className="space-y-1.5">
                   {previewSpellRuleExplanations.map(({ rule, explanation }) => {
                     const isPinned =
@@ -1634,6 +1651,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     );
                   })}
                 </div>
+                )}
               </div>
             )}
           </CardContent>
