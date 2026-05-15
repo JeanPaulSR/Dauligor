@@ -5098,9 +5098,15 @@ export default function CharacterBuilder({
                   // strokeDasharray to "<filled> <total>" so we render
                   // exactly the percentage we want. The whole SVG is
                   // rotated -90° so 0% lives at the top of the circle.
-                  const RING_SIZE = 160;
-                  const HP_R = 72;
-                  const SP_R = 60;
+                  // Ring sizing — Hand-Off-2's RingedPortraitMini is
+                  // ~140px square in the verso column. We size 130
+                  // here to leave a few pixels of breathing room
+                  // inside the 140px column declared on the outer
+                  // grid below. Inner radii shrink proportionally so
+                  // the strokes still read cleanly at the smaller size.
+                  const RING_SIZE = 130;
+                  const HP_R = 58;
+                  const SP_R = 48;
                   const HP_CIRC = 2 * Math.PI * HP_R;
                   const SP_CIRC = 2 * Math.PI * SP_R;
                   const hpDash = (HP_CIRC * hpPct) / 100;
@@ -5112,7 +5118,11 @@ export default function CharacterBuilder({
                     .toUpperCase() || "?";
 
                   return (
-                    <div className="border border-gold/20 p-5 flex flex-col xl:flex-row gap-6 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
+                    // Vital Hub outer — Hand-Off-2 uses a tighter
+                    // 140px portrait column + fluid right column, so
+                    // we drop p-5 to p-4 and gap-6 to gap-4 to match
+                    // the compactness of the reference.
+                    <div className="border border-gold/20 p-4 flex flex-col xl:flex-row gap-4 rounded-lg bg-card/50 shadow-sm relative group transition-all hover:bg-card/80 hover:shadow-md">
                       {/* RINGED PORTRAIT */}
                       <div
                         className="relative shrink-0 mx-auto xl:mx-0 group/portrait"
@@ -5172,7 +5182,7 @@ export default function CharacterBuilder({
                             center of the rings. Image when present,
                             else a monogram of the character's first
                             letter (matches the handoff's V/D monograms). */}
-                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full overflow-hidden border-2 border-gold/30 bg-card flex items-center justify-center shadow-inner">
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full overflow-hidden border-2 border-gold/30 bg-card flex items-center justify-center shadow-inner">
                           {character.imageUrl ? (
                             <img
                               src={character.imageUrl}
@@ -5181,7 +5191,7 @@ export default function CharacterBuilder({
                               referrerPolicy="no-referrer"
                             />
                           ) : (
-                            <span className="font-serif text-4xl font-bold text-gold/55 leading-none select-none">
+                            <span className="font-serif text-3xl font-bold text-gold/55 leading-none select-none">
                               {monogram}
                             </span>
                           )}
@@ -5190,7 +5200,7 @@ export default function CharacterBuilder({
                         {/* Hover image-upload overlay — same trigger as
                             before, scoped to the center circle so it
                             doesn't fight with the AC shield's hit area. */}
-                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full bg-ink/65 opacity-0 group-hover/portrait:opacity-100 transition-opacity flex items-center justify-center pointer-events-auto">
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full bg-ink/65 opacity-0 group-hover/portrait:opacity-100 transition-opacity flex items-center justify-center pointer-events-auto">
                           <ImageUpload
                             currentImageUrl={character.imageUrl}
                             storagePath={`images/characters/${id || "new"}/`}
@@ -5327,19 +5337,20 @@ export default function CharacterBuilder({
                           )}
                         </div>
 
-                        {/* Hit Dice strip — one card per class. The
-                            data model carries a `HitPoints` advancement
-                            per class with `configuration.hitDie` set
-                            to the class's hit-die size (see
-                            classProgression.ts, characterLogic.ts ::
-                            normalizeAdvancementList). The character's
-                            total available Hit Dice is therefore the
-                            sum of class levels; each class contributes
-                            `classLevel` dice of its hit-die type.
-                            Per-class spent tracking isn't in the model
-                            yet, so each card renders max/max — when
-                            spent tracking lands the `current` value
-                            wires in here. */}
+                        {/* ── Hit Dice — per-class cards (Hand-Off-2
+                            `.vv-hd-card` pattern) ─────────────────
+                            Mirrors the design's `vitals-variants` HD
+                            strip: a small "HIT DICE" label centered
+                            above a row of class-labeled cards. Each
+                            card has the class name in a faint-gold
+                            header band, then a body row of
+                            `current / max` and the die label
+                            (`d6`, `d8`, …) separated by a 1px gold
+                            divider. Per-class spent tracking isn't on
+                            the model yet, so cards render `max/max`
+                            — when the runtime spent counter lands
+                            (`group.hitDiceSpent` or similar), the
+                            `current` term wires in below. */}
                         {(() => {
                           const classGroups = progressionClassGroups.length > 0
                             ? progressionClassGroups
@@ -5347,57 +5358,68 @@ export default function CharacterBuilder({
                           const aggregateMax = Number(character?.hitDie?.max ?? 0) || 0;
                           const aggregateCurrent = Number(character?.hitDie?.current ?? aggregateMax) || aggregateMax;
                           return (
-                            <div className="flex flex-wrap items-center gap-3 p-2 border border-gold/15 bg-card/30 rounded-md">
-                              <span className="text-[8px] font-black uppercase tracking-widest text-ink/45 pl-1">
+                            <div className="flex flex-col items-center gap-1.5 pt-1">
+                              <span className="text-[9px] font-black uppercase tracking-[0.22em] text-ink/55">
                                 Hit Dice
                               </span>
-                              <div className="flex-1 flex flex-wrap gap-2">
+                              <div className="flex flex-wrap justify-center gap-2 w-full">
                                 {classGroups ? (
                                   classGroups.map((group: any) => {
                                     const classDoc = classCache[group.classId];
                                     const hitDieFaces = Number(classDoc?.hitDie) || 8;
                                     const dieLabel = `d${hitDieFaces}`;
                                     const max = Number(group?.classLevel ?? 0) || 0;
-                                    // Until per-class spent tracking
-                                    // lands, render max/max. Aggregate
-                                    // current is shown on the strip
-                                    // footer below for awareness.
+                                    const className =
+                                      classDoc?.name || group.className || "Class";
                                     return (
                                       <div
                                         key={group.classKey || group.classId}
-                                        className="px-3 py-1.5 border border-gold/20 bg-card rounded flex items-center gap-3"
+                                        className="flex-1 min-w-[110px] bg-card border border-gold/25 rounded-md overflow-hidden flex flex-col"
                                       >
-                                        <span className="font-mono text-base font-black leading-none">
-                                          <span className="text-ink">{max}</span>
-                                          <span className="text-ink/25"> / </span>
-                                          <span className="text-ink/55">{max}</span>
-                                        </span>
-                                        <span className="w-px h-4 bg-gold/20" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-gold/75 leading-none">
-                                          {dieLabel}
-                                        </span>
-                                        {classGroups.length > 1 && (
-                                          <span className="text-[9px] font-bold uppercase tracking-widest text-ink/50 truncate max-w-[80px]">
-                                            {group.className || classDoc?.name || ""}
+                                        {/* Class header band — gold text on
+                                            5% gold background, 1px border-
+                                            bottom. Matches `.vv-hd-card-class`. */}
+                                        <div className="text-[9px] font-black uppercase tracking-[0.18em] text-gold text-center py-1 px-2 bg-gold/[0.05] border-b border-gold/20">
+                                          {className}
+                                        </div>
+                                        <div className="flex items-baseline justify-center gap-2.5 px-3 py-2">
+                                          <span className="flex items-baseline gap-0.5 leading-none">
+                                            <span className="text-xl font-black text-ink leading-none">
+                                              {max}
+                                            </span>
+                                            <span className="text-xl font-black text-ink/25 leading-none">/</span>
+                                            <span className="text-xl font-black text-ink/45 leading-none">
+                                              {max}
+                                            </span>
                                           </span>
-                                        )}
+                                          <span className="w-px self-stretch bg-gold/25" />
+                                          <span className="font-mono text-base font-bold text-ink leading-none">
+                                            {dieLabel}
+                                          </span>
+                                        </div>
                                       </div>
                                     );
                                   })
                                 ) : (
-                                  // Fallback for fresh characters with
-                                  // no progression yet — show the
-                                  // default character.hitDie aggregate.
-                                  <div className="px-3 py-1.5 border border-gold/20 bg-card rounded flex items-center gap-3">
-                                    <span className="font-mono text-base font-black leading-none">
-                                      <span className="text-ink">{aggregateCurrent}</span>
-                                      <span className="text-ink/25"> / </span>
-                                      <span className="text-ink/55">{aggregateMax || 1}</span>
-                                    </span>
-                                    <span className="w-px h-4 bg-gold/20" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gold/75 leading-none">
-                                      {character?.hitDie?.type || "d10"}
-                                    </span>
+                                  <div className="flex-1 min-w-[110px] bg-card border border-gold/25 rounded-md overflow-hidden flex flex-col">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-gold text-center py-1 px-2 bg-gold/[0.05] border-b border-gold/20">
+                                      Class
+                                    </div>
+                                    <div className="flex items-baseline justify-center gap-2.5 px-3 py-2">
+                                      <span className="flex items-baseline gap-0.5 leading-none">
+                                        <span className="text-xl font-black text-ink leading-none">
+                                          {aggregateCurrent}
+                                        </span>
+                                        <span className="text-xl font-black text-ink/25 leading-none">/</span>
+                                        <span className="text-xl font-black text-ink/45 leading-none">
+                                          {aggregateMax || 1}
+                                        </span>
+                                      </span>
+                                      <span className="w-px self-stretch bg-gold/25" />
+                                      <span className="font-mono text-base font-bold text-ink leading-none">
+                                        {character?.hitDie?.type || "d10"}
+                                      </span>
+                                    </div>
                                   </div>
                                 )}
                               </div>
@@ -5405,17 +5427,16 @@ export default function CharacterBuilder({
                           );
                         })()}
 
-                        {/* ── VITAL STRIP — Init / Speed / Prof +
-                            Inspiration + Exhaustion (Hand-Off-2)
-                            ─────────────────────────────────────────
-                            Used to be three tiles + standalone
-                            Inspiration/Exhaustion blocks in the
-                            identity strip. Demoted those to compact
-                            interactive tiles inside the Vital Hub
-                            footer per Hand-Off-2 — they're status
-                            switches that belong with the rest of the
-                            "current state" reads (HP/SP/AC/Init). */}
-                        <div className="grid grid-cols-5 gap-2">
+                        {/* ── VITAL TRIPLET — Init / Speed / Prof
+                            (Hand-Off-2 `.vitals-grid` 3-col layout)
+                            ────────────────────────────────────────
+                            Inspiration + Exhaustion that briefly
+                            lived in this row got promoted back into
+                            the identity strip — the Hand-Off-2
+                            verso vital triplet is a clean 3-cell
+                            row of pure "current-state numbers"
+                            (Init / Speed / Prof). */}
+                        <div className="grid grid-cols-3 gap-2">
                           {[
                             {
                               label: "Initiative",
@@ -5450,95 +5471,6 @@ export default function CharacterBuilder({
                               </span>
                             </div>
                           ))}
-
-                          {/* Inspiration tile — gold-filled when set,
-                              click toggles. Same data shape as the
-                              old standalone block (character.hasInspiration). */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCharacter({
-                                ...character,
-                                hasInspiration: !character.hasInspiration,
-                              })
-                            }
-                            title={
-                              character.hasInspiration
-                                ? "Inspired — click to clear"
-                                : "Click to grant inspiration"
-                            }
-                            className={cn(
-                              "p-2 sm:p-3 border-2 rounded flex flex-col items-center justify-center text-center shadow-sm transition-all hover:-translate-y-0.5 cursor-pointer",
-                              character.hasInspiration
-                                ? "bg-gold border-gold text-white shadow-[0_0_12px_rgba(197,160,89,0.4)]"
-                                : "bg-card border-gold/20 text-ink hover:border-gold/40",
-                            )}
-                          >
-                            <Star
-                              className={cn(
-                                "w-5 h-5 sm:w-6 sm:h-6 transition-all",
-                                character.hasInspiration ? "scale-110 rotate-[72deg] text-white" : "text-gold/40",
-                              )}
-                              fill={character.hasInspiration ? "currentColor" : "none"}
-                            />
-                            <span
-                              className={cn(
-                                "text-[8px] sm:text-[9px] font-black uppercase tracking-[0.16em] mt-1.5",
-                                character.hasInspiration ? "text-white/90" : "text-ink/45",
-                              )}
-                            >
-                              Inspired
-                            </span>
-                          </button>
-
-                          {/* Exhaustion tile — count + step controls.
-                              Click cycles 0→1→…→6→0 (left), right-
-                              click steps back. Visual ramp tints the
-                              tile blood/* as the count climbs so it
-                              reads as "this is bad" without needing
-                              an icon. */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCharacter({
-                                ...character,
-                                exhaustion: ((character.exhaustion ?? 0) + 1) % 7,
-                              })
-                            }
-                            onContextMenu={(e) => {
-                              e.preventDefault();
-                              setCharacter({
-                                ...character,
-                                exhaustion:
-                                  ((character.exhaustion ?? 0) + 6) % 7,
-                              });
-                            }}
-                            title="Click +1 exhaustion · right-click -1"
-                            className={cn(
-                              "p-2 sm:p-3 border-2 rounded flex flex-col items-center justify-center text-center shadow-sm transition-all hover:-translate-y-0.5 cursor-pointer",
-                              (character.exhaustion ?? 0) >= 5
-                                ? "bg-blood/15 border-blood text-blood"
-                                : (character.exhaustion ?? 0) >= 3
-                                  ? "bg-blood/8 border-blood/55 text-blood"
-                                  : (character.exhaustion ?? 0) > 0
-                                    ? "bg-blood/[0.04] border-blood/30 text-blood"
-                                    : "bg-card border-gold/20 text-ink/35 hover:border-gold/40",
-                            )}
-                          >
-                            <span className="font-mono text-xl sm:text-2xl font-black leading-none">
-                              {character.exhaustion ?? 0}
-                            </span>
-                            <span
-                              className={cn(
-                                "text-[8px] sm:text-[9px] font-black uppercase tracking-[0.16em] mt-1.5",
-                                (character.exhaustion ?? 0) > 0
-                                  ? "text-blood/85"
-                                  : "text-ink/45",
-                              )}
-                            >
-                              Exhaustion
-                            </span>
-                          </button>
                         </div>
                       </div>
                     </div>
