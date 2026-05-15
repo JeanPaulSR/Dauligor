@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Wand2, Plus, Check, X, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { toast } from 'sonner';
@@ -124,21 +124,32 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     return () => document.body.classList.remove('spell-list-fullscreen');
   }, [isAdmin]);
 
-  // Viewport-derived pane height. The chrome above the working
-  // grid is: navbar (~56) + page toolbar (~50) + FilterBar row
-  // (~56) + maybe rules / chip strips when present + small gaps
-  // ≈ 200-260 depending on whether the rules strip is showing.
-  // We use a single conservative offset; the small underestimate
-  // just leaves a few pixels of breathing room at the bottom of
-  // the panes.
+  // Pane height — measured from the actual flex-1 grid container
+  // (see `gridContainerRef` below), NOT estimated from
+  // `window.innerHeight - <magic>`. The earlier estimate ignored the
+  // Linked Rules panel's expand/collapse state, so expanding it
+  // pushed the spell-list+detail cards below the viewport. With the
+  // measurement-based approach, when Linked Rules expands the page-
+  // level flex layout shrinks this container, ResizeObserver fires,
+  // paneHeight drops, and both Cards (which are sized off paneHeight)
+  // resize in lockstep — the bottom of the list always sits at the
+  // bottom of the page.
+  const gridContainerRef = useRef<HTMLDivElement | null>(null);
   const [paneHeight, setPaneHeight] = useState<number>(() =>
     typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 260),
   );
   useEffect(() => {
-    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 260));
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const el = gridContainerRef.current;
+    if (!el) return;
+    // Min 240 keeps the list usable on short viewports even when
+    // every section above is expanded (Linked Rules + filter chips +
+    // toolbar). Below that the list gets a vertical scrollbar
+    // courtesy of `overflow-y-auto` on the card itself.
+    const measure = () => setPaneHeight(Math.max(240, el.clientHeight));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
@@ -1300,7 +1311,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           detail card scrolls via overflow-y-auto. Outer flex-1
           min-h-0 lets the grid claim the viewport's leftover
           vertical space without forcing the page to scroll. */}
-      <div className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div ref={gridContainerRef} className="flex-1 min-h-0 grid gap-2 lg:grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_420px]">
         <Card
           className="border-gold/20 bg-card/50 overflow-hidden"
           style={{ height: `${paneHeight}px` }}
