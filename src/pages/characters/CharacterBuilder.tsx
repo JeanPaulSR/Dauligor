@@ -2213,17 +2213,68 @@ export default function CharacterBuilder({
       const missingIds = allSelectedIds.filter((id) => !optionsCache[id]);
       if (missingIds.length === 0) return;
 
+      // Tables to try, in order. `uniqueOptionItems` is the generic
+      // options bucket (most class advancement choices) and covers the
+      // majority of selectedOptions ids. `features` is the fall-through
+      // for advancement types whose pool comes from per-class features
+      // (e.g. feature-choice advancements that pick from a class's
+      // feature roster rather than a uniqueOptionGroup). Without this
+      // fall-through, anything stored against a feature-pool advancement
+      // shows up as a raw ID on the FEATURES tab's "Selected Advancement
+      // Options" chip strip — which is what the user reported on legacy
+      // characters.
+      //
+      // Resolved rows get keyed by `row.id` AND by the originally-
+      // requested id (in case the row reports a different canonical id
+      // for whatever reason). Tries each table sequentially per id so
+      // we don't waste a round-trip when the first attempt hits.
+      const fallbackTables = ["uniqueOptionItems", "features"];
+
       try {
-        const results = await Promise.all(
-          missingIds.map((id: string) => fetchDocument<any>("uniqueOptionItems", id)),
-        );
-        setOptionsCache((prev) => {
-          const nc = { ...prev };
-          results.forEach((row: any) => {
-            if (row && row.id) nc[row.id] = row;
+        const resolved: any[] = [];
+        const stillMissing: string[] = [];
+
+        for (const id of missingIds) {
+          let row: any = null;
+          for (const tbl of fallbackTables) {
+            try {
+              row = await fetchDocument<any>(tbl, id);
+              if (row && (row.id || row.name)) break;
+            } catch {
+              // Individual fetch failure is benign — fall through to
+              // the next table or mark as still-missing.
+            }
+          }
+          if (row && (row.id || row.name)) {
+            resolved.push({ id, row });
+          } else {
+            stillMissing.push(id);
+          }
+        }
+
+        if (resolved.length > 0) {
+          setOptionsCache((prev) => {
+            const nc = { ...prev };
+            resolved.forEach(({ id, row }) => {
+              const key = row.id || id;
+              nc[key] = row;
+              // Also cache under the originally-requested id so the
+              // direct lookup (`optionsCache[optionId]`) hits even if
+              // the row's reported id is normalized differently.
+              if (key !== id) nc[id] = row;
+            });
+            return nc;
           });
-          return nc;
-        });
+        }
+
+        if (stillMissing.length > 0) {
+          console.warn(
+            "[CharacterBuilder] Could not resolve names for selectedOption ids:",
+            stillMissing,
+            "Tables tried:",
+            fallbackTables,
+          );
+        }
       } catch (err) {
         console.error("Failed to load options cache", err);
       }
@@ -6221,17 +6272,42 @@ export default function CharacterBuilder({
                               Granted Items
                             </div>
                             <div className="flex flex-wrap gap-1.5">
-                              {allGrantedItems.map((item: any) => (
-                                <span
-                                  key={`${item.classId}-item-${item.id}-${item.level}`}
-                                  className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 inline-flex items-center gap-1.5"
-                                >
-                                  <span className="font-serif normal-case">{item.name}</span>
-                                  <span className="text-[8px] font-black tracking-widest text-gold/60">
-                                    {item.className} L{item.level}
+                              {allGrantedItems.map((item: any) => {
+                                // Unresolved = the resolver in
+                                // collectGrantedItemsFromAdvancementList
+                                // couldn't find a name in featureCache /
+                                // optionsCache and fell back to the raw
+                                // id. Show a degraded "Unresolved" style
+                                // so the player doesn't have to puzzle
+                                // out whether that 20-char id is
+                                // actually a feature name.
+                                const isUnresolved =
+                                  !item.name ||
+                                  String(item.name) === String(item.id);
+                                const displayName = isUnresolved
+                                  ? `Unresolved · ${String(item.id).slice(0, 10)}…`
+                                  : item.name;
+                                return (
+                                  <span
+                                    key={`${item.classId}-item-${item.id}-${item.level}`}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded-sm text-[10px] font-bold inline-flex items-center gap-1.5",
+                                      isUnresolved
+                                        ? "bg-blood/[0.06] border border-blood/25 text-blood/75 italic"
+                                        : "bg-card border border-gold/20 text-ink/70",
+                                    )}
+                                    title={isUnresolved ? `Couldn't resolve item id ${item.id}` : item.name}
+                                  >
+                                    <span className="font-serif normal-case">{displayName}</span>
+                                    <span className={cn(
+                                      "text-[8px] font-black tracking-widest not-italic",
+                                      isUnresolved ? "text-blood/55" : "text-gold/60",
+                                    )}>
+                                      {item.className} L{item.level}
+                                    </span>
                                   </span>
-                                </span>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -6242,19 +6318,40 @@ export default function CharacterBuilder({
                               Selected Advancement Options
                             </div>
                             <div className="flex flex-wrap gap-1.5">
-                              {selectedAdvancementOptionItems.map((option: any) => (
-                                <span
-                                  key={option.id}
-                                  className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase inline-flex items-baseline gap-1.5"
-                                >
-                                  <span>{option.name}</span>
-                                  {option.featureType && (
-                                    <span className="text-[8px] font-black tracking-widest text-gold/60 normal-case">
-                                      {option.featureType}
-                                    </span>
-                                  )}
-                                </span>
-                              ))}
+                              {selectedAdvancementOptionItems.map((option: any) => {
+                                // Same degraded "Unresolved" treatment as
+                                // Granted Items above — the lazy-loader
+                                // (`fetchSelectedOptions`) falls through
+                                // multiple tables, so an ID that's still
+                                // unresolved usually means the row was
+                                // deleted from the compendium or moved
+                                // to a table we don't yet query.
+                                const isUnresolved =
+                                  !option.name ||
+                                  String(option.name) === String(option.id);
+                                const displayName = isUnresolved
+                                  ? `Unresolved · ${String(option.id).slice(0, 10)}…`
+                                  : option.name;
+                                return (
+                                  <span
+                                    key={option.id}
+                                    className={cn(
+                                      "px-2 py-0.5 rounded-sm text-[10px] font-bold inline-flex items-baseline gap-1.5",
+                                      isUnresolved
+                                        ? "bg-blood/[0.06] border border-blood/25 text-blood/75 italic normal-case"
+                                        : "bg-card border border-gold/20 text-ink/70 uppercase",
+                                    )}
+                                    title={isUnresolved ? `Couldn't resolve option id ${option.id}` : option.name}
+                                  >
+                                    <span>{displayName}</span>
+                                    {option.featureType && (
+                                      <span className="text-[8px] font-black tracking-widest text-gold/60 normal-case not-italic">
+                                        {option.featureType}
+                                      </span>
+                                    )}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
