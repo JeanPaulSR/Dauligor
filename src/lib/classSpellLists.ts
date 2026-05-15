@@ -111,6 +111,37 @@ export async function fetchLastClassRuleRebuildAt(classId: string): Promise<stri
 }
 
 /**
+ * Two of our DATETIME columns are stored in different shapes:
+ *   - `class_spell_lists.added_at` comes from SQLite's
+ *     `CURRENT_TIMESTAMP` → `YYYY-MM-DD HH:MM:SS` (no T, no Z)
+ *   - `spell_rules.updated_at` comes from `new Date().toISOString()` in
+ *     `src/lib/spellRules.ts :: upsertRule` → `YYYY-MM-DDTHH:MM:SS.sssZ`
+ *
+ * Lexically comparing those two strings is wrong: ASCII `T` (0x54) >
+ * ` ` (0x20), so the ISO form is ALWAYS lexically greater on the same
+ * day even when the wall clock says the rebuild happened later. That's
+ * the "every class is always stale even right after rebuild" bug.
+ *
+ * Normalize both to ms-since-epoch before comparing. SQLite's
+ * CURRENT_TIMESTAMP is documented UTC, so when the string lacks a `T`/
+ * `Z` we splice them in to force UTC parsing (otherwise JS treats it as
+ * local time and tz-shifts the value).
+ */
+export function parseTimestampMs(s: string | null | undefined): number {
+  if (!s) return 0;
+  // ISO already (has T) — let Date handle it. Both `...Z` and naked-no-zone
+  // ISO parse to the right UTC instant in practice; we don't strip the
+  // millis component.
+  if (s.includes('T')) return new Date(s).getTime();
+  // SQLite `YYYY-MM-DD HH:MM:SS` — promote to UTC ISO and parse.
+  const isoish = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)
+    ? s.replace(' ', 'T') + 'Z'
+    : s;
+  const t = new Date(isoish).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/**
  * Cross-class stale audit. Returns one row per class that has at
  * least one applied rule AND is in a "needs rebuild" state, i.e.:
  *   - the class has never been rebuilt (no rule:% rows in
@@ -170,15 +201,20 @@ export async function fetchStaleClasses(): Promise<Array<{
   const out: Array<{ classId: string; className: string; staleRuleCount: number; lastRebuiltAt: string | null }> = [];
   for (const [classId, ruleIds] of rulesByClassId) {
     const lastRebuiltAt = lastRebuildByClassId.get(classId) ?? null;
+    const lastRebuiltMs = parseTimestampMs(lastRebuiltAt);
     let staleRuleCount = 0;
     for (const rid of ruleIds) {
       const updatedAt = ruleUpdatedAtById.get(rid) ?? null;
       if (!lastRebuiltAt) {
         // Class never rebuilt — every applied rule is stale.
         staleRuleCount += 1;
-      } else if (updatedAt && updatedAt > lastRebuiltAt) {
-        staleRuleCount += 1;
+        continue;
       }
+      // Numeric ms-since-epoch comparison — see `parseTimestampMs`'s
+      // header for why string compare doesn't work across the two
+      // formats our DATETIME columns mix.
+      const updatedMs = parseTimestampMs(updatedAt);
+      if (updatedMs > lastRebuiltMs) staleRuleCount += 1;
     }
     if (staleRuleCount > 0) {
       out.push({

@@ -22,6 +22,7 @@ import {
   fetchClassesForSpells,
   addSpellsToClassList,
   removeSpellsFromClassList,
+  parseTimestampMs,
   type ClassMembership,
 } from '../../lib/classSpellLists';
 import {
@@ -709,25 +710,27 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
 
   // Per-rule stale detection. A rule is "stale" relative to this
   // class if it's been edited since the class was last rebuilt
-  // (i.e. spell_rules.updated_at > MAX(class_spell_lists.added_at)
-  // for the rule:% rows on this class). Also stale if the class
-  // has never been rebuilt but does have rules linked — that's
-  // the "linked but never baked" case.
-  // String compare on ISO-shaped DATETIME columns works because
-  // both fields are written by SQLite's CURRENT_TIMESTAMP, which
-  // emits "YYYY-MM-DD HH:MM:SS" — lexicographically sortable.
+  // (i.e. `spell_rules.updated_at` > `MAX(class_spell_lists.added_at)`
+  // for the rule:% rows on this class). Also stale if the class has
+  // never been rebuilt but does have rules linked — that's the "linked
+  // but never baked" case.
+  //
+  // BUG FIX: the previous string compare was wrong because the two
+  // DATETIME columns get written by different paths (client ISO vs
+  // SQLite CURRENT_TIMESTAMP) and never share a textual shape. Same
+  // root cause as `fetchStaleClasses` in `lib/classSpellLists.ts` —
+  // see `parseTimestampMs` there for the explanation.
   const staleRuleIds = useMemo(() => {
     const out = new Set<string>();
+    const lastRebuildMs = parseTimestampMs(lastRebuildAt);
     for (const rule of linkedRules) {
-      const updatedAt = rule.updatedAt || '';
       if (!lastRebuildAt) {
         // Class never rebuilt — every linked rule needs a bake.
         out.add(rule.id);
         continue;
       }
-      if (updatedAt && updatedAt > lastRebuildAt) {
-        out.add(rule.id);
-      }
+      const updatedMs = parseTimestampMs(rule.updatedAt || '');
+      if (updatedMs > lastRebuildMs) out.add(rule.id);
     }
     return out;
   }, [linkedRules, lastRebuildAt]);
@@ -1783,7 +1786,12 @@ function LinkedRulesPanel({
               </Button>
             </div>
           ) : null}
-          <div className="space-y-1">
+          {/* Cap the expanded rules list at ~40% of viewport height and
+              scroll internally. Previously this just expanded unbounded,
+              so a class with 8+ linked rules pushed the spell-list
+              card below the fold — the user couldn't see the spells
+              the rules were actually shaping. */}
+          <div className="space-y-1 max-h-[40vh] overflow-y-auto custom-scrollbar pr-1">
             {linkedRules.map(rule => {
               const counts = ruleMatchCounts[rule.id] || { matches: 0, onList: 0 };
               const ruleStale = staleRuleIds.has(rule.id);
