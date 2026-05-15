@@ -65,6 +65,15 @@ type Props = {
    *  difference is purely the title + subtitle font scale; body / tags
    *  / source rows are unaffected. */
   size?: 'normal' | 'compact';
+  /** Optional render slot pinned to the bottom of the panel, right
+   *  after the Show Tags disclosure. Used by the SpellListManager to
+   *  drop a "Show Rule Match" disclosure into the same visual group
+   *  as Show Tags so the two toggles sit as siblings rather than as
+   *  a separate section below the panel. Receives no arguments;
+   *  rendered inside the panel's `mt-auto` bottom-pinned container,
+   *  which means anything passed here will hug the bottom of the
+   *  available reading surface in lockstep with Show Tags. */
+  bottomSlot?: React.ReactNode;
 };
 
 export default function SpellDetailPanel({
@@ -73,6 +82,7 @@ export default function SpellDetailPanel({
   isFavorite,
   onToggleFavorite,
   size = 'normal',
+  bottomSlot,
 }: Props) {
   const navigate = useNavigate();
   const [sources, setSources] = useState<SourceRecord[]>([]);
@@ -457,6 +467,13 @@ export default function SpellDetailPanel({
             )}
           </>
         )}
+        {/* Caller-supplied content pinned to the bottom of the panel
+            alongside Show Tags. Used by SpellListManager to render
+            a "Show Rule Match" disclosure as a sibling of Show Tags
+            so the two toggles share the same `space-y-3` rhythm and
+            don't visually drift apart. Anything passed via this slot
+            inherits the parent's bottom-pin (`mt-auto`). */}
+        {bottomSlot}
         </div>
       </div>
     </div>

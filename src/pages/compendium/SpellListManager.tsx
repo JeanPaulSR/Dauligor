@@ -1538,122 +1538,121 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
             <SpellDetailPanel
               spellId={previewSpellId}
               emptyMessage="Click a spell to preview its details here."
-            />
-
-            {/* Rule-match explainer — collapsed by default behind a
-                "Show Rule Match" disclosure that mirrors the "Show
-                Tags" pattern in SpellDetailPanel. Keeps the
-                description surface clean for the common read-only
-                case (admin browsing spells); the explainer is
-                one click away when debugging "why is this on/off
-                the class list". Pass count + total in the disclosure
-                label so the user sees the summary without expanding. */}
-            {previewSpellId && previewSpellRuleExplanations.length > 0 && (
-              <div className="border-t border-gold/15 px-4 py-3 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setShowRuleMatch((s) => !s)}
-                  aria-expanded={showRuleMatch}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
-                >
-                  <span className="flex items-center gap-2">
-                    <Scale className="w-3 h-3" />
-                    {showRuleMatch ? 'Hide rule match' : 'Show rule match'}
-                    <span className="text-ink/45 normal-case tracking-normal font-normal">
-                      ({previewSpellRuleExplanations.filter((e) => e.explanation.matched).length}
-                      {' / '}
-                      {previewSpellRuleExplanations.length} match)
-                    </span>
-                  </span>
-                  {showRuleMatch ? (
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  )}
-                </button>
-                {showRuleMatch && (
-                <div className="space-y-1.5">
-                  {previewSpellRuleExplanations.map(({ rule, explanation }) => {
-                    const isPinned =
-                      explanation.matched
-                      && explanation.axes.length === 1
-                      && explanation.axes[0].reason.startsWith('Manually pinned');
-                    return (
-                      <div
-                        key={rule.id}
-                        className={cn(
-                          'rounded border px-2.5 py-1.5 text-xs',
-                          explanation.matched
-                            ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
-                            : 'border-blood/30 bg-blood/[0.04]',
-                        )}
-                      >
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={cn(
-                              'inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-black shrink-0',
-                              explanation.matched
-                                ? 'bg-emerald-500/20 text-emerald-500'
-                                : 'bg-blood/20 text-blood',
-                            )}
-                          >
-                            {explanation.matched ? '✓' : '✗'}
-                          </span>
-                          <span className="font-bold text-ink truncate">{rule.name}</span>
-                          {isPinned && (
-                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 rounded-sm px-1.5 py-px">
-                              Pinned
-                            </span>
-                          )}
-                        </div>
-                        {/* Axes breakdown — only render when there's
-                            something to say. Passing rules with axes
-                            list them as a comma-separated summary so
-                            you can sanity-check what the rule actually
-                            constrains. Failing rules surface the
-                            specific failing axis + its reason. */}
-                        {explanation.axes.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1 pl-6">
-                            {explanation.matched ? (
-                              <span className="text-[10px] text-ink/50">
-                                Passes all {explanation.axes.length} axis check
-                                {explanation.axes.length === 1 ? '' : 's'}:{' '}
-                                {explanation.axes.map((a) => a.axis).join(', ')}
-                              </span>
-                            ) : (
-                              explanation.axes
-                                .filter((a) => !a.pass)
-                                .map((a, idx) => (
-                                  <span
-                                    key={`${rule.id}-${a.axis}-${idx}`}
-                                    className="text-[10px] text-blood/80 leading-snug"
-                                    title={a.reason}
-                                  >
-                                    <span className="font-bold uppercase tracking-widest mr-1">
-                                      {a.axis}:
-                                    </span>
-                                    {a.reason}
+              // Rule-match explainer rides in via SpellDetailPanel's
+              // `bottomSlot`: it lands inside the same bottom-pinned
+              // container that holds the Source / "On the spell list
+              // for" / Show Tags rows, so the Show Rule Match button
+              // sits as a sibling of Show Tags rather than as a
+              // separate section beneath the panel.
+              bottomSlot={
+                previewSpellId && previewSpellRuleExplanations.length > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowRuleMatch((s) => !s)}
+                      aria-expanded={showRuleMatch}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-gold/10 bg-gold/[0.03] hover:bg-gold/[0.07] text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Scale className="w-3 h-3" />
+                        {showRuleMatch ? 'Hide rule match' : 'Show rule match'}
+                        <span className="text-ink/45 normal-case tracking-normal font-normal">
+                          ({previewSpellRuleExplanations.filter((e) => e.explanation.matched).length}
+                          {' / '}
+                          {previewSpellRuleExplanations.length} match)
+                        </span>
+                      </span>
+                      {showRuleMatch ? (
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    {showRuleMatch && (
+                      <div className="space-y-1.5">
+                        {previewSpellRuleExplanations.map(({ rule, explanation }) => {
+                          const isPinned =
+                            explanation.matched
+                            && explanation.axes.length === 1
+                            && explanation.axes[0].reason.startsWith('Manually pinned');
+                          return (
+                            <div
+                              key={rule.id}
+                              className={cn(
+                                'rounded border px-2.5 py-1.5 text-xs',
+                                explanation.matched
+                                  ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
+                                  : 'border-blood/30 bg-blood/[0.04]',
+                              )}
+                            >
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className={cn(
+                                    'inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-black shrink-0',
+                                    explanation.matched
+                                      ? 'bg-emerald-500/20 text-emerald-500'
+                                      : 'bg-blood/20 text-blood',
+                                  )}
+                                >
+                                  {explanation.matched ? '✓' : '✗'}
+                                </span>
+                                <span className="font-bold text-ink truncate">{rule.name}</span>
+                                {isPinned && (
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 rounded-sm px-1.5 py-px">
+                                    Pinned
                                   </span>
-                                ))
-                            )}
-                          </div>
-                        )}
-                        {/* Empty-rule edge case: matcher returns true
-                            with no axes to walk. The UI says so
-                            explicitly so the user doesn't think the
-                            rule mysteriously matched. */}
-                        {explanation.matched && explanation.axes.length === 0 && !isPinned && (
-                          <div className="mt-1 pl-6 text-[10px] italic text-ink/45">
-                            Rule has no filter clauses — matches every spell.
-                          </div>
-                        )}
+                                )}
+                              </div>
+                              {/* Axes breakdown — only render when there's
+                                  something to say. Passing rules with axes
+                                  list them as a comma-separated summary so
+                                  you can sanity-check what the rule actually
+                                  constrains. Failing rules surface the
+                                  specific failing axis + its reason. */}
+                              {explanation.axes.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1 pl-6">
+                                  {explanation.matched ? (
+                                    <span className="text-[10px] text-ink/50">
+                                      Passes all {explanation.axes.length} axis check
+                                      {explanation.axes.length === 1 ? '' : 's'}:{' '}
+                                      {explanation.axes.map((a) => a.axis).join(', ')}
+                                    </span>
+                                  ) : (
+                                    explanation.axes
+                                      .filter((a) => !a.pass)
+                                      .map((a, idx) => (
+                                        <span
+                                          key={`${rule.id}-${a.axis}-${idx}`}
+                                          className="text-[10px] text-blood/80 leading-snug"
+                                          title={a.reason}
+                                        >
+                                          <span className="font-bold uppercase tracking-widest mr-1">
+                                            {a.axis}:
+                                          </span>
+                                          {a.reason}
+                                        </span>
+                                      ))
+                                  )}
+                                </div>
+                              )}
+                              {/* Empty-rule edge case: matcher returns true
+                                  with no axes to walk. The UI says so
+                                  explicitly so the user doesn't think the
+                                  rule mysteriously matched. */}
+                              {explanation.matched && explanation.axes.length === 0 && !isPinned && (
+                                <div className="mt-1 pl-6 text-[10px] italic text-ink/45">
+                                  Rule has no filter clauses — matches every spell.
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-                )}
-              </div>
-            )}
+                    )}
+                  </>
+                ) : null
+              }
+            />
           </CardContent>
         </Card>
       </div>
