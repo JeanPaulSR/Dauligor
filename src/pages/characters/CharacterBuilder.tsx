@@ -9233,35 +9233,30 @@ export default function CharacterBuilder({
                             </div>
                           );
                         }
-                        if (grandTotal === 0) {
-                          return (
-                            <div className="text-sm text-ink/45 font-serif italic p-4 border border-gold/10 rounded-md bg-card/40">
-                              No spells on your sheet match the current
-                              filters. Use the "Add Spells" button on each
-                              class header to put more on your sheet, or
-                              clear filters here.{" "}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  spellManagerFilters.resetAll();
-                                  spellManagerFilters.setSearch("");
-                                  setShowFavouritesOnly(false);
-                                  setShowWatchlistOnly(false);
-                                  setShowLoadoutOnly(false);
-                                }}
-                                className="text-gold hover:underline"
-                              >
-                                Reset filters
-                              </button>
-                            </div>
-                          );
-                        }
+                        // ── No `grandTotal === 0` early return here ──
+                        // We deliberately fall through into the per-class
+                        // render even when nothing on the sheet matches
+                        // the current filters. Each class section then
+                        // renders its own inline empty-state with the
+                        // "Add Spells" button still reachable on its
+                        // header — without that, a brand-new character
+                        // (or one whose filters happen to hide all known
+                        // spells) loses the only entry point to the
+                        // picker.
 
                         return (
                           <div className="border border-gold/15 rounded-md bg-card overflow-hidden">
                             <div className="px-3 py-2 border-b border-gold/15 bg-gold/[0.03] flex items-center justify-between gap-2">
                               <span className="text-[10px] font-bold uppercase tracking-widest text-ink/45">
-                                {grandTotal} of {grandBase} spells
+                                {grandTotal === 0
+                                  ? "No spells on sheet"
+                                  : `${grandTotal} spell${grandTotal === 1 ? "" : "s"} on sheet`}
+                                {grandBase > 0 && (
+                                  <span className="text-ink/30">
+                                    {" · "}
+                                    {grandBase} available in class lists
+                                  </span>
+                                )}
                               </span>
                               <span className="text-[9px] font-bold uppercase tracking-widest text-ink/30">
                                 {spellcastingClassIds.length === 1
@@ -9271,9 +9266,16 @@ export default function CharacterBuilder({
                             </div>
                             <div className="max-h-[70vh] overflow-y-auto custom-scrollbar divide-y divide-gold/5">
                               {perClassPools.map(({ cid, cls, filtered, poolTotal }) => {
-                                if (filtered.length === 0) return null;
+                                // The class section ALWAYS renders, even
+                                // when `filtered.length === 0`. The
+                                // header carries the "Add Spells" button
+                                // which is the only entry point into the
+                                // per-class picker — hiding the section
+                                // when the sheet is empty for that class
+                                // would strand the user.
                                 const isActive = cid === activeClassId;
                                 const classCollapsed = spellsCollapsedClasses.has(cid);
+                                const isEmpty = filtered.length === 0;
 
                                 const byLvlMap = new Map<number, any[]>();
                                 filtered.forEach((s: any) => {
@@ -9338,7 +9340,36 @@ export default function CharacterBuilder({
                                       </button>
                                     </div>
 
-                                    {!classCollapsed && sortedLvls.map((lvl) => {
+                                    {/* Per-class empty-state — shows
+                                        when this class has zero spells
+                                        on the sheet (or zero matching
+                                        the current filters). The header
+                                        above still carries the "Add
+                                        Spells" button so the player can
+                                        always go pick some. */}
+                                    {!classCollapsed && isEmpty && (
+                                      <div className="px-4 py-3 text-[11px] font-serif italic text-ink/45 bg-card/40 border-b border-gold/5">
+                                        {poolTotal === 0 ? (
+                                          <>
+                                            No spells on the {cls?.name || "class"} spell
+                                            list yet — curate them in{" "}
+                                            <span className="font-mono text-ink/55">/compendium/spell-lists</span>.
+                                          </>
+                                        ) : (
+                                          <>
+                                            No {cls?.name || "class"} spells on your sheet
+                                            yet. Click the{" "}
+                                            <span className="font-black uppercase tracking-widest text-gold/75 not-italic">
+                                              Add Spells
+                                            </span>{" "}
+                                            button above to pick from the {poolTotal}-spell
+                                            class list.
+                                          </>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {!classCollapsed && !isEmpty && sortedLvls.map((lvl) => {
                                       const spellsAtLvl = byLvlMap.get(lvl) || [];
                                       const lvlKey = `${cid}:${lvl}`;
                                       const lvlCollapsed = spellsCollapsedLevels.has(lvlKey);
