@@ -598,6 +598,652 @@ function resolveScaleValueAtLevel(column: any, level: number) {
   return values[String(highestLevel)] ?? null;
 }
 
+// ─── PrepareSpellsModal — Phase 2 of the Spell Manager design handoff ──────
+//
+// Per-class focused prepare flow. Triggered from the class header
+// "Prepare" button in the main Spell Manager tree (see CharacterBuilder
+// activeStep === "spells" block) — closes back to the main tree on Done
+// or backdrop click.
+//
+// Layout matches the Variant C design from the handoff:
+//   - Header strip: class · prep-type badge · prepared / max · cantrips
+//     / max · always count · Done button.
+//   - 3-column body: Favourites (left, 240px) | filtered class pool
+//     (middle, 1fr) | SpellDetailPanel (right, 360px).
+//   - Filter row above the middle pool: search + Filters toggle +
+//     active-count badge + reset. Inline filter panel with Level /
+//     School / Source / Properties chip sections — local to the modal,
+//     does NOT mutate the main spell manager's filter state.
+//
+// The modal mutates character state via the three handler props
+// (onTogglePrepared / onTogglePlayerKnown / onToggleFavourite) — same
+// handlers the main tree uses, so the two surfaces stay in sync.
+
+type PrepareSpellsModalProps = {
+  classId: string;
+  className: string;
+  preparationType: string;
+  spellDC: number;
+  spellAtk: string;
+  cantripsCap: number | null;
+  spellsCap: number | null;
+  cantripsKnownCount: number;
+  spellsKnownCount: number;
+  pool: any[];
+  ownedSpellMap: Map<string, any>;
+  spellManagerSources: Array<{ id: string; name?: string; abbreviation?: string; shortName?: string }>;
+  spellManagerTags: Array<{ id: string; name?: string; parentTagId?: string | null }>;
+  effectiveTagSet: Set<string>;
+  tagParentMap: Map<string, string | null>;
+  onClose: () => void;
+  onTogglePrepared: (spellId: string) => void;
+  onTogglePlayerKnown: (id: string, level: number, requiredTags: string[]) => void;
+  onToggleFavourite: (spellId: string) => void;
+};
+
+const PREPARATION_TYPE_LABELS: Record<string, string> = {
+  always: "Always Prepared",
+  innate: "Innate",
+  pact: "Pact Magic",
+  prepared: "Prepared Caster",
+  spell: "Spellbook",
+  ritual: "Ritual Only",
+  leveled: "Leveled Caster",
+};
+
+function PrepareSpellsModal(props: PrepareSpellsModalProps) {
+  const {
+    classId,
+    className,
+    preparationType,
+    spellDC,
+    spellAtk,
+    cantripsCap,
+    spellsCap,
+    cantripsKnownCount,
+    spellsKnownCount,
+    pool,
+    ownedSpellMap,
+    spellManagerSources,
+    spellManagerTags,
+    effectiveTagSet,
+    tagParentMap,
+    onClose,
+    onTogglePrepared,
+    onTogglePlayerKnown,
+    onToggleFavourite,
+  } = props;
+
+  const [search, setSearch] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [lvlF, setLvlF] = useState<number[]>([]);
+  const [schoolF, setSchoolF] = useState<string[]>([]);
+  const [sourceF, setSourceF] = useState<string[]>([]);
+  const [propF, setPropF] = useState<string[]>([]);
+  const [selId, setSelId] = useState<string | null>(pool[0]?.id ?? null);
+
+  const sourceById = useMemo(
+    () => Object.fromEntries(spellManagerSources.map((s) => [s.id, s])),
+    [spellManagerSources],
+  );
+
+  const sourcesInPool = useMemo(
+    () => Array.from(new Set(pool.map((s) => s.source_id).filter(Boolean))) as string[],
+    [pool],
+  );
+  const schoolsInPool = useMemo(
+    () => Array.from(new Set(pool.map((s) => s.school).filter(Boolean))) as string[],
+    [pool],
+  );
+
+  const toggleIn = <T,>(v: T, list: T[], setList: (l: T[]) => void) => {
+    setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  };
+
+  // Tag lookup so the modal can render prereq-locked rows with a
+  // human-readable "Needs: X, Y" tooltip when an unprepared spell would
+  // otherwise be picked.
+  const tagsById = useMemo(
+    () => Object.fromEntries(spellManagerTags.map((t) => [t.id, t])),
+    [spellManagerTags],
+  );
+
+  // Local row filter — `propF` carries spell-state flags ("ritual" /
+  // "concentration" / "known" / "prepared"). The first two read from the
+  // spell facet flags (computed at load time); the latter two cross-
+  // reference the ownedSpellMap so "prepared only" hides everything the
+  // character hasn't actually committed to.
+  const filteredPool = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return pool.filter((s) => {
+      if (q && !String(s.name || "").toLowerCase().includes(q)) return false;
+      if (lvlF.length && !lvlF.includes(Number(s.level ?? 0))) return false;
+      if (schoolF.length && !schoolF.includes(String(s.school || ""))) return false;
+      if (sourceF.length && !sourceF.includes(String(s.source_id || ""))) return false;
+      if (propF.length) {
+        const owned = ownedSpellMap.get(s.id);
+        for (const p of propF) {
+          if (p === "ritual" && !s.ritual && !s.foundryShell?.ritual) return false;
+          if (p === "concentration" && !s.concentration && !s.foundryShell?.concentration) return false;
+          if (p === "known" && !owned) return false;
+          if (p === "prepared" && !owned?.isPrepared && !owned?.isAlwaysPrepared) return false;
+        }
+      }
+      return true;
+    });
+  }, [pool, search, lvlF, schoolF, sourceF, propF, ownedSpellMap]);
+
+  const groupedPool = useMemo(() => {
+    const m = new Map<number, any[]>();
+    filteredPool.forEach((s) => {
+      const lv = Number(s.level ?? 0);
+      if (!m.has(lv)) m.set(lv, []);
+      m.get(lv)!.push(s);
+    });
+    return Array.from(m.entries()).sort((a, b) => a[0] - b[0]);
+  }, [filteredPool]);
+
+  const favList = useMemo(
+    () => pool.filter((s) => ownedSpellMap.get(s.id)?.isFavourite),
+    [pool, ownedSpellMap],
+  );
+
+  const activeFilters = lvlF.length + schoolF.length + sourceF.length + propF.length;
+  const resetFilters = () => {
+    setLvlF([]);
+    setSchoolF([]);
+    setSourceF([]);
+    setPropF([]);
+  };
+
+  // Per-class counters — same shape as the main header strip but scoped to
+  // THIS class's spell pool.
+  const preparedHere = useMemo(
+    () => pool.filter((s) => {
+      const o = ownedSpellMap.get(s.id);
+      return o?.isPrepared && !o?.isAlwaysPrepared;
+    }).length,
+    [pool, ownedSpellMap],
+  );
+  const alwaysHere = useMemo(
+    () => pool.filter((s) => ownedSpellMap.get(s.id)?.isAlwaysPrepared).length,
+    [pool, ownedSpellMap],
+  );
+
+  const prepTypeLabel = PREPARATION_TYPE_LABELS[preparationType] || preparationType;
+
+  const selected = useMemo(
+    () => (selId ? pool.find((s) => s.id === selId) || null : null),
+    [pool, selId],
+  );
+
+  // Per-spell prereq + cap blocking. The main tree's togglePlayerKnown
+  // already enforces these (silently no-ops when blocked); we re-check
+  // here so the row can disable the + button + render a "Locked" hint.
+  const blockedFor = (spell: any) => {
+    const owned = ownedSpellMap.get(spell.id);
+    if (owned) return { prereqBlocked: false, capBlocked: false, missingTags: [] as string[] };
+    const isGranted = !!owned?.grantedByAdvancementId;
+    if (isGranted) return { prereqBlocked: false, capBlocked: false, missingTags: [] as string[] };
+    const requiredTags = Array.isArray(spell.requiredTags) ? spell.requiredTags : [];
+    const missingTags = requiredTags.length === 0
+      ? []
+      : requiredTags.filter((tid: string) => {
+          if (effectiveTagSet.has(tid)) return false;
+          // Climb the parent chain — `Conjure.Manifest` satisfies a
+          // `Conjure` prereq. Mirrors `missingPrerequisiteTags` in
+          // characterTags.ts.
+          let cursor: string | null | undefined = tid;
+          while (cursor) {
+            if (effectiveTagSet.has(cursor)) return false;
+            cursor = tagParentMap.get(cursor) ?? null;
+          }
+          return true;
+        });
+    const prereqBlocked = missingTags.length > 0;
+    const lv = Number(spell.level ?? 0);
+    const capBlocked =
+      (lv === 0 && cantripsCap !== null && cantripsKnownCount >= cantripsCap) ||
+      (lv > 0 && spellsCap !== null && spellsKnownCount >= spellsCap);
+    return { prereqBlocked, capBlocked, missingTags };
+  };
+
+  const renderPoolRow = (spell: any, opts: { showFav?: boolean } = {}) => {
+    const { showFav = true } = opts;
+    const owned = ownedSpellMap.get(spell.id);
+    const isAlways = !!owned?.isAlwaysPrepared;
+    const isGranted = !!owned?.grantedByAdvancementId;
+    const isKnown = !!owned;
+    const isPrepared = !!owned?.isPrepared;
+    const isFav = !!owned?.isFavourite;
+    const isSelected = selId === spell.id;
+    const sourceLabel = sourceById[spell.source_id || ""]?.abbreviation
+      || sourceById[spell.source_id || ""]?.shortName
+      || "";
+    const { prereqBlocked, capBlocked, missingTags } = blockedFor(spell);
+    const requiredTags = Array.isArray(spell.requiredTags) ? spell.requiredTags : [];
+
+    return (
+      <div
+        key={spell.id}
+        onClick={() => setSelId(spell.id)}
+        className={cn(
+          "grid items-center cursor-pointer border-b border-gold/5 transition-colors",
+          isSelected
+            ? "bg-gold/10 border-l-[3px] border-l-gold"
+            : "border-l-[3px] border-l-transparent hover:bg-gold/5",
+        )}
+        style={{
+          gridTemplateColumns: showFav
+            ? "22px minmax(0,1fr) 40px 28px 20px"
+            : "22px minmax(0,1fr) 40px 28px",
+          padding: "6px 10px",
+        }}
+      >
+        <div>
+          {isAlways ? (
+            <span className="text-emerald-500 text-sm font-black" title="Always prepared">✦</span>
+          ) : isGranted ? (
+            <span className="text-emerald-600 text-sm font-black" title="Granted by an advancement">✓</span>
+          ) : isKnown ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePrepared(spell.id);
+              }}
+              title={isPrepared ? "Unprepare" : "Prepare"}
+              className={cn(
+                "w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center",
+                isPrepared ? "border-gold bg-gold text-white" : "border-gold/40 hover:border-gold",
+              )}
+            >
+              {isPrepared && <Check className="w-2 h-2" />}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (prereqBlocked || capBlocked) return;
+                onTogglePlayerKnown(spell.id, Number(spell.level ?? 0), requiredTags);
+              }}
+              disabled={prereqBlocked || capBlocked}
+              title={
+                prereqBlocked
+                  ? `Missing: ${missingTags
+                      .map((tid) => tagsById[tid]?.name || tid)
+                      .join(", ")}`
+                  : capBlocked
+                    ? Number(spell.level ?? 0) === 0
+                      ? `At cantrips-known cap (${cantripsCap})`
+                      : `At spells-known cap (${spellsCap})`
+                    : "Add to known"
+              }
+              className={cn(
+                "w-3.5 h-3.5 flex items-center justify-center text-[11px] leading-none border border-dashed",
+                prereqBlocked || capBlocked
+                  ? "border-blood/25 text-blood/35 cursor-not-allowed"
+                  : "border-gold/30 text-gold/55 hover:border-gold/60 hover:text-gold",
+              )}
+            >
+              +
+            </button>
+          )}
+        </div>
+        <span
+          className={cn(
+            "font-serif text-sm truncate flex items-center gap-1.5",
+            isSelected ? "font-bold text-ink" : isKnown ? "font-medium text-ink" : "font-medium text-ink/40",
+          )}
+        >
+          <span className="truncate">{spell.name}</span>
+          {prereqBlocked && (
+            <span
+              className="text-[9px] font-bold uppercase tracking-widest text-blood/70 shrink-0"
+              title={`Requires: ${missingTags
+                .map((tid) => tagsById[tid]?.name || tid)
+                .join(", ")}`}
+            >
+              ⚷
+            </span>
+          )}
+        </span>
+        <span
+          className="text-[8px] font-black uppercase tracking-[0.06em] text-gold/65 truncate"
+          title={String(spell.school || "")}
+        >
+          {String(spell.school || "").slice(0, 4)}
+        </span>
+        <span className="text-[7px] font-bold uppercase tracking-widest text-ink/35 truncate">
+          {sourceLabel}
+        </span>
+        {showFav && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavourite(spell.id);
+            }}
+            title={isFav ? "Unfavourite" : "Favourite"}
+            className={cn(
+              "text-sm leading-none transition-colors",
+              isFav ? "text-amber-500" : "text-ink/20 hover:text-amber-500",
+            )}
+          >
+            ★
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex bg-black/55 p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex-1 max-w-[1400px] mx-auto flex flex-col bg-card border border-gold shadow-2xl overflow-hidden"
+      >
+        {/* Modal header */}
+        <div
+          className="flex items-center gap-4 px-4 py-3 border-b border-gold shrink-0"
+          style={{ background: "#efe6cf" }}
+        >
+          <div className="flex flex-col gap-1 min-w-0">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <h3 className="font-serif text-xl font-bold text-ink leading-none">
+                Prepare Spells
+              </h3>
+              <span className="font-serif text-sm italic text-ink/55">
+                · {className}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[9px] font-black uppercase tracking-[0.14em] px-1.5 py-0.5 border border-gold text-gold bg-gold/10">
+                {prepTypeLabel}
+              </span>
+              <span className="font-mono text-[10px] text-ink/60">
+                DC {spellDC} · Atk {spellAtk}
+              </span>
+            </div>
+          </div>
+          <div className="flex-1" />
+          <div className="flex items-center gap-4">
+            {cantripsCap !== null && (
+              <div className="text-right">
+                <div className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/45">
+                  Cantrips
+                </div>
+                <div className="font-mono text-base font-black text-gold leading-none">
+                  {cantripsKnownCount}
+                  <span className="text-ink/40 text-xs"> / {cantripsCap}</span>
+                </div>
+              </div>
+            )}
+            <div className="text-right">
+              <div className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/45">
+                Prepared
+              </div>
+              <div className="font-mono text-base font-black text-gold leading-none">
+                {preparedHere}
+                {spellsCap !== null && (
+                  <span className="text-ink/40 text-xs"> / {spellsCap}</span>
+                )}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[7px] font-black uppercase tracking-[0.16em] text-ink/45">
+                Always
+              </div>
+              <div className="font-mono text-base font-black text-emerald-600 leading-none">
+                {alwaysHere}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 border border-gold bg-gold text-white hover:bg-gold/90"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+
+        {/* 3-col body */}
+        <div
+          className="flex-1 grid overflow-hidden"
+          style={{ gridTemplateColumns: "240px minmax(0,1fr) 360px" }}
+        >
+          {/* LEFT — Favourites */}
+          <div className="flex flex-col border-r border-gold/15 bg-gold/[0.03] overflow-hidden">
+            <div className="px-3 py-2 border-b border-gold/15 flex items-center gap-2 shrink-0">
+              <Star className="w-3 h-3 text-gold" />
+              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/60">
+                Favourites
+              </span>
+              <span className="flex-1" />
+              <span className="font-mono text-[9px] font-bold text-ink/40">
+                {favList.length}
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {favList.length === 0 ? (
+                <div className="px-3 py-10 text-center">
+                  <div className="text-2xl text-gold/25 mb-1">★</div>
+                  <div className="font-serif italic text-[11px] text-ink/45 leading-relaxed">
+                    Star spells in the middle column to pin them here for fast access.
+                  </div>
+                </div>
+              ) : (
+                favList.map((spell) => renderPoolRow(spell, { showFav: false }))
+              )}
+            </div>
+          </div>
+
+          {/* MIDDLE — class spell pool */}
+          <div className="flex flex-col border-r border-gold/15 overflow-hidden">
+            <div className="px-3 py-2 border-b border-gold/15 flex items-center gap-2 shrink-0">
+              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/60">
+                {className} Spell List
+              </span>
+              <span className="flex-1" />
+              <span className="font-mono text-[9px] font-bold text-ink/40">
+                {filteredPool.length}
+                {filteredPool.length !== pool.length && (
+                  <span className="text-ink/25"> / {pool.length}</span>
+                )}
+              </span>
+            </div>
+            <div className="px-3 py-2 border-b border-gold/10 flex items-center gap-2 shrink-0">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search spell name…"
+                className="flex-1 min-w-0 text-[12px] px-2 py-1 border border-gold/25 bg-gold/[0.04] outline-none focus:border-gold/60 text-ink rounded-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setFilterOpen((o) => !o)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] border transition-colors",
+                  filterOpen || activeFilters > 0
+                    ? "border-gold bg-gold/15 text-gold"
+                    : "border-gold/25 text-ink/55 hover:border-gold/50",
+                )}
+              >
+                Filters
+                {activeFilters > 0 && (
+                  <span className="font-mono text-[8px] px-1 py-px bg-gold text-white rounded-sm">
+                    {activeFilters}
+                  </span>
+                )}
+              </button>
+              {activeFilters > 0 && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="text-[8px] font-black uppercase tracking-widest text-blood hover:underline"
+                >
+                  ✕ Reset
+                </button>
+              )}
+            </div>
+            {filterOpen && (
+              <div className="px-3 py-3 border-b border-gold/10 bg-gold/[0.03] max-h-52 overflow-y-auto custom-scrollbar shrink-0 space-y-3">
+                <FilterChipSection
+                  title="Level"
+                  options={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => ({
+                    v: l,
+                    l: l === 0 ? "Cantrip" : `Level ${l}`,
+                  }))}
+                  selected={lvlF}
+                  onToggle={(v) => toggleIn<number>(v, lvlF, setLvlF)}
+                  onAll={() => setLvlF([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])}
+                  onClear={() => setLvlF([])}
+                />
+                {schoolsInPool.length > 0 && (
+                  <FilterChipSection
+                    title="School"
+                    options={schoolsInPool.map((k) => ({ v: k, l: String(k).toUpperCase() }))}
+                    selected={schoolF}
+                    onToggle={(v) => toggleIn<string>(v, schoolF, setSchoolF)}
+                    onAll={() => setSchoolF([...schoolsInPool])}
+                    onClear={() => setSchoolF([])}
+                  />
+                )}
+                {sourcesInPool.length > 0 && (
+                  <FilterChipSection
+                    title="Source"
+                    options={sourcesInPool.map((sid) => ({
+                      v: sid,
+                      l:
+                        sourceById[sid]?.abbreviation ||
+                        sourceById[sid]?.shortName ||
+                        sourceById[sid]?.name ||
+                        sid,
+                    }))}
+                    selected={sourceF}
+                    onToggle={(v) => toggleIn<string>(v, sourceF, setSourceF)}
+                    onAll={() => setSourceF([...sourcesInPool])}
+                    onClear={() => setSourceF([])}
+                  />
+                )}
+                <FilterChipSection
+                  title="Properties"
+                  options={[
+                    { v: "ritual", l: "Ritual" },
+                    { v: "concentration", l: "Concentration" },
+                    { v: "known", l: "Known" },
+                    { v: "prepared", l: "Prepared" },
+                  ]}
+                  selected={propF}
+                  onToggle={(v) => toggleIn<string>(v, propF, setPropF)}
+                  onAll={() => setPropF(["ritual", "concentration", "known", "prepared"])}
+                  onClear={() => setPropF([])}
+                />
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {groupedPool.length === 0 ? (
+                <div className="px-4 py-14 text-center text-ink/45 font-serif italic text-sm">
+                  No spells match.
+                </div>
+              ) : (
+                groupedPool.map(([lv, spells]) => (
+                  <div key={lv}>
+                    <div className="px-3 py-1.5 border-b border-gold/10 bg-gold/[0.04] flex items-center gap-2">
+                      <span className="text-[9px] font-black uppercase tracking-[0.16em] text-ink/50">
+                        {lv === 0 ? "Cantrips" : `Level ${lv}`}
+                      </span>
+                      <span className="flex-1" />
+                      <span className="font-mono text-[8px] font-bold text-ink/30">
+                        {spells.length}
+                      </span>
+                    </div>
+                    {spells.map((spell) => renderPoolRow(spell))}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT — detail */}
+          <div className="overflow-hidden">
+            <SpellDetailPanel
+              spellId={selId}
+              emptyMessage="Select a spell to see its details."
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Filter chip section used by PrepareSpellsModal. Single-shot
+// multi-select with Include All / Clear shortcuts on the right —
+// mirrors the FilterChipSection pattern from the design handoff's
+// spell-manager.jsx (Variant C inline-filter panel).
+function FilterChipSection<T extends string | number>(props: {
+  title: string;
+  options: Array<{ v: T; l: string }>;
+  selected: T[];
+  onToggle: (v: T) => void;
+  onAll: () => void;
+  onClear: () => void;
+}) {
+  const { title, options, selected, onToggle, onAll, onClear } = props;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/55">
+          {title}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onAll}
+            className="text-[8px] font-black uppercase tracking-widest text-ink/45 hover:text-ink/70"
+          >
+            Include All
+          </button>
+          <span className="text-gold/30">|</span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[8px] font-black uppercase tracking-widest text-ink/45 hover:text-ink/70"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {options.map(({ v, l }) => {
+          const active = selected.includes(v);
+          return (
+            <button
+              key={String(v)}
+              type="button"
+              onClick={() => onToggle(v)}
+              className={cn(
+                "px-2 py-1 text-[9px] font-bold border transition-colors rounded-sm",
+                active
+                  ? "border-gold bg-gold text-white"
+                  : "border-gold/25 text-ink/60 hover:border-gold/50",
+              )}
+            >
+              {l}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function normalizeLookupKey(value: any) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -7851,63 +8497,127 @@ export default function CharacterBuilder({
                     </div>
                   )}
 
-                  {/* ── PrepareSpellsModal — placeholder (Phase 2) ─────
-                       The class-header "Prepare" button sets
-                       `spellsPrepModalClass`. The full Variant C modal
-                       (Favourites column · filtered class pool · spell
-                       detail) is the Phase 2 follow-up; this stub
-                       documents the wiring + gives the user a clear
-                       hand-off message. All preparing today is done
-                       inline on the main tree rows (★ / ◐ / Prepare). */}
+                  {/* ── PrepareSpellsModal — Phase 2 ─────────────────────
+                       Focused per-class prepare flow. Opens from the
+                       class header "Prepare" button (see the tree
+                       above). The component is defined at module level
+                       so it can run its own hooks (search / filter /
+                       selection); state mutations route back through
+                       the same handlers as the main tree so the two
+                       surfaces stay in sync. */}
                   {spellsPrepModalClass && (() => {
-                    const modalClass = classCache[spellsPrepModalClass];
-                    const modalContributor = contributorByClass.get(spellsPrepModalClass);
+                    const modalCid = spellsPrepModalClass;
+                    const modalClass = classCache[modalCid];
+                    const modalContributor = contributorByClass.get(modalCid);
+
+                    // Build the per-class pool the modal will browse.
+                    // Same shape as the inline tree builds (basePool +
+                    // extensions + facet back-fill + sort), but scoped
+                    // to this single class.
+                    const modalBase = classSpellPools[modalCid] || [];
+                    const modalExtIds = (extensions as any[])
+                      .filter((e: any) => e.classId === modalCid)
+                      .map((e: any) => e.spellId);
+                    const modalExtEntries = modalExtIds
+                      .filter((id: string) => !modalBase.some((s: any) => s.id === id))
+                      .map((id: string) => {
+                        const cached = spellNameCache[id];
+                        return {
+                          id,
+                          name: cached?.name || id,
+                          level: cached?.level ?? 0,
+                          school: cached?.school || "",
+                          image_url: null,
+                          source_id: null,
+                          tags: [],
+                          membershipId: `ext-${id}`,
+                          membershipSource: "extension",
+                          addedAt: "",
+                          isExtension: true,
+                        };
+                      });
+                    const modalPool = [...modalBase, ...modalExtEntries]
+                      .map((spell: any) => {
+                        if (spell.activationBucket) return spell;
+                        const fromCatalog = facetEnrichedSpellSummaries?.find(
+                          (s: any) => s.id === spell.id,
+                        );
+                        return fromCatalog ? { ...spell, ...fromCatalog } : spell;
+                      })
+                      .sort((a: any, b: any) => {
+                        if ((a.level || 0) !== (b.level || 0))
+                          return (a.level || 0) - (b.level || 0);
+                        return String(a.name || "").localeCompare(String(b.name || ""));
+                      });
+
+                    // Caps for THIS class (modal may be opened on a
+                    // non-active class). Same matcher used in the IIFE
+                    // for the active-class header strip, scoped here.
+                    const matchModalCap = (pattern: RegExp) => {
+                      for (const col of Object.values(scalingCache) as any[]) {
+                        if (!col || col.parentId !== modalCid) continue;
+                        const name = String(col.name || "").trim();
+                        if (pattern.test(name)) {
+                          const v = resolveScaleValueAtLevel(
+                            col,
+                            progressionClassGroups.find(
+                              (g: any) => g.classId === modalCid,
+                            )?.classLevel || 0,
+                          );
+                          const n = Number(v);
+                          if (Number.isFinite(n)) return n;
+                        }
+                      }
+                      return null;
+                    };
+                    const modalCantripsCap = matchModalCap(/^cantrips\s*(known)?$/i);
+                    const modalSpellsCap = matchModalCap(/^spells\s*known$/i);
+
+                    // Counts scoped to this modal's class — granted
+                    // spells with doesntCountAgainstKnown stay excluded
+                    // from cap totals (Magic Initiate etc.).
+                    const countsTowardsModalClass = (s: any) => {
+                      if (!s) return false;
+                      if (s.grantedByAdvancementId) {
+                        if (s.doesntCountAgainstKnown) return false;
+                        return s.countsAsClassId
+                          ? s.countsAsClassId === modalCid
+                          : true;
+                      }
+                      return true;
+                    };
+                    const modalOwnedForClass = ownedSpells.filter(countsTowardsModalClass);
+                    const modalCantripsKnown = modalOwnedForClass.filter((s: any) => {
+                      const lvl = spellNameCache[s.id]?.level;
+                      return lvl === 0;
+                    }).length;
+                    const modalSpellsKnown = modalOwnedForClass.filter((s: any) => {
+                      const lvl = spellNameCache[s.id]?.level;
+                      return lvl !== undefined && lvl > 0;
+                    }).length;
+
                     return (
-                      <div
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-6"
-                        onClick={() => setSpellsPrepModalClass(null)}
-                      >
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full max-w-xl bg-card border border-gold shadow-2xl overflow-hidden"
-                        >
-                          <div className="flex items-center gap-3 px-4 py-3 border-b border-gold bg-gold/10">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-baseline gap-3">
-                                <h3 className="font-serif text-lg font-bold text-ink leading-none">
-                                  Prepare Spells
-                                </h3>
-                                <span className="font-serif text-sm italic text-ink/55">
-                                  · {modalClass?.name || "Class"}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 mt-1 text-[9px] font-bold uppercase tracking-[0.16em] text-ink/45">
-                                <span>{modalContributor?.preparationType || "prepared"} caster</span>
-                                <span className="text-ink/20">·</span>
-                                <span>DC {dcForClass(spellsPrepModalClass)} · Atk {atkForClass(spellsPrepModalClass)}</span>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setSpellsPrepModalClass(null)}
-                              className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 border border-gold bg-gold text-white hover:bg-gold/90"
-                            >
-                              Done
-                            </button>
-                          </div>
-                          <div className="p-6 space-y-3 text-center">
-                            <p className="text-sm text-ink/60 font-serif italic">
-                              The focused per-class prepare flow is the next
-                              piece of the design handoff. For now, mark
-                              spells prepared directly in the main tree using
-                              the ★ / ◐ / Prepare controls on each row.
-                            </p>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-gold/70">
-                              Phase 2 — Coming Next
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                      <PrepareSpellsModal
+                        classId={modalCid}
+                        className={modalClass?.name || `Class ${modalCid.slice(0, 6)}`}
+                        preparationType={modalContributor?.preparationType || "prepared"}
+                        spellDC={dcForClass(modalCid)}
+                        spellAtk={atkForClass(modalCid)}
+                        cantripsCap={modalCantripsCap}
+                        spellsCap={modalSpellsCap}
+                        cantripsKnownCount={modalCantripsKnown}
+                        spellsKnownCount={modalSpellsKnown}
+                        pool={modalPool}
+                        ownedSpellMap={ownedSpellMap}
+                        spellManagerSources={spellManagerSources}
+                        spellManagerTags={spellManagerTags}
+                        effectiveTagSet={effectiveTagSet}
+                        tagParentMap={tagParentMap}
+                        onClose={() => setSpellsPrepModalClass(null)}
+                        onTogglePrepared={togglePrepared}
+                        onTogglePlayerKnown={togglePlayerKnown}
+                        onToggleFavourite={toggleFavourite}
+                      />
                     );
                   })()}
                 </div>
