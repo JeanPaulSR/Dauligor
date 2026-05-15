@@ -1651,14 +1651,33 @@ function ClassSpellListTab({
           {filteredEntries.length !== rows.length ? <> of <span className="text-gold/70">{rows.length}</span></> : null}
           {' '}spell{rows.length === 1 ? '' : 's'} on this class's list
         </p>
-        {isAdmin && classId ? (
-          <Link
-            to={`/compendium/spell-lists?class=${classId}`}
-            className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
-          >
-            Manage →
-          </Link>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {/* "Browse in Compendium" hand-off — opens the full
+              /compendium/spells browser with this class's spell
+              list pre-applied as a scope filter. Useful when the
+              spell list is hundreds of rows and the inline tab
+              (grouped-by-level) gets unwieldy. The browser has
+              sortable columns, hideable columns, and the full
+              shared FilterBar vocabulary. Available to every
+              authenticated user — not gated on admin. */}
+          {classId ? (
+            <Link
+              to={`/compendium/spells?class=${classId}`}
+              className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
+              title="Open the full Spell List browser with this class's spells pre-filtered."
+            >
+              Browse in Compendium →
+            </Link>
+          ) : null}
+          {isAdmin && classId ? (
+            <Link
+              to={`/compendium/spell-lists?class=${classId}`}
+              className="text-[10px] font-bold uppercase tracking-widest text-gold/70 hover:text-gold underline-offset-4 hover:underline"
+            >
+              Manage →
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       <SpellFilterShell

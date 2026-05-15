@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Lock, Star, ChevronUp, ChevronDown, Settings } from 'lucide-react';
+import { Lock, Star, ChevronUp, ChevronDown, Settings, X } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
-import { fetchCollection, queryD1 } from '../../lib/d1';
+import { fetchCollection, queryD1, fetchDocument } from '../../lib/d1';
+import { fetchClassSpellIds } from '../../lib/classSpellLists';
 import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -297,8 +298,53 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   // param once on mount and seed selection from it. Identifier-based
   // (slug) matching takes priority over raw ID; falls back to ID for
   // legacy/migration cases where the param is the row UUID.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const focusParam = searchParams.get('focus') || '';
+  // `?class=<id>` deep-links the browser to a specific class's spell
+  // list — used by ClassView's "Browse in Compendium" affordance so
+  // an admin curating Wizard can swap to the full /compendium/spells
+  // table with the Wizard class already filtered in. On mount we
+  // resolve the class name + its spell ids; rows outside the set
+  // get filtered out, and a removable chip surfaces in the toolbar
+  // so the user can clear the scope back to the full catalogue.
+  const classParam = searchParams.get('class') || '';
+  const [classFilter, setClassFilter] = useState<{
+    classId: string;
+    className: string;
+    spellIds: Set<string>;
+  } | null>(null);
+  useEffect(() => {
+    if (!classParam) {
+      setClassFilter(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [classRow, spellIds] = await Promise.all([
+          fetchDocument<any>('classes', classParam),
+          fetchClassSpellIds(classParam),
+        ]);
+        if (cancelled) return;
+        const className = String(classRow?.name || classRow?.identifier || 'Class');
+        setClassFilter({ classId: classParam, className, spellIds });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[SpellList] Failed to resolve ?class= filter:', err);
+        if (!cancelled) setClassFilter(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [classParam]);
+  const clearClassFilter = () => {
+    // Drop the URL param so the filter doesn't immediately re-apply
+    // from the previous URL state. Preserves any other params (e.g.
+    // ?focus=<id>) the user is also passing.
+    const next = new URLSearchParams(searchParams);
+    next.delete('class');
+    setSearchParams(next, { replace: true });
+    setClassFilter(null);
+  };
   const [selectedSpellId, setSelectedSpellId] = useState('');
   // Live filter state — rich AxisFilter shape per axis (3-state chips
   // + per-axis include AND/OR/XOR + Exclusion Logic), uniform with the
@@ -463,6 +509,12 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       if (spell.somatic) propsHave.add('somatic');
       if (spell.material) propsHave.add('material');
 
+      // ?class=<id> scope: when set, only rows on the class's
+      // master spell list pass. Combines with every other filter
+      // via AND so a user can browse "Wizard spells matching the
+      // Burst tag" by hitting the URL + flipping a chip.
+      if (classFilter && !classFilter.spellIds.has(spell.id)) return false;
+
       return matchesSearch
         && matchesSingleAxisFilter(String(spell.sourceId ?? ''), axisFilters.source)
         && matchesSingleAxisFilter(String(Number(spell.level ?? 0)), axisFilters.level)
@@ -474,7 +526,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         && matchesSingleAxisFilter(spell.shapeBucket, axisFilters.shape)
         && matchesMultiAxisFilter(propsHave, axisFilters.property);
     });
-  }, [spells, sourceById, search, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId]);
+  }, [spells, sourceById, search, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId, classFilter]);
 
   // Sortable list — derives from filteredSpells. Numeric sort keys
   // (level, range distance) bypass localeCompare; everything else
@@ -749,6 +801,17 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
           resetLabel="Reset Filters"
           trailingActions={
             <>
+              {classFilter ? (
+                <button
+                  type="button"
+                  onClick={clearClassFilter}
+                  className="inline-flex items-center gap-1 h-8 px-2 rounded-md border border-gold/40 bg-gold/10 text-gold text-[11px] font-bold uppercase tracking-widest hover:bg-blood/10 hover:border-blood/40 hover:text-blood transition-colors"
+                  title={`Scoped to ${classFilter.className}'s spell list (${classFilter.spellIds.size} spells). Click to clear.`}
+                >
+                  Class: {classFilter.className}
+                  <X className="w-3 h-3" />
+                </button>
+              ) : null}
               {resultCount}
               {settingsPopover}
               {userProfile?.role === 'admin' ? (
