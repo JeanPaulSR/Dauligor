@@ -43,6 +43,8 @@ import {
   applyRule,
   unapplyRule,
   spellMatchesRule,
+  computeClassRebuildDelta,
+  rebuildClassSpellListFromAppliedRules,
   CONSUMER_TYPES,
   type ConsumerType,
   type SpellRule,
@@ -105,6 +107,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const [manualSpellsSearch, setManualSpellsSearch] = useState('');
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [rebuildAllPending, setRebuildAllPending] = useState(false);
 
   // Fullscreen-page opt-in — mirrors /compendium/spells,
   // /compendium/spells/manage, /compendium/spell-lists. Hides the
@@ -416,34 +419,131 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       setAppCounts(counts);
       setSelectedRuleId(id);
       setDraftDirty(false);
-      // Save-time stale signal — when an edit lands on a rule that's
-      // already applied to N CLASSES, those classes' rebuilt spell
-      // lists are now stale (their cached class_spell_lists rows
-      // reflect the pre-edit query). The user has to walk to
-      // /compendium/spell-lists and click Rebuild per class. Surface
-      // the count in the toast so they know what they've affected.
+      // Save-time auto-rebuild + stale signal.
       //
-      // We deliberately scope this signal to class-typed applications
-      // because that's the only consumer type whose data is currently
-      // baked into a snapshot table. For non-class consumers (feats /
-      // items / etc.) the application row exists but isn't read by
-      // anything yet (see worker/migrations/20260509-1000), so
-      // there's nothing to "rebuild" for those.
+      // When an edit lands on a rule already applied to N CLASSES,
+      // each class's rule-driven slice of class_spell_lists is now
+      // stale. For SMALL edits (delta of ≤ AUTO_REBUILD_THRESHOLD
+      // rows added+removed) we silently auto-rebuild that class —
+      // saves the user from walking to /compendium/spell-lists and
+      // clicking Rebuild per class. For LARGER deltas we just flag
+      // the class as stale so the admin can preview before
+      // committing (the existing Rebuild dialog shows toAdd /
+      // toRemove counts).
+      //
+      // Per-class independent decision: 4 classes with small deltas
+      // and 1 with a large delta yields 4 auto-rebuilds + 1 stale
+      // banner. Not all-or-nothing.
+      //
+      // Scoped to class-typed applications because that's the only
+      // consumer type whose data is baked into a snapshot table
+      // (class_spell_lists). For non-class consumers (feats / items
+      // / etc.) the application row exists but nothing reads it
+      // yet — there's nothing to "rebuild" for those.
+      const AUTO_REBUILD_THRESHOLD = 10;
       const refreshedApps = draft.id ? await fetchRuleApplications(draft.id) : [];
-      const classAppCount = refreshedApps.filter(a => a.appliesToType === 'class').length;
-      if (wasEdit && classAppCount > 0) {
-        toast(
-          `Saved "${draft.name}". ${classAppCount} class${classAppCount === 1 ? '' : 'es'} need rebuild — see /compendium/spell-lists.`,
-          { duration: 8000 },
-        );
-      } else {
+      const classApps = refreshedApps.filter(a => a.appliesToType === 'class');
+
+      if (!wasEdit || classApps.length === 0) {
         toast(wasEdit ? `Saved rule "${draft.name}".` : `Created rule "${draft.name}".`);
+      } else {
+        // Decide auto-rebuild per class. The matcher we already use
+        // for the live preview gets re-run inside
+        // computeClassRebuildDelta, so the tagIndex this page
+        // already built stays the relevant input.
+        const autoRebuilt: string[] = [];
+        const stillStale: string[] = [];
+        let autoChanged = 0;
+        for (const app of classApps) {
+          try {
+            const delta = await computeClassRebuildDelta(
+              app.appliesToId,
+              spells,
+              tagIndex,
+            );
+            const churn = delta.toAdd.length + delta.toRemove.length;
+            if (churn === 0) {
+              // No change — leave the row count alone but the
+              // class's last-rebuild timestamp doesn't move. It's
+              // not actually stale (matches still align), so don't
+              // count it either way.
+              continue;
+            }
+            if (churn <= AUTO_REBUILD_THRESHOLD) {
+              await rebuildClassSpellListFromAppliedRules(app.appliesToId, spells);
+              autoRebuilt.push(app.appliesToId);
+              autoChanged += churn;
+            } else {
+              stillStale.push(app.appliesToId);
+            }
+          } catch (err) {
+            // Don't let one class's failure mask the save success.
+            // The class stays stale; admin can rebuild manually.
+            // eslint-disable-next-line no-console
+            console.warn(`[SpellRulesEditor] auto-rebuild failed for class ${app.appliesToId}:`, err);
+            stillStale.push(app.appliesToId);
+          }
+        }
+        const parts: string[] = [`Saved "${draft.name}".`];
+        if (autoRebuilt.length > 0) {
+          parts.push(
+            `Auto-rebuilt ${autoRebuilt.length} class${autoRebuilt.length === 1 ? '' : 'es'} (${autoChanged} row${autoChanged === 1 ? '' : 's'} changed).`,
+          );
+        }
+        if (stillStale.length > 0) {
+          parts.push(
+            `${stillStale.length} class${stillStale.length === 1 ? '' : 'es'} need manual rebuild — see /compendium/spell-lists.`,
+          );
+        }
+        toast(parts.join(' '), {
+          duration: stillStale.length > 0 ? 8000 : 4000,
+        });
       }
     } catch (err) {
       console.error('[SpellRulesEditor] Save failed:', err);
       toast.error('Failed to save rule.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Rebuild class_spell_lists for every CLASS this rule is applied
+   * to, in parallel. Unlike the auto-rebuild path on save, this is
+   * explicit (admin-initiated) so we don't gate it by delta size.
+   * Non-class consumers are skipped (no rebuild semantics there).
+   */
+  const handleRebuildAllApplied = async () => {
+    if (!draft?.id || rebuildAllPending) return;
+    const classApps = draftApplications.filter(a => a.appliesToType === 'class');
+    if (classApps.length === 0) {
+      toast.error('No classes are applied to this rule.');
+      return;
+    }
+    setRebuildAllPending(true);
+    try {
+      // Parallel rebuilds. Each call wipes its own class's rule:%
+      // rows then re-inserts; no cross-class contention. fetchSpell-
+      // Summaries was already loaded into `spells` for the live
+      // preview, so we feed that in to avoid an extra round-trip.
+      const results = await Promise.allSettled(
+        classApps.map(app => rebuildClassSpellListFromAppliedRules(app.appliesToId, spells)),
+      );
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+      if (failed > 0) {
+        toast.error(`Rebuilt ${succeeded} of ${results.length} class${results.length === 1 ? '' : 'es'}. ${failed} failed — see console.`);
+        // eslint-disable-next-line no-console
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            console.error(`[SpellRulesEditor] rebuild-all: class ${classApps[i].appliesToId} failed:`, r.reason);
+          }
+        });
+      } else {
+        toast(`Rebuilt ${succeeded} class${succeeded === 1 ? '' : 'es'} from "${draft.name}".`);
+      }
+    } finally {
+      setRebuildAllPending(false);
     }
   };
 
@@ -959,17 +1059,37 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-gold">
                       Applied To ({draftApplications.length})
                     </h3>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setApplyDialogOpen(true)}
-                      disabled={!draft.id}
-                      className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-gold hover:bg-gold/10"
-                      title={!draft.id ? 'Save the rule before linking it to consumers' : 'Apply this rule to a consumer'}
-                    >
-                      <Plus className="w-3 h-3 mr-1" /> Apply To…
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {/* Rebuild-all CTA — runs the rebuild for every
+                          CLASS this rule is applied to in one click.
+                          Skips other consumer types (no rebuild
+                          semantics there yet). Visible only when at
+                          least one class app exists. */}
+                      {draftApplications.some(a => a.appliesToType === 'class') ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={handleRebuildAllApplied}
+                          disabled={rebuildAllPending}
+                          className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-amber-400/40 text-amber-400 hover:bg-amber-400/10"
+                          title="Rebuild class_spell_lists for every class this rule is applied to. Manual entries on each class are preserved."
+                        >
+                          {rebuildAllPending ? 'Rebuilding…' : 'Rebuild All'}
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setApplyDialogOpen(true)}
+                        disabled={!draft.id}
+                        className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-gold hover:bg-gold/10"
+                        title={!draft.id ? 'Save the rule before linking it to consumers' : 'Apply this rule to a consumer'}
+                      >
+                        <Plus className="w-3 h-3 mr-1" /> Apply To…
+                      </Button>
+                    </div>
                   </div>
                   {!draft.id ? (
                     <p className="text-xs text-ink/40 italic">Save the rule first to link it to classes / feats / etc.</p>

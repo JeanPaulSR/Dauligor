@@ -227,6 +227,66 @@ export async function rebuildClassSpellListFromAppliedRules(
   return { added, rules: rules.length };
 }
 
+/**
+ * Preview what a rebuild for this class WOULD change without
+ * actually mutating anything. Used by:
+ *   1. The pre-rebuild confirmation dialog in SpellListManager
+ *      (toAdd / toRemove / staying counts before the user commits).
+ *   2. The auto-rebuild-on-save flow in SpellRulesEditor (decides
+ *      whether the delta is small enough to apply silently without
+ *      asking the user).
+ *
+ * Computes the "new rule-driven set" = union of every applied rule's
+ * matches against the supplied spell catalogue, then diffs against
+ * the currently persisted rule:% rows in class_spell_lists.
+ *
+ * Manual rows (source = 'manual') are NEVER part of this diff —
+ * the rebuild path leaves them alone, so they're irrelevant to
+ * what's about to change.
+ */
+export async function computeClassRebuildDelta(
+  classId: string,
+  spells: (SpellMatchInput & { id: string })[],
+  tagIndex?: TagIndex,
+): Promise<{ toAdd: string[]; toRemove: string[]; staying: string[] }> {
+  const [rules, currentRuleSet] = await Promise.all([
+    fetchAppliedRulesFor('class', classId),
+    queryD1<{ spell_id: string }>(
+      `SELECT spell_id FROM class_spell_lists WHERE class_id = ? AND source LIKE 'rule:%'`,
+      [classId],
+    ),
+  ]);
+  const current = new Set(currentRuleSet.map(r => r.spell_id));
+
+  // Build tagIndex on demand if the caller didn't supply one. Most
+  // call sites have it cached; the rebuild path builds it once
+  // per run.
+  let resolvedTagIndex = tagIndex;
+  if (!resolvedTagIndex) {
+    const tagRows = await fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' });
+    resolvedTagIndex = buildTagIndex(tagRows);
+  }
+
+  const next = new Set<string>();
+  for (const rule of rules) {
+    for (const s of spells) {
+      if (spellMatchesRule(s, rule, resolvedTagIndex)) next.add(s.id);
+    }
+  }
+
+  const toAdd: string[] = [];
+  const toRemove: string[] = [];
+  const staying: string[] = [];
+  for (const id of next) {
+    if (current.has(id)) staying.push(id);
+    else toAdd.push(id);
+  }
+  for (const id of current) {
+    if (!next.has(id)) toRemove.push(id);
+  }
+  return { toAdd, toRemove, staying };
+}
+
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
