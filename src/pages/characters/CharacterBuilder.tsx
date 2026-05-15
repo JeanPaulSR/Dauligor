@@ -153,14 +153,16 @@ const getModifier = (score: number) => {
   return mod >= 0 ? `+${mod}` : mod.toString();
 };
 
-// ── Point Buy (D&D 5e standard) ─────────────────────────────────────────────
-// Standard 27-point pool, scores 8–15, with the canonical cost table
-// (cheap below 13, double-cost for 14 and 15). Applied via the
-// PointBuyModal at the top of the sheet — flips character.stats.method
-// to "point-buy" while active.
-const POINT_BUY_BUDGET = 27;
+// ── Point Buy (Dauligor variant) ────────────────────────────────────────────
+// Extended 32-point pool, scores 8–16, on top of the standard cost
+// curve. 1pt per score from 8→13, then a +2 jump at 14 and 15 (canonical
+// 5e), then a +3 jump at 16 (the variant escalation that keeps a
+// single 16 a real commitment — 12 of the 32 points). Applied via
+// the PointBuyModal at the top of the sheet — flips
+// character.stats.method to "point-buy" while active.
+const POINT_BUY_BUDGET = 32;
 const POINT_BUY_MIN = 8;
-const POINT_BUY_MAX = 15;
+const POINT_BUY_MAX = 16;
 const POINT_BUY_COSTS: Record<number, number> = {
   8: 0,
   9: 1,
@@ -170,6 +172,7 @@ const POINT_BUY_COSTS: Record<number, number> = {
   13: 5,
   14: 7,
   15: 9,
+  16: 12,
 };
 const pointBuyCost = (score: number): number => {
   if (!Number.isFinite(score)) return 0;
@@ -1337,7 +1340,10 @@ function PointBuyModal({
 
   return (
     <div
-      className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      // bg-black/* is theme-stable. The previous bg-ink/80 inverted in
+      // dark mode (where --ink is light) — that's the "bright white"
+      // overlay users were hitting.
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
@@ -1351,7 +1357,7 @@ function PointBuyModal({
               Point Buy
             </h2>
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink/55 mt-1">
-              D&amp;D 5e standard · 27 points · scores 8–15
+              Dauligor variant · 32 points · scores 8–16
             </p>
           </div>
           <div className="text-right">
@@ -1445,28 +1451,33 @@ function PointBuyModal({
                   </button>
                 </div>
 
-                {/* Cost track — pip-style visualisation of how many of
-                    the 9 max points-per-ability are spent on this row. */}
+                {/* Cost track — pip-style visualisation of the 12 max
+                    points-per-ability under the Dauligor 32-point
+                    variant. Two visible tier breaks:
+                      - pips 0..4 (gold)     cheap tier: 8 → 13 (+1 each)
+                      - pips 5..8 (blood/70) double tier: 14 → 15 (+2 each)
+                      - pips 9..11 (blood)   triple tier: 16 (+3) */}
                 <div className="flex-1 min-w-0 flex items-center gap-2">
                   <div className="flex-1 flex items-center gap-0.5">
-                    {Array.from({ length: 9 }).map((_, i) => {
+                    {Array.from({ length: 12 }).map((_, i) => {
                       const filled = i < cost;
-                      // Visual hint for the breakpoint at +5 (cost jumps
-                      // from +1/score to +2/score once you cross 14):
-                      // 14-15 pips render with a slightly heavier outline.
-                      const isHighTier = i >= 5;
+                      const tier = i < 5 ? "cheap" : i < 9 ? "double" : "triple";
                       return (
                         <span
                           key={i}
                           className={cn(
                             "h-1.5 flex-1 rounded-sm transition-colors",
                             filled
-                              ? isHighTier
-                                ? "bg-blood/70"
-                                : "bg-gold"
-                              : isHighTier
-                                ? "bg-blood/10"
-                                : "bg-gold/15",
+                              ? tier === "cheap"
+                                ? "bg-gold"
+                                : tier === "double"
+                                  ? "bg-blood/70"
+                                  : "bg-blood"
+                              : tier === "cheap"
+                                ? "bg-gold/15"
+                                : tier === "double"
+                                  ? "bg-blood/10"
+                                  : "bg-blood/15",
                           )}
                         />
                       );
