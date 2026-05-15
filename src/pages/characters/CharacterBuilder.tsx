@@ -29,6 +29,44 @@ const denormCategoryId = (d: any) => d ? ({
   ...d,
   categoryId: d.category_id,
 }) : d;
+
+// Stable JSON.stringify with sorted object keys. Drop-in for the equality
+// guards in the two reconcile-`progressionState` effects below so a
+// key-order-only diff between the persisted shape and the freshly-built
+// shape doesn't trigger a needless setCharacter write (which then re-runs
+// the effect, burns frames, and — when the user navigates into the class
+// step where the per-level accordion's `processAdvancement` work is
+// expensive — manifests as a multi-second tab freeze with no console or
+// network activity to point at).
+//
+// Headless reproduction (`scripts/_repro_progression_loop.mjs` in branch
+// `claude/priceless-zhukovsky-cbbaf3`) confirms the symptom: under the
+// previous `JSON.stringify` guard a canonical-shape character with legacy
+// key ordering writes once on load before converging; under this guard
+// it converges with no write. Same output as JSON.stringify for arrays
+// and primitives; for objects, walks keys in lexicographic order. Used
+// inside hot effects, so kept allocation-light (no Map/Set, manual
+// concat).
+function canonicalStringify(value: any): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    let out = "[";
+    for (let i = 0; i < value.length; i++) {
+      if (i > 0) out += ",";
+      out += canonicalStringify(value[i]);
+    }
+    return out + "]";
+  }
+  const keys = Object.keys(value).sort();
+  let out = "{";
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (i > 0) out += ",";
+    out += JSON.stringify(k) + ":" + canonicalStringify(value[k]);
+  }
+  return out + "}";
+}
+
 import { rebuildCharacterFromSql } from "../../lib/characterShared";
 import {
   uniqueStringList,
@@ -3259,11 +3297,19 @@ export default function CharacterBuilder({
       character.selectedOptions || {},
     );
 
+    // Key-order-insensitive equality — JSON.stringify here used to fire
+    // a spurious write on every page-load for characters whose persisted
+    // `progressionState` shape was authored before the current key order
+    // settled (legacy ordering still hits all 5 scenarios in
+    // `scripts/_repro_progression_loop.mjs`). The write itself was
+    // harmless on the sheet step but on the class step it triggered a
+    // re-run of the per-level `processAdvancement` accordion, which
+    // surfaced as a multi-second freeze.
     if (
-      JSON.stringify(currentProgressionState) ===
-        JSON.stringify(nextProgressionState) &&
-      JSON.stringify(currentSelectedOptions) ===
-        JSON.stringify(nextSelectedOptions)
+      canonicalStringify(currentProgressionState) ===
+        canonicalStringify(nextProgressionState) &&
+      canonicalStringify(currentSelectedOptions) ===
+        canonicalStringify(nextSelectedOptions)
     ) {
       return;
     }
@@ -4592,17 +4638,23 @@ export default function CharacterBuilder({
       spellListExtensions: nextSpellListExtensions,
     };
 
+    // Same key-order-insensitive guard as Effect 1 above — without it a
+    // legacy `classPackages` shape whose nested objects (spellcasting
+    // contributor entries, granted-feature refs) happen to differ only
+    // in key order triggers a write on every render, which then re-fires
+    // this effect via the `normalizedProgressionState` dep, looping the
+    // class step's expensive per-level render.
     if (
-      JSON.stringify(normalizedProgressionState.classPackages) ===
-        JSON.stringify(nextClassPackages) &&
-      JSON.stringify(normalizedProgressionState.ownedFeatures || []) ===
-        JSON.stringify(canonicalOwnedFeatures) &&
-      JSON.stringify(normalizedProgressionState.ownedItems || []) ===
-        JSON.stringify(canonicalOwnedItems) &&
-      JSON.stringify(normalizedProgressionState.ownedSpells || []) ===
-        JSON.stringify(nextOwnedSpells) &&
-      JSON.stringify(normalizedProgressionState.spellListExtensions || []) ===
-        JSON.stringify(nextSpellListExtensions)
+      canonicalStringify(normalizedProgressionState.classPackages) ===
+        canonicalStringify(nextClassPackages) &&
+      canonicalStringify(normalizedProgressionState.ownedFeatures || []) ===
+        canonicalStringify(canonicalOwnedFeatures) &&
+      canonicalStringify(normalizedProgressionState.ownedItems || []) ===
+        canonicalStringify(canonicalOwnedItems) &&
+      canonicalStringify(normalizedProgressionState.ownedSpells || []) ===
+        canonicalStringify(nextOwnedSpells) &&
+      canonicalStringify(normalizedProgressionState.spellListExtensions || []) ===
+        canonicalStringify(nextSpellListExtensions)
     ) {
       return;
     }
