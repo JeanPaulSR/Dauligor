@@ -5600,18 +5600,249 @@ export default function CharacterBuilder({
                             Spellcasting
                           </h3>
                           <p className="text-xs text-ink/50 font-serif italic mt-1">
-                            This sheet pane will reflect prepared or known spell state from the same class progression model.
+                            Prepared and granted spells from your class progression — manage via the Spell Manager step.
                           </p>
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setActiveStep("class")}
+                          onClick={() => setActiveStep("spells")}
                           className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
                         >
-                          Open Class Step
+                          Open Spell Manager
                         </Button>
                       </div>
+
+                      {/* ── Spell stats banner (design handoff) ──────────
+                           Per-class Save DC / Atk chips + the multiclass
+                           spell-slot pip bar at a glance. Lives at the
+                           top of the sheet's Spells sub-tab so combat
+                           reference data is the first thing the player
+                           sees. Slot usage tracking (used vs unused) is
+                           future work — pips render full for now. */}
+                      {spellcastingContributors.length > 0 && (
+                        <div className="border border-gold/25 bg-[#efe6cf]/40 rounded-lg p-4 space-y-4">
+                          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+                            {spellcastingContributors.map((contributor: any) => {
+                              const ab = contributor.ability;
+                              const score = Number(character?.stats?.base?.[ab] ?? 10);
+                              const mod = Math.floor((score - 10) / 2);
+                              const prof = Number(character?.proficiencyBonus ?? 2);
+                              const dc = 8 + prof + mod;
+                              const atk = prof + mod;
+                              return (
+                                <div
+                                  key={`${contributor.kind}-${contributor.classId}-${contributor.subclassId || "none"}`}
+                                  className="flex flex-col gap-0.5"
+                                >
+                                  <span className="text-[8px] font-black uppercase tracking-[0.18em] text-ink/45">
+                                    {contributor.label} · {ab}
+                                  </span>
+                                  <span className="font-mono text-base font-black text-gold leading-none">
+                                    DC {dc} · {atk >= 0 ? `+${atk}` : atk}
+                                  </span>
+                                </div>
+                              );
+                            })}
+
+                            <div className="ml-auto flex flex-wrap items-end gap-3">
+                              {multiclassSpellSlots.map((count: number, i: number) =>
+                                count > 0 ? (
+                                  <div
+                                    key={`slot-pip-${i}`}
+                                    className="flex flex-col items-center gap-1"
+                                  >
+                                    <div className="flex gap-1">
+                                      {Array.from({ length: count }).map((_, j) => (
+                                        <span
+                                          key={j}
+                                          className="w-2 h-2 rounded-full border-2 border-gold bg-gold"
+                                          title={`Level ${i + 1} slot ${j + 1}`}
+                                        />
+                                      ))}
+                                    </div>
+                                    <span className="text-[8px] font-black uppercase tracking-[0.16em] text-ink/45">
+                                      L{i + 1}
+                                    </span>
+                                  </div>
+                                ) : null,
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Per-spellcasting-class quick counts —
+                              Cantrips / Spells Known / Prepared.
+                              Reads from the ownedSpells progression
+                              state, scoped by the contributor's class
+                              when attribution columns are populated. */}
+                          {(() => {
+                            const ps = character.progressionState || {};
+                            const allOwned: any[] = ps.ownedSpells || [];
+                            const totalKnown = allOwned.filter(
+                              (s: any) => !s?.grantedByAdvancementId || !s?.doesntCountAgainstKnown,
+                            ).length;
+                            const totalPrepared = allOwned.filter(
+                              (s: any) => s?.isPrepared || s?.isAlwaysPrepared,
+                            ).length;
+                            const totalCantrips = allOwned.filter((s: any) => {
+                              const lvl = spellNameCache[s.id]?.level;
+                              return lvl === 0;
+                            }).length;
+                            const totalRituals = allOwned.filter((s: any) => {
+                              const cached = spellNameCache[s.id];
+                              return cached?.ritual || cached?.foundryShell?.ritual;
+                            }).length;
+                            return (
+                              <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-ink/55 flex-wrap pt-3 border-t border-gold/15">
+                                <span>
+                                  Cantrips: <span className="text-gold">{totalCantrips}</span>
+                                </span>
+                                <span className="text-ink/20">·</span>
+                                <span>
+                                  Known: <span className="text-gold">{totalKnown}</span>
+                                </span>
+                                <span className="text-ink/20">·</span>
+                                <span>
+                                  Prepared: <span className="text-blood">{totalPrepared}</span>
+                                </span>
+                                {totalRituals > 0 && (
+                                  <>
+                                    <span className="text-ink/20">·</span>
+                                    <span>
+                                      Ritual:{" "}
+                                      <span className="text-amber-600">{totalRituals}</span>
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* ── Prepared at a Glance (design handoff) ────────
+                           Read-only grouped view of currently-prepared
+                           spells (always_prepared ∪ isPrepared ∪ any
+                           active-loadout member). The intent of the
+                           sheet's Spells sub-tab is combat reference:
+                           "what spells do I have right now?" The full
+                           Spell Manager step is where the player
+                           actually composes the prepared set. */}
+                      {spellcastingContributors.length > 0 && (() => {
+                        const ps = character.progressionState || {};
+                        const allOwned: any[] = ps.ownedSpells || [];
+                        const allLoadouts: any[] = ps.spellLoadouts || [];
+                        const activeLoadoutIds = new Set(
+                          allLoadouts.filter((l: any) => l?.isActive).map((l: any) => l.id),
+                        );
+                        const isPreparedByEither = (s: any) => {
+                          if (s?.isAlwaysPrepared) return true;
+                          if (s?.isPrepared) return true;
+                          const membership = Array.isArray(s?.loadoutMembership)
+                            ? s.loadoutMembership
+                            : [];
+                          return membership.some((lid: string) => activeLoadoutIds.has(lid));
+                        };
+                        const prepared = allOwned.filter(isPreparedByEither);
+                        if (prepared.length === 0) {
+                          return (
+                            <div className="border border-dashed border-gold/25 rounded-lg p-4 text-center">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-gold/55">
+                                No Spells Prepared
+                              </p>
+                              <p className="text-xs text-ink/40 font-serif italic mt-1">
+                                Open the Spell Manager step to prepare spells.
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        const byLvl = new Map<number, any[]>();
+                        prepared.forEach((s: any) => {
+                          const lvl = Number(spellNameCache[s.id]?.level ?? -1);
+                          if (!byLvl.has(lvl)) byLvl.set(lvl, []);
+                          byLvl.get(lvl)!.push(s);
+                        });
+                        const lvls = Array.from(byLvl.keys()).sort((a, b) => a - b);
+
+                        return (
+                          <div className="border border-gold/20 rounded-lg p-4 bg-background/30 space-y-3">
+                            <div className="flex items-center justify-between gap-2 border-b border-gold/15 pb-2">
+                              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gold">
+                                Prepared · At a Glance
+                              </span>
+                              <span className="font-mono text-[10px] font-bold text-ink/45">
+                                {prepared.length} spell{prepared.length === 1 ? "" : "s"}
+                              </span>
+                            </div>
+                            <div className="space-y-3">
+                              {lvls.map((lvl) => {
+                                const rows = byLvl.get(lvl) || [];
+                                return (
+                                  <div key={`prep-glance-${lvl}`} className="space-y-1">
+                                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/45 px-1">
+                                      {lvl < 0
+                                        ? "Loading…"
+                                        : lvl === 0
+                                          ? "Cantrips"
+                                          : `Level ${lvl}`}
+                                      <span className="text-ink/30 font-bold ml-1">
+                                        · {rows.length}
+                                      </span>
+                                    </div>
+                                    {rows.map((s: any) => {
+                                      const cached = spellNameCache[s.id];
+                                      const isAlways = !!s?.isAlwaysPrepared;
+                                      const isRitual =
+                                        cached?.ritual || cached?.foundryShell?.ritual;
+                                      const isConc =
+                                        cached?.concentration || cached?.foundryShell?.concentration;
+                                      return (
+                                        <div
+                                          key={`prep-glance-row-${s.id}`}
+                                          className="flex items-center gap-2 px-3 py-1 bg-card/40 border border-gold/10 rounded-sm"
+                                        >
+                                          <span
+                                            className={cn(
+                                              "w-2 h-2 rounded-full shrink-0",
+                                              isAlways ? "bg-emerald-500" : "bg-gold",
+                                            )}
+                                            title={isAlways ? "Always prepared" : "Prepared"}
+                                          />
+                                          <span className="font-serif text-sm text-ink truncate flex-1">
+                                            {cached?.name || s.id}
+                                          </span>
+                                          {cached?.school && (
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-gold/60 shrink-0">
+                                              {String(cached.school).slice(0, 4)}
+                                            </span>
+                                          )}
+                                          {isRitual && (
+                                            <span
+                                              className="text-[9px] font-black uppercase tracking-widest text-amber-600 shrink-0"
+                                              title="Ritual"
+                                            >
+                                              R
+                                            </span>
+                                          )}
+                                          {isConc && (
+                                            <span
+                                              className="text-[9px] font-black uppercase tracking-widest text-cyan-600 shrink-0"
+                                              title="Concentration"
+                                            >
+                                              C
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {spellcastingContributors.length > 0 ? (
                         <div className="space-y-4">
