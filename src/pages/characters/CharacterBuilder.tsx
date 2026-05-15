@@ -5952,171 +5952,216 @@ export default function CharacterBuilder({
                   </div>
                   )}
 
-                  {sheetSection === "features" && (
-                    <div className="border border-gold/20 bg-card/40 rounded-xl p-4 sm:p-6 shadow-sm space-y-5">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div>
-                          <h3 className="text-base sm:text-lg font-serif font-black uppercase text-ink/80 tracking-tight flex items-center gap-2">
-                            <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
-                            Granted Features
-                          </h3>
-                          <p className="text-xs text-ink/50 font-serif italic mt-1">
-                            Features, scale tracks, and granted items from your class progression. Manage advancements in the Class step.
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setActiveStep("class")}
-                          className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black"
-                        >
-                          Open Class Step
-                        </Button>
-                      </div>
+                  {sheetSection === "features" && (() => {
+                    // ── Recto FEATURES tab (Hand-Off-2 layout) ─────
+                    // Flat list of features sorted by class + level,
+                    // with class+level pill on the right of each row.
+                    // No outer "GRANTED FEATURES" card wrapper, no
+                    // per-class section headers, no 2-col grid. The
+                    // single FEATURE USES strip at the top carries
+                    // class-resource chips (scales like "Sorcery
+                    // Points", "Ki Points", "Infusions Known") —
+                    // per-encounter use trackers (current/max for
+                    // Tides of Chaos, Channel Divinity, etc.) need a
+                    // runtime state shape that doesn't exist on the
+                    // character model yet; the chip strip is the
+                    // seam where those will land once the data is
+                    // there.
+                    //
+                    // Build flat feature list: [{className, classLevel,
+                    //   subclassName, classId, feature, parentType,
+                    //   level}, ...] sorted by (className, level).
+                    const flatFeatures: any[] = [];
+                    for (const summary of sheetClassSummaries) {
+                      for (const feature of summary.features) {
+                        flatFeatures.push({
+                          ...feature,
+                          className: summary.className,
+                          classLevel: summary.classLevel,
+                          subclassName: summary.subclassName,
+                          classId: summary.classId,
+                        });
+                      }
+                    }
+                    flatFeatures.sort((a, b) => {
+                      const c = String(a.className).localeCompare(String(b.className));
+                      if (c !== 0) return c;
+                      return (Number(a.level) || 0) - (Number(b.level) || 0);
+                    });
 
-                      {/* ── Granted Features grid (design handoff) ────────
-                           Per-class section with a 2-col card grid below.
-                           Each card: feature name (serif, semibold) + L#
-                           pill + source tag + optional description. Mirrors
-                           the Features-by-class layout from sheet-v3.jsx. */}
-                      {sheetClassSummaries.length > 0 ? (
-                        sheetClassSummaries.map((summary: any) => {
-                          const hasFeatures = summary.features.length > 0;
-                          const hasScales = summary.scales.length > 0;
-                          const hasItems = summary.grantedItems.length > 0;
-                          return (
-                            <div
-                              key={summary.classId}
-                              className="space-y-3 border-l-[3px] border-gold/40 pl-4"
-                            >
-                              <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                                <div className="flex items-baseline gap-3">
-                                  <span className="text-base font-serif font-bold text-ink">
-                                    {summary.className}
-                                  </span>
-                                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-gold/70">
-                                    Level {summary.classLevel}
-                                    {summary.subclassName ? ` · ${summary.subclassName}` : ""}
-                                  </span>
-                                </div>
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-ink/35">
-                                  {summary.features.length} feature{summary.features.length === 1 ? "" : "s"}
+                    // Aggregate all scale tracks across all classes
+                    // into one chip row. Sorcery Pts / Infusions
+                    // Known / Ki Points all live here.
+                    const allScales: any[] = [];
+                    for (const summary of sheetClassSummaries) {
+                      for (const scale of summary.scales) {
+                        allScales.push({
+                          ...scale,
+                          className: summary.className,
+                          classId: summary.classId,
+                        });
+                      }
+                    }
+
+                    // Aggregate granted items from all classes into
+                    // one flat list — same "demote per-class headers"
+                    // treatment as features.
+                    const allGrantedItems: any[] = [];
+                    for (const summary of sheetClassSummaries) {
+                      for (const item of summary.grantedItems) {
+                        allGrantedItems.push({
+                          ...item,
+                          className: summary.className,
+                          classId: summary.classId,
+                        });
+                      }
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Top strip: FEATURE USES header + resource
+                            chips. Clicking the header opens the class
+                            step (the old "Open Class Step" button got
+                            absorbed into a small chevron at the top
+                            right). */}
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-baseline gap-3 flex-wrap">
+                            <h3 className="text-[11px] font-black uppercase tracking-[0.16em] text-ink/55">
+                              Feature Uses
+                            </h3>
+                            {flatFeatures.length > 0 && (
+                              <span className="text-[10px] font-serif italic text-ink/40">
+                                {flatFeatures.length} total
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setActiveStep("class")}
+                            className="text-[10px] font-black uppercase tracking-widest text-gold/70 hover:text-gold transition-colors"
+                          >
+                            Open Class Step ›
+                          </button>
+                        </div>
+
+                        {allScales.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {allScales.map((scale: any) => (
+                              <div
+                                key={`${scale.classId}-${scale.id}`}
+                                className="px-3 py-1.5 border border-gold/25 bg-gold/[0.04] rounded-md flex flex-col items-start gap-0.5 min-w-[100px]"
+                                title={`${scale.className} · ${scale.name}`}
+                              >
+                                <span className="text-[9px] font-black uppercase tracking-[0.14em] text-gold/70 leading-none">
+                                  {scale.name}
+                                </span>
+                                <span className="font-mono text-base font-black text-ink leading-none">
+                                  {String(scale.value)}
                                 </span>
                               </div>
-
-                              {hasScales && (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {summary.scales.map((scale: any) => (
-                                    <div
-                                      key={scale.id}
-                                      className="px-2 py-0.5 border border-gold/25 bg-gold/5 rounded-sm flex items-baseline gap-1.5"
-                                    >
-                                      <span className="text-[9px] font-black uppercase tracking-widest text-gold/65">
-                                        {scale.name}
-                                      </span>
-                                      <span className="font-mono text-xs font-black text-ink">
-                                        {String(scale.value)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {hasFeatures ? (
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  {summary.features.map((feature: any) => {
-                                    const isSubclass = feature.parentType === "subclass";
-                                    return (
-                                      <div
-                                        key={`${summary.classId}-${feature.id}`}
-                                        className={cn(
-                                          "p-3 rounded-md border bg-card/60 transition-colors hover:bg-card/80",
-                                          isSubclass
-                                            ? "border-amber-500/25"
-                                            : "border-gold/20",
-                                        )}
-                                      >
-                                        <div className="flex items-start justify-between gap-2">
-                                          <span className="font-serif text-sm font-bold text-ink leading-tight">
-                                            {feature.name}
-                                          </span>
-                                          <div className="flex items-center gap-1 shrink-0">
-                                            <span className="text-[8px] font-black uppercase tracking-[0.16em] text-gold/65 px-1.5 py-0.5 border border-gold/25 rounded-sm">
-                                              L{feature.level}
-                                            </span>
-                                            {isSubclass && (
-                                              <span className="text-[8px] font-black uppercase tracking-[0.16em] text-amber-600/80 px-1.5 py-0.5 border border-amber-500/30 rounded-sm">
-                                                Sub
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                        {feature.description && (
-                                          <p className="text-[11px] text-ink/55 font-serif leading-relaxed mt-1.5 line-clamp-3">
-                                            {String(feature.description).replace(/\[[^\]]+\]/g, "").trim()}
-                                          </p>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="text-xs font-serif italic text-ink/35">
-                                  No granted features yet.
-                                </div>
-                              )}
-
-                              {hasItems && (
-                                <div className="space-y-1 pt-2 border-t border-gold/10">
-                                  <div className="text-[9px] font-black uppercase tracking-[0.18em] text-ink/40">
-                                    Granted Items
-                                  </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {summary.grantedItems.map((item: any) => (
-                                      <span
-                                        key={`${summary.classId}-item-${item.id}-${item.level}`}
-                                        className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 inline-flex items-center gap-1.5"
-                                      >
-                                        <span className="font-serif normal-case">{item.name}</span>
-                                        <span className="text-[8px] font-black tracking-widest text-gold/60">L{item.level}</span>
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="text-sm font-serif italic text-ink/35">
-                          No class progression is active yet.
-                        </div>
-                      )}
-
-                      {selectedAdvancementOptionItems.length > 0 && (
-                        <div className="space-y-2 pt-3 border-t border-gold/10">
-                          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-ink/40">
-                            Selected Advancement Options
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {selectedAdvancementOptionItems.map((option: any) => (
-                              <span
-                                key={option.id}
-                                className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase inline-flex items-baseline gap-1.5"
-                              >
-                                <span>{option.name}</span>
-                                {option.featureType && (
-                                  <span className="text-[8px] font-black tracking-widest text-gold/60 normal-case">
-                                    {option.featureType}
-                                  </span>
-                                )}
-                              </span>
                             ))}
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                        )}
+
+                        {/* Flat feature list — one row per feature,
+                            divider between rows. Feature name + L#
+                            pill on the left; class name + class level
+                            on the right (the design's "Artificer 1"
+                            right-align). Subclass features get an
+                            amber Sub tag so the visual delta is still
+                            present. Description, if any, sits below
+                            the row in italic body copy. */}
+                        {flatFeatures.length > 0 ? (
+                          <div className="divide-y divide-gold/10 border border-gold/15 rounded-md overflow-hidden">
+                            {flatFeatures.map((feature: any) => {
+                              const isSubclass = feature.parentType === "subclass";
+                              const description = feature.description
+                                ? String(feature.description).replace(/\[[^\]]+\]/g, "").trim()
+                                : "";
+                              return (
+                                <div
+                                  key={`${feature.classId}-${feature.id}`}
+                                  className="px-4 py-3 bg-card/40 hover:bg-card/70 transition-colors"
+                                >
+                                  <div className="flex items-baseline justify-between gap-3">
+                                    <div className="flex items-baseline gap-2 min-w-0">
+                                      <span className="text-[9px] font-black uppercase tracking-[0.14em] text-gold/60 px-1.5 py-0.5 border border-gold/25 rounded-sm shrink-0">
+                                        L{feature.level}
+                                      </span>
+                                      <span className="font-serif text-sm font-bold text-ink leading-tight truncate">
+                                        {feature.name}
+                                      </span>
+                                      {isSubclass && (
+                                        <span className="text-[8px] font-black uppercase tracking-[0.14em] text-amber-600/85 px-1.5 py-0.5 border border-amber-500/30 rounded-sm shrink-0">
+                                          Sub
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] font-black uppercase tracking-[0.14em] text-ink/45 shrink-0">
+                                      {feature.className} {feature.classLevel}
+                                    </span>
+                                  </div>
+                                  {description && (
+                                    <p className="text-[11px] text-ink/55 font-serif italic leading-relaxed mt-1.5 line-clamp-2">
+                                      {description}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-sm font-serif italic text-ink/35 px-4 py-6 text-center border border-dashed border-gold/15 rounded-md">
+                            No granted features yet — open the Class step to add levels.
+                          </div>
+                        )}
+
+                        {allGrantedItems.length > 0 && (
+                          <div className="space-y-1.5 pt-2">
+                            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-ink/45">
+                              Granted Items
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {allGrantedItems.map((item: any) => (
+                                <span
+                                  key={`${item.classId}-item-${item.id}-${item.level}`}
+                                  className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 inline-flex items-center gap-1.5"
+                                >
+                                  <span className="font-serif normal-case">{item.name}</span>
+                                  <span className="text-[8px] font-black tracking-widest text-gold/60">
+                                    {item.className} L{item.level}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedAdvancementOptionItems.length > 0 && (
+                          <div className="space-y-1.5 pt-2">
+                            <div className="text-[10px] font-black uppercase tracking-[0.18em] text-ink/45">
+                              Selected Advancement Options
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {selectedAdvancementOptionItems.map((option: any) => (
+                                <span
+                                  key={option.id}
+                                  className="px-2 py-0.5 bg-card border border-gold/20 rounded-sm text-[10px] font-bold text-ink/70 uppercase inline-flex items-baseline gap-1.5"
+                                >
+                                  <span>{option.name}</span>
+                                  {option.featureType && (
+                                    <span className="text-[8px] font-black tracking-widest text-gold/60 normal-case">
+                                      {option.featureType}
+                                    </span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {sheetSection === "spells" && (
                     <div className="border border-gold/20 bg-card/40 rounded-xl p-6 shadow-sm space-y-4">
