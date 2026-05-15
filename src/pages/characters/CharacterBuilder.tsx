@@ -8408,7 +8408,11 @@ export default function CharacterBuilder({
 
               // Counters for the active class. Granted spells with
               // doesntCountAgainstKnown are excluded from the cap counts (Magic
-              // Initiate, Chronomancy Initiate, etc).
+              // Initiate, Chronomancy Initiate, etc). Non-granted player
+              // picks count for the class whose attribution matches —
+              // same bug fix as the modal counter (`countsTowardsModalClass`)
+              // above; without it the active class's cap counters sum
+              // every class's picks together.
               const countsTowardsActiveClass = (s: any) => {
                 if (!s) return false;
                 if (s.grantedByAdvancementId) {
@@ -8417,7 +8421,18 @@ export default function CharacterBuilder({
                     ? s.countsAsClassId === activeClassId
                     : true;
                 }
-                return true;
+                if (s.countsAsClassId) return s.countsAsClassId === activeClassId;
+                // Legacy fallback: first spellcasting class whose pool
+                // contains the spell. Same rule as the main-sheet's
+                // `attributedClassForSpell`, kept in sync here so the
+                // header counters and the per-class section agree.
+                for (const otherCid of spellcastingClassIds) {
+                  const otherPool = classSpellPools[otherCid] || [];
+                  if (otherPool.some((p: any) => p.id === s.id)) {
+                    return otherCid === activeClassId;
+                  }
+                }
+                return false;
               };
               const ownedForClass = ownedSpells.filter(countsTowardsActiveClass);
               const knownCount = ownedForClass.length;
@@ -9391,17 +9406,21 @@ export default function CharacterBuilder({
                                         switch active class + toggle
                                         collapse; "Add Spells" button
                                         opens the per-class picker modal.
-                                        Background is fully transparent
-                                        per the latest design pass —
-                                        active-class affordance is the
-                                        gold underline below the label,
-                                        not a tinted band. */}
+                                        Background uses the gold accent
+                                        color so the header reads as a
+                                        section divider, not a spell
+                                        row — they used to blur together
+                                        when every row had a similar
+                                        bg-card. Active class gets the
+                                        stronger 15% gold tint; inactive
+                                        sits at 5% so they still stand
+                                        apart from rows. */}
                                     <div
                                       className={cn(
-                                        "px-3 py-2 border-b flex items-center gap-2 sticky top-0 z-10 bg-card",
+                                        "px-3 py-2 border-y flex items-center gap-2 sticky top-0 z-10",
                                         isActive
-                                          ? "border-gold"
-                                          : "border-gold/15",
+                                          ? "bg-gold/15 border-gold/40"
+                                          : "bg-gold/[0.06] border-gold/20",
                                       )}
                                     >
                                       <button
@@ -9415,17 +9434,28 @@ export default function CharacterBuilder({
                                       >
                                         <ChevronDown
                                           className={cn(
-                                            "w-3 h-3 text-ink/40 transition-transform shrink-0",
+                                            "w-3.5 h-3.5 transition-transform shrink-0",
+                                            isActive ? "text-gold" : "text-gold/55",
                                             classCollapsed && "-rotate-90",
                                           )}
                                         />
-                                        <span className="font-serif text-sm font-bold text-ink tracking-tight">
+                                        <span
+                                          className={cn(
+                                            "text-[11px] font-black uppercase tracking-[0.18em]",
+                                            isActive ? "text-gold" : "text-gold/75",
+                                          )}
+                                        >
                                           {cls?.name || `Class ${cid.slice(0, 6)}`}
                                         </span>
-                                        <span className="font-mono text-[10px] font-bold text-ink/40">
+                                        <span
+                                          className={cn(
+                                            "font-mono text-[10px] font-bold",
+                                            isActive ? "text-gold/70" : "text-gold/55",
+                                          )}
+                                        >
                                           {filtered.length}
                                           {filtered.length !== poolTotal && (
-                                            <span className="text-ink/25"> / {poolTotal}</span>
+                                            <span className="text-gold/30"> / {poolTotal}</span>
                                           )}
                                         </span>
                                       </button>
@@ -9867,9 +9897,20 @@ export default function CharacterBuilder({
                     const modalCantripsCap = matchModalCap(/^cantrips\s*(known)?$/i);
                     const modalSpellsCap = matchModalCap(/^spells\s*known$/i);
 
-                    // Counts scoped to this modal's class — granted
-                    // spells with doesntCountAgainstKnown stay excluded
-                    // from cap totals (Magic Initiate etc.).
+                    // Counts scoped to this modal's class. Three layers:
+                    //   - Granted spells with `doesntCountAgainstKnown`
+                    //     (Magic Initiate etc.) → excluded.
+                    //   - Granted spells without explicit attribution
+                    //     → count under the granting class.
+                    //   - Non-granted owned spells (player picks) →
+                    //     count under `countsAsClassId`.
+                    //
+                    // BUG FIX: the previous version returned `true` for
+                    // every non-granted owned spell, so the modal's
+                    // KNOWN counter and cap-blocking summed across all
+                    // classes — adding 3 spells to Cleric made the
+                    // Wizard modal think it was already at "3 known".
+                    // Each class's modal now sees only its own picks.
                     const countsTowardsModalClass = (s: any) => {
                       if (!s) return false;
                       if (s.grantedByAdvancementId) {
@@ -9878,7 +9919,22 @@ export default function CharacterBuilder({
                           ? s.countsAsClassId === modalCid
                           : true;
                       }
-                      return true;
+                      // Non-granted player picks: scope by attribution.
+                      // Legacy entries without `countsAsClassId` fall
+                      // back to the first spellcasting class whose
+                      // pool contains the spell (same rule the main
+                      // sheet uses; see `attributedClassForSpell`).
+                      if (s.countsAsClassId) return s.countsAsClassId === modalCid;
+                      // Legacy fallback — match the main-sheet filter
+                      // so this counter and the per-class section
+                      // agree on which spells belong to which class.
+                      for (const otherCid of spellcastingClassIds) {
+                        const otherPool = classSpellPools[otherCid] || [];
+                        if (otherPool.some((p: any) => p.id === s.id)) {
+                          return otherCid === modalCid;
+                        }
+                      }
+                      return false;
                     };
                     const modalOwnedForClass = ownedSpells.filter(countsTowardsModalClass);
                     const modalCantripsKnown = modalOwnedForClass.filter((s: any) => {
