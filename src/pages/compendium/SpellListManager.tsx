@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
 import VirtualizedList from '../../components/ui/VirtualizedList';
+import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import { FilterBar, TagGroupFilter, AxisFilterSection, matchesTagFilters } from '../../components/compendium/FilterBar';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import { fetchCollection } from '../../lib/d1';
@@ -17,6 +18,7 @@ import {
   fetchClassSpellIds,
   fetchClassRuleSpellIds,
   fetchLastClassRuleRebuildAt,
+  fetchStaleClasses,
   fetchClassesForSpells,
   addSpellsToClassList,
   removeSpellsFromClassList,
@@ -177,6 +179,17 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const [selectedSpellIds, setSelectedSpellIds] = useState<Set<string>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
   const [previewSpellId, setPreviewSpellId] = useState<string | null>(null);
+  // Cross-class stale audit. Populated on mount + after any
+  // rebuild / link / unlink so the count stays current. Drives the
+  // toolbar "Rebuild Stale (N)" affordance and the per-row
+  // staleness signal on the class picker dropdown (todo).
+  const [staleClasses, setStaleClasses] = useState<Array<{
+    classId: string;
+    className: string;
+    staleRuleCount: number;
+    lastRebuiltAt: string | null;
+  }>>([]);
+  const [rebuildAllStalePending, setRebuildAllStalePending] = useState(false);
 
   // Load classes + spells + sources + tags once, then bulk-fetch class memberships.
   useEffect(() => {
@@ -213,6 +226,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           if (active) setSpellMembershipsBySpellId(memberships);
         } catch (err) {
           console.error('[SpellListManager] Failed to load class memberships:', err);
+        }
+        // Cross-class stale audit — populates the toolbar "Rebuild
+        // Stale (N)" affordance.
+        try {
+          const stale = await fetchStaleClasses();
+          if (active) setStaleClasses(stale);
+        } catch (err) {
+          console.error('[SpellListManager] Failed to load stale class audit:', err);
         }
       } catch (err) {
         console.error('[SpellListManager] Failed to load foundation data:', err);
@@ -718,6 +739,10 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       const refreshed = await fetchAppliedRulesFor('class', selectedClassId);
       setLinkedRules(refreshed);
       toast(`Linked "${rule.name}" to this class.`);
+      // Refresh stale audit — linking a rule typically makes the
+      // class stale (rule.updated_at > lastRebuildAt because it's
+      // probably never been rebuilt against THIS rule before).
+      fetchStaleClasses().then(setStaleClasses).catch(() => {});
     } catch (err) {
       console.error('[SpellListManager] Link failed:', err);
       toast.error('Failed to link rule.');
@@ -730,6 +755,10 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       await unapplyRule(rule.id, 'class', selectedClassId);
       setLinkedRules(prev => prev.filter(r => r.id !== rule.id));
       toast(`Unlinked "${rule.name}".`);
+      // Refresh stale audit — unlinking leaves orphan rule:% rows
+      // in class_spell_lists until next rebuild, so the class
+      // stays stale until cleaned up.
+      fetchStaleClasses().then(setStaleClasses).catch(() => {});
     } catch (err) {
       console.error('[SpellListManager] Unlink failed:', err);
       toast.error('Failed to unlink rule.');
@@ -797,11 +826,74 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       setSpellMembershipsBySpellId(memberships);
       setLastRebuildAt(ts);
       toast(`Rebuilt: ${added} spell${added === 1 ? '' : 's'} matched across ${rules} linked rule${rules === 1 ? '' : 's'}.`);
+      // Refresh the cross-class stale audit so the toolbar count
+      // drops by 1 (or 0 if this class wasn't stale to begin with).
+      fetchStaleClasses().then(setStaleClasses).catch(() => {});
     } catch (err) {
       console.error('[SpellListManager] Rebuild failed:', err);
       toast.error('Rebuild failed.');
     } finally {
       setRebuildPending(false);
+    }
+  };
+
+  /**
+   * Bulk rebuild every class with at least one stale linked rule.
+   * Parallel — each call wipes its own class's rule:% slice then
+   * re-inserts; no cross-class contention. Failures are reported
+   * per-class in the toast but don't abort the others.
+   */
+  const handleRebuildAllStale = async () => {
+    if (rebuildAllStalePending || staleClasses.length === 0) return;
+    setRebuildAllStalePending(true);
+    try {
+      const inputs = spells.map(s => ({
+        id: s.id,
+        level: s.level,
+        school: s.school,
+        source_id: s.source_id,
+        tags: s.tags,
+        activationBucket: s.activationBucket,
+        rangeBucket: s.rangeBucket,
+        durationBucket: s.durationBucket,
+        shapeBucket: s.shapeBucket,
+        concentration: s.concentration,
+        ritual: s.ritual,
+        vocal: s.vocal,
+        somatic: s.somatic,
+        material: s.material,
+      }));
+      const targets = staleClasses.slice();
+      const results = await Promise.allSettled(
+        targets.map(t => rebuildClassSpellListFromAppliedRules(t.classId, inputs)),
+      );
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+      if (failed > 0) {
+        toast.error(`Rebuilt ${succeeded} of ${results.length} stale class${results.length === 1 ? '' : 'es'}. ${failed} failed — see console.`);
+        results.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            // eslint-disable-next-line no-console
+            console.error(`[SpellListManager] rebuild-all-stale: class ${targets[i].classId} failed:`, r.reason);
+          }
+        });
+      } else {
+        toast(`Rebuilt ${succeeded} stale class${succeeded === 1 ? '' : 'es'}.`);
+      }
+      // Refresh the audit. Also refresh the currently-selected
+      // class's data if it was one of the targets.
+      const stale = await fetchStaleClasses();
+      setStaleClasses(stale);
+      if (selectedClassId && targets.some(t => t.classId === selectedClassId)) {
+        const [ids, ts] = await Promise.all([
+          fetchClassSpellIds(selectedClassId),
+          fetchLastClassRuleRebuildAt(selectedClassId),
+        ]);
+        setClassListIds(ids);
+        setLastRebuildAt(ts);
+      }
+    } finally {
+      setRebuildAllStalePending(false);
     }
   };
 
@@ -833,17 +925,23 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           </Button>
         </Link>
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-gold/70 shrink-0">Class</span>
-        <select
+        {/* Entity-search class picker — same SingleSelectSearch
+            pattern used by RequirementsEditor, ActivityEditor,
+            ConsumptionTabEditor for picking among 40+ items.
+            Replaces the native <select> because at the planned
+            class catalogue scale (Wizard, Sorcerer, Warlock,
+            Cleric, Druid, Paladin, Ranger, plus subclasses /
+            partial casters / homebrew = easily 40+), the bare
+            <select> is slow to scan and miserable to type into. */}
+        <SingleSelectSearch
           value={selectedClassId}
-          onChange={(e) => setSelectedClassId(e.target.value)}
-          className="h-8 rounded-md border border-gold/20 bg-background/40 px-2 py-1 text-sm text-ink focus:border-gold/50 focus:outline-none"
+          onChange={(val) => setSelectedClassId(val)}
+          options={classes.map(c => ({ id: c.id, name: c.name }))}
+          placeholder="— Select a class —"
+          noEntitiesText={loading ? 'Loading classes…' : 'No classes found.'}
           disabled={loading}
-        >
-          <option value="">— Select a class —</option>
-          {classes.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+          triggerClassName="w-[220px]"
+        />
         {selectedClass ? (
           <div className="text-xs text-ink/60 flex items-center gap-2 min-w-0">
             <span className="text-gold font-bold tabular-nums">{inListCount}</span>
@@ -854,6 +952,24 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               </span>
             ) : null}
           </div>
+        ) : null}
+        {/* Spacer pushes the global Rebuild Stale affordance to the
+            right edge of the toolbar. Only renders when there ARE
+            stale classes — silent when everything's in sync. */}
+        <div className="flex-1" />
+        {staleClasses.length > 0 ? (
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleRebuildAllStale}
+            disabled={rebuildAllStalePending}
+            className="h-8 px-3 text-[10px] uppercase tracking-[0.18em] bg-amber-400/15 text-amber-400 border border-amber-400/40 hover:bg-amber-400/25"
+            title={`${staleClasses.length} class${staleClasses.length === 1 ? ' has' : 'es have'} stale spell lists: ${staleClasses.map(c => c.className).join(', ')}`}
+          >
+            {rebuildAllStalePending
+              ? `Rebuilding ${staleClasses.length}…`
+              : `Rebuild Stale (${staleClasses.length})`}
+          </Button>
         ) : null}
       </div>
 

@@ -111,6 +111,89 @@ export async function fetchLastClassRuleRebuildAt(classId: string): Promise<stri
 }
 
 /**
+ * Cross-class stale audit. Returns one row per class that has at
+ * least one applied rule AND is in a "needs rebuild" state, i.e.:
+ *   - the class has never been rebuilt (no rule:% rows in
+ *     class_spell_lists), OR
+ *   - at least one applied rule has been edited since the class's
+ *     last rebuild timestamp.
+ *
+ * Powers the global "Rebuild All Stale Classes" button on
+ * SpellListManager. Cheap — three aggregate queries, all
+ * client-joined.
+ *
+ * Important: scoped to applies_to_type='class' because that's the
+ * only consumer type whose data is currently baked into
+ * class_spell_lists (per worker/migrations/20260509-1000).
+ */
+export async function fetchStaleClasses(): Promise<Array<{
+  classId: string;
+  className: string;
+  staleRuleCount: number;
+  lastRebuiltAt: string | null;
+}>> {
+  const [appsRows, ruleRows, lastRebuildRows, classRows] = await Promise.all([
+    queryD1<{ applies_to_id: string; rule_id: string }>(
+      `SELECT applies_to_id, rule_id FROM spell_rule_applications WHERE applies_to_type = 'class'`,
+      [],
+    ),
+    queryD1<{ id: string; updated_at: string | null }>(
+      `SELECT id, updated_at FROM spell_rules`,
+      [],
+    ),
+    queryD1<{ class_id: string; last_at: string | null }>(
+      `SELECT class_id, MAX(added_at) AS last_at FROM class_spell_lists WHERE source LIKE 'rule:%' GROUP BY class_id`,
+      [],
+    ),
+    queryD1<{ id: string; name: string }>(
+      `SELECT id, name FROM classes`,
+      [],
+    ),
+  ]);
+
+  const ruleUpdatedAtById = new Map<string, string | null>();
+  for (const r of ruleRows) ruleUpdatedAtById.set(r.id, r.updated_at);
+
+  const lastRebuildByClassId = new Map<string, string | null>();
+  for (const r of lastRebuildRows) lastRebuildByClassId.set(r.class_id, r.last_at);
+
+  const classNameById = new Map<string, string>();
+  for (const c of classRows) classNameById.set(c.id, c.name);
+
+  // Group applications by class.
+  const rulesByClassId = new Map<string, string[]>();
+  for (const a of appsRows) {
+    if (!rulesByClassId.has(a.applies_to_id)) rulesByClassId.set(a.applies_to_id, []);
+    rulesByClassId.get(a.applies_to_id)!.push(a.rule_id);
+  }
+
+  const out: Array<{ classId: string; className: string; staleRuleCount: number; lastRebuiltAt: string | null }> = [];
+  for (const [classId, ruleIds] of rulesByClassId) {
+    const lastRebuiltAt = lastRebuildByClassId.get(classId) ?? null;
+    let staleRuleCount = 0;
+    for (const rid of ruleIds) {
+      const updatedAt = ruleUpdatedAtById.get(rid) ?? null;
+      if (!lastRebuiltAt) {
+        // Class never rebuilt — every applied rule is stale.
+        staleRuleCount += 1;
+      } else if (updatedAt && updatedAt > lastRebuiltAt) {
+        staleRuleCount += 1;
+      }
+    }
+    if (staleRuleCount > 0) {
+      out.push({
+        classId,
+        className: classNameById.get(classId) || classId,
+        staleRuleCount,
+        lastRebuiltAt,
+      });
+    }
+  }
+  out.sort((a, b) => a.className.localeCompare(b.className));
+  return out;
+}
+
+/**
  * Reverse lookup: which classes carry this spell on their spell list.
  * Used by the public SpellList detail pane and ClassView's Spell List tab.
  */

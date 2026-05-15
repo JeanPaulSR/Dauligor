@@ -440,7 +440,12 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       // (class_spell_lists). For non-class consumers (feats / items
       // / etc.) the application row exists but nothing reads it
       // yet — there's nothing to "rebuild" for those.
-      const AUTO_REBUILD_THRESHOLD = 10;
+      // Threshold tuned with the user's catalogue scale in mind —
+      // most edits touch 1-10 spells, the occasional larger one
+      // (flipping a chip on a heavily-tagged axis) might churn
+      // 20-40. 50 catches the "obviously a deliberate big rewrite"
+      // case as the only one that still goes to manual rebuild.
+      const AUTO_REBUILD_THRESHOLD = 50;
       const refreshedApps = draft.id ? await fetchRuleApplications(draft.id) : [];
       const classApps = refreshedApps.filter(a => a.appliesToType === 'class');
 
