@@ -93,12 +93,10 @@ import {
 } from "../../components/ui/dialog";
 import {
   Save,
-  ChevronLeft,
   User,
   Shield,
   Package,
   Zap,
-  Wind,
   Star,
   Clock,
   Settings,
@@ -119,6 +117,8 @@ import {
   Download,
   Trash2,
   Loader2,
+  Bug,
+  ScrollText,
 } from "lucide-react";
 import { ClassList } from "../compendium/ClassList";
 import BBCodeRenderer from "../../components/BBCodeRenderer";
@@ -1747,21 +1747,34 @@ const StatBlock = ({
   </div>
 );
 
+// Icon assignments come from TAB_RAIL_IMPLEMENTATION.md (Hand-Off-2).
+// The previous mapping was shifted by one — every step was wearing the
+// previous step's icon, which made `sheet` use the Save icon and stacked
+// two gold-Save shapes at the top of the rail (Save button + active
+// sheet step). Source-of-truth icon set:
+//   sheet         → User
+//   race          → Dna
+//   class         → Shield
+//   equipment     → Hammer
+//   spells        → Zap
+//   actions       → Bug
+//   proficiencies → ScrollText
+//   history       → Clock
 const STEPS = [
-  { id: "sheet", label: "Character Sheet", icon: <Save className="w-4 h-4" /> },
-  { id: "race", label: "Race", icon: <User className="w-4 h-4" /> },
+  { id: "sheet", label: "Character Sheet", icon: <User className="w-4 h-4" /> },
+  { id: "race", label: "Race", icon: <Dna className="w-4 h-4" /> },
   { id: "class", label: "Class", icon: <Shield className="w-4 h-4" /> },
   {
     id: "equipment",
     label: "Equipment",
-    icon: <Package className="w-4 h-4" />,
+    icon: <Hammer className="w-4 h-4" />,
   },
   { id: "spells", label: "Spell Manager", icon: <Zap className="w-4 h-4" /> },
-  { id: "actions", label: "Actions", icon: <Wind className="w-4 h-4" /> },
+  { id: "actions", label: "Actions", icon: <Bug className="w-4 h-4" /> },
   {
     id: "proficiencies",
     label: "Proficiencies",
-    icon: <Star className="w-4 h-4" />,
+    icon: <ScrollText className="w-4 h-4" />,
   },
   { id: "history", label: "History", icon: <Clock className="w-4 h-4" /> },
 ];
@@ -4684,165 +4697,47 @@ export default function CharacterBuilder({
     // below: it gets the remaining height via flex:1 and handles overflow,
     // so the sticky rail (inside body-cols) rides along while the content
     // scrolls. See TAB_RAIL_IMPLEMENTATION.md for the full rationale.
+    //
+    // No top header band: the Workroom / View JSON / Export / Commit
+    // Changes row that used to live here got absorbed into the right
+    // rail in Hand-Off-2. Save is the gold button at the top of the
+    // rail, View JSON / Export / Delete are in the Settings popover,
+    // and "Workroom" was decorative. The "back to /characters" affordance
+    // still lives in the global Sidebar nav. The legacy-advancement
+    // warning (when present) now lives at the top of `.cb-page-inner`.
     <div className="h-screen flex flex-col overflow-hidden">
-      {/* Top header band — never scrolls (shrink-0). Stays pinned above
-          the page-scroll. The max-width/padding wrapper sits INSIDE the
-          flex root so the band can span edge-to-edge if we ever want a
-          full-bleed treatment, but for now the content is centered to
-          match the page-inner width below. */}
-      <div className="shrink-0 w-full max-w-[1800px] mx-auto px-2 sm:px-4 lg:px-6 pt-4">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-gold/20 pb-3 shrink-0">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/characters")}
-            className="text-gold gap-2 hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black h-8"
-          >
-            <ChevronLeft className="w-4 h-4" />{" "}
-            <span className="hidden xs:inline">Characters</span>
-          </Button>
-          <div className="h-4 w-px bg-gold/20" />
-          <p className="label-text opacity-40 whitespace-nowrap">Workroom</p>
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto sm:overflow-visible pb-1 sm:pb-0">
-          {isAdmin && (
-            <Dialog>
-              <DialogTrigger
-                render={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={hasLegacyAdvancementSelections}
-                    title={
-                      hasLegacyAdvancementSelections
-                        ? "Reselect legacy class or subclass advancement choices before viewing export JSON."
-                        : "View current Foundry pairing output."
-                    }
-                    className="border-gold/30 text-gold hover:bg-gold/5 gap-2 uppercase tracking-widest text-[10px] font-black h-8"
-                  >
-                    <Eye className="w-3.5 h-3.5" /> View JSON
-                  </Button>
-                }
-              />
-              <DialogContent className="sm:max-w-2xl bg-parchment border-gold/30 p-0 overflow-hidden">
-                <DialogHeader className="p-6 bg-ink text-gold border-b border-gold/20">
-                  <DialogTitle className="text-xl font-serif font-black uppercase tracking-tight">
-                    Foundry Pairing Output
-                  </DialogTitle>
-                  <DialogDescription className="text-gold/60 font-serif italic">
-                    Formatted for the dauligor-pairing module bridge
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="p-6 bg-card/40">
-                  {hasLegacyAdvancementSelections ? (
-                    <div className="bg-blood/10 border border-blood/20 rounded-lg p-4 text-sm font-serif text-blood">
-                      Export preview is blocked until the legacy advancement
-                      selections listed above are reselected from the class
-                      progression step.
-                    </div>
-                  ) : (
-                    <pre className="bg-ink p-4 rounded-lg overflow-auto max-h-[400px] text-xs font-mono text-gold/80 border border-gold/10 custom-scrollbar">
-                      {JSON.stringify(generatePairingJson(), null, 2)}
-                    </pre>
-                  )}
-                </div>
-                <DialogFooter className="p-4 bg-ink/5 border-t border-gold/10">
-                  <Button
-                    disabled={hasLegacyAdvancementSelections}
-                    className="bg-gold text-white hover:bg-gold/80 gap-2 uppercase tracking-widest text-[10px] font-black"
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        JSON.stringify(generatePairingJson(), null, 2),
-                      );
-                    }}
-                  >
-                    <Copy className="w-3 h-3" /> Copy to Clipboard
-                  </Button>
-                  <DialogClose
-                    render={
-                      <Button
-                        variant="ghost"
-                        className="text-ink/40 hover:text-ink/60 uppercase tracking-widest text-[10px] font-black"
-                      >
-                        Close
-                      </Button>
-                    }
-                  />
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          {id && id !== "new" && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={hasLegacyAdvancementSelections}
-              title={
-                hasLegacyAdvancementSelections
-                  ? "Reselect legacy class or subclass advancement choices before exporting."
-                  : "Export Full Semantic Character Payload"
-              }
-              onClick={async () => {
-                try {
-                  await exportCharacterJSON(id as string);
-                } catch (error) {
-                  console.error(error);
-                }
-              }}
-              className="border-gold/20 text-gold hover:bg-gold/10 gap-2 uppercase tracking-widest text-[10px] font-black h-8 px-3"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Export</span>
-            </Button>
-          )}
-
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            size="sm"
-            className="bg-gold hover:bg-gold/80 text-white gap-2 uppercase tracking-widest text-[10px] font-black px-4 h-8 transition-all shadow-md active:scale-95"
-          >
-            <Save className="w-3.5 h-3.5" />{" "}
-            {saving ? "Writing..." : "Commit Changes"}
-          </Button>
-        </div>
-      </div>
-
-      {hasLegacyAdvancementSelections && (
-        <div className="mt-3 border border-blood/30 bg-blood/5 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 w-2 h-2 rounded-full bg-blood shrink-0" />
-            <div className="space-y-2">
-              <p className="text-sm font-black uppercase tracking-widest text-blood">
-                Legacy Advancement Selections Found
-              </p>
-              <p className="text-sm font-serif text-ink/80">
-                This character still has older advancement-choice keys that the
-                current builder no longer reads. Go back to the class
-                progression step and reselect the affected class or subclass
-                choices before exporting or trusting the current progression
-                view.
-              </p>
-              <p className="text-xs font-mono text-ink/60 break-all">
-                {legacyAdvancementSelectionKeys.join(", ")}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-      </div>
-      {/* /shrink-0 header band */}
-
       {/* Page-scroll: the SINGLE scroll container in the builder. flex-1
-          consumes whatever vertical space the header band left behind, and
-          overflow-y:auto kicks in only when the content column overflows
-          (long class accordion, tall proficiency grid, etc). The sticky
-          rail inside .cb-body-cols stays glued to the top of this scroll
-          container as the content slides past. */}
+          consumes the full viewport (no shrink-0 header above it now),
+          and overflow-y:auto kicks in only when the content column
+          overflows (long class accordion, tall proficiency grid, etc).
+          The sticky rail inside .cb-body-cols stays glued to the top of
+          this scroll container as the content slides past. */}
       <div className="cb-page-scroll flex-1 min-h-0 overflow-y-auto custom-scrollbar">
         <div className="cb-page-inner w-full max-w-[1800px] mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-4">
+
+          {hasLegacyAdvancementSelections && (
+            <div className="mb-4 border border-blood/30 bg-blood/5 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 w-2 h-2 rounded-full bg-blood shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-black uppercase tracking-widest text-blood">
+                    Legacy Advancement Selections Found
+                  </p>
+                  <p className="text-sm font-serif text-ink/80">
+                    This character still has older advancement-choice keys
+                    that the current builder no longer reads. Go back to the
+                    class progression step and reselect the affected class or
+                    subclass choices before exporting or trusting the current
+                    progression view.
+                  </p>
+                  <p className="text-xs font-mono text-ink/60 break-all">
+                    {legacyAdvancementSelectionKeys.join(", ")}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="cb-body-cols">
             {/* ── Column 1: swappable step content ─────────────── */}
             <div className="min-w-0">
