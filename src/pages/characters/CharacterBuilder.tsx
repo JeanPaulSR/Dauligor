@@ -153,6 +153,33 @@ const getModifier = (score: number) => {
   return mod >= 0 ? `+${mod}` : mod.toString();
 };
 
+// ── Point Buy (D&D 5e standard) ─────────────────────────────────────────────
+// Standard 27-point pool, scores 8–15, with the canonical cost table
+// (cheap below 13, double-cost for 14 and 15). Applied via the
+// PointBuyModal at the top of the sheet — flips character.stats.method
+// to "point-buy" while active.
+const POINT_BUY_BUDGET = 27;
+const POINT_BUY_MIN = 8;
+const POINT_BUY_MAX = 15;
+const POINT_BUY_COSTS: Record<number, number> = {
+  8: 0,
+  9: 1,
+  10: 2,
+  11: 3,
+  12: 4,
+  13: 5,
+  14: 7,
+  15: 9,
+};
+const pointBuyCost = (score: number): number => {
+  if (!Number.isFinite(score)) return 0;
+  const clamped = Math.max(POINT_BUY_MIN, Math.min(POINT_BUY_MAX, Math.round(score)));
+  return POINT_BUY_COSTS[clamped] ?? 0;
+};
+const pointBuyTotal = (scores: Record<string, number>): number =>
+  Object.values(scores).reduce((sum, s) => sum + pointBuyCost(s), 0);
+
+
 const TRAIT_TYPE_COLLECTIONS: Record<string, string> = {
   skills: "skills",
   saves: "attributes",
@@ -1239,6 +1266,254 @@ function FilterChipSection<T extends string | number>(props: {
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ── Point Buy modal ────────────────────────────────────────────────────────
+// Standalone modal so it can manage its own draft state via hooks (the
+// outer CharacterBuilder render path is too heavy to react cleanly to a
+// dozen extra useState calls). Receives an initial score map, returns
+// the chosen scores via onApply.
+function PointBuyModal({
+  attributes,
+  attrIdentifiers,
+  initialScores,
+  onApply,
+  onClose,
+}: {
+  attributes: any[];
+  attrIdentifiers: string[];
+  initialScores: Record<string, number>;
+  onApply: (scores: Record<string, number>) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<Record<string, number>>(initialScores);
+
+  const total = pointBuyTotal(draft);
+  const remaining = POINT_BUY_BUDGET - total;
+  const overBudget = remaining < 0;
+
+  const attrName = (identifier: string): string => {
+    const found = attributes.find((a: any) => String(a.identifier || a.id).toUpperCase() === identifier.toUpperCase());
+    return found?.name || identifier;
+  };
+
+  const setScore = (id: string, score: number) => {
+    setDraft((prev) => ({
+      ...prev,
+      [id]: Math.max(POINT_BUY_MIN, Math.min(POINT_BUY_MAX, score)),
+    }));
+  };
+
+  const inc = (id: string) => {
+    const current = draft[id] ?? POINT_BUY_MIN;
+    if (current >= POINT_BUY_MAX) return;
+    const nextScore = current + 1;
+    // Would the new total fit? Compute incremental cost (cost@next -
+    // cost@current) instead of recomputing whole pool.
+    const delta = pointBuyCost(nextScore) - pointBuyCost(current);
+    if (total + delta > POINT_BUY_BUDGET) return;
+    setScore(id, nextScore);
+  };
+  const dec = (id: string) => {
+    const current = draft[id] ?? POINT_BUY_MIN;
+    if (current <= POINT_BUY_MIN) return;
+    setScore(id, current - 1);
+  };
+
+  const reset = () => {
+    const next: Record<string, number> = {};
+    for (const id of attrIdentifiers) next[id] = POINT_BUY_MIN;
+    setDraft(next);
+  };
+
+  const apply = () => {
+    // Belt-and-braces: don't let an over-budget draft escape the modal.
+    if (overBudget) return;
+    onApply(draft);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl bg-background border-4 border-gold shadow-2xl rounded-lg overflow-hidden"
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b-2 border-gold/20 flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="font-serif text-2xl font-black text-ink uppercase tracking-tight">
+              Point Buy
+            </h2>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-ink/55 mt-1">
+              D&amp;D 5e standard · 27 points · scores 8–15
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-ink/45">
+              Remaining
+            </div>
+            <div
+              className={cn(
+                "font-mono text-3xl font-black leading-none",
+                overBudget ? "text-blood" : remaining === 0 ? "text-emerald-600" : "text-gold",
+              )}
+            >
+              {remaining}
+              <span className="text-sm text-ink/35 font-bold"> / {POINT_BUY_BUDGET}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Ability rows */}
+        <div className="p-6 space-y-2">
+          {attrIdentifiers.map((id) => {
+            const score = draft[id] ?? POINT_BUY_MIN;
+            const cost = pointBuyCost(score);
+            const modN = Math.floor((score - 10) / 2);
+            const modLabel = modN >= 0 ? `+${modN}` : `${modN}`;
+            const atMin = score <= POINT_BUY_MIN;
+            const atMax = score >= POINT_BUY_MAX;
+            const nextScore = score + 1;
+            const nextCostDelta = nextScore <= POINT_BUY_MAX
+              ? pointBuyCost(nextScore) - cost
+              : 0;
+            const blockedNext = atMax || total + nextCostDelta > POINT_BUY_BUDGET;
+
+            return (
+              <div
+                key={id}
+                className="flex items-center gap-4 p-3 border border-gold/20 bg-card/50 rounded-md"
+              >
+                <div className="w-12 shrink-0">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-ink/45">
+                    {id}
+                  </div>
+                  <div className="text-[10px] font-bold text-ink/60 truncate">
+                    {attrName(id)}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => dec(id)}
+                    disabled={atMin}
+                    aria-label={`Decrease ${id}`}
+                    className={cn(
+                      "w-8 h-8 rounded-md border flex items-center justify-center transition-colors",
+                      atMin
+                        ? "border-gold/10 text-ink/15 cursor-not-allowed"
+                        : "border-gold/30 text-gold hover:bg-gold/10",
+                    )}
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <div className="w-14 text-center">
+                    <div className="font-mono text-2xl font-black text-ink leading-none">
+                      {score}
+                    </div>
+                    <div className="text-[10px] font-bold text-ink/45 mt-0.5">
+                      {modLabel}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => inc(id)}
+                    disabled={blockedNext}
+                    aria-label={`Increase ${id}`}
+                    title={
+                      atMax
+                        ? `Max ${POINT_BUY_MAX}`
+                        : total + nextCostDelta > POINT_BUY_BUDGET
+                          ? "Not enough points"
+                          : `Costs ${nextCostDelta} more`
+                    }
+                    className={cn(
+                      "w-8 h-8 rounded-md border flex items-center justify-center transition-colors",
+                      blockedNext
+                        ? "border-gold/10 text-ink/15 cursor-not-allowed"
+                        : "border-gold/30 text-gold hover:bg-gold/10",
+                    )}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Cost track — pip-style visualisation of how many of
+                    the 9 max points-per-ability are spent on this row. */}
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <div className="flex-1 flex items-center gap-0.5">
+                    {Array.from({ length: 9 }).map((_, i) => {
+                      const filled = i < cost;
+                      // Visual hint for the breakpoint at +5 (cost jumps
+                      // from +1/score to +2/score once you cross 14):
+                      // 14-15 pips render with a slightly heavier outline.
+                      const isHighTier = i >= 5;
+                      return (
+                        <span
+                          key={i}
+                          className={cn(
+                            "h-1.5 flex-1 rounded-sm transition-colors",
+                            filled
+                              ? isHighTier
+                                ? "bg-blood/70"
+                                : "bg-gold"
+                              : isHighTier
+                                ? "bg-blood/10"
+                                : "bg-gold/15",
+                          )}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="font-mono text-[10px] font-bold text-ink/55 shrink-0 w-10 text-right">
+                    {cost} pt
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t-2 border-gold/20 bg-card/30 flex items-center justify-between gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={reset}
+            className="text-[10px] font-bold uppercase tracking-widest text-ink/55 hover:text-blood transition-colors"
+          >
+            Reset to 8s
+          </button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="border-gold/30 text-ink/70 hover:bg-gold/5 uppercase tracking-widest text-xs font-black"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={apply}
+              disabled={overBudget}
+              className={cn(
+                "uppercase tracking-widest text-xs font-black",
+                overBudget
+                  ? "bg-blood/30 text-blood/60 cursor-not-allowed"
+                  : "bg-gold text-white hover:bg-gold/90",
+              )}
+            >
+              {overBudget ? "Over Budget" : remaining === 0 ? "Apply (All Spent)" : `Apply (${remaining} unspent)`}
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -4533,6 +4808,61 @@ export default function CharacterBuilder({
               </div>
 
               {/* ABILITY SCORES - TIGHTER GRID */}
+              {/* Header row exposes the Point Buy modal next to the
+                  scores so players don't have to fish for it through
+                  an ASI advancement. Pre-fill summary in the badge
+                  reflects whether the current scores actually fit a
+                  27-point allocation (8–15 only, no double-cost
+                  overrun). */}
+              <div className="flex items-baseline justify-between gap-3 mb-3 px-1">
+                <div className="flex items-baseline gap-3">
+                  <span className="label-text text-ink/30 border-l-2 border-gold pl-2">
+                    Ability Scores
+                  </span>
+                  {(() => {
+                    const ids = (allAttributes.length > 0
+                      ? allAttributes.map((a: any) => String(a.identifier || a.id))
+                      : ["STR", "DEX", "CON", "INT", "WIS", "CHA"]) as string[];
+                    const scoresMap: Record<string, number> = {};
+                    let inRange = true;
+                    for (const id of ids) {
+                      const s = Number(character?.stats?.base?.[id] ?? 10);
+                      scoresMap[id] = s;
+                      if (s < POINT_BUY_MIN || s > POINT_BUY_MAX) inRange = false;
+                    }
+                    const isPB = String(character?.stats?.method || "") === "point-buy";
+                    if (!inRange) {
+                      return (
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-ink/40">
+                          Custom range
+                        </span>
+                      );
+                    }
+                    const total = pointBuyTotal(scoresMap);
+                    const remaining = POINT_BUY_BUDGET - total;
+                    return (
+                      <span
+                        className={cn(
+                          "text-[9px] font-bold uppercase tracking-widest",
+                          isPB ? "text-gold" : "text-ink/45",
+                        )}
+                        title="Whether the current scores fit a standard 27-point allocation."
+                      >
+                        {isPB ? "Point Buy · " : "Fits Point Buy · "}
+                        {remaining >= 0 ? `${remaining} unspent` : `${-remaining} over`}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPointBuy(true)}
+                  className="border-gold/30 text-gold hover:bg-gold/5 uppercase tracking-widest text-[10px] font-black gap-2"
+                >
+                  <Edit2 className="w-3 h-3" /> Point Buy
+                </Button>
+              </div>
               <div className="grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4 mb-10">
                 {allAttributes.map((attr) => {
                   const iden = attr.identifier || attr.id;
@@ -6943,6 +7273,68 @@ export default function CharacterBuilder({
                                   }
                                 });
 
+                                // ── Per-level status (Foundry-importer-inspired) ─────
+                                // After processAdvancement has populated
+                                // choicesAtThisLevel, classify each row as
+                                // "actionable" (needs a pick) or
+                                // "informational" (display only). Aggregate
+                                // into a single status kind for the level
+                                // header badge so players can scan which
+                                // levels still need their attention — same
+                                // mental model as the importer's
+                                // pending/active/complete progress markers.
+                                const levelChoicesStatus = (() => {
+                                  let needs = 0;
+                                  let done = 0;
+                                  let needsSubclass = false;
+                                  for (const c of choicesAtThisLevel) {
+                                    const t = String(c?.type || "");
+                                    if (t === "advancement-info") continue;
+                                    if (t === "asi-trigger") {
+                                      // ASI rows are informational here —
+                                      // the actual ASI/feat application
+                                      // happens via the Point Buy modal +
+                                      // ASI sheet controls, not via a
+                                      // single completion flag on this
+                                      // row. Skip so they don't gate
+                                      // level-completion.
+                                      continue;
+                                    }
+                                    if (t === "subclass-trigger") {
+                                      needs += 1;
+                                      needsSubclass = true;
+                                      // A "subclass-trigger" only fires
+                                      // when no subclass has been picked
+                                      // (the matchedSubclass-present branch
+                                      // emits "advancement-info" instead),
+                                      // so we always count it as pending.
+                                      continue;
+                                    }
+                                    const need = Number(c?.count ?? 0) || 0;
+                                    if (need <= 0) continue;
+                                    needs += 1;
+                                    const sel = getAdvancementSelectionValues(
+                                      selectedOptionsMap,
+                                      {
+                                        sourceScope: c?.sourceScope || "",
+                                        advancementId: c?.advId || "",
+                                        level: c?.level ?? prog.level,
+                                      },
+                                    );
+                                    if (sel.length >= need) done += 1;
+                                  }
+                                  if (needs === 0) {
+                                    return { kind: "info-only" as const, needs, done, needsSubclass };
+                                  }
+                                  if (done === 0) {
+                                    return { kind: "pending" as const, needs, done, needsSubclass };
+                                  }
+                                  if (done < needs) {
+                                    return { kind: "partial" as const, needs, done, needsSubclass };
+                                  }
+                                  return { kind: "complete" as const, needs, done, needsSubclass };
+                                })();
+
                                 return (
                                   <div
                                     key={idx}
@@ -6960,6 +7352,35 @@ export default function CharacterBuilder({
                                           Level
                                         </span>
                                       </div>
+                                      {/* Status pip — mirrors the importer's
+                                          progress markers. Hidden for
+                                          info-only levels (nothing to do
+                                          here) so the rail stays uncluttered. */}
+                                      {levelChoicesStatus.kind !== "info-only" && (
+                                        <div
+                                          className={cn(
+                                            "mt-1 px-1.5 py-0.5 rounded-sm border text-[8px] font-black uppercase tracking-widest text-center",
+                                            levelChoicesStatus.kind === "complete"
+                                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                                              : levelChoicesStatus.kind === "partial"
+                                                ? "border-gold/40 bg-gold/10 text-gold"
+                                                : "border-blood/30 bg-blood/5 text-blood",
+                                          )}
+                                          title={
+                                            levelChoicesStatus.kind === "complete"
+                                              ? `All ${levelChoicesStatus.needs} choice${levelChoicesStatus.needs === 1 ? "" : "s"} resolved.`
+                                              : levelChoicesStatus.kind === "partial"
+                                                ? `${levelChoicesStatus.done} of ${levelChoicesStatus.needs} choices resolved.`
+                                                : levelChoicesStatus.needsSubclass
+                                                  ? `Pick a subclass + ${levelChoicesStatus.needs - 1} other choice${levelChoicesStatus.needs - 1 === 1 ? "" : "s"}.`
+                                                  : `${levelChoicesStatus.needs} choice${levelChoicesStatus.needs === 1 ? "" : "s"} to make.`
+                                          }
+                                        >
+                                          {levelChoicesStatus.kind === "complete"
+                                            ? "Done"
+                                            : `${levelChoicesStatus.done}/${levelChoicesStatus.needs}`}
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="flex-1 space-y-4 justify-center flex flex-col pt-2">
                                       {features.length > 0 ||
@@ -7093,8 +7514,8 @@ export default function CharacterBuilder({
                                                         </span>
                                                       </div>
                                                       <p className="text-xs text-ink/60 font-serif mb-4 italic">
-                                                        This level grants an ability score improvement.
-                                                        Use the sheet controls to apply the increase for now.
+                                                        This level grants an ability score improvement. Use Point Buy below to rebudget your scores, or apply the increase via the
+                                                        ± controls on the sheet.
                                                       </p>
                                                       <Button
                                                         variant="outline"
@@ -7103,7 +7524,7 @@ export default function CharacterBuilder({
                                                         className="w-full border-dashed border-sky-500/40 text-sky-700 hover:bg-sky-500/10 hover:border-sky-500 font-bold tracking-widest uppercase text-[10px]"
                                                       >
                                                         <Edit2 className="w-3 h-3 mr-2" />
-                                                        Manage Ability Scores
+                                                        Open Point Buy
                                                       </Button>
                                                     </div>
                                                   );
@@ -9651,35 +10072,51 @@ export default function CharacterBuilder({
         </div>
       )}
 
-      {showPointBuy && (
-        <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full border-4 border-gold bg-background shadow-2xl">
-            <CardHeader className="border-b-2 border-gold/20">
-              <CardTitle className="font-serif text-2xl font-black">
-                Score Management
-              </CardTitle>
-              <CardDescription className="text-ink/60 font-bold uppercase text-[10px] tracking-widest">
-                Point Buy & Standards
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-6">
-              <div className="p-8 border-4 border-dashed border-ink/10 rounded-xl flex flex-col items-center justify-center text-center">
-                <Edit2 className="w-10 h-10 text-gold mb-4" />
-                <p className="text-ink/60 font-serif italic text-sm">
-                  Ability score management logic is currently being finalized.
-                  Please use the Â± controls on the sheet interface for now.
-                </p>
-              </div>
-              <Button
-                className="w-full bg-ink text-white hover:bg-gold transition-colors font-bold uppercase tracking-widest h-12"
-                onClick={() => setShowPointBuy(false)}
-              >
-                Return to Sheet
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {showPointBuy && (() => {
+        // ── Point Buy modal ─────────────────────────────────────────
+        // Standard D&D 5e 27-point allocator. Each ability seeds from
+        // the character's current score (clamped into [8,15]) so the
+        // modal opens to a "what would point-buy look like for the
+        // current build?" state rather than wiping the user's values.
+        // Apply writes back to character.stats.base and flips
+        // stats.method = "point-buy" for downstream lookups.
+        const attrIdentifiers = allAttributes.length > 0
+          ? allAttributes.map((a: any) => String(a.identifier || a.id))
+          : ["STR", "DEX", "CON", "INT", "WIS", "CHA"];
+        const baseScores = (character?.stats?.base || {}) as Record<string, number>;
+
+        // Local draft state lives inside an inner component so the
+        // hooks fire only while the modal is mounted. The IIFE wrapper
+        // exists so we can declare these vars + nest the component
+        // without polluting the outer render scope.
+        const initial: Record<string, number> = {};
+        for (const id of attrIdentifiers) {
+          const raw = Number(baseScores[id] ?? 10);
+          initial[id] = Math.max(POINT_BUY_MIN, Math.min(POINT_BUY_MAX, Math.round(raw)));
+        }
+        return (
+          <PointBuyModal
+            attributes={allAttributes}
+            attrIdentifiers={attrIdentifiers}
+            initialScores={initial}
+            onApply={(next) => {
+              setCharacter((prev: any) => ({
+                ...prev,
+                stats: {
+                  ...prev.stats,
+                  method: "point-buy",
+                  base: {
+                    ...(prev.stats?.base ?? {}),
+                    ...next,
+                  },
+                },
+              }));
+              setShowPointBuy(false);
+            }}
+            onClose={() => setShowPointBuy(false)}
+          />
+        );
+      })()}
     </div>
   );
 }
