@@ -895,6 +895,83 @@ export function explainSpellAgainstRule(
   return { matched: axes.every((a) => a.pass), axes };
 }
 
+/**
+ * Multi-clause rule support.
+ *
+ * Historically `SpellRule.query` was a single `RuleQuery` — one set of
+ * axis filters and tag chips that ALL had to pass for the spell to
+ * match. That single-clause shape doesn't express common rule
+ * intents like "Wizard: all Arcane spells EXCEPT Healing, PLUS the
+ * Healing spells whose theme is Revival/Necromancy" — the two halves
+ * have incompatible axis filters (one excludes the Healing tag, the
+ * other requires it) and can't be combined into a single AND of
+ * chips.
+ *
+ * The fix is OR-of-clauses at the rule level. A rule's stored
+ * `query` JSON is now one of:
+ *
+ *   - Legacy flat shape: `RuleQuery`. Treated as a single clause.
+ *     Backward-compatible: rules saved before this change continue
+ *     to work unmodified.
+ *   - Multi-clause shape: `{ clauses: RuleQuery[] }`. The rule
+ *     matches a spell if ANY clause matches. The editor saves this
+ *     shape only when the user has authored >1 clause; single-
+ *     clause rules round-trip back to the flat shape on save so the
+ *     stored JSON stays minimal.
+ *
+ * `RuleClauseRoot` is the union type; `getClauses` + `matchAnyClause`
+ * are the dispatch helpers used by `spellMatchesRule` and
+ * `explainSpellMatch` in `lib/spellRules.ts`. The hot rebuild path
+ * goes through `matchAnyClause` once per (spell, rule) pair, same
+ * cost as before for single-clause rules.
+ */
+export type RuleClause = RuleQuery;
+export type RuleClauseRoot = RuleQuery | { clauses: RuleClause[] };
+
+/** Type guard: does this root use the multi-clause shape? */
+export function isMultiClauseRoot(root: RuleClauseRoot): root is { clauses: RuleClause[] } {
+  return (
+    root !== null
+    && typeof root === 'object'
+    && Array.isArray((root as { clauses?: unknown }).clauses)
+  );
+}
+
+/**
+ * Flatten a clause root to its array of clauses. Always returns at
+ * least one element — legacy flat shapes become a singleton.
+ */
+export function getClauses(root: RuleClauseRoot): RuleClause[] {
+  if (isMultiClauseRoot(root)) {
+    // Drop empty clauses (the editor can briefly produce them when
+    // the user adds a fresh clause but hasn't filled it in yet).
+    // An empty clause matches every spell, which would make the
+    // whole rule match everything — almost never the intent. Skip.
+    return root.clauses.length > 0 ? root.clauses : [];
+  }
+  return [root as RuleQuery];
+}
+
+/**
+ * Rule-level OR: a spell matches the rule if ANY of its clauses
+ * match. `getClauses` returning empty (the multi-clause-but-zero-
+ * elements edge case) makes the rule reject everything; the editor
+ * prevents saving in that state, but the matcher stays robust.
+ */
+export function matchAnyClause(
+  spell: SpellMatchInput,
+  root: RuleClauseRoot,
+  parentByTagId?: Map<string, string | null>,
+  tagIndex?: TagIndex,
+): boolean {
+  const clauses = getClauses(root);
+  if (clauses.length === 0) return false;
+  for (const clause of clauses) {
+    if (matchSpellAgainstRule(spell, clause, parentByTagId, tagIndex)) return true;
+  }
+  return false;
+}
+
 /** True if the rule has no filter clauses set — would match every spell (probably a misconfiguration). */
 export function isRuleEmpty(query: RuleQuery): boolean {
   const axisCount = (a?: AxisFilter): number => Object.keys(a?.states ?? {}).length;

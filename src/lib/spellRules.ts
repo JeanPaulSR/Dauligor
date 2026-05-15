@@ -1,13 +1,22 @@
 import { batchQueryD1, queryD1, fetchCollection } from './d1';
 import {
   explainSpellAgainstRule,
-  matchSpellAgainstRule,
+  getClauses,
+  isMultiClauseRoot,
+  matchAnyClause,
+  type RuleClause,
+  type RuleClauseRoot,
   type RuleExplanation,
   type RuleQuery,
   type SpellMatchInput,
   type TagIndex,
 } from './spellFilters';
-export type { RuleExplanation, RuleExplanationAxis } from './spellFilters';
+export type {
+  RuleClause,
+  RuleClauseRoot,
+  RuleExplanation,
+  RuleExplanationAxis,
+} from './spellFilters';
 import { buildTagIndex } from './tagHierarchy';
 
 /**
@@ -40,6 +49,17 @@ export type SpellRule = {
   id: string;
   name: string;
   description: string;
+  /**
+   * Stored as a `RuleQuery` (flat single-clause shape). At runtime
+   * the raw JSON may also be a multi-clause root
+   * `{ clauses: RuleQuery[] }` — that shape lives behind the
+   * `RuleClauseRoot` union in `lib/spellFilters.ts` and is detected
+   * by the matcher via `isMultiClauseRoot`. We keep the TypeScript
+   * type as `RuleQuery` here so existing editor / summary code that
+   * pokes at `.tagStates`, `.sourceFilterIds`, etc. doesn't break;
+   * the multi-clause UI lives in a follow-up commit that widens
+   * this type and threads a `clauseIndex` through the editor.
+   */
   query: RuleQuery;
   manualSpells: string[];
   createdAt?: string;
@@ -80,7 +100,11 @@ export async function saveRule(rule: {
   id?: string | null;
   name: string;
   description?: string;
-  query: RuleQuery;
+  // Accepts either a flat `RuleQuery` or the multi-clause
+  // `{ clauses: RuleQuery[] }` root — JSON.stringify handles both.
+  // Typed as the union so callers (multi-clause editor in commit 2)
+  // can pass the wider shape without casting.
+  query: RuleClauseRoot;
   manualSpells: string[];
 }): Promise<string> {
   const id = rule.id || crypto.randomUUID();
@@ -187,7 +211,10 @@ export function spellMatchesRule(
   tagIndex?: TagIndex,
 ): boolean {
   if (rule.manualSpells.includes(spell.id)) return true;
-  return matchSpellAgainstRule(spell, rule.query, tagIndex?.parentByTagId, tagIndex);
+  // OR-of-clauses dispatch: legacy flat queries are treated as a
+  // single clause, multi-clause shapes (`{ clauses: [...] }`) match
+  // if any clause matches. See `lib/spellFilters.ts :: matchAnyClause`.
+  return matchAnyClause(spell, rule.query, tagIndex?.parentByTagId, tagIndex);
 }
 
 /**
@@ -228,13 +255,77 @@ export function explainSpellMatch(
       ],
     };
   }
-  return explainSpellAgainstRule(
-    spell,
-    rule.query,
-    tagIndex?.parentByTagId,
-    tagIndex,
-    tagNamesById,
+
+  // Multi-clause dispatch. Run the per-clause explainer for every
+  // clause; the rule "matched" iff any clause matched. The returned
+  // explanation prefers the FIRST passing clause (so the UI can show
+  // "matched via clause #2: …"); if no clause matched, return the
+  // first clause's failure so the user sees a concrete reason rather
+  // than an empty trace.
+  //
+  // For single-clause rules (`getClauses` returns one element), this
+  // collapses to the previous behaviour with zero overhead.
+  const clauses = getClauses(rule.query);
+  if (clauses.length === 0) {
+    // Defensive: editor shouldn't allow saving zero-clause rules,
+    // but if one slips through (legacy data, manual JSON edit) the
+    // rule rejects every spell — surface that explicitly.
+    return {
+      matched: false,
+      axes: [
+        {
+          axis: 'tags',
+          pass: false,
+          reason: 'Rule has no clauses — matches nothing',
+        },
+      ],
+    };
+  }
+  const traces = clauses.map((clause) =>
+    explainSpellAgainstRule(
+      spell,
+      clause,
+      tagIndex?.parentByTagId,
+      tagIndex,
+      tagNamesById,
+    ),
   );
+  // Multi-clause: tag the explanation with which clause won. For
+  // single-clause we don't bother — the existing UI doesn't need
+  // the extra prefix.
+  const isMulti = isMultiClauseRoot(rule.query) && traces.length > 1;
+  const matchedIdx = traces.findIndex((t) => t.matched);
+  if (matchedIdx >= 0) {
+    const matched = traces[matchedIdx];
+    if (!isMulti) return matched;
+    return {
+      matched: true,
+      axes: matched.axes.map((a, i) =>
+        i === 0
+          ? {
+              ...a,
+              reason: `Clause ${matchedIdx + 1} of ${traces.length} matched · ${a.reason}`,
+            }
+          : a,
+      ),
+    };
+  }
+  // No clause matched — return the first failure with a multi-clause
+  // header on the leading axis so the user knows we tried every
+  // alternative.
+  const first = traces[0];
+  if (!isMulti) return first;
+  return {
+    matched: false,
+    axes: first.axes.map((a, i) =>
+      i === 0
+        ? {
+            ...a,
+            reason: `No clause matched (tried ${traces.length}) · clause 1 first failure: ${a.reason}`,
+          }
+        : a,
+    ),
+  };
 }
 
 /**
@@ -347,6 +438,15 @@ export async function computeClassRebuildDelta(
 // ---------------------------------------------------------------------------
 
 function deserializeRule(row: any): SpellRule {
+  // `query` is JSON. It can be either:
+  //   - Legacy flat `RuleQuery` (every rule written before multi-
+  //     clause support), or
+  //   - Multi-clause `{ clauses: RuleQuery[] }` (`RuleClauseRoot`).
+  // Both shapes pass through as-is — the matcher dispatch
+  // (`matchAnyClause` / `getClauses` in `lib/spellFilters.ts`)
+  // handles both at evaluation time. TypeScript here narrows to
+  // `RuleQuery` so the editor's flat-shape pokes stay legal; the
+  // multi-clause UI in the follow-up commit widens this.
   return {
     id: row.id,
     name: row.name,

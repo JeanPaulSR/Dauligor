@@ -52,6 +52,7 @@ import {
   matchesMultiAxisFilter,
   type ActivationBucket,
   type DurationBucket,
+  getClauses,
   type PropertyFilter,
   type RangeBucket,
   type ShapeBucket,
@@ -1813,17 +1814,49 @@ function formatRelativeTime(iso: string): string {
 }
 
 function summarizeRuleManualAndQuery(rule: SpellRule): string {
-  const q = rule.query;
   const parts: string[] = [];
   if (rule.manualSpells.length) parts.push(`${rule.manualSpells.length} manual`);
-  if (q.sourceFilterIds?.length) parts.push(`${q.sourceFilterIds.length} source${q.sourceFilterIds.length === 1 ? '' : 's'}`);
-  if (q.levelFilters?.length) parts.push(`${q.levelFilters.length} level${q.levelFilters.length === 1 ? '' : 's'}`);
-  if (q.schoolFilters?.length) parts.push(`${q.schoolFilters.length} school${q.schoolFilters.length === 1 ? '' : 's'}`);
-  if (q.tagFilterIds?.length) parts.push(`${q.tagFilterIds.length} tag${q.tagFilterIds.length === 1 ? '' : 's'}`);
-  if (q.activationFilters?.length) parts.push(`${q.activationFilters.length} casting`);
-  if (q.rangeFilters?.length) parts.push(`${q.rangeFilters.length} range`);
-  if (q.durationFilters?.length) parts.push(`${q.durationFilters.length} duration`);
-  if (q.propertyFilters?.length) parts.push(q.propertyFilters.join(' + '));
+
+  // Multi-clause aware: sum filter counts across every clause. For
+  // single-clause rules (legacy flat shape), `getClauses` returns
+  // one element and the summary reads identically to the previous
+  // implementation. For multi-clause rules, the summary prepends
+  // "N clauses · …" so the user sees at a glance that the rule has
+  // multiple OR'd filter sets.
+  const clauses = getClauses(rule.query);
+  if (clauses.length > 1) {
+    parts.push(`${clauses.length} clauses`);
+  }
+
+  let sources = 0;
+  let levels = 0;
+  let schools = 0;
+  let tags = 0;
+  let casting = 0;
+  let ranges = 0;
+  let durations = 0;
+  const properties = new Set<string>();
+  for (const q of clauses) {
+    if (q.sourceFilterIds?.length) sources += q.sourceFilterIds.length;
+    if (q.levelFilters?.length) levels += q.levelFilters.length;
+    if (q.schoolFilters?.length) schools += q.schoolFilters.length;
+    if (q.tagFilterIds?.length) tags += q.tagFilterIds.length;
+    // Rich tagStates: count include/exclude entries.
+    if (q.tagStates) tags += Object.keys(q.tagStates).length;
+    if (q.activationFilters?.length) casting += q.activationFilters.length;
+    if (q.rangeFilters?.length) ranges += q.rangeFilters.length;
+    if (q.durationFilters?.length) durations += q.durationFilters.length;
+    if (q.propertyFilters?.length) q.propertyFilters.forEach((p) => properties.add(p));
+  }
+
+  if (sources) parts.push(`${sources} source${sources === 1 ? '' : 's'}`);
+  if (levels) parts.push(`${levels} level${levels === 1 ? '' : 's'}`);
+  if (schools) parts.push(`${schools} school${schools === 1 ? '' : 's'}`);
+  if (tags) parts.push(`${tags} tag${tags === 1 ? '' : 's'}`);
+  if (casting) parts.push(`${casting} casting`);
+  if (ranges) parts.push(`${ranges} range`);
+  if (durations) parts.push(`${durations} duration`);
+  if (properties.size) parts.push(Array.from(properties).join(' + '));
   return parts.join(' · ') || '(empty)';
 }
 
