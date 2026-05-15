@@ -5378,210 +5378,214 @@ export default function CharacterBuilder({
                 })()}
               </div>
 
-              <div className="grid md:grid-cols-3 gap-6 pt-4">
-                {/* SKILLS & TOOLS COLUMN */}
-                <div className="space-y-6">
-                  <div className="p-4 border border-gold/20 bg-card/50 flex flex-col">
-                    <div className="section-header mb-4">
-                      <h3 className="label-text flex items-center gap-2">
+              <div className="grid md:grid-cols-5 gap-6 pt-4">
+                {/* ── Verso: Skills (2-col) + Tools + Languages ─────
+                    The handoff packs all the at-a-glance proficiency
+                    info — 18 skills in a 2-col compact list, tools as
+                    a word list below, languages as a word list — onto
+                    the verso page. Tools and Languages used to live
+                    in the Character Info sub-tab; they read better
+                    here next to the skills they share a profile with. */}
+                <div className="md:col-span-2 space-y-4">
+                  <div className="p-4 border border-gold/20 bg-card/50 rounded-md">
+                    <div className="flex items-baseline justify-between mb-3 pb-2 border-b border-gold/10">
+                      <span className="label-text flex items-center gap-2">
                         <Package className="w-3 h-3 text-gold" />
                         Skills
-                      </h3>
-                      <Settings className="w-3 h-3 text-ink/20" />
+                      </span>
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-ink/35">
+                        {allSkills.length}
+                      </span>
                     </div>
-                    <div className="flex flex-col">
-                      {allSkills.map((skill, idx) => {
-                        const isProficient =
-                          character.proficientSkills?.includes(skill.id);
-                        const isExpert = character.expertiseSkills?.includes(
-                          skill.id,
-                        );
-                        const isHalf = character.halfProficientSkills?.includes(
-                          skill.id,
-                        );
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0.5">
+                      {allSkills.map((skill) => {
+                        const isProficient = character.proficientSkills?.includes(skill.id);
+                        const isExpert = character.expertiseSkills?.includes(skill.id);
+                        const isHalf = character.halfProficientSkills?.includes(skill.id);
                         const currentAbility =
                           character.overriddenSkillAbilities?.[skill.id] ||
                           skill.ability;
                         const total = getSkillTotal(skill.id);
+                        const active = isProficient || isExpert || isHalf;
+
+                        const cycleForward = () => {
+                          let p = [...(character.proficientSkills || [])];
+                          let x = [...(character.expertiseSkills || [])];
+                          let h = [...(character.halfProficientSkills || [])];
+                          if (isHalf) h = h.filter((s: string) => s !== skill.id);
+                          else if (isExpert) {
+                            x = x.filter((s: string) => s !== skill.id);
+                            h.push(skill.id);
+                          } else if (isProficient) {
+                            p = p.filter((s: string) => s !== skill.id);
+                            x.push(skill.id);
+                          } else p.push(skill.id);
+                          setCharacter({
+                            ...character,
+                            proficientSkills: p,
+                            expertiseSkills: x,
+                            halfProficientSkills: h,
+                          });
+                        };
+                        const cycleReverse = (e: React.MouseEvent) => {
+                          e.preventDefault();
+                          let p = [...(character.proficientSkills || [])];
+                          let x = [...(character.expertiseSkills || [])];
+                          let h = [...(character.halfProficientSkills || [])];
+                          if (isHalf) {
+                            h = h.filter((s: string) => s !== skill.id);
+                            x.push(skill.id);
+                          } else if (isExpert) {
+                            x = x.filter((s: string) => s !== skill.id);
+                            p.push(skill.id);
+                          } else if (isProficient) p = p.filter((s: string) => s !== skill.id);
+                          else h.push(skill.id);
+                          setCharacter({
+                            ...character,
+                            proficientSkills: p,
+                            expertiseSkills: x,
+                            halfProficientSkills: h,
+                          });
+                        };
 
                         return (
                           <div
                             key={skill.id}
-                            className={`flex items-center gap-2 py-1 relative group ${idx !== allSkills.length - 1 ? "border-b border-dashed border-gold/10" : ""}`}
+                            onClick={cycleForward}
+                            onContextMenu={cycleReverse}
+                            className={cn(
+                              "flex items-center gap-2 py-1.5 px-1 -mx-1 rounded cursor-pointer transition-colors group/skill",
+                              active ? "hover:bg-gold/5" : "hover:bg-gold/[0.03]",
+                            )}
+                            title="Click to cycle proficiency · right-click reverses"
                           >
-                            {/* Proficiency Cycle Button */}
-                            <button
-                              onClick={() => {
-                                let newProf = [
-                                  ...(character.proficientSkills || []),
-                                ];
-                                let newExp = [
-                                  ...(character.expertiseSkills || []),
-                                ];
-                                let newHalf = [
-                                  ...(character.halfProficientSkills || []),
-                                ];
-
-                                if (isHalf) {
-                                  newHalf = newHalf.filter(
-                                    (s: string) => s !== skill.id,
-                                  );
-                                } else if (isExpert) {
-                                  newExp = newExp.filter(
-                                    (s: string) => s !== skill.id,
-                                  );
-                                  newHalf.push(skill.id);
-                                } else if (isProficient) {
-                                  newProf = newProf.filter(
-                                    (s: string) => s !== skill.id,
-                                  );
-                                  newExp.push(skill.id);
-                                } else {
-                                  newProf.push(skill.id);
-                                }
-                                setCharacter({
-                                  ...character,
-                                  proficientSkills: newProf,
-                                  expertiseSkills: newExp,
-                                  halfProficientSkills: newHalf,
-                                });
-                              }}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                let newProf = [
-                                  ...(character.proficientSkills || []),
-                                ];
-                                let newExp = [
-                                  ...(character.expertiseSkills || []),
-                                ];
-                                let newHalf = [
-                                  ...(character.halfProficientSkills || []),
-                                ];
-
-                                if (isHalf) {
-                                  newHalf = newHalf.filter(
-                                    (s: string) => s !== skill.id,
-                                  );
-                                  newExp.push(skill.id);
-                                } else if (isExpert) {
-                                  newExp = newExp.filter(
-                                    (s: string) => s !== skill.id,
-                                  );
-                                  newProf.push(skill.id);
-                                } else if (isProficient) {
-                                  newProf = newProf.filter(
-                                    (s: string) => s !== skill.id,
-                                  );
-                                } else {
-                                  newHalf.push(skill.id);
-                                }
-                                setCharacter({
-                                  ...character,
-                                  proficientSkills: newProf,
-                                  expertiseSkills: newExp,
-                                  halfProficientSkills: newHalf,
-                                });
-                              }}
-                              className="w-5 h-5 flex items-center justify-center flex-shrink-0"
-                            >
-                              <div
-                                className={`w-3 h-3 rounded-full border-2 relative flex items-center justify-center transition-all ${isProficient || isExpert || isHalf ? "border-gold" : "border-gold/30 group-hover:border-gold/60"} ${isProficient ? "bg-gold" : ""}`}
-                              >
-                                {isExpert && (
-                                  <div className="w-full h-full rounded-full bg-gold border-[2px] border-card flex items-center justify-center">
-                                    <div className="w-1 h-1 bg-gold rounded-full" />
-                                  </div>
-                                )}
-                                {isHalf && (
-                                  <div
-                                    className="absolute inset-0 bg-gold rounded-full"
-                                    style={{
-                                      clipPath:
-                                        "polygon(0 0, 50% 0, 50% 100%, 0 100%)",
-                                    }}
-                                  />
-                                )}
-                              </div>
-                            </button>
-
-                            {/* Ability Select */}
-                            <div className="w-8 flex-shrink-0">
-                              <select
-                                value={currentAbility}
-                                onChange={(e) => {
-                                  setCharacter({
-                                    ...character,
-                                    overriddenSkillAbilities: {
-                                      ...(character.overriddenSkillAbilities ||
-                                        {}),
-                                      [skill.id]: e.target.value,
-                                    },
-                                  });
-                                }}
-                                className="bg-transparent text-[9px] sm:text-[10px] font-black text-gold/60 uppercase hover:text-gold transition-colors focus:outline-none cursor-pointer appearance-none px-0.5 w-full text-center"
-                              >
-                                {["STR", "DEX", "CON", "INT", "WIS", "CHA"].map(
-                                  (a) => (
-                                    <option
-                                      key={a}
-                                      value={a}
-                                      className="bg-card text-ink"
-                                    >
-                                      {a}
-                                    </option>
-                                  ),
-                                )}
-                              </select>
-                            </div>
-
-                            {/* Skill Name */}
+                            {/* Proficiency dot — 4 visual states. */}
                             <span
-                              className={`text-[11px] sm:text-xs font-black uppercase flex-1 transition-colors tracking-tighter truncate ${isProficient || isExpert || isHalf ? "text-ink" : "text-ink/30"}`}
+                              className={cn(
+                                "w-2.5 h-2.5 rounded-full border-2 flex-shrink-0 transition-all relative overflow-hidden",
+                                isExpert ? "border-gold bg-card" : "",
+                                isProficient && !isExpert ? "border-gold bg-gold" : "",
+                                isHalf ? "border-gold bg-gold" : "",
+                                !active ? "border-gold/30 group-hover/skill:border-gold/60" : "",
+                              )}
+                            >
+                              {isExpert && <span className="block w-1 h-1 rounded-full bg-gold m-auto mt-[1px]" />}
+                              {isHalf && (
+                                <span
+                                  className="absolute inset-0 bg-card"
+                                  style={{ clipPath: "polygon(50% 0, 100% 0, 100% 100%, 50% 100%)" }}
+                                />
+                              )}
+                            </span>
+
+                            {/* Ability tag — clickable select for
+                                overrides. Stop click propagation so
+                                changing the ability doesn't also
+                                cycle the prof state. */}
+                            <select
+                              value={currentAbility}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                setCharacter({
+                                  ...character,
+                                  overriddenSkillAbilities: {
+                                    ...(character.overriddenSkillAbilities || {}),
+                                    [skill.id]: e.target.value,
+                                  },
+                                });
+                              }}
+                              className="bg-transparent text-[9px] font-black text-gold/60 uppercase tracking-tight hover:text-gold transition-colors focus:outline-none cursor-pointer appearance-none w-7"
+                              title="Override ability for this skill"
+                            >
+                              {["STR", "DEX", "CON", "INT", "WIS", "CHA"].map((a) => (
+                                <option key={a} value={a} className="bg-card text-ink">
+                                  {a}
+                                </option>
+                              ))}
+                            </select>
+
+                            <span
+                              className={cn(
+                                "text-[11px] font-bold flex-1 truncate tracking-tight transition-colors uppercase",
+                                active ? "text-ink" : "text-ink/45",
+                              )}
                             >
                               {skill.name}
                             </span>
 
-                            {/* Total Bonus */}
-                            <span className="text-xs font-black text-ink/80 w-6 sm:w-8 text-right font-mono flex-shrink-0">
+                            <span className="font-mono text-xs font-black text-ink/75 w-7 text-right flex-shrink-0">
                               {total >= 0 ? `+${total}` : total}
                             </span>
-
-                            {/* Small context cog */}
-                            <button className="opacity-0 group-hover:opacity-20 transition-opacity hover:!opacity-60">
-                              <Settings className="w-2.5 h-2.5 text-ink" />
-                            </button>
                           </div>
                         );
                       })}
                     </div>
                   </div>
 
-                  <div className="p-4 border border-gold/20 bg-card/50 space-y-3">
-                    <h4 className="label-text border-b border-gold/10 pb-2 flex items-center gap-2">
-                      <Hammer className="w-3 h-3" />
-                      Tool Proficiencies
-                    </h4>
-                    <div className="space-y-1">
-                      {character.toolProficiencies?.length ? (
-                        formatTraitValues("tools", character.toolProficiencies).map((item: string) => (
-                          <div
-                            key={item}
-                            className="text-xs font-bold text-ink/70 flex items-center gap-2 uppercase tracking-tight"
-                          >
-                            <div className="w-1.5 h-1.5 bg-gold/40 rounded-full" />
-                            {item}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-[10px] italic text-ink/30 uppercase font-black">
-                          No specialized tools
-                        </p>
-                      )}
+                  {/* Tools + Languages — two word-list cards side by
+                      side. Empty states use the design's italic muted
+                      copy so the cards stay present even on a fresh
+                      character with no proficiencies authored yet. */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="p-3 border border-gold/20 bg-card/50 rounded-md space-y-2">
+                      <div className="flex items-baseline justify-between">
+                        <span className="label-text flex items-center gap-2">
+                          <Hammer className="w-3 h-3 text-gold" />
+                          Tools
+                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-ink/35">
+                          {character.toolProficiencies?.length || 0}
+                        </span>
+                      </div>
+                      <ul className="text-[11px] font-bold text-ink/70 uppercase tracking-tight space-y-0.5">
+                        {character.toolProficiencies?.length ? (
+                          formatTraitValues("tools", character.toolProficiencies).map((item: string) => (
+                            <li key={item} className="flex items-center gap-2">
+                              <span className="w-1 h-1 bg-gold/50 rounded-full shrink-0" />
+                              <span className="truncate">{item}</span>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="text-[10px] italic text-ink/30 uppercase font-black">
+                            No specialized tools
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+
+                    <div className="p-3 border border-gold/20 bg-card/50 rounded-md space-y-2">
+                      <div className="flex items-baseline justify-between">
+                        <span className="label-text flex items-center gap-2">
+                          <Scroll className="w-3 h-3 text-gold" />
+                          Languages
+                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-ink/35">
+                          {character.languages?.length || 0}
+                        </span>
+                      </div>
+                      <ul className="text-[11px] font-bold text-ink/70 uppercase tracking-tight space-y-0.5">
+                        {character.languages?.length ? (
+                          formatTraitValues("languages", character.languages).map((l: string) => (
+                            <li key={l} className="flex items-center gap-2">
+                              <span className="w-1 h-1 bg-gold/50 rounded-full shrink-0" />
+                              <span className="truncate">{l}</span>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="text-[10px] italic text-ink/30 uppercase font-black">
+                            Common
+                          </li>
+                        )}
+                      </ul>
                     </div>
                   </div>
                 </div>
 
-                <div className="md:col-span-2 space-y-4">
+                {/* Recto — sub-tab content (Character Info / Features
+                    / Spells). Span 3 of 5 columns so the verso (2
+                    cols) and recto (3 cols) feel like a 2:3 book
+                    spread rather than a sidebar/main split. */}
+                <div className="md:col-span-3 space-y-4">
                   <div className="flex flex-wrap items-center gap-3 border-b border-gold/10 pb-4">
                     {[
                       { id: "info", label: "Character Info" },
@@ -5643,50 +5647,29 @@ export default function CharacterBuilder({
                         </div>
                       </div>
 
-                      <div className="p-4 border border-gold/20 bg-card/50 space-y-5">
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <span className="label-text text-ink/30 border-l-2 border-gold pl-2">
-                              Languages
+                      {/* Languages moved to the verso (under Skills);
+                          Resistances stays here as a Character-Info
+                          panel since damage traits are conceptually
+                          different from communication languages. */}
+                      <div className="p-4 border border-gold/20 bg-card/50 space-y-3">
+                        <span className="label-text text-ink/30 border-l-2 border-rose-500 pl-2">
+                          Resistances
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {character.resistances?.length ? (
+                            character.resistances.map((l: string) => (
+                              <span
+                                key={l}
+                                className="px-2 py-0.5 bg-rose-50 border border-rose-200/50 rounded-sm text-[10px] font-bold text-rose-800 uppercase"
+                              >
+                                {l}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] font-bold text-ink/10 italic uppercase">
+                              None
                             </span>
-                            <div className="flex flex-wrap gap-1">
-                              {character.languages?.length ? (
-                                formatTraitValues("languages", character.languages).map((l: string) => (
-                                  <span
-                                    key={l}
-                                    className="px-2 py-0.5 bg-gold/5 border border-gold/10 rounded-sm text-[10px] font-bold text-gold uppercase"
-                                  >
-                                    {l}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-[10px] font-bold text-ink/30 italic uppercase">
-                                  Common
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <span className="label-text text-ink/30 border-l-2 border-rose-500 pl-2">
-                              Resistances
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {character.resistances?.length ? (
-                                character.resistances.map((l: string) => (
-                                  <span
-                                    key={l}
-                                    className="px-2 py-0.5 bg-rose-50 border border-rose-200/50 rounded-sm text-[10px] font-bold text-rose-800 uppercase"
-                                  >
-                                    {l}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-[10px] font-bold text-ink/10 italic uppercase">
-                                  None
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                          )}
                         </div>
                       </div>
                     </div>
