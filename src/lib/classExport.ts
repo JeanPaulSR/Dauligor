@@ -525,7 +525,14 @@ function normalizeSpellcastingForExport(spellcasting: any, refs: any = {}, {
         classIdentifier: classIdentifierForLevelRef,
         spellcastingAbility: normalizedAbility,
       },
-    )
+    ),
+    // Spellbook-specific level-up additions. Numeric coercion +
+    // non-negative clamp here so the bundle always ships valid
+    // integers regardless of editor / migration shape drift. Both
+    // ship as 0 for non-spellbook types — the importer's picker
+    // only consumes them when `type === "spellbook"`.
+    startingSpellbookCount: Math.max(0, Number(spellcasting.startingSpellbookCount ?? 0) || 0),
+    spellbookAdditionsPerLevel: Math.max(0, Number(spellcasting.spellbookAdditionsPerLevel ?? 0) || 0),
   };
 
   const progressionTypeId = trimString(spellcasting.progressionId);

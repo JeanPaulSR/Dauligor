@@ -344,7 +344,18 @@ function buildEmptyClassSpellcastingState() {
     progressionId: '',
     altProgressionId: '',
     spellsKnownId: '',
-    spellsKnownFormula: ''
+    spellsKnownFormula: '',
+    // Spellbook-only fields. `startingSpellbookCount` is how many
+    // initial spells the class adds to its spellbook at the
+    // spellcasting trigger level (Wizard: 6). `spellbookAdditionsPerLevel`
+    // is how many spells get added per class level after that
+    // (Wizard: 2). The Foundry importer's spell-pick step uses these
+    // to compute pick counts for spellbook-type classes, since
+    // spellbook casters don't ship a spellsKnown scaling table for
+    // their leveled-spell count (the spellbook is open-ended;
+    // prepared count is formula-driven via `spellsKnownFormula`).
+    startingSpellbookCount: 0,
+    spellbookAdditionsPerLevel: 0,
   };
 }
 
@@ -360,7 +371,12 @@ function normalizeClassSpellcastingForEditor(spellcasting: any) {
     isRitualCaster: Boolean(spellcasting.isRitualCaster),
     ability: String(spellcasting.ability || 'INT').toUpperCase(),
     type: String(spellcasting.type || 'prepared').toLowerCase(),
-    level: Number(spellcasting.level || 1) || 1
+    level: Number(spellcasting.level || 1) || 1,
+    // Coerce to non-negative integers — the editor inputs are
+    // `type="number"` but D1 stores spellcasting as JSON so old
+    // records or hand-edited rows might land any shape.
+    startingSpellbookCount: Math.max(0, Number(spellcasting.startingSpellbookCount ?? 0) || 0),
+    spellbookAdditionsPerLevel: Math.max(0, Number(spellcasting.spellbookAdditionsPerLevel ?? 0) || 0),
   } as any;
 
   return normalized;
@@ -475,18 +491,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   });
   const [primaryAbility, setPrimaryAbility] = useState<string[]>([]);
   const [primaryAbilityChoice, setPrimaryAbilityChoice] = useState<string[]>([]);
-  const [spellcasting, setSpellcasting] = useState({
-    hasSpellcasting: false,
-    isRitualCaster: false,
-    description: '',
-    level: 1,
-    ability: 'INT',
-    type: 'prepared',
-    progressionId: '',
-    altProgressionId: '',
-    spellsKnownId: '',
-    spellsKnownFormula: ''
-  });
+  const [spellcasting, setSpellcasting] = useState(buildEmptyClassSpellcastingState());
   const [excludedOptionIds, setExcludedOptionIds] = useState<Record<string, string[]>>({});
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [subclassTitle, setSubclassTitle] = useState('');
@@ -2568,6 +2573,53 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                             }))}
                             context={classReferenceContext}
                           />
+                        </div>
+                      </fieldset>
+                    )}
+
+                    {/* Spellbook-only: starting + per-level spellbook
+                        additions. The "Spells Known Formula" above
+                        defines how many spells can be PREPARED each
+                        day from the spellbook; these two values
+                        define how many spells get ADDED to the
+                        spellbook itself. Wizard SRD: 6 starter spells
+                        at the class's spellcasting trigger level
+                        (level 1 by default), then +2 each level
+                        after. */}
+                    {spellcasting.type === 'spellbook' && (
+                      <fieldset className="config-fieldset bg-background/20">
+                        <legend className="section-label text-sky-500/60 px-1">Spellbook</legend>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="field-label">Starting Spells</label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={spellcasting.startingSpellbookCount}
+                              onChange={e => setSpellcasting({
+                                ...spellcasting,
+                                startingSpellbookCount: Math.max(0, parseInt(e.target.value, 10) || 0),
+                              })}
+                              placeholder="e.g. 6"
+                              className="field-input text-xs"
+                            />
+                            <p className="field-hint">Number of spells added to the spellbook at the level the class gains spellcasting (Wizard SRD: 6).</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="field-label">Spells Added per Level</label>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={spellcasting.spellbookAdditionsPerLevel}
+                              onChange={e => setSpellcasting({
+                                ...spellcasting,
+                                spellbookAdditionsPerLevel: Math.max(0, parseInt(e.target.value, 10) || 0),
+                              })}
+                              placeholder="e.g. 2"
+                              className="field-input text-xs"
+                            />
+                            <p className="field-hint">Number of spells added to the spellbook each class level after the trigger level (Wizard SRD: 2).</p>
+                          </div>
                         </div>
                       </fieldset>
                     )}
