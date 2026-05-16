@@ -348,9 +348,17 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     return classes.find((entry) => entry.identifier === this._state.selectedClassIdentifier) ?? null;
   }
 
-  _getVisibleSpells(selectedClass = null) {
-    const classModel = selectedClass ?? this._getSelectedClassModel();
-    if (!classModel) return [];
+  _getVisibleSpells(selectedClass) {
+    // Defensive: require the caller to pass a resolved class model.
+    // We used to fall back to `_getSelectedClassModel()` when the arg
+    // was nullish, but `_getSelectedClassModel` calls
+    // `_ensureValidSelection`, which calls back here — infinite loop
+    // when the actor has no spellcasting classes detected.
+    // `_ensureValidSelection` / `_renderManager` are the only real
+    // callers and both can resolve the class themselves; the legacy
+    // default-arg path is gone.
+    if (!selectedClass) return [];
+    const classModel = selectedClass;
 
     const search = this._state.search.trim().toLowerCase();
     return classModel.spells.filter((spell) => {
@@ -370,7 +378,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     });
   }
 
-  _groupVisibleSpells(selectedClass = null) {
+  _groupVisibleSpells(selectedClass) {
     const grouped = new Map();
     for (const spell of this._getVisibleSpells(selectedClass)) {
       const level = Number(spell?.system?.level ?? 0) || 0;
@@ -387,7 +395,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       }));
   }
 
-  _getSelectedSpell(selectedClass = null) {
+  _getSelectedSpell(selectedClass) {
     const visibleSpells = this._getVisibleSpells(selectedClass);
     this._ensureValidSelection(undefined, visibleSpells);
     return visibleSpells.find((spell) => spell.id === this._state.selectedSpellId) ?? null;
