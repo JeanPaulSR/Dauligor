@@ -400,7 +400,25 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       this._state.selectedClassIdentifier = classes[0]?.identifier ?? null;
     }
 
-    const spells = visibleSpells ?? this._getVisibleSpells(classes.find((entry) => entry.identifier === this._state.selectedClassIdentifier) ?? null);
+    // Empty-pool guard. With zero class models there's nothing to
+    // validate, and the default branch below would call
+    // `_getVisibleSpells(null)`, which falls back to
+    // `_getSelectedClassModel()` — that re-enters this method through
+    // `_ensureValidSelection(classes)` and loops until the stack
+    // overflows. Short-circuit here so an actor with no spellcasting
+    // classes (or none yet detected) just renders an empty manager.
+    if (classes.length === 0) {
+      this._state.selectedSpellId = null;
+      return;
+    }
+
+    // Resolve the selected class model from the current identifier
+    // (which `currentClass` may have just promoted from null to
+    // `classes[0].identifier`). Pass it explicitly to
+    // `_getVisibleSpells` so it has no reason to call back into
+    // `_getSelectedClassModel` and re-trigger the recursion.
+    const selectedClassModel = classes.find((entry) => entry.identifier === this._state.selectedClassIdentifier) ?? null;
+    const spells = visibleSpells ?? this._getVisibleSpells(selectedClassModel);
     const currentSpell = spells.find((spell) => spell.id === this._state.selectedSpellId);
     if (!currentSpell) {
       this._state.selectedSpellId = spells[0]?.id ?? null;
