@@ -124,58 +124,26 @@ export default function App() {
 
   const loadProfile = async (firebaseUser: User) => {
     try {
-      const data = await fetchDocument<any>('users', firebaseUser.uid);
-      
-      if (data) {
-        const email = firebaseUser.email || '';
-        const internalUsername = email.endsWith('@archive.internal') ? email.split('@')[0] : null;
-        const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
-        const isOwnerEmail = email === 'luapnaej101@gmail.com';
-        const shouldBeAdmin = isInternalAdmin || isOwnerEmail;
-        
-        if (shouldBeAdmin && data.role !== 'admin') {
-          const updatedProfile = { 
-            ...data, 
-            role: 'admin',
-            username: isInternalAdmin ? (internalUsername || data.username) : data.username 
-          };
-          await upsertDocument('users', firebaseUser.uid, updatedProfile);
-          setUserProfile(updatedProfile);
-        } else if (isInternalAdmin && data.username !== internalUsername) {
-          const updatedProfile = { ...data, username: internalUsername };
-          await upsertDocument('users', firebaseUser.uid, updatedProfile);
-          setUserProfile(updatedProfile);
-        } else {
-          // Check for active campaign if missing
-          if (!data.active_campaign_id) {
-            const memberData = await fetchCollection<any>('campaignMembers', { where: 'user_id = ?', params: [firebaseUser.uid] });
-            if (memberData.length > 0) {
-              const updatedProfile = { ...data, active_campaign_id: memberData[0].campaign_id };
-              await upsertDocument('users', firebaseUser.uid, updatedProfile);
-              setUserProfile(updatedProfile);
-              return;
-            }
-          }
-          setUserProfile(data);
-        }
-      } else {
-        // No profile yet, create one
-        const email = firebaseUser.email || '';
-        const internalUsername = email.endsWith('@archive.internal') ? email.split('@')[0] : null;
-        const isInternalAdmin = internalUsername === 'admin' || internalUsername === 'gm';
-        const isOwnerEmail = email === 'luapnaej101@gmail.com';
-        
-        const newProfile = {
-          id: firebaseUser.uid,
-          username: internalUsername || firebaseUser.displayName?.toLowerCase().replace(/\s+/g, '') || 'explorer',
-          display_name: firebaseUser.displayName || 'Explorer',
-          role: (isInternalAdmin || isOwnerEmail) ? 'admin' : 'user',
-          theme: 'parchment',
-          created_at: new Date().toISOString()
-        };
-        await upsertDocument('users', firebaseUser.uid, newProfile);
-        setUserProfile(newProfile);
+      // GET /api/me does all of the work that used to live here:
+      //   - the SELECT * FROM users WHERE id = ? lookup
+      //   - the auto-create on first sign-in
+      //   - the bootstrap-admin promote for the owner email + the
+      //     synthetic `admin` / `gm` usernames
+      //   - the active_campaign_id auto-pick from the first
+      //     campaign_members row
+      // Server-side because letting the client decide which profile
+      // fields to upsert was the H6 role-self-promotion vector. With
+      // this migration the client never writes to `users.role` again.
+      const idToken = await firebaseUser.getIdToken();
+      const res = await fetch('/api/me', {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to load profile (HTTP ${res.status})`);
       }
+      const body = await res.json();
+      setUserProfile(body?.profile || null);
     } catch (err) {
       console.error("Error loading user profile:", err);
     } finally {

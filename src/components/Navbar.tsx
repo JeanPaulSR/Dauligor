@@ -80,10 +80,25 @@ export default function Navbar({
   const handleSwitchCampaign = async (campaignId: string) => {
     if (!user?.uid) return;
     try {
-      await upsertDocument('users', user.uid, {
-        ...userProfile,
-        active_campaign_id: campaignId
+      // Single-field PATCH through /api/me — the previous
+      // `upsertDocument('users', uid, { ...userProfile, active_campaign_id })`
+      // pattern was H6 risk #1: a malicious client could spread
+      // `{ ..., role: 'admin' }` into the payload and the server had no
+      // column allow-list to drop it. Now the server only honors the
+      // allow-listed fields and the client cannot reach `role` at all.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ active_campaign_id: campaignId }),
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to switch campaign (HTTP ${res.status})`);
+      }
       await refreshProfile();
     } catch (err) {
       console.error("Error switching campaign:", err);
