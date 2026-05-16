@@ -52,7 +52,17 @@ export function baseClassHandler(workflow) {
   };
 
 
-  const isMulticlass = !!(workflow?.actor?.itemTypes?.class?.length > 0);
+  // Two flavors of "this is a multiclass import":
+  //   1. `workflow.isMulticlassImport` — set by `buildClassImportWorkflow`
+  //      when the actor has another class AND this class is fresh on
+  //      the actor. This is the authoritative signal because it also
+  //      honors a stored `flags.dauligor-pairing.proficiencyMode = "multiclass"`
+  //      sticky bit on the existing class item.
+  //   2. `workflow.actor.itemTypes.class.length > 0` — the legacy
+  //      fallback when workflow construction predates the flag. Kept
+  //      so older payloads still infer correctly.
+  const isMulticlass = workflow?.isMulticlassImport === true
+    || !!(workflow?.actor?.itemTypes?.class?.length > 0);
 
   const hitPoints = findAdv('base-hp', 'HitPoints') || {
     _id: 'base-hp', type: 'HitPoints', title: 'Hit Points', level: 1, configuration: { hitDie: 8 }
@@ -88,22 +98,57 @@ export function baseClassHandler(workflow) {
     _id: 'base-condition-immunities', type: 'Trait', title: 'Condition Immunities', level: 1, configuration: { type: 'ci', fixed: [], options: [], choiceCount: 0 }
   };
 
-  return {
-    isMulticlass,
-    advancements: [
-      { id: 'base-hp', title: 'Hit Points', adv: hitPoints, ...getGuaranteedAndChoice(hitPoints) },
-      { id: 'base-saves', title: 'Saving Throws', adv: savingThrows, ...getGuaranteedAndChoice(savingThrows) },
-      { id: 'base-armor', title: 'Armor Proficiencies', adv: armor, ...getGuaranteedAndChoice(armor) },
-      { id: 'base-weapons', title: 'Weapon Proficiencies', adv: weapons, ...getGuaranteedAndChoice(weapons) },
-      { id: 'base-skills', title: 'Skills', adv: skills, ...getGuaranteedAndChoice(skills) },
-      { id: 'base-tools', title: 'Tools', adv: tools, ...getGuaranteedAndChoice(tools) },
-      { id: 'base-languages', title: 'Languages', adv: languages, ...getGuaranteedAndChoice(languages) },
-      { id: 'base-resistances', title: 'Damage Resistances', adv: resistances, ...getGuaranteedAndChoice(resistances) },
-      { id: 'base-immunities', title: 'Damage Immunities', adv: immunities, ...getGuaranteedAndChoice(immunities) },
-      { id: 'base-vulnerabilities', title: 'Damage Vulnerabilities', adv: vulnerabilities, ...getGuaranteedAndChoice(vulnerabilities) },
-      { id: 'base-condition-immunities', title: 'Condition Immunities', adv: conditionImmunities, ...getGuaranteedAndChoice(conditionImmunities) }
-    ]
-  };
+  const advancements = [
+    { id: 'base-hp', title: 'Hit Points', adv: hitPoints, ...getGuaranteedAndChoice(hitPoints) },
+    { id: 'base-saves', title: 'Saving Throws', adv: savingThrows, ...getGuaranteedAndChoice(savingThrows) },
+    { id: 'base-armor', title: 'Armor Proficiencies', adv: armor, ...getGuaranteedAndChoice(armor) },
+    { id: 'base-weapons', title: 'Weapon Proficiencies', adv: weapons, ...getGuaranteedAndChoice(weapons) },
+    { id: 'base-skills', title: 'Skills', adv: skills, ...getGuaranteedAndChoice(skills) },
+    { id: 'base-tools', title: 'Tools', adv: tools, ...getGuaranteedAndChoice(tools) },
+    { id: 'base-languages', title: 'Languages', adv: languages, ...getGuaranteedAndChoice(languages) },
+    { id: 'base-resistances', title: 'Damage Resistances', adv: resistances, ...getGuaranteedAndChoice(resistances) },
+    { id: 'base-immunities', title: 'Damage Immunities', adv: immunities, ...getGuaranteedAndChoice(immunities) },
+    { id: 'base-vulnerabilities', title: 'Damage Vulnerabilities', adv: vulnerabilities, ...getGuaranteedAndChoice(vulnerabilities) },
+    { id: 'base-condition-immunities', title: 'Condition Immunities', adv: conditionImmunities, ...getGuaranteedAndChoice(conditionImmunities) }
+  ];
+
+  // Multiclass overlay. Primary-class advancements above were built
+  // from `class.system.advancement` (which is the primary tree). When
+  // the actor is multiclassing INTO this class, the rules grant only
+  // the proficiencies listed in `multiclassProficiencies`, which is a
+  // different (usually smaller) profile authored on the class. We
+  // overlay it onto the corresponding rows here so the prompt loop +
+  // CharacterUpdater apply use the multiclass pool instead of the
+  // primary one. HP stays primary because multiclass still grants HP
+  // per level. Saves are typically empty in multiclass — keep an empty
+  // overlay so any primary `fixed` saves stop being applied.
+  if (isMulticlass && workflow?.semanticClassData?.multiclassProficiencies) {
+    const profile = workflow.semanticClassData.multiclassProficiencies;
+    const mcMap = {
+      'base-saves':     { kind: 'saves',     block: profile.savingThrows },
+      'base-armor':     { kind: 'armor',     block: profile.armor },
+      'base-weapons':   { kind: 'weapons',   block: profile.weapons },
+      'base-skills':    { kind: 'skills',    block: profile.skills },
+      'base-tools':     { kind: 'tools',     block: profile.tools },
+      'base-languages': { kind: 'languages', block: profile.languages }
+    };
+    for (const entry of advancements) {
+      const mc = mcMap[entry.id];
+      if (!mc) continue;
+      // `fixed` / `options` use the prefixed form (`skills:acr`) to
+      // match what `runSkillSelectionStep` / `runTraitSelectionStep`
+      // and `CharacterUpdater.updateSkills/updateSaves/...` already
+      // accept. `stripTypePrefix` handles both prefixed and bare slugs
+      // downstream, but staying prefixed lines us up with the primary
+      // path's authored shape.
+      const block = mc.block ?? {};
+      entry.fixed = (block.fixedIds || []).map((slug) => `${mc.kind}:${slug}`);
+      entry.options = (block.optionIds || []).map((slug) => `${mc.kind}:${slug}`);
+      entry.choiceCount = Number(block.choiceCount || 0) || 0;
+    }
+  }
+
+  return { isMulticlass, advancements };
 }
 
 
