@@ -228,9 +228,18 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       preparedOnly: false,
       selectedClassIdentifier: null,
       selectedSpellId: null,
-      status: "Review current actor spells by class. This first pass does not pull available class lists from Dauligor yet.",
+      status: "Live class spell lists fetched from Dauligor. Sourced from `/api/module/<source>/classes/<class>/spells.json`.",
       statusLevel: ""
     };
+    // Live spell-pool cache keyed by `classIdentifier`. The pool is
+    // fetched lazily when a class is first selected and re-used on
+    // subsequent re-selects so we don't hit the network every time
+    // the user clicks between classes. Each value is either:
+    //   { status: "loading" }
+    //   { status: "ready",   spells: [...] }   (lightweight summaries)
+    //   { status: "missing", reason: string }  (class has no spellListUrl flag)
+    //   { status: "error",   reason: string }
+    this._classPools = new Map();
   }
 
   _configureRenderParts() {
@@ -433,6 +442,89 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     }
   }
 
+  /**
+   * Lazy-fetch the live class spell list endpoint for the supplied
+   * class model. The URL was stamped on the class item's
+   * `flags.dauligor-pairing.spellListUrl` during import (see
+   * `class-import-service.js:importClassBundleToActor` — derived from
+   * the class bundle URL by appending `/spells.json`).
+   *
+   * Results are cached in `this._classPools` by classIdentifier so
+   * re-selecting the class doesn't refire the fetch. Returns the
+   * cache entry so the renderer can read its `status` field directly.
+   *
+   * Missing flag → `{ status: "missing" }` so the renderer can show
+   * a "Re-import to see the live spell list" hint for classes
+   * imported before the flag stamp landed.
+   *
+   * Fire-and-forget render trigger: when a not-yet-fetched class is
+   * requested, the function returns the loading sentinel immediately
+   * and kicks off the fetch in the background. The eventual resolve
+   * calls `_renderManager()` so the pool appears as soon as it's
+   * available without blocking the click that selected the class.
+   */
+  async _ensureClassPool(classModel) {
+    if (!classModel?.identifier) return null;
+    const key = classModel.identifier;
+    const cached = this._classPools.get(key);
+    if (cached) return cached;
+
+    const classItem = classModel.item;
+    const spellListUrl = classItem?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
+    if (!spellListUrl) {
+      const entry = {
+        status: "missing",
+        reason: "This class was imported before the live spell-list URL was tracked. Re-import it to populate the available-spells list.",
+      };
+      this._classPools.set(key, entry);
+      return entry;
+    }
+
+    // Mark in-flight so a second click on the same class doesn't
+    // fire a duplicate request, and so the renderer can show a
+    // "Loading…" hint instead of "missing".
+    const loadingEntry = { status: "loading" };
+    this._classPools.set(key, loadingEntry);
+
+    // Background fetch — renderer reads the loading state immediately
+    // and a re-render fires when the cache updates.
+    (async () => {
+      try {
+        const response = await fetch(spellListUrl, { cache: "no-store" });
+        if (!response.ok) {
+          this._classPools.set(key, {
+            status: "error",
+            reason: `Spell list endpoint returned ${response.status}`,
+          });
+        } else {
+          const payload = await response.json();
+          if (payload?.kind !== "dauligor.class-spell-list.v1") {
+            this._classPools.set(key, {
+              status: "error",
+              reason: `Unexpected payload kind: ${payload?.kind ?? "(missing)"}`,
+            });
+          } else {
+            this._classPools.set(key, {
+              status: "ready",
+              spells: Array.isArray(payload.spells) ? payload.spells : [],
+              fetchedAt: Date.now(),
+            });
+          }
+        }
+      } catch (err) {
+        console.warn(`${MODULE_ID} | spell-list fetch failed`, { spellListUrl, err });
+        this._classPools.set(key, {
+          status: "error",
+          reason: err?.message ?? "Network error",
+        });
+      }
+      // Re-render so the pool shows up (or the error message does).
+      this._renderManager?.();
+    })();
+
+    return loadingEntry;
+  }
+
   async _renderManager() {
     const classModels = this._buildClassModels();
     this._ensureValidSelection(classModels);
@@ -440,6 +532,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const visibleSpells = this._getVisibleSpells(selectedClass);
     this._ensureValidSelection(classModels, visibleSpells);
     const selectedSpell = visibleSpells.find((spell) => spell.id === this._state.selectedSpellId) ?? null;
+
+    // Kick off the live spell-pool fetch for the selected class if it
+    // hasn't been loaded yet. Result lands in `this._classPools` and
+    // the background fetch re-fires `_renderManager()` when it
+    // resolves, so the renderer below picks up the data on its next
+    // pass. Render now reads whatever's currently cached (loading /
+    // ready / missing / error).
+    if (selectedClass) {
+      await this._ensureClassPool(selectedClass);
+    }
 
     this._renderClasses(classModels, selectedClass);
     this._renderToolbar(selectedClass);
@@ -643,6 +745,20 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       .map((spell) => String(spell.getFlag?.(MODULE_ID, "folderLabel") ?? "").trim())
       .filter(Boolean)).size;
 
+    // Build the "Available Spells" panel from the live pool fetched
+    // by `_ensureClassPool`. Three render branches:
+    //   loading | error / missing | ready
+    // Ready state shows the curated pool grouped by spell level, with
+    // an indicator on each row showing whether the actor already has
+    // that spell. Mirrors the importer's picker UX but read-only
+    // (Phase 1 — add/remove is a follow-up).
+    const ownedSourceIds = new Set(
+      this._getSpellItems()
+        .map((spell) => String(spell.getFlag?.(MODULE_ID, "sourceId") ?? "").trim())
+        .filter(Boolean),
+    );
+    const renderPoolPanel = this._renderPoolPanel(selectedClass, ownedSourceIds);
+
     this._summaryRegion.innerHTML = `
       <div class="dauligor-spell-manager__section-title">Spell List Information</div>
       <div class="dauligor-spell-manager__summary-block">
@@ -665,9 +781,122 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
           <dt>Total Imported</dt>
           <dd>${selectedClass.totalCount}</dd>
         </dl>
-        <p class="dauligor-spell-manager__summary-note">
-          First pass: this window is reading the actor's current spell items only. Available-but-not-imported Dauligor class lists will be added later.
-        </p>
+      </div>
+      ${renderPoolPanel}
+    `;
+  }
+
+  /**
+   * Render the live class spell pool from `this._classPools` for the
+   * currently selected class. Read-only display in Phase 1: shows the
+   * full curated pool grouped by spell level, with each row marked
+   * "✓ On Sheet" if the actor already has that spell or "+ Available"
+   * if it's still pickable.
+   *
+   * Future: add the filter-chip UI from the importer's picker
+   * (Activation / Range / Duration / Shape / V·S·M / etc.) and an
+   * "Add to Sheet" action per row that fetches the full spell item
+   * and embeds it. For now the pool ships its summaries; clicking a
+   * row only highlights it.
+   */
+  _renderPoolPanel(selectedClass, ownedSourceIds) {
+    if (!selectedClass?.identifier) return "";
+    const entry = this._classPools.get(selectedClass.identifier);
+
+    if (!entry || entry.status === "loading") {
+      return `
+        <div class="dauligor-spell-manager__summary-block">
+          <div class="dauligor-spell-manager__summary-heading">Available Spells</div>
+          <div class="dauligor-spell-manager__empty">Loading class spell list…</div>
+        </div>
+      `;
+    }
+
+    if (entry.status === "missing") {
+      return `
+        <div class="dauligor-spell-manager__summary-block">
+          <div class="dauligor-spell-manager__summary-heading">Available Spells</div>
+          <div class="dauligor-spell-manager__empty">${escapeHtml(entry.reason)}</div>
+        </div>
+      `;
+    }
+
+    if (entry.status === "error") {
+      return `
+        <div class="dauligor-spell-manager__summary-block">
+          <div class="dauligor-spell-manager__summary-heading">Available Spells</div>
+          <div class="dauligor-spell-manager__empty">Failed to load class spell list: ${escapeHtml(entry.reason)}</div>
+        </div>
+      `;
+    }
+
+    const spells = entry.spells ?? [];
+    if (spells.length === 0) {
+      return `
+        <div class="dauligor-spell-manager__summary-block">
+          <div class="dauligor-spell-manager__summary-heading">Available Spells</div>
+          <div class="dauligor-spell-manager__empty">No spells curated for this class yet. Curate the list at <code>/compendium/spell-lists</code> in Dauligor.</div>
+        </div>
+      `;
+    }
+
+    // Group by spell level for level-banded headers (Cantrips, Lv 1,
+    // Lv 2, …). Each band's row order follows the bake order, which
+    // is `level ASC, name ASC` per the spells SQL in
+    // `_classSpellList.ts:buildClassSpellListBundle`.
+    const byLevel = new Map();
+    for (const item of spells) {
+      const lv = Number(item?.flags?.["dauligor-pairing"]?.level ?? 0);
+      if (!byLevel.has(lv)) byLevel.set(lv, []);
+      byLevel.get(lv).push(item);
+    }
+    const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
+
+    const ownedCount = spells.filter((s) =>
+      ownedSourceIds.has(String(s?.flags?.["dauligor-pairing"]?.sourceId ?? "")),
+    ).length;
+
+    const renderRow = (item) => {
+      const flags = item?.flags?.["dauligor-pairing"] ?? {};
+      const sourceId = String(flags.sourceId ?? "");
+      const owned = ownedSourceIds.has(sourceId);
+      const school = String(flags.school ?? "").slice(0, 4).toUpperCase();
+      const ritual = flags.ritual ? "R" : "";
+      const concentration = flags.concentration ? "C" : "";
+      return `
+        <li class="dauligor-spell-manager__pool-row${owned ? " is-owned" : ""}">
+          <span class="dauligor-spell-manager__pool-indicator" title="${owned ? "Already on sheet" : "Available — not yet on sheet"}">${owned ? "✓" : "+"}</span>
+          <span class="dauligor-spell-manager__pool-name">${escapeHtml(item.name)}</span>
+          <span class="dauligor-spell-manager__pool-school" title="${escapeHtml(flags.school || "")}">${school || "—"}</span>
+          <span class="dauligor-spell-manager__pool-badges">
+            ${ritual ? `<span class="dauligor-spell-manager__pool-badge" title="Ritual">R</span>` : ""}
+            ${concentration ? `<span class="dauligor-spell-manager__pool-badge" title="Concentration">C</span>` : ""}
+          </span>
+        </li>
+      `;
+    };
+
+    const renderBand = (level) => {
+      const items = byLevel.get(level) || [];
+      const headerLabel = level === 0 ? "Cantrips" : `Level ${level}`;
+      return `
+        <div class="dauligor-spell-manager__pool-band">
+          <div class="dauligor-spell-manager__pool-band-header">
+            <span class="dauligor-spell-manager__pool-band-name">${escapeHtml(headerLabel)}</span>
+            <span class="dauligor-spell-manager__pool-band-count">${items.length}</span>
+          </div>
+          <ul class="dauligor-spell-manager__pool-list">
+            ${items.map(renderRow).join("")}
+          </ul>
+        </div>
+      `;
+    };
+
+    return `
+      <div class="dauligor-spell-manager__summary-block">
+        <div class="dauligor-spell-manager__summary-heading">Available Spells <span class="dauligor-spell-manager__pool-count">${ownedCount} / ${spells.length} on sheet</span></div>
+        <p class="dauligor-spell-manager__summary-note">Pool from <code>/compendium/spell-lists?class=${escapeHtml(selectedClass.identifier)}</code> — refreshes each time you open this manager. Add-to-sheet action is a follow-up.</p>
+        ${sortedLevels.map(renderBand).join("")}
       </div>
     `;
   }

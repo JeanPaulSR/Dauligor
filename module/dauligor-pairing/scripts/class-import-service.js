@@ -254,6 +254,22 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
     referencedDocs: importedSupportDocs,
     proficiencyMode: workflow.proficiencyMode
   });
+  // Stamp the spell-list endpoint URL on the class item flag so the
+  // sheet-side spell preparation manager can fetch the live pool
+  // without re-running the catalog lookup. URL is derived by stripping
+  // `.json` from the class bundle URL and appending `/spells.json` —
+  // same transformation `fetchClassSpellList` does. The bundle URL was
+  // stashed on the payload by `_ensureVariantPayload`; if it's missing
+  // (raw filesystem import path, etc.) the flag stays unset and the
+  // sheet manager falls back to a "Re-import to see the live spell
+  // list" hint.
+  const classBundleUrl = payload?._dauligorBundleUrl;
+  if (classBundleUrl) {
+    const spellListUrl = String(classBundleUrl).replace(/\.json(\?.*)?$/i, "/spells.json");
+    preparedClass.flags = preparedClass.flags ?? {};
+    preparedClass.flags[MODULE_ID] = preparedClass.flags[MODULE_ID] ?? {};
+    preparedClass.flags[MODULE_ID].spellListUrl = spellListUrl;
+  }
   const actorClassDoc = await upsertActorItem(targetActor, preparedClass);
   if (!actorClassDoc) {
     notifyWarn(`Failed to import "${classItem.name ?? entry?.name ?? "class"}" onto "${targetActor.name}".`);

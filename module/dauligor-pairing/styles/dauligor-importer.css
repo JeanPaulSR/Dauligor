@@ -4009,3 +4009,112 @@ button.dauligor-option-picker__pill:hover {
   line-height: 1.4;
   opacity: 0.5;
 }
+
+/* ─── Spell Preparation manager — live pool panel ───────────────────
+ * Renders below the per-class metadata when a class is selected.
+ * Phase 1: read-only display of the curated class spell list with
+ * "owned" vs "available" indicators. Add-to-sheet action lives in
+ * a follow-up. CSS variable fallbacks match the rest of the manager
+ * so the panel reads as native on the dnd5e theme. */
+.dauligor-spell-manager__pool-count {
+  margin-left: 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.55;
+}
+
+.dauligor-spell-manager__pool-band {
+  margin-top: 10px;
+}
+
+.dauligor-spell-manager__pool-band-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.06));
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+}
+
+.dauligor-spell-manager__pool-band-name {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.dauligor-spell-manager__pool-band-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  opacity: 0.4;
+}
+
+.dauligor-spell-manager__pool-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dauligor-spell-manager__pool-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 36px auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.08));
+  font-size: 12px;
+}
+
+.dauligor-spell-manager__pool-row.is-owned .dauligor-spell-manager__pool-indicator {
+  color: var(--dauligor-success, #4ea96b);
+  font-weight: 900;
+}
+
+.dauligor-spell-manager__pool-row:not(.is-owned) .dauligor-spell-manager__pool-indicator {
+  opacity: 0.4;
+}
+
+.dauligor-spell-manager__pool-indicator {
+  font-size: 12px;
+  text-align: center;
+}
+
+.dauligor-spell-manager__pool-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-spell-manager__pool-row.is-owned .dauligor-spell-manager__pool-name {
+  font-weight: 600;
+}
+
+.dauligor-spell-manager__pool-school {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.dauligor-spell-manager__pool-badges {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dauligor-spell-manager__pool-badge {
+  display: inline-block;
+  min-width: 14px;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: 900;
+  text-align: center;
+  border-radius: 2px;
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.12));
+  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.25));
+  opacity: 0.7;
+}
