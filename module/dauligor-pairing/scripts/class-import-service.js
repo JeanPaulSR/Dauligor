@@ -524,6 +524,21 @@ export function buildClassImportWorkflow(payload, {
   const subclassFeatures = ensureArray(bundle.subclassFeatures).map((item) => normalizeWorldItem(item, bundle.source));
   const optionItems = ensureArray(bundle.optionItems).map((item) => normalizeWorldItem(item, bundle.source));
 
+  // Synthesize a Spellcasting feature item from `class.spellcasting.*`
+  // so it lands on the actor as a real `feat` document rather than
+  // hiding inside the class item's description HTML. See
+  // `buildSyntheticSpellcastingFeature` for the rationale. The synth's
+  // sourceId is layered into `desiredClassFeatureIds` below once we
+  // know the import has crossed `class.spellcasting.level`.
+  const syntheticSpellcastingFeature = buildSyntheticSpellcastingFeature({
+    semanticClassData,
+    classSourceId,
+    sourceBookId: bundle.source?.sourceId ?? null
+  });
+  if (syntheticSpellcastingFeature) {
+    classFeatures.push(syntheticSpellcastingFeature);
+  }
+
   const minSubclassLevel = getMinimumSubclassSelectionLevel(classItem.system?.advancement, classFeatures);
   const existingSubclassItem = targetActor
     ? targetActor.items.find((item) =>
@@ -597,6 +612,18 @@ export function buildClassImportWorkflow(payload, {
   };
 
   const desiredClassFeatureIds = collectGrantedFeatureSourceIds(classItem.system?.advancement, normalizedTargetLevel);
+  // The synthetic Spellcasting feature has no `ItemGrant` row in
+  // `class.system.advancement`, so it never makes it into the set
+  // above. Route it in manually when the import has reached the level
+  // the class actually gains spellcasting — same level-gate semantics
+  // as the real ItemGrant rows.
+  if (syntheticSpellcastingFeature) {
+    const synthLevel = Number(syntheticSpellcastingFeature.flags?.[MODULE_ID]?.level ?? 1) || 1;
+    const synthSourceId = syntheticSpellcastingFeature.flags?.[MODULE_ID]?.sourceId;
+    if (synthSourceId && synthLevel <= normalizedTargetLevel) {
+      desiredClassFeatureIds.add(synthSourceId);
+    }
+  }
   const desiredClassFeatureItems = classFeatures.filter((item) => {
     const sourceId = item.flags?.[MODULE_ID]?.sourceId ?? null;
     if (!sourceId || !desiredClassFeatureIds.has(sourceId)) return false;
@@ -1686,6 +1713,110 @@ function createSemanticFeatureItem(feature, context, { sourceType = "classFeatur
       [MODULE_ID]: flags
     },
     system
+  };
+}
+
+/**
+ * Build a synthetic "Spellcasting" feature item from the class's
+ * `class.spellcasting.*` block.
+ *
+ * The Dauligor ClassEditor's Spellcasting tab is conceptually one big
+ * feature on the class — name, ability, progression, formula,
+ * description — but it ships through the export as a metadata block on
+ * the class item (`class.spellcasting.*`) rather than as a real feature
+ * row in the class advancement tree. The Foundry-side embed phase
+ * therefore never creates a "Spellcasting" feat item on the actor; the
+ * block survives only as `flags.dauligor-pairing.spellcasting` + an
+ * HTML section appended to the class item description.
+ *
+ * That makes the spellcasting block effectively invisible on the
+ * features list at the top of the dnd5e character sheet. Authors expect
+ * it to look the same as Sorcery Points / Bardic Inspiration / etc.,
+ * which are real `feat` items.
+ *
+ * This helper synthesizes a Foundry-ready feature item with a stable
+ * sourceId (`<classSourceId>:spellcasting`) so the bridge embed +
+ * prune passes pick it up via the same `desiredFeatureSourceIds` path
+ * as authored class features. No advancements attached — the prompt
+ * loop walks past it as a no-op.
+ *
+ * Returns null when the class has no spellcasting enabled.
+ */
+function buildSyntheticSpellcastingFeature({ semanticClassData, classSourceId, sourceBookId }) {
+  const spellcasting = semanticClassData?.spellcasting;
+  if (!spellcasting || !spellcasting.hasSpellcasting) return null;
+  if (!classSourceId) return null;
+
+  const level = Number(spellcasting.level ?? 1) || 1;
+  const descriptionHtml = normalizeHtmlBlock(spellcasting.description)
+    || `<p>This class can cast spells.</p>`;
+
+  // Per-class identity is critical. With one global "spellcasting"
+  // identifier and name, a second spellcasting class import would match
+  // the first class's synth via `findMatchingActorItem` step 3
+  // (identifier+type) — both items have `identifier: "spellcasting"`
+  // and `type: "feat"` — and overwrite it instead of creating a second
+  // synth. Cleric+Wizard would end up with one Spellcasting item
+  // carrying Wizard data, which defeats the per-class state model we
+  // need for tracking which spells are loaded for each class.
+  //
+  // We derive a class slug from the semantic class data and stamp it
+  // into the identifier (`spellcasting-cleric`) and the visible name
+  // (`Cleric Spellcasting`). Each class then owns its own synth and
+  // none of the four matching paths collide across classes.
+  const classNameRaw = trimString(semanticClassData?.name);
+  const classSlug = normalizeSemanticIdentifier(
+    semanticClassData?.identifier ?? classNameRaw ?? semanticClassData?.id,
+    "class"
+  ) || "class";
+  const displayName = classNameRaw
+    ? `${classNameRaw} Spellcasting`
+    : "Spellcasting";
+
+  // Compose a single unique identity string the synth uses for both
+  // sourceId and the entityId/sourceRecordId pair. The two latter fields
+  // would otherwise be auto-populated by `applyPayloadMetadata` →
+  // `applySourceMetadata` using the bundle's source.id — which is the
+  // CLASS's own app record id. That would cause `getModuleEntityId` on
+  // the synth to return the same id as the class item already on the
+  // actor, and `findMatchingActorItem` step 1 (entityId, no type
+  // filter) would match the class item — Foundry then rejects the
+  // update because the document type would change from "class" to
+  // "feat". Pre-populating these flags with a synth-specific value
+  // short-circuits `applySourceMetadata`'s `== null` guard.
+  const syntheticId = `${classSourceId}:spellcasting`;
+
+  return {
+    name: displayName,
+    type: "feat",
+    img: DEFAULT_FEATURE_ICON,
+    flags: {
+      [MODULE_ID]: {
+        sourceId: syntheticId,
+        sourceBookId: sourceBookId ?? null,
+        entityId: syntheticId,
+        sourceRecordId: syntheticId,
+        identifier: `spellcasting-${classSlug}`,
+        classSourceId,
+        sourceType: "classFeature",
+        featureKind: "spellcasting",
+        synthesized: true,
+        level,
+        featureTypeValue: "class",
+        featureTypeLabel: "Class Feature"
+      }
+    },
+    system: {
+      identifier: `spellcasting-${classSlug}`,
+      description: {
+        value: descriptionHtml,
+        chat: ""
+      },
+      type: {
+        value: "class",
+        subtype: ""
+      }
+    }
   };
 }
 
