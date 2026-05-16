@@ -5980,6 +5980,48 @@ export async function fetchClassCatalog(url) {
   };
 }
 
+/**
+ * Fetch the per-class curated spell list from its dedicated endpoint.
+ *
+ * The class bundle URL is `.../phb/classes/wizard.json`; the spell
+ * list lives at `.../phb/classes/wizard/spells.json`. The server
+ * serves this endpoint live from D1 with a 60s HTTP cache, so spell
+ * curation + tag-driven rule recompute reach the importer without
+ * requiring a class rebake.
+ *
+ * Returns the `spells[]` array (Foundry-ready spell item shells —
+ * same shape the old `classSpellItems` field used to carry) on
+ * success, or `[]` when the endpoint 404s or the response is
+ * malformed. The class import flow treats an empty list as "no
+ * picker fires" so this matches the pre-decoupling behavior for
+ * classes without a curated list.
+ */
+export async function fetchClassSpellList(classBundleUrl) {
+  if (!classBundleUrl) return [];
+  // Class URL ends in `.json`. Drop the suffix and append
+  // `/spells.json` for the spell-list endpoint. Both URLs share the
+  // same source-slug + class-identifier prefix.
+  const trimmed = String(classBundleUrl).replace(/\.json(\?.*)?$/i, "");
+  if (trimmed === classBundleUrl) {
+    // Path didn't end in `.json` (unexpected shape) — bail.
+    warn("fetchClassSpellList: class bundle URL doesn't end in .json", { classBundleUrl });
+    return [];
+  }
+  const spellListUrl = `${trimmed}/spells.json`;
+
+  const payload = await fetchJson(spellListUrl);
+  if (!payload) return [];
+
+  if (payload.kind !== "dauligor.class-spell-list.v1") {
+    warn("fetchClassSpellList: response is not dauligor.class-spell-list.v1", {
+      spellListUrl,
+      kind: payload?.kind,
+    });
+    return [];
+  }
+  return Array.isArray(payload.spells) ? payload.spells : [];
+}
+
 export async function fetchJson(url) {
   try {
     const response = await fetch(url, { cache: "no-store" });

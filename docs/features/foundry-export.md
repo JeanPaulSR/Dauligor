@@ -77,8 +77,60 @@ The pairing module reads layer 3 — but the app stores layer 1 and produces lay
 | `/api/module/sources/catalog.json` | All `status='ready'` sources |
 | `/api/module/sources/<slug>/classes/catalog.json` | Class catalog for one source |
 | `/api/module/sources/<slug>/classes/<class-identifier>.json` | Single semantic class export |
+| `/api/module/sources/<slug>/classes/<class-identifier>/spells.json` | Per-class curated spell list (live read-through, see below) |
 
 Falls back to filesystem read at `module/dauligor-pairing/data/sources/<path>` if D1 doesn't have the requested resource. Useful as a transitional convenience: classes created in the app are immediately available in Foundry without manual ZIP redeploys.
+
+### Spell list decoupling (May 2026)
+
+The per-class curated spell list used to be **baked into the class bundle** as a `classSpellItems` array. Every edit to `class_spell_lists` (manual curation in `/compendium/spell-lists`) or to any spell that a rule referenced required a full class rebake to make the new pool visible on the Foundry side. A single spell tag edit fanned out to a class rebake on every class whose applied rules touched that tag.
+
+The spell list is now served on its own endpoint with **live read-through** from D1:
+
+```
+/api/module/<source>/classes/<class>/spells.json
+```
+
+**Wire format:**
+
+```jsonc
+{
+  "kind": "dauligor.class-spell-list.v1",
+  "schemaVersion": 1,
+  "classId": "0db5d98Gj95jUet5gypC",
+  "classIdentifier": "wizard",
+  "classSourceId": "...",
+  "spells": [
+    /* Foundry-ready spell item shells — same shape as the
+     * legacy `classSpellItems` array. The Foundry importer's
+     * `runSpellSelectionStep` and embed phase read `.flags.
+     * dauligor-pairing.level / school / sourceId / ...` from
+     * each entry. */
+  ],
+  "generatedAt": 1715800000000
+}
+```
+
+**Cache strategy:** `Cache-Control: public, max-age=60` (no `s-maxage`, no R2 layer). Each request runs two D1 queries — one for the `class_spell_lists` membership rows, one for the matching `spells` rows. For typical pools (20-100 spells) the response builds in tens of milliseconds. Vercel function cold-start dominates; warm latency is negligible.
+
+**Propagation paths:**
+
+| Event | Old behavior | New behavior |
+|---|---|---|
+| Admin curates a spell into the list (`SpellListManager`) | Stale until class rebake | Visible on next Foundry import (≤60s cache) |
+| Admin edits a spell's tags / level / school | Stale on every class with an applied rule touching those tags | `upsertSpell` recomputes affected rule-driven `class_spell_lists` rows synchronously; next Foundry import sees the new pool |
+| Admin applies / unapplies a rule to a class (`spell_rule_applications`) | Stale until class rebake | The next spell-save recompute or a manual "Rebuild Stale" clears it; or trigger `recomputeAppliedRulesForSpell` once per affected spell |
+| Class metadata changes (level scaling, hit die, name) | Class rebake (unchanged) | Class rebake — the spell-list endpoint is independent and unaffected |
+
+**Implementation:**
+- Builder: [`api/_lib/_classSpellList.ts`](../../api/_lib/_classSpellList.ts) (`buildClassSpellListBundle`, `buildClassSpellListByIdentifier`)
+- Route: [`api/module.ts`](../../api/module.ts) — the `pathParts.length === 4 && pathParts[3] === "spells.json"` branch
+- Tag-driven recompute: [`src/lib/spellRules.ts`](../../src/lib/spellRules.ts) (`recomputeAppliedRulesForSpell`) — called from `upsertSpell` in [`src/lib/compendium.ts`](../../src/lib/compendium.ts) on every individual spell save
+- Foundry-side fetch: [`module/dauligor-pairing/scripts/class-import-service.js`](../../module/dauligor-pairing/scripts/class-import-service.js) (`fetchClassSpellList`) — invoked in parallel with the class bundle fetch inside `_ensureVariantPayload` (`importer-app.js`)
+
+**What stays bundled in the class export:** spellcasting scaling tables (`spellsKnownScalings`), pact magic scaling (`alternativeSpellcastingScalings`), spell-rule allowlists (`spellRuleAllowlists`), rule display names (`spellRuleNameById`). These all change much less frequently than the per-class curated spell list and the class rebake cascade picks them up.
+
+**What doesn't auto-propagate:** `upsertSpellBatch` (used by the spell import workbench) does NOT call `recomputeAppliedRulesForSpell` per entry — a bulk import of 500 spells would fan out to thousands of D1 round-trips. After a batch import, the `SpellListManager`'s stale-detection indicator catches affected classes (any class whose applied rule sees a changed `updated_at` in the rule's matching spells is marked stale until rebuilt). The admin can hit "Rebuild Stale" to flush them.
 
 ## Actor bundle export
 

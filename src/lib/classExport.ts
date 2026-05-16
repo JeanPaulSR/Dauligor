@@ -1653,58 +1653,13 @@ export async function exportClassSemantic(
     if (sourceRow) source = denormalizeSource(sourceRow);
   }
 
-  // ── Bake the class's master spell list into the bundle ──────────────────
-  // DRIFT WARNING: mirror of the same block in api/_lib/_classExport.ts —
-  // keep in sync. See that file's comment for the full rationale.
-  let classSpellItems: any[] = [];
-  try {
-    const cslRows = await fetchCollection<any>('classSpellLists', {
-      where: 'class_id = ?',
-      params: [classDataRaw.id],
-    });
-    const classSpellIds = [...new Set(cslRows.map((r: any) => r.spell_id).filter(Boolean))] as string[];
-    if (classSpellIds.length > 0) {
-      const spellRows = await fetchCollection<any>('spells', {
-        where: `id IN (${classSpellIds.map(() => '?').join(',')})`,
-        params: classSpellIds,
-        select:
-          'id, name, identifier, level, school, image_url, source_id, tags, ' +
-          'foundry_data, required_tags, prerequisite_text, concentration, ritual',
-      });
-      classSpellItems = spellRows.map((row: any) => {
-        const foundrySystem = parseJsonField(row.foundry_data, {});
-        const requiredTagIds = parseJsonField(row.required_tags, []);
-        const tagIds = parseJsonField(row.tags, []);
-        return {
-          name: String(row.name || ''),
-          type: 'spell',
-          img: row.image_url || undefined,
-          system: foundrySystem,
-          effects: [],
-          flags: {
-            'dauligor-pairing': {
-              schemaVersion: 1,
-              entityKind: 'spell',
-              sourceId: trimString(row.identifier) || `spell-${row.id}`,
-              dbId: String(row.id),
-              classSourceId,
-              level: Number(row.level || 0),
-              school: String(row.school || ''),
-              spellSourceId: row.source_id || null,
-              requiredTagIds: Array.isArray(requiredTagIds) ? requiredTagIds.map(String) : [],
-              prerequisiteText: String(row.prerequisite_text || ''),
-              tagIds: Array.isArray(tagIds) ? tagIds.map(String) : [],
-              concentration: Boolean(row.concentration),
-              ritual: Boolean(row.ritual),
-            },
-          },
-        };
-      });
-    }
-  } catch (err) {
-    console.warn('[classExport] Failed to bake classSpellItems — shipping empty list', err);
-    classSpellItems = [];
-  }
+  // The per-class spell list is no longer baked into this bundle.
+  // It lives on its own endpoint
+  // (`/api/module/<source>/classes/<class>/spells.json`) served live
+  // from D1 — the Foundry module fetches it separately during class
+  // import. Decoupling means spell-list edits flow through without a
+  // class rebake. See `api/_lib/_classSpellList.ts` and the route
+  // in `api/module.ts`.
 
   const classData = {
     ...classDataRaw,
@@ -1751,11 +1706,10 @@ export async function exportClassSemantic(
     // `formatRequirementText`, but the runtime walker's pill row needs
     // names too (otherwise spellRule pills show "(spell rule)").
     spellRuleNameById,
-    // Per-class master spell list as Foundry-ready spell items. Used by
-    // the importer's spell-selection step (runSpellSelectionStep) to
-    // render the cantrip / spells-known picker and to embed the chosen
-    // spells onto the actor at level-up time.
-    classSpellItems,
+    // NOTE: the per-class spell list (formerly `classSpellItems`) is
+    // no longer part of the class bundle. The Foundry module fetches
+    // it from a separate live endpoint — see
+    // `/api/module/<source>/classes/<class>/spells.json`.
     source
   };
 }

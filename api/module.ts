@@ -6,6 +6,8 @@ import {
   buildTopLevelCatalog,
   rebakeBundle,
 } from "./_lib/module-export-pipeline.js";
+import { buildClassSpellListByIdentifier } from "./_lib/_classSpellList.js";
+import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
 import {
   classBundleKey,
   MODULE_EXPORT_CACHE_HEADER,
@@ -28,6 +30,27 @@ import { HttpError, requireStaffAccess } from "./_lib/firebase-admin.js";
 function serveCached(res: any, body: unknown) {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", MODULE_EXPORT_CACHE_HEADER);
+  res.end(typeof body === "string" ? body : JSON.stringify(body));
+}
+
+/**
+ * Serve a live-built bundle with a short HTTP cache.
+ *
+ * Used by the per-class spell-list endpoint, which deliberately
+ * skips the R2 layer: spell-list churn (manual curation, rule-driven
+ * recompute on spell tag edits) used to require a class rebake to
+ * propagate. By serving live from D1 with a 60-second `max-age`
+ * (no `s-maxage`, so Vercel's CDN doesn't pin the result longer
+ * than the browser), edits become visible to the Foundry module on
+ * the next import without any rebake step.
+ *
+ * D1 cost is one membership query + one spells query per request.
+ * For pools of 20-100 spells (typical class size) this is in the
+ * tens of milliseconds.
+ */
+function serveLive(res: any, body: unknown) {
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "public, max-age=60");
   res.end(typeof body === "string" ? body : JSON.stringify(body));
 }
 
@@ -202,6 +225,38 @@ export default async function handler(req: any, res: any) {
         () => buildClassBundleForIdentifier(classIdentifier),
       );
       if (result) return serveCached(res, result);
+    }
+
+    // Per-class spell list — live read-through, NOT R2-cached. URL:
+    //   /api/module/<source>/classes/<class>/spells.json
+    // Spell-list edits (manual curation, rule-driven recompute on
+    // spell tag changes) used to require a class rebake to land in
+    // the actor importer. By splitting the spell list off and serving
+    // it live with a short HTTP cache, edits propagate to the Foundry
+    // module on the next import — no rebake step needed.
+    //
+    // The class bundle no longer ships `classSpellItems` (the Foundry
+    // module now fetches this endpoint separately during class
+    // import). See docs/features/foundry-export.md and
+    // module/dauligor-pairing/docs/spell-picker-by-type.md.
+    else if (
+      pathParts.length === 4
+      && pathParts[1] === "classes"
+      && pathParts[3] === "spells.json"
+    ) {
+      // sourceSlug is captured for forward-compat / logging but not
+      // consumed by the builder — we resolve directly by class
+      // identifier, which is globally unique across sources in the
+      // current schema. If that ever changes, the builder gains a
+      // sourceSlug filter and this passes it through.
+      const _sourceSlug = pathParts[0].toLowerCase();
+      const classIdentifier = pathParts[2].toLowerCase();
+      const result = await buildClassSpellListByIdentifier(
+        classIdentifier,
+        SERVER_EXPORT_FETCHERS,
+      );
+      if (result) return serveLive(res, result);
+      // Fall through to 404 if the class identifier didn't match.
     }
   } catch (error) {
     console.error("Dynamic Module API Error:", error);

@@ -473,7 +473,11 @@ function readFoundryDataField(normalized: Record<string, any>): any {
   return normalized.foundry_data ?? normalized.foundryData ?? null;
 }
 
-export async function upsertSpell(id: string, data: Record<string, any>) {
+export async function upsertSpell(
+  id: string,
+  data: Record<string, any>,
+  options: { skipRuleRecompute?: boolean } = {},
+) {
   const normalized = normalizeCompendiumData(data);
   // The spells table column is `tags` (JSON array), not `tag_ids` like
   // classes / subclasses use. Editors and the import workbench carry
@@ -493,7 +497,34 @@ export async function upsertSpell(id: string, data: Record<string, any>) {
   const buckets = computeSpellBuckets(readFoundryDataField(normalized));
   Object.assign(normalized, buckets);
 
-  return upsertDocument('spells', id, normalized);
+  const result = await upsertDocument('spells', id, normalized);
+
+  // Tag-driven recompute: a spell save can flip which rules now
+  // include/exclude this spell (tag change, level change, school
+  // change). Walk every class-applied rule and update the matching
+  // `class_spell_lists` rows. With the spell list served live by
+  // `/api/module/<source>/classes/<class>/spells.json` (60s HTTP
+  // cache), this propagates to the Foundry importer on the next
+  // import — no class rebake needed.
+  //
+  // Bulk paths (import workbench, batch upserts) pass
+  // `skipRuleRecompute: true` and trigger a single rebuild after
+  // the loop instead — see `upsertSpellBatch`.
+  if (!options.skipRuleRecompute) {
+    try {
+      const { recomputeAppliedRulesForSpell } = await import('./spellRules');
+      await recomputeAppliedRulesForSpell(id);
+    } catch (err) {
+      // Recompute is best-effort — never block a save on it. The
+      // user can manually rebuild from the SpellListManager if a
+      // stale row sneaks through. Logged so we notice systemic
+      // failures.
+      // eslint-disable-next-line no-console
+      console.warn('[upsertSpell] rule recompute failed (save succeeded)', err);
+    }
+  }
+
+  return result;
 }
 
 export async function fetchSpell(id: string) {
@@ -526,6 +557,17 @@ export async function purgeAllSpells(): Promise<number> {
 
 /**
  * Executes a batch of spell upserts.
+ *
+ * Deliberately does NOT call `recomputeAppliedRulesForSpell` per
+ * entry — a bulk import of 500 spells would fan out to thousands of
+ * D1 round-trips. Callers that need the rule-driven slice refreshed
+ * after a batch should call `rebuildClassSpellListFromAppliedRules`
+ * once per affected class (or trigger a manual "Rebuild Stale" from
+ * the SpellListManager UI). The SpellListManager's stale-detection
+ * indicator catches this case automatically: every batched edit
+ * bumps the affected spells' `updated_at`, so any class whose
+ * applied rules cover changed spells will mark stale until
+ * rebuilt.
  */
 export async function upsertSpellBatch(entries: { id: string | null, data: Record<string, any> }[]) {
   const normalizedEntries = entries.map(entry => {

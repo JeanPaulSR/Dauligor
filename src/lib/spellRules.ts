@@ -1,5 +1,6 @@
 import { batchQueryD1, queryD1, fetchCollection } from './d1';
 import {
+  deriveSpellFilterFacets,
   explainSpellAgainstRule,
   getClauses,
   isMultiClauseRoot,
@@ -437,6 +438,184 @@ export async function computeClassRebuildDelta(
     if (!next.has(id)) toRemove.push(id);
   }
   return { toAdd, toRemove, staying };
+}
+
+/**
+ * Targeted recompute: re-evaluate every applied class-level rule
+ * against ONE spell that just changed (typically because tags moved
+ * or a facet was edited) and apply the resulting deltas to
+ * `class_spell_lists`.
+ *
+ * Unlike `rebuildClassSpellListFromAppliedRules`, which wipes and
+ * re-inserts the entire rule-driven slice for a class, this:
+ *   - Touches only the rows for this spell across every class
+ *   - Inserts a row where the new evaluation says "yes" and no row
+ *     existed
+ *   - Deletes rows where the new evaluation says "no" and a row
+ *     existed (and the source is `rule:<rule_id>` — manual rows are
+ *     never touched)
+ *
+ * The decoupled spell-list endpoint (`/api/module/<source>/classes/
+ * <class>/spells.json`) reads live from `class_spell_lists`, so the
+ * downstream effect is: edit a spell's tags, save, and the next
+ * Foundry import on any affected class picks up the new pool — no
+ * class rebake needed.
+ *
+ * Returns a summary describing how many `(class, rule)` pairs were
+ * touched and what direction. Useful for both logging and for
+ * surfacing "added to 3 lists / removed from 1 list" toasts in the
+ * editor.
+ *
+ * Synchronous-on-save by design (per the architecture chosen May
+ * 2026 — see `docs/features/foundry-export.md` "Spell list
+ * decoupling"). For very large rule sets we may need to debounce,
+ * but the typical Dauligor world has <100 rules × <30 spells edited
+ * per session, well within latency budget.
+ */
+export async function recomputeAppliedRulesForSpell(spellId: string): Promise<{
+  inserted: Array<{ classId: string; ruleId: string }>;
+  removed: Array<{ classId: string; ruleId: string }>;
+}> {
+  const inserted: Array<{ classId: string; ruleId: string }> = [];
+  const removed: Array<{ classId: string; ruleId: string }> = [];
+
+  // Pull this spell with the same field shape the rebuild path
+  // expects — facets + level + school + source_id + tags. Mirrors
+  // `classExport.ts:rebuildSpellRuleAllowlists` so the matcher sees
+  // an identical shape regardless of which call path drives it.
+  const spellRows = await queryD1<any>(
+    `SELECT id, source_id, level, school, tags, foundry_data, concentration, ritual,
+            components_vocal, components_somatic, components_material
+       FROM spells
+       WHERE id = ?
+       LIMIT 1`,
+    [spellId],
+  );
+  const row = spellRows[0];
+  if (!row) {
+    // Spell was deleted — drop every rule:* row that referenced it.
+    // Manual rows stay (their absence is a separate concern).
+    const droppedRows = await queryD1<{ class_id: string; source: string }>(
+      `SELECT class_id, source FROM class_spell_lists
+        WHERE spell_id = ? AND source LIKE 'rule:%'`,
+      [spellId],
+    );
+    if (droppedRows.length > 0) {
+      await queryD1(
+        `DELETE FROM class_spell_lists
+          WHERE spell_id = ? AND source LIKE 'rule:%'`,
+        [spellId],
+      );
+      for (const r of droppedRows) {
+        const ruleId = r.source.replace(/^rule:/, '');
+        removed.push({ classId: r.class_id, ruleId });
+      }
+    }
+    return { inserted, removed };
+  }
+
+  const facets = deriveSpellFilterFacets(row);
+  const tags = Array.isArray(row.tags)
+    ? row.tags.map((t: any) => String(t))
+    : (typeof row.tags === 'string' ? safeParseTagArray(row.tags) : []);
+  const spellInput: SpellMatchInput & { id: string } = {
+    ...facets,
+    id: String(row.id),
+    level: Number(row.level) || 0,
+    school: String(row.school ?? ''),
+    source_id: row.source_id ?? null,
+    tags,
+  };
+
+  // All class-applied rules, plus the tag index for hierarchical
+  // matching. One fetch each — cheaper than per-rule queries when
+  // the spell touches more than one rule.
+  const [allApplications, allRules, tagRows, existingRuleRows] = await Promise.all([
+    queryD1<{ rule_id: string; applies_to_id: string }>(
+      `SELECT rule_id, applies_to_id FROM spell_rule_applications
+        WHERE applies_to_type = 'class'`,
+    ),
+    queryD1<any>(`SELECT * FROM spell_rules`),
+    fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' }),
+    queryD1<{ class_id: string; source: string; id: string }>(
+      `SELECT class_id, source, id FROM class_spell_lists
+        WHERE spell_id = ? AND source LIKE 'rule:%'`,
+      [spellId],
+    ),
+  ]);
+  const tagIndex = buildTagIndex(tagRows);
+  const ruleById = new Map<string, SpellRule>();
+  for (const r of allRules) ruleById.set(String(r.id), deserializeRule(r));
+
+  // Pre-compute "which `(class, rule)` pairs currently hold a row
+  // for this spell" so we can diff against the next evaluation.
+  const existingByClassRule = new Map<string, string>(); // `${classId}|${ruleId}` -> rowId
+  for (const r of existingRuleRows) {
+    const ruleId = r.source.replace(/^rule:/, '');
+    existingByClassRule.set(`${r.class_id}|${ruleId}`, r.id);
+  }
+
+  // Walk every `(rule, class)` application. For each, check whether
+  // the spell now matches the rule. INSERT if matches and no row,
+  // DELETE if doesn't match and row exists. Stable batch under D1's
+  // bound-parameter limits — typical apps have <100 applications
+  // total, well within budget.
+  const inserts: { sql: string; params: any[] }[] = [];
+  const deletes: { sql: string; params: any[] }[] = [];
+  const seenPairs = new Set<string>();
+  for (const app of allApplications) {
+    const rule = ruleById.get(app.rule_id);
+    if (!rule) continue;
+    const pairKey = `${app.applies_to_id}|${app.rule_id}`;
+    if (seenPairs.has(pairKey)) continue; // (rule,class) duplicates guard
+    seenPairs.add(pairKey);
+
+    const shouldHave = spellMatchesRule(spellInput, rule, tagIndex);
+    const existingRowId = existingByClassRule.get(pairKey);
+
+    if (shouldHave && !existingRowId) {
+      inserts.push({
+        sql: `INSERT INTO class_spell_lists (id, class_id, spell_id, source)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(class_id, spell_id) DO NOTHING`,
+        params: [crypto.randomUUID(), app.applies_to_id, spellId, `rule:${app.rule_id}`],
+      });
+      inserted.push({ classId: app.applies_to_id, ruleId: app.rule_id });
+    } else if (!shouldHave && existingRowId) {
+      deletes.push({
+        sql: `DELETE FROM class_spell_lists WHERE id = ?`,
+        params: [existingRowId],
+      });
+      removed.push({ classId: app.applies_to_id, ruleId: app.rule_id });
+    }
+  }
+
+  // Also DELETE stale rows whose `(class, rule)` pair is no longer
+  // in `spell_rule_applications` (rule was unapplied since the row
+  // was inserted). Without this they'd linger as orphans.
+  for (const [pairKey, rowId] of existingByClassRule) {
+    if (seenPairs.has(pairKey)) continue;
+    const [classId, ruleId] = pairKey.split('|');
+    deletes.push({
+      sql: `DELETE FROM class_spell_lists WHERE id = ?`,
+      params: [rowId],
+    });
+    removed.push({ classId, ruleId });
+  }
+
+  if (inserts.length || deletes.length) {
+    await batchQueryD1([...deletes, ...inserts]);
+  }
+  return { inserted, removed };
+}
+
+function safeParseTagArray(raw: string): string[] {
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------

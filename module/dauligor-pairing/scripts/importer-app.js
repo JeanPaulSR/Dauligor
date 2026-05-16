@@ -7,7 +7,7 @@ import {
   SETTINGS,
   SOURCE_LIBRARY_FILE
 } from "./constants.js";
-import { buildClassImportWorkflow, fetchClassCatalog, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
+import { buildClassImportWorkflow, fetchClassCatalog, fetchClassSpellList, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
 import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
@@ -1502,8 +1502,26 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     }
 
     try {
-      const payload = await fetchJson(url);
+      // Class bundle + per-class spell list now live on separate
+      // endpoints. The class bundle is R2-cached and rebake-driven
+      // (rarely changes); the spell list endpoint is served live
+      // from D1 with a 60s HTTP cache so curation + tag-driven
+      // rule recompute reach the importer without a class rebake.
+      // Fetch both in parallel — the spell-list endpoint usually
+      // resolves faster (smaller payload, less DB work).
+      const [payload, classSpellItems] = await Promise.all([
+        fetchJson(url),
+        fetchClassSpellList(url),
+      ]);
       if (!payload) return false;
+      // Merge the spell list back onto the payload under the same
+      // field name the workflow / importer downstream code already
+      // reads — so the decoupling is invisible past this point.
+      // `buildClassImportWorkflow` consumes `payload.classSpellItems`
+      // (see class-import-service.js:783), and the embed phase
+      // reads `workflow.classSpellItems` (see line ~316). Neither
+      // needed any change once this merge is in place.
+      payload.classSpellItems = Array.isArray(classSpellItems) ? classSpellItems : [];
       this._payloadCache.set(url, payload);
       variant.payload = payload;
       return true;
