@@ -1015,13 +1015,17 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         {/* "Normal Options" — the eight axis sections
                             (Source / Level / School / Casting / Range
                             / Shape / Duration / Properties) wrapped
-                            in a single open-by-default `<details>` so
-                            the user can collapse the lot when they're
-                            tuning just tags. Mirrors the existing
-                            "Advanced Options — Tags" disclosure below.
-                            Each inner section also keeps its own
-                            chevron for granular collapse. */}
-                        <details className="group" open>
+                            in a single closed-by-default `<details>`
+                            so the editor opens slim and the user
+                            expands the group they actually need. The
+                            chip-count badge in the summary row tells
+                            them at a glance whether the current
+                            clause has any axis chips set. Mirrors the
+                            sibling "Advanced Options — Tags"
+                            disclosure below. Each inner section also
+                            keeps its own chevron for granular
+                            collapse once the parent is opened. */}
+                        <details className="group">
                           <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
                             <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
                               Normal Options
