@@ -14,6 +14,7 @@
 | Path | Page | Allowed roles |
 |---|---|---|
 | `/` | `Home.tsx` | All authenticated |
+| `/auth/redeem?token=…` | `RedeemTokenPage.tsx` | Public — used by the admin-issued sign-in-link flow |
 | `/wiki` | `Wiki.tsx` | All authenticated |
 | `/wiki/article/:id` | `LoreArticle.tsx` | All authenticated (filtered by status) |
 | `/wiki/new`, `/wiki/edit/:id` | `LoreEditor.tsx` | Staff |
@@ -26,7 +27,7 @@
 | `/compendium/options` | `UniqueOptionGroupList.tsx` | All authenticated |
 | `/compendium/tags` | `TagManager.tsx` | Admin |
 | `/characters` | `CharacterList.tsx` | All authenticated |
-| `/characters/:id` | `CharacterBuilder.tsx` | Owner or staff |
+| `/characters/:id` | `CharacterBuilder.tsx` | Owner or character-DM (admin/co-dm) |
 | `/sources` | `Sources.tsx` | All authenticated |
 | `/sources/:id` | `SourceDetail.tsx` | All authenticated |
 | `/sources/edit/:id` | `SourceEditor.tsx` | Staff |
@@ -62,11 +63,13 @@ const effectiveProfile = useMemo(() => ({
 Roughly what happens between page load and ready-to-render:
 
 1. **Auth bootstrap.** `onAuthStateChanged` fires with the current `User` (or null). If null, render the sign-in route.
-2. **Profile load.** Read `users.id = uid` from D1 via `fetchDocument('users', uid, null)`. While loading, render a splash.
-3. **Auto-promote.** If the username matches `admin`, `gm`, or the email matches a hardcoded staff email, upsert `role: admin` to D1.
-4. **Default campaign.** If `users.active_campaign_id` is null and the user has memberships, pick the first one (via `campaign_members`).
+2. **Profile load.** Call `GET /api/me` with the Firebase ID token. The server endpoint handles steps 3 and 4 itself — the client just consumes the returned `profile`. While the request is in flight, render a splash.
+3. **Auto-create + auto-promote (server-side).** `/api/me` synthesizes the `users` row on first sign-in, then forces `role = admin` for the hardcoded owner email and the `admin` / `gm` usernames.
+4. **Default campaign (server-side).** Same endpoint pins the user's first `campaign_members` row as `active_campaign_id` if it's null.
 5. **Foundation heartbeat.** Start the 30-second polling loop on `system_metadata.last_foundation_update` for cross-tab cache invalidation.
 6. **`isAuthReady = true`.** `<main>` renders the matched route.
+
+The bootstrap / promote / default-campaign logic used to run client-side with raw `fetchDocument` + `upsertDocument` calls; it moved server-side as part of the H6 closure so a coerced client can no longer spread `{ ..., role: 'admin' }` into the upsert. See [../platform/auth-firebase.md](../platform/auth-firebase.md#2-profile-load).
 
 ## Browser router quirks
 
@@ -74,23 +77,28 @@ Roughly what happens between page load and ready-to-render:
 - **Anchor links** (`#section`) work but should be rare; prefer programmatic scroll in editors.
 - **Trailing slashes** are stripped — don't link to `/wiki/`.
 
-## SPA fallback
+## SPA fallback + API resource-root dispatchers
 
-Vercel serves static files first and serverless functions at `/api/*`. Client-side routes like `/compendium/spells` don't exist on the filesystem, so a hard refresh or shared deep link would 404 without a rewrite. The catch-all in [vercel.json](../../vercel.json) sends every non-API path to `/index.html` so the SPA bundle loads and React Router resolves the route:
+Vercel serves static files first and serverless functions at `/api/*`. Client-side routes like `/compendium/spells` don't exist on the filesystem, so a hard refresh or shared deep link would 404 without a rewrite. The catch-all in [vercel.json](../../vercel.json) sends every non-API path to `/index.html` so the SPA bundle loads and React Router resolves the route.
+
+There's also a set of API-side rewrites for the per-route endpoint family. Vercel's pure-functions filesystem routing doesn't support real catch-all syntax (the `[...slug]` filename is silently treated as a single-segment dynamic param), so each multi-segment resource is implemented as one top-level file (`api/me.ts`, `api/lore.ts`, `api/campaigns.ts`) and a rewrite forwards `/api/<resource>/(.*)` to it. The handler parses the original path out of `req.url`. Same pattern `api/module.ts` has used since the Foundry export work.
 
 ```json
 {
   "rewrites": [
-    { "source": "/api/module/(.*)",  "destination": "/api/module" },
-    { "source": "/api/module",       "destination": "/api/module" },
-    { "source": "/((?!api/).*)",     "destination": "/index.html" }
+    { "source": "/api/module/(.*)",      "destination": "/api/module" },
+    { "source": "/api/module",           "destination": "/api/module" },
+    { "source": "/api/me/(.*)",          "destination": "/api/me" },
+    { "source": "/api/lore/(.*)",        "destination": "/api/lore" },
+    { "source": "/api/campaigns/(.*)",   "destination": "/api/campaigns" },
+    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ]
 }
 ```
 
-The negative lookahead `(?!api/)` skips paths under `/api/` so the serverless functions still resolve normally. Static files in `/public` and built assets in `/assets` are served from the filesystem before rewrites are evaluated, so they're unaffected by the catch-all.
+The catch-all's negative lookahead `(?!api/|assets/)` skips paths under `/api/` (so the serverless functions still resolve) and `/assets/` (so missing JS chunks return real 404s instead of being rewritten to `index.html`, which used to mask stale-bundle errors as MIME-type failures). Static files in `/public` and built assets in `/assets` are served from the filesystem before rewrites are evaluated, so they're unaffected.
 
-When you add a new route, you don't have to update `vercel.json` — the catch-all handles every new client-side path automatically.
+When you add a new client-side route, you don't have to update `vercel.json` — the SPA catch-all handles it automatically. When you add a new multi-segment **API** dispatcher, add a `/api/<resource>/(.*)` rewrite alongside the existing three.
 
 ## Navigation patterns
 
