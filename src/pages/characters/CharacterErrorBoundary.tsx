@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { AlertTriangle, Trash2, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { deleteDocument } from '../../lib/d1';
+import { auth } from '../../lib/firebase';
 
 /**
  * Character-specific error boundary.
@@ -75,10 +75,21 @@ function CharacterErrorFallback({
     if (!window.confirm('Permanently delete this character? This cannot be undone.')) return;
     setBusy(true);
     try {
-      // D1 cascade-delete fires on the `characters` row's FK children
-      // (progression / selections / inventory / spells / proficiencies /
-      // loadouts / extensions). One DELETE = full cleanup.
-      await deleteDocument('characters', id);
+      // Per-route endpoint with owner-or-DM gate. The previous
+      // deleteDocument call went through /api/d1/query whose write path
+      // requires staff role — so a non-staff owner trying to recover
+      // their broken character via this boundary would 403. The new
+      // endpoint allows owner OR DM and lets the D1 FK cascade clear
+      // every character_* child row.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/characters/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to delete character (HTTP ${res.status})`);
+      }
       // Tell the Sidebar (and any other listeners) that the user's
       // character list shrank — its recent-characters sub-list will
       // re-fetch and drop the deleted row without a page reload.

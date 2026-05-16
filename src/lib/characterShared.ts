@@ -388,34 +388,48 @@ export function generateCharacterSaveQueries(id: string, character: any) {
 /**
  * Builds a Foundry VTT compatible export object for a character.
  * Generic enough to run on client or server by providing the query function.
+ *
+ * `preloadedCharacter` — if provided, the function skips the 8 character_*
+ * SELECTs and uses the given object directly. Callers that have already
+ * loaded the character via a gated endpoint (e.g.
+ * `GET /api/characters/[id]` on the client) should pass it in — this is
+ * what `src/lib/characterExport.ts` does so the character payload only
+ * reaches users who own the character or have a DM role. The `queryFn`
+ * is still used for the non-sensitive compendium lookups
+ * (classes / subclasses / spell content).
  */
 export async function buildCharacterExport(
   characterId: string,
-  queryFn: <T>(sql: string, params?: any[]) => Promise<T[]>
+  queryFn: <T>(sql: string, params?: any[]) => Promise<T[]>,
+  preloadedCharacter?: any,
 ) {
-  const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows, extensionRows, loadoutRows] = await Promise.all([
-    queryFn<any>("SELECT * FROM characters WHERE id = ?", [characterId]),
-    queryFn<any>("SELECT * FROM character_progression WHERE character_id = ? ORDER BY level_index ASC", [characterId]),
-    queryFn<any>("SELECT * FROM character_selections WHERE character_id = ?", [characterId]),
-    queryFn<any>("SELECT * FROM character_inventory WHERE character_id = ?", [characterId]),
-    queryFn<any>("SELECT * FROM character_spells WHERE character_id = ?", [characterId]),
-    queryFn<any>("SELECT * FROM character_proficiencies WHERE character_id = ?", [characterId]),
-    queryFn<any>("SELECT * FROM character_spell_list_extensions WHERE character_id = ?", [characterId]),
-    queryFn<any>("SELECT * FROM character_spell_loadouts WHERE character_id = ?", [characterId])
-  ]);
+  let charData: any = preloadedCharacter ?? null;
 
-  if (!baseRows || baseRows.length === 0) return null;
+  if (!charData) {
+    const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows, extensionRows, loadoutRows] = await Promise.all([
+      queryFn<any>("SELECT * FROM characters WHERE id = ?", [characterId]),
+      queryFn<any>("SELECT * FROM character_progression WHERE character_id = ? ORDER BY level_index ASC", [characterId]),
+      queryFn<any>("SELECT * FROM character_selections WHERE character_id = ?", [characterId]),
+      queryFn<any>("SELECT * FROM character_inventory WHERE character_id = ?", [characterId]),
+      queryFn<any>("SELECT * FROM character_spells WHERE character_id = ?", [characterId]),
+      queryFn<any>("SELECT * FROM character_proficiencies WHERE character_id = ?", [characterId]),
+      queryFn<any>("SELECT * FROM character_spell_list_extensions WHERE character_id = ?", [characterId]),
+      queryFn<any>("SELECT * FROM character_spell_loadouts WHERE character_id = ?", [characterId])
+    ]);
 
-  const charData = rebuildCharacterFromSql(
-    baseRows[0],
-    progressionRows,
-    selectionRows,
-    inventoryRows,
-    spellRows,
-    proficiencyRows,
-    extensionRows,
-    loadoutRows
-  );
+    if (!baseRows || baseRows.length === 0) return null;
+
+    charData = rebuildCharacterFromSql(
+      baseRows[0],
+      progressionRows,
+      selectionRows,
+      inventoryRows,
+      spellRows,
+      proficiencyRows,
+      extensionRows,
+      loadoutRows
+    );
+  }
 
   if (!charData) return null;
 
