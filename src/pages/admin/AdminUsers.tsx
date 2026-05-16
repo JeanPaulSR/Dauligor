@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy } from 'lucide-react';
+import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy, Link2 } from 'lucide-react';
 
 export default function AdminUsers({ userProfile }: { userProfile: any }) {
   const [users, setUsers] = useState<any[]>([]);
@@ -25,6 +25,19 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     password: '',
     generatedAt: '',
   });
+  // Non-destructive sign-in link. Mirrors temporaryPasswordDialog but
+  // holds the redemption URL + expiry instead of a plaintext password.
+  // We render a separate dialog (rather than overloading the existing
+  // one) so the visual + copy language stays unambiguous — admins need
+  // to know at a glance whether they just overwrote a password or
+  // issued a side-channel link.
+  const [signInLinkDialog, setSignInLinkDialog] = useState<{ isOpen: boolean, displayName: string, link: string, expiresAt: string }>({
+    isOpen: false,
+    displayName: '',
+    link: '',
+    expiresAt: '',
+  });
+  const [signInLinkUserId, setSignInLinkUserId] = useState('');
   const [campaignSearch, setCampaignSearch] = useState('');
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', role: 'user', campaignIds: [] as string[] });
   const [loading, setLoading] = useState(false);
@@ -250,6 +263,72 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     } catch (err: any) {
       console.error('Failed to copy temporary password:', err);
       toast.error('Failed to copy temporary password.');
+    }
+  };
+
+  /**
+   * Non-destructive password recovery. Hits /api/admin/users/:id/sign-in-token
+   * which mints a Firebase custom token (1 hour TTL). We then build a
+   * https://<origin>/auth/redeem?token=... URL the admin can share. The
+   * target user's Firebase Auth password is NOT changed — when they
+   * click the link, signInWithCustomToken authenticates them for that
+   * session only and their original password keeps working.
+   *
+   * Prefer this over handleGenerateTemporaryPassword unless you
+   * explicitly want to invalidate the user's existing password.
+   */
+  const handleGenerateSignInLink = async (userRecord: any) => {
+    if (!auth.currentUser) {
+      toast.error('You must be signed in to generate a sign-in link.');
+      return;
+    }
+
+    setSignInLinkUserId(userRecord.id);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const response = await fetch(`/api/admin/users/${userRecord.id}/sign-in-token`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Sign-in-token endpoint not found. The deploy may be stale — refresh the page.');
+        }
+        throw new Error(result.error || 'Failed to mint sign-in token.');
+      }
+
+      // Build the redemption URL against the current origin so it works
+      // identically across prod / preview / local dev without the API
+      // having to know its own public URL.
+      const link = `${window.location.origin}/auth/redeem?token=${encodeURIComponent(result.token)}`;
+
+      setSignInLinkDialog({
+        isOpen: true,
+        displayName: userRecord.displayName || userRecord.username || 'User',
+        link,
+        expiresAt: result.expiresAt || '',
+      });
+      toast.success(`Sign-in link generated for ${userRecord.displayName || userRecord.username}.`);
+    } catch (err: any) {
+      console.error('Failed to generate sign-in link:', err);
+      toast.error(err.message || 'Failed to generate sign-in link.');
+    } finally {
+      setSignInLinkUserId('');
+    }
+  };
+
+  const handleCopySignInLink = async () => {
+    try {
+      await navigator.clipboard.writeText(signInLinkDialog.link);
+      toast.success('Sign-in link copied.');
+    } catch (err: any) {
+      console.error('Failed to copy sign-in link:', err);
+      toast.error('Failed to copy sign-in link.');
     }
   };
 
@@ -537,9 +616,23 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                         <Button
                           variant="ghost"
                           size="xs"
+                          onClick={() => handleGenerateSignInLink(u)}
+                          disabled={signInLinkUserId === u.id}
+                          className="h-6 px-2 text-[10px] text-archive-blue hover:bg-archive-blue/10 border border-archive-blue/10"
+                          title="Mint a one-hour sign-in link. Does NOT change the user's password."
+                        >
+                          <Link2 className="w-3 h-3 mr-1" />
+                          {signInLinkUserId === u.id ? 'Generating...' : 'Sign-in Link'}
+                        </Button>
+                      )}
+                      {userProfile?.role === 'admin' && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
                           onClick={() => handleGenerateTemporaryPassword(u)}
                           disabled={passwordResetUserId === u.id}
                           className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10"
+                          title="Overwrite the user's password with a new random one. Destructive — their existing password stops working."
                         >
                           <KeyRound className="w-3 h-3 mr-1" />
                           {passwordResetUserId === u.id ? 'Generating...' : 'Temp Password'}
@@ -679,7 +772,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl">Temporary Password</DialogTitle>
             <DialogDescription>
-              Share this with {temporaryPasswordDialog.displayName}. It is only shown here once, so copy it before closing.
+              Share this with {temporaryPasswordDialog.displayName}. It is only shown here once, so copy it before closing. <strong>The user's previous password no longer works</strong> — they must use this one to sign in.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -696,6 +789,39 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
               <Copy className="w-4 h-4" /> Copy Password
             </Button>
             <Button onClick={() => setTemporaryPasswordDialog(prev => ({ ...prev, isOpen: false }))} className="bg-gold text-white">
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={signInLinkDialog.isOpen}
+        onOpenChange={(open) => setSignInLinkDialog(prev => ({ ...prev, isOpen: open }))}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl">One-Time Sign-In Link</DialogTitle>
+            <DialogDescription>
+              Share this link with {signInLinkDialog.displayName}. Anyone who opens it within the next hour will be signed in as them. Their current password is unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border border-archive-blue/20 bg-archive-blue/5 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-archive-blue/70">Redemption Link</p>
+              <p className="mt-2 break-all font-mono text-xs text-ink">{signInLinkDialog.link}</p>
+            </div>
+            <p className="text-xs text-ink/50">
+              {signInLinkDialog.expiresAt
+                ? `Expires at ${new Date(signInLinkDialog.expiresAt).toLocaleString()}.`
+                : 'Expires in approximately one hour.'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCopySignInLink} className="gap-2">
+              <Copy className="w-4 h-4" /> Copy Link
+            </Button>
+            <Button onClick={() => setSignInLinkDialog(prev => ({ ...prev, isOpen: false }))} className="bg-archive-blue text-white">
               Done
             </Button>
           </DialogFooter>

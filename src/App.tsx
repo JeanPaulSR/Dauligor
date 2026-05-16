@@ -53,6 +53,7 @@ import CharacterErrorBoundary from './pages/characters/CharacterErrorBoundary';
 import { TooltipProvider } from './components/ui/tooltip';
 import CampaignManager from './pages/campaign/CampaignManager';
 import CampaignEditor from './pages/campaign/CampaignEditor';
+import RedeemTokenPage from './pages/auth/RedeemTokenPage';
 
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -245,6 +246,7 @@ export default function App() {
             <div className="animate-in fade-in duration-500">
               <Routes>
                 <Route path="/" element={<Home userProfile={effectiveProfile} />} />
+                  <Route path="/auth/redeem" element={<RedeemTokenPage />} />
                   <Route path="/wiki" element={<Wiki userProfile={effectiveProfile} />} />
                   <Route path="/wiki/new" element={<LoreEditor userProfile={effectiveProfile} />} />
                   <Route path="/wiki/edit/:id" element={<LoreEditor userProfile={effectiveProfile} />} />
