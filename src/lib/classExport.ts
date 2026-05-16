@@ -1771,11 +1771,15 @@ export function getSemanticSourceId(sourceData: any, originalId: string) {
  * Generates the source export bundle for a specific source.
  */
 export async function exportSourceForFoundry(sourceId: string, includePayloads: boolean = true) {
-  const [{ default: JSZip }, { saveAs }, { fetchDocument, fetchCollection }] = await Promise.all([
+  const [{ default: JSZip }, { saveAs }, { fetchDocument, fetchCollection, clearCache }] = await Promise.all([
     import('jszip'),
     import('file-saver'),
     import('./d1'),
   ]);
+  // Drop any cached `sources` rows so a just-edited source is reflected in
+  // the export. Other tables (skills/weapons/etc.) stay cached because the
+  // per-class fetch graph re-reads the same reference data many times.
+  clearCache('sources');
   const exportFetchers = { fetchCollection, fetchDocument };
   const sourceRow = await fetchDocument<any>('sources', sourceId);
   if (!sourceRow) throw new Error("Source not found");
@@ -1924,11 +1928,12 @@ export async function exportSourceForFoundry(sourceId: string, includePayloads: 
  * Generates a full library export containing all ready sources.
  */
 export async function exportFullSourceLibrary(includePayloads: boolean = true) {
-  const [{ default: JSZip }, { saveAs }, { fetchCollection, fetchDocument }] = await Promise.all([
+  const [{ default: JSZip }, { saveAs }, { fetchCollection, fetchDocument, clearCache }] = await Promise.all([
     import('jszip'),
     import('file-saver'),
     import('./d1'),
   ]);
+  clearCache('sources');
   const exportFetchers = { fetchCollection, fetchDocument };
   const sourcesRows = await fetchCollection<any>('sources', {
     where: 'status = ?',
@@ -2081,10 +2086,11 @@ export async function exportFullSourceLibrary(includePayloads: boolean = true) {
  * Specifically exports the master library catalog.json as a raw file for manual verification.
  */
 export async function exportRawLibraryCatalogJSON() {
-  const [{ saveAs }, { fetchCollection }] = await Promise.all([
+  const [{ saveAs }, { fetchCollection, clearCache }] = await Promise.all([
     import('file-saver'),
     import('./d1'),
   ]);
+  clearCache('sources');
   const sourcesRows = await fetchCollection<any>('sources', {
     where: 'status = ?',
     params: ['ready'],
@@ -2144,10 +2150,11 @@ export async function exportRawLibraryCatalogJSON() {
  * Specifically exports a single source.json as a raw file for manual verification.
  */
 export async function exportRawSourceJSON(sourceId: string) {
-  const [{ saveAs }, { fetchDocument, fetchCollection }] = await Promise.all([
+  const [{ saveAs }, { fetchDocument, fetchCollection, clearCache }] = await Promise.all([
     import('file-saver'),
     import('./d1'),
   ]);
+  clearCache('sources');
   const sourceRow = await fetchDocument<any>('sources', sourceId);
   if (!sourceRow) throw new Error("Source not found");
   const sourceData: any = denormalizeSource(sourceRow);

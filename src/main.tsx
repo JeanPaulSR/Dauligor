@@ -44,6 +44,20 @@ window.addEventListener('unhandledrejection', (e: any) => {
   }
 }, true);
 
+// Stale-bundle recovery: when a deploy ships, dynamically imported chunks
+// from the previous build no longer exist on the server and the request
+// falls through to /index.html (Content-Type text/html), which fails strict
+// MIME for module scripts. Reload once to pick up the current bundle.
+// Guard with a session flag so a genuinely broken deploy can't trigger an
+// infinite reload loop.
+window.addEventListener('vite:preloadError', (event) => {
+  const FLAG = 'dauligor:preloadErrorReload';
+  if (sessionStorage.getItem(FLAG)) return;
+  sessionStorage.setItem(FLAG, String(Date.now()));
+  event.preventDefault();
+  location.reload();
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
