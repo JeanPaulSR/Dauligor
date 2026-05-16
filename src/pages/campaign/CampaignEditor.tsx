@@ -79,14 +79,27 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
         const usersData = await fetchCollection<any>('users');
         setAllUsers(usersData);
 
-        // Fetch Campaign via D1 helper
+        // Per-route campaign endpoint + dedicated members sub-route.
+        // Staff context (this page is gated to admin/co-dm), so the
+        // member-or-staff check on the server always admits.
         if (id) {
-          const campData = await fetchDocument<any>('campaigns', id);
+          const editIdToken = await auth.currentUser?.getIdToken();
+          const authHeaders = editIdToken ? { Authorization: `Bearer ${editIdToken}` } : {};
+          const [campRes, membersRes] = await Promise.all([
+            fetch(`/api/campaigns/${encodeURIComponent(id)}`, { headers: authHeaders }),
+            fetch(`/api/campaigns/${encodeURIComponent(id)}/members`, { headers: authHeaders }),
+          ]);
+          if (!campRes.ok) {
+            setLoading(false);
+            return;
+          }
+          const campData = (await campRes.json())?.campaign;
 
           if (campData) {
-            // Fetch members from junction table
-            const membersData = await fetchCollection<any>('campaignMembers', { where: 'campaign_id = ?', params: [id] });
-            const memberUids = membersData.map(m => m.user_id);
+            const membersBody = membersRes.ok ? await membersRes.json() : { members: [] };
+            const memberUids: string[] = Array.isArray(membersBody?.members)
+              ? membersBody.members.map((m: any) => m.user_id).filter(Boolean)
+              : [];
 
             setFormData({
               name: campData.name || '',
@@ -138,10 +151,16 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
 
       await upsertDocument('campaigns', id, campaignData);
 
-      // 2. Update junction table
-      // Fetch current members to see who to add/remove
-      const currentMembers = await fetchCollection<any>('campaignMembers', { where: 'campaign_id = ?', params: [id] });
-      const currentUids = currentMembers.map(m => m.user_id);
+      // 2. Update junction table — fetch current members via the
+      // per-route endpoint so the read goes through the same gate as
+      // the editor's initial load.
+      const saveIdToken = await auth.currentUser?.getIdToken();
+      const currentRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}/members`, {
+        headers: saveIdToken ? { Authorization: `Bearer ${saveIdToken}` } : {},
+      });
+      const currentBody = currentRes.ok ? await currentRes.json() : { members: [] };
+      const currentMembers: any[] = Array.isArray(currentBody?.members) ? currentBody.members : [];
+      const currentUids = currentMembers.map((m) => m.user_id);
 
       // Users to add
       const toAdd = formData.playerIds.filter(uid => !currentUids.includes(uid));

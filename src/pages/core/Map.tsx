@@ -83,15 +83,28 @@ export default function Map({ userProfile }: { userProfile: any }) {
 
   const selectedMap = useMemo(() => maps.find(m => m.id === selectedMapId) || null, [maps, selectedMapId]);
 
-  // 1. Resolve the active campaign's era.
+  // 1. Resolve the active campaign's era via the per-route endpoint.
+  // The user is a member of their own active campaign so the
+  // member-or-staff gate always admits; we only need `era_id` for the
+  // map filter so this could go through the dedicated path, but
+  // re-using the single-campaign endpoint keeps one path for all
+  // /api/campaigns/[id] reads.
   useEffect(() => {
     let cancelled = false;
     if (!activeCampaignId) { setEraId(null); return; }
     (async () => {
       try {
-        const camp = await fetchDocument<any>('campaigns', activeCampaignId);
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/campaigns/${encodeURIComponent(activeCampaignId)}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
         if (cancelled) return;
-        setEraId(camp?.era_id ?? null);
+        if (!res.ok) {
+          setEraId(null);
+          return;
+        }
+        const body = await res.json();
+        setEraId(body?.campaign?.era_id ?? null);
       } catch (err) {
         console.error('Failed to load active campaign:', err);
       }

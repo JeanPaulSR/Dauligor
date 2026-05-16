@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { fetchDocument } from '../lib/d1';
 import { auth } from '../lib/firebase';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
@@ -48,9 +47,20 @@ export default function Sidebar({
     const fetchCampaign = async () => {
       try {
         if (userProfile?.active_campaign_id) {
-          const data = await fetchDocument<any>('campaigns', userProfile.active_campaign_id);
-          if (data) {
-            setCampaign(data);
+          // Per-route campaign endpoint — the active-campaign id came
+          // from the user's own profile via /api/me, so they're always
+          // a member of it, so the member-or-staff gate on the server
+          // always admits. 404 here would mean the campaign was
+          // deleted; degrade silently.
+          const idToken = await auth.currentUser?.getIdToken();
+          const res = await fetch(`/api/campaigns/${encodeURIComponent(userProfile.active_campaign_id)}`, {
+            headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+          });
+          if (res.ok) {
+            const body = await res.json();
+            if (body?.campaign) setCampaign(body.campaign);
+          } else {
+            setCampaign(null);
           }
         } else {
           setCampaign(null);

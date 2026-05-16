@@ -138,22 +138,26 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
     const loadFoundation = async () => {
       try {
-        // Lore list goes through the per-route endpoint (server strips
-        // dm_notes for the picker — the editor doesn't need it for
-        // sibling-link selection). The other foundation reads still
-        // hit /api/d1/query while their per-route migrations are
-        // pending in later audit batches.
+        // Lore + campaigns both go through their per-route endpoints
+        // now. The editor is staff-gated (loreEditor lives behind
+        // isStaff up at line 137), so the server returns the full
+        // campaign list either way. Other foundation reads
+        // (eras / tagGroups / tags) still hit /api/d1/query while
+        // their per-route migrations are pending in later audit
+        // batches.
         const idToken = await auth.currentUser?.getIdToken();
-        const [campaignsData, erasData, groupsData, tagsData, loreRes] = await Promise.all([
-          fetchCollection('campaigns', { orderBy: 'name ASC' }),
+        const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+        const [campRes, erasData, groupsData, tagsData, loreRes] = await Promise.all([
+          fetch('/api/campaigns', { headers: authHeaders }),
           fetchCollection('eras', { orderBy: '"order" ASC' }),
           fetchCollection('tagGroups', { where: "classifications LIKE '%lore%'" }),
           fetchCollection('tags'),
-          fetch('/api/lore/articles?orderBy=title%20ASC', {
-            headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-          }),
+          fetch('/api/lore/articles?orderBy=title%20ASC', { headers: authHeaders }),
         ]);
+        if (!campRes.ok) throw new Error(`Failed to load campaigns (HTTP ${campRes.status})`);
         if (!loreRes.ok) throw new Error(`Failed to load lore articles (HTTP ${loreRes.status})`);
+        const campaignsBody = await campRes.json();
+        const campaignsData: any[] = Array.isArray(campaignsBody?.campaigns) ? campaignsBody.campaigns : [];
         const loreBody = await loreRes.json();
         const articlesData: any[] = Array.isArray(loreBody?.articles) ? loreBody.articles : [];
 

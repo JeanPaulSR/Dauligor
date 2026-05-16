@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
-import { fetchDocument } from '../../lib/d1';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Book, Map as MapIcon, Users, ChevronRight, Sparkles, ScrollText, History, Shield, Zap, Swords, Wand2, Hammer, Star, Home as HomeIcon, Plus, LogIn } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -48,13 +47,17 @@ export default function Home({ userProfile }: { userProfile: any }) {
         }
         setSpecialArticles(articlesMap);
 
-        // 2. Fetch Active Campaign and its Recommended Lore. Campaign
-        // row still goes through /api/d1/query for now (lore-only
-        // migration in this commit); the lore read goes through the
-        // per-route GET so dm_notes/draft-status checks happen
+        // 2. Fetch Active Campaign and its Recommended Lore via the
+        // per-route endpoints. Active campaign read goes through
+        // /api/campaigns/[id]; the lore read goes through
+        // /api/lore/articles/[id] so draft visibility checks happen
         // server-side.
         if (userProfile?.active_campaign_id) {
-          const campaignData = await fetchDocument<any>('campaigns', userProfile.active_campaign_id);
+          const campaignRes = await fetch(
+            `/api/campaigns/${encodeURIComponent(userProfile.active_campaign_id)}`,
+            { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+          );
+          const campaignData = campaignRes.ok ? (await campaignRes.json())?.campaign : null;
 
           if (campaignData) {
             setActiveCampaign(campaignData);

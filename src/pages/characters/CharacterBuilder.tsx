@@ -3229,8 +3229,19 @@ export default function CharacterBuilder({
         }
 
         if (isStaff) {
-          const camps = await fetchCollection<any>("campaigns");
-          setCampaigns(camps);
+          // Staff context — /api/campaigns returns every campaign for
+          // admin/co-dm callers, which matches the previous
+          // `fetchCollection("campaigns")` behavior. Players would
+          // see only their own; this branch is gated on isStaff so
+          // that distinction doesn't matter here.
+          const campIdToken = await auth.currentUser?.getIdToken();
+          const campRes = await fetch('/api/campaigns', {
+            headers: campIdToken ? { Authorization: `Bearer ${campIdToken}` } : {},
+          });
+          if (campRes.ok) {
+            const campBody = await campRes.json();
+            setCampaigns(Array.isArray(campBody?.campaigns) ? campBody.campaigns : []);
+          }
         }
 
         // Attributes load first so we can map skill.ability_id → identifier

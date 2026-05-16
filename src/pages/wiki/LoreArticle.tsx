@@ -181,12 +181,20 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
           setSecrets(Array.isArray(secretsBody?.secrets) ? secretsBody.secrets : []);
         }
 
-        // 4. Foundation Data
-        const [campaignsData, erasData] = await Promise.all([
-          fetchCollection<any>('campaigns'),
-          fetchCollection<any>('eras', { orderBy: '"order" ASC' })
+        // 4. Foundation Data. Campaigns come from /api/campaigns —
+        // server returns role-filtered list (staff sees all, players
+        // see only their own). The article-visibility logic below
+        // matches lookups against the viewer's active campaign id, so
+        // a player-filtered list is the right shape.
+        const foundationIdToken = await auth.currentUser?.getIdToken();
+        const foundationAuth = foundationIdToken ? { Authorization: `Bearer ${foundationIdToken}` } : {};
+        const [campRes, erasData] = await Promise.all([
+          fetch('/api/campaigns', { headers: foundationAuth }),
+          fetchCollection<any>('eras', { orderBy: '"order" ASC' }),
         ]);
-
+        const campaignsData: any[] = campRes.ok
+          ? (await campRes.json())?.campaigns ?? []
+          : [];
 
         setCampaigns(campaignsData);
         setAllCampaigns(campaignsData);

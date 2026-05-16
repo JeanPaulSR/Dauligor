@@ -32,8 +32,18 @@ export default function CampaignManager({ userProfile }: { userProfile: any }) {
     const fetchCampaignAndArticles = async () => {
       if (!id) return;
       try {
-        // Fetch campaign via D1 helper (D1-only)
-        const campData = await fetchDocument<any>('campaigns', id);
+        // Per-route campaign endpoint. Member-or-staff gate runs
+        // server-side; non-members get a 404 (collapsed with "doesn't
+        // exist" so probes can't enumerate ids).
+        const idToken = await auth.currentUser?.getIdToken();
+        const campRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!campRes.ok) {
+          setLoading(false);
+          return;
+        }
+        const campData = (await campRes.json())?.campaign;
 
         if (campData) {
           setCampaign(campData);

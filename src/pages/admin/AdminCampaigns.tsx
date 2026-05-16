@@ -53,17 +53,30 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
     const loadAllAdminData = async () => {
       try {
-        const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'created_at DESC' });
+        // /api/campaigns gives admins every campaign with
+        // `memberCount` pre-computed, so we no longer need the
+        // separate `fetchCollection('campaignMembers')` enumeration
+        // for the dashboard counts. That was the worst single source
+        // of H7 leakage on admin pages (and still leaked even on
+        // staff-only routes since the network call fires before any
+        // role check).
+        const idToken = await auth.currentUser?.getIdToken();
+        const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+        const campRes = await fetch('/api/campaigns', { headers: authHeaders });
+        if (!campRes.ok) throw new Error(`Failed to load campaigns (HTTP ${campRes.status})`);
+        const campBody = await campRes.json();
+        const campaignsData: any[] = Array.isArray(campBody?.campaigns) ? campBody.campaigns : [];
         setCampaigns(campaignsData.map(remapCampaign));
 
         const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
         setEras(erasData.map(remapEra));
 
+        // Users + membership enumeration still go through the legacy
+        // SQL proxy (admin-gated by the route guard) until the
+        // /api/admin/users family lands. That migration covers
+        // column-scoping (M2) and the broader campaign_members
+        // enumeration for the user picker.
         const usersData = await fetchCollection<any>('users');
-        // Users have `display_name` etc.; the campaign-membership relation now
-        // lives in the campaign_members junction table — pull memberships once
-        // and attach them so the existing `u.campaignIds?.includes(...)` UI
-        // logic keeps working.
         const memberRows = await fetchCollection<any>('campaignMembers');
         const membershipsByUser = new Map<string, string[]>();
         memberRows.forEach((m: any) => {
@@ -116,8 +129,14 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       setNewCampaign({ name: '', description: '', eraId: '' });
       toast.success('Campaign created');
 
-      // Refresh list (snake_case rows + remap to camelCase the UI expects)
-      const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'created_at DESC' });
+      // Refresh list through the per-route endpoint (server filters
+      // by role + emits memberCount, same as the initial load).
+      const refreshIdToken = await auth.currentUser?.getIdToken();
+      const refreshRes = await fetch('/api/campaigns', {
+        headers: refreshIdToken ? { Authorization: `Bearer ${refreshIdToken}` } : {},
+      });
+      const refreshBody = refreshRes.ok ? await refreshRes.json() : { campaigns: [] };
+      const campaignsData: any[] = Array.isArray(refreshBody?.campaigns) ? refreshBody.campaigns : [];
       setCampaigns(campaignsData.map((c: any) => ({
         ...c,
         eraId: c.era_id,
