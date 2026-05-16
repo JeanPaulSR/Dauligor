@@ -2220,17 +2220,39 @@ export default function CharacterBuilder({
       // majority of selectedOptions ids. `features` is the fall-through
       // for advancement types whose pool comes from per-class features
       // (e.g. feature-choice advancements that pick from a class's
-      // feature roster rather than a uniqueOptionGroup). Without this
-      // fall-through, anything stored against a feature-pool advancement
-      // shows up as a raw ID on the FEATURES tab's "Selected Advancement
-      // Options" chip strip — which is what the user reported on legacy
-      // characters.
+      // feature roster rather than a uniqueOptionGroup).
+      //
+      // The base-* proficiency / language / feat advancements store
+      // references into other foundation tables — `base-skills` picks
+      // from `skills`, `base-tools` picks from `tools`, etc. Without
+      // those tables in the fall-through list, a player who chose
+      // Investigation + Tinker's Tools at level 1 saw their picks
+      // render as raw IDs ("Unresolved · 7dGhEPlbq7…") in BOTH the
+      // FEATURES tab's chip strip AND the Granted Items list, because
+      // `buildGrantedItemLookups` reads from this same `optionsCache`.
+      //
+      // Sequential per-id fetching is slow worst-case (one round trip
+      // per table per missing id) but the result is cached so the cost
+      // only lands the first time a fresh character loads. A faster
+      // version would parse the `selectedOptionsMap` key's `choice:<T>`
+      // token to pick the right table directly; left for a follow-up
+      // since the band-aid here is small and the perf is acceptable
+      // at the current scale (~10 selections per character).
       //
       // Resolved rows get keyed by `row.id` AND by the originally-
       // requested id (in case the row reports a different canonical id
-      // for whatever reason). Tries each table sequentially per id so
-      // we don't waste a round-trip when the first attempt hits.
-      const fallbackTables = ["uniqueOptionItems", "features"];
+      // for whatever reason).
+      const fallbackTables = [
+        "uniqueOptionItems",
+        "features",
+        "skills",
+        "tools",
+        "armor",
+        "weapons",
+        "languages",
+        "feats",
+        "attributes",
+      ];
 
       try {
         const resolved: any[] = [];
