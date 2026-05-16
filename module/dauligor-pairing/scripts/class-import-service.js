@@ -6107,9 +6107,26 @@ function normalizeSpellcastingModuleFlags(spellcasting) {
   return Object.keys(metadata).length ? metadata : null;
 }
 
+/**
+ * Map a Dauligor spellcasting `type` ("prepared" / "known" / "spellbook")
+ * to dnd5e's `system.spellcasting.preparation.mode` semantics.
+ *
+ *   - "prepared"  (Cleric, Druid, Paladin)        → "prepared"
+ *   - "spellbook" (Wizard)                         → "prepared"
+ *     Wizard's spellbook IS the prepared model in dnd5e — the spellbook
+ *     holds the pool, the user prepares a subset each day with a
+ *     formula-driven cap (INT mod + level). Mapping spellbook → "always"
+ *     would tell dnd5e "no prep needed" and drop the formula entirely.
+ *   - "known"     (Bard, Sorcerer, Warlock, Ranger) → "always"
+ *     Known spells are always available; no daily prep step.
+ *
+ * Used by `normalizePreparedSpellFormula` to gate whether the class
+ * item ships a `preparation.formula` (only the formula-bearing types
+ * — "prepared" and "spellbook" — need one).
+ */
 function normalizeSpellPreparationMode(type) {
   const normalized = trimString(type).toLowerCase();
-  if (normalized === "prepared") return "prepared";
+  if (normalized === "prepared" || normalized === "spellbook") return "prepared";
   return "always";
 }
 
