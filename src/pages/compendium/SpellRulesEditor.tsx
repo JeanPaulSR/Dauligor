@@ -1164,6 +1164,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           <div className="mt-4 space-y-6 pl-1">
                             {tagGroups.map(group => (
                               <TagGroupFilter
+                                compact
                                 key={group.id}
                                 group={group}
                                 tags={(tagsByGroup[group.id] || []) as any}

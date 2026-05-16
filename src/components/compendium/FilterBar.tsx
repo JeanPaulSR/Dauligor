@@ -440,6 +440,11 @@ export interface TagGroupFilterProps {
   cycleGroupMode?: (groupId: string) => void;
   exclusionMode?: 'AND' | 'OR' | 'XOR';
   cycleExclusionMode?: (groupId: string) => void;
+  /** Trims the group-header typography + spacing for surfaces stacking
+   *  many groups in a confined area (currently the SpellRulesEditor's
+   *  Advanced Options disclosure). Mirrors the `compact` flag on
+   *  AxisFilterSection — same compact treatment, same callers. */
+  compact?: boolean;
 }
 
 export function TagGroupFilter({
@@ -452,6 +457,7 @@ export function TagGroupFilter({
   cycleGroupMode,
   exclusionMode,
   cycleExclusionMode,
+  compact,
 }: TagGroupFilterProps) {
   // All hooks before any early returns — React rules.
   const { chipSearch } = useFilterBarContext();
@@ -512,8 +518,15 @@ export function TagGroupFilter({
     );
   };
 
+  // Compact styling matches the AxisFilterSection treatment below —
+  // smaller 10px gold caption, tighter vertical rhythm — for surfaces
+  // stacking many groups inside a confined editor pane.
+  const titleClass = compact
+    ? 'text-[10px] font-black uppercase tracking-[0.16em] text-gold/80'
+    : 'h3-title uppercase text-ink';
+  const groupGap = compact ? 'space-y-1' : 'space-y-2';
   return (
-    <div className="space-y-2">
+    <div className={groupGap}>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <button
@@ -523,7 +536,7 @@ export function TagGroupFilter({
             title={hidden ? 'Expand section' : 'Collapse section'}
           >
             {hidden ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            <span className="h3-title uppercase text-ink">{group.name}</span>
+            <span className={titleClass}>{group.name}</span>
           </button>
           {!hidden && (
             <div className="flex items-center gap-3">
