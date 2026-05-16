@@ -50,17 +50,23 @@ export type SpellRule = {
   name: string;
   description: string;
   /**
-   * Stored as a `RuleQuery` (flat single-clause shape). At runtime
-   * the raw JSON may also be a multi-clause root
-   * `{ clauses: RuleQuery[] }` — that shape lives behind the
-   * `RuleClauseRoot` union in `lib/spellFilters.ts` and is detected
-   * by the matcher via `isMultiClauseRoot`. We keep the TypeScript
-   * type as `RuleQuery` here so existing editor / summary code that
-   * pokes at `.tagStates`, `.sourceFilterIds`, etc. doesn't break;
-   * the multi-clause UI lives in a follow-up commit that widens
-   * this type and threads a `clauseIndex` through the editor.
+   * Either a legacy single-clause `RuleQuery` (one set of axis + tag
+   * filters that all must match) or a multi-clause root
+   * `{ clauses: RuleQuery[] }` (OR of clauses — a spell matches the
+   * rule if any clause matches). See `lib/spellFilters.ts ::
+   * RuleClauseRoot` for the dispatch rules.
+   *
+   * The editor (`pages/compendium/SpellRulesEditor.tsx`) saves the
+   * multi-clause shape only when the user has authored >1 clause;
+   * single-clause rules round-trip to the flat legacy shape so any
+   * downstream JSON consumer sees no change.
+   *
+   * Code that needs to read individual clauses should use
+   * `getClauses(rule.query)` rather than poking at `.tagStates`
+   * etc. directly — that helper hides the union-discrimination so
+   * single- and multi-clause rules share one code path.
    */
-  query: RuleQuery;
+  query: RuleClauseRoot;
   manualSpells: string[];
   createdAt?: string;
   updatedAt?: string;
@@ -438,20 +444,20 @@ export async function computeClassRebuildDelta(
 // ---------------------------------------------------------------------------
 
 function deserializeRule(row: any): SpellRule {
-  // `query` is JSON. It can be either:
-  //   - Legacy flat `RuleQuery` (every rule written before multi-
-  //     clause support), or
+  // `query` is JSON. Either shape is valid:
+  //   - Legacy flat `RuleQuery` (every rule written before
+  //     multi-clause support), or
   //   - Multi-clause `{ clauses: RuleQuery[] }` (`RuleClauseRoot`).
-  // Both shapes pass through as-is — the matcher dispatch
-  // (`matchAnyClause` / `getClauses` in `lib/spellFilters.ts`)
-  // handles both at evaluation time. TypeScript here narrows to
-  // `RuleQuery` so the editor's flat-shape pokes stay legal; the
-  // multi-clause UI in the follow-up commit widens this.
+  // The matcher dispatch (`matchAnyClause` / `getClauses` in
+  // `lib/spellFilters.ts`) handles both at evaluation time, and the
+  // editor decides at save time whether to serialize as flat or
+  // multi-clause based on whether the user has authored multiple
+  // clauses.
   return {
     id: row.id,
     name: row.name,
     description: row.description || '',
-    query: parseJsonObject(row.query) as RuleQuery,
+    query: parseJsonObject(row.query) as RuleClauseRoot,
     manualSpells: parseJsonArray(row.manual_spells).map(String),
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -25,10 +25,12 @@ import {
   SHAPE_LABELS,
   SHAPE_ORDER,
   deriveSpellFilterFacets,
+  getClauses,
   type ActivationBucket,
   type DurationBucket,
   type PropertyFilter,
   type RangeBucket,
+  type RuleClauseRoot,
   type RuleQuery,
   type ShapeBucket,
   type SpellMatchInput,
@@ -192,6 +194,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       setDraft(null);
       setDraftDirty(false);
       setDraftApplications([]);
+      setActiveClauseIndex(0);
       return;
     }
     const rule = rules.find(r => r.id === selectedRuleId) || null;
@@ -202,48 +205,55 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       // cleared as part of the migration. Authors don't see a behavior
       // change — every legacy entry becomes an `include` chip with the
       // default OR combinator.
-      const q = rule.query;
-      const migrated: Partial<typeof q> = {};
+      //
+      // Multi-clause aware: the migration runs PER CLAUSE so a rule
+      // with `{ clauses: [...] }` gets each clause cleaned up
+      // individually. Single-clause flat rules go through the same
+      // code path via `getClauses` returning a singleton.
       const arrToStates = (arr?: string[]): Record<string, number> | undefined => {
         if (!arr || arr.length === 0) return undefined;
         const out: Record<string, number> = {};
         for (const v of arr) out[v] = 1;
         return out;
       };
-      // Tags: rich tagStates already covers this — same logic, kept in
-      // case a rule has BOTH the legacy and the rich (rare/partial).
-      if ((!q.tagStates || Object.keys(q.tagStates).length === 0) && q.tagFilterIds?.length) {
-        migrated.tagStates = arrToStates(q.tagFilterIds);
-        migrated.tagFilterIds = undefined;
-      }
-      // Per-axis migration. Each promotes legacy array -> rich filter
-      // and nulls the legacy field so saves write only the new shape.
-      const promoteAxis = (
-        legacyKey: 'sourceFilterIds' | 'levelFilters' | 'schoolFilters' | 'activationFilters' | 'rangeFilters' | 'durationFilters' | 'shapeFilters' | 'propertyFilters',
-        axisKey: 'source' | 'level' | 'school' | 'activation' | 'range' | 'duration' | 'shape' | 'property',
-      ) => {
-        const legacy = q[legacyKey] as string[] | undefined;
-        const rich = q[axisKey] as any;
-        const hasRich = rich && rich.states && Object.keys(rich.states).length > 0;
-        if (!hasRich && legacy && legacy.length > 0) {
-          (migrated as any)[axisKey] = { states: arrToStates(legacy) };
-          (migrated as any)[legacyKey] = undefined;
+      const migrateClause = (q: RuleQuery): RuleQuery => {
+        const migrated: Partial<RuleQuery> = {};
+        if ((!q.tagStates || Object.keys(q.tagStates).length === 0) && q.tagFilterIds?.length) {
+          migrated.tagStates = arrToStates(q.tagFilterIds);
+          migrated.tagFilterIds = undefined;
         }
+        const promoteAxis = (
+          legacyKey: 'sourceFilterIds' | 'levelFilters' | 'schoolFilters' | 'activationFilters' | 'rangeFilters' | 'durationFilters' | 'shapeFilters' | 'propertyFilters',
+          axisKey: 'source' | 'level' | 'school' | 'activation' | 'range' | 'duration' | 'shape' | 'property',
+        ) => {
+          const legacy = q[legacyKey] as string[] | undefined;
+          const rich = q[axisKey] as any;
+          const hasRich = rich && rich.states && Object.keys(rich.states).length > 0;
+          if (!hasRich && legacy && legacy.length > 0) {
+            (migrated as any)[axisKey] = { states: arrToStates(legacy) };
+            (migrated as any)[legacyKey] = undefined;
+          }
+        };
+        promoteAxis('sourceFilterIds', 'source');
+        promoteAxis('levelFilters', 'level');
+        promoteAxis('schoolFilters', 'school');
+        promoteAxis('activationFilters', 'activation');
+        promoteAxis('rangeFilters', 'range');
+        promoteAxis('durationFilters', 'duration');
+        promoteAxis('shapeFilters', 'shape');
+        promoteAxis('propertyFilters', 'property');
+        return Object.keys(migrated).length > 0 ? { ...q, ...migrated } : q;
       };
-      promoteAxis('sourceFilterIds', 'source');
-      promoteAxis('levelFilters', 'level');
-      promoteAxis('schoolFilters', 'school');
-      promoteAxis('activationFilters', 'activation');
-      promoteAxis('rangeFilters', 'range');
-      promoteAxis('durationFilters', 'duration');
-      promoteAxis('shapeFilters', 'shape');
-      promoteAxis('propertyFilters', 'property');
 
-      if (Object.keys(migrated).length > 0) {
-        setDraft({ ...rule, query: { ...q, ...migrated } });
-      } else {
-        setDraft({ ...rule });
-      }
+      const loadedClauses = getClauses(rule.query).map(migrateClause);
+      const nextQuery: RuleClauseRoot =
+        loadedClauses.length === 0
+          ? {}
+          : loadedClauses.length === 1
+            ? loadedClauses[0]
+            : { clauses: loadedClauses };
+      setDraft({ ...rule, query: nextQuery });
+      setActiveClauseIndex(0);
     }
     setDraftDirty(false);
 
@@ -331,6 +341,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     setDraft(fresh);
     setDraftDirty(true);
     setDraftApplications([]);
+    setActiveClauseIndex(0);
   };
 
   const updateDraft = (patch: Partial<SpellRule>) => {
@@ -339,11 +350,88 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     setDraftDirty(true);
   };
 
-  const updateQuery = (patch: Partial<RuleQuery>) => {
+  // ── Multi-clause editing model ────────────────────────────────
+  // A rule can carry either a single `RuleQuery` (legacy flat
+  // shape) or a multi-clause root `{ clauses: RuleQuery[] }` (OR of
+  // clauses). The editor always shows ONE clause's filter chips at
+  // a time and lets the user switch via the tab strip above the
+  // filter panel.
+  //
+  // `clauses` is the canonical array regardless of which shape
+  // `draft.query` is currently in — `getClauses` flattens. The
+  // active clause is `clauses[activeClauseIndex]`. Writes go
+  // through `updateActiveClause`, which rebuilds the clauses array
+  // immutably and re-serializes `draft.query` (flat when
+  // `clauses.length === 1`, multi-clause object otherwise).
+  const [activeClauseIndex, setActiveClauseIndex] = useState(0);
+  const clauses: RuleQuery[] = useMemo(
+    () => (draft ? getClauses(draft.query) : []),
+    [draft],
+  );
+  const safeActiveIndex = Math.min(activeClauseIndex, Math.max(0, clauses.length - 1));
+  const activeClause: RuleQuery = clauses[safeActiveIndex] || {};
+
+  /**
+   * Serialize an updated clauses array back into a RuleClauseRoot.
+   * Single-clause arrays round-trip to the legacy flat shape so
+   * the stored JSON stays minimal; multi-clause arrays go to
+   * `{ clauses: [...] }`.
+   */
+  const clausesToRoot = (next: RuleQuery[]): RuleClauseRoot => {
+    if (next.length === 0) return {};
+    if (next.length === 1) return next[0];
+    return { clauses: next };
+  };
+
+  const updateActiveClause = (patch: Partial<RuleQuery>) => {
     if (!draft) return;
-    setDraft({ ...draft, query: { ...draft.query, ...patch } });
+    const next = clauses.map((c, i) =>
+      i === safeActiveIndex ? { ...c, ...patch } : c,
+    );
+    setDraft({ ...draft, query: clausesToRoot(next) });
     setDraftDirty(true);
   };
+
+  /** Reset the active clause to an empty `RuleQuery` (clears every
+   *  chip in this clause). Other clauses are untouched. */
+  const clearActiveClause = () => {
+    if (!draft) return;
+    const next = clauses.map((c, i) => (i === safeActiveIndex ? {} : c));
+    setDraft({ ...draft, query: clausesToRoot(next) });
+    setDraftDirty(true);
+  };
+
+  /** Append a fresh empty clause and switch focus to it. */
+  const addClause = () => {
+    if (!draft) return;
+    const next = [...clauses, {}];
+    setDraft({ ...draft, query: clausesToRoot(next) });
+    setActiveClauseIndex(next.length - 1);
+    setDraftDirty(true);
+  };
+
+  /**
+   * Drop a clause by index. Refuses to delete the last remaining
+   * clause — every rule must carry at least one clause (an empty
+   * RuleQuery, if needed). Shifts `activeClauseIndex` so the user
+   * stays anchored to a valid clause after the removal.
+   */
+  const removeClause = (idx: number) => {
+    if (!draft) return;
+    if (clauses.length <= 1) return;
+    const next = clauses.filter((_, i) => i !== idx);
+    let nextActive = safeActiveIndex;
+    if (idx < safeActiveIndex) nextActive -= 1;
+    if (nextActive >= next.length) nextActive = next.length - 1;
+    setDraft({ ...draft, query: clausesToRoot(next) });
+    setActiveClauseIndex(Math.max(0, nextActive));
+    setDraftDirty(true);
+  };
+
+  // Kept for the small number of legacy call sites that still want
+  // to write to a Partial<RuleQuery> on the active clause. All new
+  // callers should use `updateActiveClause` directly.
+  const updateQuery = updateActiveClause;
 
   // Per-axis helpers. `axisKey` is the canonical RuleQuery field
   // (source / level / school / activation / range / duration / shape /
@@ -355,7 +443,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   type LegacyFieldName = 'sourceFilterIds' | 'levelFilters' | 'schoolFilters' | 'activationFilters' | 'rangeFilters' | 'durationFilters' | 'shapeFilters' | 'propertyFilters';
   const cycleAxisState = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, value: string) => {
     if (!draft) return;
-    const axis = (draft.query[axisKey] as any) || {};
+    const axis = (activeClause[axisKey] as any) || {};
     const states = { ...(axis.states || {}) } as Record<string, number>;
     const cur = states[value] || 0;
     const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
@@ -365,35 +453,35 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   };
   const cycleAxisCombineMode = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
     if (!draft) return;
-    const axis = (draft.query[axisKey] as any) || {};
+    const axis = (activeClause[axisKey] as any) || {};
     const cur = (axis.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
     const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
     updateQuery({ [axisKey]: { ...axis, combineMode: next }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
   const cycleAxisExclusionMode = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
     if (!draft) return;
-    const axis = (draft.query[axisKey] as any) || {};
+    const axis = (activeClause[axisKey] as any) || {};
     const cur = (axis.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
     const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
     updateQuery({ [axisKey]: { ...axis, exclusionMode: next }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
   const axisIncludeAll = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, values: readonly string[]) => {
     if (!draft) return;
-    const axis = (draft.query[axisKey] as any) || {};
+    const axis = (activeClause[axisKey] as any) || {};
     const states: Record<string, number> = { ...(axis.states || {}) };
     for (const v of values) states[v] = 1;
     updateQuery({ [axisKey]: { ...axis, states }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
   const axisExcludeAll = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, values: readonly string[]) => {
     if (!draft) return;
-    const axis = (draft.query[axisKey] as any) || {};
+    const axis = (activeClause[axisKey] as any) || {};
     const states: Record<string, number> = { ...(axis.states || {}) };
     for (const v of values) states[v] = 2;
     updateQuery({ [axisKey]: { ...axis, states }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
   const axisClear = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
     if (!draft) return;
-    const axis = (draft.query[axisKey] as any) || {};
+    const axis = (activeClause[axisKey] as any) || {};
     updateQuery({ [axisKey]: { ...axis, states: {} }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
 
@@ -610,14 +698,17 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     value: NonNullable<RuleQuery[K]>[number],
   ) => {
     if (!draft) return;
-    const current = (draft.query[field] as any[] | undefined) || [];
+    const current = (activeClause[field] as any[] | undefined) || [];
     const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
-    updateQuery({ [field]: next } as Partial<RuleQuery>);
+    updateActiveClause({ [field]: next } as Partial<RuleQuery>);
   };
 
   const queryActiveCount = useMemo(() => {
     if (!draft) return 0;
-    const q = draft.query;
+    // Counts the chips on the ACTIVE clause only — so the FilterBar
+    // badge reflects "this clause" rather than the sum across all
+    // clauses. Switching clauses re-evaluates this memo.
+    const q = activeClause;
     const axisCount = (a: { states?: Record<string, number> } | undefined) => Object.keys(a?.states ?? {}).length;
     return (q.sourceFilterIds?.length ?? 0)
       + (q.levelFilters?.length ?? 0)
@@ -637,7 +728,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       + axisCount(q.duration)
       + axisCount(q.shape)
       + axisCount(q.property);
-  }, [draft]);
+  }, [draft, activeClauseIndex]);
 
   return (
     // Fullscreen layout — toolbar shrinks to its natural height,
@@ -814,13 +905,82 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       <span className="text-gold font-bold">{draftMatchCount}</span> spell{draftMatchCount === 1 ? '' : 's'} match (query + manual)
                     </span>
                   </div>
+
+                  {/* Clause tab strip. Each clause is an independent
+                      RuleQuery (axis filters + tag chips); a spell
+                      matches the rule if any clause matches (OR). Lets
+                      a single rule express "(all Arcane except Heal)
+                      OR (Heal only when Revival/Necromancy)" — two
+                      filter sets that can't be merged into one AND of
+                      chips. The active tab determines which clause the
+                      filter UI below edits; the +/− buttons add or
+                      remove clauses. Single-clause rules read this
+                      strip as a one-pill "Clause 1" label with the
+                      add-clause "+" affordance to its right. */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {clauses.map((_, idx) => {
+                      const isActive = idx === safeActiveIndex;
+                      return (
+                        <div
+                          key={idx}
+                          className={cn(
+                            'inline-flex items-center rounded border transition-colors',
+                            isActive
+                              ? 'border-gold bg-gold/15 text-gold'
+                              : 'border-gold/20 bg-card/50 text-ink/65 hover:border-gold/45',
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setActiveClauseIndex(idx)}
+                            className={cn(
+                              'px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors',
+                              isActive ? '' : 'hover:text-gold',
+                            )}
+                          >
+                            Clause {idx + 1}
+                          </button>
+                          {clauses.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeClause(idx)}
+                              title={`Remove Clause ${idx + 1}`}
+                              className={cn(
+                                'px-1.5 py-1 text-[10px] font-bold border-l transition-colors',
+                                isActive
+                                  ? 'border-gold/40 text-gold/70 hover:bg-blood/15 hover:text-blood'
+                                  : 'border-gold/20 text-ink/30 hover:bg-blood/10 hover:text-blood',
+                              )}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={addClause}
+                      title="Add a new clause (OR with existing clauses)"
+                      className="inline-flex items-center gap-1 rounded border border-dashed border-gold/35 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gold/70 hover:bg-gold/10 hover:border-gold transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add Clause
+                    </button>
+                    {clauses.length > 1 ? (
+                      <span className="ml-1 text-[10px] italic text-ink/45">
+                        OR-combined ({clauses.length} clauses)
+                      </span>
+                    ) : null}
+                  </div>
+
                   <FilterBar
                     search=""
                     setSearch={() => {}}
                     isFilterOpen={filterOpen}
                     setIsFilterOpen={setFilterOpen}
                     activeFilterCount={queryActiveCount}
-                    resetFilters={() => updateDraft({ query: {} })}
+                    resetFilters={clearActiveClause}
                     // Filter state on this page IS the document being
                     // edited (draft.query → spell_rules.query JSON),
                     // not a transient page-level filter. Override the
@@ -836,11 +996,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Source"
                           values={sources.map(s => ({ value: s.id, label: String(s.abbreviation || s.shortName || s.name || s.id) }))}
-                          states={draft.query.source?.states || {}}
+                          states={activeClause.source?.states || {}}
                           cycleState={(v) => cycleAxisState('source', 'sourceFilterIds', v)}
-                          combineMode={draft.query.source?.combineMode}
+                          combineMode={activeClause.source?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('source', 'sourceFilterIds')}
-                          exclusionMode={draft.query.source?.exclusionMode}
+                          exclusionMode={activeClause.source?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('source', 'sourceFilterIds')}
                           includeAll={() => axisIncludeAll('source', 'sourceFilterIds', sources.map(s => s.id))}
                           excludeAll={() => axisExcludeAll('source', 'sourceFilterIds', sources.map(s => s.id))}
@@ -849,11 +1009,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Spell Level"
                           values={LEVEL_VALUES.map(lvl => ({ value: lvl, label: lvl === '0' ? 'Cantrip' : `Level ${lvl}` }))}
-                          states={draft.query.level?.states || {}}
+                          states={activeClause.level?.states || {}}
                           cycleState={(v) => cycleAxisState('level', 'levelFilters', v)}
-                          combineMode={draft.query.level?.combineMode}
+                          combineMode={activeClause.level?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('level', 'levelFilters')}
-                          exclusionMode={draft.query.level?.exclusionMode}
+                          exclusionMode={activeClause.level?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('level', 'levelFilters')}
                           includeAll={() => axisIncludeAll('level', 'levelFilters', LEVEL_VALUES)}
                           excludeAll={() => axisExcludeAll('level', 'levelFilters', LEVEL_VALUES)}
@@ -862,11 +1022,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Spell School"
                           values={Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label }))}
-                          states={draft.query.school?.states || {}}
+                          states={activeClause.school?.states || {}}
                           cycleState={(v) => cycleAxisState('school', 'schoolFilters', v)}
-                          combineMode={draft.query.school?.combineMode}
+                          combineMode={activeClause.school?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('school', 'schoolFilters')}
-                          exclusionMode={draft.query.school?.exclusionMode}
+                          exclusionMode={activeClause.school?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('school', 'schoolFilters')}
                           includeAll={() => axisIncludeAll('school', 'schoolFilters', Object.keys(SCHOOL_LABELS))}
                           excludeAll={() => axisExcludeAll('school', 'schoolFilters', Object.keys(SCHOOL_LABELS))}
@@ -875,11 +1035,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Casting Time"
                           values={ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] }))}
-                          states={draft.query.activation?.states || {}}
+                          states={activeClause.activation?.states || {}}
                           cycleState={(v) => cycleAxisState('activation', 'activationFilters', v)}
-                          combineMode={draft.query.activation?.combineMode}
+                          combineMode={activeClause.activation?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('activation', 'activationFilters')}
-                          exclusionMode={draft.query.activation?.exclusionMode}
+                          exclusionMode={activeClause.activation?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('activation', 'activationFilters')}
                           includeAll={() => axisIncludeAll('activation', 'activationFilters', ACTIVATION_ORDER as readonly string[])}
                           excludeAll={() => axisExcludeAll('activation', 'activationFilters', ACTIVATION_ORDER as readonly string[])}
@@ -888,11 +1048,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Range"
                           values={RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] }))}
-                          states={draft.query.range?.states || {}}
+                          states={activeClause.range?.states || {}}
                           cycleState={(v) => cycleAxisState('range', 'rangeFilters', v)}
-                          combineMode={draft.query.range?.combineMode}
+                          combineMode={activeClause.range?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('range', 'rangeFilters')}
-                          exclusionMode={draft.query.range?.exclusionMode}
+                          exclusionMode={activeClause.range?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('range', 'rangeFilters')}
                           includeAll={() => axisIncludeAll('range', 'rangeFilters', RANGE_ORDER as readonly string[])}
                           excludeAll={() => axisExcludeAll('range', 'rangeFilters', RANGE_ORDER as readonly string[])}
@@ -901,11 +1061,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Shape"
                           values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
-                          states={draft.query.shape?.states || {}}
+                          states={activeClause.shape?.states || {}}
                           cycleState={(v) => cycleAxisState('shape', 'shapeFilters', v)}
-                          combineMode={draft.query.shape?.combineMode}
+                          combineMode={activeClause.shape?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('shape', 'shapeFilters')}
-                          exclusionMode={draft.query.shape?.exclusionMode}
+                          exclusionMode={activeClause.shape?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('shape', 'shapeFilters')}
                           includeAll={() => axisIncludeAll('shape', 'shapeFilters', SHAPE_ORDER as readonly string[])}
                           excludeAll={() => axisExcludeAll('shape', 'shapeFilters', SHAPE_ORDER as readonly string[])}
@@ -914,11 +1074,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Duration"
                           values={DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] }))}
-                          states={draft.query.duration?.states || {}}
+                          states={activeClause.duration?.states || {}}
                           cycleState={(v) => cycleAxisState('duration', 'durationFilters', v)}
-                          combineMode={draft.query.duration?.combineMode}
+                          combineMode={activeClause.duration?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('duration', 'durationFilters')}
-                          exclusionMode={draft.query.duration?.exclusionMode}
+                          exclusionMode={activeClause.duration?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('duration', 'durationFilters')}
                           includeAll={() => axisIncludeAll('duration', 'durationFilters', DURATION_ORDER as readonly string[])}
                           excludeAll={() => axisExcludeAll('duration', 'durationFilters', DURATION_ORDER as readonly string[])}
@@ -927,11 +1087,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                         <AxisFilterSection
                           title="Properties"
                           values={PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] }))}
-                          states={draft.query.property?.states || {}}
+                          states={activeClause.property?.states || {}}
                           cycleState={(v) => cycleAxisState('property', 'propertyFilters', v)}
-                          combineMode={draft.query.property?.combineMode}
+                          combineMode={activeClause.property?.combineMode}
                           cycleCombineMode={() => cycleAxisCombineMode('property', 'propertyFilters')}
-                          exclusionMode={draft.query.property?.exclusionMode}
+                          exclusionMode={activeClause.property?.exclusionMode}
                           cycleExclusionMode={() => cycleAxisExclusionMode('property', 'propertyFilters')}
                           includeAll={() => axisIncludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
                           excludeAll={() => axisExcludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
@@ -946,8 +1106,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
                             <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
                               Advanced Options — Tags
-                              {Object.keys(draft.query.tagStates ?? {}).length > 0 && (
-                                <span className="ml-2 text-gold/60">({Object.keys(draft.query.tagStates ?? {}).length} selected)</span>
+                              {Object.keys(activeClause.tagStates ?? {}).length > 0 && (
+                                <span className="ml-2 text-gold/60">({Object.keys(activeClause.tagStates ?? {}).length} selected)</span>
                               )}
                             </span>
                             <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
@@ -958,27 +1118,27 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                                 key={group.id}
                                 group={group}
                                 tags={(tagsByGroup[group.id] || []) as any}
-                                tagStates={draft.query.tagStates || {}}
-                                setTagStates={(next) => updateQuery({ tagStates: typeof next === 'function' ? next(draft.query.tagStates || {}) : next, tagFilterIds: undefined })}
+                                tagStates={activeClause.tagStates || {}}
+                                setTagStates={(next) => updateQuery({ tagStates: typeof next === 'function' ? next(activeClause.tagStates || {}) : next, tagFilterIds: undefined })}
                                 cycleTagState={(tagId) => {
-                                  const cur = (draft.query.tagStates || {})[tagId] || 0;
+                                  const cur = (activeClause.tagStates || {})[tagId] || 0;
                                   const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
-                                  const nextStates = { ...(draft.query.tagStates || {}) };
+                                  const nextStates = { ...(activeClause.tagStates || {}) };
                                   if (nextState === 0) delete nextStates[tagId];
                                   else nextStates[tagId] = nextState;
                                   updateQuery({ tagStates: nextStates, tagFilterIds: undefined });
                                 }}
-                                combineMode={(draft.query.groupCombineModes || {})[group.id]}
+                                combineMode={(activeClause.groupCombineModes || {})[group.id]}
                                 cycleGroupMode={(groupId) => {
-                                  const cur = (draft.query.groupCombineModes || {})[groupId] || 'OR';
+                                  const cur = (activeClause.groupCombineModes || {})[groupId] || 'OR';
                                   const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-                                  updateQuery({ groupCombineModes: { ...(draft.query.groupCombineModes || {}), [groupId]: nextMode } });
+                                  updateQuery({ groupCombineModes: { ...(activeClause.groupCombineModes || {}), [groupId]: nextMode } });
                                 }}
-                                exclusionMode={(draft.query.groupExclusionModes || {})[group.id]}
+                                exclusionMode={(activeClause.groupExclusionModes || {})[group.id]}
                                 cycleExclusionMode={(groupId) => {
-                                  const cur = (draft.query.groupExclusionModes || {})[groupId] || 'OR';
+                                  const cur = (activeClause.groupExclusionModes || {})[groupId] || 'OR';
                                   const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-                                  updateQuery({ groupExclusionModes: { ...(draft.query.groupExclusionModes || {}), [groupId]: nextMode } });
+                                  updateQuery({ groupExclusionModes: { ...(activeClause.groupExclusionModes || {}), [groupId]: nextMode } });
                                 }}
                               />
                             ))}
