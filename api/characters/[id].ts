@@ -23,6 +23,8 @@ import type { IncomingMessage } from "node:http";
 import {
   HttpError,
   getCredentialErrorMessage,
+  isCharacterDM,
+  requireAuthenticatedUser,
   requireCharacterAccess,
 } from "../_lib/firebase-admin.js";
 import { executeD1QueryInternal } from "../_lib/d1-internal.js";
@@ -140,7 +142,15 @@ export default async function handler(req: NodeLikeRequest, res: NodeLikeRespons
     }
 
     if (req.method === "PUT") {
-      const { decoded, isOwner } = await requireCharacterAccess(req.headers.authorization, characterId);
+      // PUT is "create or update" — CharacterBuilder hits it with a
+      // freshly-generated UUID when the user is saving a brand-new
+      // character (no row in D1 yet) AND with an existing UUID when
+      // they're editing one they (or a DM) already own. requireCharacterAccess
+      // throws 404 for the create case because it expects a row to gate
+      // against, so we do the gate inline here instead.
+      const { decoded, role } = await requireAuthenticatedUser(req.headers.authorization);
+      const callerUid: string = decoded.uid;
+      const callerIsDM = isCharacterDM(role);
 
       const body = await readJsonBody(req);
       const character = body?.character;
@@ -148,17 +158,55 @@ export default async function handler(req: NodeLikeRequest, res: NodeLikeRespons
         throw new HttpError(400, "Missing `character` in request body.");
       }
 
-      // Defense in depth: the client sets `userId` to the current user when
-      // creating a new character (CharacterBuilder.tsx:3448). If the caller
-      // is a DM editing someone else's character, the client-side `userId`
-      // should already be the owner's id; if it isn't (malicious client,
-      // stale state, etc.) we trust the existing row's owner over whatever
-      // the body says. Owners are also pinned to their own uid so a player
-      // can't reassign their character to another account.
+      // Does this character already exist?
+      const existingResult = await executeD1QueryInternal({
+        sql: "SELECT user_id FROM characters WHERE id = ? LIMIT 1",
+        params: [characterId],
+      });
+      const existingRows = Array.isArray(existingResult?.results) ? existingResult.results : [];
+      const existing = existingRows[0] as { user_id?: string } | undefined;
+
+      // Resolve the user_id we'll persist. Update vs create take
+      // different paths but end at the same shape (id from URL, userId
+      // never trustable as-is from the client).
+      let resolvedUserId: string;
+      if (existing) {
+        // UPDATE — owner or DM only. Same 404 pattern as
+        // requireCharacterAccess so probes can't enumerate which ids
+        // belong to whom by attempting writes.
+        const existingUserId = String(existing.user_id ?? "");
+        const isOwner = existingUserId === callerUid;
+        if (!isOwner && !callerIsDM) {
+          throw new HttpError(404, "Character not found.");
+        }
+        // Owner pinned to their own uid; DMs keep editing the original
+        // owner's row without accidentally reassigning ownership.
+        resolvedUserId = isOwner ? callerUid : existingUserId;
+      } else {
+        // CREATE — players can create their own, DMs can create for
+        // any user (e.g. building a quick NPC sheet for a player).
+        // Requested ownership comes from the body; we never trust it
+        // blindly.
+        const requestedUserId = typeof character.userId === "string" ? character.userId : "";
+        if (callerIsDM) {
+          resolvedUserId = requestedUserId || callerUid;
+        } else {
+          // Players are limited to creating their own characters. If
+          // the client sent a different uid (stale state, malicious
+          // mutation, anything), fail explicitly rather than silently
+          // pinning it — surfacing the mismatch helps catch bugs in
+          // the client's "isNew" branch.
+          if (requestedUserId && requestedUserId !== callerUid) {
+            throw new HttpError(403, "Cannot create a character for another user.");
+          }
+          resolvedUserId = callerUid;
+        }
+      }
+
       const characterToSave = {
         ...character,
         id: characterId, // ensure path id wins over body id
-        userId: isOwner ? decoded.uid : character.userId,
+        userId: resolvedUserId,
       };
 
       const queries = generateCharacterSaveQueries(characterId, characterToSave);
