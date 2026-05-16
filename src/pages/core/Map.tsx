@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { auth } from '../../lib/firebase';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument, queryD1 } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -127,11 +128,18 @@ export default function Map({ userProfile }: { userProfile: any }) {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await fetchCollection<{ id: string; title: string }>('lore', {
-          select: 'id, title',
-          orderBy: 'title ASC',
+        // /api/lore/articles with ?fields= keeps the wire payload tiny
+        // (we only need id + title for the marker label lookup) and
+        // routes through the per-route gate so drafts / dm_notes never
+        // ride along. Was raw `fetchCollection('lore', { select: 'id,
+        // title' })` previously.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/lore/articles?fields=id,title&orderBy=title%20ASC', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
-        if (!cancelled) setAllArticles(rows);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        if (!cancelled) setAllArticles(Array.isArray(body?.articles) ? body.articles : []);
       } catch (err) {
         console.error('Failed to load articles list:', err);
       }

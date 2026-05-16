@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { OperationType, reportClientError } from '@/lib/firebase';
+import { auth, OperationType, reportClientError } from '@/lib/firebase';
 import { fetchDocument, fetchCollection, upsertDocument, deleteDocuments } from '@/lib/d1';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,9 +65,15 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
         const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
         setEras(erasData);
 
-        // Fetch Lore via D1 helper (D1-only)
-        const loreData = await fetchCollection<any>('lore', { orderBy: 'title ASC' });
-        setLorePages(loreData);
+        // Per-route endpoint (server strips dm_notes). Staff edit
+        // surface, so the article picker shows drafts too.
+        const idToken = await auth.currentUser?.getIdToken();
+        const loreRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!loreRes.ok) throw new Error(`Failed to load lore (HTTP ${loreRes.status})`);
+        const loreBody = await loreRes.json();
+        setLorePages(Array.isArray(loreBody?.articles) ? loreBody.articles : []);
 
         // Fetch Users via D1 helper (D1-only)
         const usersData = await fetchCollection<any>('users');

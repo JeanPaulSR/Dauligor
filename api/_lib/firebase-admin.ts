@@ -20,6 +20,12 @@ const ADMIN_ROLES = new Set(["admin"]);
 // always allowed regardless of role; see `requireCharacterAccess`.
 const CHARACTER_DM_ROLES = new Set(["admin", "co-dm"]);
 
+// Roles allowed to see drafts, dm_notes, and the full secret set on
+// every wiki article. The wiki content authority is broader than the
+// character DM authority — `lore-writer` is in here precisely because
+// the role exists to author drafts before they're published.
+const WIKI_STAFF_ROLES = new Set(["admin", "co-dm", "lore-writer"]);
+
 type FirebaseAppletConfig = {
   projectId: string;
 };
@@ -142,6 +148,17 @@ export async function requireAuthenticatedUser(authHeader?: string | string[]) {
  */
 export function isCharacterDM(role: string | null | undefined): boolean {
   return CHARACTER_DM_ROLES.has(role ?? "");
+}
+
+/**
+ * Roles allowed to see drafts, `dm_notes`, and the full secret set on
+ * every wiki article. Used by the `/api/lore/*` endpoints. Broader than
+ * `isCharacterDM` because `lore-writer` exists to author wiki content
+ * (and therefore needs draft + dm_notes visibility) but should not be
+ * able to read player character sheets.
+ */
+export function isWikiStaff(role: string | null | undefined): boolean {
+  return WIKI_STAFF_ROLES.has(role ?? "");
 }
 
 /**

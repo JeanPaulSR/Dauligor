@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
-import { OperationType, reportClientError } from '../../lib/firebase';
+import { auth, OperationType, reportClientError } from '../../lib/firebase';
 import { fetchLoreArticle, fetchLoreSecrets, upsertLoreArticle, upsertLoreSecret, deleteLoreSecret } from '../../lib/lore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -138,13 +138,24 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
     const loadFoundation = async () => {
       try {
-        const [campaignsData, erasData, groupsData, tagsData, articlesData] = await Promise.all([
+        // Lore list goes through the per-route endpoint (server strips
+        // dm_notes for the picker — the editor doesn't need it for
+        // sibling-link selection). The other foundation reads still
+        // hit /api/d1/query while their per-route migrations are
+        // pending in later audit batches.
+        const idToken = await auth.currentUser?.getIdToken();
+        const [campaignsData, erasData, groupsData, tagsData, loreRes] = await Promise.all([
           fetchCollection('campaigns', { orderBy: 'name ASC' }),
           fetchCollection('eras', { orderBy: '"order" ASC' }),
           fetchCollection('tagGroups', { where: "classifications LIKE '%lore%'" }),
           fetchCollection('tags'),
-          fetchCollection('lore', { orderBy: 'title ASC' })
+          fetch('/api/lore/articles?orderBy=title%20ASC', {
+            headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+          }),
         ]);
+        if (!loreRes.ok) throw new Error(`Failed to load lore articles (HTTP ${loreRes.status})`);
+        const loreBody = await loreRes.json();
+        const articlesData: any[] = Array.isArray(loreBody?.articles) ? loreBody.articles : [];
 
         setCampaigns(campaignsData);
         setEras(erasData);

@@ -77,7 +77,17 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
           campaignIds: membershipsByUser.get(u.id) || [],
         })));
 
-        const loreData = await fetchCollection<any>('lore', { orderBy: 'title ASC' });
+        // Per-route lore endpoint — admin context, server still strips
+        // dm_notes (admin doesn't need it for the recommended-article
+        // picker; if they ever do, the dedicated dm-notes route can
+        // serve it).
+        const idTokenLore = await auth.currentUser?.getIdToken();
+        const loreRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
+          headers: idTokenLore ? { Authorization: `Bearer ${idTokenLore}` } : {},
+        });
+        if (!loreRes.ok) throw new Error(`Failed to load lore (HTTP ${loreRes.status})`);
+        const loreBody = await loreRes.json();
+        const loreData: any[] = Array.isArray(loreBody?.articles) ? loreBody.articles : [];
         setLorePages(loreData.map(remapLore));
 
         const settings = await getSystemMetadata<{ defaultBackgroundImageUrl?: string }>('wiki_settings');
