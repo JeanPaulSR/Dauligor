@@ -541,15 +541,14 @@ function normalizeSpellcastingForExport(spellcasting: any, refs: any = {}, {
   if (progressionType?.name) normalized.progressionTypeLabel = trimString(progressionType.name);
   if (progressionType?.formula) normalized.progressionFormula = trimString(progressionType.formula);
 
-  // `spellcastingTypes` is fetched via `fetchCollection` without the
-  // `denormalizeCompendiumData` snake→camel pass, so rows arrive with
-  // their raw D1 column names. The admin editor writes the field as
-  // `foundry_name`; read that first and fall back to `foundryName` only
-  // for any future code path that hands us a camelCased object. Reading
-  // only `foundryName` silently returned undefined for every row,
-  // which DELETED `progression` from every export and made every
+  // `spellcastingTypes` is fetched via `fetchCollection` without going
+  // through `denormalizeCompendiumData`, so rows arrive with their raw
+  // D1 column names. Read `foundry_name` verbatim — no `?? foundryName`
+  // fallback (see docs/database-memory.md §2 — no dual-shape reads).
+  // Reading the camelCased form silently returned undefined for every
+  // row, which DELETED `progression` from every export and made every
   // imported class look like `progression: "none"` on the actor side.
-  const mappedProgression = trimString(progressionType?.foundry_name ?? progressionType?.foundryName).toLowerCase();
+  const mappedProgression = trimString(progressionType?.foundry_name).toLowerCase();
   const progression = trimString(spellcasting.progression).toLowerCase();
   const validNativeProgressions = new Set(['none', 'full', 'half', 'third', 'pact', 'artificer']);
   const hasLinkedScalingIds = Boolean(

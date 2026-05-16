@@ -128,6 +128,49 @@ When the user has multiple tabs of the app open and an admin mutates a persisten
 
 The polling SQL is the only call that's intentionally uncached so that the heartbeat actually heartbeats.
 
+## Row shape — snake_case is the wire shape
+
+Rows returned by `queryD1` / `fetchCollection` / `fetchDocument` arrive with their **raw D1 column names**. The schema convention is `snake_case` (see [../database/README.md §schema philosophy](../database/README.md#schema-philosophy)) so reads look like:
+
+```ts
+const rows = await fetchCollection<any>('spellcastingTypes', { orderBy: 'name ASC' });
+const row = rows[0];
+row.foundry_name      // ← string ("full") — read the column name verbatim
+row.foundryName       // ← undefined. The d1 layer does NOT snake→camel by default.
+row.created_at        // ← ISO string
+row.proficiencies     // ← already-parsed object (auto-parse JSON list, below)
+```
+
+There is **no automatic snake→camel conversion** in the fetch path. Adding one would conflict with [database-memory.md §2 — no backwards compatibility](../database-memory.md#operating-principles): a `row.snake_case ?? row.camelCase` dual-read pattern is explicitly forbidden, so picking a single shape and sticking with it is the rule.
+
+### When to denormalize
+
+Editor state code often wants camelCase (so it can spread directly into form controls bound to `setName` / `setHitDie` etc.). For those call sites the explicit opt-in is `denormalizeCompendiumData(row)` in [src/lib/compendium.ts](../../src/lib/compendium.ts), which maps a known set of snake→camel keys (`source_id` → `sourceId`, `hit_die` → `hitDie`, etc.).
+
+```ts
+import { denormalizeCompendiumData } from '../lib/compendium';
+
+const raw = await fetchDocument<any>('classes', classId);
+const cls = denormalizeCompendiumData(raw);
+cls.sourceId       // ← camelCased — safe to read here.
+cls.foundry_name   // ← still works; the helper merges, doesn't strip.
+```
+
+**Decision tree:**
+- *Reading a row to use server-side or in an export pipeline*: read raw snake_case keys. Skip the helper.
+- *Reading a row into editor state*: pass through `denormalizeCompendiumData` once, then everything downstream sees camelCase consistently.
+- **Never** write `row.field_name ?? row.fieldName` fallbacks. If a column doesn't have a known camelCase alias in `denormalizeCompendiumData`, either add it to that map or use the snake_case form directly.
+
+### Auditing existing dual-reads
+
+Several legacy call sites still have `row.snake_case ?? row.camelCase` patterns left over from the Firestore→D1 transition. These are flagged in `memory/project_dual_shape_cleanup.md` as a pending cleanup. New code must not add to that list.
+
+### Gotchas
+
+- `denormalizeCompendiumData` only maps the keys listed in its `mapping` table. If you add a new snake_case column the editor needs in camelCase, **add the mapping entry too** — otherwise editor state reads will silently see undefined.
+- `JSON.parse` ordering: `queryD1` auto-parses a fixed list of JSON columns BEFORE handing the row back. The auto-parse list is keyed by column name (snake_case). If you add a new JSON column, add its snake_case name to the auto-parse list in `d1.ts` (see [JSON column convention](#json-column-convention) below).
+- Server-side reads via `executeD1QueryInternal` go through the same Worker `/query` endpoint, so rows arrive with the same snake_case shape. The drift mirror `api/_lib/_classExport.ts` of `src/lib/classExport.ts` must keep the same column names on both sides.
+
 ## JSON column convention
 
 D1 is plain SQLite — there is no native JSON type. Complex nested values are stored as JSON-stringified TEXT and parsed client-side.
