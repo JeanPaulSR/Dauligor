@@ -68,15 +68,31 @@ type NodeLikeResponse = {
 /**
  * Catch-all routes attach the path tail to `req.query.path` as an
  * array. Same defensive shape as the lore dispatcher.
+ *
+ * `__root` is a sentinel segment introduced by the vercel.json rewrite
+ * `/api/me → /api/me/__root`. Vercel's pure-functions catch-all
+ * routing doesn't match BARE URLs (that's a Next.js-only feature of
+ * `[[...slug]]`), so we rewrite the bare URL to a sub-path that
+ * physically matches the file, then strip the sentinel here so
+ * handlers see `path = []` and the bare-resource branch fires
+ * naturally. If anyone ever names a real sub-route `__root`, this
+ * stripping will swallow it — don't do that.
  */
 function parsePath(req: NodeLikeRequest): string[] {
   const raw = req.query?.path;
-  if (Array.isArray(raw)) return raw.map((seg) => decodeURIComponent(String(seg)));
-  if (typeof raw === "string" && raw) return [decodeURIComponent(raw)];
-  const url = req.url || "";
-  const match = url.match(/\/api\/me\/?([^?]*)/);
-  if (!match || !match[1]) return [];
-  return match[1].split("/").filter(Boolean).map(decodeURIComponent);
+  let segments: string[];
+  if (Array.isArray(raw)) {
+    segments = raw.map((seg) => decodeURIComponent(String(seg)));
+  } else if (typeof raw === "string" && raw) {
+    segments = [decodeURIComponent(raw)];
+  } else {
+    const url = req.url || "";
+    const match = url.match(/\/api\/me\/?([^?]*)/);
+    segments = !match || !match[1]
+      ? []
+      : match[1].split("/").filter(Boolean).map(decodeURIComponent);
+  }
+  return segments.filter((s) => s !== "__root");
 }
 
 /* -------------------------------------------------------------------------- */
