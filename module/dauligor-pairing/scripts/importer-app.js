@@ -5505,17 +5505,20 @@ function collectLeaves(tree) {
 /**
  * Real spell-selection step. Replaces the older placeholder.
  *
- * Renders a per-class spell picker scoped by the level-up delta:
- *   - "Pick N cantrips" from the class's cantrip pool
- *   - "Pick M leveled spells" from level-1+ rows the actor doesn't
- *     already know
+ * 3-column layout ported from the character builder's `AddSpellsModal`
+ * (src/pages/characters/CharacterBuilder.tsx):
+ *   - LEFT  — "On Sheet": spells already on the actor. Locked rows for
+ *     quick reference. Empty on a fresh first-class import; populated
+ *     on level-ups / multiclass reimports.
+ *   - MIDDLE — class spell pool: search input, Filters toggle that
+ *     reveals a Level / School / Source / Properties chip panel,
+ *     followed by the filtered pool grouped by level.
+ *   - RIGHT — detail: selected spell's description, school/level meta,
+ *     ritual/concentration badges.
  *
- * The pool comes from `workflow.classSpellItems` (baked by the server
- * class export). Already-on-actor spells render as locked rows (they
- * count against the "already known" tally, not against the N+M
- * budgets). Confirm is disabled until exactly N cantrips and M spells
- * are picked, OR the player explicitly skips the step (no spells
- * embedded).
+ * Confirm is disabled until exactly N cantrips and M spells are picked
+ * (from `computeSpellSelectionDelta`), OR the player explicitly skips
+ * the step (no spells embedded).
  *
  * Returns one of "confirmed" / "skipped" / "cancelled" and stashes the
  * selected sourceIds into `state.spellSelections` so the embed phase
@@ -5548,10 +5551,10 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     return "skipped";
   }
 
-  // Existing-on-actor sourceIds — these render as locked rows so the
-  // player can SEE the spells they already know without being able to
-  // re-pick them or exceeding the budget. Identifier-based match
-  // mirrors the way features/options are deduped elsewhere.
+  // Existing-on-actor sourceIds — these render in the LEFT column for
+  // quick reference and as locked rows in the middle pool. They don't
+  // count against the budget. Identifier-based match mirrors the way
+  // features/options are deduped elsewhere.
   const alreadyOnActorSourceIds = new Set();
   if (actor?.items) {
     for (const item of actor.items.contents) {
@@ -5561,14 +5564,28 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     }
   }
 
-  // Local picker state. Plain objects + getters/setters so the
-  // re-renders below stay synchronous (DauligorSequencePromptApp
-  // doesn't have a built-in reactive layer).
+  // ─── Local picker state ──────────────────────────────────────────
+  // DauligorSequencePromptApp doesn't have a reactive layer; we keep
+  // state as closure variables and call `app.rerenderPrompt()` after
+  // each mutation. Sets / let bindings are fine because every mutation
+  // is followed by a full body re-render.
   const pickedCantrips = new Set();
   const pickedSpells = new Set();
-  let selectedSourceId = null;
+  let selectedSourceId = pool[0]?.flags?.[MODULE_ID]?.sourceId ?? null;
+
+  // Filter state — mirrors the builder's AddSpellsModal:
+  //   - search:    fuzzy name match
+  //   - filterOpen: whether the chip panel is expanded
+  //   - lvlF / schoolF / sourceBookF / propF: active multi-select chips
+  let searchTerm = "";
+  let filterOpen = false;
+  const lvlF = new Set();         // numbers (0 = cantrip, 1..9 = leveled)
+  const schoolF = new Set();      // school slugs
+  const sourceBookF = new Set();  // sourceBookId strings
+  const propF = new Set();        // "ritual" / "concentration" / "already"
 
   const togglePick = (sourceId, level) => {
+    if (alreadyOnActorSourceIds.has(sourceId)) return false; // locked
     const isCantrip = level === 0;
     const bucket = isCantrip ? pickedCantrips : pickedSpells;
     const limit = isCantrip ? cantripsToPick : spellsToPick;
@@ -5581,120 +5598,294 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     return true;
   };
 
-  // Group pool by level for the section headers.
-  const byLevel = new Map();
-  for (const item of pool) {
-    const level = Number(item?.flags?.[MODULE_ID]?.level ?? 0);
-    if (!byLevel.has(level)) byLevel.set(level, []);
-    byLevel.get(level).push(item);
-  }
-  const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
+  const toggleInSet = (set, value) => {
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+  };
+
+  // ─── Pre-computed pool metadata ──────────────────────────────────
+  // Schools / source books that actually appear in the pool — used to
+  // populate the filter chip sections. Skipping empty values keeps the
+  // chip row tight for classes whose pool doesn't span every school.
+  const schoolsInPool = [...new Set(
+    pool.map((s) => String(s?.flags?.[MODULE_ID]?.school ?? "").trim()).filter(Boolean)
+  )].sort();
+  const sourceBooksInPool = [...new Set(
+    pool.map((s) => String(s?.flags?.[MODULE_ID]?.sourceBookId ?? "").trim()).filter(Boolean)
+  )].sort();
 
   const escapeHtml = (v) => foundry.utils.escapeHTML(String(v ?? ""));
 
+  // ─── Filtered pool derivation ─────────────────────────────────────
+  // Re-runs every body render. Cheap enough for typical class pools
+  // (<400 spells) that a memoization layer isn't worth it here.
+  const computeFilteredPool = () => {
+    const q = searchTerm.trim().toLowerCase();
+    return pool.filter((item) => {
+      const f = item?.flags?.[MODULE_ID] ?? {};
+      const sourceId = String(f.sourceId ?? "");
+      const lv = Number(f.level ?? 0);
+      const school = String(f.school ?? "");
+      const sourceBookId = String(f.sourceBookId ?? "");
+      const isRitual = Boolean(f.ritual);
+      const isConcentration = Boolean(f.concentration);
+      const isAlready = alreadyOnActorSourceIds.has(sourceId);
+
+      if (q && !String(item.name || "").toLowerCase().includes(q)) return false;
+      if (lvlF.size && !lvlF.has(lv)) return false;
+      if (schoolF.size && !schoolF.has(school)) return false;
+      if (sourceBookF.size && !sourceBookF.has(sourceBookId)) return false;
+      if (propF.has("ritual") && !isRitual) return false;
+      if (propF.has("concentration") && !isConcentration) return false;
+      if (propF.has("already") && !isAlready) return false;
+      return true;
+    });
+  };
+
+  // ─── Row renderer ────────────────────────────────────────────────
+  // Used by both the LEFT (on-sheet) column and the MIDDLE filtered
+  // pool. Click on the row body toggles pick + select; click on the
+  // school / source meta selects without picking (selection only
+  // happens when the row is non-locked).
+  const renderRow = (item) => {
+    const flags = item?.flags?.[MODULE_ID] ?? {};
+    const sourceId = String(flags.sourceId ?? "");
+    const level = Number(flags.level ?? 0);
+    const isCantrip = level === 0;
+    const isAlready = alreadyOnActorSourceIds.has(sourceId);
+    const isPicked = (isCantrip ? pickedCantrips : pickedSpells).has(sourceId);
+    const isSelected = selectedSourceId === sourceId;
+    const school = String(flags.school ?? "").slice(0, 4).toUpperCase();
+    const sourceLabel = String(flags.sourceBookId ?? "").slice(0, 6);
+    const ritual = flags.ritual ? "R" : "";
+    const concentration = flags.concentration ? "C" : "";
+
+    const stateClass = isAlready ? "is-already" : isPicked ? "is-picked" : "";
+    const indicatorChar = isAlready ? "✓" : isPicked ? "●" : "○";
+    const title = isAlready
+      ? "Already on actor"
+      : isPicked
+        ? "Click to unpick"
+        : "Click to pick";
+
+    return `
+      <div
+        class="dauligor-spell-picker__row ${stateClass} ${isSelected ? "is-selected" : ""}"
+        data-source-id="${escapeHtml(sourceId)}"
+        data-level="${level}"
+        title="${title}"
+      >
+        <span class="dauligor-spell-picker__indicator">${indicatorChar}</span>
+        <span class="dauligor-spell-picker__name">${escapeHtml(item.name)}</span>
+        <span class="dauligor-spell-picker__school" title="${escapeHtml(flags.school || "")}">${school || "—"}</span>
+        <span class="dauligor-spell-picker__source" title="${escapeHtml(flags.sourceBookId || "")}">${escapeHtml(sourceLabel)}</span>
+        <span class="dauligor-spell-picker__badges">
+          ${ritual ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--ritual" title="Ritual">${ritual}</span>` : ""}
+          ${concentration ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--conc" title="Concentration">${concentration}</span>` : ""}
+        </span>
+      </div>
+    `;
+  };
+
+  // ─── Chip section renderer ───────────────────────────────────────
+  // `kind` matches the data-filter-kind attribute the click handler
+  // dispatches on. `options` is [{ v, l }] just like the builder's
+  // FilterChipSection.
+  const renderChipSection = (title, kind, options, activeSet) => {
+    if (options.length === 0) return "";
+    const chips = options.map(({ v, l }) => {
+      const active = activeSet.has(v);
+      return `
+        <button
+          type="button"
+          class="dauligor-spell-picker__chip ${active ? "is-active" : ""}"
+          data-action="toggle-filter-chip"
+          data-filter-kind="${escapeHtml(kind)}"
+          data-filter-value="${escapeHtml(String(v))}"
+        >${escapeHtml(l)}</button>
+      `;
+    }).join("");
+    return `
+      <div class="dauligor-spell-picker__chip-section">
+        <div class="dauligor-spell-picker__chip-section-header">
+          <span class="dauligor-spell-picker__chip-section-title">${escapeHtml(title)}</span>
+          <div class="dauligor-spell-picker__chip-section-actions">
+            <button type="button" class="dauligor-spell-picker__chip-action" data-action="select-all-filter" data-filter-kind="${escapeHtml(kind)}">Include All</button>
+            <span class="dauligor-spell-picker__chip-section-sep">|</span>
+            <button type="button" class="dauligor-spell-picker__chip-action" data-action="clear-filter-section" data-filter-kind="${escapeHtml(kind)}">Clear</button>
+          </div>
+        </div>
+        <div class="dauligor-spell-picker__chips">${chips}</div>
+      </div>
+    `;
+  };
+
+  // ─── Body renderer ───────────────────────────────────────────────
   const renderBody = () => {
     const cantripsRemaining = cantripsToPick - pickedCantrips.size;
     const spellsRemaining = spellsToPick - pickedSpells.size;
     const selectedItem = selectedSourceId
-      ? pool.find((s) => s?.flags?.[MODULE_ID]?.sourceId === selectedSourceId)
+      ? pool.find((s) => String(s?.flags?.[MODULE_ID]?.sourceId ?? "") === selectedSourceId)
       : null;
 
-    const renderListRows = () => sortedLevels.map((level) => {
-      const items = byLevel.get(level) || [];
-      const isCantrip = level === 0;
-      const limit = isCantrip ? cantripsToPick : spellsToPick;
-      const pickedHere = isCantrip ? pickedCantrips.size : pickedSpells.size;
-      const headerLabel = isCantrip ? "Cantrips" : `Level ${level}`;
-      return `
-        <div class="dauligor-spell-picker__level">
-          <div class="dauligor-spell-picker__level-header">
-            <span class="dauligor-spell-picker__level-name">${escapeHtml(headerLabel)}</span>
-            <span class="dauligor-spell-picker__level-count">
-              ${limit > 0 ? `${pickedHere} / ${limit}` : `${items.length} available`}
-            </span>
-          </div>
-          ${items.map((item) => {
-            const flags = item?.flags?.[MODULE_ID] ?? {};
-            const sourceId = flags.sourceId;
-            const isAlready = alreadyOnActorSourceIds.has(String(sourceId));
-            const isPickedCantrip = isCantrip && pickedCantrips.has(sourceId);
-            const isPickedSpell = !isCantrip && pickedSpells.has(sourceId);
-            const isPicked = isPickedCantrip || isPickedSpell;
-            const isSelected = selectedSourceId === sourceId;
-            const school = String(flags.school ?? "").slice(0, 4).toUpperCase();
-            const concentration = flags.concentration ? "C" : "";
-            const ritual = flags.ritual ? "R" : "";
-            const stateClass = isAlready
-              ? "is-already"
-              : isPicked
-                ? "is-picked"
-                : "";
-            return `
-              <div
-                class="dauligor-spell-picker__row ${stateClass} ${isSelected ? "is-selected" : ""}"
-                data-source-id="${escapeHtml(sourceId)}"
-                data-level="${level}"
-              >
-                <button
-                  type="button"
-                  class="dauligor-spell-picker__toggle"
-                  data-action="toggle-pick"
-                  data-source-id="${escapeHtml(sourceId)}"
-                  data-level="${level}"
-                  ${isAlready ? "disabled" : ""}
-                  title="${isAlready ? "Already on actor" : isPicked ? "Unpick" : "Pick"}"
-                >${isAlready ? "✓" : isPicked ? "●" : "○"}</button>
-                <span class="dauligor-spell-picker__name">${escapeHtml(item.name)}</span>
-                <span class="dauligor-spell-picker__school">${school || "—"}</span>
-                <span class="dauligor-spell-picker__badges">
-                  ${ritual ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--ritual" title="Ritual">${ritual}</span>` : ""}
-                  ${concentration ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--conc" title="Concentration">${concentration}</span>` : ""}
-                </span>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      `;
-    }).join("");
+    const filteredPool = computeFilteredPool();
+    const activeFilterCount = lvlF.size + schoolF.size + sourceBookF.size + propF.size;
 
+    // LEFT — On Sheet column. Renders the already-on-actor subset of
+    // the pool. Empty-state guidance hints at when this column fills.
+    const onSheetItems = pool.filter((s) => alreadyOnActorSourceIds.has(String(s?.flags?.[MODULE_ID]?.sourceId ?? "")));
+    const renderOnSheet = () => {
+      if (onSheetItems.length === 0) {
+        return `
+          <div class="dauligor-spell-picker__empty">
+            <div class="dauligor-spell-picker__empty-icon">✓</div>
+            <div class="dauligor-spell-picker__empty-text">No spells from this class are on the actor yet. After this import, future level-ups will list previously-known spells here for reference.</div>
+          </div>
+        `;
+      }
+      return onSheetItems.map(renderRow).join("");
+    };
+
+    // MIDDLE — grouped filtered pool. Group headers carry their own
+    // budget tally (e.g. "Cantrips · 0/2") so the user sees how many
+    // picks remain per level at a glance.
+    const byLevel = new Map();
+    for (const item of filteredPool) {
+      const lv = Number(item?.flags?.[MODULE_ID]?.level ?? 0);
+      if (!byLevel.has(lv)) byLevel.set(lv, []);
+      byLevel.get(lv).push(item);
+    }
+    const sortedLevels = [...byLevel.keys()].sort((a, b) => a - b);
+
+    const renderListRows = () => {
+      if (sortedLevels.length === 0) {
+        return `<div class="dauligor-spell-picker__empty"><div class="dauligor-spell-picker__empty-text">No spells match.</div></div>`;
+      }
+      return sortedLevels.map((level) => {
+        const items = byLevel.get(level) || [];
+        const isCantrip = level === 0;
+        const limit = isCantrip ? cantripsToPick : spellsToPick;
+        const pickedHere = isCantrip ? pickedCantrips.size : pickedSpells.size;
+        const headerLabel = isCantrip ? "Cantrips" : `Level ${level}`;
+        return `
+          <div class="dauligor-spell-picker__level">
+            <div class="dauligor-spell-picker__level-header">
+              <span class="dauligor-spell-picker__level-name">${escapeHtml(headerLabel)}</span>
+              <span class="dauligor-spell-picker__level-spacer"></span>
+              <span class="dauligor-spell-picker__level-count">
+                ${limit > 0 ? `${pickedHere} / ${limit}` : `${items.length}`}
+              </span>
+            </div>
+            ${items.map(renderRow).join("")}
+          </div>
+        `;
+      }).join("");
+    };
+
+    // RIGHT — detail panel. Pulls description + meta from the
+    // currently selected pool item. Empty hint when nothing is
+    // selected (rare — we default selection to pool[0]).
     const renderDetail = () => {
       if (!selectedItem) {
-        return `<div class="dauligor-class-browser__empty">Select a spell to see its details.</div>`;
+        return `<div class="dauligor-spell-picker__empty"><div class="dauligor-spell-picker__empty-text">Select a spell to see its details.</div></div>`;
       }
       const sys = selectedItem.system ?? {};
       const desc = String(sys?.description?.value ?? "").trim();
       const flags = selectedItem.flags?.[MODULE_ID] ?? {};
+      const lv = Number(flags.level ?? 0);
       return `
-        <h3 class="dauligor-sequence__panel-title">${escapeHtml(selectedItem.name)}</h3>
-        <div class="dauligor-spell-picker__meta">
-          <span>${escapeHtml(flags.school || "")} · ${flags.level === 0 ? "Cantrip" : `Level ${flags.level}`}</span>
+        <h3 class="dauligor-spell-picker__detail-title">${escapeHtml(selectedItem.name)}</h3>
+        <div class="dauligor-spell-picker__detail-meta">
+          <span>${escapeHtml(flags.school || "")} · ${lv === 0 ? "Cantrip" : `Level ${lv}`}</span>
           ${flags.ritual ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--ritual">Ritual</span>` : ""}
           ${flags.concentration ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--conc">Concentration</span>` : ""}
         </div>
-        <div class="dauligor-spell-picker__desc">${desc || "<em>No description.</em>"}</div>
+        <div class="dauligor-spell-picker__detail-desc">${desc || "<em>No description.</em>"}</div>
       `;
     };
 
+    // Build the level chip options from levels actually present in
+    // the pool, so we don't show a "Level 9" chip for a pool that only
+    // reaches 5.
+    const levelsInPool = [...new Set(pool.map((s) => Number(s?.flags?.[MODULE_ID]?.level ?? 0)))].sort((a, b) => a - b);
+    const levelChipOptions = levelsInPool.map((lv) => ({ v: lv, l: lv === 0 ? "Cantrip" : `Lv ${lv}` }));
+    const schoolChipOptions = schoolsInPool.map((s) => ({ v: s, l: s.toUpperCase() }));
+    const sourceChipOptions = sourceBooksInPool.map((sb) => ({ v: sb, l: sb }));
+    const propChipOptions = [
+      { v: "ritual", l: "Ritual" },
+      { v: "concentration", l: "Concentration" },
+      ...(alreadyOnActorSourceIds.size > 0 ? [{ v: "already", l: "On Sheet" }] : [])
+    ];
+
     return `
-      <div class="dauligor-sequence__spell-picker">
-        <div class="dauligor-sequence__spell-picker-summary">
-          <div>
-            <strong>Cantrips:</strong>
-            <span class="dauligor-spell-picker__tally ${cantripsRemaining === 0 ? "is-complete" : ""}">${pickedCantrips.size} / ${cantripsToPick}</span>
+      <div class="dauligor-spell-picker">
+        <div class="dauligor-spell-picker__summary">
+          <div class="dauligor-spell-picker__summary-cell">
+            <span class="dauligor-spell-picker__summary-label">Cantrips</span>
+            <span class="dauligor-spell-picker__summary-value ${cantripsRemaining === 0 ? "is-complete" : ""}">${pickedCantrips.size} / ${cantripsToPick}</span>
           </div>
-          <div>
-            <strong>Spells:</strong>
-            <span class="dauligor-spell-picker__tally ${spellsRemaining === 0 ? "is-complete" : ""}">${pickedSpells.size} / ${spellsToPick}</span>
+          <div class="dauligor-spell-picker__summary-cell">
+            <span class="dauligor-spell-picker__summary-label">Spells</span>
+            <span class="dauligor-spell-picker__summary-value ${spellsRemaining === 0 ? "is-complete" : ""}">${pickedSpells.size} / ${spellsToPick}</span>
           </div>
-          ${alreadyOnActorSourceIds.size > 0
-            ? `<div class="dauligor-spell-picker__note">Already known: <strong>${alreadyOnActorSourceIds.size}</strong></div>`
-            : ""}
+          ${alreadyOnActorSourceIds.size > 0 ? `
+            <div class="dauligor-spell-picker__summary-cell">
+              <span class="dauligor-spell-picker__summary-label">On Sheet</span>
+              <span class="dauligor-spell-picker__summary-value">${alreadyOnActorSourceIds.size}</span>
+            </div>
+          ` : ""}
         </div>
-        <div class="dauligor-sequence__spell-picker-body">
-          <div class="dauligor-sequence__spell-picker-list">
-            ${renderListRows()}
+
+        <div class="dauligor-spell-picker__body">
+          <!-- LEFT: On Sheet -->
+          <div class="dauligor-spell-picker__col dauligor-spell-picker__col--left">
+            <div class="dauligor-spell-picker__col-header">
+              <span class="dauligor-spell-picker__col-title">On Sheet</span>
+              <span class="dauligor-spell-picker__col-count">${onSheetItems.length}</span>
+            </div>
+            <div class="dauligor-spell-picker__col-body">${renderOnSheet()}</div>
           </div>
-          <div class="dauligor-sequence__spell-picker-detail">
+
+          <!-- MIDDLE: filtered pool -->
+          <div class="dauligor-spell-picker__col dauligor-spell-picker__col--middle">
+            <div class="dauligor-spell-picker__col-header">
+              <span class="dauligor-spell-picker__col-title">${escapeHtml(workflow.classItem?.name ?? "Class")} Spell List</span>
+              <span class="dauligor-spell-picker__col-count">
+                ${filteredPool.length}${filteredPool.length !== pool.length ? ` / ${pool.length}` : ""}
+              </span>
+            </div>
+            <div class="dauligor-spell-picker__searchbar">
+              <input
+                type="text"
+                class="dauligor-spell-picker__search"
+                data-action="search-input"
+                placeholder="Search spell name…"
+                value="${escapeHtml(searchTerm)}"
+              />
+              <button
+                type="button"
+                class="dauligor-spell-picker__filter-toggle ${filterOpen || activeFilterCount > 0 ? "is-active" : ""}"
+                data-action="toggle-filter-panel"
+              >
+                Filters${activeFilterCount > 0 ? ` <span class="dauligor-spell-picker__filter-badge">${activeFilterCount}</span>` : ""}
+              </button>
+              ${activeFilterCount > 0 ? `
+                <button type="button" class="dauligor-spell-picker__filter-reset" data-action="reset-filters">✕ Reset</button>
+              ` : ""}
+            </div>
+            ${filterOpen ? `
+              <div class="dauligor-spell-picker__filter-panel">
+                ${renderChipSection("Level", "level", levelChipOptions, lvlF)}
+                ${renderChipSection("School", "school", schoolChipOptions, schoolF)}
+                ${renderChipSection("Source", "source", sourceChipOptions, sourceBookF)}
+                ${renderChipSection("Properties", "prop", propChipOptions, propF)}
+              </div>
+            ` : ""}
+            <div class="dauligor-spell-picker__col-body">${renderListRows()}</div>
+          </div>
+
+          <!-- RIGHT: detail -->
+          <div class="dauligor-spell-picker__col dauligor-spell-picker__col--right">
             ${renderDetail()}
           </div>
         </div>
@@ -5705,8 +5896,8 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
   const result = await DauligorSequencePromptApp.prompt({
     title: "Select Spells",
     subtitle: `${workflow.classItem.name}${workflow.selectedSubclassItem ? ` (${workflow.selectedSubclassItem.name})` : ""}`,
-    width: 1100,
-    height: 720,
+    width: 1280,
+    height: 760,
     renderBody,
     actions: [
       { id: "confirm", label: "Confirm", primary: true },
@@ -5714,27 +5905,112 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
       { id: "cancel", label: "Cancel" },
     ],
     // onRenderBody fires after every re-render of the body region —
-    // re-attach the click listener each time since the previous
-    // listener's host element was just replaced by the innerHTML
-    // refresh.
+    // re-attach the click + input listeners each time since the
+    // previous element host was just replaced by the innerHTML
+    // refresh. We also re-focus the search input + restore caret
+    // position so the user can keep typing through re-renders.
     onRenderBody: (app, region) => {
+      // Click delegation — one handler dispatches on data-action.
       region.addEventListener("click", (event) => {
-        const toggleBtn = event.target.closest?.("[data-action='toggle-pick']");
-        if (toggleBtn) {
+        // Filter chip toggle
+        const chipBtn = event.target.closest?.("[data-action='toggle-filter-chip']");
+        if (chipBtn) {
           event.stopPropagation();
-          const sourceId = toggleBtn.dataset.sourceId;
-          const level = Number(toggleBtn.dataset.level || 0);
-          if (toggleBtn.disabled) return;
-          togglePick(sourceId, level);
+          const kind = chipBtn.dataset.filterKind;
+          const valueRaw = chipBtn.dataset.filterValue;
+          const set = kind === "level" ? lvlF
+            : kind === "school" ? schoolF
+              : kind === "source" ? sourceBookF
+                : kind === "prop" ? propF
+                  : null;
+          if (!set) return;
+          const value = kind === "level" ? Number(valueRaw) : String(valueRaw);
+          toggleInSet(set, value);
           app.rerenderPrompt();
           return;
         }
-        const row = event.target.closest?.("[data-source-id]");
+
+        // "Include All" / "Clear" within a chip section
+        const allBtn = event.target.closest?.("[data-action='select-all-filter']");
+        if (allBtn) {
+          event.stopPropagation();
+          const kind = allBtn.dataset.filterKind;
+          if (kind === "level") {
+            for (const lv of new Set(pool.map((s) => Number(s?.flags?.[MODULE_ID]?.level ?? 0)))) lvlF.add(lv);
+          } else if (kind === "school") {
+            for (const s of schoolsInPool) schoolF.add(s);
+          } else if (kind === "source") {
+            for (const sb of sourceBooksInPool) sourceBookF.add(sb);
+          } else if (kind === "prop") {
+            propF.add("ritual"); propF.add("concentration");
+            if (alreadyOnActorSourceIds.size > 0) propF.add("already");
+          }
+          app.rerenderPrompt();
+          return;
+        }
+        const clearBtn = event.target.closest?.("[data-action='clear-filter-section']");
+        if (clearBtn) {
+          event.stopPropagation();
+          const kind = clearBtn.dataset.filterKind;
+          if (kind === "level") lvlF.clear();
+          else if (kind === "school") schoolF.clear();
+          else if (kind === "source") sourceBookF.clear();
+          else if (kind === "prop") propF.clear();
+          app.rerenderPrompt();
+          return;
+        }
+
+        // Toggle filter panel visibility
+        if (event.target.closest?.("[data-action='toggle-filter-panel']")) {
+          event.stopPropagation();
+          filterOpen = !filterOpen;
+          app.rerenderPrompt();
+          return;
+        }
+
+        // Reset all filters
+        if (event.target.closest?.("[data-action='reset-filters']")) {
+          event.stopPropagation();
+          lvlF.clear(); schoolF.clear(); sourceBookF.clear(); propF.clear();
+          app.rerenderPrompt();
+          return;
+        }
+
+        // Row click — select + toggle pick if not locked.
+        // Single click matches the builder's AddSpellsModal: pick AND
+        // select are one gesture so the user doesn't have to mode-
+        // switch between "select this for reading" and "pick this".
+        const row = event.target.closest?.(".dauligor-spell-picker__row");
         if (row) {
-          selectedSourceId = row.dataset.sourceId;
+          const sourceId = String(row.dataset.sourceId ?? "");
+          const level = Number(row.dataset.level || 0);
+          selectedSourceId = sourceId;
+          if (!alreadyOnActorSourceIds.has(sourceId)) {
+            togglePick(sourceId, level);
+          }
           app.rerenderPrompt();
         }
       });
+
+      // Search input. `input` event fires on every keystroke; the
+      // re-render preserves caret position by re-focusing and
+      // restoring the selectionStart after the body re-paints.
+      const searchInput = region.querySelector("[data-action='search-input']");
+      if (searchInput) {
+        searchInput.addEventListener("input", (event) => {
+          const target = event.target;
+          const caret = target.selectionStart;
+          searchTerm = target.value;
+          app.rerenderPrompt();
+          // After rerender, the input is a NEW element — find it and
+          // restore focus + caret.
+          const reFocused = region.querySelector("[data-action='search-input']");
+          if (reFocused) {
+            reFocused.focus();
+            try { reFocused.setSelectionRange(caret, caret); } catch (_) {}
+          }
+        });
+      }
     },
     onAction: async (_app, actionId) => {
       if (actionId === "cancel") return { status: "cancelled" };

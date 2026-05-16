@@ -3547,3 +3547,465 @@ button.dauligor-option-picker__pill:hover {
   border-color: var(--dauligor-warning);
   color: var(--dauligor-warning);
 }
+
+/* ─── Spell picker (importer's spell-selection step) ──────────────────
+ *
+ * 3-column layout ported from the character builder's `AddSpellsModal`
+ * (src/pages/characters/CharacterBuilder.tsx). Lives inside a
+ * DauligorSequencePromptApp body region — so the outer chrome (header,
+ * actions footer) comes from the prompt app and we only style the body.
+ *
+ * Variables fall back to dnd5e / Foundry tokens so the picker reads as
+ * native on both the dnd5e theme and any sheet skin that retypes the
+ * --dauligor-* family. */
+.dauligor-spell-picker {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 8px;
+}
+
+.dauligor-spell-picker__summary {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.06));
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__summary-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 64px;
+}
+
+.dauligor-spell-picker__summary-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.dauligor-spell-picker__summary-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--dauligor-accent, #b58838);
+  line-height: 1;
+}
+
+.dauligor-spell-picker__summary-value.is-complete {
+  color: var(--dauligor-success, #4ea96b);
+}
+
+.dauligor-spell-picker__body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 360px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dauligor-spell-picker__col {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  overflow: hidden;
+  min-height: 0;
+}
+
+.dauligor-spell-picker__col--right {
+  border-right: none;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+.dauligor-spell-picker__col--left {
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.04));
+}
+
+.dauligor-spell-picker__col-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.2));
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__col-title {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.dauligor-spell-picker__col-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.45;
+}
+
+.dauligor-spell-picker__col-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* Search + filter toggle row */
+.dauligor-spell-picker__searchbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.2));
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__search {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.04));
+  border-radius: 2px;
+}
+
+.dauligor-spell-picker__search:focus {
+  outline: none;
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dauligor-spell-picker__filter-toggle:hover {
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__filter-toggle.is-active {
+  border-color: var(--dauligor-accent, #b58838);
+  background: var(--dauligor-accent-soft, rgba(181, 136, 56, 0.15));
+  color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__filter-badge {
+  display: inline-block;
+  min-width: 14px;
+  padding: 0 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 8px;
+  font-weight: 900;
+  text-align: center;
+  background: var(--dauligor-accent, #b58838);
+  color: #fff;
+  border-radius: 2px;
+}
+
+.dauligor-spell-picker__filter-reset {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dauligor-danger, #a94e4e);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.dauligor-spell-picker__filter-reset:hover {
+  text-decoration: underline;
+}
+
+/* Inline filter chip panel — shown when filter toggle is active */
+.dauligor-spell-picker__filter-panel {
+  padding: 10px 10px 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.2));
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.03));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.dauligor-spell-picker__chip-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dauligor-spell-picker__chip-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dauligor-spell-picker__chip-section-title {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.dauligor-spell-picker__chip-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dauligor-spell-picker__chip-action {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dauligor-spell-picker__chip-action:hover { opacity: 0.75; }
+
+.dauligor-spell-picker__chip-section-sep {
+  opacity: 0.3;
+  color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dauligor-spell-picker__chip {
+  padding: 3px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid var(--dauligor-border, rgba(170, 130, 80, 0.4));
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dauligor-spell-picker__chip:hover {
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__chip.is-active {
+  background: var(--dauligor-accent, #b58838);
+  border-color: var(--dauligor-accent, #b58838);
+  color: #fff;
+}
+
+/* Level grouping inside the pool */
+.dauligor-spell-picker__level {
+  display: flex;
+  flex-direction: column;
+}
+
+.dauligor-spell-picker__level-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.05));
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.dauligor-spell-picker__level-name {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.dauligor-spell-picker__level-spacer { flex: 1; }
+
+.dauligor-spell-picker__level-count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.4;
+}
+
+/* Pool row */
+.dauligor-spell-picker__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 36px 40px auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.08));
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.dauligor-spell-picker__row:hover {
+  background: var(--dauligor-surface-hover, rgba(181, 136, 56, 0.05));
+}
+
+.dauligor-spell-picker__row.is-selected {
+  background: var(--dauligor-accent-soft, rgba(181, 136, 56, 0.12));
+  border-left-color: var(--dauligor-accent, #b58838);
+}
+
+.dauligor-spell-picker__row.is-picked .dauligor-spell-picker__indicator {
+  color: var(--dauligor-accent, #b58838);
+  font-weight: 900;
+}
+
+.dauligor-spell-picker__row.is-already {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.dauligor-spell-picker__row.is-already .dauligor-spell-picker__indicator {
+  color: var(--dauligor-success, #4ea96b);
+  font-weight: 900;
+}
+
+.dauligor-spell-picker__indicator {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.5;
+  text-align: center;
+}
+
+.dauligor-spell-picker__name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-spell-picker__row.is-picked .dauligor-spell-picker__name,
+.dauligor-spell-picker__row.is-already .dauligor-spell-picker__name {
+  font-weight: 700;
+}
+
+.dauligor-spell-picker__school {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-spell-picker__source {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dauligor-spell-picker__badges {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.dauligor-spell-picker__badge {
+  display: inline-block;
+  min-width: 14px;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: 900;
+  text-align: center;
+  border-radius: 2px;
+  background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.12));
+  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.25));
+}
+
+.dauligor-spell-picker__badge--ritual {
+  color: var(--dauligor-success, #4ea96b);
+  border-color: var(--dauligor-success, #4ea96b);
+}
+
+.dauligor-spell-picker__badge--conc {
+  color: var(--dauligor-accent, #b58838);
+  border-color: var(--dauligor-accent, #b58838);
+}
+
+/* Detail column */
+.dauligor-spell-picker__detail-title {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.dauligor-spell-picker__detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+  margin-bottom: 10px;
+}
+
+.dauligor-spell-picker__detail-desc {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dauligor-spell-picker__detail-desc p { margin: 0 0 8px; }
+
+/* Empty-state hints (left column when nothing on sheet, pool when
+ * filters produce no matches, detail when nothing selected). */
+.dauligor-spell-picker__empty {
+  padding: 30px 16px;
+  text-align: center;
+}
+
+.dauligor-spell-picker__empty-icon {
+  font-size: 26px;
+  opacity: 0.25;
+  margin-bottom: 4px;
+}
+
+.dauligor-spell-picker__empty-text {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.5;
+}
