@@ -6066,7 +6066,35 @@ function buildFoundrySpellcastingData(spellcasting, {
   subclassIdentifier = null
 } = {}) {
   const normalizedAbility = normalizeAbilityCode(spellcasting?.ability);
-  const progression = trimString(spellcasting?.progression).toLowerCase() || "none";
+  // Resolve progression. Source of truth on the bundle is
+  // `spellcasting.progression`, which the app-side exporter only sets
+  // when the linked spellcasting type's `foundryName` field maps to a
+  // valid Foundry progression code (none/full/half/third/pact/artificer).
+  // When the spellcasting type is authored without a `foundryName` (or
+  // it doesn't match), the export DELETES `progression` from the
+  // bundle — `spellcasting.progression` arrives as undefined and we
+  // fall through to "none". That tanks the class on the Foundry side:
+  // dnd5e's `actor.spellcastingClasses` only includes class items
+  // whose `system.spellcasting.progression !== "none"`, so the
+  // Spell Preparation manager would render as empty and the
+  // importer's spell-pick step would be skipped.
+  //
+  // Defensive fallback: when the bundle explicitly flagged the class
+  // as a spellcaster (`hasSpellcasting === true`) but no valid
+  // progression survived the export, default to "full". That covers
+  // the common case (most spellcasting classes are full casters) and
+  // lets the manager + picker work against unfixed bundles. The
+  // proper fix lives in the editor's spellcasting type data — set
+  // `foundryName` to the matching Foundry progression code — but this
+  // unblocks the import flow today.
+  let progression = trimString(spellcasting?.progression).toLowerCase();
+  if (!progression || progression === "none") {
+    if (spellcasting && spellcasting.hasSpellcasting) {
+      progression = "full";
+    } else {
+      progression = "none";
+    }
+  }
   const preparationFormula = normalizePreparedSpellFormula(spellcasting, {
     ability: normalizedAbility,
     classIdentifier,
