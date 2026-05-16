@@ -9,16 +9,16 @@
       "destination": "/api/module"
     },
     {
-      "source": "/api/me",
-      "destination": "/api/me/__root"
+      "source": "/api/me/(.*)",
+      "destination": "/api/me"
     },
     {
-      "source": "/api/lore",
-      "destination": "/api/lore/__root"
+      "source": "/api/lore/(.*)",
+      "destination": "/api/lore"
     },
     {
-      "source": "/api/campaigns",
-      "destination": "/api/campaigns/__root"
+      "source": "/api/campaigns/(.*)",
+      "destination": "/api/campaigns"
     },
     {
       "source": "/((?!api/|assets/).*)",

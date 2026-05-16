@@ -34,8 +34,8 @@ import {
   getCredentialErrorMessage,
   isWikiStaff,
   requireAuthenticatedUser,
-} from "../_lib/firebase-admin.js";
-import { executeD1QueryInternal } from "../_lib/d1-internal.js";
+} from "./_lib/firebase-admin.js";
+import { executeD1QueryInternal } from "./_lib/d1-internal.js";
 
 type NodeLikeRequest = IncomingMessage & {
   headers: Record<string, string | string[] | undefined>;
@@ -49,36 +49,25 @@ type NodeLikeResponse = {
 };
 
 /**
- * Catch-all routes (`[[...path]]`) attach the path tail to
- * `req.query.path` as an array on Vercel; if the request hits the bare
- * `/api/lore` URL there's no `path` key at all. Normalize both cases
- * (plus the string-fallback the runtime sometimes uses for single
- * segments) into a flat string[].
+ * Vercel pure serverless functions don't support real catch-all routes
+ * (filesystem `[...slug]` is treated as a single-segment dynamic param,
+ * same as `[name]`). The codebase pattern — mirrored from
+ * `api/module.ts` — is to put one file at `api/<resource>.ts`, add a
+ * vercel.json rewrite `/api/<resource>/(.*) → /api/<resource>`, and
+ * parse the original path out of `req.url` inside the handler.
  *
- * `__root` is a sentinel segment introduced by the vercel.json rewrite
- * `/api/lore → /api/lore/__root`. Vercel's pure-functions catch-all
- * routing doesn't match BARE URLs (that's a Next.js-only feature of
- * `[[...slug]]`), so we rewrite the bare URL to a sub-path that
- * physically matches the file, then strip the sentinel here so
- * handlers see `path = []` for the bare-resource branch. No bare lore
- * route exists today, but the rewrite is here for parity with
- * /api/me and /api/campaigns so future bare endpoints just work.
+ * `req.url` retains the user's original path even after the rewrite,
+ * so a request to `/api/lore/articles/<id>/secrets` shows up here as
+ * `req.url === "/api/lore/articles/<id>/secrets"`. We slice off the
+ * `/api/lore/` prefix, split on `/`, and the result is the path
+ * array the route table below dispatches on.
  */
 function parsePath(req: NodeLikeRequest): string[] {
-  const raw = req.query?.path;
-  let segments: string[];
-  if (Array.isArray(raw)) {
-    segments = raw.map((seg) => decodeURIComponent(String(seg)));
-  } else if (typeof raw === "string" && raw) {
-    segments = [decodeURIComponent(raw)];
-  } else {
-    const url = req.url || "";
-    const match = url.match(/\/api\/lore\/?([^?]*)/);
-    segments = !match || !match[1]
-      ? []
-      : match[1].split("/").filter(Boolean).map(decodeURIComponent);
-  }
-  return segments.filter((s) => s !== "__root");
+  const url = req.url || "";
+  const pathname = url.split("?")[0];
+  const tail = pathname.replace(/^\/api\/lore\/?/, "");
+  if (!tail) return [];
+  return tail.split("/").filter(Boolean).map(decodeURIComponent);
 }
 
 /**
