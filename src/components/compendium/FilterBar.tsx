@@ -745,6 +745,12 @@ export interface AxisFilterSectionProps<V extends string = string> {
    *  includeAll/clearAll as the "None" preset. When omitted the
    *  section's header omits the None button. */
   excludeAll?: () => void;
+  /** Trims the section's typography + spacing for surfaces stacking
+   *  many sections in a confined area (currently the SpellRulesEditor
+   *  inline filter panel). Default rendering keeps the full
+   *  `h3-title` heading + space-y-2 rhythm; compact rendering swaps
+   *  in a 10px uppercase gold caption and tightens the gap. */
+  compact?: boolean;
 }
 
 export function AxisFilterSection<V extends string = string>({
@@ -759,6 +765,7 @@ export function AxisFilterSection<V extends string = string>({
   includeAll,
   clearAll,
   excludeAll,
+  compact,
 }: AxisFilterSectionProps<V>) {
   // Hooks before early-return per React rules.
   const { chipSearch } = useFilterBarContext();
@@ -769,8 +776,16 @@ export function AxisFilterSection<V extends string = string>({
   const visibleValues = values.filter(({ label }) => chipMatchesSearch(label, chipSearch));
   // Hide the whole section if chip-search filters out every value.
   if (chipSearch && visibleValues.length === 0) return null;
+  // Compact styling collapses the per-section header to a small gold
+  // caption + tightens vertical rhythm. Used by surfaces stacking
+  // many sections in a confined area; default rendering keeps the
+  // larger `.h3-title` heading.
+  const titleClass = compact
+    ? 'text-[10px] font-black uppercase tracking-[0.16em] text-gold/80'
+    : 'h3-title uppercase text-ink';
+  const sectionGap = compact ? 'space-y-1' : 'space-y-2';
   return (
-    <div className="space-y-2">
+    <div className={sectionGap}>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <button
@@ -780,7 +795,7 @@ export function AxisFilterSection<V extends string = string>({
             title={hidden ? 'Expand section' : 'Collapse section'}
           >
             {hidden ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            <span className="h3-title uppercase text-ink">{title}</span>
+            <span className={titleClass}>{title}</span>
           </button>
           {!hidden && (
             <div className="flex items-center gap-3">

@@ -1012,7 +1012,28 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     ) : null}
                   </div>
                   <div className="space-y-4">
+                        {/* "Normal Options" — the eight axis sections
+                            (Source / Level / School / Casting / Range
+                            / Shape / Duration / Properties) wrapped
+                            in a single open-by-default `<details>` so
+                            the user can collapse the lot when they're
+                            tuning just tags. Mirrors the existing
+                            "Advanced Options — Tags" disclosure below.
+                            Each inner section also keeps its own
+                            chevron for granular collapse. */}
+                        <details className="group" open>
+                          <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
+                              Normal Options
+                              {queryActiveCount > 0 && (
+                                <span className="ml-2 text-gold/60">({queryActiveCount} chip{queryActiveCount === 1 ? '' : 's'})</span>
+                              )}
+                            </span>
+                            <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                          </summary>
+                          <div className="mt-3 space-y-3 pl-1">
                         <AxisFilterSection
+                          compact
                           title="Source"
                           values={sources.map(s => ({ value: s.id, label: String(s.abbreviation || s.shortName || s.name || s.id) }))}
                           states={activeClause.source?.states || {}}
@@ -1026,6 +1047,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           clearAll={() => axisClear('source', 'sourceFilterIds')}
                         />
                         <AxisFilterSection
+                          compact
                           title="Spell Level"
                           values={LEVEL_VALUES.map(lvl => ({ value: lvl, label: lvl === '0' ? 'Cantrip' : `Level ${lvl}` }))}
                           states={activeClause.level?.states || {}}
@@ -1039,6 +1061,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           clearAll={() => axisClear('level', 'levelFilters')}
                         />
                         <AxisFilterSection
+                          compact
                           title="Spell School"
                           values={Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label }))}
                           states={activeClause.school?.states || {}}
@@ -1052,6 +1075,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           clearAll={() => axisClear('school', 'schoolFilters')}
                         />
                         <AxisFilterSection
+                          compact
                           title="Casting Time"
                           values={ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] }))}
                           states={activeClause.activation?.states || {}}
@@ -1065,6 +1089,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           clearAll={() => axisClear('activation', 'activationFilters')}
                         />
                         <AxisFilterSection
+                          compact
                           title="Range"
                           values={RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] }))}
                           states={activeClause.range?.states || {}}
@@ -1078,6 +1103,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           clearAll={() => axisClear('range', 'rangeFilters')}
                         />
                         <AxisFilterSection
+                          compact
                           title="Shape"
                           values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
                           states={activeClause.shape?.states || {}}
@@ -1091,6 +1117,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           clearAll={() => axisClear('shape', 'shapeFilters')}
                         />
                         <AxisFilterSection
+                          compact
                           title="Duration"
                           values={DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] }))}
                           states={activeClause.duration?.states || {}}
@@ -1104,6 +1131,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           clearAll={() => axisClear('duration', 'durationFilters')}
                         />
                         <AxisFilterSection
+                          compact
                           title="Properties"
                           values={PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] }))}
                           states={activeClause.property?.states || {}}
@@ -1116,6 +1144,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                           excludeAll={() => axisExcludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
                           clearAll={() => axisClear('property', 'propertyFilters')}
                         />
+                          </div>
+                        </details>
 
                         {/* Tags + per-group AND/OR/XOR live in an
                             Advanced Options disclosure. Most rules use
