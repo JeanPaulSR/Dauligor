@@ -7,7 +7,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
-import { FilterBar, TagGroupFilter, AxisFilterSection } from '../../components/compendium/FilterBar';
+import { TagGroupFilter, AxisFilterSection } from '../../components/compendium/FilterBar';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { normalizeTagRow, orderTagsAsTree, tagPickerLabel, buildTagIndex } from '../../lib/tagHierarchy';
@@ -105,7 +105,6 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
 
   // UI state
   const [howOpen, setHowOpen] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [manualSpellsSearch, setManualSpellsSearch] = useState('');
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -974,25 +973,45 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     ) : null}
                   </div>
 
-                  <FilterBar
-                    search=""
-                    setSearch={() => {}}
-                    isFilterOpen={filterOpen}
-                    setIsFilterOpen={setFilterOpen}
-                    activeFilterCount={queryActiveCount}
-                    resetFilters={clearActiveClause}
-                    // Filter state on this page IS the document being
-                    // edited (draft.query → spell_rules.query JSON),
-                    // not a transient page-level filter. Override the
-                    // inline button label so "Reset" doesn't read as
-                    // "reset to saved state" — it actually clears
-                    // every chip in the rule's query. The dirty
-                    // banner above the toolbar is the safety net.
-                    resetInlineLabel="Clear query"
-                    searchPlaceholder=""
-                    filterTitle="Rule Filters"
-                    renderFilters={
-                      <>
+                  {/* Filter chips are always inline on this page — the
+                      FilterBar wrapper (search + popup-toggle pattern
+                      used by /compendium/spells and the SpellListManager)
+                      doesn't fit here because the search box did nothing
+                      (the rule editor doesn't search spells; it AUTHORS
+                      filter chips) and the popup hid the chips behind an
+                      extra click. Inline lets the user see + edit every
+                      chip without context-switching. The chip-count
+                      badge + "Clear clause" affordance ride in a small
+                      header row above the chip sections. */}
+                  <div className="flex items-center gap-3 px-1">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink/55">
+                      Filters
+                    </span>
+                    <span
+                      className={cn(
+                        'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-sm text-[10px] font-black tabular-nums',
+                        queryActiveCount > 0
+                          ? 'bg-gold/20 text-gold border border-gold/40'
+                          : 'bg-card border border-gold/15 text-ink/40',
+                      )}
+                      title={`${queryActiveCount} chip${queryActiveCount === 1 ? '' : 's'} on this clause`}
+                    >
+                      {queryActiveCount}
+                    </span>
+                    <div className="flex-1" />
+                    {queryActiveCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={clearActiveClause}
+                        className="inline-flex items-center gap-1 h-7 px-2 rounded border border-blood/30 bg-blood/5 text-[10px] font-bold uppercase tracking-[0.18em] text-blood/80 hover:bg-blood/10 hover:text-blood transition-colors"
+                        title="Reset every chip on this clause to off"
+                      >
+                        <X className="w-3 h-3" />
+                        Clear clause
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="space-y-4">
                         <AxisFilterSection
                           title="Source"
                           values={sources.map(s => ({ value: s.id, label: String(s.abbreviation || s.shortName || s.name || s.id) }))}
@@ -1144,9 +1163,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             ))}
                           </div>
                         </details>
-                      </>
-                    }
-                  />
+                  </div>
                   <p className="text-[10px] text-ink/40">
                     The query selects spells by their attributes. Combine sections with AND (a spell must match every section that has any chips picked).
                   </p>
