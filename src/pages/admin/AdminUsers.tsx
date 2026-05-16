@@ -111,36 +111,31 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     setLoading(true);
     setError('');
     try {
-      // Create secondary app to register user without logging out admin
-      const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
-      const secondaryAuth = getAuth(secondaryApp);
-      
-      const email = usernameToEmail(newUser.username);
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUser.password);
-      await updateProfile(userCredential.user, { displayName: newUser.displayName });
-      
-      // Create profile in D1
-      const uid = userCredential.user.uid;
-      await upsertDocument('users', uid, {
-        username: newUser.username.toLowerCase(),
-        display_name: newUser.displayName,
-        role: newUser.role,
-        active_campaign_id: newUser.campaignIds[0] || null,
-        created_at: new Date().toISOString()
+      // Server-side create through the admin endpoint. The legacy
+      // secondary-app + client SDK dance is gone — Firebase Admin SDK
+      // on the server does the createUser without ever touching the
+      // admin's session, AND the server is the only place writing to
+      // the `users` table (the proxy now requires admin for direct
+      // users writes, so the old client path would 403 anyway).
+      const idToken = await auth.currentUser?.getIdToken();
+      const createRes = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          username: newUser.username,
+          displayName: newUser.displayName,
+          password: newUser.password,
+          role: newUser.role,
+          campaignIds: newUser.campaignIds,
+        }),
       });
-
-      // Assign campaigns in junction table
-      for (const campaignId of newUser.campaignIds) {
-        await upsertDocument('campaignMembers', `${campaignId}_${uid}`, {
-          campaign_id: campaignId,
-          user_id: uid,
-          role: 'player',
-          joined_at: new Date().toISOString()
-        });
+      if (!createRes.ok) {
+        const errBody = await createRes.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to create user (HTTP ${createRes.status})`);
       }
-
-      // Sign out secondary app and delete it
-      await signOut(secondaryAuth);
 
       setIsAddOpen(false);
       setNewUser({ username: '', password: '', displayName: '', role: 'user', campaignIds: [] });
@@ -174,14 +169,30 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (confirm('Are you sure? This only deletes the D1 profile, not the Auth account.')) {
+    if (confirm('Are you sure? This deletes both the Firebase Auth account AND the D1 profile (campaign memberships cascade automatically).')) {
       try {
-        await deleteDocument('users', id);
+        // Server-side delete through the admin endpoint. Removes the
+        // Firebase Auth record AND the D1 row (FK cascade handles
+        // campaign_members). The old client `deleteDocument('users',
+        // id)` path is now blocked at the proxy — `users` writes
+        // require admin and the only admin write surface is here.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error || `Failed to delete user (HTTP ${res.status})`);
+        }
         setUsers(prev => prev.filter(u => u.id !== id));
-        toast.success('User profile deleted');
-      } catch (err) {
+        // Membership cache loses the user's rows automatically since
+        // it was synthesized from the now-removed user row.
+        setCampaignMembers(prev => prev.filter(m => m.user_id !== id));
+        toast.success('User deleted');
+      } catch (err: any) {
         console.error(err);
-        toast.error('Failed to delete user');
+        toast.error(err?.message || 'Failed to delete user');
       }
     }
   };
@@ -198,64 +209,85 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   const handleToggleUserCampaign = async (userId: string, campaignId: string, currentIds: string[] = []) => {
     try {
       const isAssigned = currentIds.includes(campaignId);
-      if (isAssigned) {
-        // Remove from junction table
-        await deleteDocuments('campaignMembers', 'campaign_id = ? AND user_id = ?', [campaignId, userId]);
-      } else {
-        await upsertDocument('campaignMembers', `${campaignId}_${userId}`, {
-          campaign_id: campaignId,
-          user_id: userId,
-          role: 'player',
-          joined_at: new Date().toISOString()
-        });
-      }
-      
-      // Refresh memberships via /api/admin/users which now joins them
-      // server-side. Slightly heavier than the old single-table
-      // enumeration but it's the same payload AdminUsers already
-      // loaded on mount, so the route is well-warmed.
-      const refreshToken = await auth.currentUser?.getIdToken();
-      const refreshRes = await fetch('/api/admin/users', {
-        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+      const newIds = isAssigned
+        ? currentIds.filter(id => id !== campaignId)
+        : [...currentIds, campaignId];
+
+      // PATCH /api/admin/users/[id] with the full desired campaign_ids
+      // set. The server reconciles (diffs current vs desired) and
+      // writes campaign_members accordingly. Replaces the direct
+      // upsertDocument / deleteDocuments calls against campaignMembers
+      // — same end result, but the write path is admin-gated and
+      // atomic per user.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ campaign_ids: newIds }),
       });
-      if (refreshRes.ok) {
-        const refreshBody = await refreshRes.json();
-        const refreshedUsers: any[] = Array.isArray(refreshBody?.users) ? refreshBody.users : [];
-        const membershipRows = refreshedUsers.flatMap((u: any) =>
-          (Array.isArray(u.campaign_ids) ? u.campaign_ids : []).map((cid: string) => ({
-            user_id: u.id,
-            campaign_id: cid,
-          })),
-        );
-        setCampaignMembers(membershipRows);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to update campaign assignment (HTTP ${res.status})`);
+      }
+      const body = await res.json();
+      const updatedUser = body?.user;
+
+      // Update local state in place — the PATCH response carries the
+      // post-write user row with its joined campaign_ids, so we can
+      // patch the membership cache and the user list without a full
+      // /api/admin/users refresh.
+      if (updatedUser) {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updatedUser } : u));
+        const updatedCampaignIds: string[] = Array.isArray(updatedUser.campaign_ids) ? updatedUser.campaign_ids : [];
+        setCampaignMembers(prev => {
+          const withoutUser = prev.filter(m => m.user_id !== userId);
+          const userRows = updatedCampaignIds.map((cid: string) => ({ user_id: userId, campaign_id: cid }));
+          return [...withoutUser, ...userRows];
+        });
       }
 
       if (campaignDialogOpen.isOpen && campaignDialogOpen.userId === userId) {
-        const newIds = isAssigned 
-          ? currentIds.filter(id => id !== campaignId)
-          : [...currentIds, campaignId];
         setCampaignDialogOpen(prev => ({ ...prev, currentIds: newIds }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Failed to update campaign assignment');
+      toast.error(err?.message || 'Failed to update campaign assignment');
     }
   };
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     try {
-      const user = users.find(u => u.id === userId);
-      if (!user) return;
-      await upsertDocument('users', userId, {
-        ...user,
-        role: newRole
+      // PATCH /api/admin/users/[id] — server allow-lists `role` and
+      // validates against the known set. Replaces the old
+      // `upsertDocument('users', uid, { ...user, role })` spread,
+      // which was the most direct H6 vector: a co-dm or lore-writer
+      // with devtools could write `{ role: 'admin' }` for any user
+      // (or themselves) and the proxy admitted it on a staff token.
+      // That write path is now blocked at the proxy (users writes
+      // require admin) and the only legitimate write surface is
+      // here.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ role: newRole }),
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to update role (HTTP ${res.status})`);
+      }
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
       setRoleDialogOpen({ ...roleDialogOpen, isOpen: false });
       toast.success('User role updated');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Failed to update role');
+      toast.error(err?.message || 'Failed to update role');
     }
   };
 
@@ -391,38 +423,42 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
 
   const handleSeedUsers = async () => {
     const testUsers = [
-      { username: 'codm', displayName: 'Co-DM', role: 'co-dm' },
-      { username: 'lorewriter', displayName: 'Lore Writer', role: 'lore-writer' },
-      { username: 'trustedplayer', displayName: 'Trusted Player', role: 'trusted-player' }
+      { username: 'codm', displayName: 'Co-DM', role: 'co-dm', password: 'password123' },
+      { username: 'lorewriter', displayName: 'Lore Writer', role: 'lore-writer', password: 'password123' },
+      { username: 'trustedplayer', displayName: 'Trusted Player', role: 'trusted-player', password: 'password123' },
     ];
 
     setLoading(true);
     setError('');
     try {
-      const secondaryApp = initializeApp(firebaseConfig, 'SeedApp');
-      const secondaryAuth = getAuth(secondaryApp);
-
+      // POST /api/admin/users for each seed user — server creates
+      // Firebase Auth + D1 row + (optional) memberships in one shot.
+      // Drops the legacy secondary-app pattern entirely. Duplicate
+      // usernames surface as 409 from the duplicate-username
+      // pre-check; we log+continue so re-running the seed against a
+      // partially-populated table doesn't bail.
+      const idToken = await auth.currentUser?.getIdToken();
       for (const u of testUsers) {
         try {
-          const email = usernameToEmail(u.username);
-          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, 'password123');
-          await updateProfile(userCredential.user, { displayName: u.displayName });
-          
-          await upsertDocument('users', userCredential.user.uid, {
-            username: u.username,
-            display_name: u.displayName,
-            role: u.role,
-            created_at: new Date().toISOString()
+          const res = await fetch('/api/admin/users', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify(u),
           });
-          await signOut(secondaryAuth);
+          if (!res.ok && res.status !== 409) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error || `HTTP ${res.status}`);
+          }
         } catch (e: any) {
-          console.warn(`User ${u.username} might already exist:`, e.message);
+          console.warn(`User ${u.username} might already exist:`, e?.message);
         }
       }
       toast.success('Test users created! Default password: password123');
-      const refreshToken = await auth.currentUser?.getIdToken();
       const refreshRes = await fetch('/api/admin/users', {
-        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
       });
       if (refreshRes.ok) {
         const refreshBody = await refreshRes.json();

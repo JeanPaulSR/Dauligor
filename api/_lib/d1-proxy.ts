@@ -1,6 +1,7 @@
 import {
   HttpError,
   getCredentialErrorMessage,
+  requireAdminAccess,
   requireAuthenticatedUser,
   requireStaffAccess,
 } from "./firebase-admin.js";
@@ -75,12 +76,25 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     // the proxy. False positives (e.g. the word "UPDATE" appearing in a
     // SELECT's string literal) fall to the more restrictive staff path —
     // safe-by-default.
+    //
+    // PROTECTED_WRITE_TABLES are tables where direct mutations through
+    // this generic proxy are limited to admins specifically (not just
+    // staff). The `users` table is the canonical example: without this
+    // gate a co-dm / lore-writer could send `upsertDocument('users',
+    // <their-uid>, { role: 'admin' })` from devtools and self-promote.
+    // Legitimate user writes now go through /api/admin/users which has
+    // its own admin gate; this block forbids the bypass.
     const body = await readJsonBody(req);
     const sql = body.sql || (Array.isArray(body) ? body[0]?.sql : '');
     const MUTATION_KEYWORDS = /\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER|TRUNCATE|ATTACH|DETACH|REINDEX|VACUUM|PRAGMA)\b/i;
+    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(users)\b/i;
     const isMutation = MUTATION_KEYWORDS.test(sql);
+    const targetsProtectedTable = isMutation && PROTECTED_WRITE_TABLES.test(sql);
 
-    if (isMutation) {
+    if (targetsProtectedTable) {
+      await requireAdminAccess(authHeader);
+      console.log(`[D1 Proxy] Admin-only mutation on protected table: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
+    } else if (isMutation) {
       await requireStaffAccess(authHeader);
       console.log(`[D1 Proxy] Executing mutation: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
     } else {
