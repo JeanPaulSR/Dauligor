@@ -5657,10 +5657,18 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
   //   - lvlF / schoolF / sourceBookF / propF: active multi-select chips
   let searchTerm = "";
   let filterOpen = false;
+  // Filter axes — kept in sync with the chip set on /compendium/spells
+  // so a picker user sees the same facets they're used to in the app.
+  // Each Set holds the *active* chip values for that axis. AND semantics
+  // across axes, OR within an axis (matches the public spell browser).
   const lvlF = new Set();         // numbers (0 = cantrip, 1..9 = leveled)
-  const schoolF = new Set();      // school slugs
+  const schoolF = new Set();      // school slugs (abj, evo, ...)
   const sourceBookF = new Set();  // sourceBookId strings
-  const propF = new Set();        // "ritual" / "concentration" / "already"
+  const actF = new Set();         // activation buckets (action / bonus / reaction / minute / hour / special)
+  const rangeF = new Set();       // range buckets (self / touch / close / near / far / ranged / special / sight / unlimited)
+  const durationF = new Set();    // duration buckets (instant / round / minute / hour / day / special / permanent)
+  const shapeF = new Set();       // shape buckets (cone / cube / sphere / line / square / cylinder / radius / none)
+  const propF = new Set();        // "ritual" / "concentration" / "vocal" / "somatic" / "material" / "already"
 
   const togglePick = (sourceId, level) => {
     if (alreadyOnActorSourceIds.has(sourceId)) return false; // locked
@@ -5682,21 +5690,31 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
   };
 
   // ─── Pre-computed pool metadata ──────────────────────────────────
-  // Schools / source books that actually appear in the pool — used to
-  // populate the filter chip sections. Skipping empty values keeps the
-  // chip row tight for classes whose pool doesn't span every school.
-  const schoolsInPool = [...new Set(
-    pool.map((s) => String(s?.flags?.[MODULE_ID]?.school ?? "").trim()).filter(Boolean)
-  )].sort();
-  const sourceBooksInPool = [...new Set(
-    pool.map((s) => String(s?.flags?.[MODULE_ID]?.sourceBookId ?? "").trim()).filter(Boolean)
-  )].sort();
+  // Schools / source books / buckets that actually appear in the pool
+  // — used to populate the filter chip sections. Skipping empty
+  // values keeps the chip row tight for classes whose pool doesn't
+  // span every option.
+  const collectFromPool = (key) =>
+    [...new Set(
+      pool.map((s) => String(s?.flags?.[MODULE_ID]?.[key] ?? "").trim()).filter(Boolean)
+    )].sort();
+  const schoolsInPool = collectFromPool("school");
+  // The summary ships the source-book id under `spellSourceId`
+  // (the spell's source book). Foundry-side row render historically
+  // mis-read `sourceBookId` here — kept the lookup name explicit so
+  // the field naming stays consistent with the wire format.
+  const sourceBooksInPool = collectFromPool("spellSourceId");
+  const activationsInPool = collectFromPool("activationBucket");
+  const rangesInPool = collectFromPool("rangeBucket");
+  const durationsInPool = collectFromPool("durationBucket");
+  const shapesInPool = collectFromPool("shapeBucket");
 
   const escapeHtml = (v) => foundry.utils.escapeHTML(String(v ?? ""));
 
   // ─── Filtered pool derivation ─────────────────────────────────────
   // Re-runs every body render. Cheap enough for typical class pools
   // (<400 spells) that a memoization layer isn't worth it here.
+  // AND across axes, OR within an axis — same as /compendium/spells.
   const computeFilteredPool = () => {
     const q = searchTerm.trim().toLowerCase();
     return pool.filter((item) => {
@@ -5704,17 +5722,31 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
       const sourceId = String(f.sourceId ?? "");
       const lv = Number(f.level ?? 0);
       const school = String(f.school ?? "");
-      const sourceBookId = String(f.sourceBookId ?? "");
+      const sourceBookId = String(f.spellSourceId ?? f.sourceBookId ?? "");
+      const activation = String(f.activationBucket ?? "");
+      const range = String(f.rangeBucket ?? "");
+      const duration = String(f.durationBucket ?? "");
+      const shape = String(f.shapeBucket ?? "");
       const isRitual = Boolean(f.ritual);
       const isConcentration = Boolean(f.concentration);
+      const isVocal = Boolean(f.componentsVocal);
+      const isSomatic = Boolean(f.componentsSomatic);
+      const isMaterial = Boolean(f.componentsMaterial);
       const isAlready = alreadyOnActorSourceIds.has(sourceId);
 
       if (q && !String(item.name || "").toLowerCase().includes(q)) return false;
       if (lvlF.size && !lvlF.has(lv)) return false;
       if (schoolF.size && !schoolF.has(school)) return false;
       if (sourceBookF.size && !sourceBookF.has(sourceBookId)) return false;
+      if (actF.size && !actF.has(activation)) return false;
+      if (rangeF.size && !rangeF.has(range)) return false;
+      if (durationF.size && !durationF.has(duration)) return false;
+      if (shapeF.size && !shapeF.has(shape)) return false;
       if (propF.has("ritual") && !isRitual) return false;
       if (propF.has("concentration") && !isConcentration) return false;
+      if (propF.has("vocal") && !isVocal) return false;
+      if (propF.has("somatic") && !isSomatic) return false;
+      if (propF.has("material") && !isMaterial) return false;
       if (propF.has("already") && !isAlready) return false;
       return true;
     });
@@ -5734,7 +5766,7 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     const isPicked = (isCantrip ? pickedCantrips : pickedSpells).has(sourceId);
     const isSelected = selectedSourceId === sourceId;
     const school = String(flags.school ?? "").slice(0, 4).toUpperCase();
-    const sourceLabel = String(flags.sourceBookId ?? "").slice(0, 6);
+    const sourceLabel = String(flags.spellSourceId ?? "").slice(0, 6);
     const ritual = flags.ritual ? "R" : "";
     const concentration = flags.concentration ? "C" : "";
 
@@ -5756,7 +5788,7 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
         <span class="dauligor-spell-picker__indicator">${indicatorChar}</span>
         <span class="dauligor-spell-picker__name">${escapeHtml(item.name)}</span>
         <span class="dauligor-spell-picker__school" title="${escapeHtml(flags.school || "")}">${school || "—"}</span>
-        <span class="dauligor-spell-picker__source" title="${escapeHtml(flags.sourceBookId || "")}">${escapeHtml(sourceLabel)}</span>
+        <span class="dauligor-spell-picker__source" title="${escapeHtml(flags.spellSourceId || "")}">${escapeHtml(sourceLabel)}</span>
         <span class="dauligor-spell-picker__badges">
           ${ritual ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--ritual" title="Ritual">${ritual}</span>` : ""}
           ${concentration ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--conc" title="Concentration">${concentration}</span>` : ""}
@@ -5807,7 +5839,10 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
       : null;
 
     const filteredPool = computeFilteredPool();
-    const activeFilterCount = lvlF.size + schoolF.size + sourceBookF.size + propF.size;
+    const activeFilterCount =
+      lvlF.size + schoolF.size + sourceBookF.size
+      + actF.size + rangeF.size + durationF.size + shapeF.size
+      + propF.size;
 
     // LEFT — On Sheet column. Renders the already-on-actor subset of
     // the pool. Empty-state guidance hints at when this column fills.
@@ -5893,17 +5928,51 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
       `;
     };
 
-    // Build the level chip options from levels actually present in
-    // the pool, so we don't show a "Level 9" chip for a pool that only
-    // reaches 5.
+    // Build the chip option lists from values actually present in the
+    // pool — keeps the chip row tight and prevents "Level 9" chips on
+    // a class that only reaches 5, etc. Same approach as the public
+    // /compendium/spells filter UI.
     const levelsInPool = [...new Set(pool.map((s) => Number(s?.flags?.[MODULE_ID]?.level ?? 0)))].sort((a, b) => a - b);
     const levelChipOptions = levelsInPool.map((lv) => ({ v: lv, l: lv === 0 ? "Cantrip" : `Lv ${lv}` }));
     const schoolChipOptions = schoolsInPool.map((s) => ({ v: s, l: s.toUpperCase() }));
     const sourceChipOptions = sourceBooksInPool.map((sb) => ({ v: sb, l: sb }));
+    // Bucket label dictionaries — humanise the slug each axis ships in
+    // `flags.dauligor-pairing.{axis}Bucket`. Keep tight labels for the
+    // chip strip; fallback to the slug if a value isn't pre-mapped.
+    const activationLabels = {
+      action: "Action", bonus: "Bonus", reaction: "Reaction",
+      minute: "Minute", hour: "Hour", special: "Special",
+    };
+    const rangeLabels = {
+      self: "Self", touch: "Touch", close: "Close",
+      near: "Near", far: "Far", ranged: "Ranged", sight: "Sight",
+      unlimited: "Unlimited", special: "Special",
+    };
+    const durationLabels = {
+      instant: "Instant", round: "Round", minute: "Minute",
+      hour: "Hour", day: "Day", permanent: "Permanent",
+      special: "Special",
+    };
+    const shapeLabels = {
+      cone: "Cone", cube: "Cube", sphere: "Sphere",
+      line: "Line", square: "Square", cylinder: "Cylinder",
+      radius: "Radius", none: "No Shape",
+    };
+    const labelFor = (dict, v) => dict[v] || (v ? v.charAt(0).toUpperCase() + v.slice(1) : "");
+    const activationChipOptions = activationsInPool.map((v) => ({ v, l: labelFor(activationLabels, v) }));
+    const rangeChipOptions = rangesInPool.map((v) => ({ v, l: labelFor(rangeLabels, v) }));
+    const durationChipOptions = durationsInPool.map((v) => ({ v, l: labelFor(durationLabels, v) }));
+    const shapeChipOptions = shapesInPool.map((v) => ({ v, l: labelFor(shapeLabels, v) }));
+    // Properties chip set — matches the /compendium/spells filter:
+    // V/S/M components, ritual, concentration. Plus the "already on
+    // actor" convenience chip when relevant (re-import scenarios).
     const propChipOptions = [
+      { v: "vocal", l: "V (Vocal)" },
+      { v: "somatic", l: "S (Somatic)" },
+      { v: "material", l: "M (Material)" },
       { v: "ritual", l: "Ritual" },
       { v: "concentration", l: "Concentration" },
-      ...(alreadyOnActorSourceIds.size > 0 ? [{ v: "already", l: "On Sheet" }] : [])
+      ...(alreadyOnActorSourceIds.size > 0 ? [{ v: "already", l: "On Sheet" }] : []),
     ];
 
     return `
@@ -5967,6 +6036,10 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
                 ${renderChipSection("Level", "level", levelChipOptions, lvlF)}
                 ${renderChipSection("School", "school", schoolChipOptions, schoolF)}
                 ${renderChipSection("Source", "source", sourceChipOptions, sourceBookF)}
+                ${renderChipSection("Activation", "activation", activationChipOptions, actF)}
+                ${renderChipSection("Range", "range", rangeChipOptions, rangeF)}
+                ${renderChipSection("Duration", "duration", durationChipOptions, durationF)}
+                ${renderChipSection("Shape", "shape", shapeChipOptions, shapeF)}
                 ${renderChipSection("Properties", "prop", propChipOptions, propF)}
               </div>
             ` : ""}
@@ -6007,11 +6080,17 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
           event.stopPropagation();
           const kind = chipBtn.dataset.filterKind;
           const valueRaw = chipBtn.dataset.filterValue;
+          // Dispatch the chip onto the right axis Set. All non-level
+          // axes carry string values; level is the only numeric axis.
           const set = kind === "level" ? lvlF
             : kind === "school" ? schoolF
               : kind === "source" ? sourceBookF
-                : kind === "prop" ? propF
-                  : null;
+                : kind === "activation" ? actF
+                  : kind === "range" ? rangeF
+                    : kind === "duration" ? durationF
+                      : kind === "shape" ? shapeF
+                        : kind === "prop" ? propF
+                          : null;
           if (!set) return;
           const value = kind === "level" ? Number(valueRaw) : String(valueRaw);
           toggleInSet(set, value);
@@ -6030,7 +6109,16 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
             for (const s of schoolsInPool) schoolF.add(s);
           } else if (kind === "source") {
             for (const sb of sourceBooksInPool) sourceBookF.add(sb);
+          } else if (kind === "activation") {
+            for (const v of activationsInPool) actF.add(v);
+          } else if (kind === "range") {
+            for (const v of rangesInPool) rangeF.add(v);
+          } else if (kind === "duration") {
+            for (const v of durationsInPool) durationF.add(v);
+          } else if (kind === "shape") {
+            for (const v of shapesInPool) shapeF.add(v);
           } else if (kind === "prop") {
+            propF.add("vocal"); propF.add("somatic"); propF.add("material");
             propF.add("ritual"); propF.add("concentration");
             if (alreadyOnActorSourceIds.size > 0) propF.add("already");
           }
@@ -6044,6 +6132,10 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
           if (kind === "level") lvlF.clear();
           else if (kind === "school") schoolF.clear();
           else if (kind === "source") sourceBookF.clear();
+          else if (kind === "activation") actF.clear();
+          else if (kind === "range") rangeF.clear();
+          else if (kind === "duration") durationF.clear();
+          else if (kind === "shape") shapeF.clear();
           else if (kind === "prop") propF.clear();
           app.rerenderPrompt();
           return;
@@ -6060,7 +6152,9 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
         // Reset all filters
         if (event.target.closest?.("[data-action='reset-filters']")) {
           event.stopPropagation();
-          lvlF.clear(); schoolF.clear(); sourceBookF.clear(); propF.clear();
+          lvlF.clear(); schoolF.clear(); sourceBookF.clear();
+          actF.clear(); rangeF.clear(); durationF.clear(); shapeF.clear();
+          propF.clear();
           app.rerenderPrompt();
           return;
         }

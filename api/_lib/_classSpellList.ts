@@ -35,16 +35,21 @@ const trimString = (val: any) => String(val ?? "").trim();
  * Lightweight summary of one spell in a class's curated list.
  *
  * Intentionally OMITS the heavy `system` block (description,
- * activities, materials, range, duration, etc.) and `effects`. The
- * Foundry importer uses these summaries for the picker's row render,
- * filter chips, and budget logic — none of those need the system
- * block. When the user picks a spell, the embed phase fetches the
+ * activities, etc.) and `effects`. The Foundry importer uses these
+ * summaries for the picker's row render, filter chips, and budget
+ * logic. When the user picks a spell, the embed phase fetches the
  * full item from `/api/module/spells/<dbId>.json` before writing it
  * to the actor.
  *
- * Size: ~700 bytes per spell vs ~3-5 KB for the full item. Typical
- * 37-spell pool drops from 141 KB → 26 KB (~80% reduction). Larger
+ * Size: ~800 bytes per spell vs ~3-5 KB for the full item. Typical
+ * 37-spell pool drops from 141 KB → ~30 KB (~78% reduction). Larger
  * pools (200+ spells) save proportionally more.
+ *
+ * Filter parity with `/compendium/spells`: the bucket fields below
+ * (`activationBucket`, `rangeBucket`, `durationBucket`, `shapeBucket`,
+ * `componentsVocal/Somatic/Material`) match every facet the public
+ * spell browser ships filter chips for. The importer's picker can
+ * therefore offer the same chip set without re-fetching full data.
  *
  * Every field consumed by `runSpellSelectionStep` and the embed
  * loop's "find by sourceId" pass is preserved — the only change
@@ -57,12 +62,13 @@ export interface ClassSpellItem {
   /** Image URL for the picker row icon. Tiny string; kept inline. */
   img?: string;
   /**
-   * Flags carry every field the picker reads: sourceId (track
-   * picks), dbId (fetch full data on embed), level (group rows +
-   * cantrip/spell budget), school (badge + filter), sourceBookId
-   * (badge + filter), ritual / concentration (badges + filter),
-   * requiredTagIds + prerequisiteText (prereq display), tagIds
-   * (future tag filter), classSourceId (attribution).
+   * Flags carry every field the picker reads. Identity fields
+   * (sourceId, dbId, classSourceId), display + grouping fields
+   * (level, school, spellSourceId for the source badge), filter
+   * facets identical to /compendium/spells (activation/range/
+   * duration/shape buckets + V/S/M component flags + ritual +
+   * concentration), and prereq metadata (requiredTagIds +
+   * prerequisiteText + tagIds).
    */
   flags: {
     "dauligor-pairing": {
@@ -77,6 +83,18 @@ export interface ClassSpellItem {
       requiredTagIds: string[];
       prerequisiteText: string;
       tagIds: string[];
+      // Filter facets — mirrors src/lib/spellFilters.ts buckets.
+      // These are pre-computed columns on the `spells` table (see
+      // worker/migrations/20260514-2200_spells_bucket_columns.sql)
+      // and kept in sync by `upsertSpell` / `upsertSpellBatch` so
+      // we never need to parse foundry_data on the picker side.
+      activationBucket: string;
+      rangeBucket: string;
+      durationBucket: string;
+      shapeBucket: string;
+      componentsVocal: boolean;
+      componentsSomatic: boolean;
+      componentsMaterial: boolean;
       concentration: boolean;
       ritual: boolean;
     };
@@ -144,12 +162,20 @@ export async function buildClassSpellListBundle(
   // full item. Deliberately drops `foundry_data` (the system block),
   // `effects`, and any large descriptive columns. The full spell is
   // fetched on demand via `/api/module/spells/<dbId>.json`.
+  //
+  // The bucket columns (activation/range/duration/shape) and
+  // component flags (vocal/somatic/material) ARE included — they're
+  // small precomputed scalars kept in sync by `upsertSpell` /
+  // `upsertSpellBatch` and give the picker filter parity with the
+  // app's `/compendium/spells` browser.
   const spellRows = await fetchCollection<any>("spells", {
     where: `id IN (${classSpellIds.map(() => "?").join(",")})`,
     params: classSpellIds,
     select:
       "id, name, identifier, level, school, image_url, source_id, tags, " +
-      "required_tags, prerequisite_text, concentration, ritual",
+      "required_tags, prerequisite_text, concentration, ritual, " +
+      "activation_bucket, range_bucket, duration_bucket, shape_bucket, " +
+      "components_vocal, components_somatic, components_material",
   });
 
   const spells: ClassSpellItem[] = spellRows.map((row: any) => {
@@ -182,6 +208,17 @@ export async function buildClassSpellListBundle(
             : [],
           prerequisiteText: String(row.prerequisite_text || ""),
           tagIds: Array.isArray(tagIds) ? tagIds.map(String) : [],
+          // Filter facets (bucket values match `src/lib/spellFilters.ts`
+          // bucket constants). Default to "special"/"other"/"none" so
+          // the chips still bucket legacy rows whose bucket column
+          // didn't backfill (foundry_data was NULL at migration time).
+          activationBucket: String(row.activation_bucket || "special"),
+          rangeBucket: String(row.range_bucket || "special"),
+          durationBucket: String(row.duration_bucket || "instant"),
+          shapeBucket: String(row.shape_bucket || "none"),
+          componentsVocal: Boolean(row.components_vocal),
+          componentsSomatic: Boolean(row.components_somatic),
+          componentsMaterial: Boolean(row.components_material),
           concentration: Boolean(row.concentration),
           ritual: Boolean(row.ritual),
         },

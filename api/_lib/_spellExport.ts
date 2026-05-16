@@ -96,6 +96,17 @@ export async function buildSpellItemBundle(
           : [],
         prerequisiteText: String(row.prerequisite_text || ""),
         tagIds: Array.isArray(tagIds) ? tagIds.map(String) : [],
+        // Same filter facets shipped in the lightweight summary —
+        // keeps the actor's embedded spell item flag set identical
+        // to what the picker saw, so any future sheet-side filter
+        // chip code can read from a single source.
+        activationBucket: String(row.activation_bucket || "special"),
+        rangeBucket: String(row.range_bucket || "special"),
+        durationBucket: String(row.duration_bucket || "instant"),
+        shapeBucket: String(row.shape_bucket || "none"),
+        componentsVocal: Boolean(row.components_vocal),
+        componentsSomatic: Boolean(row.components_somatic),
+        componentsMaterial: Boolean(row.components_material),
         concentration: Boolean(row.concentration),
         ritual: Boolean(row.ritual),
       },
