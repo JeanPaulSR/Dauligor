@@ -578,6 +578,185 @@ here, not silently propagated:
   owns the export pipeline and the Foundry pairing module right now.
 - Don't reintroduce `firebase/firestore` imports anywhere (per `AGENTS.md`).
 
+## Post-Layer-6 polish (May 2026)
+
+Layers 1–5 + Foundry export round-trip (Layer 6) are all shipped.
+This section captures the post-merge polish work that landed on
+`claude/pedantic-antonelli-ce1c7f` after Layer 6 closed, organized by
+surface.
+
+### Spell Manager step — Add Spells modal model
+
+Previously the Spell Manager step rendered every spell on every
+class's pool as a row, with a per-row toggle that flipped both
+"known" and "prepared". With dozens of spells per class and
+multiple classes on one character that produced a very long, very
+busy view where prep-state mistakes were easy.
+
+The new model splits picking from preparing:
+
+| Surface | Job |
+|---|---|
+| **Per-class "Add Spells" picker modal** | Browse the full class pool; click a row to add/remove the spell from the character's sheet. Header counters show `Cantrips: N/cap` + `Known: N/cap`. Modal is class-scoped — its `pool` is exactly `classSpellPools[cid]` + class-specific extensions. |
+| **Main sheet — per-class section** | Renders ONLY the spells already on the character's sheet for that class. The leading control per row is a prep toggle (not a known toggle); preparing respects a per-class prep cap. |
+
+Per-class attribution is the key data move. When the picker calls
+`togglePlayerKnown(spellId, level, requiredTags, attributedClassId)`,
+the new owned-spell entry stores `countsAsClassId = attributedClassId`.
+The main sheet's filter (`attributedClassForSpell` in
+[CharacterBuilder.tsx](../../src/pages/characters/CharacterBuilder.tsx))
+resolves attribution in priority:
+
+1. `owned.countsAsClassId` (explicit — modal pick or override)
+2. `owned.grantedById` when `grantedByType === 'class'` (class
+   advancement grant)
+3. First spellcasting class whose `classSpellPools[cid]` contains
+   the spell — deterministic fallback for legacy owned-spell rows
+   written before the modal stamped `countsAsClassId`.
+
+Prepared-cap enforcement (`togglePrepared` in the same file): cap
+for a class = count of leveled-spell known entries attributed to
+that class (cantrips and always-prepared spells don't count
+against the cap). Adding a prepared spell at cap silently no-ops;
+unpreparing is always allowed. The same predicate (`countsTowardsActiveClass`
++ its modal twin `countsTowardsModalClass`) drives both the rail
+header counter and the cap-block enforcement so they stay in sync.
+
+### Rule-match explainer
+
+For the spell-lists curation surface, an admin needs to see WHY a
+given spell did or didn't enter the class's list. The
+explainer lives in two layers:
+
+- **`lib/spellFilters.ts :: explainSpellAgainstRule(spell, query,
+  parentByTagId, tagIndex, tagNamesById)`** — companion to the
+  hot-path `matchSpellAgainstRule`. Returns a structured trace:
+  ```ts
+  type RuleExplanation = {
+    matched: boolean;
+    axes: Array<{
+      axis: 'source' | 'level' | 'school' | 'tags' | 'activation'
+          | 'range' | 'duration' | 'shape' | 'property';
+      pass: boolean;
+      reason: string;        // human-readable
+    }>;
+  };
+  ```
+  Only emits entries for axes the rule actually constrains (no
+  noise like "Source: ✓ no filter set" for axes the rule ignores).
+  The tag axis spells out the failing group + which include/exclude
+  tags missed by name when `tagNamesById` is supplied.
+- **`lib/spellRules.ts :: explainSpellMatch(spell, rule, tagIndex,
+  tagNamesById)`** — thin wrapper that handles manual-pin
+  shortcuts (returns a synthetic single-axis "Manually pinned"
+  trace) and multi-clause dispatch (see next section).
+
+UI in [SpellListManager.tsx](../../src/pages/compendium/SpellListManager.tsx)
+: when a spell is previewed in the right pane, the SpellDetailPanel's
+`bottomSlot` renders a "Show Rule Match" disclosure with one
+accordion-style block per linked rule. Closed by default; the
+summary shows `(N / M match)` so the user knows at a glance
+whether to expand for a diagnostic dive. Passing rules collapse to
+a one-liner listing the constrained axes; failing rules expand to
+show the failing-axis reasons in blood-tinted chips.
+
+The `bottomSlot` is a new prop on `SpellDetailPanel` — render slot
+pinned to the bottom-`mt-auto` group alongside the Show Tags
+disclosure, so the two disclosures sit as siblings rather than as
+a separate section below.
+
+### Multi-clause rules (`RuleClauseRoot`)
+
+A single `RuleQuery` is one AND of axis + tag filters. That can't
+express common rule intents like "all Arcane EXCEPT Healing PLUS
+Healing-when-Revival-or-Necromancy" — the two halves have
+incompatible tag chips. The fix is OR-of-clauses at the rule level.
+
+The stored `query` JSON is now either:
+
+- **Legacy flat `RuleQuery`** — every rule written before
+  multi-clause support. Continues to load and evaluate unchanged.
+- **Multi-clause `{ clauses: RuleQuery[] }`** — written by the
+  editor only when the user authors >1 clause. Single-clause
+  rules round-trip back to the flat shape on save so the stored
+  JSON for single-clause rules looks identical to pre-change
+  output.
+
+Library plumbing in [lib/spellFilters.ts](../../src/lib/spellFilters.ts):
+
+| Symbol | Role |
+|---|---|
+| `RuleClauseRoot` | `RuleQuery \| { clauses: RuleClause[] }` |
+| `isMultiClauseRoot(root)` | Type guard. |
+| `getClauses(root)` | Flatten to clause array; legacy flat becomes singleton. |
+| `matchAnyClause(spell, root, parentByTagId, tagIndex)` | OR dispatch — true if any clause matches via the existing `matchSpellAgainstRule`. |
+
+`spellMatchesRule` and `explainSpellMatch` dispatch through
+`matchAnyClause` / clause-walking respectively. Hot-path cost for
+single-clause rules is identical to before.
+
+Editor in [SpellRulesEditor.tsx](../../src/pages/compendium/SpellRulesEditor.tsx):
+
+- New `activeClauseIndex` state. `clauses` derived via
+  `getClauses(draft.query)`; `activeClause` selects the focused one.
+- All filter-chip UI reads `activeClause.X` (not `draft.query.X`),
+  and writes via `updateActiveClause(patch)` which immutably merges
+  into `clauses[activeIndex]` and re-serializes `draft.query` via
+  `clausesToRoot()` (flat ↔ multi based on length).
+- Clause tab strip above the filter panel: `Clause 1 · Clause 2 ✕
+  · + Add Clause`. Refuses to delete the last remaining clause.
+  Single-clause rules show one "Clause 1" pill with no ✕.
+- "Clear clause" button resets the focused clause to `{}` without
+  touching siblings; the per-clause chip-count badge in the header
+  reflects the active clause only.
+- Both filter groups ("Normal Options" — the 8 axis sections, and
+  "Advanced Options — Tags") are now wrapped in collapsible
+  `<details>` blocks; collapsed by default so the editor opens
+  slim.
+- `AxisFilterSection` + `TagGroupFilter` gained a `compact` prop
+  (in [FilterBar.tsx](../../src/components/compendium/FilterBar.tsx))
+  that swaps the `h3-title` heading for a 10px gold caption and
+  tightens vertical rhythm. Used here only; the compendium spell
+  browser keeps the full-size heading.
+
+### Layout: viewport-anchored card sizing on `/compendium/spell-lists`
+
+`SpellListManager` used `paneHeight = window.innerHeight - 260` to
+size the spell-list + detail cards. The 260 was a fixed assumption
+about toolbar + filter chrome height, so when the Linked Rules
+panel was expanded the cards drifted past the viewport bottom.
+
+`paneHeight` now comes from a `ResizeObserver` on the actual
+`flex-1 min-h-0 grid` container that wraps the cards, with the
+fallback computation `window.innerHeight - gridTop - 12` (12px
+bottom buffer absorbs sub-pixel rounding). When chrome above the
+grid expands, `clientHeight` updates and `paneHeight` follows; the
+cards always stretch from just-below-the-search-bar to ~12px above
+the viewport bottom.
+
+The outer xl grid template flipped from
+`minmax(0,1fr)_420px` (list grew unbounded) to
+`520px_minmax(360px,1fr)` (list fixed, detail flex-1) — same shape
+`/compendium/spells` uses, so the description pane gets the wide
+column instead of the list.
+
+### Stale-class detection fix (`parseTimestampMs`)
+
+`spell_rules.updated_at` is client-written as ISO
+`2026-05-15T17:05:18.674Z`. `class_spell_lists.added_at` is
+SQLite-written via `DEFAULT CURRENT_TIMESTAMP` as
+`2026-05-15 17:07:14`. Lexical string compare on the same day saw
+the ISO form as always greater (T 0x54 > space 0x20 at position
+10), so every class always showed up as stale — right after a
+rebuild.
+
+`parseTimestampMs(s)` (exported from
+[lib/classSpellLists.ts](../../src/lib/classSpellLists.ts)) parses
+both shapes to ms-since-epoch — appending `T`/`Z` to SQLite-shaped
+strings to force UTC. Both stale paths (`fetchStaleClasses` for
+the global indicator + `staleRuleIds` for per-rule pills in
+`SpellListManager`) now compare numerically.
+
 ## Related docs
 
 - [compendium-spells.md](compendium-spells.md) — spell row shape and importer

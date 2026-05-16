@@ -140,13 +140,122 @@ Class advancement values come from package-backed advancement selections (not th
 
 Source: [src/lib/characterExport.ts](../../src/lib/characterExport.ts). Also see [foundry-export.md](foundry-export.md).
 
-## Related docs
+## Recent rework (May 2026)
 
-- [character-sheet.md](character-sheet.md) — sheet rendering
-- [compendium-classes.md](compendium-classes.md) — class data the builder consumes
-- [compendium-scaling.md](compendium-scaling.md) — scale value resolution
-- [compendium-spells.md](compendium-spells.md) — spell side
-- [foundry-export.md](foundry-export.md) — actor bundle export contract
-- [../architecture/reference-syntax.md](../architecture/reference-syntax.md) — `@scale.*`, `@prof`, `@level` resolution
-- [../database/structure/characters.md](../database/structure/characters.md), [../_archive/migration-details/phase-5-characters.md](../_archive/migration-details/phase-5-characters.md)
-- [../_archive/class-progression-architecture.md](../_archive/class-progression-architecture.md), [../_archive/character-builder-progression-owned-state-outline.md](../_archive/character-builder-progression-owned-state-outline.md) — design notes
+This section documents structural changes that landed after the original
+Builder Steps section above. The wizard-style step description still
+applies to the *content* of each step; the layout chrome and the
+character-side spell manager were rebuilt for a Hand-Off-2 design pass.
+
+### Page-scroll layout (TAB_RAIL_IMPLEMENTATION.md)
+
+The outer page used to be `<div className="max-w-[1800px] mx-auto h-screen flex flex-col">`
+with the rail mounted as a sibling flex item. That layout broke when
+content overflowed (rail and content competed for the same height) and
+clipped on short screens. The current shape:
+
+```
+<root h-screen flex-col overflow-hidden>             ← body lock, no page scroll
+  <div cb-page-scroll flex-1 overflow-y-auto>        ← the single scroll container
+    <div cb-page-inner max-w-1800 mx-auto px-X>
+      (legacy-advancement warning, if present)
+      <div cb-body-cols>                             ← grid: 1fr + clamp(44px, 5vw, 64px)
+        <div min-w-0>{swappable step}</div>          ← content column
+        <nav cb-step-rail>...</nav>                  ← sticky-top right rail
+      </div>
+```
+
+- `body.character-builder-wide` locks the document body to viewport
+  height + hides the global footer (mounted via a `useEffect` on the
+  builder root).
+- `.cb-page-scroll` is the *only* scrolling element. The class-step
+  accordion / proficiency grid / spell list all grow to natural height
+  and the page scrolls past them; the rail's `position: sticky; top: 14px`
+  keeps it pinned through the scroll.
+- The rail is rendered as the second column of `.cb-body-cols`, not a
+  fixed overlay. `align-items: start` on the grid is required — without
+  it the rail column stretches to the content column's height and
+  `position: sticky` stops working.
+
+The top header band (Workroom + View JSON + Export + Commit Changes
+row) was absorbed into the rail. Save is the always-gold button at the
+top of the rail; View JSON / Export / Delete Character live in the
+rail's Settings popover.
+
+CSS lives in [src/index.css](../../src/index.css) under the
+`/* CHARACTER BUILDER LAYOUT */` block (`.cb-body-cols`, `.cb-step-rail`,
+`.cb-tab-strip-btn`, etc.).
+
+### Sheet step — BookSpread verso/recto
+
+The "sheet" step renders as a two-page book spread:
+
+- **Verso** (left page, 540–580px on xl): identity strip, Vital Hub,
+  Abilities & Saves grid, Skills 2-col, Tools/Languages. Inspiration +
+  Exhaustion pills ride right-aligned next to the name input in the
+  identity strip; the Vital Hub footer is a clean 3-col Init/Speed/Prof
+  row.
+- **Recto** (right page, fluid): tab strip (Features · Spells · Inventory
+  · Feats · Profs · Bio) with the active tab's content beneath. Below xl
+  the columns stack; above xl each column scrolls independently via
+  `xl:overflow-y-auto` so a long Skills list and a long Features tab
+  don't fight for the same vertical space.
+
+The Abilities & Saves grid uses the design's `.ability-save-cell` shape:
+6 columns × stack(`STR` label · `+0` mod in faint-gold box · `10` score
+tag · save dot + `+0` save mod), tightly spaced. Component CSS is in
+[sheet-v3.css](../../E:/DnD/Professional/Dev/Design Handoff/Dauligor-Character-Sheet-Hand-Off-2/design_handoff_character_sheet/sheet-v3.css)
+on the design side; the React build is inline in `CharacterBuilder.tsx`.
+
+### Spell Manager step (Add Spells modal)
+
+The character side of `/compendium/spell-rules` / `spell-lists` work.
+Two surfaces:
+
+1. **Per-class "Add Spells" modal.** Opens from the class header
+   button in the main spell manager tree. Renders the full class
+   spell pool with search + per-modal filters; clicking a row toggles
+   the spell on the character's sheet (subject to per-class
+   `cantripsCap` + `spellsCap` from class scaling columns). The modal
+   does NOT toggle prepared state — that's the main sheet's job.
+2. **Main sheet — known spells only.** Each class section in the
+   sheet's main view shows only the spells already on the character.
+   The leading control per row is the prep toggle; preparing respects
+   a per-class prepared cap = the number of leveled spells known by
+   that class. Spells with `countsAsClassId` set are charged to that
+   class's cap (so cross-class assignments work correctly for Divine
+   Soul / Magic Initiate / etc.).
+
+Attribution: when the picker calls `togglePlayerKnown(spellId, level,
+requiredTags, attributedClassId)`, the new owned-spell entry gets
+`countsAsClassId = attributedClassId`. The main view's per-class
+section then filters via `attributedClassForSpell(spellId, owned)`,
+which resolves to (in priority order):
+1. `owned.countsAsClassId` (explicit attribution from the modal)
+2. `owned.grantedById` when `grantedByType === 'class'` (granted by
+   the class's own advancement)
+3. The first spellcasting class whose pool contains the spell —
+   deterministic fallback for legacy data written before
+   `countsAsClassId` was set by the modal.
+
+### Class-step freeze fix (`canonicalStringify`)
+
+Two `useEffect`s in `CharacterBuilder.tsx` reconcile
+`character.progressionState` against a freshly-built shape. Their bail
+guards previously used `JSON.stringify(a) === JSON.stringify(b)`, which
+is key-order-sensitive — `spell_rules.updated_at` writes ISO via
+`new Date().toISOString()`, while SQLite-emitted `class_spell_lists.added_at`
+strings differ. The matching characters'-side reconcile effects looked
+similar: persisted `progressionState` shape vs. freshly built one
+could differ purely on key order, triggering a no-op `setCharacter`
+write that re-fired the effect, looped, and locked the tab when the
+class step was visible (its per-level accordion render is expensive
+enough to make the loop visible as a freeze).
+
+`canonicalStringify(value)` (top of [CharacterBuilder.tsx](../../src/pages/characters/CharacterBuilder.tsx))
+sorts object keys lexicographically before emitting. Drop-in for
+`JSON.stringify` in the two effect guards. Allocation-light (manual
+concat). `scripts/_repro_progression_loop.mjs` is the regression
+harness — run via `npx tsx scripts/_repro_progression_loop.mjs`.
+
+## Related docs
