@@ -1,4 +1,9 @@
-import { HttpError, getCredentialErrorMessage, requireStaffAccess } from "./firebase-admin.js";
+import {
+  HttpError,
+  getCredentialErrorMessage,
+  requireAuthenticatedUser,
+  requireStaffAccess,
+} from "./firebase-admin.js";
 import { executeD1QueryInternal } from "./d1-internal.js";
 
 // Re-exported for back-compat; the implementation now lives in d1-internal so
@@ -53,18 +58,33 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
   try {
     const authHeader = req.headers.authorization;
     if (typeof authHeader !== 'string') throw new HttpError(401, "Missing authorization header");
-    
-    // Most compendium data should be public, but let's at least ensure they are a valid user
-    // or if it's a specific admin action, require staff access.
-    // For now, let's just require staff access for ALL queries to be safe during development.
-    await requireStaffAccess(authHeader);
 
+    // Split the gate by SQL kind. Most compendium reads are effectively
+    // public (lore, classes, spells, etc.) and need to be available to
+    // every signed-in role — including `trusted-player` and `user`. Writes
+    // and DDL stay gated to staff (admin / co-dm / lore-writer).
+    //
+    // We have to parse the body before the auth check so we know which gate
+    // to apply. The body is small JSON and we'd parse it anyway one line
+    // later, so the cost is nil.
+    //
+    // The MUTATION_KEYWORDS regex is intentionally broad: it covers row
+    // mutations (INSERT/UPDATE/DELETE/REPLACE) AND DDL/maintenance verbs
+    // (CREATE/DROP/ALTER/TRUNCATE/ATTACH/DETACH/REINDEX/VACUUM/PRAGMA) so
+    // a signed-in regular user can't, say, send `DROP TABLE users` through
+    // the proxy. False positives (e.g. the word "UPDATE" appearing in a
+    // SELECT's string literal) fall to the more restrictive staff path —
+    // safe-by-default.
     const body = await readJsonBody(req);
     const sql = body.sql || (Array.isArray(body) ? body[0]?.sql : '');
-    const isMutation = /INSERT|UPDATE|DELETE|REPLACE/i.test(sql);
-    
+    const MUTATION_KEYWORDS = /\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER|TRUNCATE|ATTACH|DETACH|REINDEX|VACUUM|PRAGMA)\b/i;
+    const isMutation = MUTATION_KEYWORDS.test(sql);
+
     if (isMutation) {
+      await requireStaffAccess(authHeader);
       console.log(`[D1 Proxy] Executing mutation: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
+    } else {
+      await requireAuthenticatedUser(authHeader);
     }
 
     const { apiSecret } = getWorkerConfig();
