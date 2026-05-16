@@ -71,23 +71,22 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
         const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
         setEras(erasData.map(remapEra));
 
-        // Users + membership enumeration still go through the legacy
-        // SQL proxy (admin-gated by the route guard) until the
-        // /api/admin/users family lands. That migration covers
-        // column-scoping (M2) and the broader campaign_members
-        // enumeration for the user picker.
-        const usersData = await fetchCollection<any>('users');
-        const memberRows = await fetchCollection<any>('campaignMembers');
-        const membershipsByUser = new Map<string, string[]>();
-        memberRows.forEach((m: any) => {
-          const list = membershipsByUser.get(m.user_id) || [];
-          list.push(m.campaign_id);
-          membershipsByUser.set(m.user_id, list);
+        // Per-route admin endpoint — returns rows column-scoped by
+        // viewer role (recovery_email only goes to admin), and each
+        // row already carries campaign_ids joined server-side, so the
+        // legacy `fetchCollection('campaignMembers')` enumeration is
+        // gone. Closes M2 here.
+        const usersIdToken = await auth.currentUser?.getIdToken();
+        const usersRes = await fetch('/api/admin/users', {
+          headers: usersIdToken ? { Authorization: `Bearer ${usersIdToken}` } : {},
         });
+        if (!usersRes.ok) throw new Error(`Failed to load users (HTTP ${usersRes.status})`);
+        const usersBody = await usersRes.json();
+        const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
         setUsers(usersData.map((u: any) => ({
           ...u,
           displayName: u.display_name,
-          campaignIds: membershipsByUser.get(u.id) || [],
+          campaignIds: Array.isArray(u.campaign_ids) ? u.campaign_ids : [],
         })));
 
         // Per-route lore endpoint — admin context, server still strips

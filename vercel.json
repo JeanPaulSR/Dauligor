@@ -21,6 +21,10 @@
       "destination": "/api/campaigns"
     },
     {
+      "source": "/api/admin/users/(.*)",
+      "destination": "/api/admin/users"
+    },
+    {
       "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }

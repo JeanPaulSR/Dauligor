@@ -51,17 +51,40 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
 
     const loadAdminUsersData = async () => {
       try {
-        // Fetch Users via D1 helper (D1-only)
-        const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
+        // Per-route admin endpoint — returns rows column-scoped by
+        // viewer role (admin sees recovery_email; lower staff doesn't)
+        // and includes campaign_ids as a server-side JOIN so we no
+        // longer need to fetchCollection('campaignMembers') separately.
+        // Closes M2 + the second H7-leak path.
+        const idToken = await auth.currentUser?.getIdToken();
+        const usersRes = await fetch('/api/admin/users', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!usersRes.ok) throw new Error(`Failed to load users (HTTP ${usersRes.status})`);
+        const usersBody = await usersRes.json();
+        const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
         setUsers(usersData);
 
-        // Fetch Campaigns via D1 helper (D1-only)
-        const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'name ASC' });
-        setCampaigns(campaignsData);
+        // Synthesize the membership table the old client logic
+        // expects (so `getUserCampaignIds(uid)` keeps working). One
+        // pass through the joined `campaign_ids` array.
+        const membershipRows = usersData.flatMap((u: any) =>
+          (Array.isArray(u.campaign_ids) ? u.campaign_ids : []).map((cid: string) => ({
+            user_id: u.id,
+            campaign_id: cid,
+          })),
+        );
+        setCampaignMembers(membershipRows);
 
-        // Fetch Campaign Members (Junction Table)
-        const membersData = await fetchCollection<any>('campaignMembers');
-        setCampaignMembers(membersData);
+        // Campaigns list — staff context, still on /api/campaigns
+        // (server-filtered, admin sees all).
+        const campRes = await fetch('/api/campaigns', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (campRes.ok) {
+          const campBody = await campRes.json();
+          setCampaigns(Array.isArray(campBody?.campaigns) ? campBody.campaigns : []);
+        }
       } catch (err) {
         console.error("Error loading admin users data:", err);
       }
@@ -123,11 +146,25 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
       setNewUser({ username: '', password: '', displayName: '', role: 'user', campaignIds: [] });
       toast.success('User created successfully');
       
-      // Refresh data
-      const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
-      setUsers(usersData);
-      const membersData = await fetchCollection<any>('campaignMembers');
-      setCampaignMembers(membersData);
+      // Refresh through the per-route endpoint so the new user's
+      // (now-existing) row shows up with its column-scoped projection
+      // and campaign_ids JOIN.
+      const refreshToken = await auth.currentUser?.getIdToken();
+      const refreshRes = await fetch('/api/admin/users', {
+        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+      });
+      if (refreshRes.ok) {
+        const refreshBody = await refreshRes.json();
+        const usersData: any[] = Array.isArray(refreshBody?.users) ? refreshBody.users : [];
+        setUsers(usersData);
+        const membershipRows = usersData.flatMap((u: any) =>
+          (Array.isArray(u.campaign_ids) ? u.campaign_ids : []).map((cid: string) => ({
+            user_id: u.id,
+            campaign_id: cid,
+          })),
+        );
+        setCampaignMembers(membershipRows);
+      }
     } catch (err: any) {
       console.error('Failed to create user:', err);
       setError(err.message || 'Failed to create user');
@@ -173,9 +210,25 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         });
       }
       
-      // Refresh members
-      const membersData = await fetchCollection<any>('campaignMembers');
-      setCampaignMembers(membersData);
+      // Refresh memberships via /api/admin/users which now joins them
+      // server-side. Slightly heavier than the old single-table
+      // enumeration but it's the same payload AdminUsers already
+      // loaded on mount, so the route is well-warmed.
+      const refreshToken = await auth.currentUser?.getIdToken();
+      const refreshRes = await fetch('/api/admin/users', {
+        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+      });
+      if (refreshRes.ok) {
+        const refreshBody = await refreshRes.json();
+        const refreshedUsers: any[] = Array.isArray(refreshBody?.users) ? refreshBody.users : [];
+        const membershipRows = refreshedUsers.flatMap((u: any) =>
+          (Array.isArray(u.campaign_ids) ? u.campaign_ids : []).map((cid: string) => ({
+            user_id: u.id,
+            campaign_id: cid,
+          })),
+        );
+        setCampaignMembers(membershipRows);
+      }
 
       if (campaignDialogOpen.isOpen && campaignDialogOpen.userId === userId) {
         const newIds = isAssigned 
@@ -367,8 +420,14 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
         }
       }
       toast.success('Test users created! Default password: password123');
-      const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
-      setUsers(usersData);
+      const refreshToken = await auth.currentUser?.getIdToken();
+      const refreshRes = await fetch('/api/admin/users', {
+        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+      });
+      if (refreshRes.ok) {
+        const refreshBody = await refreshRes.json();
+        setUsers(Array.isArray(refreshBody?.users) ? refreshBody.users : []);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to seed users');
     } finally {

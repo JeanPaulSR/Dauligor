@@ -75,8 +75,20 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
         const loreBody = await loreRes.json();
         setLorePages(Array.isArray(loreBody?.articles) ? loreBody.articles : []);
 
-        // Fetch Users via D1 helper (D1-only)
-        const usersData = await fetchCollection<any>('users');
+        // Per-route admin endpoint. Staff-gated (lore-writer / co-dm /
+        // admin) with column-scoping by viewer role — non-admin staff
+        // gets the minimal identity subset (id, username, display_name,
+        // role, avatar_url). That's exactly what the player picker
+        // below needs; closes M2 + the H7-leak path where the legacy
+        // fetchCollection('users') returned recovery_email and the
+        // full row to every staff visitor of /campaign/edit/:id.
+        const usersIdToken = await auth.currentUser?.getIdToken();
+        const usersRes = await fetch('/api/admin/users', {
+          headers: usersIdToken ? { Authorization: `Bearer ${usersIdToken}` } : {},
+        });
+        if (!usersRes.ok) throw new Error(`Failed to load users (HTTP ${usersRes.status})`);
+        const usersBody = await usersRes.json();
+        const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
         setAllUsers(usersData);
 
         // Per-route campaign endpoint + dedicated members sub-route.
