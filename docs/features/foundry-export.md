@@ -157,6 +157,27 @@ The Foundry module caches resolved full items by `dbId` for the lifetime of the 
 - Tag-driven recompute: [`src/lib/spellRules.ts`](../../src/lib/spellRules.ts) (`recomputeAppliedRulesForSpell`) — called from `upsertSpell` in [`src/lib/compendium.ts`](../../src/lib/compendium.ts) on every individual spell save
 - Foundry-side fetches: [`module/dauligor-pairing/scripts/class-import-service.js`](../../module/dauligor-pairing/scripts/class-import-service.js) (`fetchClassSpellList`, `fetchFullSpellItem`) — list fetched in parallel with the class bundle inside `_ensureVariantPayload` (`importer-app.js`); per-spell fetched lazily on row select (description) and on confirm (embed)
 
+### Foundry-side ride-along fields
+
+The class bundle wire format is fetched at `payloadUrl` and consumed by `buildClassImportWorkflow`. On the Foundry side we stash a couple of fields on the payload object that aren't part of the server-side wire format — purely runtime breadcrumbs:
+
+| Field | Set at | Read at | Purpose |
+|---|---|---|---|
+| `payload._dauligorBundleUrl` | `_ensureVariantPayload` (importer-app.js), immediately after `fetchJson(url)` | `importClassBundleToActor` (class-import-service.js) — used to derive the spell-list endpoint URL stamped on the embedded class item; `runSpellSelectionStep` — used by `fetchFullSpellItem` to derive `/spells/<dbId>.json` for the lazy description loader | Lets every downstream consumer reconstruct the API origin without re-traversing the catalog. The `_` prefix marks it as Foundry-side-only — must not survive round-trips back to the server. |
+
+**Critical:** when the bundle goes through `normalizeSemanticClassExportToBundle` (i.e. the payload arrived as a semantic class export rather than a pre-built bundle), `_dauligorBundleUrl` MUST be forwarded onto the produced bundle. The transformer used to drop it, which made the spell-list URL stamp silently no-op and left the sheet-side manager forever showing "Re-import to populate the available-spells list" because no re-import ever stamped the flag.
+
+### Class item flags stamped during import
+
+Beyond the standard `dauligor-pairing` identity flags, the importer stamps a few runtime breadcrumbs on the embedded class item:
+
+| Flag path | Source | Read by |
+|---|---|---|
+| `flags.dauligor-pairing.spellListUrl` | Derived during import: strip `.json` from `_dauligorBundleUrl` + append `/spells.json` | `DauligorSpellPreparationApp._ensureClassPool` (sheet-side manager) — fetches the live spell list when the class is selected |
+| `flags.dauligor-pairing.advancementIdMap` | `prepareEmbeddedActorClassItem` rekey pass | Re-import / level-up logic to remap semantic advancement ids ↔ Foundry-safe 16-char ids |
+| `flags.dauligor-pairing.proficiencyMode` | Workflow build (`"primary"` / `"multiclass"`) | Sticky across re-imports so level-ups in a secondary class never accidentally promote to primary proficiencies |
+| `flags.dauligor-pairing.importSelections` | Workflow selection state | Cached so re-imports skip already-chosen subclass + option-group picks |
+
 **What stays bundled in the class export:** spellcasting scaling tables (`spellsKnownScalings`), pact magic scaling (`alternativeSpellcastingScalings`), spell-rule allowlists (`spellRuleAllowlists`), rule display names (`spellRuleNameById`). These all change much less frequently than the per-class curated spell list and the class rebake cascade picks them up.
 
 **What doesn't auto-propagate:** `upsertSpellBatch` (used by the spell import workbench) does NOT call `recomputeAppliedRulesForSpell` per entry — a bulk import of 500 spells would fan out to thousands of D1 round-trips. After a batch import, the `SpellListManager`'s stale-detection indicator catches affected classes (any class whose applied rule sees a changed `updated_at` in the rule's matching spells is marked stale until rebuilt). The admin can hit "Rebuild Stale" to flush them.

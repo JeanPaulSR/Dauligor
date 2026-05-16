@@ -1539,7 +1539,18 @@ function normalizeSemanticClassExportToBundle(payload, { entry = null } = {}) {
     classFeatures,
     subclassItems,
     subclassFeatures,
-    optionItems
+    optionItems,
+    // Forward the Foundry-side ride-along fields from the input
+    // payload. `_dauligorBundleUrl` is stashed on the raw payload
+    // by `_ensureVariantPayload` (in importer-app.js) when the
+    // class bundle is fetched. Without this forwarding, the
+    // class-bundle returned here loses the URL and downstream
+    // code (`importClassBundleToActor` stamping `spellListUrl`
+    // on the actor's class item; the picker's lazy description
+    // fetch) silently degrades — the sheet manager then shows
+    // "Re-import to populate the available-spells list" forever
+    // because no re-import EVER stamps the flag.
+    _dauligorBundleUrl: payload?._dauligorBundleUrl ?? null
   };
 }
 
