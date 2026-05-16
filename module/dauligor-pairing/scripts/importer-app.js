@@ -7,7 +7,7 @@ import {
   SETTINGS,
   SOURCE_LIBRARY_FILE
 } from "./constants.js";
-import { buildClassImportWorkflow, fetchClassCatalog, fetchClassSpellList, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
+import { buildClassImportWorkflow, fetchClassCatalog, fetchClassSpellList, fetchFullSpellItem, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
 import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
@@ -1514,14 +1514,19 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         fetchClassSpellList(url),
       ]);
       if (!payload) return false;
-      // Merge the spell list back onto the payload under the same
-      // field name the workflow / importer downstream code already
-      // reads — so the decoupling is invisible past this point.
-      // `buildClassImportWorkflow` consumes `payload.classSpellItems`
-      // (see class-import-service.js:783), and the embed phase
-      // reads `workflow.classSpellItems` (see line ~316). Neither
-      // needed any change once this merge is in place.
+      // Merge the lightweight spell-list summaries onto the payload
+      // under the same field name the workflow downstream code
+      // already reads (`payload.classSpellItems`). The summaries
+      // carry the flags + name + img needed by the picker but no
+      // `system` block / effects. The embed phase fetches the full
+      // spell item per pick via `fetchFullSpellItem(bundleUrl, dbId)`.
       payload.classSpellItems = Array.isArray(classSpellItems) ? classSpellItems : [];
+      // Stash the class bundle URL so the embed phase can derive the
+      // `/api/module/spells/<dbId>.json` URL it needs. Not part of
+      // the wire format — `_dauligor*` prefix marks it as a Foundry-
+      // side enrichment that mustn't survive round-trips back to
+      // the server.
+      payload._dauligorBundleUrl = url;
       this._payloadCache.set(url, payload);
       variant.payload = payload;
       return true;
@@ -5591,6 +5596,61 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
   const pickedSpells = new Set();
   let selectedSourceId = pool[0]?.flags?.[MODULE_ID]?.sourceId ?? null;
 
+  // Lazy-loaded full spell items, keyed by dbId. The spell-list
+  // endpoint ships summaries (no `system` block, no description) to
+  // keep the picker payload light; the full item — including the
+  // description, materials, etc. — is fetched on demand when a row
+  // is selected or when the user confirms picks. Cached so opening
+  // / closing the picker on the same class doesn't re-fetch.
+  // `dauligor-pairing.dbId` is the lookup key; the URL is derived
+  // by `fetchFullSpellItem` from `workflow.bundleUrl`.
+  const fullSpellByDbId = new Map();
+  const loadingDbIds = new Set();
+  const triggerFullSpellLoad = (app, dbId) => {
+    if (!dbId || !workflow.bundleUrl) return;
+    if (fullSpellByDbId.has(dbId) || loadingDbIds.has(dbId)) return;
+    loadingDbIds.add(dbId);
+    fetchFullSpellItem(workflow.bundleUrl, dbId)
+      .then((full) => {
+        loadingDbIds.delete(dbId);
+        if (full) {
+          fullSpellByDbId.set(dbId, full);
+          // Only re-render if this spell is still the one selected
+          // — otherwise the user moved on and a re-render would
+          // waste work. The check is against the closure's
+          // `selectedSourceId` (which is read live by renderDetail).
+          if (selectedSourceId) app.rerenderPrompt?.();
+        }
+      })
+      .catch((err) => {
+        loadingDbIds.delete(dbId);
+        // Non-fatal — picker stays usable, detail panel just shows
+        // the "loading..." placeholder for this spell.
+        console.warn("[runSpellSelectionStep] full-spell fetch failed", { dbId, err });
+      });
+  };
+
+  // Prefetch the initially-selected spell's full data so the very
+  // first render shows the description rather than a blank
+  // placeholder. The fetch is fire-and-forget; if it resolves
+  // before the first render we just have a hot cache.
+  if (selectedSourceId) {
+    const initialItem = pool.find((s) => s?.flags?.[MODULE_ID]?.sourceId === selectedSourceId);
+    const initialDbId = String(initialItem?.flags?.[MODULE_ID]?.dbId ?? "").trim();
+    if (initialDbId && workflow.bundleUrl) {
+      loadingDbIds.add(initialDbId);
+      fetchFullSpellItem(workflow.bundleUrl, initialDbId)
+        .then((full) => {
+          loadingDbIds.delete(initialDbId);
+          if (full) fullSpellByDbId.set(initialDbId, full);
+          // No rerender call here — by the time this resolves the
+          // first render has happened. The next render (triggered
+          // by any user interaction) will pick up the cached value.
+        })
+        .catch(() => loadingDbIds.delete(initialDbId));
+    }
+  }
+
   // Filter state — mirrors the builder's AddSpellsModal:
   //   - search:    fuzzy name match
   //   - filterOpen: whether the chip panel is expanded
@@ -5801,16 +5861,27 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     };
 
     // RIGHT — detail panel. Pulls description + meta from the
-    // currently selected pool item. Empty hint when nothing is
-    // selected (rare — we default selection to pool[0]).
+    // currently selected pool item. The pool ships summaries (no
+    // `system` block); the description is lazy-loaded from
+    // `/api/module/spells/<dbId>.json` and cached in
+    // `fullSpellByDbId`. While the fetch is in flight we show a
+    // "Loading description…" placeholder so the panel is never
+    // blank for a spell the user can see in the list.
     const renderDetail = () => {
       if (!selectedItem) {
         return `<div class="dauligor-spell-picker__empty"><div class="dauligor-spell-picker__empty-text">Select a spell to see its details.</div></div>`;
       }
-      const sys = selectedItem.system ?? {};
-      const desc = String(sys?.description?.value ?? "").trim();
       const flags = selectedItem.flags?.[MODULE_ID] ?? {};
       const lv = Number(flags.level ?? 0);
+      const dbId = String(flags.dbId ?? "").trim();
+      const fullSpell = dbId ? fullSpellByDbId.get(dbId) : null;
+      const desc = String(fullSpell?.system?.description?.value ?? "").trim();
+      const isLoading = dbId && !fullSpell && loadingDbIds.has(dbId);
+      const descHtml = desc
+        ? desc
+        : isLoading
+          ? `<em class="dauligor-spell-picker__detail-loading">Loading description…</em>`
+          : `<em>No description.</em>`;
       return `
         <h3 class="dauligor-spell-picker__detail-title">${escapeHtml(selectedItem.name)}</h3>
         <div class="dauligor-spell-picker__detail-meta">
@@ -5818,7 +5889,7 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
           ${flags.ritual ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--ritual">Ritual</span>` : ""}
           ${flags.concentration ? `<span class="dauligor-spell-picker__badge dauligor-spell-picker__badge--conc">Concentration</span>` : ""}
         </div>
-        <div class="dauligor-spell-picker__detail-desc">${desc || "<em>No description.</em>"}</div>
+        <div class="dauligor-spell-picker__detail-desc">${descHtml}</div>
       `;
     };
 
@@ -6003,6 +6074,18 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
           const sourceId = String(row.dataset.sourceId ?? "");
           const level = Number(row.dataset.level || 0);
           selectedSourceId = sourceId;
+          // Kick off the full-spell fetch for the description, if
+          // we don't have it cached yet. The fetch is fire-and-
+          // forget; renderDetail handles the "loading" state in the
+          // meantime and triggerFullSpellLoad re-renders when it
+          // resolves.
+          const newlySelectedItem = pool.find(
+            (s) => s?.flags?.[MODULE_ID]?.sourceId === sourceId,
+          );
+          const newlySelectedDbId = String(
+            newlySelectedItem?.flags?.[MODULE_ID]?.dbId ?? "",
+          ).trim();
+          if (newlySelectedDbId) triggerFullSpellLoad(app, newlySelectedDbId);
           if (!alreadyOnActorSourceIds.has(sourceId)) {
             togglePick(sourceId, level);
           }

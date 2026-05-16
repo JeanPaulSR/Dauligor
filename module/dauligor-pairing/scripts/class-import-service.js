@@ -303,14 +303,16 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
   }
 
   // Cantrips + spells-known picked in runSpellSelectionStep. Each
-  // selection is a flag.dauligor-pairing.sourceId; we match against the
-  // baked `classSpellItems` array on the workflow, then embed the
-  // matching items as Foundry spell documents on the actor. Already-
-  // on-actor sourceIds get skipped naturally because `upsertActorItem`
-  // is idempotent (updates the existing item rather than creating a
-  // duplicate). Skipped when the selection arrays are empty (the
-  // common case for non-spellcasting class imports or when the player
-  // chose Skip in the picker).
+  // selection is a flag.dauligor-pairing.sourceId; we match against
+  // the `classSpellItems` summaries on the workflow, fetch the FULL
+  // spell item per pick (the summary lacks `system` / effects to keep
+  // the picker payload light), then embed the matching items as
+  // Foundry spell documents on the actor. Already-on-actor sourceIds
+  // get skipped naturally because `upsertActorItem` is idempotent
+  // (updates the existing item rather than creating a duplicate).
+  // Skipped when the selection arrays are empty (the common case for
+  // non-spellcasting class imports or when the player chose Skip in
+  // the picker).
   const importedSpellItems = [];
   const spellSelections = workflow.selection?.spellSelections ?? null;
   if (spellSelections && Array.isArray(workflow.classSpellItems)) {
@@ -319,9 +321,34 @@ async function importClassBundleToActor(payload, { entry = null, actor = null, t
       ...ensureArray(spellSelections.spellSourceIds).map(String),
     ]);
     if (selectedSourceIds.size > 0) {
-      for (const spellItem of workflow.classSpellItems) {
-        const sourceId = trimString(spellItem?.flags?.[MODULE_ID]?.sourceId);
+      // The bundle URL ride-along was stashed on the payload by
+      // `_ensureVariantPayload` (see importer-app.js). It's the only
+      // way for code at this depth to reconstruct the per-spell
+      // endpoint without threading the URL through the workflow.
+      const bundleUrl = payload?._dauligorBundleUrl ?? null;
+      for (const summary of workflow.classSpellItems) {
+        const summaryFlags = summary?.flags?.[MODULE_ID] ?? {};
+        const sourceId = trimString(summaryFlags.sourceId);
         if (!sourceId || !selectedSourceIds.has(sourceId)) continue;
+
+        // Fetch the full spell item (with system block + effects) on
+        // demand. The summary alone is too thin to embed — dnd5e
+        // would render a name-only spell with no description,
+        // activities, materials, etc. Fall back to the summary if
+        // the fetch fails so the embed at least produces a valid
+        // (if hollow) spell document.
+        const dbId = trimString(summaryFlags.dbId);
+        let fullSpell = null;
+        if (bundleUrl && dbId) {
+          fullSpell = await fetchFullSpellItem(bundleUrl, dbId);
+        }
+        if (!fullSpell) {
+          warn("Spell embed: full-item fetch failed, embedding summary as-is (description/activities will be missing)", {
+            sourceId, dbId,
+          });
+        }
+        const spellItem = fullSpell ?? summary;
+
         // Reuse the world-item normalizer so the spell picks up the
         // standard source/book/audit flags. Spells need no class-
         // sourceId attribution like features do — they live alongside
@@ -781,6 +808,13 @@ export function buildClassImportWorkflow(payload, {
     // actor at level-up. Empty array when the class hasn't been curated
     // in /compendium/spell-lists yet.
     classSpellItems: ensureArray(payload.classSpellItems),
+    // Class bundle URL stashed by `_ensureVariantPayload` so the
+    // picker's detail panel + the embed phase can derive the
+    // per-spell endpoint URL (`/api/module/spells/<dbId>.json`).
+    // Null when the payload arrived through a path that didn't run
+    // through that fetch (e.g. raw filesystem import). Downstream
+    // code handles null by falling back to the summary as-is.
+    bundleUrl: payload?._dauligorBundleUrl ?? null,
     minSubclassLevel,
     requiresSubclassSelection: Boolean(
       targetActor
@@ -5989,12 +6023,17 @@ export async function fetchClassCatalog(url) {
  * curation + tag-driven rule recompute reach the importer without
  * requiring a class rebake.
  *
- * Returns the `spells[]` array (Foundry-ready spell item shells —
- * same shape the old `classSpellItems` field used to carry) on
- * success, or `[]` when the endpoint 404s or the response is
- * malformed. The class import flow treats an empty list as "no
- * picker fires" so this matches the pre-decoupling behavior for
- * classes without a curated list.
+ * Returns the `spells[]` array of lightweight summaries (no `system`
+ * block, no `effects`). The picker reads from `flags.dauligor-pairing.*`
+ * which carries everything it needs (level, school, sourceId, dbId,
+ * ritual, concentration, etc.). The embed phase fetches the full
+ * spell item via `fetchFullSpellItem(dbId, classBundleUrl)` for
+ * each spell the user actually picks.
+ *
+ * Returns `[]` when the endpoint 404s or the response is malformed.
+ * The class import flow treats an empty list as "no picker fires"
+ * so this matches the pre-decoupling behavior for classes without
+ * a curated list.
  */
 export async function fetchClassSpellList(classBundleUrl) {
   if (!classBundleUrl) return [];
@@ -6020,6 +6059,64 @@ export async function fetchClassSpellList(classBundleUrl) {
     return [];
   }
   return Array.isArray(payload.spells) ? payload.spells : [];
+}
+
+/**
+ * Derive the per-spell endpoint URL from the class bundle URL.
+ *
+ * The class bundle lives at `.../api/module/<source>/classes/<class>.json`;
+ * the per-spell endpoint lives at `.../api/module/spells/<dbId>.json`.
+ * Both share the same `/api/module/` root, so we strip the
+ * source/class tail from the class URL to find the module root.
+ *
+ * Returns null when the input URL doesn't match the expected shape.
+ */
+function deriveSpellEndpointUrl(classBundleUrl, dbId) {
+  if (!classBundleUrl || !dbId) return null;
+  // Match `.../api/module/...` and snip everything after `/api/module/`.
+  const match = String(classBundleUrl).match(/^(.*\/api\/module\/)/i);
+  if (!match) {
+    warn("deriveSpellEndpointUrl: class bundle URL does not contain '/api/module/'", { classBundleUrl });
+    return null;
+  }
+  return `${match[1]}spells/${encodeURIComponent(dbId)}.json`;
+}
+
+/**
+ * Fetch the full Foundry-ready spell item by DB id.
+ *
+ * The class spell-list endpoint ships lightweight summaries
+ * (~700 bytes per spell); the picker uses those for row render and
+ * filter chips. When the user picks spells, the embed phase fetches
+ * the full item — including `system.description.value`,
+ * `system.activities`, `system.materials`, etc. — from this
+ * endpoint and writes it to the actor.
+ *
+ * Per-fetch is one D1 row lookup, ~3-5 KB response. For a typical
+ * level-1 Wizard pick (2 cantrips + 6 spells = 8 fetches) the total
+ * is comparable to a single full-pool ship in the old design, but
+ * avoids the cost when the user doesn't import that pool.
+ *
+ * Returns the spell item (suitable for `createEmbeddedDocuments`)
+ * or null if the fetch fails. Failures are non-fatal — the caller
+ * can fall back to the summary it already has, but the actor's
+ * spell item will lack description / activities / etc.
+ */
+export async function fetchFullSpellItem(classBundleUrl, dbId) {
+  const url = deriveSpellEndpointUrl(classBundleUrl, dbId);
+  if (!url) return null;
+
+  const payload = await fetchJson(url);
+  if (!payload) return null;
+
+  if (payload.kind !== "dauligor.spell-item.v1") {
+    warn("fetchFullSpellItem: response is not dauligor.spell-item.v1", {
+      url,
+      kind: payload?.kind,
+    });
+    return null;
+  }
+  return payload.spell ?? null;
 }
 
 export async function fetchJson(url) {

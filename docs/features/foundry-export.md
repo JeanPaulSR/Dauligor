@@ -77,7 +77,8 @@ The pairing module reads layer 3 — but the app stores layer 1 and produces lay
 | `/api/module/sources/catalog.json` | All `status='ready'` sources |
 | `/api/module/sources/<slug>/classes/catalog.json` | Class catalog for one source |
 | `/api/module/sources/<slug>/classes/<class-identifier>.json` | Single semantic class export |
-| `/api/module/sources/<slug>/classes/<class-identifier>/spells.json` | Per-class curated spell list (live read-through, see below) |
+| `/api/module/sources/<slug>/classes/<class-identifier>/spells.json` | Per-class curated spell list (lightweight summaries, live read-through, see below) |
+| `/api/module/spells/<dbId>.json` | Full Foundry-ready spell item (live read-through, fetched per pick at embed time) |
 
 Falls back to filesystem read at `module/dauligor-pairing/data/sources/<path>` if D1 doesn't have the requested resource. Useful as a transitional convenience: classes created in the app are immediately available in Foundry without manual ZIP redeploys.
 
@@ -91,7 +92,7 @@ The spell list is now served on its own endpoint with **live read-through** from
 /api/module/<source>/classes/<class>/spells.json
 ```
 
-**Wire format:**
+**Wire format (lightweight summary):**
 
 ```jsonc
 {
@@ -101,17 +102,44 @@ The spell list is now served on its own endpoint with **live read-through** from
   "classIdentifier": "wizard",
   "classSourceId": "...",
   "spells": [
-    /* Foundry-ready spell item shells — same shape as the
-     * legacy `classSpellItems` array. The Foundry importer's
-     * `runSpellSelectionStep` and embed phase read `.flags.
-     * dauligor-pairing.level / school / sourceId / ...` from
-     * each entry. */
+    /* SUMMARIES, not full items. Each entry has:
+     *   - name, img, type: "spell"
+     *   - flags.dauligor-pairing: { sourceId, dbId, classSourceId,
+     *       level, school, spellSourceId, requiredTagIds,
+     *       prerequisiteText, tagIds, concentration, ritual }
+     * NO `system` block, NO `effects`. The picker reads the flags
+     * for row render + filter; embed-time fetches the full item
+     * from /api/module/spells/<dbId>.json (see below). */
   ],
   "generatedAt": 1715800000000
 }
 ```
 
+**Size impact:** A typical Wizard pool of 37 spells dropped from ~141 KB (full Foundry-ready items, inline `system.description.value` + `system.activities` etc.) to ~26 KB (~80% reduction). Larger pools save proportionally more. The trade is one extra fetch per *picked* spell at embed time (typically 2-6 per level-1 import), but only the spells the user actually selects pay the cost.
+
 **Cache strategy:** `Cache-Control: public, max-age=60` (no `s-maxage`, no R2 layer). Each request runs two D1 queries — one for the `class_spell_lists` membership rows, one for the matching `spells` rows. For typical pools (20-100 spells) the response builds in tens of milliseconds. Vercel function cold-start dominates; warm latency is negligible.
+
+**Per-spell full item endpoint:** When the picker needs the description (row click in the detail panel) or the embed phase commits a pick to the actor, it fetches `/api/module/spells/<dbId>.json`:
+
+```jsonc
+{
+  "kind": "dauligor.spell-item.v1",
+  "schemaVersion": 1,
+  "dbId": "...",
+  "sourceId": "spell-fireball",
+  "spell": {
+    "name": "Fireball",
+    "type": "spell",
+    "img": "...",
+    "system": { /* full dnd5e spell system block */ },
+    "effects": [ /* item-level Active Effects */ ],
+    "flags": { "dauligor-pairing": { /* full flag set */ } }
+  },
+  "generatedAt": 1715800000000
+}
+```
+
+The Foundry module caches resolved full items by `dbId` for the lifetime of the picker open — re-clicking a row doesn't re-fetch. The embed phase re-uses the same cache for picks, so for a level-1 pick of 2 cantrips + 4 spells the total network cost is: one class bundle + one spell list (summary) + 6 full-spell fetches.
 
 **Propagation paths:**
 
@@ -123,10 +151,11 @@ The spell list is now served on its own endpoint with **live read-through** from
 | Class metadata changes (level scaling, hit die, name) | Class rebake (unchanged) | Class rebake — the spell-list endpoint is independent and unaffected |
 
 **Implementation:**
-- Builder: [`api/_lib/_classSpellList.ts`](../../api/_lib/_classSpellList.ts) (`buildClassSpellListBundle`, `buildClassSpellListByIdentifier`)
-- Route: [`api/module.ts`](../../api/module.ts) — the `pathParts.length === 4 && pathParts[3] === "spells.json"` branch
+- Summary builder: [`api/_lib/_classSpellList.ts`](../../api/_lib/_classSpellList.ts) (`buildClassSpellListBundle`, `buildClassSpellListByIdentifier`)
+- Per-spell full builder: [`api/_lib/_spellExport.ts`](../../api/_lib/_spellExport.ts) (`buildSpellItemBundle`)
+- Routes: [`api/module.ts`](../../api/module.ts) — `pathParts.length === 4 && pathParts[3] === "spells.json"` for the list, `pathParts[0] === "spells"` for per-spell
 - Tag-driven recompute: [`src/lib/spellRules.ts`](../../src/lib/spellRules.ts) (`recomputeAppliedRulesForSpell`) — called from `upsertSpell` in [`src/lib/compendium.ts`](../../src/lib/compendium.ts) on every individual spell save
-- Foundry-side fetch: [`module/dauligor-pairing/scripts/class-import-service.js`](../../module/dauligor-pairing/scripts/class-import-service.js) (`fetchClassSpellList`) — invoked in parallel with the class bundle fetch inside `_ensureVariantPayload` (`importer-app.js`)
+- Foundry-side fetches: [`module/dauligor-pairing/scripts/class-import-service.js`](../../module/dauligor-pairing/scripts/class-import-service.js) (`fetchClassSpellList`, `fetchFullSpellItem`) — list fetched in parallel with the class bundle inside `_ensureVariantPayload` (`importer-app.js`); per-spell fetched lazily on row select (description) and on confirm (embed)
 
 **What stays bundled in the class export:** spellcasting scaling tables (`spellsKnownScalings`), pact magic scaling (`alternativeSpellcastingScalings`), spell-rule allowlists (`spellRuleAllowlists`), rule display names (`spellRuleNameById`). These all change much less frequently than the per-class curated spell list and the class rebake cascade picks them up.
 

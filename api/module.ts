@@ -7,6 +7,7 @@ import {
   rebakeBundle,
 } from "./_lib/module-export-pipeline.js";
 import { buildClassSpellListByIdentifier } from "./_lib/_classSpellList.js";
+import { buildSpellItemBundle } from "./_lib/_spellExport.js";
 import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
 import {
   classBundleKey,
@@ -257,6 +258,25 @@ export default async function handler(req: any, res: any) {
       );
       if (result) return serveLive(res, result);
       // Fall through to 404 if the class identifier didn't match.
+    }
+
+    // Per-spell full item — live read-through. URL:
+    //   /api/module/spells/<dbId>.json
+    // The Foundry importer's embed phase fetches each picked spell
+    // from this endpoint to get the full `system` block + effects.
+    // The class spell-list endpoint above ships LIGHTWEIGHT summaries
+    // (~80% smaller); this fills in the rest only for the handful of
+    // spells the user actually picks. See `_classSpellList.ts` and
+    // `_spellExport.ts` for the split rationale.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "spells"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildSpellItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(res, result);
+      // Fall through to 404 if no spell row matched.
     }
   } catch (error) {
     console.error("Dynamic Module API Error:", error);

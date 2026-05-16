@@ -32,18 +32,38 @@ const parseJsonField = (val: any, fallback: any) => {
 const trimString = (val: any) => String(val ?? "").trim();
 
 /**
- * Shape of an individual entry in the returned `spells[]` array.
- * Matches what the Foundry importer used to read from
- * `payload.classSpellItems` — every field that
- * `runSpellSelectionStep` and `embedSelectedSpells` consume is
- * preserved verbatim.
+ * Lightweight summary of one spell in a class's curated list.
+ *
+ * Intentionally OMITS the heavy `system` block (description,
+ * activities, materials, range, duration, etc.) and `effects`. The
+ * Foundry importer uses these summaries for the picker's row render,
+ * filter chips, and budget logic — none of those need the system
+ * block. When the user picks a spell, the embed phase fetches the
+ * full item from `/api/module/spells/<dbId>.json` before writing it
+ * to the actor.
+ *
+ * Size: ~700 bytes per spell vs ~3-5 KB for the full item. Typical
+ * 37-spell pool drops from 141 KB → 26 KB (~80% reduction). Larger
+ * pools (200+ spells) save proportionally more.
+ *
+ * Every field consumed by `runSpellSelectionStep` and the embed
+ * loop's "find by sourceId" pass is preserved — the only change
+ * downstream is the embed step needing one fetch per picked spell.
  */
 export interface ClassSpellItem {
   name: string;
+  /** Always "spell" — kept so downstream typeguard checks pass. */
   type: "spell";
+  /** Image URL for the picker row icon. Tiny string; kept inline. */
   img?: string;
-  system: Record<string, any>;
-  effects: unknown[];
+  /**
+   * Flags carry every field the picker reads: sourceId (track
+   * picks), dbId (fetch full data on embed), level (group rows +
+   * cantrip/spell budget), school (badge + filter), sourceBookId
+   * (badge + filter), ritual / concentration (badges + filter),
+   * requiredTagIds + prerequisiteText (prereq display), tagIds
+   * (future tag filter), classSourceId (attribution).
+   */
   flags: {
     "dauligor-pairing": {
       schemaVersion: 1;
@@ -119,28 +139,30 @@ export async function buildClassSpellListBundle(
     };
   }
 
-  // Pull the spell rows we need to build Foundry-shaped items. Field
-  // list mirrors what the (now-removed) classSpellItems bake used in
-  // _classExport.ts — keeping the shape identical means the Foundry
-  // importer needs no per-field adjustments to read this payload.
+  // Lightweight SELECT — only fields needed for picker rows + filter
+  // chips + the dbId / sourceId the embed phase uses to fetch the
+  // full item. Deliberately drops `foundry_data` (the system block),
+  // `effects`, and any large descriptive columns. The full spell is
+  // fetched on demand via `/api/module/spells/<dbId>.json`.
   const spellRows = await fetchCollection<any>("spells", {
     where: `id IN (${classSpellIds.map(() => "?").join(",")})`,
     params: classSpellIds,
     select:
       "id, name, identifier, level, school, image_url, source_id, tags, " +
-      "foundry_data, required_tags, prerequisite_text, concentration, ritual",
+      "required_tags, prerequisite_text, concentration, ritual",
   });
 
   const spells: ClassSpellItem[] = spellRows.map((row: any) => {
-    const foundrySystem = parseJsonField(row.foundry_data, {}) || {};
     const requiredTagIds = parseJsonField(row.required_tags, []) || [];
     const tagIds = parseJsonField(row.tags, []) || [];
     return {
       name: String(row.name || ""),
       type: "spell" as const,
       img: row.image_url || undefined,
-      system: foundrySystem,
-      effects: [],
+      // NOTE: no `system` field and no `effects` array. The Foundry
+      // importer's picker reads from flags below; the embed phase
+      // fetches the full item from `/api/module/spells/<dbId>.json`
+      // before writing to the actor.
       flags: {
         "dauligor-pairing": {
           schemaVersion: 1,
