@@ -5352,9 +5352,27 @@ button.dauligor-option-picker__pill:hover {
 }
 
 /* === Detail pane — SpellDetailPanel parity === */
+/*
+ * `__detail-scroll` is a plain block container with overflow-y:auto.
+ * Children (header/hero/body/footer) flow naturally top-to-bottom as
+ * block elements; when total content exceeds the container's height,
+ * the container scrolls.
+ *
+ * This was previously a `display: flex; flex-direction: column`
+ * container, which led to a subtle bug: flex children default to
+ * `flex-shrink: 1`, so when the body's content was taller than the
+ * available column height, flex shrunk `__detail-body`'s computed
+ * height — and because we'd just set `__detail-body { overflow:
+ * visible }` (to keep the description from getting its own
+ * scrollbar), the description's overflowing content painted ON TOP
+ * of the footer below. Visible result: "Source: PHB'14, p. 218"
+ * overlapping mid-description text.
+ *
+ * Switching to plain block layout removes the flex-shrink dynamic
+ * entirely — children render at their natural height, container
+ * scrolls — matches the public /compendium/spells panel behaviour.
+ */
 .dauligor-spell-manager__detail-scroll {
-  display: flex;
-  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
