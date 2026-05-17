@@ -573,14 +573,15 @@ export function buildClassImportWorkflow(payload, {
   // `buildSyntheticSpellcastingFeature` for the rationale. The synth's
   // sourceId is layered into `desiredClassFeatureIds` below once we
   // know the import has crossed `class.spellcasting.level`.
-  const syntheticSpellcastingFeature = buildSyntheticSpellcastingFeature({
-    semanticClassData,
-    classSourceId,
-    sourceBookId: bundle.source?.sourceId ?? null
-  });
-  if (syntheticSpellcastingFeature) {
-    classFeatures.push(syntheticSpellcastingFeature);
-  }
+  // Synthetic per-class "Spellcasting" feature creation is disabled.
+  // It was added so users could see "Bard Spellcasting" as a Feat row
+  // on the Features tab, but the class item already carries the
+  // `system.spellcasting` block (DC, attack, progression) and the
+  // Dauligor Sheet surfaces the same info via per-class chips on the
+  // Spells tab. Keeping the synth around just clutters Other Features.
+  // The builder function (`buildSyntheticSpellcastingFeature`) is
+  // preserved below in case we want to re-enable it later.
+  const syntheticSpellcastingFeature = null;
 
   const minSubclassLevel = getMinimumSubclassSelectionLevel(classItem.system?.advancement, classFeatures);
   const existingSubclassItem = targetActor

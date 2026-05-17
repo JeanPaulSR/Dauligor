@@ -15,3 +15,4 @@ export const CLASS_BROWSER_TEMPLATE = "modules/dauligor-pairing/templates/class-
 export const CLASS_OPTIONS_TEMPLATE = "modules/dauligor-pairing/templates/class-options-shell.hbs";
 export const SPELL_PREPARATION_TEMPLATE = "modules/dauligor-pairing/templates/spell-preparation-shell.hbs";
 export const FEATURE_MANAGER_TEMPLATE = "modules/dauligor-pairing/templates/feature-manager-shell.hbs";
+export const DAULIGOR_SPELLS_TAB_TEMPLATE = "modules/dauligor-pairing/templates/dauligor-spells-tab.hbs";

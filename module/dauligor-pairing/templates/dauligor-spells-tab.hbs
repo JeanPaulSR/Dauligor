@@ -1,0 +1,271 @@
+{{!--
+  Dauligor character-sheet Spells tab.
+
+  Replaces dnd5e's `creature-spells.hbs` for actors using the opt-in
+  Dauligor Sheet. Reuses dnd5e's row markup (`.items-section`,
+  `.items-header`, `.item`, `dnd5e-itemContext`, columns,
+  description expansion, activities) so the row visuals and action
+  wiring (use / prepare / edit / expand / drag-drop / chat-card cast)
+  inherit unchanged. The only structural change is GROUPING:
+
+    dnd5e default:                  Dauligor Sheet:
+      Cantrips                        Bard
+        ▸ Blade Ward (Bard)             Cantrips
+        ▸ Fire Bolt (Wizard)              ▸ Blade Ward
+      1st Level                         1st Level
+        ▸ Animal Friendship (Bard)        ▸ Animal Friendship
+        ▸ Shield (Wizard)             Wizard
+                                        Cantrips
+                                          ▸ Fire Bolt
+                                        1st Level
+                                          ▸ Shield
+
+  The class-then-level data comes from DauligorCharacterSheet's
+  `_prepareSpellsContext` override, which re-buckets context.sections
+  by each spell's classIdentifier. `context.sections` remains
+  untouched so `<item-list-controls>` (search / sort / filter
+  datalists) still operates over the full spell pool.
+
+  The outer `<section class="tab">` is left untouched (no custom
+  classes) so dnd5e's `.tab:not(.active) { display: none }` rule
+  governs visibility — all custom layout lives on the inner
+  `.dauligor-character-sheet__spells-tab-inner` div.
+--}}
+<section class="tab {{ tab.cssClass }}" data-tab="{{ tab.id }}" data-group="{{ tab.group }}">
+    <div class="dauligor-character-sheet__spells-tab-inner">
+
+        {{!-- The top per-class spellcasting cards used to live here.
+              Now removed: the same data (ability / attack / DC /
+              prepared) is rendered inline on each class section
+              header below, alongside its Prepare button. The
+              `dnd5e.preUseActivity` resolver still uses
+              `spell.system.sourceItem` to pick the casting ability,
+              so casts from each section use that class's modifier. --}}
+
+        {{!-- Class-grouped spell list. We keep the `<dnd5e-inventory>`
+              custom element + `item-list-controls` so search / sort /
+              filter still operate over the full spell pool. Inside,
+              we iterate Dauligor's `classGroups` (built by
+              `_prepareSpellsContext`) instead of the flat `sections`
+              array. Each section emits dnd5e's standard markup so
+              their CSS owns the visuals. --}}
+        <dnd5e-inventory class="inventory-element dauligor-character-sheet__inventory">
+
+            {{#if listControls}}
+            <div class="middle">
+                <item-list-controls for="{{ listControls.list }}" collection="items"
+                                    label="{{ localize listControls.label }}" keep-empty>
+                    {{#if listControls.filters.length}}
+                    <datalist data-list="filters">
+                        {{#each listControls.filters}}
+                        <option value="{{ key }}" {{ dnd5e-dataset dataset }}>{{ localize label }}</option>
+                        {{/each}}
+                    </datalist>
+                    {{/if}}
+                    {{!-- Filler datalists here, +Section button below the controls --}}
+                    {{#if listControls.sorting.length}}
+                    <datalist data-list="sort">
+                        {{#each listControls.sorting}}
+                        <option value="{{ key }}" {{ dnd5e-dataset dataset }}>{{ localize label }}</option>
+                        {{/each}}
+                    </datalist>
+                    {{/if}}
+                </item-list-controls>
+                {{!-- Dauligor: create a new custom Spells section.
+                      Opens a prompt, appends to
+                      `flags.dauligor-pairing.customSections`, the
+                      sheet re-renders with the new (empty) section. --}}
+                <button type="button" class="dauligor-character-sheet__create-section-button"
+                        data-action="dauligorCreateSection"
+                        data-tooltip="Add a custom Spells section"
+                        aria-label="Add Spells Section">
+                    <i class="fas fa-folder-plus"></i>
+                </button>
+            </div>
+            {{/if}}
+
+            <section class="items-list spells-list" data-item-list="spells">
+                {{#each dauligor.classGroups}}
+                <section class="dauligor-character-sheet__class-group{{#if collapsed}} is-collapsed{{/if}}"
+                         data-class-identifier="{{ classIdentifier }}">
+                    {{!-- Header is a 5-column CSS grid so columns
+                          align consistently across class sections
+                          (no shifting between e.g. a class with a
+                          1-digit DC vs a 2-digit DC):
+                            Name   | Attack | Spell DC | Prepared | Prepare📖
+                          Reorder is via dragging the header itself
+                          (see `_onClassDragStart` in the subclass);
+                          no per-row arrow buttons. --}}
+                    <header class="dauligor-character-sheet__class-group-header">
+                        <button type="button" class="dauligor-character-sheet__class-group-toggle"
+                                data-action="dauligorToggleClassGroup"
+                                data-class-identifier="{{ classIdentifier }}"
+                                aria-expanded="{{#unless collapsed}}true{{else}}false{{/unless}}"
+                                aria-label="Toggle {{ className }} spells">
+                            <i class="fas fa-caret-right dauligor-character-sheet__class-group-caret"></i>
+                            <h2 class="dauligor-character-sheet__class-group-name">{{ className }}</h2>
+                        </button>
+
+                        <div class="dauligor-character-sheet__class-group-stat">
+                            <span class="dauligor-character-sheet__class-group-stat-label">{{ localize "DND5E.Attack" }}</span>
+                            <span class="dauligor-character-sheet__class-group-stat-value">{{#if spellcasting}}{{ dnd5e-formatModifier spellcasting.attack }}{{else}}&mdash;{{/if}}</span>
+                        </div>
+                        <div class="dauligor-character-sheet__class-group-stat">
+                            <span class="dauligor-character-sheet__class-group-stat-label">{{ localize "DND5E.SpellDC" }}</span>
+                            <span class="dauligor-character-sheet__class-group-stat-value">{{#if spellcasting}}{{ spellcasting.save }}{{else}}&mdash;{{/if}}</span>
+                        </div>
+                        <div class="dauligor-character-sheet__class-group-stat dauligor-character-sheet__class-group-stat--prepared">
+                            <span class="dauligor-character-sheet__class-group-stat-label">{{ localize "DND5E.Prepared" }}</span>
+                            <span class="dauligor-character-sheet__class-group-stat-value">
+                                {{#if isPreparedCaster}}
+                                {{ spellcasting.preparation.value }}{{#if spellcasting.preparation.max}}<span class="dauligor-character-sheet__class-group-stat-cap">/{{ spellcasting.preparation.max }}</span>{{/if}}
+                                {{else}}
+                                &mdash;
+                                {{/if}}
+                            </span>
+                        </div>
+
+                        {{#if spellcasting}}
+                        <button type="button" class="dauligor-class-prepare-button"
+                                data-action="dauligorPrepareClassSpells"
+                                data-class-identifier="{{ classIdentifier }}"
+                                data-tooltip="Open Dauligor Prepare Spells for {{ className }}"
+                                aria-label="Prepare {{ className }} spells">
+                            <i class="fas fa-book-open"></i>
+                        </button>
+                        {{else}}
+                        <span class="dauligor-character-sheet__class-group-prepare-placeholder"></span>
+                        {{/if}}
+                    </header>
+
+                    <div class="dauligor-character-sheet__class-group-body">
+                    {{#each sections}}
+                    <div class="items-section card{{#if collapsed}} is-section-collapsed{{/if}}"
+                         {{ dnd5e-dataset dataset }}
+                         data-level="{{ level }}"
+                         data-section-key="{{ sectionKey }}"
+                         data-section-kind="{{ kind }}"
+                         {{#if folderId}}data-folder-id="{{ folderId }}"{{/if}}>
+
+                        {{!-- Section header (collapse caret + level
+                              label + columns). The caret is a small
+                              Dauligor-added button at the start of
+                              dnd5e's standard items-header row, so
+                              the rest of the row keeps native
+                              styling and column-resize behavior. --}}
+                        <div class="items-header header">
+                            <button type="button" class="dauligor-character-sheet__section-toggle"
+                                    data-action="dauligorToggleSection"
+                                    data-section-key="{{ sectionKey }}"
+                                    aria-expanded="{{#unless collapsed}}true{{else}}false{{/unless}}"
+                                    aria-label="Toggle {{ label }}">
+                                <i class="fas fa-caret-down dauligor-character-sheet__section-toggle-caret"></i>
+                            </button>
+                            <h3 class="item-name">{{ localize label }}</h3>
+                            {{#each columns}}
+                            <div class="item-header item-{{ id }}" data-column-id="{{ id }}"
+                                 data-column-width="{{ width }}" data-column-priority="{{ priority }}">
+                                {{~#if label}}{{ localize label }}{{/if~}}
+                            </div>
+                            {{/each}}
+                        </div>
+
+                        {{!-- Section contents — dnd5e's standard row markup --}}
+                        <ol class="item-list unlist">
+                            {{#each items as |item|}}
+                            {{#dnd5e-itemContext item as |ctx|}}
+
+                            <li class="item collapsible {{#unless ctx.isExpanded}}collapsed{{/unless}}"
+                                data-uuid="{{ item.uuid }}" data-item-id="{{ item.id }}"
+                                data-entry-id="{{ item.id }}" data-item-name="{{ item.name }}"
+                                {{ dnd5e-dataset ctx.dataset }}>
+
+                                <div class="item-row draggable">
+
+                                    <div class="item-name item-action item-tooltip {{#if ctx.clickAction}}{{ @root.rollableClass }}{{/if}}"
+                                         role="button" data-action="{{ ctx.clickAction }}" aria-label="{{ item.name }}">
+
+                                        {{#if ctx.concentration}}
+                                        <i class="concentration fa-solid fa-arrow-rotate-left fa-spin fa-spin-reverse"
+                                           aria-label="{{ localize 'DND5E.Concentration' }}"></i>
+                                        {{/if}}
+
+                                        {{ dnd5e-icon item.img alt=item.name classes="item-image gold-icon" }}
+
+                                        <div class="name name-stacked">
+                                            <span class="title">{{ item.name }}</span>
+                                            {{#if ctx.subtitle}}
+                                            <span class="subtitle">{{{ ctx.subtitle }}}</span>
+                                            {{/if}}
+                                        </div>
+
+                                        <div class="tags">
+                                            {{#if item.labels.components}}
+                                            {{#each item.labels.components.all}}
+                                            {{#if tag}}
+                                            <span aria-label="{{ label }}">
+                                                <dnd5e-icon src="{{ icon }}"></dnd5e-icon>
+                                            </span>
+                                            {{/if}}
+                                            {{/each}}
+                                            {{else}}
+                                            {{#each item.labels.properties}}
+                                            {{#if icon}}
+                                            <span aria-label="{{ label }}">
+                                                <dnd5e-icon src="{{ icon }}"></dnd5e-icon>
+                                            </span>
+                                            {{/if}}
+                                            {{/each}}
+                                            {{/if}}
+                                        </div>
+
+                                    </div>
+
+                                    {{!-- Columns: prefer ctx.columns override, fall back to section columns --}}
+                                    {{#if ctx.columns.length}}
+                                    {{#each ctx.columns}}
+                                    {{> (lookup . "template") entry=item item=item ctx=ctx isItem=true }}
+                                    {{/each}}
+                                    {{else}}
+                                    {{#each ../columns}}
+                                    {{> (lookup . "template") entry=item item=item ctx=ctx isItem=true }}
+                                    {{/each}}
+                                    {{/if}}
+
+                                </div>
+
+                                <div class="item-description collapsible-content">
+                                    <div class="wrapper">
+
+                                        {{#if ctx.activities.length}}
+                                        <ol class="activities unlist">
+                                            {{#each ctx.activities}}
+                                            {{> "systems/dnd5e/templates/inventory/activity.hbs"
+                                                columns=../../columns item=../item }}
+                                            {{/each}}
+                                        </ol>
+                                        {{/if}}
+
+                                        {{#if ctx.isExpanded}}
+                                        {{> "dnd5e.item-summary" ctx.expanded }}
+                                        {{/if}}
+
+                                    </div>
+                                </div>
+
+                            </li>
+
+                            {{/dnd5e-itemContext}}
+                            {{/each}}
+                        </ol>
+
+                    </div>
+                    {{/each}}
+                    </div>{{!-- end class-group-body --}}
+                </section>{{!-- end dauligor-character-sheet__class-group --}}
+                {{/each}}
+            </section>
+        </dnd5e-inventory>
+
+    </div>
+</section>

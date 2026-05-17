@@ -1,4 +1,5 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
+import { registerDauligorCharacterSheet } from "./dauligor-character-sheet.js";
 import { exportApplicationWindow, exportSpellFolder } from "./export-service.js";
 import { openFeatureManager } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
@@ -16,6 +17,11 @@ Hooks.once("init", () => {
   registerSettingsUiButtons();
   registerSidebarButtons();
   registerRestBarControls();
+  // Register the opt-in "Dauligor Sheet (D&D 5e)" alt character
+  // sheet. Users select it per-actor via the sheet picker; non-opted
+  // actors keep dnd5e's stock sheet (where the DOM-injected
+  // per-class Prepare buttons still apply).
+  registerDauligorCharacterSheet();
 });
 
 Hooks.once("ready", () => {
@@ -679,38 +685,163 @@ function injectSpellTabButton(appLike, root) {
   if (!actor || actor.type !== "character") return;
   if (!root) return;
 
-  const spellsTab = root.querySelector(`[data-tab="spells"]`);
+  // Per-class Prepare buttons sit on each `.spellcasting.card` header.
+  injectPerClassPrepareButtons(actor, root);
+
+  // Global Prepare-Spells entry point: small book icon on the spells
+  // tab's search/filter toolbar (the `.middle` container that wraps
+  // `<item-list-controls>`). Replaces the wide
+  // "Dauligor Prepare Spells" button we used to sit above the list.
+  injectSpellTabToolbarButton(actor, root);
+}
+
+/**
+ * Inject a single Dauligor book-icon button into the Spells tab's
+ * search/filter toolbar. dnd5e renders the toolbar as
+ *   <div class="middle">
+ *     <item-list-controls for="spells" ...>...</item-list-controls>
+ *   </div>
+ * — we append our icon as a sibling of `<item-list-controls>` so it
+ * sits at the trailing edge of the toolbar row, next to the sort /
+ * filter icons that `<item-list-controls>` renders on the right.
+ *
+ * Clicking opens the Dauligor Prepare Spells manager without a
+ * pre-selected class (the per-class chip buttons handle pre-selection
+ * for the user). If the toolbar isn't present in the current render
+ * (rare — only when the sheet has no spell list at all), we silently
+ * skip and the per-class buttons remain as the only entry point.
+ */
+function injectSpellTabToolbarButton(actor, root) {
+  if (!actor || !root) return;
+  const spellsTab = root.querySelector(`section.tab[data-tab="spells"], [data-tab="spells"]`);
   if (!spellsTab) return;
-  if (spellsTab.querySelector?.(`[data-${MODULE_ID}-spell-tab-tools]`)) return;
 
-  const topSection = spellsTab.querySelector(`section.top`);
-  const inventorySection = spellsTab.querySelector(`.inventory-element`);
+  // Prefer the `.middle` wrapper because that's the row-flow container
+  // dnd5e uses. Fall back to the item-list-controls element's parent
+  // in case the template variant doesn't wrap in `.middle`.
+  const toolbar = spellsTab.querySelector(`.middle`)
+    ?? spellsTab.querySelector(`item-list-controls`)?.parentElement
+    ?? null;
+  if (!toolbar) return;
+  if (toolbar.querySelector(`:scope > [data-${MODULE_ID}-prepare-toolbar-button]`)) return;
 
-  const wrapper = document.createElement("div");
-  wrapper.className = "dauligor-spell-tab-tools";
-  wrapper.setAttribute(`data-${MODULE_ID}-spell-tab-tools`, "true");
-  wrapper.innerHTML = `
-    <button type="button" class="dauligor-spell-tab-tools__button" data-action="open-spell-manager">
-      <i class="fas fa-book-open"></i>
-      <span>Dauligor Prepare Spells</span>
-    </button>
-  `;
-
-  wrapper.querySelector(`[data-action="open-spell-manager"]`)?.addEventListener("click", async () => {
+  const button = document.createElement("button");
+  button.type = "button";
+  // Re-use the same gold-bordered icon-button styling that the
+  // per-class chips on `.spellcasting.card` use — same visual
+  // language, one less custom CSS class to maintain.
+  button.className = "dauligor-class-prepare-button dauligor-class-prepare-button--toolbar";
+  button.setAttribute(`data-${MODULE_ID}-prepare-toolbar-button`, "true");
+  button.setAttribute("aria-label", "Dauligor Prepare Spells");
+  button.setAttribute("data-tooltip", "Dauligor Prepare Spells");
+  button.innerHTML = `<i class="fas fa-book-open"></i>`;
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     await openSpellPreparationManager(actor);
   });
+  toolbar.appendChild(button);
+}
 
-  if (topSection?.parentElement === spellsTab) {
-    topSection.insertAdjacentElement("afterend", wrapper);
-    return;
+/**
+ * Injects a small "Prepare" button into each "{ClassName} Spellcasting"
+ * card header on the Spells tab. Clicking opens the Dauligor spell
+ * preparation manager pre-selected to that class.
+ *
+ * dnd5e v5.x renders these cards from
+ * `templates/actors/tabs/creature-spells.hbs` →
+ * `section.tab[data-tab="spells"] .spellcasting.card[data-ability]`.
+ * The card has no class-id attribute (dnd5e's `_prepareSpellcasting`
+ * only emits `data-ability`), so we match by parsing the `<h3>`
+ * heading "{ClassName} Spellcasting" against the actor's class items.
+ * Fallback for non-English locales: unique-ability match (only when
+ * one class on the actor uses that ability).
+ *
+ * Earlier revisions also injected on the Features tab's
+ * `.class.pill-lg` rows but that was removed — the Spells tab is
+ * where the user actually wants the entry point.
+ *
+ * If no selector matches in a given render the injection silently
+ * no-ops and the global "Dauligor Prepare Spells" button on the
+ * spells tab remains as a fallback entry point.
+ */
+function injectPerClassPrepareButtons(actor, root) {
+  if (!actor || actor.type !== "character" || !root) return;
+  const spellcastingClasses = actor.spellcastingClasses ?? {};
+  const classEntries = Object.entries(spellcastingClasses);
+  if (!classEntries.length) return;
+
+  // --- Spells tab only — `.spellcasting.card` headers -------------
+  // Earlier we also injected on the Features tab's `.class.pill-lg`
+  // rows, but the user only wants the icon on the Spells tab to
+  // avoid duplicate visual noise next to the dnd5e class roster.
+  // We get one card per spellcasting class on the actor. Match each
+  // card to a class by heading text first (locale-agnostic for
+  // English; the dnd5e i18n key is `DND5E.SpellcastingClass` →
+  // "{class} Spellcasting"). If the heading parse misses, fall back
+  // to data-ability matching when exactly one class on the actor
+  // uses that ability (multi-class with shared ability silently
+  // skips — better that than mis-attributing).
+  const cards = root.querySelectorAll(`section.tab[data-tab="spells"] .spellcasting.card, .spellcasting.card`);
+  for (const card of cards) {
+    const header = card.querySelector(".header");
+    if (!header) continue;
+    if (header.querySelector(`:scope > [data-${MODULE_ID}-prepare-class-button]`)) continue;
+
+    const headingText = String(card.querySelector(".header h3")?.textContent ?? "").trim();
+    let matched = null;
+    // Heading match (English locale): the card heading is "{class}
+    // Spellcasting" per the `DND5E.SpellcastingClass` i18n key. Match
+    // by `startsWith(name + " ")` so a class whose name is a prefix
+    // of another (e.g. "Bard" vs a hypothetical "Bardlite") doesn't
+    // collide. Exact match on the full label is also accepted.
+    for (const [identifier, classItem] of classEntries) {
+      const name = String(classItem?.name ?? "").trim();
+      if (!name) continue;
+      if (!headingText) continue;
+      if (headingText === name || headingText.startsWith(`${name} `)) {
+        matched = { identifier, classItem };
+        break;
+      }
+    }
+    // Fallback: data-ability disambiguates only when one class uses
+    // it. Locale-safe but less precise.
+    if (!matched) {
+      const ability = card.dataset?.ability;
+      if (ability) {
+        const candidates = classEntries.filter(([, cls]) =>
+          String(cls?.system?.spellcasting?.ability ?? "") === ability
+        );
+        if (candidates.length === 1) {
+          const [identifier, classItem] = candidates[0];
+          matched = { identifier, classItem };
+        }
+      }
+    }
+    if (!matched) continue;
+    mountClassPrepareButton(header, actor, matched.identifier, matched.classItem, /* anchor= */ header);
   }
+}
 
-  if (inventorySection?.parentElement) {
-    inventorySection.insertAdjacentElement("beforebegin", wrapper);
-    return;
-  }
-
-  spellsTab.prepend(wrapper);
+function mountClassPrepareButton(uniquenessScope, actor, identifier, classItem, anchor) {
+  // `uniquenessScope` is where we read for the duplicate-check; the
+  // `anchor` is where we actually append. They're usually the same
+  // element, but allowing them to differ lets us scope-match inside
+  // a parent while injecting into a child.
+  if (uniquenessScope.querySelector(`:scope > [data-${MODULE_ID}-prepare-class-button]`)) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dauligor-class-prepare-button";
+  button.setAttribute(`data-${MODULE_ID}-prepare-class-button`, identifier);
+  button.setAttribute("aria-label", `Dauligor Prepare ${classItem.name} spells`);
+  button.setAttribute("data-tooltip", `Prepare ${classItem.name} spells`);
+  button.innerHTML = `<i class="fas fa-book-open"></i>`;
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await openSpellPreparationManager(actor, { preselectClassIdentifier: identifier });
+  });
+  anchor.appendChild(button);
 }
 
 function shouldExposeWindowExport(app) {

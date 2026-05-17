@@ -1786,6 +1786,59 @@
   background: #313131;
 }
 
+/* Small Dauligor "open Prepare Spells" button reused in three slots:
+ *   - dnd5e v5 character sheet's `.spellcasting.card .header` (top
+ *     of the Spells tab — pre-selects that class).
+ *   - The new class-group headers in the Dauligor Sheet (pre-selects
+ *     that class).
+ *   - The Spells tab's `.middle` toolbar (no pre-selection).
+ *
+ * Visual is intentionally neutral (no Dauligor gold) so it adopts
+ * the host sheet's color scheme — light-on-dark on the dnd5e dark
+ * theme, dark-on-light on light themes. */
+.dauligor-class-prepare-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  position: relative;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  margin: 0 6px 0 8px;
+  padding: 0;
+  border: 1px solid var(--color-border-light-2, rgba(255, 255, 255, 0.2));
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.dauligor-class-prepare-button:hover,
+.dauligor-class-prepare-button:focus {
+  border-color: var(--color-border-light-1, rgba(255, 255, 255, 0.45));
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  outline: none;
+}
+
+.dauligor-class-prepare-button > i {
+  pointer-events: none;
+}
+
+/* Toolbar variant of the per-class prepare button — sits at the
+ * trailing edge of the Spells tab's `.middle` row next to dnd5e's
+ * filter/sort icons. Just a small left-margin tweak to keep it from
+ * butting against `<item-list-controls>`. */
+.dauligor-class-prepare-button--toolbar {
+  margin-left: 6px;
+}
+
 .dauligor-spell-manager {
   display: flex;
   flex-direction: column;
@@ -4010,31 +4063,406 @@ button.dauligor-option-picker__pill:hover {
   opacity: 0.5;
 }
 
-/* ─── Spell Preparation manager — live pool panel ───────────────────
- * Renders below the per-class metadata when a class is selected.
- * Phase 1: read-only display of the curated class spell list with
- * "owned" vs "available" indicators. Add-to-sheet action lives in
- * a follow-up. CSS variable fallbacks match the rest of the manager
- * so the panel reads as native on the dnd5e theme. */
-.dauligor-spell-manager__pool-count {
-  margin-left: 8px;
+/* ─── Spell Preparation manager — picker variant (4-col body) ───────
+ * Mirrors the Character Builder's AddSpellsModal layout:
+ *   rail (classes) · favourites · pool (meta + filters + rows) · detail
+ * Shares the dark-token palette of the rest of the manager. The legacy
+ * 3-col body (kept on `.dauligor-spell-manager__layout`) is no longer
+ * referenced — the picker variant uses its own `__picker-layout` grid.
+ */
+
+.dauligor-spell-manager--picker .dauligor-spell-manager__picker-layout {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 180px)   /* rail */
+    minmax(180px, 220px)   /* favourites */
+    minmax(0, 1fr)         /* pool */
+    minmax(360px, 420px);  /* detail */
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 10px;
+  background: var(--dauligor-panel);
+}
+
+/* Pillar wrappers share a panel-like chrome. Pool column opts out of
+ * inner padding because its meta / toolbar / drawer / scroll
+ * sub-regions each set their own. */
+.dauligor-spell-manager--picker .dauligor-spell-manager__rail,
+.dauligor-spell-manager--picker .dauligor-spell-manager__favorites,
+.dauligor-spell-manager--picker .dauligor-spell-manager__pool-column,
+.dauligor-spell-manager--picker .dauligor-spell-manager__detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--dauligor-border);
+  background: var(--dauligor-panel-alt);
+}
+
+.dauligor-spell-manager--picker .dauligor-spell-manager__rail,
+.dauligor-spell-manager--picker .dauligor-spell-manager__favorites,
+.dauligor-spell-manager--picker .dauligor-spell-manager__detail {
+  padding: 12px;
+  gap: 8px;
+}
+
+.dauligor-spell-manager--picker .dauligor-spell-manager__pool-column {
+  padding: 0;
+  gap: 0;
+}
+
+/* === Favourites column === */
+.dauligor-spell-manager__favorites-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+}
+
+.dauligor-spell-manager__favorites-icon {
+  color: #d2b350;
+  font-size: 13px;
+}
+
+.dauligor-spell-manager__favorites-title {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__favorites-count {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__favorites-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__favorites-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 10px;
+  text-align: center;
+  gap: 6px;
+}
+
+.dauligor-spell-manager__favorites-empty-icon {
+  font-size: 24px;
+  color: #c2b87a;
+  opacity: 0.25;
+}
+
+.dauligor-spell-manager__favorites-empty-hint {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.45;
+}
+
+/* === Pool column — meta strip === */
+.dauligor-spell-manager__meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.dauligor-spell-manager__meta-left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__meta-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dauligor-spell-manager__meta-class {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__meta-chip {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dauligor-accent-strong);
+  border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.4));
+  background: rgba(170, 130, 80, 0.08);
+}
+
+.dauligor-spell-manager__meta-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__meta-right {
+  display: flex;
+  gap: 16px;
+}
+
+.dauligor-spell-manager__meta-counter {
+  text-align: right;
+}
+
+.dauligor-spell-manager__meta-counter-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  opacity: 0.7;
+}
+
+.dauligor-spell-manager__meta-counter-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__meta-counter-cap {
+  font-size: 11px;
+  color: var(--dauligor-text-muted);
+  font-weight: 400;
+}
+
+/* === Pool column — toolbar (search + filters + reset) === */
+.dauligor-spell-manager__pool-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.1));
+}
+
+.dauligor-spell-manager__pool-toolbar-title {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  white-space: nowrap;
+}
+
+.dauligor-spell-manager__pool-search {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--dauligor-text);
+  font-size: 12px;
+  border-radius: 2px;
+}
+
+.dauligor-spell-manager__pool-search:focus {
+  outline: none;
+  border-color: #9b988f;
+}
+
+.dauligor-spell-manager__filter-button,
+.dauligor-spell-manager__reset-button {
+  height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--dauligor-border);
+  background: #2a2a2a;
+  color: var(--dauligor-text);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.dauligor-spell-manager__filter-button:hover,
+.dauligor-spell-manager__reset-button:hover {
+  border-color: #8a877d;
+  background: #313131;
+}
+
+.dauligor-spell-manager__filter-button--active {
+  border-color: #c2b87a;
+  background: rgba(194, 184, 122, 0.12);
+  color: #d2b350;
+}
+
+.dauligor-spell-manager__filter-count-badge {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 9px;
+  padding: 1px 4px;
+  background: #c2b87a;
+  color: #000;
+  border-radius: 2px;
+  min-width: 14px;
+  text-align: center;
+}
+
+.dauligor-spell-manager__reset-button {
+  color: #d4856d;
+  border-color: rgba(212, 133, 109, 0.35);
+}
+
+.dauligor-spell-manager__pool-count {
+  margin-left: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
   font-weight: 700;
-  opacity: 0.55;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.dauligor-spell-manager__pool-count-total {
+  opacity: 0.5;
+}
+
+/* === Pool column — filter drawer === */
+.dauligor-spell-manager__drawer {
+  display: none;
+}
+
+.dauligor-spell-manager__drawer.dauligor-spell-manager__drawer--open {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.1));
+  background: rgba(0, 0, 0, 0.1);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__filter-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dauligor-spell-manager__filter-section-title {
+  flex: 1;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+}
+
+.dauligor-spell-manager__filter-shortcuts {
+  display: flex;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__filter-shortcut {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.dauligor-spell-manager__filter-shortcut:hover {
+  opacity: 1;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__filter-chip {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--dauligor-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 11px;
+  letter-spacing: 0.02em;
+}
+
+.dauligor-spell-manager__filter-chip:hover {
+  border-color: #8a877d;
+  color: var(--dauligor-text);
+}
+
+.dauligor-spell-manager__filter-chip--selected {
+  background: rgba(194, 184, 122, 0.18);
+  border-color: #c2b87a;
+  color: #d2b350;
+}
+
+/* === Pool column — scroll area + level bands === */
+.dauligor-spell-manager__pool-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .dauligor-spell-manager__pool-band {
-  margin-top: 10px;
+  margin: 0;
 }
 
 .dauligor-spell-manager__pool-band-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
+  padding: 4px 12px;
   background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.06));
   border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.15));
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .dauligor-spell-manager__pool-band-name {
@@ -4052,61 +4480,87 @@ button.dauligor-option-picker__pill:hover {
   opacity: 0.4;
 }
 
-.dauligor-spell-manager__pool-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.dauligor-spell-manager__pool-band-list {
+  display: flex;
+  flex-direction: column;
 }
 
+/* === Pool row (new shape) ===
+ * grid: indicator · name · badges · school · source · star
+ * Favorites column reuses the same row but trims the trailing star
+ * (see the `.dauligor-spell-manager__favorites-list` override below). */
 .dauligor-spell-manager__pool-row {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 36px auto;
+  grid-template-columns:
+    20px           /* indicator */
+    minmax(0, 1fr) /* name */
+    auto           /* badges */
+    32px           /* school */
+    36px           /* source */
+    20px;          /* star */
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
+  padding: 5px 12px;
+  border-left: 3px solid transparent;
   border-bottom: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.08));
   font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
 }
 
-.dauligor-spell-manager__pool-row.is-owned .dauligor-spell-manager__pool-indicator {
+.dauligor-spell-manager__pool-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dauligor-spell-manager__pool-row--selected {
+  background: rgba(201, 199, 192, 0.1);
+  border-left-color: #c2b87a;
+}
+
+.dauligor-spell-manager__pool-row--owned .dauligor-spell-manager__row-indicator {
   color: var(--dauligor-success, #4ea96b);
   font-weight: 900;
 }
 
-.dauligor-spell-manager__pool-row:not(.is-owned) .dauligor-spell-manager__pool-indicator {
-  opacity: 0.4;
-}
-
-.dauligor-spell-manager__pool-indicator {
-  font-size: 12px;
-  text-align: center;
-}
-
-.dauligor-spell-manager__pool-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dauligor-spell-manager__pool-row.is-owned .dauligor-spell-manager__pool-name {
+.dauligor-spell-manager__pool-row--owned .dauligor-spell-manager__row-name {
   font-weight: 600;
 }
 
-.dauligor-spell-manager__pool-school {
-  font-size: 8px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.55;
-  white-space: nowrap;
+.dauligor-spell-manager__pool-row:not(.dauligor-spell-manager__pool-row--owned) .dauligor-spell-manager__row-indicator {
+  opacity: 0.4;
 }
 
-.dauligor-spell-manager__pool-badges {
+.dauligor-spell-manager__pool-row:not(.dauligor-spell-manager__pool-row--owned) .dauligor-spell-manager__row-name {
+  opacity: 0.65;
+}
+
+.dauligor-spell-manager__pool-row--locked {
+  cursor: default;
+}
+
+.dauligor-spell-manager__pool-row--locked .dauligor-spell-manager__row-indicator {
+  color: #c2b87a;
+}
+
+.dauligor-spell-manager__row-indicator {
+  text-align: center;
+  font-size: 13px;
+}
+
+.dauligor-spell-manager__row-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dauligor-text);
+}
+
+.dauligor-spell-manager__row-badges {
   display: inline-flex;
   gap: 3px;
 }
 
-.dauligor-spell-manager__pool-badge {
+.dauligor-spell-manager__row-badge {
   display: inline-block;
   min-width: 14px;
   padding: 1px 4px;
@@ -4117,4 +4571,450 @@ button.dauligor-option-picker__pill:hover {
   background: var(--dauligor-surface-muted, rgba(170, 130, 80, 0.12));
   border: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.25));
   opacity: 0.7;
+}
+
+.dauligor-spell-manager__row-school {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.dauligor-spell-manager__row-source {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.35;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.dauligor-spell-manager__row-star {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.18);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.dauligor-spell-manager__row-star:hover {
+  color: #d2b350;
+}
+
+.dauligor-spell-manager__row-star--active {
+  color: #d2b350;
+}
+
+/* Favourites column rows skip the trailing star → grid template */
+.dauligor-spell-manager__favorites-list .dauligor-spell-manager__pool-row {
+  grid-template-columns:
+    20px           /* indicator */
+    minmax(0, 1fr) /* name */
+    auto           /* badges */
+    32px           /* school */
+    36px;          /* source */
+}
+
+/* === Detail column === */
+.dauligor-spell-manager--picker .dauligor-spell-manager__detail {
+  overflow-y: auto;
+}
+
+.dauligor-spell-manager__detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.dauligor-spell-manager__detail-empty-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dauligor-accent-strong);
+}
+
+.dauligor-spell-manager__detail-empty-hint {
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.55;
+  max-width: 280px;
+}
+
+/* Detail-pane action buttons (Add / Remove from class). Row click in
+ * the pool now only updates the detail selection — these are the
+ * sole add/remove entry points. Locked variants render as disabled
+ * buttons that explain why the spell can't be removed here. */
+.dauligor-spell-manager__detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dauligor-spell-manager__detail-action {
+  flex: 1;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: none;
+  transition: filter 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-spell-manager__detail-action--add {
+  background: rgba(78, 169, 107, 0.18);
+  border: 1px solid #4ea96b;
+  color: #6bd494;
+}
+
+.dauligor-spell-manager__detail-action--remove {
+  background: rgba(212, 133, 109, 0.18);
+  border: 1px solid #d4856d;
+  color: #e8a18a;
+}
+
+.dauligor-spell-manager__detail-action--add:hover,
+.dauligor-spell-manager__detail-action--remove:hover {
+  filter: brightness(1.2);
+}
+
+.dauligor-spell-manager__detail-action--locked {
+  background: rgba(170, 130, 80, 0.08);
+  border: 1px solid var(--dauligor-border);
+  color: var(--dauligor-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* ─── Dauligor Character Sheet — Spells tab ─────────────────────────
+ * Opt-in alt sheet (DauligorCharacterSheet) overrides only the
+ * `spells` PART template. Our template REUSES dnd5e's row markup
+ * (`.items-section`, `.items-header`, `.item`, `dnd5e-itemContext`,
+ * columns, description expansion, activities) — the only structural
+ * change is grouping spells by Class → Level instead of Level only.
+ *
+ * Most styling therefore comes from dnd5e itself. We add ONLY:
+ *   - inner layout container for the Spells tab body
+ *   - class-group wrapper that holds dnd5e-styled `.items-section`s
+ *   - class-group header (the "Bard" / "Wizard" divider label)
+ *
+ * The per-class Prepare button (`.dauligor-class-prepare-button`) is
+ * defined further up in this file and is reused inside dnd5e's
+ * `.spellcasting.card > .header`.
+ *
+ * Tab visibility is left to dnd5e's stock `.tab:not(.active)` rule —
+ * we DO NOT set `display` on the outer `.tab` element, only on the
+ * inner wrapper below.
+ */
+
+.dauligor-character-sheet__spells-tab-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.dauligor-character-sheet__class-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Header is a 5-column CSS grid so columns line up identically
+ * across every class section regardless of value widths. Order:
+ *   1. Name (toggle button)            — flex 1
+ *   2. Attack                          — fixed
+ *   3. Spell DC                        — fixed
+ *   4. Prepared                        — fixed
+ *   5. Prepare-book button             — auto
+ *
+ * Background uses dnd5e's spellcasting-card gradient vars so each
+ * header reads the same as the legacy top-of-tab cards. */
+.dauligor-character-sheet__class-group-header {
+  display: grid;
+  grid-template-columns:
+    minmax(160px, 1fr)   /* Name */
+    72px                 /* Attack */
+    72px                 /* Spell DC */
+    88px                 /* Prepared */
+    auto;                /* Prepare-book button */
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: linear-gradient(to right,
+    var(--dnd5e-color-sc-1, #433754),
+    var(--dnd5e-color-sc-2, #776493));
+  color: #fff;
+  border: 1px solid var(--dnd5e-color-gold, #9f9275);
+  border-radius: 3px;
+  box-shadow: 0 0 6px var(--dnd5e-shadow-45, rgba(0, 0, 0, 0.45));
+  overflow: hidden;
+}
+
+.dauligor-character-sheet__class-group-header.is-dragging {
+  opacity: 0.55;
+}
+
+/* Drop indicators sit on the SECTION (parent of the header), not on
+ * the header itself, so the drop zone covers the whole class block
+ * (header + spell rows) and dropping anywhere over Wizard reorders
+ * relative to Wizard. The pseudo-element is a gold rule above or
+ * below the section. */
+.dauligor-character-sheet__class-group {
+  position: relative;
+}
+
+.dauligor-character-sheet__class-group.is-drop-above::before,
+.dauligor-character-sheet__class-group.is-drop-below::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--dnd5e-color-gold, #9f9275);
+  box-shadow: 0 0 6px var(--dnd5e-color-gold, #9f9275);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.dauligor-character-sheet__class-group.is-drop-above::before {
+  top: -2px;
+}
+
+.dauligor-character-sheet__class-group.is-drop-below::after {
+  bottom: -2px;
+}
+
+/* Spell-drop drop-target indicators. Distinct from the class-reorder
+ * indicators (gold lines above/below) — a spell drop highlights the
+ * whole target region with a dashed outline so the user clearly sees
+ * "this is where the spell will land". */
+.dauligor-character-sheet__class-group.is-spell-drop-target {
+  outline: 2px dashed var(--dnd5e-color-gold, #9f9275);
+  outline-offset: -2px;
+}
+
+.items-section.card.is-spell-drop-target {
+  outline: 2px dashed var(--dnd5e-color-gold, #9f9275);
+  outline-offset: -2px;
+  background: rgba(159, 146, 117, 0.06);
+}
+
+/* When the section is open, square-bottom the header so it merges
+ * visually with the spell list below; the radius rounds the corners
+ * of the whole card-like wrapper. */
+.dauligor-character-sheet__class-group:not(.is-collapsed) .dauligor-character-sheet__class-group-header {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Toggle button: caret + class name. Width hugs its content so the
+ * stats grid + actions can sit beside it. The header itself absorbs
+ * any extra width via the stats `flex: 1`. */
+.dauligor-character-sheet__class-group-toggle {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.dauligor-character-sheet__class-group-toggle:hover,
+.dauligor-character-sheet__class-group-toggle:focus {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.dauligor-character-sheet__class-group-caret {
+  width: 12px;
+  text-align: center;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+/* Open (default) — caret points down. Collapsed — caret points right. */
+.dauligor-character-sheet__class-group:not(.is-collapsed) .dauligor-character-sheet__class-group-caret {
+  transform: rotate(90deg);
+}
+
+.dauligor-character-sheet__class-group-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  /* Inherit the sheet's normal text color — no Dauligor gold. */
+  color: inherit;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* Each stat is a single grid cell — label on top, value on bottom,
+ * thin left rule separating from the previous cell. The grid
+ * dimensions are set on `.class-group-header` so each row's stat
+ * cells align across class sections (no shifting). */
+.dauligor-character-sheet__class-group-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  min-width: 0;
+}
+
+.dauligor-character-sheet__class-group-stat--prepared {
+  border-left: 2px solid rgba(255, 255, 255, 0.28);
+}
+
+.dauligor-character-sheet__class-group-stat-label {
+  font-family: var(--dnd5e-font-roboto-condensed, var(--font-sans, system-ui, sans-serif));
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1;
+}
+
+.dauligor-character-sheet__class-group-stat-value {
+  font-family: var(--dnd5e-font-roboto-slab, var(--font-mono, ui-monospace, monospace));
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #fff;
+  text-align: center;
+}
+
+.dauligor-character-sheet__class-group-stat-cap {
+  font-weight: 400;
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+/* Placeholder cell used when a non-spellcasting class group (e.g.
+ * "Other Spells") doesn't render a Prepare button — keeps the
+ * trailing grid column populated so neighboring sections still
+ * align. */
+.dauligor-character-sheet__class-group-prepare-placeholder {
+  display: block;
+}
+
+/* The Prepare-book button sits in the trailing grid column. Give it
+ * a bit of padding so it doesn't butt against the right edge. */
+.dauligor-character-sheet__class-group-header .dauligor-class-prepare-button {
+  margin: 0 8px;
+  align-self: center;
+}
+
+/* "+ Section" button on the Spells tab toolbar. Adds a new custom
+ * top-level section (persisted as `flags.dauligor-pairing.customSections`).
+ * Visual is the same icon-button family used by the per-class Prepare
+ * book — neutral colors, no Dauligor gold. */
+.dauligor-character-sheet__create-section-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  margin: 0 0 0 6px;
+  padding: 0;
+  border: 1px solid var(--color-border-light-2, rgba(255, 255, 255, 0.2));
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex: 0 0 auto;
+  box-shadow: none;
+  font-size: 12px;
+  line-height: 1;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-character-sheet__create-section-button:hover,
+.dauligor-character-sheet__create-section-button:focus {
+  border-color: var(--color-border-light-1, rgba(255, 255, 255, 0.45));
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+/* Per-level collapse toggle inside dnd5e's `.items-header`. Small
+ * caret button at the start of the row; rotates -90° when its
+ * parent `.items-section` is collapsed via `.is-section-collapsed`.
+ * The actual hiding is `display: none` on the sibling `.item-list`. */
+.dauligor-character-sheet__section-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.dauligor-character-sheet__section-toggle:hover,
+.dauligor-character-sheet__section-toggle:focus {
+  opacity: 1;
+  outline: none;
+}
+
+.dauligor-character-sheet__section-toggle-caret {
+  transition: transform 0.15s ease;
+}
+
+.items-section.card.is-section-collapsed .dauligor-character-sheet__section-toggle-caret {
+  transform: rotate(-90deg);
+}
+
+.items-section.card.is-section-collapsed > .item-list {
+  display: none;
+}
+
+/* Body — hidden when section is collapsed. The class-group above is
+ * a `<section>` with `is-collapsed` set by the template based on the
+ * `flags.dauligor-pairing.collapsedClasses` actor flag. */
+.dauligor-character-sheet__class-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dauligor-character-sheet__class-group.is-collapsed .dauligor-character-sheet__class-group-body {
+  display: none;
 }
