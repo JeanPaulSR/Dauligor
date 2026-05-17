@@ -5552,8 +5552,13 @@ button.dauligor-option-picker__pill:hover {
 }
 
 .dauligor-spell-manager__detail-description {
-  font-family: var(--font-serif, "Crimson Text", serif);
-  font-size: 13px;
+  /* Match Foundry's body text — sans-serif (Signika under dnd5e v5,
+   * with the system's `--font-primary` / `--font-sans` chain as a
+   * fallback). Slightly larger than the 13px we had so it reads at
+   * the same comfort level as the CASTING TIME / RANGE / etc. info
+   * rows above. */
+  font-family: var(--font-primary, var(--font-sans, "Signika", system-ui, sans-serif));
+  font-size: 14px;
   line-height: 1.55;
   color: var(--dauligor-text, #cbb98f);
 }
@@ -5566,10 +5571,26 @@ button.dauligor-option-picker__pill:hover {
   font-weight: 700;
   color: #e0c98a;
 }
-.dauligor-spell-manager__detail-description em,
-.dauligor-spell-manager__detail-description i {
+/* Italic via `em` only — NOT `i`. Font Awesome icons (used by Foundry's
+ * enrichHTML to render `[[/r ...]]` and `[[/damage ...]]` as inline
+ * roll widgets with `<i class="fa-…">` glyphs) were inheriting italic
+ * from a broader `i` selector, giving the dice icon a tilted look. */
+.dauligor-spell-manager__detail-description em {
   font-style: italic;
   color: var(--dauligor-text, #cbb98f);
+}
+/* Foundry's icon font lives on bare `<i class="fa-*">` elements
+ * inside enriched HTML. Force-upright them in case some other
+ * stylesheet (legacy `.dauligor-spell-manager__detail-body em`?)
+ * tries to italicise. */
+.dauligor-spell-manager__detail-description i[class*="fa-"],
+.dauligor-spell-manager__detail-description i.fas,
+.dauligor-spell-manager__detail-description i.far,
+.dauligor-spell-manager__detail-description i.fab,
+.dauligor-spell-manager__detail-description i.fa-solid,
+.dauligor-spell-manager__detail-description i.fa-regular,
+.dauligor-spell-manager__detail-description i.fa-brands {
+  font-style: normal;
 }
 .dauligor-spell-manager__detail-description u { text-decoration: underline; }
 .dauligor-spell-manager__detail-description ul,
