@@ -1803,7 +1803,19 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
     const schoolLabel = describeSpellSchool(poolSchool(summary));
     const levelLabel = describeSpellLevel(poolLevel(summary));
-    const sourceShort = this._sourceShortName(poolSpellSourceId(summary)) || "—";
+    // Source rendering. Priority order:
+    //   1. `full.system.source.book` — the spell's own Foundry-shape
+    //      source field (e.g. "XGE", "PHB"). Reliable once the full
+    //      payload loads, and works regardless of whether the spell's
+    //      legacy spellSourceId column matches the sources catalog.
+    //   2. Sources catalog lookup keyed on `spellSourceId` — works for
+    //      newly-migrated rows whose source_id matches `sources.id`.
+    //   3. "—" placeholder while loading / when neither resolves.
+    const sourceBookFromFull = String(full?.system?.source?.book ?? "").trim();
+    const sourceShort = sourceBookFromFull
+      || this._sourceShortName(poolSpellSourceId(summary))
+      || "—";
+    const sourcePage = String(full?.system?.source?.page ?? "").trim();
 
     const ritual = Boolean(flags.ritual);
     const concentration = Boolean(flags.concentration);
@@ -1839,19 +1851,31 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         })()
       : "Not on sheet";
 
+    // Tag rendering. The summary endpoint ships `tagIds` only (opaque
+    // D1 row ids) — there's no tag-catalog endpoint yet to resolve
+    // them to human-readable names like "Fire" / "Cleric Domain". So
+    // until that endpoint exists we hide the tag section entirely to
+    // avoid showing a wall of UUIDs. Tracked as a server-side polish
+    // item; the moment the summary ships `tagNames` (or we get a
+    // `/api/module/tags/catalog.json` endpoint), flip this back on
+    // and render the resolved names.
     const tagIds = Array.isArray(flags.tagIds) ? flags.tagIds : [];
-    const tagsHtml = tagIds.length === 0
-      ? `<div class="dauligor-spell-manager__detail-tags-empty">No tags.</div>`
-      : `<div class="dauligor-spell-manager__detail-tags-list">
-          ${tagIds.map((id) => `<span class="dauligor-spell-manager__detail-tag">${escapeHtml(id)}</span>`).join("")}
-        </div>`;
+    const hasResolvableTags = false; // intentionally false until tag-name resolution lands
+
+    // Suppress the source chip + Source line when we have no
+    // resolvable book — better than showing a meaningless "—" beside
+    // the title.
+    const hasSource = sourceShort && sourceShort !== "—";
+    const sourceLineValue = hasSource
+      ? `${escapeHtml(sourceShort)}${sourcePage ? `, p. ${escapeHtml(sourcePage)}` : ""}`
+      : `<em style="opacity: 0.55">unresolved</em>`;
 
     this._detailRegion.innerHTML = `
       <div class="dauligor-spell-manager__detail-scroll">
         <header class="dauligor-spell-manager__detail-header">
           <div class="dauligor-spell-manager__detail-title-row">
             <h2 class="dauligor-spell-manager__detail-title">${escapeHtml(summary.name)}</h2>
-            <span class="dauligor-spell-manager__detail-source-chip">${escapeHtml(sourceShort)}</span>
+            ${hasSource ? `<span class="dauligor-spell-manager__detail-source-chip">${escapeHtml(sourceShort)}</span>` : ""}
             <button type="button"
               class="dauligor-spell-manager__detail-star ${fav ? "dauligor-spell-manager__detail-star--active" : ""}"
               data-action="detail-toggle-fav"
@@ -1882,9 +1906,10 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         <footer class="dauligor-spell-manager__detail-footer">
           <div class="dauligor-spell-manager__detail-source-line">
             <span class="dauligor-spell-manager__detail-source-label">Source:</span>
-            <span class="dauligor-spell-manager__detail-source-value">${escapeHtml(sourceShort)}</span>
+            <span class="dauligor-spell-manager__detail-source-value">${sourceLineValue}</span>
           </div>
           <div class="dauligor-spell-manager__detail-status">${escapeHtml(ownedLine)}</div>
+          ${hasResolvableTags ? `
           <button type="button"
             class="dauligor-spell-manager__detail-tags-toggle"
             data-action="toggle-tags"
@@ -1893,7 +1918,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
             ${this._state.showTags ? "Hide tags" : "Show tags"}
             <span class="dauligor-spell-manager__detail-tags-count">(${tagIds.length})</span>
           </button>
-          ${this._state.showTags ? `<div class="dauligor-spell-manager__detail-tags">${tagsHtml}</div>` : ""}
+          ` : ""}
         </footer>
       </div>
     `;
@@ -2131,12 +2156,19 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const shapeOptions      = SHAPE_ORDER.map((b) => ({ v: b, l: SHAPE_LABELS[b] }));
     const propertyOptions   = PROPERTY_ORDER.map((b) => ({ v: b, l: PROPERTY_LABELS[b] }));
 
-    const sourceOptions = sourcesInPool.length === 0
-      ? []
-      : sourcesInPool.map((sid) => ({
-          v: sid,
-          l: this._sourceShortName(sid) || sid
-        }));
+    // Source chips: only include sources we can actually name. The
+    // spell summary's `spellSourceId` column hasn't been migrated to
+    // the new slugged source ids in all rows, so a chunk of spells
+    // carry legacy Firestore-style ids that aren't in the catalog.
+    // Until that data is reconciled server-side, suppress unresolvable
+    // chips entirely — better than showing "6lJGQvtAIbUSSJ1tG6cg" as
+    // a filter option the user can't usefully interact with.
+    const sourceOptions = sourcesInPool
+      .map((sid) => {
+        const label = this._sourceShortName(sid);
+        return label ? { v: sid, l: label } : null;
+      })
+      .filter(Boolean);
 
     const title = target === "favorites" ? "Filter Favourites" : "Filter Spells";
 
