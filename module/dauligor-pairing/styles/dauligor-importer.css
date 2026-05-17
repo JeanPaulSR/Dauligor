@@ -5353,29 +5353,40 @@ button.dauligor-option-picker__pill:hover {
 
 /* === Detail pane — SpellDetailPanel parity === */
 /*
- * `__detail-scroll` is a plain block container with overflow-y:auto.
- * Children (header/hero/body/footer) flow naturally top-to-bottom as
- * block elements; when total content exceeds the container's height,
- * the container scrolls.
+ * `__detail-scroll` is a flex column with `overflow-y: auto`. The
+ * footer uses `margin-top: auto` to pin to the bottom when content
+ * is shorter than the container — same trick the website's
+ * <SpellDetailPanel> uses (Tailwind `mt-auto` on the bottom group).
  *
- * This was previously a `display: flex; flex-direction: column`
- * container, which led to a subtle bug: flex children default to
- * `flex-shrink: 1`, so when the body's content was taller than the
- * available column height, flex shrunk `__detail-body`'s computed
- * height — and because we'd just set `__detail-body { overflow:
- * visible }` (to keep the description from getting its own
- * scrollbar), the description's overflowing content painted ON TOP
- * of the footer below. Visible result: "Source: PHB'14, p. 218"
- * overlapping mid-description text.
+ * Earlier attempts hit a flex-shrink interaction: children default
+ * to `flex-shrink: 1`, so when total content exceeded the container
+ * height, flex SQUEEZED `__detail-body`'s computed height while its
+ * content kept rendering at natural height — description painted
+ * straight onto the footer below. Two changes fix this:
  *
- * Switching to plain block layout removes the flex-shrink dynamic
- * entirely — children render at their natural height, container
- * scrolls — matches the public /compendium/spells panel behaviour.
+ *   1. `flex-shrink: 0` on every direct child of `__detail-scroll`
+ *      (header / hero / body / footer). Children keep their natural
+ *      heights regardless of container.
+ *   2. `overflow-y: auto` then engages cleanly when content > container.
+ *
+ * With shrink prevented, `margin-top: auto` on the footer gives the
+ * desired "pin to bottom when short, flow naturally when long"
+ * behaviour — bottom-of-panel for short spells, scroll-naturally
+ * for long ones. Description and footer always share one scroll.
  */
 .dauligor-spell-manager__detail-scroll {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-header,
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-hero,
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-body,
+.dauligor-spell-manager__detail-scroll > .dauligor-spell-manager__detail-footer {
+  flex-shrink: 0;
 }
 
 .dauligor-spell-manager__detail-header {
@@ -5550,17 +5561,64 @@ button.dauligor-option-picker__pill:hover {
 .dauligor-spell-manager__detail-description > :first-child { margin-top: 0; }
 .dauligor-spell-manager__detail-description > :last-child  { margin-bottom: 0; }
 .dauligor-spell-manager__detail-description p { margin: 0 0 10px; }
-.dauligor-spell-manager__detail-description strong { color: #e0c98a; }
-.dauligor-spell-manager__detail-description em { color: var(--dauligor-text, #cbb98f); }
+.dauligor-spell-manager__detail-description strong,
+.dauligor-spell-manager__detail-description b {
+  font-weight: 700;
+  color: #e0c98a;
+}
+.dauligor-spell-manager__detail-description em,
+.dauligor-spell-manager__detail-description i {
+  font-style: italic;
+  color: var(--dauligor-text, #cbb98f);
+}
+.dauligor-spell-manager__detail-description u { text-decoration: underline; }
+.dauligor-spell-manager__detail-description ul,
+.dauligor-spell-manager__detail-description ol {
+  margin: 0 0 10px 1.4em;
+  padding: 0;
+}
+.dauligor-spell-manager__detail-description li { margin: 0 0 4px; }
+.dauligor-spell-manager__detail-description h1,
+.dauligor-spell-manager__detail-description h2,
+.dauligor-spell-manager__detail-description h3,
+.dauligor-spell-manager__detail-description h4 {
+  margin: 10px 0 6px;
+  font-family: var(--font-serif, "Crimson Text", serif);
+  font-weight: 700;
+  color: #f1d999;
+}
+.dauligor-spell-manager__detail-description h1 { font-size: 16px; }
+.dauligor-spell-manager__detail-description h2 { font-size: 15px; }
+.dauligor-spell-manager__detail-description h3 { font-size: 14px; }
+.dauligor-spell-manager__detail-description h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+.dauligor-spell-manager__detail-description blockquote {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--dauligor-accent, #b89a6b);
+  background: rgba(170, 130, 80, 0.06);
+  font-style: italic;
+}
+.dauligor-spell-manager__detail-description code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  padding: 1px 4px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 2px;
+}
 
-/* Detail footer used to be `margin-top: auto` to pin against the
- * bottom of the scroll region — but when the user clicked "Show
- * tags" the footer's expanded height grew UPWARD and visually
- * overlapped the description above. Now the footer flows naturally
- * after the description in the same scroll container, so tags
- * append below the source/status line without consuming anything. */
+/* Footer pins to the bottom of `__detail-scroll` via `margin-top:
+ * auto`. When the description is short, the auto-margin grows to
+ * fill the remaining height and the footer sits at the bottom of
+ * the panel. When the description is long, the auto-margin collapses
+ * to 0 and the footer flows directly after the body — both cases
+ * scroll inside the same `__detail-scroll` container.
+ *
+ * Children of `__detail-scroll` have `flex-shrink: 0` so this
+ * interaction doesn't squeeze the body / footer (see the comment
+ * on `__detail-scroll` above for the history). */
 .dauligor-spell-manager__detail-footer {
   padding: 12px 18px 16px;
+  margin-top: auto;
   border-top: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
   display: flex;
   flex-direction: column;

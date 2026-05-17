@@ -18,6 +18,7 @@
 
 import type { ExportFetchers } from "./_classExport.js";
 import { getSemanticSourceId } from "./_classExport.js";
+import { bbcodeToHtml } from "./_bbcode.js";
 
 const parseJsonField = (val: any, fallback: any) => {
   if (val == null) return fallback;
@@ -73,6 +74,32 @@ export async function buildSpellItemBundle(
   const requiredTagIds = parseJsonField(row.required_tags, []) || [];
   const tagIds = parseJsonField(row.tags, []) || [];
   const sourceId = trimString(row.identifier) || `spell-${row.id}`;
+
+  // Description rendering: prefer the BBCode column (`spells.description`)
+  // rendered through `bbcodeToHtml`. Rationale:
+  //   - The BBCode column is the authoritative post-import shape
+  //     (Foundry HTML → BBCode at import time, see
+  //     `docs/features/compendium-spells.md`). It carries inline
+  //     emphasis ([b]/[i]) authors typed in the editor.
+  //   - The raw `foundry_data.description.value` we used to ship is
+  //     stripped of inline emphasis by Foundry's serializer — paragraph
+  //     wrappers only. Visible on the actor sheet + Prepare Spells
+  //     manager as "everything is the same weight, no bold for the
+  //     sub-headings like 'Clenched Fist.'".
+  //   - bbcodeToHtml preserves Foundry rich-text patterns
+  //     (`[[/r ...]]`, `&Reference[...]`) as plain text; dnd5e's
+  //     enrichHTML on the actor's side picks them up and renders the
+  //     interactive widgets normally.
+  // Falls back to the foundry_data value when BBCode is empty (e.g. a
+  // Foundry-only spell that never round-tripped through the app
+  // editor).
+  const bbcodeDescription = trimString(row.description);
+  if (bbcodeDescription) {
+    foundrySystem.description = {
+      ...(foundrySystem.description ?? {}),
+      value: bbcodeToHtml(bbcodeDescription),
+    };
+  }
 
   // Resolve the spell's source FK to its public semantic id to match
   // the lightweight summary endpoint and the sources catalog. Single
