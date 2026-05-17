@@ -1644,10 +1644,19 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       : (selectedClass.abilityAbbr ? escapeHtml(selectedClass.abilityAbbr) : "");
 
     // Bottom row renders only when at least one of its slots is
-    // applicable. When only one applies, the other slot becomes the
-    // empty placeholder so the visible counter stays in its proper
-    // column (Cantrips on the LEFT, In Spellbook on the RIGHT).
+    // applicable. Slot positioning:
+    //   - Both apply (Wizard):     [Cantrips] [In Spellbook]
+    //   - Only Cantrips (Cleric):  [‹hidden›] [Cantrips]
+    //   - Only Spellbook (rare):   [‹hidden›] [In Spellbook]
+    // i.e. when only ONE row-2 counter applies, it always sits in the
+    // RIGHT column — that keeps everything visually flush with the
+    // right edge of the meta-right strip instead of leaving a gap on
+    // the right while the lonely counter floats in the left column.
     const hasBottomRow = cantripCounter !== null || spellbookCounter !== null;
+    const bothBottom   = cantripCounter !== null && spellbookCounter !== null;
+    const bottomLeft   = bothBottom ? cantripCounter : emptySlot;
+    const bottomRight  = bothBottom ? spellbookCounter : (cantripCounter ?? spellbookCounter ?? emptySlot);
+
     this._metaRegion.innerHTML = `
       <div class="dauligor-spell-manager__meta-left">
         <div class="dauligor-spell-manager__meta-title">
@@ -1663,8 +1672,8 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         </div>
         ${hasBottomRow ? `
         <div class="dauligor-spell-manager__meta-counter-row">
-          ${cantripCounter  ?? emptySlot}
-          ${spellbookCounter ?? emptySlot}
+          ${bottomLeft}
+          ${bottomRight}
         </div>
         ` : ""}
       </div>
