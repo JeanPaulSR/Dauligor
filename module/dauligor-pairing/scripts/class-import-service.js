@@ -567,21 +567,30 @@ export function buildClassImportWorkflow(payload, {
   const subclassFeatures = ensureArray(bundle.subclassFeatures).map((item) => normalizeWorldItem(item, bundle.source));
   const optionItems = ensureArray(bundle.optionItems).map((item) => normalizeWorldItem(item, bundle.source));
 
-  // Synthesize a Spellcasting feature item from `class.spellcasting.*`
-  // so it lands on the actor as a real `feat` document rather than
-  // hiding inside the class item's description HTML. See
-  // `buildSyntheticSpellcastingFeature` for the rationale. The synth's
-  // sourceId is layered into `desiredClassFeatureIds` below once we
-  // know the import has crossed `class.spellcasting.level`.
-  // Synthetic per-class "Spellcasting" feature creation is disabled.
-  // It was added so users could see "Bard Spellcasting" as a Feat row
-  // on the Features tab, but the class item already carries the
-  // `system.spellcasting` block (DC, attack, progression) and the
-  // Dauligor Sheet surfaces the same info via per-class chips on the
-  // Spells tab. Keeping the synth around just clutters Other Features.
-  // The builder function (`buildSyntheticSpellcastingFeature`) is
-  // preserved below in case we want to re-enable it later.
-  const syntheticSpellcastingFeature = null;
+  // Synthesize a per-class Spellcasting feature item from
+  // `class.spellcasting.*` so it lands on the actor as a real `feat`
+  // document ("Bard Spellcasting", "Wizard Spellcasting", …) rather
+  // than hiding inside the class item's description HTML.
+  //
+  // History note: this was briefly disabled while the Dauligor Sheet
+  // surfaced spellcasting info via per-class chips on the Spells tab.
+  // Re-enabled because (a) downstream automation modules (Midi-QOL,
+  // DAE, Active Auras) key off a discoverable Spellcasting feature
+  // item and (b) the Features tab is the natural place for players to
+  // see "this class can cast spells" at a glance. Cluttering Other
+  // Features is the lesser evil compared to losing the recognizable
+  // item.
+  //
+  // The synth's sourceId is layered into `desiredClassFeatureIds`
+  // below once the import has crossed `class.spellcasting.level`.
+  const syntheticSpellcastingFeature = buildSyntheticSpellcastingFeature({
+    semanticClassData,
+    classSourceId,
+    sourceBookId: bundle.source?.sourceId ?? null
+  });
+  if (syntheticSpellcastingFeature) {
+    classFeatures.push(syntheticSpellcastingFeature);
+  }
 
   const minSubclassLevel = getMinimumSubclassSelectionLevel(classItem.system?.advancement, classFeatures);
   const existingSubclassItem = targetActor
