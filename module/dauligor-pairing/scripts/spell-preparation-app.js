@@ -650,6 +650,19 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   _getActorClasses()  { return this._actor?.classes ?? {}; }
   _getSpellItems()    { return this._actor?.itemTypes?.spell ? [...this._actor.itemTypes.spell] : []; }
 
+  /**
+   * Actor-wide dbId → spell map. Class-agnostic — used in places that
+   * legitimately need to see all owned spells (e.g. the favourites
+   * synthesis fallback when a favourited dbId isn't in any current
+   * class pool). Callers that care about "is this spell on the sheet
+   * AS A <class> SPELL" must use `_getOwnedDbIdMapForClass` instead.
+   *
+   * Spells with no classIdentifier attribution land under
+   * `__other__`. When multiple instances of the same dbId exist (e.g.
+   * the player has Blade Ward as both a Bard and a Wizard spell on
+   * the actor), the actor-wide map keeps the first one we hit —
+   * that's fine for the synthesis-fallback use case.
+   */
   _getOwnedDbIdMap() {
     const map = new Map();
     for (const spell of this._getSpellItems()) {
@@ -659,8 +672,33 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     return map;
   }
 
+  /**
+   * Per-class dbId → spell map. The pool / favourites indicator
+   * (filled circle / 📖) lights up only when this class owns the
+   * spell, so adding Blade Ward to Bard doesn't make it look "on
+   * sheet" in Wizard's pool. Mutations (add / remove / toggle prepared)
+   * scope here too so the two copies stay independent.
+   */
+  _getOwnedDbIdMapForClass(classIdentifier) {
+    const map = new Map();
+    if (!classIdentifier) return map;
+    for (const spell of this._getSpellItems()) {
+      const id = resolveSpellClassIdentifier(spell) || UNKNOWN_CLASS_IDENTIFIER;
+      if (id !== classIdentifier) continue;
+      const dbId = getSpellEntityId(spell);
+      if (dbId && !map.has(dbId)) map.set(dbId, spell);
+    }
+    return map;
+  }
+
+  /** Actor-wide lookup. Use sparingly — most callers want per-class. */
   _findOwnedSpellByDbId(dbId) {
     return this._getOwnedDbIdMap().get(String(dbId)) ?? null;
+  }
+
+  /** Per-class lookup. Returns the spell only when this class owns it. */
+  _findOwnedSpellByDbIdForClass(dbId, classIdentifier) {
+    return this._getOwnedDbIdMapForClass(classIdentifier).get(String(dbId)) ?? null;
   }
 
   _buildClassModels() {
@@ -1113,15 +1151,18 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   // -----------------------------------------------------------------------
 
   /**
-   * Apply a sheetMode to a spell — either by mutating an existing owned
-   * spell or by embedding a fresh copy from the live class pool. The
-   * `classModel` is used to attribute the new spell + to resolve the
-   * full-spell endpoint for unowned spells.
+   * Apply a sheetMode to a spell — either by mutating the spell that's
+   * already on the sheet AS THIS CLASS, or by embedding a fresh copy
+   * from the live class pool. Per-class scoping means adding Blade
+   * Ward as a Wizard spell when Bard already has it doesn't update
+   * Bard's copy — it creates a second item attributed to Wizard.
    */
   async _applySheetMode(dbId, mode, classModel) {
     if (!this._actor || !dbId || !mode) return;
 
-    const owned = this._findOwnedSpellByDbId(dbId);
+    const owned = classModel?.identifier
+      ? this._findOwnedSpellByDbIdForClass(dbId, classModel.identifier)
+      : this._findOwnedSpellByDbId(dbId);
 
     if (owned) {
       if (isAdvancementGranted(owned)) {
@@ -1178,9 +1219,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     }
   }
 
-  async _removeSpell(dbId) {
+  /**
+   * Delete a spell from the actor entirely. Scoped per-class — if Bard
+   * and Wizard each have their own Blade Ward, removing from Wizard's
+   * footer only deletes the Wizard copy.
+   */
+  async _removeSpell(dbId, classModel = null) {
     if (!this._actor || !dbId) return;
-    const owned = this._findOwnedSpellByDbId(dbId);
+    const owned = classModel?.identifier
+      ? this._findOwnedSpellByDbIdForClass(dbId, classModel.identifier)
+      : this._findOwnedSpellByDbId(dbId);
     if (!owned) return;
     if (isAdvancementGranted(owned)) {
       notifyWarn(`${owned.name} is granted by an advancement and can only be removed via the source class.`);
@@ -1299,7 +1347,14 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     if (!this._favoritesRegion) return;
 
     const favIds = this._getFavoriteDbIds();
-    const ownedMap = this._getOwnedDbIdMap();
+    // Per-class owned scope. A favourite shows the on-sheet indicator
+    // ONLY when the currently-selected class also owns that spell —
+    // matching the pool's per-class indicator semantics. Bard owning
+    // Blade Ward doesn't make it light up in Wizard's view.
+    const selectedClassForOwned = classModels.find((m) => m.identifier === this._state.selectedClassIdentifier) ?? null;
+    const ownedMap = selectedClassForOwned
+      ? this._getOwnedDbIdMapForClass(selectedClassForOwned.identifier)
+      : this._getOwnedDbIdMap();
     const allFavorites = this._buildFavoritesPool(classModels);
     const filtered = this._filterList(allFavorites, "favorites");
 
@@ -1571,7 +1626,12 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       return;
     }
 
-    const ownedMap = this._getOwnedDbIdMap();
+    // Per-class indicator: only show "on sheet" for spells THIS class
+    // owns. If Bard has Blade Ward attributed to Bard, Wizard's pool
+    // still shows Blade Ward as empty-circle (not owned by Wizard).
+    const ownedMap = selectedClass
+      ? this._getOwnedDbIdMapForClass(selectedClass.identifier)
+      : this._getOwnedDbIdMap();
     const favIds = this._getFavoriteDbIds();
     const grouped = this._groupByLevel(filteredPool);
 
@@ -1728,7 +1788,13 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
     const dbId = poolDbId(summary);
     const full = this._fullSpellCache.get(dbId) ?? null;
-    const ownedItem = this._findOwnedSpellByDbId(dbId);
+    // Per-class scope for the detail pane's status line + footer button
+    // state. Adding Bard's Blade Ward to Wizard should let the Wizard
+    // detail view say "Not on sheet" (for Wizard) — even though Bard
+    // has its own copy.
+    const ownedItem = classModel?.identifier
+      ? this._findOwnedSpellByDbIdForClass(dbId, classModel.identifier)
+      : this._findOwnedSpellByDbId(dbId);
     const flags = poolFlags(summary);
 
     const enrichedHtml = this._enrichedDescriptionCache.get(dbId);
@@ -1871,48 +1937,117 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
   // ---- Footer (action buttons) ------------------------------------------
 
+  /**
+   * Footer buttons are HIERARCHICAL toggles, not mutually-exclusive
+   * modes. The data model:
+   *
+   *     on-sheet ⊇ in-spellbook ⊇ prepared
+   *
+   * - Every spell on the sheet has a sheetMode of either `free`,
+   *   `spellbook`, or `prepared`.
+   * - "On Sheet" toggle goes between not-owned and `free`.
+   * - "In Spellbook" toggle (Wizard) flips between `free` and
+   *   `spellbook` (and demotes `prepared` → `spellbook` when toggling
+   *   prepared off — see below).
+   * - "Prepared" toggle flips between `prepared` and a lower tier.
+   *   Wizard: demotes to `spellbook`. Others: demotes to `free`.
+   *
+   * Removing a spell from the sheet (the "On Sheet" active-state
+   * click) deletes the spell item entirely — that also un-preps and
+   * removes it from the spellbook in one step.
+   *
+   * Per-class scope (see `_applySheetMode` / `_removeSpell`): adding
+   * Blade Ward as a Wizard spell when Bard already has Blade Ward
+   * doesn't touch Bard's copy. Each class owns its own item.
+   */
   _renderFooter(selectedClass, summary) {
     if (!this._footerRegion) return;
 
     const dbId = summary ? poolDbId(summary) : null;
-    const owned = dbId ? this._findOwnedSpellByDbId(dbId) : null;
+    const owned = dbId && selectedClass?.identifier
+      ? this._findOwnedSpellByDbIdForClass(dbId, selectedClass.identifier)
+      : null;
     const ownedMode = owned ? getSheetMode(owned) : null;
+    const onSheet      = ownedMode !== null;
+    const inSpellbook  = ownedMode === SHEET_MODE_SPELLBOOK || ownedMode === SHEET_MODE_PREPARED;
+    const isPrepared   = ownedMode === SHEET_MODE_PREPARED;
+
     const prep = selectedClass?.prepType ?? null;
-    const prepLabel = prep === "known" ? "Add as Known" : "Prepare";
-    const prepActiveLabel = prep === "known" ? "Remove (Known)" : "Unprepare";
+    const isSpellbookCaster = prep === "spellbook";
+    const isKnownCaster     = prep === "known";
 
     const isAlways = owned ? isAlwaysPrepared(owned) : false;
     const isGranted = owned ? isAdvancementGranted(owned) : false;
     const locked = isAlways || isGranted;
 
-    // Each button's active state mirrors the spell's current sheetMode.
-    const btn = (mode, label, activeLabel, tooltip, visible) => {
-      if (!visible) return "";
-      const active = ownedMode === mode;
-      const cssActive = active ? "dauligor-spell-manager__footer-button--active" : "";
-      const cssLocked = locked ? "dauligor-spell-manager__footer-button--locked" : "";
-      const labelHtml = active ? activeLabel : label;
-      const action = active ? "footer-remove" : "footer-set-mode";
-      return `<button type="button"
-        class="dauligor-spell-manager__footer-button ${cssActive} ${cssLocked}"
-        data-action="${action}"
-        data-mode="${escapeHtml(mode)}"
-        title="${escapeHtml(tooltip)}"
-        ${locked ? "disabled" : ""}
-      >${escapeHtml(labelHtml)}</button>`;
+    // The "Add to Sheet" / "Remove from Sheet" button.
+    // - active = on sheet → "Remove from Sheet" deletes
+    // - inactive = not on sheet → "Add to Sheet" creates with sheetMode=free
+    const sheetBtn = {
+      label: onSheet ? "Remove from Sheet" : "Add to Sheet",
+      action: onSheet ? "footer-remove-sheet" : "footer-add-free",
+      active: onSheet,
+      tooltip: onSheet
+        ? "Remove this spell from the sheet entirely. Unprepares it and removes it from your spellbook (if applicable)."
+        : `Add to sheet as a ${selectedClass?.label ?? "Class"} spell. Does not count against your spells known or prepared.`,
+      visible: true
     };
 
-    const preparedTooltip = `Add to sheet as a prepared/known spell. It will count against your spells prepared/known.`;
-    const freeTooltip     = `Add to sheet as a ${selectedClass?.label ?? "Class"} spell. This spell does not count against your spells known or prepared.`;
-    const bookTooltip     = `This spell will be added to your spell book. A Spellbook Caster can only prepare spells they have in their spellbook.`;
+    // The "Prepare" / "Unprepare" (or "Add as Known" / "Remove as
+    // Known") button. Promotes to PREPARED; demotes to SPELLBOOK for
+    // Wizard, FREE otherwise.
+    const prepBtn = {
+      label: isPrepared
+        ? (isKnownCaster ? "Remove as Known" : "Unprepare")
+        : (isKnownCaster ? "Add as Known" : "Prepare"),
+      action: isPrepared ? "footer-demote-prep" : "footer-promote-prep",
+      active: isPrepared,
+      tooltip: isPrepared
+        ? (isKnownCaster
+            ? "Remove the Known status. The spell stays on the sheet."
+            : (isSpellbookCaster
+                ? "Unprepare. The spell stays in your spellbook."
+                : "Unprepare. The spell stays on the sheet."))
+        : (isKnownCaster
+            ? "Add as a Known spell. Counts against your Known cap."
+            : (isSpellbookCaster
+                ? "Prepare. The spell will also be added to your spellbook if not already."
+                : "Prepare. Counts against your Prepared cap.")),
+      visible: true
+    };
+
+    // The "Add to Spellbook" / "Remove from Spellbook" button — Wizards
+    // only. Promotes to SPELLBOOK; demotes to FREE (which also un-preps
+    // a PREPARED spell since PREPARED implies in-spellbook).
+    const bookBtn = {
+      label: inSpellbook ? "Remove from Spellbook" : "Add to Spellbook",
+      action: inSpellbook ? "footer-demote-book" : "footer-promote-book",
+      active: inSpellbook,
+      tooltip: inSpellbook
+        ? "Remove from your spellbook. The spell stays on the sheet but you can no longer prepare it."
+        : "Add to your spellbook. A spellbook caster can only prepare spells in their spellbook.",
+      visible: isSpellbookCaster
+    };
+
+    const renderBtn = (btn) => {
+      if (!btn.visible) return "";
+      const cssActive = btn.active ? "dauligor-spell-manager__footer-button--active" : "";
+      const cssLocked = locked ? "dauligor-spell-manager__footer-button--locked" : "";
+      return `<button type="button"
+        class="dauligor-spell-manager__footer-button ${cssActive} ${cssLocked}"
+        data-action="${btn.action}"
+        title="${escapeHtml(btn.tooltip)}"
+        ${locked ? "disabled" : ""}
+      >${escapeHtml(btn.label)}</button>`;
+    };
 
     const noSelection = !selectedClass || !summary;
     const buttons = noSelection
       ? `<div class="dauligor-spell-manager__footer-hint">Select a spell to enable add buttons.</div>`
       : `
-        ${btn(SHEET_MODE_PREPARED,  prepLabel,        prepActiveLabel,     preparedTooltip, true)}
-        ${btn(SHEET_MODE_FREE,      "Add to Sheet",   "Remove from Sheet", freeTooltip,     true)}
-        ${btn(SHEET_MODE_SPELLBOOK, "Add to Spellbook","Remove from Spellbook", bookTooltip, prep === "spellbook")}
+        ${renderBtn(sheetBtn)}
+        ${renderBtn(bookBtn)}
+        ${renderBtn(prepBtn)}
       `;
 
     this._footerRegion.innerHTML = `
@@ -1922,22 +2057,24 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       </div>
     `;
 
-    this._footerRegion.querySelectorAll(`[data-action="footer-set-mode"]`).forEach((button) => {
-      button.addEventListener("click", async () => {
-        const mode = button.dataset.mode;
-        if (!mode || !dbId) return;
-        await this._applySheetMode(dbId, mode, selectedClass);
-      });
+    // Hierarchical transitions. Each handler maps to a target sheetMode
+    // (or "remove from sheet") and delegates to `_applySheetMode` /
+    // `_removeSpell` which both scope to `selectedClass`.
+    const wire = (selector, handler) => {
+      this._footerRegion.querySelector(selector)?.addEventListener("click", handler);
+    };
+    wire(`[data-action="footer-add-free"]`,    async () => { await this._applySheetMode(dbId, SHEET_MODE_FREE, selectedClass); });
+    wire(`[data-action="footer-remove-sheet"]`, async () => { await this._removeSpell(dbId, selectedClass); });
+    wire(`[data-action="footer-promote-book"]`, async () => { await this._applySheetMode(dbId, SHEET_MODE_SPELLBOOK, selectedClass); });
+    wire(`[data-action="footer-demote-book"]`,  async () => { await this._applySheetMode(dbId, SHEET_MODE_FREE,     selectedClass); });
+    wire(`[data-action="footer-promote-prep"]`, async () => { await this._applySheetMode(dbId, SHEET_MODE_PREPARED, selectedClass); });
+    wire(`[data-action="footer-demote-prep"]`,  async () => {
+      // Unprepare: demote to spellbook for Wizards (keeps book
+      // membership), free for everyone else.
+      const targetMode = isSpellbookCaster ? SHEET_MODE_SPELLBOOK : SHEET_MODE_FREE;
+      await this._applySheetMode(dbId, targetMode, selectedClass);
     });
-    this._footerRegion.querySelectorAll(`[data-action="footer-remove"]`).forEach((button) => {
-      button.addEventListener("click", async () => {
-        if (!dbId) return;
-        await this._removeSpell(dbId);
-      });
-    });
-    this._footerRegion.querySelector(`[data-action="footer-close"]`)?.addEventListener("click", async () => {
-      await this.close();
-    });
+    wire(`[data-action="footer-close"]`, async () => { await this.close(); });
   }
 
   // ---- Filter modal (shared, opens for pool or favorites) --------------

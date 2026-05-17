@@ -1661,16 +1661,28 @@ function buildDauligorCharacterSheetClass() {
             : (prepMax > 0 ? prepMax : null);
         } else if (casterKind === "known") {
           casterLabel = "Known";
-          // Count owned non-cantrip spells attributed to THIS class.
-          // Cantrips are always known when on the sheet but don't count
-          // against the spells-known cap, so they're excluded here.
-          // (A dedicated Cantrips Known column would live as its own
-          // header column — not the same axis as the prepared column.)
+          // Count owned non-cantrip spells attributed to THIS class
+          // AND marked as Known (sheetMode === "prepared"). Spells
+          // added via "Add to Sheet" (sheetMode === "free") don't
+          // count against the Known cap by design — same hierarchy
+          // the Prepare Spells manager uses.
+          //
+          // Back-compat: spells imported before the sheetMode flag
+          // existed have no flag. The Prepare Spells manager's
+          // `getSheetMode` defaults those to "prepared" (the most
+          // common case), so we match here too — any owned non-cantrip
+          // without the flag counts toward Known.
           casterValue = 0;
           for (const item of (actor.itemTypes?.spell ?? [])) {
             const lv = Number(item?.system?.level ?? 0) || 0;
             if (lv <= 0) continue;
-            if (classOfSpell(item) === bucket.classIdentifier) casterValue++;
+            if (classOfSpell(item) !== bucket.classIdentifier) continue;
+            const sheetModeFlag = item?.getFlag?.(MODULE_ID, "sheetMode")
+              ?? item?.flags?.[MODULE_ID]?.sheetMode
+              ?? null;
+            if (sheetModeFlag === "free" || sheetModeFlag === "spellbook") continue;
+            // null / "prepared" / unknown → counts as Known.
+            casterValue++;
           }
           // Cap source priority:
           //   1. `flags.dauligor-pairing.spellcasting.spellsKnownLevels`
