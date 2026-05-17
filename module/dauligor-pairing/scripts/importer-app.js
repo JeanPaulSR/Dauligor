@@ -8,6 +8,7 @@ import {
   SOURCE_LIBRARY_FILE
 } from "./constants.js";
 import { buildClassImportWorkflow, fetchClassCatalog, fetchClassSpellList, fetchFullSpellItem, fetchJson, fetchSourceCatalog, importClassPayloadToWorld } from "./class-import-service.js";
+import { openSpellBrowser } from "./spell-preparation-app.js";
 import { maybeOfferSpellPointsSupport } from "./spell-points-service.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { baseClassHandler, extractStrings, formatFoundryLabel } from "./importer-base-features.js";
@@ -37,8 +38,8 @@ const IMPORT_TYPES = [
   {
     id: "spells",
     label: "Spells",
-    status: "soon",
-    description: "Spell browsing and import filtering will be added after the class browser stabilizes."
+    status: "ready",
+    description: "Browse every spell published in a source and import any of them directly to the actor's Other Spells (unsorted) section."
   },
   {
     id: "feats",
@@ -58,14 +59,11 @@ const SOURCE_TYPES = {
       description: "Reserved source slot for item-family payloads once the endpoint is ready."
     }
   ],
-  spells: [
-    {
-      id: "srd",
-      label: "SRD",
-      status: "soon",
-      description: "Reserved source slot for spell payloads once the endpoint is ready."
-    }
-  ],
+  // Spells reuse the API source catalog (same one classes use) — the
+  // wizard handles the dynamic load when importTypeId is "spells".
+  // SOURCE_TYPES.spells stays empty so the hardcoded fallback in
+  // `getSourceTypes(...)` never fires for this mode.
+  spells: [],
   feats: [
     {
       id: "srd",
@@ -311,13 +309,14 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
   setImportType(importTypeId) {
     if (!importTypeId) return;
+    const usesApiSources = importTypeId === "classes-subclasses" || importTypeId === "spells";
     this._state.importTypeId = importTypeId;
     this._state.sourceTypeId = getDefaultSourceTypeId(importTypeId);
-    this._state.selectedSourceIds = importTypeId === "classes-subclasses"
+    this._state.selectedSourceIds = usesApiSources
       ? []
       : normalizeSourceTypeIds(getDefaultSourceTypeId(importTypeId));
     this._state.sourceSearch = "";
-    if (importTypeId === "classes-subclasses") this._sourcesLoaded = false;
+    if (usesApiSources) this._sourcesLoaded = false;
   }
 
   setSourceType(sourceTypeId) {
@@ -377,7 +376,12 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async _ensureWizardSourcesLoaded({ force = false } = {}) {
-    if (this._state.importTypeId !== "classes-subclasses") return;
+    // Classes and spells both load the live API source catalog; other
+    // importers still use the hardcoded SOURCE_TYPES list. We don't
+    // separately refetch when the importer toggles between
+    // classes/spells — the SAME source catalog drives both.
+    if (this._state.importTypeId !== "classes-subclasses"
+      && this._state.importTypeId !== "spells") return;
     if ((this._sourcesLoaded || this._sourcesLoading) && !force) return;
     await this._loadWizardSources({ force });
   }
@@ -409,8 +413,30 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
     const catalog = await fetchSourceCatalog(sourceUrl);
     this._sourceCatalog = catalog;
+    // Filter rules depend on the active importer:
+    //   - classes-subclasses: keep sources that declare a class catalog
+    //     URL or list "classes-subclasses" in supportedImportTypes
+    //   - spells: keep sources that have at least one spell published
+    //     (i.e. counts.spells > 0 if the catalog ships it; otherwise
+    //     fall through and trust the user)
+    // We keep the SAME `_sourceEntries` field — the wizard toggles
+    // between the two importer modes by swapping the active count
+    // column (`classes` vs `spells`).
+    const isSpells = this._state.importTypeId === "spells";
     this._sourceEntries = ensureArray(catalog?.entries)
-      .filter((entry) => ensureArray(entry.supportedImportTypes).includes("classes-subclasses") || entry.classCatalogUrl)
+      .filter((entry) => {
+        if (isSpells) {
+          // Either explicit support flag, or the catalog reports >0
+          // spells for this source. Fall through (accept) when the
+          // catalog doesn't ship counts (older catalogs).
+          const supports = ensureArray(entry.supportedImportTypes).includes("spells");
+          const hasSpells = Number(entry.counts?.spells ?? 0) > 0;
+          if (supports || hasSpells) return true;
+          return entry.counts?.spells == null; // unknown count → accept
+        }
+        return ensureArray(entry.supportedImportTypes).includes("classes-subclasses")
+          || entry.classCatalogUrl;
+      })
       .map((entry) => ({
         id: entry.sourceId,
         label: entry.name,
@@ -419,7 +445,9 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         shortName: entry.shortName ?? "",
         detailUrl: entry.detailUrl ?? null,
         classCatalogUrl: entry.classCatalogUrl ?? null,
-        count: Number(entry.counts?.classes ?? 0) || 0,
+        count: isSpells
+          ? (Number(entry.counts?.spells ?? 0) || 0)
+          : (Number(entry.counts?.classes ?? 0) || 0),
         tags: ensureArray(entry.tags),
         rules: entry.rules ?? "",
         slug: entry.slug ?? ""
@@ -483,12 +511,19 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       button.addEventListener("click", async () => {
         const importTypeId = button.dataset.importTypeId;
         if (!importTypeId) return;
+        const usesApiSources = importTypeId === "classes-subclasses" || importTypeId === "spells";
         this._state.importTypeId = importTypeId;
         this._state.sourceTypeId = getDefaultSourceTypeId(importTypeId);
-        this._state.selectedSourceIds = importTypeId === "classes-subclasses"
+        this._state.selectedSourceIds = usesApiSources
           ? []
           : normalizeSourceTypeIds(this._state.sourceTypeId);
         this._state.sourceSearch = "";
+        // Force the source list to re-filter with the new mode's
+        // rules (classes vs spells filter differently). Without this,
+        // toggling classes → spells would keep showing the
+        // classes-filtered list because `_sourcesLoaded` is still
+        // true and the URL hasn't changed.
+        if (usesApiSources) this._sourcesLoaded = false;
         this._renderPanels();
         await this._ensureWizardSourcesLoaded();
       });
@@ -498,7 +533,12 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
   _renderSourceTypesPanel() {
     if (!this._panelSources) return;
 
-    const sources = this._state.importTypeId === "classes-subclasses"
+    // Both classes and spells importers pull their source list from
+    // the live API catalog (`_sourceEntries`); every other importer
+    // mode uses the hardcoded `SOURCE_TYPES[mode]` list.
+    const usesApiSources = this._state.importTypeId === "classes-subclasses"
+      || this._state.importTypeId === "spells";
+    const sources = usesApiSources
       ? this._sourceEntries
       : getSourceTypes(this._state.importTypeId);
     const selectedSourceIds = new Set(normalizeSourceTypeIds(this._state.selectedSourceIds, this._state.sourceTypeId));
@@ -514,9 +554,9 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     const readyVisibleSources = visibleSources.filter((source) => source.status === "ready");
     const allVisibleSelected = readyVisibleSources.length > 0 && readyVisibleSources.every((source) => selectedSourceIds.has(source.id));
 
-    const rowsHtml = this._state.importTypeId === "classes-subclasses" && this._sourcesLoading
+    const rowsHtml = usesApiSources && this._sourcesLoading
       ? `<div class="dauligor-wizard__empty">Loading available sources...</div>`
-      : this._state.importTypeId === "classes-subclasses" && visibleSources.length
+      : usesApiSources && visibleSources.length
         ? `
         <div class="dauligor-wizard__source-table">
           <div class="dauligor-wizard__source-header">
@@ -570,15 +610,17 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
           <div class="dauligor-wizard__choice-header">
             <span class="dauligor-wizard__choice-label">${foundry.utils.escapeHTML(source.label)}${source.shortName ? ` <span class="dauligor-wizard__choice-label-secondary">${foundry.utils.escapeHTML(source.shortName)}</span>` : ""}</span>
           </div>
-          ${this._state.importTypeId === "classes-subclasses" ? `
+          ${usesApiSources ? `
             <div class="dauligor-wizard__choice-submeta">
-              <span>${source.count} class${source.count === 1 ? "" : "es"}</span>
+              <span>${source.count} ${this._state.importTypeId === "spells"
+                ? `spell${source.count === 1 ? "" : "s"}`
+                : `class${source.count === 1 ? "" : "es"}`}</span>
               ${source.rules ? `<span>${foundry.utils.escapeHTML(String(source.rules))}</span>` : ""}
             </div>
           ` : ""}
         </button>
       `).join("")
-          : `<div class="dauligor-wizard__empty">${this._state.importTypeId === "classes-subclasses" ? "No sources matched the current search." : "No source types match the current search."}</div>`;
+          : `<div class="dauligor-wizard__empty">${usesApiSources ? "No sources matched the current search." : "No source types match the current search."}</div>`;
 
     this._panelSources.innerHTML = `
       <section class="dauligor-wizard__section">
@@ -597,7 +639,7 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
                 autocomplete="off"
                 spellcheck="false"
               >
-              ${this._state.importTypeId === "classes-subclasses"
+              ${usesApiSources
         ? `<button type="button" class="dauligor-wizard__toolbar-button" data-action="source-reload">Reload</button>`
         : ""}
               <button type="button" class="dauligor-wizard__toolbar-button" data-action="reset-source-search">Reset</button>
@@ -679,7 +721,9 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
     if (!this._footerPanel) return;
 
     const importType = getImportType(this._state.importTypeId);
-    const sources = this._state.importTypeId === "classes-subclasses" ? this._sourceEntries : getSourceTypes(this._state.importTypeId);
+    const usesApiSources = this._state.importTypeId === "classes-subclasses"
+      || this._state.importTypeId === "spells";
+    const sources = usesApiSources ? this._sourceEntries : getSourceTypes(this._state.importTypeId);
     const selectedSources = sources.filter((source) => normalizeSourceTypeIds(this._state.selectedSourceIds, this._state.sourceTypeId).includes(source.id));
     const sourceType = selectedSources[0] ?? sources.find((source) => source.id === this._state.sourceTypeId) ?? null;
     const importReady = importType?.status === "ready"
@@ -706,12 +750,31 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
 
   async _openImporter() {
     const importType = getImportType(this._state.importTypeId);
-    const sources = this._state.importTypeId === "classes-subclasses" ? this._sourceEntries : getSourceTypes(this._state.importTypeId);
+    const usesApiSources = this._state.importTypeId === "classes-subclasses"
+      || this._state.importTypeId === "spells";
+    const sources = usesApiSources ? this._sourceEntries : getSourceTypes(this._state.importTypeId);
     const selectedSources = sources.filter((source) => normalizeSourceTypeIds(this._state.selectedSourceIds, this._state.sourceTypeId).includes(source.id));
     const sourceType = selectedSources[0] ?? sources.find((source) => source.id === this._state.sourceTypeId) ?? null;
 
     if (importType?.status !== "ready" || !selectedSources.length || selectedSources.some((candidate) => candidate.status !== "ready")) {
       notifyWarn(`${importType?.label ?? "This importer"} is not wired up yet.`);
+      return;
+    }
+
+    if (this._state.importTypeId === "spells") {
+      // Spell browser needs an actor to import onto. The wizard
+      // chrome already shows the target actor name; reject early if
+      // the user opened the wizard standalone.
+      if (!this._actor) {
+        notifyWarn("Open the Spell Browser from a character actor (or pick a target actor first).");
+        return;
+      }
+      // Source slugs feed `/api/module/<slug>/spells.json`. We use
+      // `entry.slug` as the URL component — falls back to the entry
+      // `id` (semantic id) when no slug is set, which the source
+      // endpoint also accepts.
+      const slugs = selectedSources.map((s) => s.slug || s.id).filter(Boolean);
+      await openSpellBrowser(this._actor, { sourceSlugs: slugs });
       return;
     }
 

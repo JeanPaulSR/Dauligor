@@ -7,6 +7,7 @@ import {
   rebakeBundle,
 } from "./_lib/module-export-pipeline.js";
 import { buildClassSpellListByIdentifier } from "./_lib/_classSpellList.js";
+import { buildSourceSpellListBundle } from "./_lib/_sourceSpellList.js";
 import { buildSpellItemBundle } from "./_lib/_spellExport.js";
 import { buildTagCatalog } from "./_lib/_tagCatalog.js";
 import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
@@ -284,6 +285,29 @@ export default async function handler(req: any, res: any) {
       const result = await buildSpellItemBundle(dbId, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(res, result);
       // Fall through to 404 if no spell row matched.
+    }
+
+    // Per-source spell list — live read-through, no R2 cache. URL:
+    //   /api/module/<source>/spells.json
+    // Returns every spell published in a source as lightweight
+    // summaries (same shape as the per-class spell list endpoint).
+    // The Foundry Spell Browser app (launched from the importer's
+    // Spells page) uses this to let the user pick spells to import
+    // onto an actor without any class attachment — they land in the
+    // alt sheet's "Other Spells" / __other__ orphan bucket.
+    //
+    // The `pathParts[0] === "spells"` check above is ordered BEFORE
+    // this one, so `/api/module/spells/<dbId>.json` still routes to
+    // the per-spell handler (never to this one, since `dbId.json`
+    // doesn't equal `"spells.json"`).
+    else if (
+      pathParts.length === 2
+      && pathParts[1] === "spells.json"
+    ) {
+      const slug = pathParts[0].toLowerCase();
+      const result = await buildSourceSpellListBundle(slug, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(res, result);
+      // Fall through to 404 if the source slug didn't match.
     }
 
     // Public tag catalog — live read-through, no R2 cache. URL:

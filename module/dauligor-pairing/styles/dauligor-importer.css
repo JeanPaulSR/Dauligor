@@ -3265,6 +3265,72 @@ button.dauligor-option-picker__pill:hover {
   min-height: 0;
 }
 
+/* Spells tab body — embeds the Prepare Spells manager inline. Drop
+   the padding so the manager's own 3-col grid spans the full body,
+   and give the host explicit dimensions so the grid + footer layout
+   has something to size against. The dauligor-spell-manager root
+   already handles its own scrolling. */
+.dauligor-feature-manager__body:has(.dauligor-feature-manager__spells-host) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.dauligor-feature-manager__spells-host {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-feature-manager__spells-host > .dauligor-spell-manager {
+  height: 100%;
+}
+
+/* Importer-mode meta strip — replaces the per-class counter strip
+   with a simple "what's being imported, to whom" summary. Uses the
+   same dimensions / spacing as the regular meta strip so the pool
+   below lines up identically. */
+.dauligor-spell-manager__meta-importer {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 14px;
+}
+
+.dauligor-spell-manager__meta-importer-title {
+  font-weight: 600;
+  font-size: 1.05em;
+}
+
+.dauligor-spell-manager__meta-importer-subtitle {
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.dauligor-spell-manager__meta-importer-right {
+  text-align: right;
+  font-size: 0.85em;
+}
+
+.dauligor-spell-manager__meta-importer-label {
+  opacity: 0.6;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dauligor-spell-manager__meta-importer-target {
+  font-weight: 600;
+}
+
+.dauligor-spell-manager__meta-importer-hint {
+  opacity: 0.65;
+  font-style: italic;
+  font-size: 0.85em;
+}
+
 .dauligor-feature-manager__groups {
   display: flex;
   flex-direction: column;

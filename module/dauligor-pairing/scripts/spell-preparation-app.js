@@ -398,12 +398,90 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     return instance;
   }
 
-  constructor({ actor, preselectClassIdentifier = null } = {}) {
+  /**
+   * Mount the Prepare Spells manager INSIDE an external DOM element
+   * instead of its own ApplicationV2 window. Used by the Feature
+   * Manager's Spells tab to embed the manager UI inline.
+   *
+   * The instance is NOT registered as the singleton — the standalone
+   * window and the embedded mount can coexist on a given actor.
+   * Caller is responsible for cleanup: when the embedding container
+   * is replaced (e.g. tab switch), call `destroyEmbedded()` on the
+   * returned instance.
+   */
+  static async renderInto(container, { actor, preselectClassIdentifier = null } = {}) {
+    if (!actor || !(container instanceof HTMLElement)) return null;
+    const instance = new this({ actor, preselectClassIdentifier });
+    instance._embeddedRoot = container;
+    instance._isEmbedded = true;
+    // Resolve the shell template path via Foundry's template loader so
+    // the same compiled template the standalone window uses fires here.
+    // `renderTemplate` is the v13 global; the AppV2 namespace exposes
+    // it as well as a fallback.
+    const renderTpl = foundry.applications?.handlebars?.renderTemplate
+      ?? globalThis.renderTemplate
+      ?? null;
+    if (!renderTpl) {
+      console.warn(`${MODULE_ID} | renderTemplate not available — cannot embed Prepare Spells manager.`);
+      return null;
+    }
+    const html = await renderTpl(SPELL_PREPARATION_TEMPLATE, {});
+    container.innerHTML = html;
+    // Drive the same lifecycle the window flow uses — `_onRender`
+    // queries the region elements + kicks the catalog loads.
+    await instance._onRender();
+    return instance;
+  }
+
+  /**
+   * Tear down an embedded mount. Clears the host container's HTML
+   * and drops region references so a subsequent `renderInto` call
+   * starts clean. Safe to call when not embedded — no-op.
+   */
+  destroyEmbedded() {
+    if (!this._isEmbedded) return;
+    if (this._embeddedRoot instanceof HTMLElement) {
+      this._embeddedRoot.innerHTML = "";
+    }
+    this._railRegion = null;
+    this._favoritesRegion = null;
+    this._metaRegion = null;
+    this._toolbarRegion = null;
+    this._poolRegion = null;
+    this._detailRegion = null;
+    this._footerRegion = null;
+    this._filterModalRegion = null;
+    this._embeddedRoot = null;
+    this._isEmbedded = false;
+  }
+
+  constructor({
+    actor,
+    preselectClassIdentifier = null,
+    // mode === "sheet" (default) is the actor-side Prepare Spells
+    // manager. mode === "importer" is the standalone Spell Browser
+    // launched from the Dauligor Importer wizard — it browses every
+    // spell published in the selected source(s) and imports them with
+    // NO class attachment, so they land in the alt sheet's
+    // `__other__` "Other Spells" orphan bucket. The two modes share
+    // the bulk of the rendering pipeline; mode-specific branches live
+    // in `_buildClassModels`, `_ensureClassPool`, `_renderRail`,
+    // `_renderMeta`, `_renderFooter`, and `_applySheetMode`.
+    mode = "sheet",
+    sourceSlugs = null,
+    appId = null,
+    windowTitle = null
+  } = {}) {
+    const isImporter = mode === "importer";
     super({
-      id: `${MODULE_ID}-spell-preparation`,
-      classes: ["dauligor-importer-app", "dauligor-importer-app--spells"],
+      id: appId ?? `${MODULE_ID}-spell-preparation`,
+      classes: [
+        "dauligor-importer-app",
+        "dauligor-importer-app--spells",
+        isImporter ? "dauligor-importer-app--spells-browser" : "dauligor-importer-app--spells-sheet"
+      ],
       window: {
-        title: actor ? `Prepare Spells: ${actor.name}` : "Prepare Spells",
+        title: windowTitle ?? (actor ? `Prepare Spells: ${actor.name}` : "Prepare Spells"),
         resizable: true,
         contentClasses: ["dauligor-importer-window"]
       },
@@ -412,6 +490,21 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         height: Math.min(window.innerHeight - 80, 820)
       }
     });
+
+    // ── Mode-state ───────────────────────────────────────────────────
+    // `_mode` is the cap-accounting + UX shape. "sheet" is the
+    // class-scoped manager used from the actor sheet; "importer" is
+    // the standalone Spell Browser launched from the Dauligor
+    // Importer wizard.
+    this._mode = isImporter ? "importer" : "sheet";
+    // Importer-mode source slugs (e.g. ["phb", "xge"]). Each becomes a
+    // pseudo-class-model with `isSource: true` so the rail can show
+    // the source list instead of an actor class list, and
+    // `_ensureClassPool` swaps to the per-source endpoint.
+    this._sourceSlugs = Array.isArray(sourceSlugs) ? sourceSlugs.map(String) : [];
+    // Source-slug → label override (e.g. "phb" → "PHB"). Populated as
+    // the sources catalog resolves. Falls back to the slug itself.
+    this._sourceLabels = new Map();
 
     this._template = SPELL_PREPARATION_TEMPLATE;
     this._actor = actor ?? null;
@@ -490,7 +583,20 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   async close(options) {
-    if (DauligorSpellPreparationApp._instance === this) DauligorSpellPreparationApp._instance = null;
+    // Embedded mode: there's no window to close — just tear down the
+    // embed. The host (e.g. the Feature Manager's Spells tab) calls
+    // `destroyEmbedded()` separately when the tab switches; closing
+    // here mirrors the footer "Close" button behaviour.
+    if (this._isEmbedded) {
+      this.destroyEmbedded();
+      return;
+    }
+    // Use `this.constructor._instance` so subclasses (e.g.
+    // `DauligorSpellBrowserApp`) clear their OWN singleton, not the
+    // base class's. The base class previously hard-coded
+    // `DauligorSpellPreparationApp._instance`, which leaked the
+    // browser instance after close.
+    if (this.constructor._instance === this) this.constructor._instance = null;
     return super.close(options);
   }
 
@@ -514,6 +620,11 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   _getRootElement() {
+    // Embedded mode (e.g. the Feature Manager's Spells tab body):
+    // the manager renders into an external container instead of its
+    // own window. `_embeddedRoot` is set by `renderInto()` before
+    // the first render pass.
+    if (this._embeddedRoot instanceof HTMLElement) return this._embeddedRoot;
     if (this.element instanceof HTMLElement) return this.element;
     if (this.element?.jquery && this.element[0] instanceof HTMLElement) return this.element[0];
     if (this.element?.[0] instanceof HTMLElement) return this.element[0];
@@ -667,6 +778,10 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
    * `/spells.json` suffix.
    */
   _resolveClassBundleUrl(classModel) {
+    // Importer-mode source-models have no class bundle (they're not
+    // tied to a class item). Skip the lookup — the meta strip's
+    // bundle-aware prep-type resolver short-circuits to "no class".
+    if (classModel?.isSource) return null;
     const spellListUrl = classModel?.item?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
     if (!spellListUrl) return null;
     return String(spellListUrl).replace(/\/spells\.json(\?.*)?$/i, ".json");
@@ -806,6 +921,39 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   _buildClassModels() {
     const actor = this._actor;
     if (!actor) return [];
+
+    // Importer mode: return pseudo-class-models built from the source
+    // slugs the user picked in the wizard. Each acts like a class for
+    // the rail / pool / detail render but carries `isSource: true` so
+    // mode-specific branches (pool URL, footer, mutations) can detect
+    // it. No actor classes are walked — the browser is class-agnostic.
+    if (this._mode === "importer") {
+      return this._sourceSlugs.map((slug) => {
+        const label = this._sourceLabels.get(slug) || this._sourceShortName(`source-${slug}-2014`) || String(slug).toUpperCase();
+        return {
+          identifier: `__source__:${slug}`,
+          label,
+          item: null,
+          ownedSpells: [],
+          isSource: true,
+          sourceSlug: slug,
+          progression: "none",
+          progressionLabel: "",
+          ability: "",
+          abilityLabel: "",
+          abilityAbbr: "",
+          levels: 0,
+          preparation: {},
+          prepType: null,
+          prepTypeLabel: "",
+          dc: null,
+          atk: "",
+          cantripsCap: null,
+          spellsCap: null,
+          ownedCount: 0
+        };
+      });
+    }
 
     const actorClasses = this._getActorClasses();
     const spellcastingClasses = actor.spellcastingClasses ?? {};
@@ -949,6 +1097,45 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const cached = this._classPools.get(key);
     if (cached) return cached;
 
+    // Importer-mode pseudo-class-model: fetch the source spell-list
+    // endpoint instead of a class-specific spell list. Both endpoints
+    // ship the same lightweight summary shape (kind discriminator
+    // differs — "dauligor.source-spell-list.v1" vs
+    // "dauligor.class-spell-list.v1") so the picker reads the result
+    // the same way.
+    if (classModel.isSource) {
+      const slug = classModel.sourceSlug;
+      const host = this._resolveApiHost();
+      const url = `${host}/api/module/${encodeURIComponent(slug)}/spells.json`;
+      const loadingEntry = { status: "loading" };
+      this._classPools.set(key, loadingEntry);
+      (async () => {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) {
+            this._classPools.set(key, { status: "error", reason: `Source spell list endpoint returned ${response.status}` });
+          } else {
+            const payload = await response.json();
+            if (payload?.kind !== "dauligor.source-spell-list.v1") {
+              this._classPools.set(key, { status: "error", reason: `Unexpected payload kind: ${payload?.kind ?? "(missing)"}` });
+            } else {
+              this._classPools.set(key, {
+                status: "ready",
+                spells: Array.isArray(payload.spells) ? payload.spells : [],
+                fetchedAt: Date.now(),
+                sourceSemanticId: payload.sourceSemanticId ?? null
+              });
+            }
+          }
+        } catch (err) {
+          console.warn(`${MODULE_ID} | source spell-list fetch failed`, { url, err });
+          this._classPools.set(key, { status: "error", reason: err?.message ?? "Network error" });
+        }
+        this._renderManager?.();
+      })();
+      return loadingEntry;
+    }
+
     const classItem = classModel.item;
     const spellListUrl = classItem?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
     if (!spellListUrl) {
@@ -988,6 +1175,21 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     })();
 
     return loadingEntry;
+  }
+
+  /**
+   * Resolve the API host based on the module setting. Used by the
+   * importer-mode pool fetch + the per-spell fetch fallback.
+   * Mirrors the importer's host resolution so all module endpoints
+   * agree on the same root.
+   */
+  _resolveApiHost() {
+    try {
+      const mode = game.settings.get(MODULE_ID, "api-endpoint-mode") || "local";
+      return mode === "production" ? "https://www.dauligor.com" : "http://localhost:3000";
+    } catch {
+      return "https://www.dauligor.com";
+    }
   }
 
   _getActivePool(classModel) {
@@ -1098,7 +1300,11 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
     // We accept any classModel for the URL; if the current selection
     // doesn't have one (e.g. a favourite from a removed class), we
-    // walk other classes for any spell-list URL we can borrow.
+    // walk other classes for any spell-list URL we can borrow. In
+    // importer mode the class model is a source pseudo-model with
+    // no spellListUrl, so the URL walk yields nothing — fall through
+    // to `_ensureFullSpellAnyway` which synthesizes from the module
+    // host setting.
     let spellListUrl = classModelLike?.item?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
     if (!spellListUrl) {
       for (const model of this._buildClassModels()) {
@@ -1106,7 +1312,12 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         if (url) { spellListUrl = url; break; }
       }
     }
-    if (!spellListUrl) return null;
+    if (!spellListUrl) {
+      // No actor classes (or none with a URL) → use the synthesized
+      // per-spell endpoint via the module host setting. Same payload,
+      // same cache, just a different URL derivation.
+      return this._ensureFullSpellAnyway(dbId, classModelLike);
+    }
 
     this._fullSpellInFlight.add(dbId);
     try {
@@ -1314,13 +1525,31 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   async _applySheetMode(dbId, mode, classModel) {
     if (!this._actor || !dbId || !mode) return;
 
-    const owned = classModel?.identifier
-      ? this._findOwnedSpellByDbIdForClass(dbId, classModel.identifier)
-      : this._findOwnedSpellByDbId(dbId);
+    const isImporter = this._mode === "importer";
+
+    // Per-class scope in sheet mode; actor-wide in importer mode.
+    // Importer mode never modifies a class-attributed copy — it only
+    // creates orphan spells (no `classIdentifier` flag). If the spell
+    // already exists on the actor (regardless of which section it's
+    // in), we don't add a duplicate; the user can manage it from the
+    // Prepare Spells manager or the sheet itself.
+    const owned = isImporter
+      ? this._findOwnedSpellByDbId(dbId)
+      : (classModel?.identifier
+        ? this._findOwnedSpellByDbIdForClass(dbId, classModel.identifier)
+        : this._findOwnedSpellByDbId(dbId));
 
     if (owned) {
       if (isAdvancementGranted(owned)) {
         notifyWarn(`${owned.name} is granted by an advancement and can only be modified via the source class.`);
+        return;
+      }
+      if (isImporter) {
+        // Already on sheet via some other path. Don't try to mutate
+        // — just signal the user. The "Remove from Sheet" branch in
+        // the footer toggle handles deletion.
+        notifyInfo(`${owned.name} is already on the sheet.`);
+        await this._renderManager();
         return;
       }
       try {
@@ -1329,6 +1558,39 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       } catch (err) {
         console.warn(`${MODULE_ID} | update sheetMode failed`, err);
         notifyWarn("Failed to update spell — see console.");
+      }
+      return;
+    }
+
+    // Resolve the per-spell fetch URL. In sheet mode, the class item
+    // carries `spellListUrl` and `_ensureFullSpell` derives the spell
+    // endpoint from it. In importer mode there's no class — borrow
+    // any existing actor class's spellListUrl, or fall back to a
+    // synthesized URL via the source slug + module-host setting.
+    if (isImporter) {
+      let full = this._fullSpellCache.get(dbId);
+      if (!full) full = await this._ensureFullSpellAnyway(dbId, classModel);
+      if (!full) {
+        notifyWarn("Could not fetch the spell from Dauligor — see console.");
+        return;
+      }
+      const itemData = foundry.utils.deepClone(full);
+      // No class attribution. Don't stamp classIdentifier; don't set
+      // system.sourceItem to "class:X". The alt sheet's
+      // resolveSpellSectionId falls through to `__other__` for these.
+      if (!itemData.flags) itemData.flags = {};
+      if (!itemData.flags[MODULE_ID]) itemData.flags[MODULE_ID] = {};
+      itemData.flags[MODULE_ID].entityId = dbId;
+      itemData.flags[MODULE_ID].sheetMode = SHEET_MODE_FREE;
+      foundry.utils.setProperty(itemData, "system.prepared", true);
+      foundry.utils.setProperty(itemData, "system.method", "spell");
+      try {
+        await this._actor.createEmbeddedDocuments("Item", [itemData]);
+        notifyInfo(`${itemData.name} added to sheet.`);
+        await this._renderManager();
+      } catch (err) {
+        console.warn(`${MODULE_ID} | importer add spell failed`, err);
+        notifyWarn("Failed to add spell — see console.");
       }
       return;
     }
@@ -1370,6 +1632,62 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     } catch (err) {
       console.warn(`${MODULE_ID} | add spell failed`, err);
       notifyWarn("Failed to add spell — see console.");
+    }
+  }
+
+  /**
+   * Importer-mode full-spell fetch. Borrows any class's spell-list URL
+   * to derive the per-spell endpoint URL, or constructs one from the
+   * configured module host. Falls back to the public production host
+   * as a last resort so the importer works even when no class is
+   * imported yet.
+   */
+  async _ensureFullSpellAnyway(dbId, classModel) {
+    if (!dbId) return null;
+    if (this._fullSpellCache.has(dbId)) return this._fullSpellCache.get(dbId);
+    if (this._fullSpellInFlight.has(dbId)) return null;
+
+    // Try the class model first (if we have one with a URL), then
+    // walk other classes on the actor, then synthesize from the
+    // module host setting.
+    let endpointUrl = null;
+    if (classModel?.item?.getFlag?.(MODULE_ID, "spellListUrl")) {
+      const baseUrl = classModel.item.getFlag(MODULE_ID, "spellListUrl");
+      const match = String(baseUrl).match(/^(.*\/api\/module\/)/i);
+      if (match) endpointUrl = `${match[1]}spells/${encodeURIComponent(dbId)}.json`;
+    }
+    if (!endpointUrl) {
+      const host = this._resolveApiHost();
+      endpointUrl = `${host}/api/module/spells/${encodeURIComponent(dbId)}.json`;
+    }
+
+    this._fullSpellInFlight.add(dbId);
+    try {
+      const response = await fetch(endpointUrl, { cache: "no-store" });
+      if (!response.ok) {
+        this._fullSpellInFlight.delete(dbId);
+        console.warn(`${MODULE_ID} | importer full-spell fetch returned ${response.status}`, { endpointUrl });
+        return null;
+      }
+      const payload = await response.json();
+      this._fullSpellInFlight.delete(dbId);
+      if (payload?.kind !== "dauligor.spell-item.v1") {
+        console.warn(`${MODULE_ID} | unexpected spell payload kind`, { endpointUrl, kind: payload?.kind });
+        return null;
+      }
+      const full = payload.spell ?? null;
+      if (full) {
+        this._fullSpellCache.set(dbId, full);
+        if (this._state.selectedSpellDbId === dbId) this._renderDetail();
+        this._enrichSpellDescription(dbId, full).catch((err) => {
+          console.warn(`${MODULE_ID} | description enrich failed`, err);
+        });
+      }
+      return full;
+    } catch (err) {
+      this._fullSpellInFlight.delete(dbId);
+      console.warn(`${MODULE_ID} | importer full-spell fetch failed`, { endpointUrl, err });
+      return null;
     }
   }
 
@@ -1461,28 +1779,41 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   _renderRail(classModels, selectedClass) {
     if (!this._railRegion) return;
 
+    const isImporter = this._mode === "importer";
+    const railTitle = isImporter ? "Sources" : "Classes";
+    const emptyMsg = isImporter
+      ? "No sources selected. Re-open the importer and pick a source."
+      : "This actor has no spellcasting classes.";
+
     if (!classModels.length) {
       this._railRegion.innerHTML = `
-        <div class="dauligor-spell-manager__sidebar-title">Classes</div>
-        <div class="dauligor-spell-manager__empty">This actor has no spellcasting classes.</div>
+        <div class="dauligor-spell-manager__sidebar-title">${escapeHtml(railTitle)}</div>
+        <div class="dauligor-spell-manager__empty">${escapeHtml(emptyMsg)}</div>
       `;
       return;
     }
 
-    const rows = classModels.map((entry) => `
-      <button
-        type="button"
-        class="dauligor-spell-manager__class-row ${selectedClass?.identifier === entry.identifier ? "dauligor-spell-manager__class-row--active" : ""}"
-        data-action="select-class"
-        data-class-identifier="${escapeHtml(entry.identifier)}"
-      >
-        <span class="dauligor-spell-manager__class-row-name">${escapeHtml(entry.label)}</span>
-        <span class="dauligor-spell-manager__class-row-count">${entry.ownedCount}</span>
-      </button>
-    `).join("");
+    const rows = classModels.map((entry) => {
+      // Importer mode: count is the source's total spell count (from
+      // the loaded pool). Sheet mode: count is owned-by-this-class.
+      const count = isImporter
+        ? (this._classPools.get(entry.identifier)?.spells?.length ?? "—")
+        : entry.ownedCount;
+      return `
+        <button
+          type="button"
+          class="dauligor-spell-manager__class-row ${selectedClass?.identifier === entry.identifier ? "dauligor-spell-manager__class-row--active" : ""}"
+          data-action="select-class"
+          data-class-identifier="${escapeHtml(entry.identifier)}"
+        >
+          <span class="dauligor-spell-manager__class-row-name">${escapeHtml(entry.label)}</span>
+          <span class="dauligor-spell-manager__class-row-count">${escapeHtml(String(count))}</span>
+        </button>
+      `;
+    }).join("");
 
     this._railRegion.innerHTML = `
-      <div class="dauligor-spell-manager__sidebar-title">Classes</div>
+      <div class="dauligor-spell-manager__sidebar-title">${escapeHtml(railTitle)}</div>
       <div class="dauligor-spell-manager__class-list">${rows}</div>
     `;
 
@@ -1506,9 +1837,14 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // matching the pool's per-class indicator semantics. Bard owning
     // Blade Ward doesn't make it light up in Wizard's view.
     const selectedClassForOwned = classModels.find((m) => m.identifier === this._state.selectedClassIdentifier) ?? null;
-    const ownedMap = selectedClassForOwned
-      ? this._getOwnedDbIdMapForClass(selectedClassForOwned.identifier)
-      : this._getOwnedDbIdMap();
+    // Importer mode: actor-wide owned map (no per-class scope), so
+    // favourites indicators light up for spells owned via any class
+    // / no class. Sheet mode keeps the per-class scope.
+    const ownedMap = this._mode === "importer"
+      ? this._getOwnedDbIdMap()
+      : (selectedClassForOwned
+        ? this._getOwnedDbIdMapForClass(selectedClassForOwned.identifier)
+        : this._getOwnedDbIdMap());
     const allFavorites = this._buildFavoritesPool(classModels);
     const filtered = this._filterList(allFavorites, "favorites");
 
@@ -1582,6 +1918,30 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
   _renderMeta(selectedClass, fullPool) {
     if (!this._metaRegion) return;
+
+    // Importer mode: simpler header (no caster counters — there's no
+    // class context). Shows the active source + pool size + actor
+    // target so the user has a clear "what's about to be imported and
+    // where to" readout above the pool.
+    if (this._mode === "importer") {
+      const sourceLabel = selectedClass?.label || "Source";
+      const totalCount = fullPool?.length ?? 0;
+      const actorName = this._actor?.name ?? "Actor";
+      this._metaRegion.innerHTML = `
+        <div class="dauligor-spell-manager__meta-importer">
+          <div class="dauligor-spell-manager__meta-importer-left">
+            <div class="dauligor-spell-manager__meta-importer-title">${escapeHtml(sourceLabel)}</div>
+            <div class="dauligor-spell-manager__meta-importer-subtitle">${totalCount} spell${totalCount === 1 ? "" : "s"} in source</div>
+          </div>
+          <div class="dauligor-spell-manager__meta-importer-right">
+            <div class="dauligor-spell-manager__meta-importer-label">Importing to</div>
+            <div class="dauligor-spell-manager__meta-importer-target">${escapeHtml(actorName)}</div>
+            <div class="dauligor-spell-manager__meta-importer-hint">Other Spells (unsorted)</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
 
     if (!selectedClass) {
       this._metaRegion.innerHTML = `<div class="dauligor-spell-manager__meta-empty">Select a class to view its pool.</div>`;
@@ -1782,7 +2142,12 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       placeholder: "Search spell name…",
       filteredCount: filteredPool.length,
       totalCount: fullPool.length,
-      showOnSheet: true
+      // Hide the "On Sheet" toggle in importer mode — it filters by
+      // per-class ownership, which doesn't apply to source-wide
+      // browsing. The pool indicator on each row still shows the
+      // actor-wide owned state, so the user can scan for "already
+      // added" spells without the toggle.
+      showOnSheet: this._mode !== "importer"
     });
     this._bindToolbar(this._toolbarRegion, "pool");
   }
@@ -1822,9 +2187,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // Per-class indicator: only show "on sheet" for spells THIS class
     // owns. If Bard has Blade Ward attributed to Bard, Wizard's pool
     // still shows Blade Ward as empty-circle (not owned by Wizard).
-    const ownedMap = selectedClass
-      ? this._getOwnedDbIdMapForClass(selectedClass.identifier)
-      : this._getOwnedDbIdMap();
+    //
+    // Importer mode has no class scope — light the indicator for any
+    // copy on the actor, regardless of class attribution. Otherwise
+    // every row in the importer pool would show as "not on sheet"
+    // (the pseudo-source-identifier never matches a real class).
+    const ownedMap = this._mode === "importer"
+      ? this._getOwnedDbIdMap()
+      : (selectedClass
+        ? this._getOwnedDbIdMapForClass(selectedClass.identifier)
+        : this._getOwnedDbIdMap());
     const favIds = this._getFavoriteDbIds();
     const grouped = this._groupByLevel(filteredPool);
 
@@ -2232,6 +2604,49 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     if (!this._footerRegion) return;
 
     const dbId = summary ? poolDbId(summary) : null;
+
+    // Importer mode: single "Add to Sheet" toggle (creates without a
+    // class attribution → lands in the alt sheet's __other__ orphan
+    // bucket). Owned lookup is actor-wide here (no per-class scope in
+    // importer mode), so if ANY copy of the spell is already on the
+    // sheet we toggle into "Remove from Sheet". Re-using
+    // `_applySheetMode` + `_removeSpell` keeps the mutation semantics
+    // consistent with the sheet flow.
+    if (this._mode === "importer") {
+      const ownedAny = dbId ? this._findOwnedSpellByDbId(dbId) : null;
+      const onSheet = !!ownedAny;
+      const noSelection = !summary;
+      const btnHtml = noSelection
+        ? `<div class="dauligor-spell-manager__footer-hint">Select a spell to enable the import button.</div>`
+        : `<button type="button"
+            class="dauligor-spell-manager__footer-button ${onSheet ? "dauligor-spell-manager__footer-button--active" : ""}"
+            data-action="footer-importer-toggle"
+            title="${escapeHtml(onSheet
+              ? "Remove this spell from the actor (deletes the spell item)."
+              : "Add this spell to the actor. It lands in the Other Spells (unsorted) section and can be moved to a class section if eligible.")}"
+          >${escapeHtml(onSheet ? "Remove from Sheet" : "Add to Sheet (Unsorted)")}</button>`;
+
+      this._footerRegion.innerHTML = `
+        <div class="dauligor-spell-manager__footer-left">${btnHtml}</div>
+        <div class="dauligor-spell-manager__footer-right">
+          <button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>
+        </div>
+      `;
+
+      this._footerRegion.querySelector(`[data-action="footer-importer-toggle"]`)?.addEventListener("click", async () => {
+        if (!dbId) return;
+        if (onSheet) {
+          await this._removeSpell(dbId, null);
+        } else {
+          await this._applySheetMode(dbId, SHEET_MODE_FREE, selectedClass);
+        }
+      });
+      this._footerRegion.querySelector(`[data-action="footer-close"]`)?.addEventListener("click", async () => {
+        await this.close();
+      });
+      return;
+    }
+
     const owned = dbId && selectedClass?.identifier
       ? this._findOwnedSpellByDbIdForClass(dbId, selectedClass.identifier)
       : null;
@@ -2545,4 +2960,103 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       await this._renderManager();
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// DauligorSpellBrowserApp — standalone spell browser
+// ---------------------------------------------------------------------------
+
+/**
+ * Spell browser launched from the Dauligor Importer wizard's Spells
+ * page. Identical 3-column layout to the Prepare Spells manager, but:
+ *
+ *   - The left rail shows SOURCES (PHB, XGE, ...) instead of classes.
+ *   - The pool draws from `/api/module/<slug>/spells.json` (all spells
+ *     in a source) instead of the per-class spell list.
+ *   - The footer has a single "Add to Sheet (Unsorted)" toggle. Added
+ *     spells get NO class attribution — they land in the alt sheet's
+ *     "Other Spells" / __other__ orphan bucket, which the user can
+ *     then move into a class section (gated by class spell-list
+ *     membership) or a custom section.
+ *
+ * Implemented as a thin subclass of `DauligorSpellPreparationApp` with
+ * its own static singleton + opener. The base class handles
+ * mode-specific branching via `this._mode === "importer"` in render
+ * methods, pool fetching, and mutation flows.
+ */
+export class DauligorSpellBrowserApp extends DauligorSpellPreparationApp {
+  static _instance = null;
+
+  static open({ actor, sourceSlugs = [] } = {}) {
+    if (!actor) return null;
+    if (this._instance) {
+      this._instance.setActor(actor);
+      this._instance.setSourceSlugs(sourceSlugs);
+      this._instance.render({ force: true });
+      this._instance.maximize?.();
+      return this._instance;
+    }
+    const instance = new this({ actor, sourceSlugs });
+    this._instance = instance;
+    instance.render({ force: true });
+    return instance;
+  }
+
+  constructor({ actor, sourceSlugs = [] } = {}) {
+    super({
+      actor,
+      mode: "importer",
+      sourceSlugs,
+      appId: `${MODULE_ID}-spell-browser`,
+      windowTitle: actor ? `Import Spells: ${actor.name}` : "Import Spells"
+    });
+    // Preselect the first source so the pool fills in on first paint.
+    if (sourceSlugs?.length) {
+      this._state.selectedClassIdentifier = `__source__:${String(sourceSlugs[0])}`;
+    }
+  }
+
+  setSourceSlugs(slugs) {
+    const next = Array.isArray(slugs) ? slugs.map(String) : [];
+    const changed = next.join(",") !== this._sourceSlugs.join(",");
+    this._sourceSlugs = next;
+    if (changed) {
+      // Pool cache keyed by `__source__:<slug>` — drop stale entries
+      // so the pool refetches for the new selection.
+      for (const key of [...this._classPools.keys()]) {
+        if (key.startsWith("__source__:")) this._classPools.delete(key);
+      }
+      this._state.selectedClassIdentifier = next.length
+        ? `__source__:${next[0]}`
+        : null;
+      this._state.selectedSpellDbId = null;
+    }
+  }
+
+  setActor(actor, preselectClassIdentifier = null) {
+    // Importer mode never preselects a class — sources, not classes.
+    super.setActor(actor, null);
+    if (actor) {
+      this.options.window.title = `Import Spells: ${actor.name}`;
+    }
+  }
+}
+
+/**
+ * Public opener for the spell browser. Mirrors
+ * `openSpellPreparationManager` so callers get a uniform entry point.
+ */
+export async function openSpellBrowser(actorLike, { sourceSlugs = [] } = {}) {
+  const actor = (() => {
+    if (!actorLike) return null;
+    if (actorLike.documentName === "Actor") return actorLike;
+    if (actorLike.document?.documentName === "Actor") return actorLike.document;
+    if (actorLike.actor?.documentName === "Actor") return actorLike.actor;
+    return null;
+  })();
+  if (!actor || actor.type !== "character") {
+    notifyWarn("Open Import Spells from a character actor.");
+    return null;
+  }
+  return DauligorSpellBrowserApp.open({ actor, sourceSlugs });
 }

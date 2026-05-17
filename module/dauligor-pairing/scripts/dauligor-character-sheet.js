@@ -77,6 +77,126 @@ function getClassBundle(classIdentifier) {
   return entry?.status === "ready" ? entry : null;
 }
 
+// ─── Class spell-list dbId cache (per-class membership) ───────────────
+// The drag-drop and context-menu move handlers need to know "is this
+// spell in <class>'s spell list?" so they can gate cross-class moves.
+// We fetch the per-class spell list (same endpoint the Prepare Spells
+// manager hits) and cache the set of dbIds keyed by class identifier.
+//
+// The fetch is fire-and-forget: the gating check is async, but if the
+// data hasn't arrived yet we conservatively REJECT the move so we
+// never accidentally allow an invalid drop. Subsequent attempts after
+// the fetch settles work normally.
+//
+// Cache entries:
+//   { status: "loading" } | { status: "ready", dbIds: Set<string> }
+//   | { status: "missing", reason } | { status: "error", reason }
+const _classSpellListCache = new Map();
+
+function _getClassSpellListEntry(classIdentifier) {
+  return _classSpellListCache.get(classIdentifier) ?? null;
+}
+
+/**
+ * Kick (idempotently) a class spell-list fetch + cache. Resolves
+ * with the entry once the fetch settles (or immediately when
+ * cached). The drop/move handlers await this so they get a
+ * deterministic gating decision per attempt.
+ */
+async function ensureClassSpellListDbIds(classIdentifier, classItem) {
+  if (!classIdentifier) return { status: "missing", reason: "No class identifier" };
+  const existing = _classSpellListCache.get(classIdentifier);
+  if (existing?.status === "ready" || existing?.status === "missing" || existing?.status === "error") return existing;
+  if (existing?.status === "loading" && existing.promise) return existing.promise;
+
+  const spellListUrl = classItem?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
+  if (!spellListUrl) {
+    const entry = { status: "missing", reason: "No spellListUrl on class item — re-import the class." };
+    _classSpellListCache.set(classIdentifier, entry);
+    return entry;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const response = await fetch(spellListUrl, { cache: "no-store" });
+      if (!response.ok) {
+        const entry = { status: "error", reason: `HTTP ${response.status}` };
+        _classSpellListCache.set(classIdentifier, entry);
+        return entry;
+      }
+      const payload = await response.json();
+      if (payload?.kind !== "dauligor.class-spell-list.v1") {
+        const entry = { status: "error", reason: `Unexpected payload kind: ${payload?.kind ?? "(missing)"}` };
+        _classSpellListCache.set(classIdentifier, entry);
+        return entry;
+      }
+      const dbIds = new Set();
+      for (const spell of (Array.isArray(payload.spells) ? payload.spells : [])) {
+        const id = String(spell?.flags?.["dauligor-pairing"]?.dbId ?? "");
+        if (id) dbIds.add(id);
+      }
+      const entry = { status: "ready", dbIds };
+      _classSpellListCache.set(classIdentifier, entry);
+      return entry;
+    } catch (err) {
+      console.warn(`${MODULE_ID} | class spell-list fetch failed`, { classIdentifier, err });
+      const entry = { status: "error", reason: err?.message ?? "Network error" };
+      _classSpellListCache.set(classIdentifier, entry);
+      return entry;
+    }
+  })();
+
+  _classSpellListCache.set(classIdentifier, { status: "loading", promise: fetchPromise });
+  return fetchPromise;
+}
+
+/**
+ * Resolve a spell's Dauligor dbId. Spells imported via Dauligor stamp
+ * this flag at import time; spells from other sources (e.g. dropped
+ * onto the sheet from a Foundry compendium) won't have it, and the
+ * gating check falls through to "allow" since we can't enforce
+ * membership without a dbId.
+ */
+function getSpellDauligorDbId(spell) {
+  if (!spell) return null;
+  const flag = spell?.getFlag?.(MODULE_ID, "entityId")
+    ?? spell?.flags?.[MODULE_ID]?.entityId
+    ?? null;
+  return flag ? String(flag) : null;
+}
+
+/**
+ * Returns true when the spell is allowed in `classIdentifier`'s
+ * section on the actor sheet. Rules:
+ *   - Spell has no Dauligor dbId → allow (can't enforce; non-Dauligor
+ *     spell, e.g. a Foundry-compendium import).
+ *   - Class spell-list cache miss / error → reject (conservative; we
+ *     don't allow moves without a deterministic membership answer).
+ *   - dbId is in the cached set → allow.
+ *   - Otherwise → reject.
+ *
+ * Async because the cache may still be loading. Callers await before
+ * deciding the drop outcome.
+ */
+async function isSpellAllowedInClassList(spell, classIdentifier, classItem) {
+  const dbId = getSpellDauligorDbId(spell);
+  if (!dbId) return { allowed: true, reason: "no-dbid" };
+
+  const entry = await ensureClassSpellListDbIds(classIdentifier, classItem);
+  if (entry?.status !== "ready") {
+    return {
+      allowed: false,
+      reason: entry?.status === "missing"
+        ? "no-list-url"
+        : (entry?.status === "error" ? "list-fetch-failed" : "list-unavailable"),
+      detail: entry?.reason ?? ""
+    };
+  }
+  return entry.dbIds.has(dbId)
+    ? { allowed: true, reason: "in-list" }
+    : { allowed: false, reason: "not-in-list" };
+}
+
 /**
  * Opt-in alt character sheet. Extends dnd5e v5.x's
  * `CharacterActorSheet` and overrides ONLY the Spells PART template
@@ -500,38 +620,102 @@ async function promptForMoveFolderDestination(actor, sectionId, { currentId = nu
   }
 }
 
-async function promptForMoveSectionDestination(actor, { currentId = null } = {}) {
+async function promptForMoveSectionDestination(actor, { currentId = null, spell = null } = {}) {
   const DialogV2 = foundry.applications?.api?.DialogV2;
   if (!DialogV2) return null;
   const sections = readCustomSections(actor);
-  const options = [
-    `<option value="__default__"${!currentId ? " selected" : ""}>Default — by class</option>`,
-    ...sections.map((s) =>
-      `<option value="${foundry.utils.escapeHTML(s.id)}"${currentId === s.id ? " selected" : ""}>${foundry.utils.escapeHTML(s.name)}</option>`
-    )
-  ].join("");
+  const spellcastingClasses = actor?.spellcastingClasses ?? {};
+  const classEntries = Object.entries(spellcastingClasses);
+  // Resolve the spell's current section to preselect the option. The
+  // spell's `classIdentifier` flag is the source-of-truth for class
+  // attribution; custom-section override takes precedence in the UI
+  // when set. `currentId` is the SECTION id (custom or class id).
+  const currentClassId = spell?.getFlag?.(MODULE_ID, "classIdentifier")
+    ?? spell?.flags?.[MODULE_ID]?.classIdentifier
+    ?? null;
+  const currentCustomId = spell?.getFlag?.(MODULE_ID, "customSectionId")
+    ?? spell?.flags?.[MODULE_ID]?.customSectionId
+    ?? null;
+  const effectiveCurrentId = currentId
+    ?? currentCustomId
+    ?? currentClassId
+    ?? "__other__";
+
+  const classOptions = classEntries.map(([identifier, classItem]) => {
+    const name = classItem?.name ?? identifier;
+    const sel = effectiveCurrentId === identifier;
+    return `<option value="${foundry.utils.escapeHTML(identifier)}"${sel ? " selected" : ""} data-kind="class">${foundry.utils.escapeHTML(name)}</option>`;
+  }).join("");
+
+  const customOptions = sections.map((s) => {
+    const sel = effectiveCurrentId === s.id;
+    return `<option value="${foundry.utils.escapeHTML(s.id)}"${sel ? " selected" : ""} data-kind="custom">${foundry.utils.escapeHTML(s.name)}</option>`;
+  }).join("");
+
+  // Build option groups so the picker shows clear sectioning.
+  // Order matches the sheet's render order: classes, then customs,
+  // then the orphan bucket.
+  const optionsHtml = `
+    ${classOptions ? `<optgroup label="Classes">${classOptions}</optgroup>` : ""}
+    ${customOptions ? `<optgroup label="Custom Sections">${customOptions}</optgroup>` : ""}
+    <optgroup label="Other">
+      <option value="__other__"${effectiveCurrentId === "__other__" ? " selected" : ""} data-kind="other">Other Spells (unsorted)</option>
+    </optgroup>
+  `;
+
   try {
-    return await DialogV2.prompt({
+    const raw = await DialogV2.prompt({
       window: { title: "Move to Section" },
       content: `
         <div class="form-group">
           <label>Section</label>
           <select name="destination" autofocus>
-            ${options}
+            ${optionsHtml}
           </select>
+          <p class="hint" style="margin-top: 8px; font-size: 0.85em; opacity: 0.7;">
+            Moving to a class section is only allowed if the spell is in that class's spell list.
+          </p>
         </div>
       `,
       ok: {
         label: "Move",
         callback: (_event, button) => {
-          const value = String(button.form?.elements?.destination?.value ?? "");
-          if (!value || value === "__default__") return { kind: "default" };
-          return { kind: "custom", sectionId: value };
+          const select = button.form?.elements?.destination;
+          const value = String(select?.value ?? "");
+          const selectedOption = select?.options?.[select?.selectedIndex];
+          const kind = selectedOption?.dataset?.kind ?? "";
+          if (!value || kind === "") return null;
+          if (kind === "class") return { kind: "class", classIdentifier: value };
+          if (kind === "custom") return { kind: "custom", sectionId: value };
+          if (kind === "other") return { kind: "other" };
+          return null;
         }
       },
       rejectClose: false,
       modal: true
     });
+    if (!raw) return null;
+
+    // Gate class-section choices on spell-list membership — same
+    // rules the drop handler enforces. Async, so we do it AFTER the
+    // dialog resolves rather than blocking the dialog button.
+    if (raw.kind === "class" && spell) {
+      const classItem = spellcastingClasses[raw.classIdentifier];
+      const className = classItem?.name ?? raw.classIdentifier;
+      const decision = await isSpellAllowedInClassList(spell, raw.classIdentifier, classItem);
+      if (!decision.allowed) {
+        if (decision.reason === "not-in-list") {
+          notifyWarn(`${spell.name} is not in ${className}'s spell list.`);
+        } else if (decision.reason === "no-list-url") {
+          notifyWarn(`${className} has no live spell list — re-import the class to enable cross-class moves.`);
+        } else {
+          notifyWarn(`Couldn't verify ${className}'s spell list — try again in a moment.`);
+          console.warn(`${MODULE_ID} | move-to-section gating failed`, decision);
+        }
+        return null;
+      }
+    }
+    return raw;
   } catch {
     return null;
   }
@@ -674,13 +858,33 @@ function buildDauligorCharacterSheetClass() {
           const spell = actor.items?.get?.(itemId);
           if (!spell || spell.type !== "spell") return;
           const result = await promptForMoveSectionDestination(actor, {
-            currentId: spellCustomSectionId(spell)
+            currentId: spellCustomSectionId(spell),
+            spell
           });
           if (!result) return;
-          if (result.kind === "default") {
-            await setSpellCustomSection(spell, null);
+          if (result.kind === "class") {
+            // Cross-class move (gated above). Update attribution +
+            // clear any custom-section override.
+            await spell.update({
+              "system.sourceItem": `class:${result.classIdentifier}`,
+              [`flags.${MODULE_ID}.classIdentifier`]: result.classIdentifier,
+              [`flags.${MODULE_ID}.-=customSectionId`]: null,
+              [`flags.${MODULE_ID}.-=customFolderId`]: null
+            });
           } else if (result.kind === "custom") {
             await setSpellCustomSection(spell, result.sectionId);
+          } else if (result.kind === "other") {
+            // Class-less orphan — clear attribution + custom section.
+            await spell.update({
+              "system.sourceItem": "",
+              [`flags.${MODULE_ID}.-=classIdentifier`]: null,
+              [`flags.${MODULE_ID}.-=customSectionId`]: null,
+              [`flags.${MODULE_ID}.-=customFolderId`]: null
+            });
+          } else if (result.kind === "default") {
+            // Back-compat: legacy "Default — by class" path. Keep it
+            // working by clearing the custom-section override.
+            await setSpellCustomSection(spell, null);
           }
         },
 
@@ -1231,13 +1435,25 @@ function buildDauligorCharacterSheetClass() {
 
     /**
      * Parse the Foundry item drag payload from the drop event and
-     * assign the dropped spell to the target section + folder by
-     * updating `customSectionId` / `customFolderId` on the spell.
+     * assign the dropped spell to the target section + folder. The
+     * three drop targets each have different semantics:
+     *
+     *   - **Custom section**: set `customSectionId` flag (the spell
+     *     keeps its class attribution but renders under this section).
+     *   - **Class section** (e.g. Bard, Wizard): change the spell's
+     *     class attribution to that class. Gated by class spell-list
+     *     membership — if the spell isn't in the target class's list,
+     *     the drop is rejected with a warning toast.
+     *   - **`__other__` (Other Spells)**: clear class attribution, so
+     *     the spell renders in the orphan bucket. Also clears any
+     *     custom-section override.
      *
      * Rejects:
      *   - non-spell items
      *   - spells from other actors / compendium drops (could be
      *     supported later by re-importing; not in scope here)
+     *   - cross-class drops where the spell isn't in the target
+     *     class's curated spell list
      *   - folder ids that don't belong to the target section
      */
     async _assignSpellFromDrop(event, targetSectionId, targetFolderId) {
@@ -1255,13 +1471,70 @@ function buildDauligorCharacterSheetClass() {
 
       const customSections = readCustomSections(actor);
       const customSet = new Set(customSections.map((s) => s.id));
-      // Spells dropped on a custom section get the override flag;
-      // drops on class or "__other__" headers clear it (so default
-      // class attribution decides).
-      const nextSectionId = customSet.has(targetSectionId) ? targetSectionId : null;
+      const spellcastingClasses = actor.spellcastingClasses ?? {};
+      const isClassTarget = !customSet.has(targetSectionId)
+        && targetSectionId !== "__other__"
+        && Object.prototype.hasOwnProperty.call(spellcastingClasses, targetSectionId);
+      const isOtherTarget = targetSectionId === "__other__";
 
-      // Validate the folder belongs to the target section. If not,
-      // the drop clears the folder assignment (level grouping).
+      // Class section drop: gated by class spell-list membership.
+      // Successful drop changes attribution (sourceItem +
+      // classIdentifier flag) AND clears any custom-section
+      // override so the spell renders under its new class.
+      if (isClassTarget) {
+        const classItem = spellcastingClasses[targetSectionId];
+        const className = classItem?.name ?? targetSectionId;
+        const decision = await isSpellAllowedInClassList(doc, targetSectionId, classItem);
+        if (!decision.allowed) {
+          // Reject. Use a short user-friendly toast — the underlying
+          // reason (no-list-url / list-fetch-failed / not-in-list) is
+          // logged for debugging but not surfaced.
+          if (decision.reason === "not-in-list") {
+            notifyWarn(`${doc.name} is not in ${className}'s spell list.`);
+          } else if (decision.reason === "no-list-url") {
+            notifyWarn(`${className} has no live spell list — re-import the class to enable cross-class moves.`);
+          } else {
+            notifyWarn(`Couldn't verify ${className}'s spell list — try again in a moment.`);
+            console.warn(`${MODULE_ID} | drop gating failed`, decision);
+          }
+          return;
+        }
+        try {
+          await doc.update({
+            "system.sourceItem": `class:${targetSectionId}`,
+            [`flags.${MODULE_ID}.classIdentifier`]: targetSectionId,
+            [`flags.${MODULE_ID}.-=customSectionId`]: null,
+            [`flags.${MODULE_ID}.-=customFolderId`]: null
+          });
+        } catch (err) {
+          console.warn(`${MODULE_ID} | move-to-class update failed`, err);
+          notifyWarn("Failed to move spell — see console.");
+        }
+        return;
+      }
+
+      // "Other Spells" bucket drop: clear class attribution. The
+      // spell becomes a class-less orphan — exactly what the importer
+      // Spells flow lands on. Custom section + folder also cleared.
+      if (isOtherTarget) {
+        try {
+          await doc.update({
+            "system.sourceItem": "",
+            [`flags.${MODULE_ID}.-=classIdentifier`]: null,
+            [`flags.${MODULE_ID}.-=customSectionId`]: null,
+            [`flags.${MODULE_ID}.-=customFolderId`]: null
+          });
+        } catch (err) {
+          console.warn(`${MODULE_ID} | move-to-other update failed`, err);
+          notifyWarn("Failed to move spell — see console.");
+        }
+        return;
+      }
+
+      // Custom-section drop: keep class attribution; set override.
+      // Validate the folder belongs to the target section — drop
+      // clears the folder assignment if the folder doesn't belong.
+      const nextSectionId = customSet.has(targetSectionId) ? targetSectionId : null;
       let nextFolderId = null;
       if (targetFolderId) {
         const folders = readCustomFoldersForSection(actor, targetSectionId);
@@ -1269,7 +1542,6 @@ function buildDauligorCharacterSheetClass() {
           nextFolderId = targetFolderId;
         }
       }
-
       await setSpellCustomSection(doc, nextSectionId);
       await setSpellCustomFolder(doc, nextFolderId);
     }
@@ -1799,11 +2071,30 @@ function registerDauligorItemContextHook() {
       icon: '<i class="fas fa-folder-tree"></i>',
       callback: async () => {
         const result = await promptForMoveSectionDestination(actor, {
-          currentId: spellCustomSectionId(item)
+          currentId: spellCustomSectionId(item),
+          spell: item
         });
         if (!result) return;
-        if (result.kind === "default") await setSpellCustomSection(item, null);
-        else if (result.kind === "custom") await setSpellCustomSection(item, result.sectionId);
+        if (result.kind === "class") {
+          await item.update({
+            "system.sourceItem": `class:${result.classIdentifier}`,
+            [`flags.${MODULE_ID}.classIdentifier`]: result.classIdentifier,
+            [`flags.${MODULE_ID}.-=customSectionId`]: null,
+            [`flags.${MODULE_ID}.-=customFolderId`]: null
+          });
+        } else if (result.kind === "custom") {
+          await setSpellCustomSection(item, result.sectionId);
+        } else if (result.kind === "other") {
+          await item.update({
+            "system.sourceItem": "",
+            [`flags.${MODULE_ID}.-=classIdentifier`]: null,
+            [`flags.${MODULE_ID}.-=customSectionId`]: null,
+            [`flags.${MODULE_ID}.-=customFolderId`]: null
+          });
+        } else if (result.kind === "default") {
+          // Back-compat: legacy "Default — by class" path.
+          await setSpellCustomSection(item, null);
+        }
       }
     });
 

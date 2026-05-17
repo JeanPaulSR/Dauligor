@@ -54,6 +54,7 @@
 
 import { FEATURE_MANAGER_TEMPLATE, MODULE_ID } from "./constants.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
+import { DauligorSpellPreparationApp } from "./spell-preparation-app.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 
@@ -70,7 +71,7 @@ const TAB_ADVANCEMENT = "advancement";
 
 const TAB_DEFS = [
   { id: TAB_FEATURES,    label: "Features",    icon: "fas fa-star",          scope: SCOPE_LONG_REST, placeholder: false },
-  { id: TAB_SPELLS,      label: "Spells",      icon: "fas fa-wand-sparkles", scope: SCOPE_LONG_REST, placeholder: true  },
+  { id: TAB_SPELLS,      label: "Spells",      icon: "fas fa-wand-sparkles", scope: SCOPE_LONG_REST, placeholder: false },
   { id: TAB_CRAFTING,    label: "Crafting",    icon: "fas fa-hammer",        scope: SCOPE_LONG_REST, placeholder: true  },
   { id: TAB_FEATS,       label: "Feats",       icon: "fas fa-medal",         scope: SCOPE_LEVEL_UP,  placeholder: true  },
   { id: TAB_ADVANCEMENT, label: "Advancement", icon: "fas fa-circle-up",     scope: SCOPE_LEVEL_UP,  placeholder: true  }
@@ -288,6 +289,13 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
   }
 
   async close(options) {
+    // Tear down the embedded Spells manager (if any) so its region
+    // refs don't leak into the next open. The standalone Prepare
+    // Spells window is unaffected (different instance).
+    if (this._embeddedSpellManager) {
+      try { this._embeddedSpellManager.destroyEmbedded(); } catch { /* noop */ }
+      this._embeddedSpellManager = null;
+    }
     if (DauligorFeatureManagerApp._instance === this) DauligorFeatureManagerApp._instance = null;
     return super.close(options);
   }
@@ -386,13 +394,16 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
 
   _renderBody() {
     if (!this._bodyRegion) return;
+    // Always tear down any previously embedded Spells manager before
+    // switching tabs / re-rendering — otherwise stale region
+    // references from a prior mount would point at detached DOM.
+    if (this._embeddedSpellManager) {
+      try { this._embeddedSpellManager.destroyEmbedded(); } catch { /* noop */ }
+      this._embeddedSpellManager = null;
+    }
     switch (this._state.activeTab) {
       case TAB_FEATURES:    return this._renderFeaturesTab();
-      case TAB_SPELLS:      return this._renderPlaceholderTab({
-        title: "Spell Manager",
-        message: "Will eventually subsume the Prepare Spells tool — queue prepared-spell swaps and known-spell replacements here so the player can decide between sessions and apply them at the next long rest.",
-        hint: "For now, use the existing Prepare Spells tool from the actor sheet's Spells tab."
-      });
+      case TAB_SPELLS:      return this._renderSpellsTab();
       case TAB_CRAFTING:    return this._renderPlaceholderTab({
         title: "Crafting Projects",
         message: "Track downtime crafting projects — current progress, materials, days remaining. Queue progress increments between sessions so a downtime week resolves in one commit.",
@@ -545,6 +556,46 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         <p class="dauligor-feature-manager__coming-soon-hint">${escapeHtml(hint)}</p>
       </div>
     `;
+  }
+
+  /**
+   * Spells tab — embeds the Prepare Spells manager inline inside the
+   * Feature Manager body. Re-uses the same component, mounted into
+   * the body region via `DauligorSpellPreparationApp.renderInto`.
+   *
+   * The embedded instance is destroyed on the next `_renderBody`
+   * (tab switch / re-render) so the regions don't leak into stale
+   * DOM. The standalone Prepare Spells window can still coexist —
+   * the embedded mount is NOT registered as the prep app's singleton.
+   *
+   * Long-rest queueing of prepared-spell swaps is a separate concern
+   * (see this file's header comment for the queue model) — that
+   * layer hooks into the prep app's mutations in a follow-up pass.
+   * For now, mutations apply immediately like the standalone window.
+   */
+  _renderSpellsTab() {
+    // Host element for the embedded manager. A dedicated wrapper
+    // keeps the manager's CSS scope (.dauligor-spell-manager) inside
+    // the FM body without bleeding selectors into the rest of the
+    // Feature Manager.
+    this._bodyRegion.innerHTML = `
+      <div class="dauligor-feature-manager__spells-host" data-region="spells-manager"></div>
+    `;
+    const host = this._bodyRegion.querySelector(`[data-region="spells-manager"]`);
+    if (!host) return;
+    // Mount async — the prep manager's template fetch + catalog
+    // pre-warming take a tick. The host shows a brief "Loading…"
+    // until the first render lands.
+    host.innerHTML = `<div class="dauligor-spell-manager__empty">Loading spell manager…</div>`;
+    (async () => {
+      try {
+        const instance = await DauligorSpellPreparationApp.renderInto(host, { actor: this._actor });
+        this._embeddedSpellManager = instance;
+      } catch (err) {
+        console.warn(`${MODULE_ID} | embed spell manager failed`, err);
+        host.innerHTML = `<div class="dauligor-spell-manager__empty">Failed to load spell manager — see console.</div>`;
+      }
+    })();
   }
 
   _renderFooter() {
