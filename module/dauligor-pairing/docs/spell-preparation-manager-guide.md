@@ -21,99 +21,216 @@ The spell preparation manager should solve four problems:
 
 ## Implementation Status (May 2026 refactor)
 
-The manager has now been redesigned to match the `/compendium/spells`
-browser layout on the application side. The notes below reflect the
-**current shipped implementation**; sections further down in this doc
-are the original spec and may diverge.
+The manager is redesigned to match the `/compendium/spells` browser
+layout. The notes below reflect the **current shipped implementation**;
+sections further down in this doc are the original spec and may
+diverge.
 
 ### Window layout
 
 ```
-┌─────────────┬─────────────────────────┬──────────────────────────────┐
-│  CLASSES    │       META STRIP        │       DETAIL HEADER          │
-│  · Bard     │  toolbar (search/filter │   Title + source + ★         │
-│  · Wizard   │           /On Sheet)    │   subtitle (level / school)  │
-│             │                         │                              │
-│  FAVOURITES │                         │   IMAGE  │  CASTING TIME     │
-│  search +   │   POOL LIST             │          │  RANGE            │
-│  filter btn │   (grouped by level)    │          │  COMPONENTS       │
-│  rows…      │   ring / book / empty   │          │  DURATION         │
-│             │   indicators per row    │                              │
-│             │                         │   DESCRIPTION (enriched)     │
-│             │                         │                              │
-│             │                         │   Source · Status            │
-│             │                         │   Show tags (toggle)         │
-└─────────────┴─────────────────────────┴──────────────────────────────┘
-│  FOOTER  · [ Prepare ] [ Add to Sheet ] [ Add to Spellbook? ]  · [ Close ] │
-└────────────────────────────────────────────────────────────────────────┘
+┌─────────────┬───────────────────────────────┬──────────────────────────────┐
+│  CLASSES    │  META STRIP                   │   DETAIL HEADER              │
+│  · Bard 2   │    Bard · Known Caster        │   Title · CHIP(p218) · ★     │
+│  · Cleric 3 │    Full Caster · CHA          │   Level · School · ...       │
+│  · Wizard 1 │              On Sheet  Known  │                              │
+│             │              0       1/4      │   IMAGE  │ CASTING TIME      │
+│             │              Cantrips ‹empty› │          │ RANGE             │
+│             │              0/2              │          │ COMPONENTS        │
+│ FAVOURITES  │  ─────────────────────────    │          │ DURATION          │
+│ [search]    │  [search …  ×  37/256 ] [On  │                              │
+│             │   Sheet] [Filters]            │   DESCRIPTION (enriched)     │
+│ ★ rows...   │  ─────────────────────────    │   - bold, italic, lists      │
+│             │  POOL LIST  (level-grouped)   │   - dice icons + roll links  │
+│             │  ○/●/📖 indicators            │   - Foundry refs (clickable) │
+│             │  ★ favourite star             │                              │
+│             │  prepared rows highlighted    │                              │
+│             │                               │   Show Tags  (pinned bottom) │
+│             │                               │     Tag-group sections       │
+└─────────────┴───────────────────────────────┴──────────────────────────────┘
+│  FOOTER  ·  [On Sheet → ] [In Spellbook → ?] [Prepare/Known →]  ·  [Close]  │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The detail column absorbs leftover horizontal space when the window is
-resized — the reading-priority content (description) gets the extra
-real estate. The pool column stays at a comfortable fixed-ish width.
+- The **detail column** absorbs window-resize space (the description
+  is the highest-value reading content).
+- The **pool column** is fixed-ish (~400-480px) so spell rows + meta
+  counters don't squish on resize.
+- The **sidebar** (classes + favourites) stays narrow.
+- Footer pins to the bottom of the panel; when the description is short
+  the Show Tags disclosure floats at the bottom (matches the website's
+  SpellDetailPanel `mt-auto` pattern).
 
 ### sheetMode flag
 
 Each owned spell carries `flags.dauligor-pairing.sheetMode` ∈
-`"prepared" | "spellbook" | "free"` (source of truth for the manager's
-counter accounting + indicator state). Source-of-truth mapping to
-dnd5e's native fields:
+`"prepared" | "spellbook" | "free"` — source of truth for the manager's
+counter accounting + indicator state. Modes are **hierarchical, not
+exclusive**: a spell that's `"prepared"` is BY DEFINITION on the sheet;
+for a Wizard, a `"prepared"` spell is also in the spellbook.
 
-| sheetMode    | `system.prepared` | `system.method` | Counts vs…       | Indicator     | Row highlight |
-|--------------|-------------------|------------------|------------------|---------------|---------------|
-| `prepared`   | `true`            | `"spell"`        | Prepared / Known | filled circle | yes           |
-| `spellbook`  | `false`           | `"spell"`        | Spellbook cap    | book          | no            |
-| `free`       | `true`            | `"always"`       | (none)           | filled circle | no            |
+dnd5e mapping:
+
+| sheetMode    | `system.prepared` | `system.method` | Pool indicator     | Row highlight |
+|--------------|-------------------|-----------------|---------------------|---------------|
+| `prepared`   | `true`            | `"spell"`       | filled circle (or 📖 for Wizard) | yes (gold border) |
+| `spellbook`  | `false`           | `"spell"`       | 📖                  | no            |
+| `free`       | `true`            | `"spell"`       | filled circle       | no            |
+
+All three modes ship `system.method = "spell"` — the cap-accounting
+distinction is OUR flag, not dnd5e's method. (Earlier iterations used
+`method = "always"` for `free`, which surfaced as "Always Prepared" in
+dnd5e's per-spell editor; reverted in commit 920e13c.)
 
 Cantrips never carry a "prepared" semantic — they're always known when
-on the sheet. The cantrip counter is independent of the prepared
-counter.
+on the sheet. The Cantrips counter is independent of the Prepared counter.
 
-### Footer buttons
+### Per-class scope
 
-The footer is data-driven by the selected spell's current sheetMode +
-the active class's prep type:
+All mutations + indicator checks are **scoped to the selected class**.
+Adding Blade Ward to Bard doesn't light it up in Wizard's pool, and
+clicking "Add" in Wizard's view doesn't update Bard's copy — it
+creates a separate Wizard-attributed item. Two helpers:
 
-- **Prepare** (or "Add as Known" for known casters) — `sheetMode = "prepared"`.
-- **Add to Sheet** — `sheetMode = "free"`. Doesn't count vs caps.
-- **Add to Spellbook** — `sheetMode = "spellbook"`. Only shown when the
-  active class's prep type is `"spellbook"`.
-- **Close** — `await this.close()`.
+- `_getOwnedDbIdMapForClass(identifier)` — filters by `classIdentifier`
+- `_findOwnedSpellByDbIdForClass(dbId, identifier)` — single-spell variant
 
-When the spell is already in a mode, the corresponding button shows
-the inverse label ("Unprepare" / "Remove from Sheet" / "Remove from
-Spellbook") and clicking deletes the spell item from the actor.
+Used by: pool row indicator, favorite row indicator, detail pane
+status + buttons, `_applySheetMode`, `_removeSpell`.
 
-Buttons are disabled for spells whose state is managed externally
-(advancement-granted, dnd5e-native always-prepared).
+### Footer — hierarchical toggles
 
-### Filter modal
+```
+       on-sheet ⊇ in-spellbook ⊇ prepared
+```
 
-Search + filter button live on **both** the favourites toolbar and the
-pool toolbar. The filter button opens a centered modal overlay (matches
-the `/compendium/spells` modal) with sections for:
+Three independent toggles (Close is always present):
+
+| Button | Inactive label | Active label | Inactive action | Active action |
+|---|---|---|---|---|
+| **On Sheet** | Add to Sheet | Remove from Sheet | create with `sheetMode="free"` | delete the spell item (also un-preps + removes from book) |
+| **In Spellbook** (Wizard only) | Add to Spellbook | Remove from Spellbook | promote to `sheetMode="spellbook"` | demote to `free` (also un-preps a prepared spell) |
+| **Prepared / Known** | Prepare / Add as Known | Unprepare / Remove as Known | `sheetMode="prepared"` | Wizard: → `spellbook`; others: → `free` |
+
+For known casters the label is "Add as Known" / "Remove as Known"; for
+prepared / spellbook casters it's "Prepare" / "Unprepare".
+
+Disabled when spell is advancement-granted or dnd5e-native always-prepared.
+
+### Meta-strip counters
+
+Two rows, paired columns, column-stable alignment:
+
+```
+Row 1 (always):   On Sheet         Prepared / Known
+Row 2 (optional): Cantrips         In Spellbook
+```
+
+When only ONE of (Cantrips, In Spellbook) applies, it slots into the
+RIGHT column (with a transparent placeholder on the left) so the visible
+counter stays flush with the right edge.
+
+- **Prepared caster** (Cleric, Druid): row 1 + Cantrips on the right
+- **Known caster** (Bard, Sorcerer): row 1 + Cantrips on the right (if cantrips)
+- **Spellbook caster** (Wizard): row 1 + Cantrips left + In Spellbook right
+
+Caps:
+- `Prepared / Known` cap: prepared casters use `preparation.max`;
+  **known casters use `spellsKnownLevels[classLevel].spellsKnown`**
+  (per-level scaling stamped at import time, with bundle-cache fallback
+  for older imports).
+- `Cantrips` cap: same priority — `cantripsKnown` from scaling.
+
+### Filter modal (shared pool + favourites)
+
+Centered overlay, same component for both surfaces. Sections:
 
 - Level (0–9)
 - School (8 schools)
-- Source (PHB / XGE / … — resolved via `/api/module/sources/catalog.json`)
-- Casting Time (`activationBucket`)
-- Range (`rangeBucket`)
-- Duration (`durationBucket`)
-- Shape (`shapeBucket`)
+- Source (PHB / XGE / … — resolves via `/api/module/sources/catalog.json`)
+- Casting Time / Range / Duration / Shape (filter buckets)
 - Properties (Concentration / Ritual / V / S / M)
+- **Tag Groups** — one section per group in `/api/module/tags/catalog.json`
+  filtered to spell-classified groups. Subtags ancestor-expand spell
+  tagIds (parent-tag chip matches any subtag).
 
-Each chip is 2-state (selected / unselected) — the include-only model
-of the existing app. Sections have `All` / `Clear` shortcuts. The
-modal carries a `Reset` (clears the entire filter set for its target)
-and `Apply & Close` (just dismisses; chip changes apply live).
+Each chip is 2-state (include/unselected). Sections have `All` / `Clear`
+shortcuts. Modal carries `Reset` (clears the target's whole filter set)
+and `Apply & Close`. Filter state is per-target — pool and favourites
+each have their own.
+
+### Toolbar (shared pool + favourites)
+
+```
+[ Search …  ×  37 / 256 ] [On Sheet?] [Filters]
+└──── one bordered box ────┘
+```
+
+- **Search input** + custom **X clear button** (when input has text) +
+  **count badge** (filteredCount / totalCount) — all inside one
+  bordered wrap, visually one search field.
+- Native browser X clear suppressed via `::-webkit-search-cancel-button`.
+- **On Sheet** button — pool only (favourites doesn't get it).
+- **Filters** button — opens the shared modal.
+
+Search and filter state are scoped per-target ("pool" / "favourites") so
+the two surfaces filter independently.
+
+### Detail pane
+
+Mirrors the website's `<SpellDetailPanel>`:
+
+- **Header** — title, source chip with hover tooltip (full source name
+  + page), favourite star
+- **Subtitle** — level · school (· Ritual · Concentration)
+- **Hero** — image left + 2-col info grid (Casting Time / Range /
+  Components / Duration)
+- **Body** — enriched description (BBCode → HTML server-side via
+  `_bbcode.ts`; Foundry's `enrichHTML` then resolves `[[/r ...]]`,
+  `[[/damage ...]]`, `&Reference[...]`)
+- **Footer** (pinned to bottom of panel via `margin-top: auto`) — Show
+  Tags disclosure with tags grouped by tag group
+
+**Scroll preservation:** `_lastDetailDbId` tracks the last rendered
+dbId. When re-rendering the SAME spell (toggling Show Tags / clicking
+a footer button), the scroll position is preserved. Clicking a new
+row resets to top.
+
+**Description font:** Foundry's body chain (Signika under dnd5e v5)
+via `var(--font-primary, var(--font-sans, ...))` — matches the meta
+strip's info-row typography.
+
+### Server endpoints used
+
+| Endpoint | Purpose |
+|---|---|
+| `/api/module/sources/catalog.json` | Source labels (semantic id → shortName / name) |
+| `/api/module/tags/catalog.json` | Tag-group filter + tag id → name resolution |
+| `/api/module/<source>/classes/<class>.json` | Class bundle (for `spellsKnownScalings` cap data) |
+| `/api/module/<source>/classes/<class>/spells.json` | Live class spell list (summaries) |
+| `/api/module/spells/<dbId>.json` | Full per-spell payload (BBCode-rendered description) |
+
+All ship **semantic source ids** (`source-phb-2014`) — no legacy
+Firestore-style ids. See `docs/database/README.md` §schema-philosophy
+on why D1 PKs are still legacy strings internally; the export layer
+normalises via `getSemanticSourceId()` in `_classExport.ts`.
 
 ### Files
 
 | Path | Role |
 |---|---|
-| `module/dauligor-pairing/scripts/spell-preparation-app.js` | Manager class + helpers + sheetMode logic. |
+| `module/dauligor-pairing/scripts/spell-preparation-app.js` | Manager class — render pipeline, sheetMode mutations, filter logic, scroll preservation. |
 | `module/dauligor-pairing/templates/spell-preparation-shell.hbs` | Shell template (3-col grid + footer + modal host). |
-| `module/dauligor-pairing/styles/dauligor-importer.css` | All `.dauligor-spell-manager__*` styling. |
+| `module/dauligor-pairing/scripts/dauligor-character-sheet.js` | Alt actor sheet — `casterKind` resolution, class section per-class scope. |
+| `module/dauligor-pairing/templates/dauligor-spells-tab.hbs` | Alt sheet's Spells PART (uses `casterKind` / `casterLabel`). |
+| `module/dauligor-pairing/scripts/class-import-service.js` | Importer — stamps `spellcasting.type`, `spellsKnownLevels`, synthetic `{Class} Spellcasting` feat. |
+| `module/dauligor-pairing/styles/dauligor-importer.css` | All `.dauligor-spell-manager__*` and `.dauligor-character-sheet__*` styling. |
+| `api/_lib/_bbcode.ts` | BBCode → HTML converter (drift mirror of `src/lib/bbcode.ts`). |
+| `api/_lib/_classSpellList.ts` | Per-class spell list — resolves `spellSourceId` to semantic. |
+| `api/_lib/_spellExport.ts` | Per-spell full payload — BBCode-renders description, semantic source id. |
+| `api/_lib/_tagCatalog.ts` | Tag catalog endpoint helper. |
+| `api/_lib/module-export-pipeline.ts` | Sources catalog (semantic ids only). |
+| `api/module.ts` | Routes — `/sources/catalog.json`, `/tags/catalog.json`, class bundles, spell list, per-spell. |
 
 ## Related Documents
 
