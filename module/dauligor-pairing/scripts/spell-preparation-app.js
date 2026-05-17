@@ -476,6 +476,13 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     //     tagsByGroup: Map<groupId, tag[]> }
     this._tagCatalog = null;
     this._tagCatalogInFlight = false;
+
+    // Detail-pane scroll preservation state. Tracks the last dbId we
+    // rendered; if the next render is the SAME dbId (e.g. user
+    // toggled Show Tags or clicked Prepare on the currently-selected
+    // spell), we restore the scroll position. Different dbId means
+    // the user selected a new spell — reset to top.
+    this._lastDetailDbId = null;
   }
 
   _configureRenderParts() {
@@ -498,6 +505,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       this._fullSpellInFlight.clear();
       this._enrichedDescriptionCache.clear();
       this._state.selectedSpellDbId = null;
+      this._lastDetailDbId = null;
     }
     if (preselectClassIdentifier) {
       this._state.selectedClassIdentifier = preselectClassIdentifier;
@@ -633,6 +641,18 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const entry = this._sourcesById?.get(String(sourceId ?? ""));
     if (!entry) return "";
     return entry.shortName || entry.name || "";
+  }
+
+  /**
+   * Full (long-form) source name — used as the tooltip on the
+   * short-name chip so hovering "PHB" reveals "Player's Handbook".
+   * Falls back to the shortName when the catalog has no separate
+   * full name on the entry.
+   */
+  _sourceFullName(sourceId) {
+    const entry = this._sourcesById?.get(String(sourceId ?? ""));
+    if (!entry) return "";
+    return entry.name || entry.shortName || "";
   }
 
   // -----------------------------------------------------------------------
@@ -2012,17 +2032,9 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         : `<div class="dauligor-spell-manager__detail-description dauligor-spell-manager__empty">No description stored on this spell.</div>`)
       : `<div class="dauligor-spell-manager__detail-description dauligor-spell-manager__empty">Loading description…</div>`;
 
-    const ownedLine = ownedItem
-      ? (() => {
-          const mode = getSheetMode(ownedItem);
-          if (isAlwaysPrepared(ownedItem) && mode === SHEET_MODE_PREPARED) return "On sheet · Always prepared";
-          if (isAdvancementGranted(ownedItem)) return "On sheet · Granted by advancement";
-          if (mode === SHEET_MODE_PREPARED)  return classModel?.prepType === "known" ? "On sheet · Known" : "On sheet · Prepared";
-          if (mode === SHEET_MODE_SPELLBOOK) return "On sheet · In spellbook";
-          if (mode === SHEET_MODE_FREE)      return "On sheet · Free (no cap)";
-          return "On sheet";
-        })()
-      : "Not on sheet";
+    // (The previous "On sheet · …" status line was removed — the
+    // footer action buttons already convey on-sheet state, and a
+    // duplicate text line just added clutter to the detail pane.)
 
     // Tag rendering. The tag catalog is fetched on manager open from
     // `/api/module/tags/catalog.json` and resolves each id to its
@@ -2053,20 +2065,34 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       : 0;
     const hasResolvableTags = resolvedTagCount > 0;
 
-    // Suppress the source chip + Source line when we have no
-    // resolvable book — better than showing a meaningless "—" beside
-    // the title.
+    // Source chip — suppress when no resolvable book (a dangling "—"
+    // next to the title reads as a mistake). Hover tooltip on the
+    // chip shows the FULL source name plus page number ("Player's
+    // Handbook · p. 218"), so the visible chip stays compact while
+    // the long form is one hover away.
     const hasSource = sourceShort && sourceShort !== "—";
-    const sourceLineValue = hasSource
-      ? `${escapeHtml(sourceShort)}${sourcePage ? `, p. ${escapeHtml(sourcePage)}` : ""}`
-      : `<em style="opacity: 0.55">unresolved</em>`;
+    const sourceFull = this._sourceFullName(poolSpellSourceId(summary)) || sourceShort;
+    const sourceTooltip = hasSource
+      ? `${sourceFull}${sourcePage ? ` · p. ${sourcePage}` : ""}`
+      : "";
+
+    // Preserve scroll position across re-renders — without this, the
+    // detail-scroll container resets to top whenever the user toggles
+    // Show Tags or clicks any footer button (Prepare / Add to Sheet
+    // / etc.), because we replace the whole innerHTML. We only
+    // preserve when the SAME spell is being re-rendered; clicking a
+    // different spell in the pool resets to top (which is what the
+    // user expects — they want to read the new spell from the start).
+    const prevScrollTop = (this._lastDetailDbId === dbId)
+      ? (this._detailRegion.querySelector(".dauligor-spell-manager__detail-scroll")?.scrollTop ?? 0)
+      : 0;
 
     this._detailRegion.innerHTML = `
       <div class="dauligor-spell-manager__detail-scroll">
         <header class="dauligor-spell-manager__detail-header">
           <div class="dauligor-spell-manager__detail-title-row">
             <h2 class="dauligor-spell-manager__detail-title">${escapeHtml(summary.name)}</h2>
-            ${hasSource ? `<span class="dauligor-spell-manager__detail-source-chip">${escapeHtml(sourceShort)}</span>` : ""}
+            ${hasSource ? `<span class="dauligor-spell-manager__detail-source-chip" title="${escapeHtml(sourceTooltip)}">${escapeHtml(sourceShort)}${sourcePage ? ` <span class="dauligor-spell-manager__detail-source-chip-page">p${escapeHtml(sourcePage)}</span>` : ""}</span>` : ""}
             <button type="button"
               class="dauligor-spell-manager__detail-star ${fav ? "dauligor-spell-manager__detail-star--active" : ""}"
               data-action="detail-toggle-fav"
@@ -2094,13 +2120,8 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
           ${descriptionHtml}
         </section>
 
+        ${hasResolvableTags ? `
         <footer class="dauligor-spell-manager__detail-footer">
-          <div class="dauligor-spell-manager__detail-source-line">
-            <span class="dauligor-spell-manager__detail-source-label">Source:</span>
-            <span class="dauligor-spell-manager__detail-source-value">${sourceLineValue}</span>
-          </div>
-          <div class="dauligor-spell-manager__detail-status">${escapeHtml(ownedLine)}</div>
-          ${hasResolvableTags ? `
           <button type="button"
             class="dauligor-spell-manager__detail-tags-toggle"
             data-action="toggle-tags"
@@ -2134,10 +2155,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
             })()}
           </div>
           ` : ""}
-          ` : ""}
         </footer>
+        ` : ""}
       </div>
     `;
+
+    // Restore scroll position immediately after replacing innerHTML.
+    // (See the prevScrollTop comment above.)
+    const scrollEl = this._detailRegion.querySelector(".dauligor-spell-manager__detail-scroll");
+    if (scrollEl && prevScrollTop > 0) scrollEl.scrollTop = prevScrollTop;
+    this._lastDetailDbId = dbId;
 
     this._detailRegion.querySelector(`[data-action="detail-toggle-fav"]`)?.addEventListener("click", async () => {
       await this._toggleFavorite(dbId);

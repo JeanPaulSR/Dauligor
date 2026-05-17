@@ -5412,6 +5412,19 @@ button.dauligor-option-picker__pill:hover {
   font-weight: 700;
   letter-spacing: 0.10em;
   text-transform: uppercase;
+  cursor: help;
+}
+
+/* Page suffix inside the source chip ("PHB p218") — same family,
+ * lighter colour + weight to clearly read as a secondary annotation. */
+.dauligor-spell-manager__detail-source-chip-page {
+  margin-left: 2px;
+  padding-left: 4px;
+  border-left: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
+  color: var(--dauligor-text-muted);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
 }
 
 .dauligor-spell-manager__detail-star {
