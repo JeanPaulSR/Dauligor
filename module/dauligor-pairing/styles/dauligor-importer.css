@@ -4087,7 +4087,10 @@ button.dauligor-option-picker__pill:hover {
   display: grid;
   grid-template-columns:
     minmax(220px, 280px)   /* sidebar (classes + favourites) */
-    minmax(320px, 400px)   /* pool */
+    minmax(400px, 480px)   /* pool — gained ~80px so the meta-strip
+                              counters + class-header chips have
+                              breathing room and the spell rows don't
+                              feel cramped */
     minmax(380px, 1fr);    /* detail — absorbs window resize */
   gap: 10px;
   width: 100%;
@@ -4216,22 +4219,85 @@ button.dauligor-option-picker__pill:hover {
   padding: 4px 0;
 }
 
+/* Search "field" = a flex wrap that contains the text input + an
+ * optional X clear button + an optional result-count badge. All three
+ * live inside one bordered box so they visually read as a single
+ * search field, matching the spec the user asked for (X and count
+ * "inside" the search bar). */
+.dauligor-spell-manager__inline-search-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 6px 0 0;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.25);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dauligor-spell-manager__inline-search-wrap:focus-within {
+  border-color: var(--dauligor-accent, #b89a6b);
+  background: rgba(0, 0, 0, 0.35);
+}
+
 .dauligor-spell-manager__inline-search {
   flex: 1;
   min-width: 0;
-  height: 26px;
+  height: 100%;
   padding: 2px 8px;
-  border: 1px solid var(--dauligor-border);
-  background: rgba(0, 0, 0, 0.25);
+  border: none;
+  background: transparent;
   color: var(--dauligor-text, #cbb98f);
   font-family: inherit;
   font-size: 12px;
   outline: none;
 }
 
-.dauligor-spell-manager__inline-search:focus {
-  border-color: var(--dauligor-accent, #b89a6b);
-  background: rgba(0, 0, 0, 0.35);
+/* Hide the native browser search-clear (×) — we render our own so
+ * its appearance + always-visible-when-text-present behaviour stays
+ * consistent across browsers. */
+.dauligor-spell-manager__inline-search::-webkit-search-cancel-button,
+.dauligor-spell-manager__inline-search::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dauligor-spell-manager__inline-search-clear {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--dauligor-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dauligor-spell-manager__inline-search-clear:hover {
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__inline-search-count {
+  flex-shrink: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dauligor-accent, #b89a6b);
+  white-space: nowrap;
+  padding-left: 4px;
+  border-left: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
+}
+
+.dauligor-spell-manager__inline-search-count-total {
+  color: var(--dauligor-text-muted);
+  font-weight: 400;
 }
 
 /* === Favourites header (count + label) === */
@@ -5440,10 +5506,15 @@ button.dauligor-option-picker__pill:hover {
 .dauligor-spell-manager__detail-description strong { color: #e0c98a; }
 .dauligor-spell-manager__detail-description em { color: var(--dauligor-text, #cbb98f); }
 
+/* Detail footer used to be `margin-top: auto` to pin against the
+ * bottom of the scroll region — but when the user clicked "Show
+ * tags" the footer's expanded height grew UPWARD and visually
+ * overlapped the description above. Now the footer flows naturally
+ * after the description in the same scroll container, so tags
+ * append below the source/status line without consuming anything. */
 .dauligor-spell-manager__detail-footer {
   padding: 12px 18px 16px;
   border-top: 1px solid var(--dauligor-border-soft, rgba(170, 130, 80, 0.18));
-  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;

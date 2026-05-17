@@ -1492,33 +1492,20 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const allFavorites = this._buildFavoritesPool(classModels);
     const filtered = this._filterList(allFavorites, "favorites");
 
-    const filtersActive = this._activeFilterCount("favorites");
+    const toolbarHtml = this._buildToolbarHtml({
+      target: "favorites",
+      placeholder: "Search favourites…",
+      filteredCount: filtered.length,
+      totalCount: allFavorites.length,
+      showOnSheet: false
+    });
 
     const header = `
       <div class="dauligor-spell-manager__favorites-header">
         <span class="dauligor-spell-manager__favorites-icon">★</span>
         <span class="dauligor-spell-manager__favorites-title">Favourites</span>
-        <span class="dauligor-spell-manager__favorites-count">${filtered.length}${filtered.length !== allFavorites.length ? ` / ${allFavorites.length}` : ""}</span>
       </div>
-      <div class="dauligor-spell-manager__favorites-toolbar">
-        <input
-          type="search"
-          class="dauligor-spell-manager__inline-search"
-          data-action="fav-search"
-          placeholder="Search favourites…"
-          value="${escapeHtml(this._state.favSearch)}"
-          autocomplete="off"
-        >
-        <button type="button"
-          class="dauligor-spell-manager__filter-button ${filtersActive > 0 ? "dauligor-spell-manager__filter-button--active" : ""}"
-          data-action="open-filter"
-          data-target="favorites"
-          title="Open filter options"
-        >
-          <span class="dauligor-spell-manager__filter-button-label">Filters</span>
-          ${filtersActive > 0 ? `<span class="dauligor-spell-manager__filter-count-badge">${filtersActive}</span>` : ""}
-        </button>
-      </div>
+      <div class="dauligor-spell-manager__favorites-toolbar">${toolbarHtml}</div>
     `;
 
     if (allFavorites.length === 0) {
@@ -1554,21 +1541,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   _bindFavoritesToolbar() {
-    const search = this._favoritesRegion?.querySelector(`[data-action="fav-search"]`);
-    search?.addEventListener("input", async (event) => {
-      const cursor = event.currentTarget.selectionStart;
-      this._state.favSearch = event.currentTarget.value ?? "";
-      await this._renderManager();
-      const next = this._favoritesRegion?.querySelector(`[data-action="fav-search"]`);
-      if (next instanceof HTMLInputElement) {
-        next.focus();
-        try { next.setSelectionRange(cursor, cursor); } catch { /* noop */ }
-      }
-    });
-    this._favoritesRegion?.querySelector(`[data-action="open-filter"]`)?.addEventListener("click", async () => {
-      this._state.filterModalOpen = "favorites";
-      await this._renderManager();
-    });
+    this._bindToolbar(this._favoritesRegion, "favorites");
   }
 
   _buildFavoriteRowHtml(item, ownedMap, selectedClass) {
@@ -1680,68 +1653,118 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     `;
   }
 
-  // ---- Toolbar (pool search + filter + On Sheet) -----------------------
+  // ---- Toolbar (shared between pool + favourites) -----------------------
 
-  _renderToolbar(selectedClass, filteredPool, fullPool) {
-    if (!this._toolbarRegion) return;
-
-    const filtersActive = this._activeFilterCount("pool");
-    const showReset = filtersActive > 0 || Boolean(this._state.poolSearch) || this._state.onSheetFilter;
-
-    const countHtml = fullPool.length === 0
+  /**
+   * Build the toolbar HTML — used by BOTH the pool toolbar and the
+   * favourites toolbar. The two surfaces share one component to keep
+   * the visual + behaviour consistent.
+   *
+   * Search input + count + clear ✕ are wrapped in a single visual
+   * "search field" (an input + overlays inside one bordered div).
+   * The clear ✕ shows only when the input has a value. The count
+   * (filteredCount / totalCount) sits flush against the right edge
+   * inside the wrap.
+   *
+   * The On Sheet toggle is opt-in via `showOnSheet` — pool gets it,
+   * favourites doesn't.
+   *
+   * data-action wiring:
+   *   - `search` → live input handler
+   *   - `clear-search` → clears state[searchKey] back to ""
+   *   - `open-filter` (with data-target) → opens the filter modal
+   *   - `toggle-on-sheet` → toggles state.onSheetFilter (pool only)
+   *
+   * No more inline "Reset" button — the search field's clear ✕ and
+   * the filter modal's own Reset button cover the same surface.
+   */
+  _buildToolbarHtml({ target, placeholder, filteredCount, totalCount, showOnSheet }) {
+    const searchValue = this._searchFor(target);
+    const filtersActive = this._activeFilterCount(target);
+    const countLabel = totalCount === 0
       ? ""
-      : `<span class="dauligor-spell-manager__pool-count">${filteredPool.length}${filteredPool.length !== fullPool.length ? ` <span class="dauligor-spell-manager__pool-count-total">/ ${fullPool.length}</span>` : ""}</span>`;
+      : (filteredCount !== totalCount
+        ? `${filteredCount} <span class="dauligor-spell-manager__inline-search-count-total">/ ${totalCount}</span>`
+        : `${totalCount}`);
 
-    this._toolbarRegion.innerHTML = `
-      <input
-        type="search"
-        class="dauligor-spell-manager__inline-search"
-        data-action="pool-search"
-        placeholder="Search spell name…"
-        value="${escapeHtml(this._state.poolSearch)}"
-        autocomplete="off"
-      >
-      <button type="button"
-        class="dauligor-spell-manager__filter-button ${filtersActive > 0 ? "dauligor-spell-manager__filter-button--active" : ""}"
-        data-action="open-filter"
-        data-target="pool"
-        title="Open filter options"
-      >
-        <span class="dauligor-spell-manager__filter-button-label">Filters</span>
-        ${filtersActive > 0 ? `<span class="dauligor-spell-manager__filter-count-badge">${filtersActive}</span>` : ""}
-      </button>
+    return `
+      <div class="dauligor-spell-manager__inline-search-wrap">
+        <input
+          type="search"
+          class="dauligor-spell-manager__inline-search"
+          data-action="search"
+          placeholder="${escapeHtml(placeholder)}"
+          value="${escapeHtml(searchValue)}"
+          autocomplete="off"
+        >
+        ${searchValue ? `<button type="button" class="dauligor-spell-manager__inline-search-clear" data-action="clear-search" title="Clear search" aria-label="Clear search">×</button>` : ""}
+        ${countLabel ? `<span class="dauligor-spell-manager__inline-search-count" aria-live="polite">${countLabel}</span>` : ""}
+      </div>
+      ${showOnSheet ? `
       <button type="button"
         class="dauligor-spell-manager__on-sheet-button ${this._state.onSheetFilter ? "dauligor-spell-manager__on-sheet-button--active" : ""}"
         data-action="toggle-on-sheet"
         title="Show only spells that are already on this class's sheet"
       >On Sheet</button>
-      ${showReset ? `<button type="button" class="dauligor-spell-manager__reset-button" data-action="reset-pool">✕ Reset</button>` : ""}
-      ${countHtml}
+      ` : ""}
+      <button type="button"
+        class="dauligor-spell-manager__filter-button ${filtersActive > 0 ? "dauligor-spell-manager__filter-button--active" : ""}"
+        data-action="open-filter"
+        data-target="${escapeHtml(target)}"
+        title="Open filter options"
+      >
+        <span class="dauligor-spell-manager__filter-button-label">Filters</span>
+        ${filtersActive > 0 ? `<span class="dauligor-spell-manager__filter-count-badge">${filtersActive}</span>` : ""}
+      </button>
     `;
+  }
 
-    const search = this._toolbarRegion.querySelector(`[data-action="pool-search"]`);
+  /**
+   * Wire up the toolbar's event handlers within a given region.
+   * Shared by pool + favourites. The `target` ("pool" / "favorites")
+   * routes search state + filter-modal opens.
+   */
+  _bindToolbar(region, target) {
+    if (!region) return;
+
+    const search = region.querySelector(`[data-action="search"]`);
     search?.addEventListener("input", async (event) => {
       const cursor = event.currentTarget.selectionStart;
-      this._state.poolSearch = event.currentTarget.value ?? "";
+      this._setSearchFor(target, event.currentTarget.value ?? "");
       await this._renderManager();
-      const next = this._toolbarRegion?.querySelector(`[data-action="pool-search"]`);
+      const next = region.querySelector(`[data-action="search"]`);
       if (next instanceof HTMLInputElement) {
         next.focus();
         try { next.setSelectionRange(cursor, cursor); } catch { /* noop */ }
       }
     });
-    this._toolbarRegion.querySelector(`[data-action="open-filter"]`)?.addEventListener("click", async () => {
-      this._state.filterModalOpen = "pool";
+
+    region.querySelector(`[data-action="clear-search"]`)?.addEventListener("click", async () => {
+      this._setSearchFor(target, "");
       await this._renderManager();
     });
-    this._toolbarRegion.querySelector(`[data-action="toggle-on-sheet"]`)?.addEventListener("click", async () => {
+
+    region.querySelector(`[data-action="open-filter"]`)?.addEventListener("click", async () => {
+      this._state.filterModalOpen = target;
+      await this._renderManager();
+    });
+
+    region.querySelector(`[data-action="toggle-on-sheet"]`)?.addEventListener("click", async () => {
       this._state.onSheetFilter = !this._state.onSheetFilter;
       await this._renderManager();
     });
-    this._toolbarRegion.querySelector(`[data-action="reset-pool"]`)?.addEventListener("click", async () => {
-      this._resetFilters("pool");
-      await this._renderManager();
+  }
+
+  _renderToolbar(selectedClass, filteredPool, fullPool) {
+    if (!this._toolbarRegion) return;
+    this._toolbarRegion.innerHTML = this._buildToolbarHtml({
+      target: "pool",
+      placeholder: "Search spell name…",
+      filteredCount: filteredPool.length,
+      totalCount: fullPool.length,
+      showOnSheet: true
     });
+    this._bindToolbar(this._toolbarRegion, "pool");
   }
 
   // ---- Pool list --------------------------------------------------------
