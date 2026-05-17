@@ -4346,13 +4346,27 @@ button.dauligor-option-picker__pill:hover {
   color: var(--dauligor-text-muted);
 }
 
+/* Meta-right stacks two ROWS of counters:
+ *   Row 1 (always):  Spells on Sheet · Prepared/Known Spells
+ *   Row 2 (opt):     Cantrips Known  · Spells in Spellbook
+ * Each row is its own flex line so the counters stay grouped pairwise
+ * regardless of viewport width.
+ */
 .dauligor-spell-manager__meta-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.dauligor-spell-manager__meta-counter-row {
   display: flex;
   gap: 16px;
 }
 
 .dauligor-spell-manager__meta-counter {
   text-align: right;
+  min-width: 90px;
 }
 
 .dauligor-spell-manager__meta-counter-label {

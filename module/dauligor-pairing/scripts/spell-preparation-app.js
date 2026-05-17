@@ -1647,6 +1647,14 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       ? `${escapeHtml(selectedClass.progressionLabel)}${selectedClass.abilityAbbr ? " – " + escapeHtml(selectedClass.abilityAbbr) : ""}`
       : (selectedClass.abilityAbbr ? escapeHtml(selectedClass.abilityAbbr) : "");
 
+    // Counters split across TWO rows so they stop bunching up on
+    // narrow viewports:
+    //   Top row (always):     [Spells on Sheet] [Prepared/Known Spells]
+    //   Bottom row (optional): [Cantrips Known] [Spells in Spellbook]
+    // The bottom row only renders when at least one of its counters
+    // is applicable (cantripCap set, or class is spellbook). When
+    // neither applies, only the top row appears.
+    const hasBottomRow = Boolean(cantripCounter) || Boolean(spellbookCounter);
     this._metaRegion.innerHTML = `
       <div class="dauligor-spell-manager__meta-left">
         <div class="dauligor-spell-manager__meta-title">
@@ -1656,10 +1664,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         ${progressionPart ? `<div class="dauligor-spell-manager__meta-progression">${progressionPart}</div>` : ""}
       </div>
       <div class="dauligor-spell-manager__meta-right">
-        ${onSheetCounter}
-        ${cantripCounter}
-        ${spellbookCounter}
-        ${prepCounter}
+        <div class="dauligor-spell-manager__meta-counter-row">
+          ${onSheetCounter}
+          ${prepCounter}
+        </div>
+        ${hasBottomRow ? `
+        <div class="dauligor-spell-manager__meta-counter-row">
+          ${cantripCounter}
+          ${spellbookCounter}
+        </div>
+        ` : ""}
       </div>
     `;
   }
