@@ -2,6 +2,81 @@ import { DAULIGOR_SPELLS_TAB_TEMPLATE, MODULE_ID } from "./constants.js";
 import { openSpellPreparationManager } from "./spell-preparation-app.js";
 import { log, notifyWarn } from "./utils.js";
 
+// ─── Class-bundle cache (module-level singleton) ──────────────────────
+// The alt sheet needs `class.spellcasting.spellsKnownLevels` (the per-
+// level Spells Known scaling) to render "KNOWN  X/Y" on the per-class
+// header. New imports stamp this onto the class item directly; older
+// imports don't have it. Fetching the bundle at render time fills the
+// gap for older imports — without forcing the user to re-import.
+//
+// Cache lives at module scope so multiple sheet instances (and the
+// Prepare Spells manager later, if we choose to migrate it here) share
+// the result. Entries:
+//   { status: "loading" } | { status: "ready", spellcasting, payload }
+//   | { status: "missing", reason } | { status: "error", reason }
+const _classBundleCache = new Map();
+
+/** Derive the bundle URL by stripping `/spells.json` off the live
+ *  spell-list URL we already store on the class item. The decoupling
+ *  refactor split the two endpoints (see project memory).
+ */
+function _resolveClassBundleUrl(classItem) {
+  const spellListUrl = classItem?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
+  if (!spellListUrl) return null;
+  return String(spellListUrl).replace(/\/spells\.json(\?.*)?$/i, ".json");
+}
+
+/**
+ * Kick (idempotently) a class-bundle fetch + cache. The `onReady`
+ * callback fires once the entry transitions to `"ready"`; used by the
+ * alt sheet to call `render()` so the next pass picks up the cap.
+ *
+ * Returns the current cache entry (which may still be `"loading"`).
+ */
+function ensureClassBundle(classIdentifier, classItem, onReady) {
+  if (!classIdentifier) return null;
+  const existing = _classBundleCache.get(classIdentifier);
+  if (existing?.status === "ready") return existing;
+  if (existing?.status === "loading") return existing;
+
+  const bundleUrl = _resolveClassBundleUrl(classItem);
+  if (!bundleUrl) {
+    const entry = { status: "missing", reason: "No spellListUrl on class item" };
+    _classBundleCache.set(classIdentifier, entry);
+    return entry;
+  }
+
+  const loadingEntry = { status: "loading" };
+  _classBundleCache.set(classIdentifier, loadingEntry);
+
+  (async () => {
+    try {
+      const response = await fetch(bundleUrl, { cache: "no-store" });
+      if (!response.ok) {
+        _classBundleCache.set(classIdentifier, { status: "error", reason: `HTTP ${response.status}` });
+      } else {
+        const payload = await response.json();
+        const spellcasting = payload?.class?.spellcasting ?? payload?.spellcasting ?? null;
+        _classBundleCache.set(classIdentifier, { status: "ready", spellcasting, payload });
+        if (typeof onReady === "function") {
+          try { onReady(); } catch (err) { console.warn(`${MODULE_ID} | bundle onReady callback failed`, err); }
+        }
+      }
+    } catch (err) {
+      console.warn(`${MODULE_ID} | class bundle fetch failed`, { bundleUrl, err });
+      _classBundleCache.set(classIdentifier, { status: "error", reason: err?.message ?? "Network error" });
+    }
+  })();
+
+  return loadingEntry;
+}
+
+/** Read the cached bundle's spellcasting block (or null). */
+function getClassBundle(classIdentifier) {
+  const entry = _classBundleCache.get(classIdentifier);
+  return entry?.status === "ready" ? entry : null;
+}
+
 /**
  * Opt-in alt character sheet. Extends dnd5e v5.x's
  * `CharacterActorSheet` and overrides ONLY the Spells PART template
@@ -1597,13 +1672,35 @@ function buildDauligorCharacterSheetClass() {
             if (lv <= 0) continue;
             if (classOfSpell(item) === bucket.classIdentifier) casterValue++;
           }
-          // Cap is read from the per-class scaling stamped at import.
-          // Falls back to null (rendered as "—") when the class was
-          // imported before the flag existed; the user just needs to
-          // re-import to populate it.
-          const levels = moduleFlag.spellsKnownLevels ?? null;
+          // Cap source priority:
+          //   1. `flags.dauligor-pairing.spellcasting.spellsKnownLevels`
+          //      — stamped at import time. Synchronous, no fetch.
+          //   2. Live class-bundle cache. For classes imported before
+          //      the flag existed; kick a background fetch and let the
+          //      subsequent render pick up the value (the `onReady`
+          //      callback calls `this.render()`).
           const classLevel = Number(classItem?.system?.levels ?? 0) || 0;
-          const scaling = levels?.[classLevel] ?? levels?.[String(classLevel)] ?? null;
+          const flagLevels = moduleFlag.spellsKnownLevels ?? null;
+          let scaling = flagLevels
+            ? (flagLevels[classLevel] ?? flagLevels[String(classLevel)] ?? null)
+            : null;
+
+          if (!scaling) {
+            // No flag — try the bundle cache.
+            ensureClassBundle(bucket.classIdentifier, classItem, () => this.render({ parts: ["spells"] }));
+            const bundle = getClassBundle(bucket.classIdentifier);
+            const sourceId = bundle?.spellcasting?.spellsKnownSourceId
+              ?? moduleFlag.spellsKnownSourceId
+              ?? null;
+            const bundleScalings = bundle?.payload?.spellsKnownScalings ?? null;
+            const bundleLevels = sourceId && bundleScalings
+              ? (bundleScalings[sourceId]?.levels ?? null)
+              : null;
+            if (bundleLevels) {
+              scaling = bundleLevels[classLevel] ?? bundleLevels[String(classLevel)] ?? null;
+            }
+          }
+
           const fromScaling = Number(scaling?.spellsKnown);
           casterMax = Number.isFinite(fromScaling) && fromScaling > 0 ? fromScaling : null;
         }
