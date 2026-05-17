@@ -8,6 +8,7 @@ import {
 } from "./_lib/module-export-pipeline.js";
 import { buildClassSpellListByIdentifier } from "./_lib/_classSpellList.js";
 import { buildSpellItemBundle } from "./_lib/_spellExport.js";
+import { buildTagCatalog } from "./_lib/_tagCatalog.js";
 import { SERVER_EXPORT_FETCHERS } from "./_lib/d1-fetchers-server.js";
 import {
   classBundleKey,
@@ -58,9 +59,15 @@ function serveLive(res: any, body: unknown) {
 async function getOrBuild<T>(
   key: string,
   build: () => Promise<T | null>,
+  isValidCache?: (cached: T) => boolean,
 ): Promise<T | null> {
   const cached = await readBundle<T>(key);
-  if (cached) return cached;
+  // Optional validity gate — used when a server-side change adds a
+  // new required field to the bundle shape. Without this, R2 would
+  // happily keep serving the pre-change cached blob until something
+  // explicitly rebakes the key. The validator returns false on a
+  // stale shape, which triggers a live rebuild + write-through.
+  if (cached && (!isValidCache || isValidCache(cached))) return cached;
 
   const fresh = await build();
   if (fresh) {
@@ -205,7 +212,16 @@ export default async function handler(req: any, res: any) {
 
   try {
     if (!cleanSubpath || cleanSubpath === "catalog.json") {
-      const result = await getOrBuild(topLevelCatalogKey(), buildTopLevelCatalog);
+      const result = await getOrBuild(
+        topLevelCatalogKey(),
+        buildTopLevelCatalog,
+        // Cache-shape validator: every entry must carry `legacyId`
+        // (added so the Foundry side can map legacy Firestore-style
+        // spell.source_id back to the new semantic id). A cached blob
+        // built before that change won't have the field, and we'd
+        // rather rebuild once than serve a partial catalog forever.
+        (c: any) => Array.isArray(c?.entries) && c.entries.every((e: any) => "legacyId" in e),
+      );
       if (result) return serveCached(res, result);
     }
 
@@ -277,6 +293,26 @@ export default async function handler(req: any, res: any) {
       const result = await buildSpellItemBundle(dbId, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(res, result);
       // Fall through to 404 if no spell row matched.
+    }
+
+    // Public tag catalog — live read-through, no R2 cache. URL:
+    //   /api/module/tags/catalog.json
+    // Mirrors `/sources/catalog.json` for the spell-classified tag
+    // taxonomy. The Foundry Prepare Spells manager fetches this on
+    // open so it can:
+    //   - Resolve `flags.dauligor-pairing.tagIds` on spell summaries
+    //     to readable names ("Fire", "Cleric Domain", ...).
+    //   - Render Tag-group filter sections matching the public
+    //     /compendium/spells filter UI.
+    // See `api/_lib/_tagCatalog.ts` for the schema (kind:
+    // "dauligor.tag-catalog.v1", `tagGroups[] + tags[]`).
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "tags"
+      && pathParts[1] === "catalog.json"
+    ) {
+      const result = await buildTagCatalog();
+      if (result) return serveLive(res, result);
     }
   } catch (error) {
     console.error("Dynamic Module API Error:", error);

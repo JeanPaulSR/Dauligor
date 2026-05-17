@@ -5469,12 +5469,36 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-spell-manager__detail-tags {
   margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .dauligor-spell-manager__detail-tags-empty {
   font-style: italic;
   font-size: 11px;
   color: var(--dauligor-text-muted);
+}
+
+/* Per-tag-group section inside the Show Tags disclosure. Matches the
+ * app's <SpellDetailPanel> visual: group name as an uppercase label,
+ * chip-row of tags below. Tags are also resolved per-group rather
+ * than flat-listed because the same chip name can mean different
+ * things across groups (e.g. "Other" in school vs in role tags).
+ */
+.dauligor-spell-manager__detail-tags-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-spell-manager__detail-tags-group-name {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dauligor-text-muted);
+  opacity: 0.85;
 }
 
 .dauligor-spell-manager__detail-tags-list {

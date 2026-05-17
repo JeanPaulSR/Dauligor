@@ -101,6 +101,13 @@ export async function buildTopLevelCatalog() {
       const slug = s.slug || s.id;
       return {
         sourceId: s.semanticId,
+        // Legacy D1 row id (originally a Firestore document id, now a
+        // stable internal PK). Exposed so consumers that joined against
+        // the old `spells.source_id` column (still populated with the
+        // legacy id for back-compat) can resolve a row back to its
+        // semantic id + abbreviation. The Foundry-side Prepare Spells
+        // manager uses this to label source-filter chips.
+        legacyId: String(s.id),
         slug,
         name: s.name,
         shortName: s.abbreviation || s.name,

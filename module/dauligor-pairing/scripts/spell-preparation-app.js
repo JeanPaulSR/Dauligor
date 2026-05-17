@@ -453,9 +453,29 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // Shape: Map<identifier, { status: "loading"|"ready"|"missing", spellcasting?: object }>
     this._classBundles = new Map();
 
-    // Foundation catalogs (lazy, loaded once).
-    this._sourcesById = null;       // Map<sourceId, { shortName, name }>
+    // Foundation catalogs (lazy, loaded once per manager open).
+    //
+    // Sources catalog — keyed by BOTH semantic id ("source-phb-2014")
+    // AND legacy id ("6lJGQvtAIbUSSJ1tG6cg"). The legacy id is what
+    // the spell summary's `spellSourceId` actually carries (the
+    // D1 `spells.source_id` column was not migrated to the slug
+    // format), so we need both keys to resolve a row from either
+    // direction. Added in commit (this one): the server now ships
+    // `legacyId` on every catalog entry — see api/_lib/module-export-pipeline.ts.
+    this._sourcesById = null;       // Map<id, { shortName, name }>  — both kinds of id
     this._sourcesInFlight = false;
+
+    // Tags catalog — mirrors what /compendium/spells loads via
+    // `fetchCollection('tags' / 'tagGroups')`. Filtered server-side
+    // to spell-classified tag groups. Used to:
+    //   - Resolve `tagIds` on spell summaries to readable names.
+    //   - Render a Tag-group filter section in the modal.
+    // Shape:
+    //   { tagsById: Map<id, { id, name, groupId, parentTagId }>,
+    //     tagGroups: [{ id, name, classifications }],
+    //     tagsByGroup: Map<groupId, tag[]> }
+    this._tagCatalog = null;
+    this._tagCatalogInFlight = false;
   }
 
   _configureRenderParts() {
@@ -508,9 +528,12 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this._footerRegion      = content.querySelector(`[data-region="footer"]`);
     this._filterModalRegion = content.querySelector(`[data-region="filter-modal"]`);
 
-    // Kick the sources catalog load if we haven't already — populates
-    // the per-row + detail source chip with PHB/XGE/… abbreviations.
+    // Kick the foundation catalog loads (idempotent — only fire once
+    // per manager session). Sources catalog feeds the source labels
+    // on chips + detail; tag catalog resolves tag ids to names + drives
+    // the Tag-group filter section.
     this._ensureSourcesCatalog();
+    this._ensureTagCatalog();
 
     await this._renderManager();
   }
@@ -529,11 +552,19 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         const payload = await response.json();
         const map = new Map();
         for (const entry of (payload?.entries ?? [])) {
-          if (!entry?.sourceId) continue;
-          map.set(String(entry.sourceId), {
+          const semanticId = String(entry?.sourceId ?? "");
+          const legacyId   = String(entry?.legacyId ?? "");
+          const value = {
             shortName: String(entry.shortName ?? entry.slug ?? entry.name ?? ""),
             name: String(entry.name ?? entry.shortName ?? "")
-          });
+          };
+          // Key the catalog on BOTH semantic + legacy ids so callers
+          // resolve regardless of which id the row carries. The spell
+          // summary endpoint currently ships the legacy id in
+          // `spellSourceId`; the class bundle's `source.id` typically
+          // ships the semantic id. Same map, two lookups.
+          if (semanticId) map.set(semanticId, value);
+          if (legacyId)   map.set(legacyId, value);
         }
         this._sourcesById = map;
         // Re-render so source chips pick up the new labels.
@@ -547,66 +578,68 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     })();
   }
 
-  _sourceShortName(sourceId) {
-    const sid = String(sourceId || "");
-    // Primary: D1 sources catalog (keyed by `source-phb-2014` style ids).
-    const entry = this._sourcesById?.get(sid);
-    if (entry) return entry.shortName || entry.name || "";
-    // Fallback: walk cached full-spell payloads for any spell whose
-    // `spellSourceId` flag matches AND that ships a `system.source.book`
-    // abbreviation. The spell summaries currently ship legacy
-    // Firestore-style ids in `spellSourceId` that don't join the
-    // catalog, but the per-spell endpoint's `system.source.book`
-    // does carry the human-readable shortName ("XGE", "PHB", …).
-    // As the user clicks around the pool, the full-spell cache fills
-    // and this fallback resolves more chips on each subsequent render.
-    if (!sid) return "";
-    for (const full of this._fullSpellCache?.values?.() ?? []) {
-      const fullSid = String(full?.flags?.["dauligor-pairing"]?.spellSourceId ?? "").trim();
-      if (fullSid !== sid) continue;
-      const book = String(full?.system?.source?.book ?? "").trim();
-      if (book) return book;
-    }
-    return "";
+  // -----------------------------------------------------------------------
+  // Foundation: tag catalog (spell-classified tags + tag groups)
+  // -----------------------------------------------------------------------
+
+  _ensureTagCatalog() {
+    if (this._tagCatalog || this._tagCatalogInFlight) return;
+    this._tagCatalogInFlight = true;
+    (async () => {
+      try {
+        const response = await fetch("https://www.dauligor.com/api/module/tags/catalog.json", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (payload?.kind !== "dauligor.tag-catalog.v1") {
+          throw new Error(`Unexpected tag-catalog kind: ${payload?.kind ?? "(missing)"}`);
+        }
+        const tagsById = new Map();
+        const tagsByGroup = new Map();
+        for (const tag of (payload.tags ?? [])) {
+          if (!tag?.id) continue;
+          tagsById.set(String(tag.id), {
+            id: String(tag.id),
+            name: String(tag.name ?? ""),
+            groupId: String(tag.groupId ?? ""),
+            parentTagId: tag.parentTagId ? String(tag.parentTagId) : null
+          });
+          const gid = String(tag.groupId ?? "");
+          if (!gid) continue;
+          if (!tagsByGroup.has(gid)) tagsByGroup.set(gid, []);
+          tagsByGroup.get(gid).push(tagsById.get(String(tag.id)));
+        }
+        const tagGroups = (payload.tagGroups ?? []).map((g) => ({
+          id: String(g.id),
+          name: String(g.name ?? ""),
+          classifications: Array.isArray(g.classifications) ? g.classifications.map(String) : []
+        }));
+        this._tagCatalog = { tagsById, tagGroups, tagsByGroup };
+        this._renderManager?.();
+      } catch (err) {
+        console.warn(`${MODULE_ID} | tag catalog fetch failed`, err);
+        this._tagCatalog = { tagsById: new Map(), tagGroups: [], tagsByGroup: new Map() };
+      } finally {
+        this._tagCatalogInFlight = false;
+      }
+    })();
+  }
+
+  /** Resolve a tag id to its human-readable name (empty string when not loaded). */
+  _tagName(tagId) {
+    return this._tagCatalog?.tagsById?.get(String(tagId ?? ""))?.name ?? "";
   }
 
   /**
-   * Pre-warm the full-spell cache for the first few unresolved
-   * sourceIds in the pool so the filter modal's Source chips can
-   * label themselves. One fetch per UNIQUE unresolved sourceId, not
-   * per spell — typically 1–8 total per class, cheap. Capped so a
-   * massive homebrew class doesn't fire off hundreds of fetches.
+   * Resolve a source id (semantic OR legacy) to its short
+   * abbreviation. The sources catalog is keyed on both kinds of id,
+   * so a single lookup handles both `source-phb-2014` and the legacy
+   * Firestore-style ids `6lJGQvtAIbUSSJ1tG6cg` that the spell summary
+   * currently ships.
    */
-  _warmSourceLabelsFromPool(items, classModel) {
-    if (!items || !classModel) return;
-    const sourcesById = this._sourcesById;
-    const seen = new Set();
-    const need = [];
-    const MAX_WARM = 12;
-    for (const item of items) {
-      const sid = poolSpellSourceId(item);
-      if (!sid || seen.has(sid)) continue;
-      seen.add(sid);
-      // Already resolvable via catalog? Skip.
-      if (sourcesById?.has(sid)) continue;
-      // Already cached via a full-spell pull? Skip (we'll walk the
-      // cache from _sourceShortName).
-      let alreadyKnown = false;
-      for (const full of this._fullSpellCache?.values?.() ?? []) {
-        const fullSid = String(full?.flags?.["dauligor-pairing"]?.spellSourceId ?? "").trim();
-        if (fullSid === sid) { alreadyKnown = true; break; }
-      }
-      if (alreadyKnown) continue;
-      // Pick the first pool spell with this source — that's what we'll fetch.
-      const dbId = poolDbId(item);
-      if (dbId) need.push({ sid, dbId });
-      if (need.length >= MAX_WARM) break;
-    }
-    if (need.length === 0) return;
-    // Fire-and-forget; each fetch populates `_fullSpellCache` and
-    // triggers a re-render via the existing pipeline in
-    // `_ensureFullSpell`.
-    for (const { dbId } of need) this._ensureFullSpell(dbId, classModel);
+  _sourceShortName(sourceId) {
+    const entry = this._sourcesById?.get(String(sourceId ?? ""));
+    if (!entry) return "";
+    return entry.shortName || entry.name || "";
   }
 
   // -----------------------------------------------------------------------
@@ -1171,6 +1204,57 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   /**
+   * Tag-group filter matching. Each tag group is its own filter axis
+   * with axis key `tag:<groupId>`. A spell matches when, for every
+   * group with at least one chip selected, ANY of the spell's tagIds
+   * (with ancestor-expansion via `parentTagId`, mirroring the app's
+   * `expandTagsWithAncestors`) is among the selected chips.
+   *
+   * Matches the public /compendium/spells include-OR semantics (the
+   * app's UI also supports AND / XOR per group via combineMode, but
+   * the manager keeps the simpler OR-within-axis model from the rest
+   * of its filters for consistency).
+   */
+  _matchesTagGroups(item, target) {
+    if (!this._tagCatalog) return true;
+    const state = this._filterStateFor(target);
+    const itemTagIds = Array.isArray(poolFlags(item).tagIds) ? poolFlags(item).tagIds : [];
+    if (itemTagIds.length === 0) {
+      // Spell has no tags — fails any group that has chips selected.
+      for (const group of this._tagCatalog.tagGroups) {
+        const axisKey = `tag:${group.id}`;
+        const axisState = state.axes?.[axisKey];
+        const selected = axisState?.states ?? {};
+        if (Object.keys(selected).some((k) => selected[k])) return false;
+      }
+      return true;
+    }
+
+    // Ancestor-expand the spell's tagIds so a parent-tag chip matches
+    // a spell carrying any subtag of it.
+    const expanded = new Set(itemTagIds.map(String));
+    const tagsById = this._tagCatalog.tagsById;
+    for (const id of itemTagIds) {
+      let cursor = tagsById.get(String(id));
+      while (cursor?.parentTagId) {
+        if (expanded.has(cursor.parentTagId)) break;
+        expanded.add(cursor.parentTagId);
+        cursor = tagsById.get(cursor.parentTagId);
+      }
+    }
+
+    for (const group of this._tagCatalog.tagGroups) {
+      const axisKey = `tag:${group.id}`;
+      const axisState = state.axes?.[axisKey];
+      const selected = axisState?.states ?? {};
+      const selectedKeys = Object.keys(selected).filter((k) => selected[k]);
+      if (selectedKeys.length === 0) continue;
+      if (!selectedKeys.some((tid) => expanded.has(String(tid)))) return false;
+    }
+    return true;
+  }
+
+  /**
    * Apply search + axis filters. Optionally narrow to an explicit set
    * of dbIds (used by the "On Sheet" toggle to restrict the pool to
    * spells already attributed to the active class).
@@ -1188,6 +1272,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       if (!this._matchesAxis(item, target, "duration",   poolDuration))         return false;
       if (!this._matchesAxis(item, target, "shape",      poolShape))            return false;
       if (!this._matchesProperties(item, target)) return false;
+      if (!this._matchesTagGroups(item, target)) return false;
       return true;
     });
   }
@@ -1907,16 +1992,34 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         })()
       : "Not on sheet";
 
-    // Tag rendering. The summary endpoint ships `tagIds` only (opaque
-    // D1 row ids) — there's no tag-catalog endpoint yet to resolve
-    // them to human-readable names like "Fire" / "Cleric Domain". So
-    // until that endpoint exists we hide the tag section entirely to
-    // avoid showing a wall of UUIDs. Tracked as a server-side polish
-    // item; the moment the summary ships `tagNames` (or we get a
-    // `/api/module/tags/catalog.json` endpoint), flip this back on
-    // and render the resolved names.
+    // Tag rendering. The tag catalog is fetched on manager open from
+    // `/api/module/tags/catalog.json` and resolves each id to its
+    // group + readable name. Tags grouped by their tag-group, in the
+    // same layout the app's <SpellDetailPanel> uses (group name as a
+    // section header, chip-row of tag names below).
+    //
+    // Only resolved tags are rendered — if the catalog hasn't loaded
+    // yet we keep the disclosure visible but show the count of raw
+    // ids so the toggle still works without lighting up a wall of
+    // UUIDs. After the catalog lands the next render swaps them for
+    // proper names.
     const tagIds = Array.isArray(flags.tagIds) ? flags.tagIds : [];
-    const hasResolvableTags = false; // intentionally false until tag-name resolution lands
+    const tagsByGroupForSpell = (() => {
+      if (!this._tagCatalog) return null;
+      const grouped = new Map();
+      for (const tagId of tagIds) {
+        const tag = this._tagCatalog.tagsById.get(String(tagId));
+        if (!tag) continue;
+        const gid = tag.groupId || "__other__";
+        if (!grouped.has(gid)) grouped.set(gid, []);
+        grouped.get(gid).push(tag);
+      }
+      return grouped;
+    })();
+    const resolvedTagCount = tagsByGroupForSpell
+      ? [...tagsByGroupForSpell.values()].reduce((sum, arr) => sum + arr.length, 0)
+      : 0;
+    const hasResolvableTags = resolvedTagCount > 0;
 
     // Suppress the source chip + Source line when we have no
     // resolvable book — better than showing a meaningless "—" beside
@@ -1972,8 +2075,33 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
             aria-expanded="${this._state.showTags ? "true" : "false"}"
           >
             ${this._state.showTags ? "Hide tags" : "Show tags"}
-            <span class="dauligor-spell-manager__detail-tags-count">(${tagIds.length})</span>
+            <span class="dauligor-spell-manager__detail-tags-count">(${resolvedTagCount})</span>
           </button>
+          ${this._state.showTags ? `
+          <div class="dauligor-spell-manager__detail-tags">
+            ${(() => {
+              // Render in the order the catalog ships tag groups (the
+              // server orders them alphabetically). Groups with no
+              // resolved tags for this spell are skipped. Tags inside a
+              // group are sorted by name for stability across renders.
+              const sections = [];
+              for (const group of (this._tagCatalog?.tagGroups ?? [])) {
+                const list = tagsByGroupForSpell?.get(group.id) ?? [];
+                if (list.length === 0) continue;
+                const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name));
+                sections.push(`
+                  <div class="dauligor-spell-manager__detail-tags-section">
+                    <div class="dauligor-spell-manager__detail-tags-group-name">${escapeHtml(group.name)}</div>
+                    <div class="dauligor-spell-manager__detail-tags-list">
+                      ${sorted.map((t) => `<span class="dauligor-spell-manager__detail-tag">${escapeHtml(t.name)}</span>`).join("")}
+                    </div>
+                  </div>
+                `);
+              }
+              return sections.join("") || `<div class="dauligor-spell-manager__detail-tags-empty">No tags resolved.</div>`;
+            })()}
+          </div>
+          ` : ""}
           ` : ""}
         </footer>
       </div>
@@ -2178,14 +2306,9 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const sourcesInPool = [...new Set(visibleItems.map(poolSpellSourceId).filter(Boolean))].sort();
     const schoolsInPool = [...new Set(visibleItems.map(poolSchool).filter(Boolean))].sort();
 
-    // Kick background fetches for any source whose label isn't
-    // resolvable yet. As each fetch lands, the cached full-spell's
-    // `system.source.book` becomes available to `_sourceShortName`
-    // (via the cache walk in that helper) and the next render swaps
-    // the short id placeholder for the real abbreviation. Scoped to
-    // the SELECTED class — favourites mode uses the same active class.
-    const selectedClass = classModels.find((m) => m.identifier === this._state.selectedClassIdentifier) ?? null;
-    if (selectedClass) this._warmSourceLabelsFromPool(visibleItems, selectedClass);
+    // (Source labels resolve directly via the catalog now that the
+    // server-side endpoint ships both semantic + legacy ids. No
+    // background pre-warm needed.)
 
     const ax = (axis) => this._filterStateFor(target).axes?.[axis]?.states ?? {};
     const chipsFor = (axis, options) => options.map((opt) => {
@@ -2227,16 +2350,43 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // sourceId, else a short fallback (first 5 chars of the id). The
     // chip is still filterable in all three cases — only the label
     // visibility changes.
-    //
-    // `_warmSourceLabelsFromPool` (called in `_renderFilterModal`)
-    // kicks background fetches for unresolved sourceIds so subsequent
-    // renders resolve more labels without the user having to click
-    // through every spell.
     const sourceOptions = sourcesInPool.map((sid) => {
       const resolved = this._sourceShortName(sid);
       const label = resolved || String(sid).slice(0, 5);
       return { v: sid, l: label };
     });
+
+    // Tag-group filter sections. Each spell-classified tag group
+    // becomes its own axis (`tag:<groupId>`) with chips for the tags
+    // actually present in the visible pool. Chips OUT of the visible
+    // pool are skipped so the modal doesn't list "Forbidden Tag" for
+    // a Wizard's pool that contains zero such spells. The Tag groups
+    // are only rendered once the tag catalog has loaded — until then
+    // the section is omitted (the catalog usually lands within a few
+    // hundred ms of manager open).
+    const tagGroupSections = (() => {
+      if (!this._tagCatalog || this._tagCatalog.tagGroups.length === 0) return "";
+      const usedTagIds = new Set();
+      for (const item of visibleItems) {
+        const ids = poolFlags(item).tagIds;
+        if (Array.isArray(ids)) for (const id of ids) usedTagIds.add(String(id));
+      }
+      const sections = [];
+      for (const group of this._tagCatalog.tagGroups) {
+        const tagsInGroup = (this._tagCatalog.tagsByGroup.get(group.id) ?? [])
+          .filter((t) => usedTagIds.has(t.id));
+        if (tagsInGroup.length === 0) continue;
+        // Roots first, then subtags sorted by their parent's name —
+        // mirrors the app's tagHierarchy ordering. Within each tier
+        // we sort by name for stability.
+        const roots = tagsInGroup.filter((t) => !t.parentTagId).sort((a, b) => a.name.localeCompare(b.name));
+        const subs = tagsInGroup.filter((t) => t.parentTagId).sort((a, b) => a.name.localeCompare(b.name));
+        const ordered = [...roots, ...subs];
+        const opts = ordered.map((t) => ({ v: t.id, l: t.parentTagId ? `↳ ${t.name}` : t.name }));
+        sections.push(section(group.name, `tag:${group.id}`, opts));
+      }
+      return sections.join("");
+    })();
 
     const title = target === "favorites" ? "Filter Favourites" : "Filter Spells";
 
@@ -2256,6 +2406,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
           ${section("Duration", "duration", durationOptions)}
           ${section("Shape", "shape", shapeOptions)}
           ${section("Properties", "property", propertyOptions)}
+          ${tagGroupSections}
         </div>
         <footer class="dauligor-spell-manager__modal-footer">
           <button type="button" class="dauligor-spell-manager__modal-button dauligor-spell-manager__modal-button--ghost" data-action="modal-reset">Reset</button>
@@ -2297,6 +2448,20 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
           if (axis === "shape")      return SHAPE_ORDER;
           if (axis === "property")   return PROPERTY_ORDER;
           if (axis === "source")     return sourcesInPool;
+          // Tag-group axis (`tag:<groupId>`): "All" selects every tag
+          // that's actually present in the visible pool for that
+          // group — same set the chip rendering used.
+          if (axis.startsWith("tag:")) {
+            const gid = axis.slice("tag:".length);
+            const usedTagIds = new Set();
+            for (const item of visibleItems) {
+              const ids = poolFlags(item).tagIds;
+              if (Array.isArray(ids)) for (const id of ids) usedTagIds.add(String(id));
+            }
+            return (this._tagCatalog?.tagsByGroup?.get(gid) ?? [])
+              .filter((t) => usedTagIds.has(t.id))
+              .map((t) => t.id);
+          }
           return [];
         })();
         for (const v of allValues) states[String(v)] = 1;
