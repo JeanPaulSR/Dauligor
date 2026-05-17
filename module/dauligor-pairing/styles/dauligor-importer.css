@@ -6223,6 +6223,46 @@ button.dauligor-option-picker__pill:hover {
   opacity: 0.95;
 }
 
+/* Rest options — three checkboxes that map 1:1 to dnd5e's native
+   long-rest dialog (newDay, recoverTemp, recoverTempMax). Inline
+   row layout so the rest card stays compact. */
+.dauligor-feature-manager__rest-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+
+.dauligor-feature-manager__rest-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82em;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.dauligor-feature-manager__rest-option:hover {
+  opacity: 1;
+}
+
+.dauligor-feature-manager__rest-option input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.dauligor-feature-manager__rest-option-label {
+  user-select: none;
+}
+
+/* "Replacing X with Y" swap-pair row — annotated with class name. */
+.dauligor-feature-manager__overview-row-class {
+  margin-left: 6px;
+  font-size: 0.85em;
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .dauligor-feature-manager__overview {
   display: flex;
   flex-direction: column;

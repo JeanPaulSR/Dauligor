@@ -117,59 +117,58 @@ function patchDnd5eRemoteItemImages() {
 }
 
 /**
- * Intercept dnd5e's `Actor5e.prototype.longRest` so the player goes
- * through the Dauligor Feature Manager Overview tab instead of
- * dnd5e's built-in HD-spending dialog. The FM Overview shows queued
- * advancements + a "Take Long Rest" button that re-enters longRest
- * with `dialog: false` (skipping our intercept and executing the
- * rest mechanics directly).
+ * Intercept dnd5e's long-rest flow so the player goes through the
+ * Dauligor Feature Manager Overview tab instead of dnd5e's built-in
+ * LongRestDialog. The FM Overview shows queued advancements + a
+ * "Take Long Rest" button that bypasses this intercept by passing
+ * `dialog: false`.
+ *
+ * Why `dnd5e.preLongRest` and not libWrapper:
+ *   The sheet's Long Rest button calls
+ *   `actor.initiateRest({ type: "long" })`, NOT `actor.longRest()`.
+ *   `longRest` is a thin wrapper around `initiateRest` for
+ *   programmatic callers — wrapping it never sees the button click.
+ *   `dnd5e.preLongRest` fires from inside `initiateRest` and
+ *   returning `false` cancels the entire rest (including the
+ *   native dialog), giving us a clean intercept point that catches
+ *   both the button AND any programmatic `actor.longRest()` call.
  *
  * Routing:
- *   - `dialog === false`             → pass through to the wrapped
- *                                       method (our FM button + any
- *                                       other "no-dialog" caller).
- *   - non-character actors           → pass through (the intercept
- *                                       only makes sense for PCs).
- *   - otherwise (default — dnd5e's   → open FM at Overview tab and
- *     button calls dialog:true)        skip the wrapped call; the
- *                                       user clicks Take Long Rest
- *                                       in our UI to fire the rest.
+ *   - `config.dialog === false`        → pass through (our FM button
+ *                                          fires the rest with this).
+ *   - non-character actors             → pass through (NPCs keep
+ *                                          dnd5e's default flow).
+ *   - default (button / macro path)    → open FM at Overview tab,
+ *                                          return false to cancel
+ *                                          dnd5e's flow. User clicks
+ *                                          Take Long Rest in our UI
+ *                                          to actually rest.
  *
- * Phase 1 caveat: HD spending isn't surfaced in our Overview. The
- * native dnd5e dialog would normally let the player allocate hit
- * dice. v1 trades that for the queue-aware flow; Phase 2 can layer
- * an HD-spend control onto the Overview rest card.
+ * Source ref: dnd5e v5.3.x `module/documents/actor/actor.mjs:2185`
+ * fires `Hooks.call("dnd5e.preLongRest", actor, config)`.
  */
 function registerLongRestIntercept() {
-  if (typeof libWrapper === "undefined") {
-    notifyWarn("libWrapper is not available; long-rest intercept disabled.");
-    return;
-  }
-  const target = "dnd5e.documents.Actor5e.prototype.longRest";
-  try {
-    libWrapper.register(MODULE_ID, target, async function (wrapped, config = {}, ...args) {
-      // Pass-through: explicit `dialog: false` calls (our FM Overview
-      // Take Long Rest button uses this) skip the intercept.
-      if (config?.dialog === false) return wrapped(config, ...args);
-      // Non-character actors keep dnd5e's default flow.
-      if (this?.type !== "character") return wrapped(config, ...args);
-      // Otherwise: divert to the Feature Manager Overview tab. The
-      // wrapped method is NOT called — the user must click Take
-      // Long Rest in our UI to actually rest.
-      try {
-        await openFeatureManager(this, { tab: "overview" });
-      } catch (err) {
-        console.warn(`${MODULE_ID} | long-rest intercept open-FM failed`, err);
-        // If the FM can't open (e.g. mid-init), fall back to the
-        // native dialog so the user can still rest.
-        return wrapped(config, ...args);
-      }
-      return null; // intercepted; rest happens later via our button
-    }, "MIXED");
-    log("Registered libWrapper for long-rest intercept.");
-  } catch (error) {
-    console.error(`[${MODULE_ID}] libWrapper registration failed for ${target}:`, error);
-  }
+  Hooks.on("dnd5e.preLongRest", (actor, config) => {
+    // Pass-through: our Take Long Rest button uses dialog:false,
+    // so this branch lets that flow proceed through dnd5e's normal
+    // rest mechanics (HP recovery, slots, etc.).
+    if (config?.dialog === false) return; // undefined → don't cancel
+    // Non-character actors (NPCs) keep dnd5e's default flow.
+    if (actor?.type !== "character") return;
+    // Divert to FM Overview. Returning false cancels the rest
+    // (including dnd5e's LongRestDialog). The user clicks Take
+    // Long Rest in our UI to re-enter with dialog:false.
+    try {
+      openFeatureManager(actor, { tab: "overview" });
+    } catch (err) {
+      console.warn(`${MODULE_ID} | preLongRest intercept open-FM failed`, err);
+      // If the FM can't open (mid-init?), fall through to dnd5e's
+      // default flow so the user can still rest.
+      return;
+    }
+    return false; // cancel
+  });
+  log("Registered dnd5e.preLongRest intercept.");
 }
 
 function registerCustomFeatureTypeLabels() {

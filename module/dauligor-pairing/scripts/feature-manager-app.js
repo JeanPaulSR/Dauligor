@@ -640,10 +640,30 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     const levelUpEntries = queue.levelUp.entries;
     const total = longRestEntries.length + levelUpEntries.length;
 
-    // Long-rest action card — always rendered. The button is the
-    // entry point for committing queued changes AND for triggering
-    // dnd5e's rest mechanics (HP recovery, spell slots, etc.). After
-    // the rest completes our `restCompleted` hook applies the queue.
+    // Rest config — read the actor's sticky preference flag, with
+    // defaults pulled from dnd5e's CONFIG.DND5E.restTypes.long (all
+    // three checkboxes default on, matching the native dialog).
+    const restConfig = this._readRestConfigFlag();
+
+    // Long-rest action card — always rendered. The button applies
+    // queued changes + calls `actor.longRest({ dialog: false, ...cfg })`
+    // with the cfg pulled from these checkboxes. The three options
+    // mirror dnd5e's native LongRestDialog 1-for-1:
+    //   - newDay        ("New Day")
+    //   - recoverTemp   ("Remove Temp HP" in dnd5e's dialog label)
+    //   - recoverTempMax ("Recover Max HP")
+    //
+    // dnd5e source ref: module/applications/actor/rest/base-rest-dialog.mjs
+    // for the dialog wiring; CONFIG.DND5E.restTypes.long for defaults.
+    const checkbox = (key, label, hint, checked) => `
+      <label class="dauligor-feature-manager__rest-option" title="${escapeHtml(hint)}">
+        <input type="checkbox"
+               data-action="rest-config"
+               data-config-key="${escapeHtml(key)}"
+               ${checked ? "checked" : ""}>
+        <span class="dauligor-feature-manager__rest-option-label">${escapeHtml(label)}</span>
+      </label>
+    `;
     const restCardHtml = `
       <section class="dauligor-feature-manager__rest-card">
         <div class="dauligor-feature-manager__rest-card-body">
@@ -653,12 +673,23 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
             <p>${total > 0
               ? `Apply your ${total} queued change${total === 1 ? "" : "s"} and complete a long rest. HP, spell slots, and rest features recover.`
               : "Complete a long rest. HP, spell slots, and rest features recover."}</p>
+            <div class="dauligor-feature-manager__rest-options">
+              ${checkbox("newDay", "New Day",
+                "Recover limited-use abilities that recharge at dawn or on a new day.",
+                restConfig.newDay)}
+              ${checkbox("recoverTemp", "Remove Temp HP",
+                "Clear any temporary HP at the start of the rest.",
+                restConfig.recoverTemp)}
+              ${checkbox("recoverTempMax", "Recover Max HP",
+                "Remove any adjustments to your maximum HP (e.g. from drain effects).",
+                restConfig.recoverTempMax)}
+            </div>
           </div>
         </div>
         <button type="button"
                 class="dauligor-feature-manager__rest-card-button"
                 data-action="take-long-rest"
-                title="Run the dnd5e long rest workflow + apply any queued changes.">
+                title="Apply queued changes + run the dnd5e long rest workflow with the options selected.">
           Take Long Rest
         </button>
       </section>
@@ -677,50 +708,112 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       return;
     }
 
-    const renderEntry = (entry) => {
-      // Spell entries (legacy — pre-May-2026 queue logging) get
-      // verb-aware descriptions; option-item entries get a from/to
-      // arrow; everything else falls back to a generic kind label.
-      // Spell entries should be empty going forward but the renderer
-      // still handles them so old actor flags from before the
-      // revision degrade gracefully.
-      let descHtml = "";
-      if (entry.kind === "spellChange") {
-        const verbs = {
-          "added-to-sheet":         "Added to sheet:",
-          "removed-from-sheet":     "Removed from sheet:",
-          "added-to-spellbook":     "Added to spellbook:",
-          "removed-from-spellbook": "Removed from spellbook:",
-          "prepared":               "Prepared:",
-          "unprepared":             "Unprepared:",
-          "added-as-known":         "Added as Known:",
-          "removed-as-known":       "Removed as Known:",
-        };
-        const verb = verbs[entry.transition] ?? "Changed:";
-        descHtml = `<strong>${escapeHtml(verb)}</strong> ${escapeHtml(entry.spellName ?? "")}`;
-      } else if (entry.kind === "optionItem") {
-        descHtml = `<strong>${escapeHtml(entry.groupLabel ?? "Class Option")}:</strong> ${escapeHtml(entry.fromName ?? "?")} <i class="fas fa-arrow-right"></i> ${escapeHtml(entry.toName ?? "(picker TBD)")}`;
-      } else {
-        descHtml = `<strong>${escapeHtml(entry.kind ?? "Queued change")}</strong>`;
-      }
+    // Build the preview rows. Spell-change entries get smart
+    // grouping: for known casters, paired Remove + Add entries on
+    // the same class render as a single "Replacing X with Y" row.
+    // Everything else renders as "Preparing X" / "Unpreparing X" /
+    // generic "Changed X".
+    const renderRow = (rowHtml, entryIds, scope = SCOPE_LONG_REST) => `
+      <li class="dauligor-feature-manager__overview-row">
+        <div class="dauligor-feature-manager__overview-row-body">${rowHtml}</div>
+        <button type="button"
+                class="dauligor-feature-manager__queued-remove"
+                data-action="remove-overview-entry-bundle"
+                data-entry-ids="${escapeHtml(entryIds.join(","))}"
+                data-entry-scope="${escapeHtml(scope)}"
+                title="${entryIds.length > 1 ? "Remove this swap pair" : "Remove this queued change"}">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </li>
+    `;
 
-      return `
-        <li class="dauligor-feature-manager__overview-row">
-          <div class="dauligor-feature-manager__overview-row-body">${descHtml}</div>
-          <button type="button"
-                  class="dauligor-feature-manager__queued-remove"
-                  data-action="remove-overview-entry"
-                  data-entry-id="${escapeHtml(entry.id)}"
-                  data-entry-scope="${escapeHtml(entry.scope ?? SCOPE_LONG_REST)}"
-                  title="Remove this queued change">
-            <i class="fas fa-xmark"></i>
-          </button>
-        </li>
-      `;
+    /** "Preparing X" / "Unpreparing X" / "Added to Spellbook X" / "Removed: X" — verb-aware. */
+    const describeSpellEntry = (entry) => {
+      const before = entry.before;
+      const after = entry.after;
+      const SPELL_PREPARED = "prepared";
+      const SPELL_SPELLBOOK = "spellbook";
+      // Promote to prepared (or add as known — same after-mode).
+      if (after === SPELL_PREPARED) {
+        if (before === null) return `<strong>Adding:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+        if (before === SPELL_PREPARED) return `<strong>Re-prepared:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+        return `<strong>Preparing:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+      }
+      // Demote from prepared
+      if (before === SPELL_PREPARED) {
+        if (after === null) return `<strong>Removing:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+        if (after === SPELL_SPELLBOOK) return `<strong>Unpreparing:</strong> ${escapeHtml(entry.spellName ?? "")} <em>(stays in spellbook)</em>`;
+        return `<strong>Unpreparing:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+      }
+      // Spellbook moves
+      if (after === SPELL_SPELLBOOK) return `<strong>To spellbook:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+      if (before === SPELL_SPELLBOOK) return `<strong>From spellbook:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+      // Plain add / remove (free mode)
+      if (before === null) return `<strong>Adding to sheet:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+      if (after === null) return `<strong>Removing from sheet:</strong> ${escapeHtml(entry.spellName ?? "")}`;
+      return `<strong>Changed:</strong> ${escapeHtml(entry.spellName ?? "")}`;
     };
 
+    /**
+     * For known casters, detect Remove + Add pairs on the same
+     * class and render them as "Replacing X with Y". Non-known
+     * casters fall through to per-entry rendering.
+     */
+    const buildPreviewRowsFromEntries = (entries) => {
+      const rows = [];
+      const consumed = new Set();
+      // Group spell-change entries by class for pairing.
+      const byClass = new Map(); // classIdentifier → { adds: [], removes: [] }
+      for (const e of entries) {
+        if (e?.kind !== "spellChange") continue;
+        const cls = e.classIdentifier ?? "__none__";
+        if (!byClass.has(cls)) byClass.set(cls, { adds: [], removes: [] });
+        const isAdd = e.before !== "prepared" && e.after === "prepared";
+        const isRemove = e.before === "prepared" && e.after !== "prepared";
+        if (isAdd) byClass.get(cls).adds.push(e);
+        else if (isRemove) byClass.get(cls).removes.push(e);
+      }
+      // Per class: only pair if known caster. Otherwise leave
+      // entries un-paired so they render individually.
+      for (const [cls, bucket] of byClass.entries()) {
+        if (cls === "__none__") continue;
+        const classItem = this._actor.classes?.[cls];
+        const prepType = classItem?.getFlag?.(MODULE_ID, "spellcasting")?.type
+          ?? classItem?.flags?.[MODULE_ID]?.spellcasting?.type
+          ?? null;
+        if (prepType !== "known") continue;
+        // Pair removes ↔ adds.
+        while (bucket.removes.length && bucket.adds.length) {
+          const rem = bucket.removes.shift();
+          const add = bucket.adds.shift();
+          consumed.add(rem.id);
+          consumed.add(add.id);
+          const className = classItem?.name ?? cls;
+          const html = `<strong>Replacing</strong> <em>${escapeHtml(rem.spellName ?? "")}</em> <strong>with</strong> <em>${escapeHtml(add.spellName ?? "")}</em> <span class="dauligor-feature-manager__overview-row-class">(${escapeHtml(className)} known swap)</span>`;
+          rows.push({ html, ids: [rem.id, add.id], scope: SCOPE_LONG_REST });
+        }
+      }
+      // Render remaining (unconsumed) entries individually.
+      for (const e of entries) {
+        if (consumed.has(e.id)) continue;
+        let descHtml = "";
+        if (e.kind === "spellChange") {
+          descHtml = describeSpellEntry(e);
+        } else if (e.kind === "optionItem") {
+          descHtml = `<strong>${escapeHtml(e.groupLabel ?? "Class Option")}:</strong> ${escapeHtml(e.fromName ?? "?")} <i class="fas fa-arrow-right"></i> ${escapeHtml(e.toName ?? "(picker TBD)")}`;
+        } else {
+          descHtml = `<strong>${escapeHtml(e.kind ?? "Queued change")}</strong>`;
+        }
+        rows.push({ html: descHtml, ids: [e.id], scope: e.scope ?? SCOPE_LONG_REST });
+      }
+      return rows;
+    };
+
+    const longRestRows = buildPreviewRowsFromEntries(longRestEntries);
+    const levelUpRows = buildPreviewRowsFromEntries(levelUpEntries);
+
     const sections = [];
-    if (longRestEntries.length) {
+    if (longRestRows.length) {
       sections.push(`
         <section class="dauligor-feature-manager__overview-section">
           <h3 class="dauligor-feature-manager__overview-section-title">
@@ -729,12 +822,12 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
             <span class="dauligor-feature-manager__overview-section-count">${longRestEntries.length}</span>
           </h3>
           <ul class="dauligor-feature-manager__overview-list">
-            ${longRestEntries.map(renderEntry).join("")}
+            ${longRestRows.map((r) => renderRow(r.html, r.ids, r.scope)).join("")}
           </ul>
         </section>
       `);
     }
-    if (levelUpEntries.length) {
+    if (levelUpRows.length) {
       sections.push(`
         <section class="dauligor-feature-manager__overview-section">
           <h3 class="dauligor-feature-manager__overview-section-title">
@@ -743,7 +836,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
             <span class="dauligor-feature-manager__overview-section-count">${levelUpEntries.length}</span>
           </h3>
           <ul class="dauligor-feature-manager__overview-list">
-            ${levelUpEntries.map(renderEntry).join("")}
+            ${levelUpRows.map((r) => renderRow(r.html, r.ids, SCOPE_LEVEL_UP)).join("")}
           </ul>
         </section>
       `);
@@ -756,15 +849,20 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       </div>
     `;
 
-    // Wire per-row Remove buttons. Routes through the scoped queue
-    // helpers so the right bucket is mutated.
-    for (const button of this._bodyRegion.querySelectorAll(`[data-action="remove-overview-entry"]`)) {
+    // Wire per-row Remove buttons. Each bundle (single entry OR a
+    // paired Replacing-X-with-Y swap) carries comma-separated ids;
+    // we walk them and remove each from the appropriate scope. The
+    // bundle scope is the SAME for all ids in the bundle (swap
+    // pairs only happen within the long-rest scope).
+    for (const button of this._bodyRegion.querySelectorAll(`[data-action="remove-overview-entry-bundle"]`)) {
       button.addEventListener("click", async (event) => {
         event.preventDefault();
-        const entryId = event.currentTarget?.dataset?.entryId;
+        const idsRaw = event.currentTarget?.dataset?.entryIds ?? "";
         const scope = event.currentTarget?.dataset?.entryScope ?? SCOPE_LONG_REST;
-        if (!entryId) return;
-        await removeQueueEntry(this._actor, scope, entryId);
+        const ids = idsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+        for (const id of ids) {
+          await removeQueueEntry(this._actor, scope, id);
+        }
         this.render({ force: false });
       });
     }
@@ -785,7 +883,41 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
    * so the player sees the queued changes before hitting "Take
    * Long Rest" anyway.
    */
+  /**
+   * Read the actor's sticky rest-config flag. Falls back to dnd5e's
+   * `CONFIG.DND5E.restTypes.long` defaults when the flag isn't set,
+   * which match what the user sees as the default-checked options
+   * in dnd5e's native LongRestDialog.
+   */
+  _readRestConfigFlag() {
+    const raw = this._actor?.getFlag?.(MODULE_ID, "longRestConfig") ?? null;
+    const defaults = CONFIG?.DND5E?.restTypes?.long ?? {};
+    return {
+      newDay: typeof raw?.newDay === "boolean" ? raw.newDay : (defaults.newDay ?? true),
+      recoverTemp: typeof raw?.recoverTemp === "boolean" ? raw.recoverTemp : (defaults.recoverTemp ?? true),
+      recoverTempMax: typeof raw?.recoverTempMax === "boolean" ? raw.recoverTempMax : (defaults.recoverTempMax ?? true)
+    };
+  }
+
+  async _writeRestConfigFlag(partial) {
+    if (!this._actor?.setFlag) return;
+    const current = this._readRestConfigFlag();
+    await this._actor.setFlag(MODULE_ID, "longRestConfig", { ...current, ...partial });
+  }
+
   _bindRestCardButton() {
+    // Checkbox change handlers — persist each toggle to the actor's
+    // sticky preference flag. The hook doesn't re-render (avoids a
+    // visual flicker mid-click); the Take Long Rest button reads
+    // the live flag at click time.
+    for (const cb of this._bodyRegion?.querySelectorAll(`[data-action="rest-config"]`) ?? []) {
+      cb.addEventListener("change", async (event) => {
+        const key = event.currentTarget?.dataset?.configKey;
+        if (!key) return;
+        await this._writeRestConfigFlag({ [key]: !!event.currentTarget.checked });
+      });
+    }
+
     const btn = this._bodyRegion?.querySelector(`[data-action="take-long-rest"]`);
     if (!btn) return;
     btn.addEventListener("click", async (event) => {
@@ -805,12 +937,19 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         if (applied > 0) {
           notifyInfo(`Applied ${applied} queued change${applied === 1 ? "" : "s"}.`);
         }
-        // 2. Trigger the actual rest. `dialog: false` skips dnd5e's
-        //    built-in dialog so the rest applies straight through
-        //    (HP recovery, spell slot reset, rest features). dnd5e
-        //    fires `restCompleted` after — our hook in main.js
-        //    treats an empty queue as a no-op and returns silently.
-        await this._actor.longRest({ dialog: false, advanceTime: true });
+        // 2. Trigger the actual rest with the sticky checkbox
+        //    options. `dialog: false` skips dnd5e's native dialog
+        //    (and bypasses our `preLongRest` intercept). dnd5e then
+        //    runs the standard rest mechanics: HP recovery, spell
+        //    slot reset, rest features.
+        const restConfig = this._readRestConfigFlag();
+        await this._actor.longRest({
+          dialog: false,
+          advanceTime: true,
+          newDay: restConfig.newDay,
+          recoverTemp: restConfig.recoverTemp,
+          recoverTempMax: restConfig.recoverTempMax
+        });
         // 3. Re-render the Overview so the (now-empty) queue
         //    summary + rest-card subtitle refresh. The actor flag
         //    write triggers our updateActor hook too — this is a
@@ -1062,24 +1201,28 @@ async function applyLongRestQueue(actor) {
 
 /**
  * Format the queued long-rest entries as a short HTML list for the
- * confirm dialog content. Spell entries get verb-aware descriptions;
- * other entry kinds fall through to a generic "X queued change".
+ * (legacy) commit dialog content. The dialog is a fallback path —
+ * the Overview tab's preview (built inline in `_renderOverviewTab`)
+ * uses richer swap-pair detection. This function stays simple +
+ * per-entry for fallback usage.
  */
 function formatQueueEntryDescriptionHtml(entry) {
   const escape = (v) => escapeHtml(String(v ?? ""));
   if (entry.kind === "spellChange") {
-    const verbs = {
-      "added-to-sheet":       "Added to sheet:",
-      "removed-from-sheet":   "Removed from sheet:",
-      "added-to-spellbook":   "Added to spellbook:",
-      "removed-from-spellbook": "Removed from spellbook:",
-      "prepared":             "Prepared:",
-      "unprepared":           "Unprepared:",
-      "added-as-known":       "Added as Known:",
-      "removed-as-known":     "Removed as Known:",
-    };
-    const verb = verbs[entry.transition] ?? "Changed:";
-    return `<li><strong>${verb}</strong> ${escape(entry.spellName)}</li>`;
+    const before = entry.before;
+    const after = entry.after;
+    const name = escape(entry.spellName);
+    if (after === "prepared") {
+      if (before === null) return `<li><strong>Adding:</strong> ${name}</li>`;
+      return `<li><strong>Preparing:</strong> ${name}</li>`;
+    }
+    if (before === "prepared") {
+      if (after === null) return `<li><strong>Removing:</strong> ${name}</li>`;
+      return `<li><strong>Unpreparing:</strong> ${name}</li>`;
+    }
+    if (after === null) return `<li><strong>Removing from sheet:</strong> ${name}</li>`;
+    if (before === null) return `<li><strong>Adding to sheet:</strong> ${name}</li>`;
+    return `<li><strong>Changed:</strong> ${name}</li>`;
   }
   if (entry.kind === "optionItem") {
     return `<li><strong>${escape(entry.groupLabel)}:</strong> ${escape(entry.fromName ?? "?")} → ${escape(entry.toName ?? "(picker TBD)")}</li>`;
