@@ -548,9 +548,65 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   _sourceShortName(sourceId) {
-    const entry = this._sourcesById?.get(String(sourceId || ""));
-    if (!entry) return "";
-    return entry.shortName || entry.name || "";
+    const sid = String(sourceId || "");
+    // Primary: D1 sources catalog (keyed by `source-phb-2014` style ids).
+    const entry = this._sourcesById?.get(sid);
+    if (entry) return entry.shortName || entry.name || "";
+    // Fallback: walk cached full-spell payloads for any spell whose
+    // `spellSourceId` flag matches AND that ships a `system.source.book`
+    // abbreviation. The spell summaries currently ship legacy
+    // Firestore-style ids in `spellSourceId` that don't join the
+    // catalog, but the per-spell endpoint's `system.source.book`
+    // does carry the human-readable shortName ("XGE", "PHB", …).
+    // As the user clicks around the pool, the full-spell cache fills
+    // and this fallback resolves more chips on each subsequent render.
+    if (!sid) return "";
+    for (const full of this._fullSpellCache?.values?.() ?? []) {
+      const fullSid = String(full?.flags?.["dauligor-pairing"]?.spellSourceId ?? "").trim();
+      if (fullSid !== sid) continue;
+      const book = String(full?.system?.source?.book ?? "").trim();
+      if (book) return book;
+    }
+    return "";
+  }
+
+  /**
+   * Pre-warm the full-spell cache for the first few unresolved
+   * sourceIds in the pool so the filter modal's Source chips can
+   * label themselves. One fetch per UNIQUE unresolved sourceId, not
+   * per spell — typically 1–8 total per class, cheap. Capped so a
+   * massive homebrew class doesn't fire off hundreds of fetches.
+   */
+  _warmSourceLabelsFromPool(items, classModel) {
+    if (!items || !classModel) return;
+    const sourcesById = this._sourcesById;
+    const seen = new Set();
+    const need = [];
+    const MAX_WARM = 12;
+    for (const item of items) {
+      const sid = poolSpellSourceId(item);
+      if (!sid || seen.has(sid)) continue;
+      seen.add(sid);
+      // Already resolvable via catalog? Skip.
+      if (sourcesById?.has(sid)) continue;
+      // Already cached via a full-spell pull? Skip (we'll walk the
+      // cache from _sourceShortName).
+      let alreadyKnown = false;
+      for (const full of this._fullSpellCache?.values?.() ?? []) {
+        const fullSid = String(full?.flags?.["dauligor-pairing"]?.spellSourceId ?? "").trim();
+        if (fullSid === sid) { alreadyKnown = true; break; }
+      }
+      if (alreadyKnown) continue;
+      // Pick the first pool spell with this source — that's what we'll fetch.
+      const dbId = poolDbId(item);
+      if (dbId) need.push({ sid, dbId });
+      if (need.length >= MAX_WARM) break;
+    }
+    if (need.length === 0) return;
+    // Fire-and-forget; each fetch populates `_fullSpellCache` and
+    // triggers a re-render via the existing pipeline in
+    // `_ensureFullSpell`.
+    for (const { dbId } of need) this._ensureFullSpell(dbId, classModel);
   }
 
   // -----------------------------------------------------------------------
@@ -2122,6 +2178,15 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const sourcesInPool = [...new Set(visibleItems.map(poolSpellSourceId).filter(Boolean))].sort();
     const schoolsInPool = [...new Set(visibleItems.map(poolSchool).filter(Boolean))].sort();
 
+    // Kick background fetches for any source whose label isn't
+    // resolvable yet. As each fetch lands, the cached full-spell's
+    // `system.source.book` becomes available to `_sourceShortName`
+    // (via the cache walk in that helper) and the next render swaps
+    // the short id placeholder for the real abbreviation. Scoped to
+    // the SELECTED class — favourites mode uses the same active class.
+    const selectedClass = classModels.find((m) => m.identifier === this._state.selectedClassIdentifier) ?? null;
+    if (selectedClass) this._warmSourceLabelsFromPool(visibleItems, selectedClass);
+
     const ax = (axis) => this._filterStateFor(target).axes?.[axis]?.states ?? {};
     const chipsFor = (axis, options) => options.map((opt) => {
       const sel = !!ax(axis)[String(opt.v)];
@@ -2156,19 +2221,22 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const shapeOptions      = SHAPE_ORDER.map((b) => ({ v: b, l: SHAPE_LABELS[b] }));
     const propertyOptions   = PROPERTY_ORDER.map((b) => ({ v: b, l: PROPERTY_LABELS[b] }));
 
-    // Source chips: only include sources we can actually name. The
-    // spell summary's `spellSourceId` column hasn't been migrated to
-    // the new slugged source ids in all rows, so a chunk of spells
-    // carry legacy Firestore-style ids that aren't in the catalog.
-    // Until that data is reconciled server-side, suppress unresolvable
-    // chips entirely — better than showing "6lJGQvtAIbUSSJ1tG6cg" as
-    // a filter option the user can't usefully interact with.
-    const sourceOptions = sourcesInPool
-      .map((sid) => {
-        const label = this._sourceShortName(sid);
-        return label ? { v: sid, l: label } : null;
-      })
-      .filter(Boolean);
+    // Source chips: render one per distinct sourceId in the pool.
+    // Label = catalog shortName when available, else the spell-book
+    // abbreviation from any cached full-spell payload that shares the
+    // sourceId, else a short fallback (first 5 chars of the id). The
+    // chip is still filterable in all three cases — only the label
+    // visibility changes.
+    //
+    // `_warmSourceLabelsFromPool` (called in `_renderFilterModal`)
+    // kicks background fetches for unresolved sourceIds so subsequent
+    // renders resolve more labels without the user having to click
+    // through every spell.
+    const sourceOptions = sourcesInPool.map((sid) => {
+      const resolved = this._sourceShortName(sid);
+      const label = resolved || String(sid).slice(0, 5);
+      return { v: sid, l: label };
+    });
 
     const title = target === "favorites" ? "Filter Favourites" : "Filter Spells";
 
