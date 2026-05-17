@@ -262,19 +262,37 @@ function describeAbilityAbbr(ability) {
 }
 
 /**
- * Best-effort classification of a class's preparation type. The
- * module's importer should stamp `flags.dauligor-pairing.spellcasting.type`
- * but older imports don't carry it — heuristics below close the gap.
+ * Resolve a class's preparation type ("prepared" / "known" / "spellbook").
+ *
+ * Priority order:
+ *   1. Live class bundle cache (`_classBundleCache`) — fetched on
+ *      manager open from `/api/module/<source>/classes/<class>.json`.
+ *      The bundle ships `class.spellcasting.type` directly (the
+ *      authoritative D1 value, see `docs/spell-picker-by-type.md`).
+ *   2. Module flag stamped at import time
+ *      (`flags.dauligor-pairing.spellcasting.type`) — present on
+ *      imports done after May 2026.
+ *   3. Heuristic fallback used only when neither is available.
+ *
+ * Pure module-level helper kept for callers that just need a quick
+ * read off the class item itself (no async). The Application's
+ * `_classifyPrepType` method is the bundle-aware version that walks
+ * `_classBundleCache` first.
  */
-function classifyPrepType(classModel) {
+function classifyPrepTypeFromFlag(classModel) {
   const item = classModel?.item;
   if (!item) return "prepared";
   const flag = item.getFlag?.(MODULE_ID, "spellcasting") ?? {};
   const explicit = String(flag.type ?? "").toLowerCase();
   if (explicit === "spellbook" || explicit === "known" || explicit === "prepared") return explicit;
-  if (flag.spellsKnownSourceId) return "known";
   const id = String(classModel.identifier ?? "").toLowerCase();
   if (id === "wizard" || id === "artificer") return "spellbook";
+  // dnd5e's preparation.mode is "always" for known casters (set by
+  // normalizeSpellPreparationMode at import time) and "prepared" for
+  // both prepared and spellbook types. So mode === "always" is a
+  // reliable "known" tell; anything else falls through to prepared.
+  const mode = String(item?.system?.spellcasting?.preparation?.mode ?? "").toLowerCase();
+  if (mode === "always") return "known";
   return "prepared";
 }
 
@@ -415,6 +433,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this._fullSpellInFlight = new Set();
     this._enrichedDescriptionCache = new Map();
 
+    // Per-class bundle cache. Keyed by class identifier. The bundle
+    // ships `class.spellcasting.type` (the authoritative D1 type:
+    // "prepared" / "known" / "spellbook") plus the formula + cantrip
+    // scaling refs the manager uses for counter accounting. We hit
+    // this endpoint at manager-open time so the meta strip can pick
+    // the right counter set (prepared vs known vs spellbook) even
+    // for classes imported before our module flag was added.
+    // Shape: Map<identifier, { status: "loading"|"ready"|"missing", spellcasting?: object }>
+    this._classBundles = new Map();
+
     // Foundation catalogs (lazy, loaded once).
     this._sourcesById = null;       // Map<sourceId, { shortName, name }>
     this._sourcesInFlight = false;
@@ -435,6 +463,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this.options.window.title = this._actor ? `Prepare Spells: ${this._actor.name}` : "Prepare Spells";
     if (changedActor) {
       this._classPools.clear();
+      this._classBundles.clear();
       this._fullSpellCache.clear();
       this._fullSpellInFlight.clear();
       this._enrichedDescriptionCache.clear();
@@ -515,6 +544,96 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   // -----------------------------------------------------------------------
+  // Class bundle fetch — authoritative source for `class.spellcasting.type`
+  // -----------------------------------------------------------------------
+
+  /**
+   * Derive the class bundle URL from a class item's `spellListUrl`
+   * flag. The decoupling refactor split the bundle into two endpoints
+   * (`<class>.json` for the bundle, `<class>/spells.json` for the
+   * live list) — so the bundle URL is the spell-list URL minus the
+   * `/spells.json` suffix.
+   */
+  _resolveClassBundleUrl(classModel) {
+    const spellListUrl = classModel?.item?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
+    if (!spellListUrl) return null;
+    return String(spellListUrl).replace(/\/spells\.json(\?.*)?$/i, ".json");
+  }
+
+  /**
+   * Kick (idempotently) a class-bundle fetch and cache the result.
+   * The bundle ships `class.spellcasting` — including `type` —
+   * authoritatively from the D1 row. Used by `_classifyPrepType` so
+   * the meta strip's prep-type label + footer button visibility
+   * reflect the true class definition rather than guessing from
+   * dnd5e's preparation.mode (which collapses prepared+spellbook).
+   *
+   * Stamps a cache entry as soon as the fetch finishes (success or
+   * failure), then triggers `_renderManager` so the UI picks up the
+   * authoritative value on the next tick.
+   */
+  _ensureClassBundle(classModel) {
+    if (!classModel?.identifier) return null;
+    const key = classModel.identifier;
+    const cached = this._classBundles.get(key);
+    if (cached) return cached;
+
+    const bundleUrl = this._resolveClassBundleUrl(classModel);
+    if (!bundleUrl) {
+      const entry = { status: "missing", reason: "No spellListUrl flag on class item" };
+      this._classBundles.set(key, entry);
+      return entry;
+    }
+
+    const loadingEntry = { status: "loading" };
+    this._classBundles.set(key, loadingEntry);
+
+    (async () => {
+      try {
+        const response = await fetch(bundleUrl, { cache: "no-store" });
+        if (!response.ok) {
+          this._classBundles.set(key, { status: "error", reason: `HTTP ${response.status}` });
+        } else {
+          const payload = await response.json();
+          // Semantic class export: `payload.class.spellcasting`.
+          // Older bundles may put spellcasting on `payload.spellcasting`
+          // directly — accept both.
+          const spellcasting = payload?.class?.spellcasting ?? payload?.spellcasting ?? null;
+          this._classBundles.set(key, {
+            status: "ready",
+            spellcasting,
+            // Cache the whole payload too so future readers (cantrip
+            // scaling, formula) can use it without a refetch.
+            payload
+          });
+        }
+      } catch (err) {
+        console.warn(`${MODULE_ID} | class bundle fetch failed`, { bundleUrl, err });
+        this._classBundles.set(key, { status: "error", reason: err?.message ?? "Network error" });
+      }
+      // Re-render so the meta strip can show the authoritative
+      // prep-type label once the bundle lands.
+      this._renderManager?.();
+    })();
+
+    return loadingEntry;
+  }
+
+  /**
+   * Bundle-aware prep-type resolver. Reads the cached bundle first
+   * (authoritative D1 type), falls back to flag/dnd5e/heuristic via
+   * `classifyPrepTypeFromFlag`.
+   */
+  _classifyPrepType(classModel) {
+    const cached = this._classBundles.get(classModel?.identifier);
+    if (cached?.status === "ready") {
+      const type = String(cached.spellcasting?.type ?? "").toLowerCase();
+      if (type === "prepared" || type === "known" || type === "spellbook") return type;
+    }
+    return classifyPrepTypeFromFlag(classModel);
+  }
+
+  // -----------------------------------------------------------------------
   // Class models + actor introspection
   // -----------------------------------------------------------------------
 
@@ -577,7 +696,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         const atk = String(this._actor?.system?.attributes?.spellatk ?? spellcasting.attack?.formula ?? "");
         const cantripsCap = (spellcasting.cantrips?.max ?? spellcasting.cantrips?.value);
         const spellsCap = (spellcasting.spells?.max ?? spellcasting.spells?.value);
-        const prepType = classifyPrepType(model);
+        const prepType = this._classifyPrepType(model);
         return {
           ...model,
           progression,
@@ -1029,6 +1148,11 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     if (selectedClass) await this._ensureClassPool(selectedClass);
     // Pre-warm pools for ALL classes so favorites can hit any of them.
     for (const m of classModels) if (m !== selectedClass) this._ensureClassPool(m);
+    // Pre-warm the class bundle for EVERY class so the meta strip's
+    // prep-type label is authoritative (read from `class.spellcasting.type`
+    // in D1, not heuristics). Idempotent — re-firing is a no-op when
+    // the cache entry already exists.
+    for (const m of classModels) this._ensureClassBundle(m);
 
     const fullPool = this._getActivePool(selectedClass);
     // "On Sheet" toggle: restrict to spells owned and attributed to
