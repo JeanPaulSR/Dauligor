@@ -3662,6 +3662,26 @@ button.dauligor-option-picker__pill:hover {
   color: #fff;
 }
 
+/* "Save now" — applies the long-rest queue without waiting for a
+   rest. Sibling of the Discard button but tinted success so the
+   primary intent reads as "commit", not "cancel". */
+.dauligor-feature-manager__queue-apply {
+  background: transparent;
+  border: 1px solid var(--dauligor-success, #4ea96b);
+  color: var(--dauligor-success, #4ea96b);
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  border-radius: 2px;
+  margin-right: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dauligor-feature-manager__queue-apply:hover {
+  background: var(--dauligor-success, #4ea96b);
+  color: #fff;
+}
+
 /* The "Queue Change" pill swaps from neutral to warning-tinted so it
  * reads as an intent action rather than a destructive one. */
 .dauligor-feature-manager__change {
@@ -4830,6 +4850,26 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-spell-manager__pool-row--locked .dauligor-spell-manager__row-indicator {
   color: #c2b87a;
+}
+
+/* Pending change (FM-embedded mount): the row's effective sheetMode
+   reflects a queued change that hasn't committed yet. Visual: a
+   warm dashed left-edge stripe so it reads as "in-progress" without
+   overpowering the active-selected gold stripe. */
+.dauligor-spell-manager__pool-row--pending {
+  border-left: 2px dashed var(--dauligor-warning, #d6a55b);
+  background: rgba(214, 165, 91, 0.06);
+}
+
+.dauligor-spell-manager__pool-row--pending .dauligor-spell-manager__row-indicator {
+  color: var(--dauligor-warning, #d6a55b);
+  font-style: italic;
+}
+
+.dauligor-spell-manager__pool-row--pending.dauligor-spell-manager__pool-row--selected {
+  /* Selected + pending: keep the selected gold stripe but tint the
+     row background a touch warmer to keep the pending state legible. */
+  background: rgba(214, 165, 91, 0.12);
 }
 
 .dauligor-spell-manager__row-indicator {
@@ -6113,20 +6153,6 @@ button.dauligor-option-picker__pill:hover {
 .dauligor-chat-spell-change {
   margin: 0;
   line-height: 1.4;
-}
-
-.dauligor-chat-spell-change-class {
-  display: inline-block;
-  margin-left: 2px;
-  padding: 0 6px;
-  border: 1px solid var(--dauligor-border, rgba(0, 0, 0, 0.4));
-  border-radius: 10px;
-  background: rgba(180, 140, 80, 0.18);
-  color: var(--dauligor-text, #cbb98f);
-  font-size: 0.82em;
-  font-weight: 600;
-  vertical-align: baseline;
-  white-space: nowrap;
 }
 
 /* ─── Feature Manager Overview tab ──────────────────────────────────── */

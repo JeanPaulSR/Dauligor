@@ -292,6 +292,31 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     this._state = {
       activeTab: TAB_IDS.includes(tab) ? tab : TAB_OVERVIEW
     };
+
+    // Re-render the FM (tabs + footer queue summary) whenever the
+    // actor's queue flag changes. This keeps the Overview tab count
+    // badge + the footer's "queued for next long rest" line fresh
+    // as the embedded Prepare Spells mount writes queue entries.
+    // The hook is detached on `close()`.
+    this._actorUpdateHook = Hooks.on("updateActor", (doc, changes) => {
+      if (doc?.id !== this._actor?.id) return;
+      // Only re-render when the queue flag actually changed. The
+      // path is `flags.dauligor-pairing.featureManagerQueue` — a
+      // shallow check on the flag object is enough.
+      const touched = !!changes?.flags?.[MODULE_ID]?.featureManagerQueue;
+      if (!touched) return;
+      // Skip when we're rendering an embedded Spells mount — the
+      // body re-render would unmount it mid-interaction. The tab
+      // strip + footer auto-refresh next time the user switches
+      // tabs. Acceptable staleness for v1.
+      if (this._state.activeTab === TAB_SPELLS) {
+        // Only refresh the tab strip + footer regions (not the body).
+        this._renderTabs();
+        this._renderFooter();
+        return;
+      }
+      this.render({ force: false });
+    });
   }
 
   _configureRenderParts() {
@@ -299,6 +324,13 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
   }
 
   async close(options) {
+    // Detach the actor-update hook so it doesn't leak across FM
+    // open/close cycles. Hook ids are returned by Hooks.on and
+    // released via Hooks.off.
+    if (this._actorUpdateHook) {
+      try { Hooks.off("updateActor", this._actorUpdateHook); } catch { /* noop */ }
+      this._actorUpdateHook = null;
+    }
     // Tear down the embedded Spells manager (if any) so its region
     // refs don't leak into the next open. The standalone Prepare
     // Spells window is unaffected (different instance).
@@ -711,10 +743,12 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
    * DOM. The standalone Prepare Spells window can still coexist —
    * the embedded mount is NOT registered as the prep app's singleton.
    *
-   * Long-rest queueing of prepared-spell swaps is a separate concern
-   * (see this file's header comment for the queue model) — that
-   * layer hooks into the prep app's mutations in a follow-up pass.
-   * For now, mutations apply immediately like the standalone window.
+   * Spell mutations made inside the embedded mount QUEUE up for the
+   * next long rest — they don't apply to the actor immediately. The
+   * Prepare Spells UI shows queued state via a "pending" indicator
+   * on each affected row so the player sees their click registered.
+   * Apply happens via `applyLongRestQueue` either on the long-rest
+   * dialog's Save action or via the FM footer's "Save now" button.
    */
   _renderSpellsTab() {
     // Host element for the embedded manager. A dedicated wrapper
@@ -759,6 +793,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         <div class="dauligor-feature-manager__queue-stat">
           <i class="fas fa-bed"></i>
           <span>${longRestSummary}</span>
+          ${longRestCount ? `<button type="button" class="dauligor-feature-manager__queue-apply" data-action="apply-long-rest" title="Apply queued long-rest changes to the actor now (without taking a rest)">Save now</button>` : ""}
           ${longRestCount ? `<button type="button" class="dauligor-feature-manager__queue-clear" data-action="clear-queue" data-scope="${SCOPE_LONG_REST}">Discard</button>` : ""}
         </div>
         <div class="dauligor-feature-manager__queue-stat">
@@ -785,6 +820,25 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         this.render({ force: false });
       });
     }
+
+    // Save Now — applies the long-rest queue without waiting for a
+    // rest. Same code path as the rest-dialog's Save button. Tucked
+    // next to the bed icon so it reads as "commit this batch now".
+    this._footerRegion.querySelector(`[data-action="apply-long-rest"]`)
+      ?.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const applied = await applyLongRestQueue(this._actor);
+        notifyInfo(`Applied ${applied} change${applied === 1 ? "" : "s"} for ${this._actor?.name ?? "actor"}.`);
+        // Re-render the FM (tabs + footer queue summary). If the
+        // Spells tab is active, also re-render the embedded prep
+        // mount so its pool rows + indicators reflect the now-
+        // applied actor state. Otherwise the embedded mount would
+        // still show "pending" until the user switched tabs.
+        this.render({ force: false });
+        if (this._embeddedSpellManager?._renderManager) {
+          try { await this._embeddedSpellManager._renderManager(); } catch { /* noop */ }
+        }
+      });
   }
 
   // ─── change-queue actions ──────────────────────────────────────────────
@@ -825,6 +879,92 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
 
 export function openFeatureManager(actorLike, options = {}) {
   return DauligorFeatureManagerApp.open({ actor: actorLike, ...options });
+}
+
+// ─── Queue commit (apply queued changes to the actor) ──────────────────
+//
+// The FM-embedded Prepare Spells mount queues spell mutations without
+// mutating the actor. On long-rest commit (or the FM footer's "Save"
+// button), this helper walks every queued `spellChange` entry and
+// applies it:
+//
+//   - before=null,  after!=null → CREATE the spell item from
+//                                  entry.spellItemData
+//   - before!=null, after=null  → DELETE the spell item by spellId
+//   - both non-null              → UPDATE the spell item's sheetMode
+//
+// The queue is cleared on success. Returns the number of entries
+// applied (informational; the dialog notification uses this).
+
+async function applyLongRestQueue(actor) {
+  if (!actor) return 0;
+  const queue = getQueue(actor);
+  const entries = queue.longRest.entries;
+  if (!entries.length) return 0;
+
+  let applied = 0;
+  for (const entry of entries) {
+    try {
+      if (entry?.kind !== "spellChange") continue;
+      const before = entry.before ?? null;
+      const after = entry.after ?? null;
+
+      // CREATE: queued add of a spell that wasn't on the actor yet.
+      if (before === null && after !== null && entry.spellItemData) {
+        // Re-stamp the sheetMode + dnd5e fields in case the user
+        // toggled between modes while the entry was queued (the
+        // upsert logic preserves the spellItemData but the after
+        // mode might differ from when it was first captured).
+        const itemData = foundry.utils.deepClone(entry.spellItemData);
+        if (!itemData.flags) itemData.flags = {};
+        if (!itemData.flags[MODULE_ID]) itemData.flags[MODULE_ID] = {};
+        itemData.flags[MODULE_ID].sheetMode = after;
+        foundry.utils.setProperty(itemData, "system.prepared", after !== "spellbook");
+        foundry.utils.setProperty(itemData, "system.method", "spell");
+        await actor.createEmbeddedDocuments("Item", [itemData]);
+        applied++;
+        continue;
+      }
+
+      // DELETE: queued removal of an owned spell.
+      if (before !== null && after === null && entry.spellId) {
+        try {
+          await actor.deleteEmbeddedDocuments("Item", [entry.spellId]);
+          applied++;
+        } catch (err) {
+          // Item may have been deleted by some other path (sheet
+          // edit, etc.) — log and skip. Don't fail the whole commit.
+          console.warn(`${MODULE_ID} | queued delete failed`, { entry, err });
+        }
+        continue;
+      }
+
+      // UPDATE: existing owned spell, sheetMode change.
+      if (before !== null && after !== null && entry.spellId) {
+        const item = actor.items?.get?.(entry.spellId);
+        if (!item) {
+          console.warn(`${MODULE_ID} | queued update target missing`, entry);
+          continue;
+        }
+        const patch = {
+          "system.prepared": after !== "spellbook",
+          "system.method": "spell"
+        };
+        patch[`flags.${MODULE_ID}.sheetMode`] = after;
+        await item.update(patch);
+        applied++;
+        continue;
+      }
+    } catch (err) {
+      console.warn(`${MODULE_ID} | queue entry apply failed`, { entry, err });
+    }
+  }
+
+  // Clear the long-rest scope after applying — even if some entries
+  // failed, the rest are now applied, so we don't want to double-
+  // apply on the next commit attempt. Failed entries log to console.
+  await clearScope(actor, SCOPE_LONG_REST);
+  return applied;
 }
 
 // ─── Long-rest commit prompt ────────────────────────────────────────────
@@ -970,18 +1110,25 @@ export async function promptLongRestCommit(actorLike) {
   }
 
   if (decision === "save") {
-    // Clear BOTH scopes — long rest is the natural commit point
-    // for either kind of queued advancement, and Phase 1 doesn't
-    // distinguish between them at commit time (the picker UI that
-    // creates real entries hasn't shipped yet).
-    if (longRestEntries.length) await clearScope(actor, SCOPE_LONG_REST);
-    if (levelUpEntries.length) await clearScope(actor, SCOPE_LEVEL_UP);
+    // Apply long-rest queue: walks every queued spellChange and
+    // applies the create / update / delete to the actor. Clears
+    // the long-rest scope after applying.
+    const applied = await applyLongRestQueue(actor);
+    // Level-up scope entries aren't committed by a long rest —
+    // they're held for the next level-up wizard run. Discard them
+    // here only if they're stale placeholders (Phase 1 stub from
+    // the Features tab). Leave real picks intact when Phase 2 lands.
+    // For now we keep them — the user explicitly chose Save, but
+    // level-up isn't the trigger for those entries.
     fmInstance?.render?.({ force: false });
-    notifyInfo(`Queued advancements saved for ${actor.name}.`);
+    notifyInfo(`Applied ${applied} change${applied === 1 ? "" : "s"} for ${actor.name}.`);
     return;
   }
 
   if (decision === "discard") {
+    // Clear BOTH scopes without applying. The actor's spell items
+    // remain in their pre-queue state (since FM-embedded changes
+    // never applied to the actor in the first place).
     if (longRestEntries.length) await clearScope(actor, SCOPE_LONG_REST);
     if (levelUpEntries.length) await clearScope(actor, SCOPE_LEVEL_UP);
     fmInstance?.render?.({ force: false });

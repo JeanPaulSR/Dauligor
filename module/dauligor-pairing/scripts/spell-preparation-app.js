@@ -194,10 +194,12 @@ function resolveClassDisplayName(actor, classIdentifier) {
 
 /**
  * Build the chat-message content for a spell change. Format mirrors
- * the user's example "{User} from {Character} swapped out {Spell}"
- * but uses verbs that match the actual transition. Includes the
- * spell's class attribution as a parenthesized chip when present —
- * orphan spells (no class) omit the chip entirely.
+ * the user's example "{User} prepared {Spell} in {Class} on {Character}"
+ * but uses verbs that match the actual transition. The class is
+ * rendered inline as plain bold text (no chip) so it reads as part
+ * of the sentence, matching the other emphasised tokens.
+ *
+ * Orphan spells (no class) drop the "in <Class>" segment entirely.
  *
  * The chat message surfaces every prep change so other players +
  * the GM can see what the actor's spell loadout looked like at any
@@ -209,23 +211,20 @@ function buildSpellChangeChatContent(actor, spell, transition, { classIdentifier
   const charName = String(actor?.name ?? "their character");
   const spellName = String(spell?.name ?? "a spell");
   const className = resolveClassDisplayName(actor, classIdentifier);
-  // Inline class chip — shown between the spell name and the
-  // preposition (or at the end for symmetric phrasing). Skip when
-  // the spell has no class attribution.
-  const classChip = className
-    ? ` <span class="dauligor-chat-spell-change-class">(${escapeHtmlGlobal(className)})</span>`
-    : "";
+  // Inline " in <Class>" — plain bold text, no chip styling. Empty
+  // when the spell has no class attribution (orphan / importer-add).
+  const classFrag = className ? ` in <strong>${escapeHtmlGlobal(className)}</strong>` : "";
   const phrases = {
-    "added-to-sheet":       `added <strong>${spellName}</strong>${classChip} to <strong>${charName}</strong>'s sheet`,
-    "removed-from-sheet":   `removed <strong>${spellName}</strong>${classChip} from <strong>${charName}</strong>'s sheet`,
-    "added-to-spellbook":   `added <strong>${spellName}</strong>${classChip} to <strong>${charName}</strong>'s spellbook`,
-    "removed-from-spellbook": `removed <strong>${spellName}</strong>${classChip} from <strong>${charName}</strong>'s spellbook`,
-    "prepared":             `prepared <strong>${spellName}</strong>${classChip} on <strong>${charName}</strong>`,
-    "unprepared":           `unprepared <strong>${spellName}</strong>${classChip} on <strong>${charName}</strong>`,
-    "added-as-known":       `added <strong>${spellName}</strong>${classChip} as a Known spell on <strong>${charName}</strong>`,
-    "removed-as-known":     `removed <strong>${spellName}</strong>${classChip} as a Known spell on <strong>${charName}</strong>`,
+    "added-to-sheet":         `added <strong>${spellName}</strong>${classFrag} to <strong>${charName}</strong>'s sheet`,
+    "removed-from-sheet":     `removed <strong>${spellName}</strong>${classFrag} from <strong>${charName}</strong>'s sheet`,
+    "added-to-spellbook":     `added <strong>${spellName}</strong>${classFrag} to <strong>${charName}</strong>'s spellbook`,
+    "removed-from-spellbook": `removed <strong>${spellName}</strong>${classFrag} from <strong>${charName}</strong>'s spellbook`,
+    "prepared":               `prepared <strong>${spellName}</strong>${classFrag} on <strong>${charName}</strong>`,
+    "unprepared":             `unprepared <strong>${spellName}</strong>${classFrag} on <strong>${charName}</strong>`,
+    "added-as-known":         `added <strong>${spellName}</strong>${classFrag} as a Known spell on <strong>${charName}</strong>`,
+    "removed-as-known":       `removed <strong>${spellName}</strong>${classFrag} as a Known spell on <strong>${charName}</strong>`,
   };
-  const verb = phrases[transition] ?? `changed <strong>${spellName}</strong>${classChip} on <strong>${charName}</strong>`;
+  const verb = phrases[transition] ?? `changed <strong>${spellName}</strong>${classFrag} on <strong>${charName}</strong>`;
   return `<p class="dauligor-chat-spell-change">${escapeHtmlGlobal(userName)} ${verb}.</p>`;
 }
 
@@ -274,16 +273,119 @@ function postSpellChangeChat(actor, spell, transition, { classIdentifier = null 
   }
 }
 
-// Note: an earlier revision of this file shipped a
-// `logSpellChangeToQueue` helper that appended `kind: "spellChange"`
-// entries to the FM's long-rest queue when the user mutated spells
-// via the FM-embedded Prepare Spells mount. Per the May 2026
-// clarification, FM-embedded mutations now apply immediately just
-// like the standalone window — no queueing for spell changes. The
-// queue is reserved for level-up advancement picks (deferred player
-// choice). The helper was removed; if Phase 2 wants to defer-then-
-// commit spell changes, restore it from git history at the same
-// shape.
+// ---------------------------------------------------------------------------
+// FM-embedded queueing — spell changes made via the Feature Manager's
+// embedded Prepare Spells mount are DEFERRED, not applied immediately.
+//
+// User's contract (May 2026):
+//   - Standalone Prepare Spells window  → apply immediately + post chat
+//   - FM-embedded Prepare Spells mount  → queue change; nothing on the
+//     actor mutates until the user takes a long rest + chooses "Save"
+//     in the commit dialog. (Or hits the equivalent commit affordance
+//     in the FM footer.)
+//
+// Queue entry shape:
+//   {
+//     id: string,                  // randomID
+//     kind: "spellChange",
+//     scope: "long-rest",
+//     queuedAt: number,
+//     spellDbId: string,           // Dauligor dbId (stable identity)
+//     spellId: string | null,      // local actor item id (null = not
+//                                   //   yet on the actor; create on commit)
+//     spellName: string,
+//     classIdentifier: string | null,
+//     before: SheetMode | null,    // null = not owned at queue time
+//     after: SheetMode | null,     // null = remove on commit
+//     spellItemData: object | null // full Foundry item payload for
+//                                   //   "add" entries (before === null +
+//                                   //   after !== null). Lets the commit
+//                                   //   path call createEmbeddedDocuments
+//                                   //   without re-fetching from the API.
+//   }
+//
+// Upsert semantics: at most ONE entry per spellDbId. If the user
+// changes their mind (e.g. queues "prepare", then queues "unprepare"
+// before the rest), the existing entry is mutated rather than a new
+// one appended. If the queued `after` matches the actor's current
+// state, the entry is removed entirely — the user undid the pending
+// change.
+
+/**
+ * Upsert (or remove) a queued spell-change entry. Idempotent —
+ * calling with `after === currentState` deletes the entry instead
+ * of leaving a no-op in the queue.
+ *
+ * Returns the updated queue object (also written to the actor flag).
+ */
+async function queueSpellChange(actor, {
+  spellDbId,
+  spellId,
+  spellName,
+  classIdentifier,
+  before,
+  after,
+  spellItemData = null
+}) {
+  if (!actor?.setFlag || !spellDbId) return null;
+  const raw = actor.getFlag?.(MODULE_ID, "featureManagerQueue") ?? null;
+  const queue = {
+    longRest: { entries: Array.isArray(raw?.longRest?.entries) ? [...raw.longRest.entries] : [] },
+    levelUp: { entries: Array.isArray(raw?.levelUp?.entries) ? [...raw.levelUp.entries] : [] }
+  };
+
+  // Drop any existing entry for this dbId — we're upserting.
+  const existingIdx = queue.longRest.entries.findIndex((e) =>
+    e?.kind === "spellChange" && String(e.spellDbId) === String(spellDbId));
+  let priorEntry = null;
+  if (existingIdx >= 0) {
+    priorEntry = queue.longRest.entries[existingIdx];
+    queue.longRest.entries.splice(existingIdx, 1);
+  }
+
+  // If the new "after" state matches the actor's CURRENT state (i.e.
+  // `before` here), the queued change is a no-op — the user undid
+  // their pending mutation. Don't write a new entry.
+  // For the "add then remove" case (before=null, after=null), also skip.
+  const isNoOp = (before === after) || (before === null && after === null);
+
+  if (!isNoOp) {
+    queue.longRest.entries.push({
+      id: foundry.utils.randomID(),
+      kind: "spellChange",
+      scope: "long-rest",
+      queuedAt: Date.now(),
+      spellDbId: String(spellDbId),
+      spellId: spellId ? String(spellId) : null,
+      spellName: String(spellName ?? "Spell"),
+      classIdentifier: classIdentifier ? String(classIdentifier) : null,
+      before: before ?? null,
+      after: after ?? null,
+      // Preserve the spellItemData if the prior entry had it (so
+      // re-toggling an "add" then "modify" still has the payload to
+      // create on commit). The caller passes the freshest version
+      // when available.
+      spellItemData: spellItemData ?? priorEntry?.spellItemData ?? null
+    });
+  }
+
+  await actor.setFlag(MODULE_ID, "featureManagerQueue", queue);
+  return queue;
+}
+
+/**
+ * Read the pending spell-change entry for a given dbId (or null).
+ * Called by render helpers to overlay queued state on top of actor
+ * state — pool rows + indicators + footer buttons all reflect the
+ * "effective" view (actor + pending change applied) so the player
+ * gets immediate visual feedback that their click registered.
+ */
+function getPendingSpellChange(actor, dbId) {
+  if (!actor?.getFlag || !dbId) return null;
+  const raw = actor.getFlag(MODULE_ID, "featureManagerQueue");
+  const entries = Array.isArray(raw?.longRest?.entries) ? raw.longRest.entries : [];
+  return entries.find((e) => e?.kind === "spellChange" && String(e.spellDbId) === String(dbId)) ?? null;
+}
 
 function escapeHtml(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
@@ -908,6 +1010,59 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const entry = this._sourcesById?.get(String(sourceId ?? ""));
     if (!entry) return "";
     return entry.name || entry.shortName || "";
+  }
+
+  // -----------------------------------------------------------------------
+  // Queue overlay (FM-embedded mount only)
+  // -----------------------------------------------------------------------
+  //
+  // When the manager is mounted inside the Feature Manager, spell
+  // mutations don't apply to the actor immediately — they queue up
+  // for the next long-rest commit. To give the player visual
+  // feedback that their click registered, the render pipeline
+  // overlays the queued state on top of the actor's actual state:
+  //
+  //   - Pool row indicator → effective state (queued after wins)
+  //   - Row "is-pending" CSS class → distinct visual (yellow border)
+  //   - Footer button labels → reflect effective state so the user
+  //     can toggle back if they change their mind
+  //   - Meta-strip counters → count queued additions / removals
+  //
+  // The overlay is a no-op in standalone mode (`_isEmbedded === false`)
+  // so the existing UX behaviour for direct-apply changes is
+  // preserved.
+
+  /**
+   * Read the pending change entry for a Dauligor dbId from the
+   * actor's queue flag. Returns null in standalone mode (no queue
+   * consulted) or when no entry exists.
+   */
+  _getPendingChange(dbId) {
+    if (!this._isEmbedded) return null;
+    if (!dbId) return null;
+    return getPendingSpellChange(this._actor, dbId);
+  }
+
+  /**
+   * Resolve the EFFECTIVE sheetMode for a spell — queued `after`
+   * state if there's a pending change, else the actor's actual
+   * sheetMode. Returns null when the spell is neither owned nor
+   * queued for add.
+   */
+  _effectiveSheetMode(ownedItem, dbId) {
+    const pending = this._getPendingChange(dbId);
+    if (pending) return pending.after ?? null;
+    return ownedItem ? getSheetMode(ownedItem) : null;
+  }
+
+  /**
+   * Is this spell currently "on the sheet" according to the
+   * effective state (actor + queue overlay)?
+   */
+  _effectiveIsOwned(ownedItem, dbId) {
+    const pending = this._getPendingChange(dbId);
+    if (pending) return pending.after !== null;
+    return !!ownedItem;
   }
 
   // -----------------------------------------------------------------------
@@ -1697,15 +1852,31 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         return;
       }
       const beforeMode = getSheetMode(owned);
+
+      // FM-embedded mount: DEFER the change to the long-rest commit
+      // queue. The actor's state is NOT mutated here. The render
+      // overlay reflects the queued state visually so the player
+      // sees their click took effect; the actual mutation happens
+      // when the player chooses "Save" on the long-rest dialog.
+      if (this._isEmbedded) {
+        await queueSpellChange(this._actor, {
+          spellDbId: dbId,
+          spellId: owned.id,
+          spellName: owned.name,
+          classIdentifier: classModel?.identifier ?? null,
+          before: beforeMode,
+          after: mode,
+          spellItemData: null
+        });
+        await this._renderManager();
+        return;
+      }
+
       try {
         await owned.update(buildSheetModePatch(mode));
-        // Chat audit: every spell-prep change posts a message so the
-        // GM + other players can see the actor's loadout shift. This
-        // fires regardless of WHERE the user made the change (the
-        // standalone Prepare Spells window OR the Feature Manager's
-        // embedded mount). The FM-embedded mount no longer queues
-        // — the user clarified that FM changes apply immediately too;
-        // the queue is reserved for level-up advancement picks.
+        // Chat audit: standalone Prepare Spells changes apply
+        // immediately and post a message so the GM + other players
+        // can see the actor's loadout shift.
         const isKnownCaster = classModel?.prepType === "known";
         const transition = describeSheetModeTransition(beforeMode, mode, isKnownCaster);
         postSpellChangeChat(this._actor, owned, transition, {
@@ -1790,13 +1961,28 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // dnd5e's "always" method. The Dauligor flag handles cap accounting.
     foundry.utils.setProperty(itemData, "system.method", "spell");
 
+    // FM-embedded mount: DEFER the create to the long-rest commit.
+    // Store the full itemData so the commit path can hand it to
+    // createEmbeddedDocuments without re-fetching the API.
+    if (this._isEmbedded) {
+      await queueSpellChange(this._actor, {
+        spellDbId: dbId,
+        spellId: null,
+        spellName: itemData.name,
+        classIdentifier: classModel?.identifier ?? null,
+        before: null,
+        after: mode,
+        spellItemData: itemData
+      });
+      await this._renderManager();
+      return;
+    }
+
     try {
       const [created] = await this._actor.createEmbeddedDocuments("Item", [itemData]);
       notifyInfo(`${itemData.name} added to sheet.`);
-      // Chat audit: post the create transition (null → mode).
-      // Fires for BOTH standalone and FM-embedded mounts — the FM
-      // no longer queues spell changes (apply-immediately semantics
-      // per user's clarification).
+      // Chat audit: standalone Prepare Spells creates apply
+      // immediately + post a message.
       const isKnownCaster = classModel?.prepType === "known";
       const transition = describeSheetModeTransition(null, mode, isKnownCaster);
       if (created) {
@@ -1889,7 +2075,8 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       return;
     }
     // Snapshot before deletion so we can describe the transition +
-    // resolve the class attribution for the chat audit.
+    // resolve the class attribution for the chat audit / queue
+    // bookkeeping.
     const beforeMode = getSheetMode(owned);
     const beforeClassIdentifier = resolveSpellClassIdentifier(owned)
       || classModel?.identifier
@@ -1899,10 +2086,31 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       name: owned.name,
       getFlag: owned.getFlag?.bind(owned)
     };
+    const dauligorDbId = String(owned.getFlag?.(MODULE_ID, "entityId") ?? "");
+
+    // FM-embedded mount: DEFER the delete to the long-rest commit.
+    // The actor item stays put until commit; the render overlay
+    // shows the row as "queued remove" so the user sees the click
+    // registered.
+    if (this._isEmbedded && dauligorDbId) {
+      await queueSpellChange(this._actor, {
+        spellDbId: dauligorDbId,
+        spellId: owned.id,
+        spellName: owned.name,
+        classIdentifier: beforeClassIdentifier,
+        before: beforeMode,
+        after: null,
+        spellItemData: null
+      });
+      await this._renderManager();
+      return;
+    }
+
     try {
       await this._actor.deleteEmbeddedDocuments("Item", [owned.id]);
       notifyInfo(`${owned.name} removed from sheet.`);
-      // Chat audit: fires for both standalone and FM-embedded mounts.
+      // Chat audit: standalone Prepare Spells removes apply
+      // immediately + post a message.
       postSpellChangeChat(this._actor, spellSnapshot, "removed-from-sheet", {
         classIdentifier: beforeClassIdentifier
       });
@@ -2140,18 +2348,53 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     }
 
     const owned = selectedClass.ownedSpells;
-    const totalOnSheet = owned.length;
-    const cantripsOnSheet = owned.filter((s) => Number(s.system?.level ?? 0) === 0).length;
-    const preparedCount = owned
-      .filter((s) => Number(s.system?.level ?? 0) > 0)
-      .filter((s) => getSheetMode(s) === SHEET_MODE_PREPARED)
+
+    // Build an effective-state view that overlays queued changes
+    // onto the actor's actual ownership. Each row in the view is
+    // { level, mode } where mode is `prepared|spellbook|free|null`.
+    // `null` mode means "queued for removal" — counts toward nothing.
+    // FM-embedded queue overlay is the only producer of pending
+    // changes; standalone mode passes through actor state untouched.
+    const effective = [];
+    const queuedDbIds = new Set();
+    for (const spell of owned) {
+      const dbId = getSpellEntityId(spell);
+      const pending = this._getPendingChange(dbId);
+      const mode = pending ? (pending.after ?? null) : getSheetMode(spell);
+      if (dbId) queuedDbIds.add(dbId);
+      effective.push({ level: Number(spell?.system?.level ?? 0) || 0, mode });
+    }
+    // Pending ADDS (queue entry with `before === null`, `after !== null`,
+    // for a spell that isn't currently owned). These count toward the
+    // effective totals so the player sees their queued additions
+    // reflected in the cap.
+    if (this._isEmbedded && selectedClass?.identifier) {
+      const raw = this._actor?.getFlag?.(MODULE_ID, "featureManagerQueue");
+      const entries = Array.isArray(raw?.longRest?.entries) ? raw.longRest.entries : [];
+      for (const entry of entries) {
+        if (entry?.kind !== "spellChange") continue;
+        if (entry.before !== null) continue; // not a create
+        if (entry.after === null) continue;  // not a real add
+        if (queuedDbIds.has(String(entry.spellDbId))) continue;
+        // Scope to selected class to avoid double-counting across
+        // multi-class actors. Falls back to "count anyway" when no
+        // classIdentifier is on the entry (orphan add).
+        if (entry.classIdentifier && entry.classIdentifier !== selectedClass.identifier) continue;
+        // Level for pending-add entries: pull from the cached full
+        // spell payload (we stored it on the queue entry). Defaults
+        // to 0 if unparsable — counts toward cantrips bucket then.
+        const level = Number(entry.spellItemData?.system?.level ?? 0) || 0;
+        effective.push({ level, mode: entry.after });
+      }
+    }
+
+    const totalOnSheet = effective.filter((e) => e.mode !== null).length;
+    const cantripsOnSheet = effective.filter((e) => e.level === 0 && e.mode !== null).length;
+    const preparedCount = effective
+      .filter((e) => e.level > 0 && e.mode === SHEET_MODE_PREPARED)
       .length;
-    const inSpellbookCount = owned
-      .filter((s) => Number(s.system?.level ?? 0) > 0)
-      .filter((s) => {
-        const m = getSheetMode(s);
-        return m === SHEET_MODE_PREPARED || m === SHEET_MODE_SPELLBOOK;
-      })
+    const inSpellbookCount = effective
+      .filter((e) => e.level > 0 && (e.mode === SHEET_MODE_PREPARED || e.mode === SHEET_MODE_SPELLBOOK))
       .length;
 
     const cap = selectedClass.spellsCap;
@@ -2431,8 +2674,13 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const dbId = poolDbId(item);
     const level = poolLevel(item);
     const isCantrip = level === 0;
-    const isOwned = !!ownedItem;
-    const sheetMode = isOwned ? getSheetMode(ownedItem) : null;
+    // Effective state: queued change wins over actor state in
+    // FM-embedded mode. Standalone mode falls through to the
+    // actor's actual sheetMode.
+    const pending = this._getPendingChange(dbId);
+    const isPending = !!pending;
+    const sheetMode = pending ? (pending.after ?? null) : (ownedItem ? getSheetMode(ownedItem) : null);
+    const isOwned = sheetMode !== null;
     const prep = selectedClass ? selectedClass.prepType : "prepared";
     const isPrepared = sheetMode === SHEET_MODE_PREPARED;
     const isLocked = ownedItem ? (isAdvancementGranted(ownedItem) || (isAlwaysPrepared(ownedItem) && sheetMode !== SHEET_MODE_FREE)) : false;
@@ -2455,6 +2703,11 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         else indicatorTitle = "On sheet";
       }
     }
+    if (isPending) {
+      // Append a "(pending commit)" hint to the indicator tooltip so
+      // the user knows the visual state isn't on the actor yet.
+      indicatorTitle += " — pending next long rest";
+    }
 
     const rowClasses = [
       "dauligor-spell-manager__pool-row",
@@ -2462,7 +2715,8 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       isSelected && "dauligor-spell-manager__pool-row--selected",
       isOwned && "dauligor-spell-manager__pool-row--owned",
       isPrepared && "dauligor-spell-manager__pool-row--prepared",
-      isLocked && "dauligor-spell-manager__pool-row--locked"
+      isLocked && "dauligor-spell-manager__pool-row--locked",
+      isPending && "dauligor-spell-manager__pool-row--pending"
     ].filter(Boolean).join(" ");
 
     const flags = poolFlags(item);
@@ -2841,7 +3095,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const owned = dbId && selectedClass?.identifier
       ? this._findOwnedSpellByDbIdForClass(dbId, selectedClass.identifier)
       : null;
-    const ownedMode = owned ? getSheetMode(owned) : null;
+    // Effective state: queued change wins over actor state in
+    // FM-embedded mode. The footer button labels reflect the queued
+    // "after" so the user sees the right toggle direction. When a
+    // change is queued we also append a small "(pending)" hint to
+    // every active button label.
+    const pendingChange = this._getPendingChange(dbId);
+    const isPending = !!pendingChange;
+    const ownedMode = pendingChange
+      ? (pendingChange.after ?? null)
+      : (owned ? getSheetMode(owned) : null);
     const onSheet      = ownedMode !== null;
     const inSpellbook  = ownedMode === SHEET_MODE_SPELLBOOK || ownedMode === SHEET_MODE_PREPARED;
     const isPrepared   = ownedMode === SHEET_MODE_PREPARED;
@@ -2924,16 +3187,17 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         ${renderBtn(prepBtn)}
       `;
 
-    // Footer note: shown ONLY in standalone sheet mode (not in the
-    // embedded Feature Manager mount, since the FM IS the intended
-    // way to make changes; not in importer mode, which is handled
-    // by a different footer block). Reminds the user that changes
-    // made here apply immediately and bypass the long-rest queue —
-    // the Feature Manager is the canonical path for prep changes.
-    const showSheetModeNote = !this._isEmbedded;
-    const noteHtml = showSheetModeNote
-      ? `<div class="dauligor-spell-manager__footer-note">Add spells from here only if you forgot. Use the Feature Manager instead.</div>`
-      : "";
+    // Footer note:
+    //   - Standalone sheet mode: remind the user that changes here
+    //     apply immediately and bypass the long-rest queue.
+    //   - FM-embedded mode: explain that changes queue for the next
+    //     long rest (so the user understands why row indicators
+    //     show a "pending" outline instead of the actor's actual
+    //     state changing). The importer-mode branch above renders
+    //     its own footer; this code doesn't apply there.
+    const noteHtml = this._isEmbedded
+      ? `<div class="dauligor-spell-manager__footer-note">Changes queue for the next long rest. Click <em>Save changes</em> on the rest dialog to apply.</div>`
+      : `<div class="dauligor-spell-manager__footer-note">Add spells from here only if you forgot. Use the Feature Manager instead.</div>`;
 
     this._footerRegion.innerHTML = `
       ${noteHtml}
