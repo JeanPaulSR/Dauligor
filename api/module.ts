@@ -212,16 +212,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     if (!cleanSubpath || cleanSubpath === "catalog.json") {
-      const result = await getOrBuild(
-        topLevelCatalogKey(),
-        buildTopLevelCatalog,
-        // Cache-shape validator: every entry must carry `legacyId`
-        // (added so the Foundry side can map legacy Firestore-style
-        // spell.source_id back to the new semantic id). A cached blob
-        // built before that change won't have the field, and we'd
-        // rather rebuild once than serve a partial catalog forever.
-        (c: any) => Array.isArray(c?.entries) && c.entries.every((e: any) => "legacyId" in e),
-      );
+      const result = await getOrBuild(topLevelCatalogKey(), buildTopLevelCatalog);
       if (result) return serveCached(res, result);
     }
 

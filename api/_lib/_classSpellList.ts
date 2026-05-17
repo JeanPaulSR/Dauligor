@@ -18,6 +18,7 @@
 //   - The endpoint is a thin D1 JOIN, no R2 cache, no warming step.
 
 import type { ExportFetchers } from "./_classExport.js";
+import { getSemanticSourceId } from "./_classExport.js";
 
 const parseJsonField = (val: any, fallback: any) => {
   if (val == null) return fallback;
@@ -178,6 +179,31 @@ export async function buildClassSpellListBundle(
       "components_vocal, components_somatic, components_material",
   });
 
+  // Resolve each spell's `source_id` to its public semantic id (e.g.
+  // "source-phb-2014") before shipping it as `spellSourceId`. The
+  // D1 column stores the row's PRIMARY KEY (a stable opaque string,
+  // typically the original Firestore document id per
+  // `docs/database/README.md` §schema-philosophy bullet 5). The
+  // public sources catalog endpoint publishes the SEMANTIC id, so
+  // we resolve here to match — that's what lets the Foundry module
+  // join one to the other without legacy-id mapping.
+  //
+  // One sources fetch per spell-list request; sources changes are
+  // rare and the result is small enough that caching server-side
+  // isn't worth the staleness risk yet.
+  const sourceRows = await fetchCollection<any>("sources", {
+    select: "id, slug, abbreviation, rules_version",
+  });
+  const sourceIdToSemantic = new Map<string, string>();
+  for (const r of sourceRows) {
+    const sourceData = {
+      slug: r.slug,
+      abbreviation: r.abbreviation,
+      rules: r.rules_version || "2014",
+    };
+    sourceIdToSemantic.set(String(r.id), getSemanticSourceId(sourceData, r.id));
+  }
+
   const spells: ClassSpellItem[] = spellRows.map((row: any) => {
     const requiredTagIds = parseJsonField(row.required_tags, []) || [];
     const tagIds = parseJsonField(row.tags, []) || [];
@@ -202,7 +228,10 @@ export async function buildClassSpellListBundle(
           classSourceId,
           level: Number(row.level || 0),
           school: String(row.school || ""),
-          spellSourceId: row.source_id || null,
+          // Semantic id (e.g. "source-phb-2014"). Falls back to the
+          // raw row.source_id only when the sources lookup misses,
+          // which shouldn't happen for any FK-valid row.
+          spellSourceId: (row.source_id && sourceIdToSemantic.get(String(row.source_id))) || row.source_id || null,
           requiredTagIds: Array.isArray(requiredTagIds)
             ? requiredTagIds.map(String)
             : [],

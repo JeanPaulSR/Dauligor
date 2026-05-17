@@ -455,14 +455,14 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
     // Foundation catalogs (lazy, loaded once per manager open).
     //
-    // Sources catalog — keyed by BOTH semantic id ("source-phb-2014")
-    // AND legacy id ("6lJGQvtAIbUSSJ1tG6cg"). The legacy id is what
-    // the spell summary's `spellSourceId` actually carries (the
-    // D1 `spells.source_id` column was not migrated to the slug
-    // format), so we need both keys to resolve a row from either
-    // direction. Added in commit (this one): the server now ships
-    // `legacyId` on every catalog entry — see api/_lib/module-export-pipeline.ts.
-    this._sourcesById = null;       // Map<id, { shortName, name }>  — both kinds of id
+    // Sources catalog — keyed by the public semantic id
+    // ("source-phb-2014"). Both endpoints (sources catalog AND the
+    // class spell-list summary) publish source ids in this format:
+    // the catalog publishes its synthesized `s.semanticId`, and the
+    // spell-summary endpoint resolves `spells.source_id` through
+    // the same `getSemanticSourceId` helper before shipping (see
+    // `api/_lib/_classSpellList.ts`). The raw D1 PK is never exposed.
+    this._sourcesById = null;       // Map<semanticId, { shortName, name }>
     this._sourcesInFlight = false;
 
     // Tags catalog — mirrors what /compendium/spells loads via
@@ -553,18 +553,11 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         const map = new Map();
         for (const entry of (payload?.entries ?? [])) {
           const semanticId = String(entry?.sourceId ?? "");
-          const legacyId   = String(entry?.legacyId ?? "");
-          const value = {
+          if (!semanticId) continue;
+          map.set(semanticId, {
             shortName: String(entry.shortName ?? entry.slug ?? entry.name ?? ""),
             name: String(entry.name ?? entry.shortName ?? "")
-          };
-          // Key the catalog on BOTH semantic + legacy ids so callers
-          // resolve regardless of which id the row carries. The spell
-          // summary endpoint currently ships the legacy id in
-          // `spellSourceId`; the class bundle's `source.id` typically
-          // ships the semantic id. Same map, two lookups.
-          if (semanticId) map.set(semanticId, value);
-          if (legacyId)   map.set(legacyId, value);
+          });
         }
         this._sourcesById = map;
         // Re-render so source chips pick up the new labels.

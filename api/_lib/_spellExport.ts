@@ -17,6 +17,7 @@
 // to carry — the Foundry module's embed code reads the same fields.
 
 import type { ExportFetchers } from "./_classExport.js";
+import { getSemanticSourceId } from "./_classExport.js";
 
 const parseJsonField = (val: any, fallback: any) => {
   if (val == null) return fallback;
@@ -73,6 +74,26 @@ export async function buildSpellItemBundle(
   const tagIds = parseJsonField(row.tags, []) || [];
   const sourceId = trimString(row.identifier) || `spell-${row.id}`;
 
+  // Resolve the spell's source FK to its public semantic id to match
+  // the lightweight summary endpoint and the sources catalog. Single
+  // sources lookup per per-spell fetch — cheap and consistent.
+  let spellSourceIdSemantic: string | null = null;
+  if (row.source_id) {
+    const sourceRow: any = await fetchDocument<any>("sources", String(row.source_id));
+    if (sourceRow) {
+      const sourceData = {
+        slug: sourceRow.slug,
+        abbreviation: sourceRow.abbreviation,
+        rules: sourceRow.rules_version || "2014",
+      };
+      spellSourceIdSemantic = getSemanticSourceId(sourceData, sourceRow.id);
+    } else {
+      // FK miss (shouldn't happen for valid rows); preserve raw id so
+      // older clients still see SOMETHING they can match against.
+      spellSourceIdSemantic = String(row.source_id);
+    }
+  }
+
   const spell = {
     name: String(row.name || ""),
     type: "spell" as const,
@@ -90,7 +111,7 @@ export async function buildSpellItemBundle(
         dbId: String(row.id),
         level: Number(row.level || 0),
         school: String(row.school || ""),
-        spellSourceId: row.source_id || null,
+        spellSourceId: spellSourceIdSemantic,
         requiredTagIds: Array.isArray(requiredTagIds)
           ? requiredTagIds.map(String)
           : [],
