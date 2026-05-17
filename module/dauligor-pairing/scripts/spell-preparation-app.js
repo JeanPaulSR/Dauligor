@@ -113,7 +113,14 @@ const PROGRESSION_LABELS = {
 //                 Indicator: book icon; row NOT highlighted.
 //   "free"      → on the sheet, doesn't count vs any cap. Granted by
 //                 racial / feat / item, or just user choice.
-//                 dnd5e: system.prepared = true, system.method = "always".
+//                 dnd5e: system.prepared = true, system.method = "spell".
+//                 (Previously used method="always" — that surfaced
+//                 the spell as "Always Prepared" in dnd5e's editor,
+//                 which doesn't match the user's intent for "on sheet
+//                 but doesn't count vs caps." The Dauligor flag is
+//                 the cap-accounting source of truth; method stays at
+//                 "spell" so dnd5e's per-spell editor reads as a
+//                 normal class spell.)
 //                 Indicator: filled circle; row NOT highlighted.
 // ---------------------------------------------------------------------------
 
@@ -180,7 +187,9 @@ function getSpellEntityId(spell) {
 /**
  * Resolve the sheetMode on an owned spell item. Reads the explicit
  * module flag first; falls back to a deriveable state from dnd5e's
- * `prepared` + `method` fields for spells that predate this flag.
+ * `prepared` field for spells that predate this flag. (We used to
+ * also derive sheetMode="free" from `system.method === "always"`,
+ * but we no longer stamp that — see the sheetMode comment block.)
  */
 function getSheetMode(spell) {
   if (!spell) return DEFAULT_SHEET_MODE;
@@ -191,7 +200,6 @@ function getSheetMode(spell) {
     return flag;
   }
   const sys = spell.system ?? {};
-  if (String(sys.method ?? "") === "always") return SHEET_MODE_FREE;
   if (sys.prepared === false) return SHEET_MODE_SPELLBOOK;
   return SHEET_MODE_PREPARED;
 }
@@ -199,6 +207,8 @@ function getSheetMode(spell) {
 /**
  * Compose the dnd5e + module-flag patch for putting a spell into a
  * given sheetMode. Used by `_setSheetMode` and the add-spell flow.
+ * All three modes stamp `system.method = "spell"` — the cap-accounting
+ * distinction is OUR Dauligor flag, not dnd5e's method.
  */
 function buildSheetModePatch(mode) {
   if (mode === SHEET_MODE_SPELLBOOK) {
@@ -211,7 +221,7 @@ function buildSheetModePatch(mode) {
   if (mode === SHEET_MODE_FREE) {
     return {
       "system.prepared": true,
-      "system.method": "always",
+      "system.method": "spell",
       [`flags.${MODULE_ID}.sheetMode`]: SHEET_MODE_FREE
     };
   }
@@ -1153,7 +1163,10 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     itemData.flags[MODULE_ID].entityId = dbId;
     itemData.flags[MODULE_ID].sheetMode = mode;
     foundry.utils.setProperty(itemData, "system.prepared", mode !== SHEET_MODE_SPELLBOOK);
-    foundry.utils.setProperty(itemData, "system.method", mode === SHEET_MODE_FREE ? "always" : "spell");
+    // All three sheetModes stamp `system.method = "spell"` — see the
+    // top-of-file sheetMode comment for why "free" no longer maps to
+    // dnd5e's "always" method. The Dauligor flag handles cap accounting.
+    foundry.utils.setProperty(itemData, "system.method", "spell");
 
     try {
       await this._actor.createEmbeddedDocuments("Item", [itemData]);
