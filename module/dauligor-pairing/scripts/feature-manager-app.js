@@ -755,46 +755,100 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     };
 
     /**
-     * For known casters, detect Remove + Add pairs on the same
-     * class and render them as "Replacing X with Y". Non-known
-     * casters fall through to per-entry rendering.
+     * Group entries by class so the Overview renders one block per
+     * class. Each block is its own sub-section with the class name
+     * as a header — makes multi-class characters legible at a
+     * glance ("which spell affects which class?").
+     *
+     * Grouping key resolution:
+     *   - spellChange entries → `classIdentifier` (resolved to the
+     *     actor's class item .name for the header label)
+     *   - optionItem entries  → `className` (already a display name)
+     *   - everything else     → "(Other)" bucket pinned last
+     *
+     * Returns an ordered array of `{ classKey, className, entries }`.
+     * First-occurrence order preserved so the user sees classes in
+     * the order they queued changes.
      */
-    const buildPreviewRowsFromEntries = (entries) => {
+    const groupEntriesByClass = (entries) => {
+      const groups = new Map(); // groupKey → { className, entries }
+      for (const entry of entries) {
+        let groupKey = "__other__";
+        let className = "Other";
+        if (entry?.kind === "spellChange") {
+          const cls = entry.classIdentifier;
+          if (cls) {
+            groupKey = String(cls);
+            const classItem = this._actor.classes?.[cls];
+            className = classItem?.name ?? cls;
+          }
+        } else if (entry?.kind === "optionItem") {
+          const name = String(entry.className ?? "").trim();
+          if (name) {
+            groupKey = `__byName__:${name.toLowerCase()}`;
+            className = name;
+          }
+        }
+        if (!groups.has(groupKey)) groups.set(groupKey, { groupKey, className, entries: [] });
+        groups.get(groupKey).entries.push(entry);
+      }
+      // Pin the "Other" bucket last for readability.
+      const list = [...groups.values()];
+      list.sort((a, b) => {
+        if (a.groupKey === "__other__") return 1;
+        if (b.groupKey === "__other__") return -1;
+        return 0; // preserve insertion order otherwise
+      });
+      return list;
+    };
+
+    /**
+     * Build the rendered rows for a single class group. Applies
+     * the known-caster swap-pair detection inside the group;
+     * unmatched entries fall through to per-entry rendering. Pair
+     * detection only considers entries WITHIN the group, so a
+     * Bard Remove never gets paired with a Sorcerer Add even
+     * though both are "known" caster types.
+     */
+    const buildPreviewRowsForGroup = (group) => {
       const rows = [];
       const consumed = new Set();
-      // Group spell-change entries by class for pairing.
-      const byClass = new Map(); // classIdentifier → { adds: [], removes: [] }
-      for (const e of entries) {
-        if (e?.kind !== "spellChange") continue;
-        const cls = e.classIdentifier ?? "__none__";
-        if (!byClass.has(cls)) byClass.set(cls, { adds: [], removes: [] });
-        const isAdd = e.before !== "prepared" && e.after === "prepared";
-        const isRemove = e.before === "prepared" && e.after !== "prepared";
-        if (isAdd) byClass.get(cls).adds.push(e);
-        else if (isRemove) byClass.get(cls).removes.push(e);
-      }
-      // Per class: only pair if known caster. Otherwise leave
-      // entries un-paired so they render individually.
-      for (const [cls, bucket] of byClass.entries()) {
-        if (cls === "__none__") continue;
-        const classItem = this._actor.classes?.[cls];
-        const prepType = classItem?.getFlag?.(MODULE_ID, "spellcasting")?.type
-          ?? classItem?.flags?.[MODULE_ID]?.spellcasting?.type
-          ?? null;
-        if (prepType !== "known") continue;
-        // Pair removes ↔ adds.
-        while (bucket.removes.length && bucket.adds.length) {
-          const rem = bucket.removes.shift();
-          const add = bucket.adds.shift();
+      // Detect the group's prep type from a spellChange entry. All
+      // entries in the group share the same class (by construction
+      // of `groupEntriesByClass`), so any spellChange entry gives
+      // us the classIdentifier we need.
+      const sampleSpellEntry = group.entries.find((e) => e?.kind === "spellChange");
+      const cls = sampleSpellEntry?.classIdentifier ?? null;
+      const classItem = cls ? this._actor.classes?.[cls] : null;
+      const prepType = classItem?.getFlag?.(MODULE_ID, "spellcasting")?.type
+        ?? classItem?.flags?.[MODULE_ID]?.spellcasting?.type
+        ?? null;
+
+      if (prepType === "known") {
+        // Pair removes ↔ adds inside this group → "Replacing X with Y"
+        const adds = [];
+        const removes = [];
+        for (const e of group.entries) {
+          if (e?.kind !== "spellChange") continue;
+          const isAdd = e.before !== "prepared" && e.after === "prepared";
+          const isRemove = e.before === "prepared" && e.after !== "prepared";
+          if (isAdd) adds.push(e);
+          else if (isRemove) removes.push(e);
+        }
+        while (removes.length && adds.length) {
+          const rem = removes.shift();
+          const add = adds.shift();
           consumed.add(rem.id);
           consumed.add(add.id);
-          const className = classItem?.name ?? cls;
-          const html = `<strong>Replacing</strong> <em>${escapeHtml(rem.spellName ?? "")}</em> <strong>with</strong> <em>${escapeHtml(add.spellName ?? "")}</em> <span class="dauligor-feature-manager__overview-row-class">(${escapeHtml(className)} known swap)</span>`;
+          const html = `<strong>Replacing</strong> <em>${escapeHtml(rem.spellName ?? "")}</em> <strong>with</strong> <em>${escapeHtml(add.spellName ?? "")}</em>`;
           rows.push({ html, ids: [rem.id, add.id], scope: SCOPE_LONG_REST });
         }
       }
-      // Render remaining (unconsumed) entries individually.
-      for (const e of entries) {
+
+      // Remaining entries: render individually with verb-aware
+      // descriptions (spell changes) or kind-appropriate formatting
+      // (optionItem, etc.).
+      for (const e of group.entries) {
         if (consumed.has(e.id)) continue;
         let descHtml = "";
         if (e.kind === "spellChange") {
@@ -809,37 +863,51 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       return rows;
     };
 
-    const longRestRows = buildPreviewRowsFromEntries(longRestEntries);
-    const levelUpRows = buildPreviewRowsFromEntries(levelUpEntries);
+    /** Render one scope-section (Next long rest / Next level up) — class-grouped. */
+    const renderScopeSection = ({ title, icon, entries, scope }) => {
+      const groups = groupEntriesByClass(entries);
+      const groupHtml = groups.map((group) => {
+        const groupRows = buildPreviewRowsForGroup(group);
+        if (!groupRows.length) return "";
+        return `
+          <div class="dauligor-feature-manager__overview-class-group">
+            <h4 class="dauligor-feature-manager__overview-class-header">
+              ${escapeHtml(group.className)}
+            </h4>
+            <ul class="dauligor-feature-manager__overview-list">
+              ${groupRows.map((r) => renderRow(r.html, r.ids, r.scope ?? scope)).join("")}
+            </ul>
+          </div>
+        `;
+      }).join("");
+      return `
+        <section class="dauligor-feature-manager__overview-section">
+          <h3 class="dauligor-feature-manager__overview-section-title">
+            <i class="${escapeHtml(icon)}"></i>
+            ${escapeHtml(title)}
+            <span class="dauligor-feature-manager__overview-section-count">${entries.length}</span>
+          </h3>
+          ${groupHtml}
+        </section>
+      `;
+    };
 
     const sections = [];
-    if (longRestRows.length) {
-      sections.push(`
-        <section class="dauligor-feature-manager__overview-section">
-          <h3 class="dauligor-feature-manager__overview-section-title">
-            <i class="fas fa-bed"></i>
-            Next long rest
-            <span class="dauligor-feature-manager__overview-section-count">${longRestEntries.length}</span>
-          </h3>
-          <ul class="dauligor-feature-manager__overview-list">
-            ${longRestRows.map((r) => renderRow(r.html, r.ids, r.scope)).join("")}
-          </ul>
-        </section>
-      `);
+    if (longRestEntries.length) {
+      sections.push(renderScopeSection({
+        title: "Next long rest",
+        icon: "fas fa-bed",
+        entries: longRestEntries,
+        scope: SCOPE_LONG_REST
+      }));
     }
-    if (levelUpRows.length) {
-      sections.push(`
-        <section class="dauligor-feature-manager__overview-section">
-          <h3 class="dauligor-feature-manager__overview-section-title">
-            <i class="fas fa-circle-up"></i>
-            Next level up
-            <span class="dauligor-feature-manager__overview-section-count">${levelUpEntries.length}</span>
-          </h3>
-          <ul class="dauligor-feature-manager__overview-list">
-            ${levelUpRows.map((r) => renderRow(r.html, r.ids, SCOPE_LEVEL_UP)).join("")}
-          </ul>
-        </section>
-      `);
+    if (levelUpEntries.length) {
+      sections.push(renderScopeSection({
+        title: "Next level up",
+        icon: "fas fa-circle-up",
+        entries: levelUpEntries,
+        scope: SCOPE_LEVEL_UP
+      }));
     }
 
     this._bodyRegion.innerHTML = `

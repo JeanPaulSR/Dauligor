@@ -6255,12 +6255,29 @@ button.dauligor-option-picker__pill:hover {
   user-select: none;
 }
 
-/* "Replacing X with Y" swap-pair row — annotated with class name. */
-.dauligor-feature-manager__overview-row-class {
-  margin-left: 6px;
+/* Per-class group inside a scope section. The header reads the
+   class name; the list below contains rows for spells affecting
+   THAT class only. Makes multi-class characters legible — Bard
+   changes don't get mixed with Wizard changes in one flat list. */
+.dauligor-feature-manager__overview-class-group {
+  margin-top: 8px;
+}
+
+.dauligor-feature-manager__overview-class-group:first-child {
+  margin-top: 0;
+}
+
+.dauligor-feature-manager__overview-class-header {
+  margin: 0 0 4px;
+  padding: 2px 8px;
   font-size: 0.85em;
-  opacity: 0.6;
-  font-style: italic;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dauligor-text, #cbb98f);
+  opacity: 0.7;
+  border-left: 2px solid var(--dauligor-accent, rgba(180, 140, 80, 0.45));
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .dauligor-feature-manager__overview {
