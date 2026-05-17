@@ -5489,8 +5489,24 @@ button.dauligor-option-picker__pill:hover {
   color: var(--dauligor-text, #cbb98f);
 }
 
+/* Description body. Crucial: NO overflow/border/background here.
+ *
+ * An earlier (now-retired) detail panel set `overflow: auto;
+ * border + dark bg` on `__detail-body` — that rule lives further up
+ * in this file from the legacy 3-col layout era. Without these
+ * explicit overrides, the legacy values leak in: the description
+ * gets its OWN scrollbar inside the detail pane, so expanding the
+ * Show Tags section below visibly shrinks the description's
+ * scrollable window. The fix is to let `__detail-scroll` own the
+ * single outer scroll and have `__detail-body` flow naturally
+ * (overflow: visible; height: auto). */
 .dauligor-spell-manager__detail-body {
   padding: 14px 18px 4px;
+  overflow: visible;
+  height: auto;
+  min-height: 0;
+  border: none;
+  background: transparent;
 }
 
 .dauligor-spell-manager__detail-description {
