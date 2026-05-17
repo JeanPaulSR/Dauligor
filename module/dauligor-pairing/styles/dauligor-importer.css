@@ -3529,6 +3529,13 @@ button.dauligor-option-picker__pill:hover {
   color: var(--dauligor-warning);
 }
 
+/* Overview "All" chip — scope-agnostic (master view), styled as a
+   neutral tag so it doesn't compete with the scope-coloured chips
+   on per-category tabs. */
+.dauligor-feature-manager__tab-scope--master {
+  color: var(--dauligor-text-muted, rgba(255, 255, 255, 0.55));
+}
+
 .dauligor-feature-manager__tab.is-active .dauligor-feature-manager__tab-scope {
   opacity: 1;
 }
@@ -6099,6 +6106,136 @@ button.dauligor-option-picker__pill:hover {
  * positioned filter modal-host stays bounded inside the app frame. */
 .dauligor-importer-app .window-content {
   position: relative;
+}
+
+/* ─── Chat audit (spell change messages) ────────────────────────────── */
+
+.dauligor-chat-spell-change {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.dauligor-chat-spell-change-class {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 6px;
+  border: 1px solid var(--dauligor-border, rgba(0, 0, 0, 0.4));
+  border-radius: 10px;
+  background: rgba(180, 140, 80, 0.18);
+  color: var(--dauligor-text, #cbb98f);
+  font-size: 0.82em;
+  font-weight: 600;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+/* ─── Feature Manager Overview tab ──────────────────────────────────── */
+
+.dauligor-feature-manager__overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dauligor-feature-manager__overview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border: 1px dashed var(--dauligor-border, rgba(0, 0, 0, 0.4));
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dauligor-feature-manager__overview-empty i {
+  font-size: 2em;
+  opacity: 0.55;
+}
+
+.dauligor-feature-manager__overview-empty h3 {
+  margin: 0;
+  font-size: 1.05em;
+  font-weight: 600;
+}
+
+.dauligor-feature-manager__overview-empty p {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 0.9em;
+  line-height: 1.45;
+  color: var(--dauligor-text, #cbb98f);
+  opacity: 0.8;
+}
+
+.dauligor-feature-manager__overview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--dauligor-border, rgba(0, 0, 0, 0.4));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dauligor-feature-manager__overview-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-feature-manager__overview-section-title i {
+  opacity: 0.75;
+}
+
+.dauligor-feature-manager__overview-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--dauligor-accent, rgba(180, 140, 80, 0.35));
+  color: var(--dauligor-text, #cbb98f);
+  font-size: 0.78em;
+  font-weight: 600;
+}
+
+.dauligor-feature-manager__overview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dauligor-feature-manager__overview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.dauligor-feature-manager__overview-row-body {
+  flex: 1 1 auto;
+  font-size: 0.9em;
+  line-height: 1.35;
+}
+
+.dauligor-feature-manager__overview-row-body i.fa-arrow-right {
+  margin: 0 4px;
+  opacity: 0.55;
+  font-size: 0.85em;
 }
 
 /* ─── GM Console ─────────────────────────────────────────────────────── */

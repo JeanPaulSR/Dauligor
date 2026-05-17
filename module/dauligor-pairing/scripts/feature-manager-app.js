@@ -63,6 +63,7 @@ const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applicat
 const SCOPE_LONG_REST = "long-rest";
 const SCOPE_LEVEL_UP = "level-up";
 
+const TAB_OVERVIEW = "overview";
 const TAB_FEATURES = "features";
 const TAB_SPELLS = "spells";
 const TAB_CRAFTING = "crafting";
@@ -70,6 +71,12 @@ const TAB_FEATS = "feats";
 const TAB_ADVANCEMENT = "advancement";
 
 const TAB_DEFS = [
+  // Overview is the master landing tab — lists every queued change
+  // across both scopes (long-rest + level-up). The long-rest hook
+  // opens the FM to this tab so the user sees the queue summary
+  // first; the dedicated per-category tabs (Features/Spells/etc.)
+  // are still reachable via the tab strip.
+  { id: TAB_OVERVIEW,    label: "Overview",    icon: "fas fa-list-check",    scope: null,            placeholder: false },
   { id: TAB_FEATURES,    label: "Features",    icon: "fas fa-star",          scope: SCOPE_LONG_REST, placeholder: false },
   { id: TAB_SPELLS,      label: "Spells",      icon: "fas fa-wand-sparkles", scope: SCOPE_LONG_REST, placeholder: false },
   { id: TAB_CRAFTING,    label: "Crafting",    icon: "fas fa-hammer",        scope: SCOPE_LONG_REST, placeholder: true  },
@@ -232,7 +239,7 @@ function buildOptionGroupInventory(actor) {
 export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
 
-  static open({ actor = null, tab = TAB_FEATURES, scope = null } = {}) {
+  static open({ actor = null, tab = TAB_OVERVIEW, scope = null } = {}) {
     const actorDoc = resolveActorDocument(actor);
     if (!actorDoc) {
       notifyWarn("Open the Feature Manager from a character actor sheet.");
@@ -243,10 +250,13 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       return null;
     }
 
-    // Back-compat: callers that still pass `scope` get routed to the
-    // first tab in that scope (Features for long-rest, Feats for level-up).
-    let resolvedTab = TAB_IDS.includes(tab) ? tab : TAB_FEATURES;
-    if (scope === SCOPE_LEVEL_UP && resolvedTab === TAB_FEATURES) resolvedTab = TAB_FEATS;
+    // Back-compat: callers may pass `scope: "long-rest" | "level-up"`,
+    // which used to route to the first concrete tab in that scope.
+    // After the May 2026 revision, both scopes land on the Overview
+    // master tab — the scope argument is ignored (kept in the API
+    // signature so older call sites don't break).
+    let resolvedTab = TAB_IDS.includes(tab) ? tab : TAB_OVERVIEW;
+    void scope; // suppress "unused var" lint while keeping the API stable
 
     if (this._instance) {
       this._instance.setActor(actorDoc);
@@ -262,7 +272,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     return instance;
   }
 
-  constructor({ actor = null, tab = TAB_FEATURES } = {}) {
+  constructor({ actor = null, tab = TAB_OVERVIEW } = {}) {
     super({
       id: `${MODULE_ID}-feature-manager`,
       classes: ["dauligor-importer-app", "dauligor-feature-manager-app"],
@@ -280,7 +290,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     this._template = FEATURE_MANAGER_TEMPLATE;
     this._actor = actor;
     this._state = {
-      activeTab: TAB_IDS.includes(tab) ? tab : TAB_FEATURES
+      activeTab: TAB_IDS.includes(tab) ? tab : TAB_OVERVIEW
     };
   }
 
@@ -344,7 +354,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     this._headerRegion.innerHTML = `
       <div class="dauligor-feature-manager__title">
         <h2>${escapeHtml(actorName)}</h2>
-        <p class="dauligor-feature-manager__subtitle">Queue changes here. They commit at the next long rest or level up — whichever the tab calls for.</p>
+        <p class="dauligor-feature-manager__subtitle">Spell changes apply immediately and post to chat as an audit trail. Advancement picks queue up here and commit at the next long rest or level up.</p>
       </div>
     `;
   }
@@ -354,18 +364,29 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     const inventory = buildOptionGroupInventory(this._actor);
     const queue = getQueue(this._actor);
 
+    const totalQueued = queue.longRest.entries.length + queue.levelUp.entries.length;
+
     const tabs = TAB_DEFS.map((def) => {
       let count = 0;
       if (def.id === TAB_FEATURES) count = inventory.length;
-      // Per-tab queued counts not stored separately for phase 1; we
-      // show aggregate scope counts in the footer instead.
+      // Overview tab badge shows total queue size across both scopes
+      // so the user has an at-a-glance signal that pending work
+      // exists. Counts of 0 are hidden by the template below.
+      if (def.id === TAB_OVERVIEW) count = totalQueued;
       return { ...def, count };
     });
 
     this._tabsRegion.innerHTML = tabs.map((tab) => {
-      const scopeClass = tab.scope === SCOPE_LEVEL_UP
-        ? "dauligor-feature-manager__tab-scope--level-up"
-        : "dauligor-feature-manager__tab-scope--long-rest";
+      // Scope chip: Overview tab is scope-agnostic (master view) so
+      // we render a neutral chip label "All" instead of one of the
+      // scope colours. Other tabs keep their existing scope classes.
+      const isMaster = tab.id === TAB_OVERVIEW;
+      const scopeClass = isMaster
+        ? "dauligor-feature-manager__tab-scope--master"
+        : (tab.scope === SCOPE_LEVEL_UP
+          ? "dauligor-feature-manager__tab-scope--level-up"
+          : "dauligor-feature-manager__tab-scope--long-rest");
+      const scopeText = isMaster ? "All" : scopeLabel(tab.scope);
       return `
         <button type="button"
                 class="dauligor-feature-manager__tab${tab.id === this._state.activeTab ? " is-active" : ""}${tab.placeholder ? " is-coming-soon" : ""}"
@@ -376,7 +397,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
             <span class="dauligor-feature-manager__tab-label">${escapeHtml(tab.label)}</span>
             ${tab.count ? `<span class="dauligor-feature-manager__tab-count">${tab.count}</span>` : ""}
           </div>
-          <span class="dauligor-feature-manager__tab-scope ${scopeClass}">${escapeHtml(scopeLabel(tab.scope))}</span>
+          <span class="dauligor-feature-manager__tab-scope ${scopeClass}">${escapeHtml(scopeText)}</span>
         </button>
       `;
     }).join("");
@@ -402,6 +423,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       this._embeddedSpellManager = null;
     }
     switch (this._state.activeTab) {
+      case TAB_OVERVIEW:    return this._renderOverviewTab();
       case TAB_FEATURES:    return this._renderFeaturesTab();
       case TAB_SPELLS:      return this._renderSpellsTab();
       case TAB_CRAFTING:    return this._renderPlaceholderTab({
@@ -556,6 +578,127 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         <p class="dauligor-feature-manager__coming-soon-hint">${escapeHtml(hint)}</p>
       </div>
     `;
+  }
+
+  /**
+   * Overview tab — the master landing view. Shows every queued
+   * advancement across both scopes (long-rest + level-up) grouped
+   * by scope. The long-rest hook in main.js opens the FM to this
+   * tab so the user sees the queue first.
+   *
+   * As of May 2026, spell-prep changes do NOT queue — the FM-embedded
+   * Prepare Spells mount applies changes immediately. So the queue
+   * here is exclusively for advancement-style picks (Phase 1 ships
+   * placeholder Features entries; Phase 2 will add real picker UI
+   * for ASI / feat / class / subclass / proficiency choices).
+   */
+  _renderOverviewTab() {
+    const queue = getQueue(this._actor);
+    const longRestEntries = queue.longRest.entries;
+    const levelUpEntries = queue.levelUp.entries;
+    const total = longRestEntries.length + levelUpEntries.length;
+
+    if (total === 0) {
+      this._bodyRegion.innerHTML = `
+        <div class="dauligor-feature-manager__overview-empty">
+          <i class="fas fa-circle-check"></i>
+          <h3>No queued advancements</h3>
+          <p>Queued changes from the other tabs will show up here. Spell prep changes apply immediately and don't queue — they post to chat as an audit trail.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const renderEntry = (entry) => {
+      // Spell entries (legacy — pre-May-2026 queue logging) get
+      // verb-aware descriptions; option-item entries get a from/to
+      // arrow; everything else falls back to a generic kind label.
+      // Spell entries should be empty going forward but the renderer
+      // still handles them so old actor flags from before the
+      // revision degrade gracefully.
+      let descHtml = "";
+      if (entry.kind === "spellChange") {
+        const verbs = {
+          "added-to-sheet":         "Added to sheet:",
+          "removed-from-sheet":     "Removed from sheet:",
+          "added-to-spellbook":     "Added to spellbook:",
+          "removed-from-spellbook": "Removed from spellbook:",
+          "prepared":               "Prepared:",
+          "unprepared":             "Unprepared:",
+          "added-as-known":         "Added as Known:",
+          "removed-as-known":       "Removed as Known:",
+        };
+        const verb = verbs[entry.transition] ?? "Changed:";
+        descHtml = `<strong>${escapeHtml(verb)}</strong> ${escapeHtml(entry.spellName ?? "")}`;
+      } else if (entry.kind === "optionItem") {
+        descHtml = `<strong>${escapeHtml(entry.groupLabel ?? "Class Option")}:</strong> ${escapeHtml(entry.fromName ?? "?")} <i class="fas fa-arrow-right"></i> ${escapeHtml(entry.toName ?? "(picker TBD)")}`;
+      } else {
+        descHtml = `<strong>${escapeHtml(entry.kind ?? "Queued change")}</strong>`;
+      }
+
+      return `
+        <li class="dauligor-feature-manager__overview-row">
+          <div class="dauligor-feature-manager__overview-row-body">${descHtml}</div>
+          <button type="button"
+                  class="dauligor-feature-manager__queued-remove"
+                  data-action="remove-overview-entry"
+                  data-entry-id="${escapeHtml(entry.id)}"
+                  data-entry-scope="${escapeHtml(entry.scope ?? SCOPE_LONG_REST)}"
+                  title="Remove this queued change">
+            <i class="fas fa-xmark"></i>
+          </button>
+        </li>
+      `;
+    };
+
+    const sections = [];
+    if (longRestEntries.length) {
+      sections.push(`
+        <section class="dauligor-feature-manager__overview-section">
+          <h3 class="dauligor-feature-manager__overview-section-title">
+            <i class="fas fa-bed"></i>
+            Next long rest
+            <span class="dauligor-feature-manager__overview-section-count">${longRestEntries.length}</span>
+          </h3>
+          <ul class="dauligor-feature-manager__overview-list">
+            ${longRestEntries.map(renderEntry).join("")}
+          </ul>
+        </section>
+      `);
+    }
+    if (levelUpEntries.length) {
+      sections.push(`
+        <section class="dauligor-feature-manager__overview-section">
+          <h3 class="dauligor-feature-manager__overview-section-title">
+            <i class="fas fa-circle-up"></i>
+            Next level up
+            <span class="dauligor-feature-manager__overview-section-count">${levelUpEntries.length}</span>
+          </h3>
+          <ul class="dauligor-feature-manager__overview-list">
+            ${levelUpEntries.map(renderEntry).join("")}
+          </ul>
+        </section>
+      `);
+    }
+
+    this._bodyRegion.innerHTML = `
+      <div class="dauligor-feature-manager__overview">
+        ${sections.join("")}
+      </div>
+    `;
+
+    // Wire per-row Remove buttons. Routes through the scoped queue
+    // helpers so the right bucket is mutated.
+    for (const button of this._bodyRegion.querySelectorAll(`[data-action="remove-overview-entry"]`)) {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const entryId = event.currentTarget?.dataset?.entryId;
+        const scope = event.currentTarget?.dataset?.entryScope ?? SCOPE_LONG_REST;
+        if (!entryId) return;
+        await removeQueueEntry(this._actor, scope, entryId);
+        this.render({ force: false });
+      });
+    }
   }
 
   /**
@@ -737,41 +880,58 @@ function formatQueueEntryDescriptionHtml(entry) {
 /**
  * Open the long-rest commit dialog for an actor. Called from
  * `main.js` after `dnd5e.restCompleted` fires for a long rest.
- * No-op when the queue is empty.
+ * No-op when the queue is empty across both scopes.
+ *
+ * Behaviour (May 2026 revision):
+ *   - Always opens the FM to the Overview tab (no auto-switch to
+ *     Spells / Features based on entry kind).
+ *   - Shows entries from BOTH scopes — long rest is the natural
+ *     review point for any pending advancement.
+ *   - Save / Discard both clear the relevant queue scopes. Phase 1
+ *     limitation: changes that were applied immediately (every
+ *     spell-prep change, which no longer queues at all) aren't
+ *     affected.
  */
 export async function promptLongRestCommit(actorLike) {
   const actor = resolveActorDocument(actorLike);
   if (!actor || actor.type !== "character") return;
   const queue = getQueue(actor);
-  const entries = queue.longRest.entries;
-  if (!entries.length) return;
+  const longRestEntries = queue.longRest.entries;
+  const levelUpEntries = queue.levelUp.entries;
+  const total = longRestEntries.length + levelUpEntries.length;
+  if (total === 0) return;
 
-  // Decide which tab to focus the FM on. If ANY spell entry is in
-  // the queue, the Spells tab is the most relevant view; otherwise
-  // stay on Features (the only other Phase-1 ready tab).
-  const hasSpellEntry = entries.some((e) => e.kind === "spellChange");
-  const focusedTab = hasSpellEntry ? TAB_SPELLS : TAB_FEATURES;
+  // Always open the FM to the Overview tab — the master view that
+  // surfaces every queued advancement across scopes. No more
+  // entry-kind-based auto-switching to Spells/Features.
+  const fmInstance = DauligorFeatureManagerApp.open({ actor, tab: TAB_OVERVIEW });
 
-  // Open / focus the FM so the user can review changes alongside the
-  // dialog.
-  const fmInstance = DauligorFeatureManagerApp.open({ actor, tab: focusedTab });
+  const longRestListHtml = longRestEntries.map(formatQueueEntryDescriptionHtml).join("");
+  const levelUpListHtml = levelUpEntries.map(formatQueueEntryDescriptionHtml).join("");
 
-  const listHtml = entries.map(formatQueueEntryDescriptionHtml).join("");
-  const phase1Note = entries.some((e) => e.kind === "spellChange")
-    ? `<p class="hint" style="opacity:0.7; font-size:0.85em; margin-top:6px;">Note: spell changes applied immediately when you made them. Discarding clears the audit log but does not roll the changes back.</p>`
-    : "";
+  const sectionHtml = [
+    longRestEntries.length ? `
+      <div class="dauligor-feature-manager__rest-prompt-section">
+        <strong><i class="fas fa-bed"></i> Next long rest:</strong>
+        <ul style="margin: 4px 0 0 18px; padding: 0; list-style: disc;">${longRestListHtml}</ul>
+      </div>
+    ` : "",
+    levelUpEntries.length ? `
+      <div class="dauligor-feature-manager__rest-prompt-section">
+        <strong><i class="fas fa-circle-up"></i> Next level up:</strong>
+        <ul style="margin: 4px 0 0 18px; padding: 0; list-style: disc;">${levelUpListHtml}</ul>
+      </div>
+    ` : ""
+  ].filter(Boolean).join("");
 
   let decision = null;
   try {
     decision = await DialogV2.wait({
-      window: { title: `Long Rest — Confirm changes for ${actor.name}` },
+      window: { title: `Long Rest — Queued Advancements for ${actor.name}` },
       content: `
         <div class="dauligor-feature-manager__rest-prompt">
-          <p>You finished a long rest with <strong>${entries.length}</strong> queued change${entries.length === 1 ? "" : "s"}:</p>
-          <ul style="margin: 6px 0 0 18px; padding: 0; list-style: disc;">
-            ${listHtml}
-          </ul>
-          ${phase1Note}
+          <p>You finished a long rest with <strong>${total}</strong> queued advancement${total === 1 ? "" : "s"}:</p>
+          ${sectionHtml}
         </div>
       `,
       buttons: [
@@ -804,24 +964,28 @@ export async function promptLongRestCommit(actorLike) {
   }
 
   if (decision === "review") {
-    // Keep the FM open + leave the queue intact. The user will
-    // commit via the FM footer's queue summary buttons (or repeat
-    // the rest).
+    // Keep the FM open + leave the queue intact. The user can
+    // continue editing via the FM's tabs.
     return;
   }
 
   if (decision === "save") {
-    await clearScope(actor, SCOPE_LONG_REST);
-    // Re-render the FM so the (now-empty) queue summary updates.
+    // Clear BOTH scopes — long rest is the natural commit point
+    // for either kind of queued advancement, and Phase 1 doesn't
+    // distinguish between them at commit time (the picker UI that
+    // creates real entries hasn't shipped yet).
+    if (longRestEntries.length) await clearScope(actor, SCOPE_LONG_REST);
+    if (levelUpEntries.length) await clearScope(actor, SCOPE_LEVEL_UP);
     fmInstance?.render?.({ force: false });
-    notifyInfo(`Long rest changes saved for ${actor.name}.`);
+    notifyInfo(`Queued advancements saved for ${actor.name}.`);
     return;
   }
 
   if (decision === "discard") {
-    await clearScope(actor, SCOPE_LONG_REST);
+    if (longRestEntries.length) await clearScope(actor, SCOPE_LONG_REST);
+    if (levelUpEntries.length) await clearScope(actor, SCOPE_LEVEL_UP);
     fmInstance?.render?.({ force: false });
-    notifyInfo(`Long rest changes discarded for ${actor.name}. (Phase 1: applied changes are not rolled back.)`);
+    notifyInfo(`Queued advancements discarded for ${actor.name}.`);
     return;
   }
 

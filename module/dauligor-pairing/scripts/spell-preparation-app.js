@@ -178,29 +178,54 @@ function describeSheetModeTransition(before, after, isKnownCaster = false) {
 }
 
 /**
+ * Resolve a human-readable class name for the chat audit. Looks up
+ * the actor's class item by identifier and returns its `.name` (the
+ * imported item's display name — e.g. "Bard", "Wizard"). Returns
+ * empty string when the identifier doesn't resolve to a class item
+ * on the actor (e.g. orphan spells from the importer, spells whose
+ * class was removed).
+ */
+function resolveClassDisplayName(actor, classIdentifier) {
+  if (!actor || !classIdentifier) return "";
+  const classes = actor.classes ?? {};
+  const item = classes[classIdentifier];
+  return String(item?.name ?? "").trim();
+}
+
+/**
  * Build the chat-message content for a spell change. Format mirrors
  * the user's example "{User} from {Character} swapped out {Spell}"
- * but uses verbs that match the actual transition. The chat message
- * surfaces every direct (non-queued) prep change so other players +
+ * but uses verbs that match the actual transition. Includes the
+ * spell's class attribution as a parenthesized chip when present —
+ * orphan spells (no class) omit the chip entirely.
+ *
+ * The chat message surfaces every prep change so other players +
  * the GM can see what the actor's spell loadout looked like at any
  * point — useful for "wait, when did you prepare Counterspell?"
  * follow-up questions.
  */
-function buildSpellChangeChatContent(actor, spell, transition) {
+function buildSpellChangeChatContent(actor, spell, transition, { classIdentifier = null } = {}) {
   const userName = String(game.user?.name ?? "Someone");
   const charName = String(actor?.name ?? "their character");
   const spellName = String(spell?.name ?? "a spell");
+  const className = resolveClassDisplayName(actor, classIdentifier);
+  // Inline class chip — shown between the spell name and the
+  // preposition (or at the end for symmetric phrasing). Skip when
+  // the spell has no class attribution.
+  const classChip = className
+    ? ` <span class="dauligor-chat-spell-change-class">(${escapeHtmlGlobal(className)})</span>`
+    : "";
   const phrases = {
-    "added-to-sheet":       `added <strong>${spellName}</strong> to <strong>${charName}</strong>'s sheet`,
-    "removed-from-sheet":   `removed <strong>${spellName}</strong> from <strong>${charName}</strong>'s sheet`,
-    "added-to-spellbook":   `added <strong>${spellName}</strong> to <strong>${charName}</strong>'s spellbook`,
-    "removed-from-spellbook": `removed <strong>${spellName}</strong> from <strong>${charName}</strong>'s spellbook`,
-    "prepared":             `prepared <strong>${spellName}</strong> on <strong>${charName}</strong>`,
-    "unprepared":           `unprepared <strong>${spellName}</strong> on <strong>${charName}</strong>`,
-    "added-as-known":       `added <strong>${spellName}</strong> as a Known spell on <strong>${charName}</strong>`,
-    "removed-as-known":     `removed <strong>${spellName}</strong> as a Known spell on <strong>${charName}</strong>`,
+    "added-to-sheet":       `added <strong>${spellName}</strong>${classChip} to <strong>${charName}</strong>'s sheet`,
+    "removed-from-sheet":   `removed <strong>${spellName}</strong>${classChip} from <strong>${charName}</strong>'s sheet`,
+    "added-to-spellbook":   `added <strong>${spellName}</strong>${classChip} to <strong>${charName}</strong>'s spellbook`,
+    "removed-from-spellbook": `removed <strong>${spellName}</strong>${classChip} from <strong>${charName}</strong>'s spellbook`,
+    "prepared":             `prepared <strong>${spellName}</strong>${classChip} on <strong>${charName}</strong>`,
+    "unprepared":           `unprepared <strong>${spellName}</strong>${classChip} on <strong>${charName}</strong>`,
+    "added-as-known":       `added <strong>${spellName}</strong>${classChip} as a Known spell on <strong>${charName}</strong>`,
+    "removed-as-known":     `removed <strong>${spellName}</strong>${classChip} as a Known spell on <strong>${charName}</strong>`,
   };
-  const verb = phrases[transition] ?? `changed <strong>${spellName}</strong> on <strong>${charName}</strong>`;
+  const verb = phrases[transition] ?? `changed <strong>${spellName}</strong>${classChip} on <strong>${charName}</strong>`;
   return `<p class="dauligor-chat-spell-change">${escapeHtmlGlobal(userName)} ${verb}.</p>`;
 }
 
@@ -222,20 +247,24 @@ function escapeHtmlGlobal(value) {
 }
 
 /**
- * Post a spell-change notification to chat. Only fires for direct
- * mutations (the user used the standalone Prepare Spells window) —
- * mutations made via the Feature Manager's embedded mount are
- * recorded in the queue instead (see `_logSpellChangeToQueue`) and
- * don't post here. The GM + every player sees the message; the
- * speaker is the actor so it groups under their portrait in chat.
+ * Post a spell-change notification to chat. Fires for every direct
+ * spell mutation — both the standalone Prepare Spells window AND
+ * the Feature Manager's embedded mount (which apply changes
+ * immediately as of the May 2026 revision; no FM-side queueing).
+ * The GM + every player sees the message; the speaker is the actor
+ * so it groups under their portrait in chat.
+ *
+ * `classIdentifier` is the spell's class attribution (e.g. "bard").
+ * Falls through to no chip when null / unresolvable — see
+ * `buildSpellChangeChatContent` for the chip rendering.
  */
-function postSpellChangeChat(actor, spell, transition) {
+function postSpellChangeChat(actor, spell, transition, { classIdentifier = null } = {}) {
   if (!actor || !spell || !transition) return;
   try {
     const ChatMessageImpl = globalThis.ChatMessage;
     if (!ChatMessageImpl?.create) return;
     ChatMessageImpl.create({
-      content: buildSpellChangeChatContent(actor, spell, transition),
+      content: buildSpellChangeChatContent(actor, spell, transition, { classIdentifier }),
       speaker: ChatMessageImpl.getSpeaker({ actor }),
       user: game.user?.id,
       style: globalThis.CONST?.CHAT_MESSAGE_STYLES?.OTHER ?? 0,
@@ -245,43 +274,16 @@ function postSpellChangeChat(actor, spell, transition) {
   }
 }
 
-/**
- * Append a queue log entry recording a spell change made via the
- * Feature Manager's embedded Prepare Spells mount. The entry lives
- * under `flags.dauligor-pairing.featureManagerQueue.longRest.entries`
- * with kind=`"spellChange"`, so the long-rest commit dialog has a
- * concrete list of "things you did during this rest period" to show
- * the player + GM.
- *
- * Phase 1 limitation: the change has ALREADY been applied to the
- * actor — the queue is an audit log, not a deferred transaction.
- * Phase 2 would defer the mutation until commit; the data shape
- * here is forward-compatible with that change.
- */
-async function logSpellChangeToQueue(actor, spell, transition, { classIdentifier = null } = {}) {
-  if (!actor?.setFlag) return;
-  try {
-    const raw = actor.getFlag?.(MODULE_ID, "featureManagerQueue") ?? null;
-    const queue = {
-      longRest: { entries: Array.isArray(raw?.longRest?.entries) ? [...raw.longRest.entries] : [] },
-      levelUp: { entries: Array.isArray(raw?.levelUp?.entries) ? [...raw.levelUp.entries] : [] }
-    };
-    queue.longRest.entries.push({
-      id: foundry.utils.randomID(),
-      kind: "spellChange",
-      queuedAt: Date.now(),
-      scope: "long-rest",
-      spellId: String(spell?.id ?? ""),
-      spellName: String(spell?.name ?? ""),
-      spellDbId: String(spell?.getFlag?.(MODULE_ID, "entityId") ?? ""),
-      classIdentifier: classIdentifier ? String(classIdentifier) : null,
-      transition: String(transition)
-    });
-    await actor.setFlag(MODULE_ID, "featureManagerQueue", queue);
-  } catch (err) {
-    console.warn(`${MODULE_ID} | logSpellChangeToQueue failed`, err);
-  }
-}
+// Note: an earlier revision of this file shipped a
+// `logSpellChangeToQueue` helper that appended `kind: "spellChange"`
+// entries to the FM's long-rest queue when the user mutated spells
+// via the FM-embedded Prepare Spells mount. Per the May 2026
+// clarification, FM-embedded mutations now apply immediately just
+// like the standalone window — no queueing for spell changes. The
+// queue is reserved for level-up advancement picks (deferred player
+// choice). The helper was removed; if Phase 2 wants to defer-then-
+// commit spell changes, restore it from git history at the same
+// shape.
 
 function escapeHtml(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
@@ -1697,18 +1699,18 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       const beforeMode = getSheetMode(owned);
       try {
         await owned.update(buildSheetModePatch(mode));
-        // Chat / queue: record the transition. Embedded mounts (FM)
-        // log to the long-rest queue; standalone Prepare Spells
-        // posts to chat for everyone to see.
+        // Chat audit: every spell-prep change posts a message so the
+        // GM + other players can see the actor's loadout shift. This
+        // fires regardless of WHERE the user made the change (the
+        // standalone Prepare Spells window OR the Feature Manager's
+        // embedded mount). The FM-embedded mount no longer queues
+        // — the user clarified that FM changes apply immediately too;
+        // the queue is reserved for level-up advancement picks.
         const isKnownCaster = classModel?.prepType === "known";
         const transition = describeSheetModeTransition(beforeMode, mode, isKnownCaster);
-        if (this._isEmbedded) {
-          await logSpellChangeToQueue(this._actor, owned, transition, {
-            classIdentifier: classModel?.identifier ?? null
-          });
-        } else {
-          postSpellChangeChat(this._actor, owned, transition);
-        }
+        postSpellChangeChat(this._actor, owned, transition, {
+          classIdentifier: classModel?.identifier ?? null
+        });
         await this._renderManager();
       } catch (err) {
         console.warn(`${MODULE_ID} | update sheetMode failed`, err);
@@ -1742,13 +1744,13 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       try {
         const [created] = await this._actor.createEmbeddedDocuments("Item", [itemData]);
         notifyInfo(`${itemData.name} added to sheet.`);
-        // Importer creates go to chat regardless of embed state —
-        // the importer isn't a long-rest action and shouldn't add
-        // queue entries. Skip when running inside the FM mount
-        // (which currently doesn't happen, but the guard keeps the
-        // contract clean if that ever changes).
-        if (created && !this._isEmbedded) {
-          postSpellChangeChat(this._actor, created, "added-to-sheet");
+        // Importer creates an orphan (no classIdentifier) — chat
+        // message omits the class chip. Posts regardless of embed
+        // state.
+        if (created) {
+          postSpellChangeChat(this._actor, created, "added-to-sheet", {
+            classIdentifier: null
+          });
         }
         await this._renderManager();
       } catch (err) {
@@ -1791,17 +1793,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     try {
       const [created] = await this._actor.createEmbeddedDocuments("Item", [itemData]);
       notifyInfo(`${itemData.name} added to sheet.`);
-      // Chat / queue: record the create transition (null → mode).
+      // Chat audit: post the create transition (null → mode).
+      // Fires for BOTH standalone and FM-embedded mounts — the FM
+      // no longer queues spell changes (apply-immediately semantics
+      // per user's clarification).
       const isKnownCaster = classModel?.prepType === "known";
       const transition = describeSheetModeTransition(null, mode, isKnownCaster);
       if (created) {
-        if (this._isEmbedded) {
-          await logSpellChangeToQueue(this._actor, created, transition, {
-            classIdentifier: classModel?.identifier ?? null
-          });
-        } else {
-          postSpellChangeChat(this._actor, created, transition);
-        }
+        postSpellChangeChat(this._actor, created, transition, {
+          classIdentifier: classModel?.identifier ?? null
+        });
       }
       await this._renderManager();
     } catch (err) {
@@ -1887,8 +1888,12 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       notifyWarn(`${owned.name} is always prepared and cannot be removed from this manager.`);
       return;
     }
-    // Snapshot before deletion so we can describe the transition.
+    // Snapshot before deletion so we can describe the transition +
+    // resolve the class attribution for the chat audit.
     const beforeMode = getSheetMode(owned);
+    const beforeClassIdentifier = resolveSpellClassIdentifier(owned)
+      || classModel?.identifier
+      || null;
     const spellSnapshot = {
       id: owned.id,
       name: owned.name,
@@ -1897,15 +1902,10 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     try {
       await this._actor.deleteEmbeddedDocuments("Item", [owned.id]);
       notifyInfo(`${owned.name} removed from sheet.`);
-      // Chat / queue: record the removal transition (<mode> → null).
-      const transition = "removed-from-sheet";
-      if (this._isEmbedded) {
-        await logSpellChangeToQueue(this._actor, spellSnapshot, transition, {
-          classIdentifier: classModel?.identifier ?? null
-        });
-      } else {
-        postSpellChangeChat(this._actor, spellSnapshot, transition);
-      }
+      // Chat audit: fires for both standalone and FM-embedded mounts.
+      postSpellChangeChat(this._actor, spellSnapshot, "removed-from-sheet", {
+        classIdentifier: beforeClassIdentifier
+      });
       await this._renderManager();
     } catch (err) {
       console.warn(`${MODULE_ID} | remove spell failed`, err);
