@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { OperationType, reportClientError } from '@/lib/firebase';
+import { auth, OperationType, reportClientError } from '@/lib/firebase';
 import { fetchDocument, fetchCollection, upsertDocument, deleteDocuments } from '@/lib/d1';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,22 +65,53 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
         const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
         setEras(erasData);
 
-        // Fetch Lore via D1 helper (D1-only)
-        const loreData = await fetchCollection<any>('lore', { orderBy: 'title ASC' });
-        setLorePages(loreData);
+        // Per-route endpoint (server strips dm_notes). Staff edit
+        // surface, so the article picker shows drafts too.
+        const idToken = await auth.currentUser?.getIdToken();
+        const loreRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!loreRes.ok) throw new Error(`Failed to load lore (HTTP ${loreRes.status})`);
+        const loreBody = await loreRes.json();
+        setLorePages(Array.isArray(loreBody?.articles) ? loreBody.articles : []);
 
-        // Fetch Users via D1 helper (D1-only)
-        const usersData = await fetchCollection<any>('users');
+        // Per-route admin endpoint. Staff-gated (lore-writer / co-dm /
+        // admin) with column-scoping by viewer role — non-admin staff
+        // gets the minimal identity subset (id, username, display_name,
+        // role, avatar_url). That's exactly what the player picker
+        // below needs; closes M2 + the H7-leak path where the legacy
+        // fetchCollection('users') returned recovery_email and the
+        // full row to every staff visitor of /campaign/edit/:id.
+        const usersIdToken = await auth.currentUser?.getIdToken();
+        const usersRes = await fetch('/api/admin/users', {
+          headers: usersIdToken ? { Authorization: `Bearer ${usersIdToken}` } : {},
+        });
+        if (!usersRes.ok) throw new Error(`Failed to load users (HTTP ${usersRes.status})`);
+        const usersBody = await usersRes.json();
+        const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
         setAllUsers(usersData);
 
-        // Fetch Campaign via D1 helper
+        // Per-route campaign endpoint + dedicated members sub-route.
+        // Staff context (this page is gated to admin/co-dm), so the
+        // member-or-staff check on the server always admits.
         if (id) {
-          const campData = await fetchDocument<any>('campaigns', id);
+          const editIdToken = await auth.currentUser?.getIdToken();
+          const authHeaders = editIdToken ? { Authorization: `Bearer ${editIdToken}` } : {};
+          const [campRes, membersRes] = await Promise.all([
+            fetch(`/api/campaigns/${encodeURIComponent(id)}`, { headers: authHeaders }),
+            fetch(`/api/campaigns/${encodeURIComponent(id)}/members`, { headers: authHeaders }),
+          ]);
+          if (!campRes.ok) {
+            setLoading(false);
+            return;
+          }
+          const campData = (await campRes.json())?.campaign;
 
           if (campData) {
-            // Fetch members from junction table
-            const membersData = await fetchCollection<any>('campaignMembers', { where: 'campaign_id = ?', params: [id] });
-            const memberUids = membersData.map(m => m.user_id);
+            const membersBody = membersRes.ok ? await membersRes.json() : { members: [] };
+            const memberUids: string[] = Array.isArray(membersBody?.members)
+              ? membersBody.members.map((m: any) => m.user_id).filter(Boolean)
+              : [];
 
             setFormData({
               name: campData.name || '',
@@ -132,10 +163,16 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
 
       await upsertDocument('campaigns', id, campaignData);
 
-      // 2. Update junction table
-      // Fetch current members to see who to add/remove
-      const currentMembers = await fetchCollection<any>('campaignMembers', { where: 'campaign_id = ?', params: [id] });
-      const currentUids = currentMembers.map(m => m.user_id);
+      // 2. Update junction table — fetch current members via the
+      // per-route endpoint so the read goes through the same gate as
+      // the editor's initial load.
+      const saveIdToken = await auth.currentUser?.getIdToken();
+      const currentRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}/members`, {
+        headers: saveIdToken ? { Authorization: `Bearer ${saveIdToken}` } : {},
+      });
+      const currentBody = currentRes.ok ? await currentRes.json() : { members: [] };
+      const currentMembers: any[] = Array.isArray(currentBody?.members) ? currentBody.members : [];
+      const currentUids = currentMembers.map((m) => m.user_id);
 
       // Users to add
       const toAdd = formData.playerIds.filter(uid => !currentUids.includes(uid));

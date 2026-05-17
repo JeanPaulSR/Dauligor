@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { auth } from '@/lib/firebase';
 import { fetchDocument, fetchCollection } from '@/lib/d1';
 
 import { Shield, ChevronLeft, Calendar, Users, MapPin, Sparkles, Edit, FileText, Scroll, History, LayoutGrid } from 'lucide-react';
@@ -31,14 +32,33 @@ export default function CampaignManager({ userProfile }: { userProfile: any }) {
     const fetchCampaignAndArticles = async () => {
       if (!id) return;
       try {
-        // Fetch campaign via D1 helper (D1-only)
-        const campData = await fetchDocument<any>('campaigns', id);
+        // Per-route campaign endpoint. Member-or-staff gate runs
+        // server-side; non-members get a 404 (collapsed with "doesn't
+        // exist" so probes can't enumerate ids).
+        const idToken = await auth.currentUser?.getIdToken();
+        const campRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!campRes.ok) {
+          setLoading(false);
+          return;
+        }
+        const campData = (await campRes.json())?.campaign;
 
         if (campData) {
           setCampaign(campData);
 
-          // Fetch all lore articles (D1-only)
-          const lorePages = await fetchCollection<any>('lore');
+          // Per-route endpoint; server strips dm_notes and filters
+          // drafts for non-staff. The visibility filter (campaign /
+          // era scoping) still runs in JS below because the page does
+          // its own client-side preview/era logic.
+          const idToken = await auth.currentUser?.getIdToken();
+          const loreRes = await fetch('/api/lore/articles', {
+            headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+          });
+          if (!loreRes.ok) throw new Error(`HTTP ${loreRes.status}`);
+          const loreBody = await loreRes.json();
+          const lorePages: any[] = Array.isArray(loreBody?.articles) ? loreBody.articles : [];
 
           // Fetch visibility data from junction tables
           const articleCampaigns = await fetchCollection<any>('loreArticleCampaigns');

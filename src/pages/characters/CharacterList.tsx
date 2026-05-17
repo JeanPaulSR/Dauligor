@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Plus, User, Shield, Sparkles, BookOpen, Book } from 'lucide-react';
-import { queryD1 } from '../../lib/d1';
+import { auth } from '../../lib/firebase';
 import {
   Dialog,
   DialogContent,
@@ -17,34 +17,40 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const isStaff = ['admin', 'co-dm', 'lore-writer'].includes(userProfile?.role);
+  // "Archive Administration View" — admin/co-dm get the full character
+  // list, everyone else (including lore-writer, trusted-player, user)
+  // sees only their own. The server enforces this too; `isCharacterDM` here
+  // just decides which endpoint to call so we don't ship a 403.
+  // `lore-writer` used to be treated as staff for this list but the
+  // server now scopes character DM access to admin/co-dm only (see
+  // `api/_lib/firebase-admin.ts:CHARACTER_DM_ROLES`); we match that
+  // here so the UI label and the network call agree.
+  const isCharacterDM = ['admin', 'co-dm'].includes(userProfile?.role);
 
   useEffect(() => {
     if (!userProfile?.id) return;
 
     const loadCharacters = async () => {
       try {
-        let sql = "SELECT * FROM characters";
-        let params: any[] = [];
-
-        if (!isStaff) {
-          sql += " WHERE user_id = ?";
-          params = [userProfile.id];
+        const idToken = await auth.currentUser?.getIdToken();
+        const url = isCharacterDM ? '/api/admin/characters' : '/api/me/characters';
+        const res = await fetch(url, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to load characters (HTTP ${res.status})`);
         }
-        
-        sql += " ORDER BY updated_at DESC";
-        
-        const results = await queryD1<any>(sql, params);
-        setCharacters(results);
+        const body = await res.json();
+        setCharacters(Array.isArray(body?.characters) ? body.characters : []);
       } catch (error) {
-        console.error("Error loading characters from D1:", error);
+        console.error("Error loading characters:", error);
       } finally {
         setLoading(false);
       }
     };
 
     loadCharacters();
-  }, [userProfile?.id, isStaff]);
+  }, [userProfile?.id, isCharacterDM]);
 
   if (loading) {
     return (
@@ -61,7 +67,7 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
           <User className="w-8 h-8 text-gold" />
           <div>
             <h1 className="text-3xl font-serif font-bold text-ink uppercase tracking-tight">Characters</h1>
-            {isStaff && <p className="text-sm text-ink/60 font-bold tracking-widest uppercase">Archive Administration View</p>}
+            {isCharacterDM && <p className="text-sm text-ink/60 font-bold tracking-widest uppercase">Archive Administration View</p>}
           </div>
         </div>
         <Dialog>
@@ -167,7 +173,7 @@ export default function CharacterList({ userProfile }: { userProfile: any }) {
               <div className="text-xs text-ink/50 uppercase tracking-widest font-bold">
                 {char.campaign_id ? 'Assigned to Campaign' : 'No Campaign'}
               </div>
-              {isStaff && char.user_id !== userProfile.id && (
+              {isCharacterDM && char.user_id !== userProfile.id && (
                 <div className="mt-2 pt-2 border-t border-gold/10 flex items-center gap-2 text-xs text-ink/40">
                   <Shield className="w-3 h-3" /> Player ID: {String(char.user_id || '').substring(0,6)}...
                 </div>

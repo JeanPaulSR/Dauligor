@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { fetchDocument, queryD1 } from '../lib/d1';
+import { auth } from '../lib/firebase';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { 
@@ -47,9 +47,20 @@ export default function Sidebar({
     const fetchCampaign = async () => {
       try {
         if (userProfile?.active_campaign_id) {
-          const data = await fetchDocument<any>('campaigns', userProfile.active_campaign_id);
-          if (data) {
-            setCampaign(data);
+          // Per-route campaign endpoint — the active-campaign id came
+          // from the user's own profile via /api/me, so they're always
+          // a member of it, so the member-or-staff gate on the server
+          // always admits. 404 here would mean the campaign was
+          // deleted; degrade silently.
+          const idToken = await auth.currentUser?.getIdToken();
+          const res = await fetch(`/api/campaigns/${encodeURIComponent(userProfile.active_campaign_id)}`, {
+            headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+          });
+          if (res.ok) {
+            const body = await res.json();
+            if (body?.campaign) setCampaign(body.campaign);
+          } else {
+            setCampaign(null);
           }
         } else {
           setCampaign(null);
@@ -91,10 +102,17 @@ export default function Sidebar({
     let cancelled = false;
     const load = async () => {
       try {
-        const rows = await queryD1<any>(
-          'SELECT id, name, level FROM characters WHERE user_id = ? ORDER BY updated_at DESC LIMIT 5',
-          [userProfile.id],
-        );
+        // Per-route endpoint with server-side uid scoping. `?fields=` /
+        // `?limit=` keep the response minimal — same payload shape as
+        // the previous `SELECT id, name, level FROM characters …` raw
+        // query, just gated and column-scoped on the server.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/me/characters?fields=id,name,level&limit=5', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        const rows: any[] = Array.isArray(body?.characters) ? body.characters : [];
         if (cancelled) return;
         setUserCharacters(
           rows.map((r: any) => ({

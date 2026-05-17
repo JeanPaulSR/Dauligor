@@ -94,41 +94,49 @@ export default function Settings({ user, userProfile }: { user: any, userProfile
     setError('');
 
     try {
-      // Update Auth Profile
+      // Update the Firebase Auth display name + photo URL. These don't
+      // live in D1 — they're convenience metadata Firebase Auth surfaces
+      // to other Firebase services. Email is handled server-side as
+      // part of the PATCH /api/me below (the server owns the Firebase
+      // Admin SDK so it can rename without the client SDK's
+      // "recent login" requirement).
       if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { 
+        await updateProfile(auth.currentUser, {
           displayName,
-          photoURL: avatarUrl 
+          photoURL: avatarUrl,
         });
-
-        if (username !== userProfile.username) {
-          try {
-            await updateEmail(auth.currentUser, usernameToEmail(username));
-          } catch (emailErr: any) {
-            if (emailErr.code === 'auth/requires-recent-login') {
-              throw new Error('For security, please log out and log back in before changing your username.');
-            }
-            throw emailErr;
-          }
-        }
       }
 
-      // Update D1 Profile
-      await upsertDocument('users', user.uid, {
-        display_name: displayName,
-        pronouns,
-        bio,
-        avatar_url: avatarUrl,
-        theme,
-        accent_color: accentColor,
-        username,
-        hide_username: hideUsername,
-        is_private: isPrivate,
-        recovery_email: recoveryEmail,
-        updated_at: new Date().toISOString()
+      // PATCH /api/me — allow-listed fields only; the server drops any
+      // column the client tries to set that isn't in its allow-list
+      // (which deliberately excludes `role`). Closes H6.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          display_name: displayName,
+          pronouns,
+          bio,
+          avatar_url: avatarUrl,
+          theme,
+          accent_color: accentColor,
+          username,
+          hide_username: hideUsername,
+          is_private: isPrivate,
+          recovery_email: recoveryEmail,
+        }),
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to update profile (HTTP ${res.status})`);
+      }
 
-      // Refresh the app-wide profile state
+      // Refresh the app-wide profile state so other components pick up
+      // the new values without a manual reload.
       await refreshProfile();
       setSuccess('Profile updated successfully!');
     } catch (err: any) {

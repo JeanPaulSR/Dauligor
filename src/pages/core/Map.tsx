@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { auth } from '../../lib/firebase';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument, queryD1 } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -82,15 +83,28 @@ export default function Map({ userProfile }: { userProfile: any }) {
 
   const selectedMap = useMemo(() => maps.find(m => m.id === selectedMapId) || null, [maps, selectedMapId]);
 
-  // 1. Resolve the active campaign's era.
+  // 1. Resolve the active campaign's era via the per-route endpoint.
+  // The user is a member of their own active campaign so the
+  // member-or-staff gate always admits; we only need `era_id` for the
+  // map filter so this could go through the dedicated path, but
+  // re-using the single-campaign endpoint keeps one path for all
+  // /api/campaigns/[id] reads.
   useEffect(() => {
     let cancelled = false;
     if (!activeCampaignId) { setEraId(null); return; }
     (async () => {
       try {
-        const camp = await fetchDocument<any>('campaigns', activeCampaignId);
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/campaigns/${encodeURIComponent(activeCampaignId)}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
         if (cancelled) return;
-        setEraId(camp?.era_id ?? null);
+        if (!res.ok) {
+          setEraId(null);
+          return;
+        }
+        const body = await res.json();
+        setEraId(body?.campaign?.era_id ?? null);
       } catch (err) {
         console.error('Failed to load active campaign:', err);
       }
@@ -127,11 +141,18 @@ export default function Map({ userProfile }: { userProfile: any }) {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await fetchCollection<{ id: string; title: string }>('lore', {
-          select: 'id, title',
-          orderBy: 'title ASC',
+        // /api/lore/articles with ?fields= keeps the wire payload tiny
+        // (we only need id + title for the marker label lookup) and
+        // routes through the per-route gate so drafts / dm_notes never
+        // ride along. Was raw `fetchCollection('lore', { select: 'id,
+        // title' })` previously.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/lore/articles?fields=id,title&orderBy=title%20ASC', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
-        if (!cancelled) setAllArticles(rows);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        if (!cancelled) setAllArticles(Array.isArray(body?.articles) ? body.articles : []);
       } catch (err) {
         console.error('Failed to load articles list:', err);
       }

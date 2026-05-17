@@ -53,31 +53,53 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
     const loadAllAdminData = async () => {
       try {
-        const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'created_at DESC' });
+        // /api/campaigns gives admins every campaign with
+        // `memberCount` pre-computed, so we no longer need the
+        // separate `fetchCollection('campaignMembers')` enumeration
+        // for the dashboard counts. That was the worst single source
+        // of H7 leakage on admin pages (and still leaked even on
+        // staff-only routes since the network call fires before any
+        // role check).
+        const idToken = await auth.currentUser?.getIdToken();
+        const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+        const campRes = await fetch('/api/campaigns', { headers: authHeaders });
+        if (!campRes.ok) throw new Error(`Failed to load campaigns (HTTP ${campRes.status})`);
+        const campBody = await campRes.json();
+        const campaignsData: any[] = Array.isArray(campBody?.campaigns) ? campBody.campaigns : [];
         setCampaigns(campaignsData.map(remapCampaign));
 
         const erasData = await fetchCollection<any>('eras', { orderBy: '"order" ASC' });
         setEras(erasData.map(remapEra));
 
-        const usersData = await fetchCollection<any>('users');
-        // Users have `display_name` etc.; the campaign-membership relation now
-        // lives in the campaign_members junction table — pull memberships once
-        // and attach them so the existing `u.campaignIds?.includes(...)` UI
-        // logic keeps working.
-        const memberRows = await fetchCollection<any>('campaignMembers');
-        const membershipsByUser = new Map<string, string[]>();
-        memberRows.forEach((m: any) => {
-          const list = membershipsByUser.get(m.user_id) || [];
-          list.push(m.campaign_id);
-          membershipsByUser.set(m.user_id, list);
+        // Per-route admin endpoint — returns rows column-scoped by
+        // viewer role (recovery_email only goes to admin), and each
+        // row already carries campaign_ids joined server-side, so the
+        // legacy `fetchCollection('campaignMembers')` enumeration is
+        // gone. Closes M2 here.
+        const usersIdToken = await auth.currentUser?.getIdToken();
+        const usersRes = await fetch('/api/admin/users', {
+          headers: usersIdToken ? { Authorization: `Bearer ${usersIdToken}` } : {},
         });
+        if (!usersRes.ok) throw new Error(`Failed to load users (HTTP ${usersRes.status})`);
+        const usersBody = await usersRes.json();
+        const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
         setUsers(usersData.map((u: any) => ({
           ...u,
           displayName: u.display_name,
-          campaignIds: membershipsByUser.get(u.id) || [],
+          campaignIds: Array.isArray(u.campaign_ids) ? u.campaign_ids : [],
         })));
 
-        const loreData = await fetchCollection<any>('lore', { orderBy: 'title ASC' });
+        // Per-route lore endpoint — admin context, server still strips
+        // dm_notes (admin doesn't need it for the recommended-article
+        // picker; if they ever do, the dedicated dm-notes route can
+        // serve it).
+        const idTokenLore = await auth.currentUser?.getIdToken();
+        const loreRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
+          headers: idTokenLore ? { Authorization: `Bearer ${idTokenLore}` } : {},
+        });
+        if (!loreRes.ok) throw new Error(`Failed to load lore (HTTP ${loreRes.status})`);
+        const loreBody = await loreRes.json();
+        const loreData: any[] = Array.isArray(loreBody?.articles) ? loreBody.articles : [];
         setLorePages(loreData.map(remapLore));
 
         const settings = await getSystemMetadata<{ defaultBackgroundImageUrl?: string }>('wiki_settings');
@@ -106,8 +128,14 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
       setNewCampaign({ name: '', description: '', eraId: '' });
       toast.success('Campaign created');
 
-      // Refresh list (snake_case rows + remap to camelCase the UI expects)
-      const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'created_at DESC' });
+      // Refresh list through the per-route endpoint (server filters
+      // by role + emits memberCount, same as the initial load).
+      const refreshIdToken = await auth.currentUser?.getIdToken();
+      const refreshRes = await fetch('/api/campaigns', {
+        headers: refreshIdToken ? { Authorization: `Bearer ${refreshIdToken}` } : {},
+      });
+      const refreshBody = refreshRes.ok ? await refreshRes.json() : { campaigns: [] };
+      const campaignsData: any[] = Array.isArray(refreshBody?.campaigns) ? refreshBody.campaigns : [];
       setCampaigns(campaignsData.map((c: any) => ({
         ...c,
         eraId: c.era_id,

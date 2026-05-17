@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
-import { OperationType, reportClientError } from '../../lib/firebase';
+import { auth, OperationType, reportClientError } from '../../lib/firebase';
 import { fetchLoreArticle, fetchLoreSecrets, upsertLoreArticle, upsertLoreSecret, deleteLoreSecret } from '../../lib/lore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -138,13 +138,28 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
     const loadFoundation = async () => {
       try {
-        const [campaignsData, erasData, groupsData, tagsData, articlesData] = await Promise.all([
-          fetchCollection('campaigns', { orderBy: 'name ASC' }),
+        // Lore + campaigns both go through their per-route endpoints
+        // now. The editor is staff-gated (loreEditor lives behind
+        // isStaff up at line 137), so the server returns the full
+        // campaign list either way. Other foundation reads
+        // (eras / tagGroups / tags) still hit /api/d1/query while
+        // their per-route migrations are pending in later audit
+        // batches.
+        const idToken = await auth.currentUser?.getIdToken();
+        const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+        const [campRes, erasData, groupsData, tagsData, loreRes] = await Promise.all([
+          fetch('/api/campaigns', { headers: authHeaders }),
           fetchCollection('eras', { orderBy: '"order" ASC' }),
           fetchCollection('tagGroups', { where: "classifications LIKE '%lore%'" }),
           fetchCollection('tags'),
-          fetchCollection('lore', { orderBy: 'title ASC' })
+          fetch('/api/lore/articles?orderBy=title%20ASC', { headers: authHeaders }),
         ]);
+        if (!campRes.ok) throw new Error(`Failed to load campaigns (HTTP ${campRes.status})`);
+        if (!loreRes.ok) throw new Error(`Failed to load lore articles (HTTP ${loreRes.status})`);
+        const campaignsBody = await campRes.json();
+        const campaignsData: any[] = Array.isArray(campaignsBody?.campaigns) ? campaignsBody.campaigns : [];
+        const loreBody = await loreRes.json();
+        const articlesData: any[] = Array.isArray(loreBody?.articles) ? loreBody.articles : [];
 
         setCampaigns(campaignsData);
         setEras(erasData);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { fetchCollection } from '../../lib/d1';
+import { auth } from '../../lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -22,27 +22,31 @@ export default function Profile({ viewerProfile }: { viewerProfile?: any }) {
       if (!username) return;
       setLoading(true);
       try {
-        // Fetch user by username (D1-only)
-        const results = await fetchCollection<any>('users', { where: 'username = ?', params: [username] });
-        
-        if (results.length > 0) {
-          const userProfileData = results[0];
-          setProfile(userProfileData);
-
-          // Fetch assigned campaigns from junction table
-          const memberData = await fetchCollection<any>('campaignMembers', { where: 'user_id = ?', params: [userProfileData.id] });
-          const campaignIds = memberData.map(m => m.campaign_id);
-
-          if (campaignIds.length > 0) {
-            // Fetch campaign names
-            // We can fetch all campaigns and filter, or add a fetchDocumentsByIds helper.
-            // For now, let's fetch all and filter since campaigns is usually small.
-            const allCampaigns = await fetchCollection<any>('campaigns');
-            setCampaigns(allCampaigns.filter(c => campaignIds.includes(c.id)));
-          }
-        } else {
+        // GET /api/profiles/[username] returns BOTH the (server-filtered)
+        // profile fields AND the campaign list in one round trip. The
+        // server strips sensitive columns (recovery_email,
+        // hide_username, active_campaign_id) based on the viewer's role
+        // and the target's is_private flag — closes the H1 PII leak and
+        // the per-profile slice of H7's campaign_members enumeration.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/profiles/${encodeURIComponent(username)}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (res.status === 404) {
           setError('Archivist not found in the records.');
+          return;
         }
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error || `Failed to retrieve profile (HTTP ${res.status})`);
+        }
+        const body = await res.json();
+        if (!body?.profile) {
+          setError('Archivist not found in the records.');
+          return;
+        }
+        setProfile(body.profile);
+        setCampaigns(Array.isArray(body?.campaigns) ? body.campaigns : []);
       } catch (err: any) {
         console.error(err);
         setError('Failed to retrieve profile.');

@@ -9,6 +9,22 @@
       "destination": "/api/module"
     },
     {
+      "source": "/api/me/(.*)",
+      "destination": "/api/me"
+    },
+    {
+      "source": "/api/lore/(.*)",
+      "destination": "/api/lore"
+    },
+    {
+      "source": "/api/campaigns/(.*)",
+      "destination": "/api/campaigns"
+    },
+    {
+      "source": "/api/admin/users/(.*)",
+      "destination": "/api/admin/users"
+    },
+    {
       "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }

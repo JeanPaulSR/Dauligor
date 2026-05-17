@@ -56,15 +56,30 @@ The Express dev server in `server.ts` and the Vercel functions in `api/` share t
 
 ## Request flow examples
 
-### a) Reading classes
+### a) Reading classes (via the legacy SQL proxy)
 
-1. `ClassList.tsx` calls `fetchCollection('classes', null)` from `src/lib/d1.ts` (`null` = D1-only, no Firestore fallback).
+1. `ClassList.tsx` calls `fetchCollection('classes')` from `src/lib/d1.ts`.
 2. `d1.ts` checks in-memory cache → sessionStorage cache → de-duplicates inflight → otherwise issues a `POST /api/d1/query` with the SQL.
-3. The Express/Vercel handler `handleD1Query` verifies the Firebase JWT, calls `requireStaffAccess` (or appropriate role check), then forwards to the Worker with the shared `API_SECRET`.
-4. The Worker calls `env.DB.prepare(sql).bind(...params).all()`.
-5. Result returns through the chain. `d1.ts` caches it and auto-parses JSON columns.
+3. The Express/Vercel handler `handleD1Query` verifies the Firebase JWT. The gate is split: writes/DDL go through `requireStaffAccess`, reads go through `requireAuthenticatedUser`. A `SELECT * FROM classes` read passes the latter for any signed-in user.
+4. Proxy forwards to the Worker with the shared `API_SECRET`.
+5. The Worker calls `env.DB.prepare(sql).bind(...params).all()`.
+6. Result returns through the chain. `d1.ts` caches it and auto-parses JSON columns.
 
-### b) Uploading an image
+This path is the catch-all that still handles most compendium reads. The per-route endpoints below are the preferred shape for any new endpoint — the SQL stays server-side and the gate is tighter.
+
+### b) Reading a character (per-route endpoint)
+
+1. `CharacterBuilder.tsx` calls `fetch('/api/characters/' + id, { headers: { Authorization: 'Bearer <token>' } })`.
+2. The Vercel function at [api/characters/[id].ts](../../api/characters/[id].ts) runs `requireCharacterAccess(authHeader, characterId)`, which:
+   - Verifies the JWT.
+   - SELECTs `user_id` from the `characters` row.
+   - 404s (not 403) if the row doesn't exist OR the caller isn't the owner AND isn't a character-DM. Same shape on purpose so probes can't enumerate ids.
+3. Handler runs the 8 `character_*` table queries in parallel, reshapes via `rebuildCharacterFromSql`, returns `{ character }`.
+4. The client receives a fully-reconstructed character object — no client-side cross-table joining.
+
+The PUT branch on the same endpoint handles both create (row doesn't exist yet — new character) and update (row exists — must be owner or DM). The DELETE branch lets the schema's FK cascade clear all `character_*` child rows in one shot. See [api-endpoints.md](api-endpoints.md) for the full per-route surface.
+
+### c) Uploading an image
 
 1. `ImageUpload` component converts the file to WebP (and to icon/token canvas size if applicable) via `src/lib/imageUtils.ts`.
 2. Calls `r2Upload(file, key)` from `src/lib/r2.ts`. It POSTs `multipart/form-data` to `/api/r2/upload` with the user's Firebase JWT.
@@ -72,11 +87,13 @@ The Express dev server in `server.ts` and the Vercel functions in `api/` share t
 4. The Worker writes to R2 (`env.BUCKET.put`) and returns the public URL.
 5. The client typically writes a metadata row through D1 (e.g., `image_metadata`) referencing the URL.
 
-### c) Authenticating a user
+All five R2 actions (list / delete / rename / move-folder / upload) live in one dispatcher at [api/r2/[action].ts](../../api/r2/[action].ts) — consolidated from five separate functions to stay under the Vercel Hobby plan's 12-function deployment cap.
+
+### d) Authenticating a user
 
 1. Browser calls `signInWithEmailAndPassword(auth, usernameToEmail(username), pw)` from `src/lib/firebase.ts`.
-2. Firebase Auth issues an ID token. The token is automatically attached to every D1 / R2 call as `Authorization: Bearer <id-token>`.
-3. Server-side helpers in `api/_lib/firebase-admin.ts` verify the token via `firebase-admin` and look up the user's role in the **D1** `users` table (the historical `users` Firestore collection has been migrated).
+2. Firebase Auth issues an ID token. The token is automatically attached to every D1 / R2 / per-route call as `Authorization: Bearer <id-token>`.
+3. `App.tsx` calls `GET /api/me`, which verifies the token, auto-creates the `users` row on first sign-in, auto-promotes the bootstrap admins, and returns the profile. See [auth-firebase.md §2 Profile load](auth-firebase.md#2-profile-load) for the full sequence.
 
 ## Why one Worker, two bindings
 

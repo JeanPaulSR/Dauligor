@@ -6,7 +6,6 @@ import {
   signInWithEmailAndPassword, 
   signOut 
 } from '../lib/firebase';
-import { fetchCollection, upsertDocument } from '../lib/d1';
 import { useWikiPreview } from '../lib/wikiPreviewContext';
 
 import { Button } from './ui/button';
@@ -50,25 +49,21 @@ export default function Navbar({
 
     const loadCampaigns = async () => {
       try {
-        const isAdmin = userProfile.role === 'admin';
-        
-        // Fetch all campaigns (D1-only)
-        const allCampaigns = await fetchCollection<any>('campaigns');
-        
-        if (isAdmin) {
-          setCampaigns(allCampaigns);
-          const active = allCampaigns.find(c => c.id === userProfile.active_campaign_id);
-          setActiveCampaign(active || allCampaigns[0]);
-        } else {
-          // Fetch memberships for non-admins
-          const memberData = await fetchCollection<any>('campaignMembers', { where: 'user_id = ?', params: [userProfile.id] });
-          const userCampaignIds = memberData.map(m => m.campaign_id);
-          
-          const filtered = allCampaigns.filter(c => userCampaignIds.includes(c.id));
-          setCampaigns(filtered);
-          const active = filtered.find(c => c.id === userProfile.active_campaign_id);
-          setActiveCampaign(active || filtered[0]);
-        }
+        // /api/campaigns enforces the role-based filter server-side:
+        // admin / co-dm get every campaign, everyone else gets only
+        // the campaigns they're a member of. Replaces the previous
+        // pattern that pulled the entire campaigns table + every
+        // member row to figure out the same thing client-side.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/campaigns', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        const visible: any[] = Array.isArray(body?.campaigns) ? body.campaigns : [];
+        setCampaigns(visible);
+        const active = visible.find((c: any) => c.id === userProfile.active_campaign_id);
+        setActiveCampaign(active || visible[0]);
       } catch (err) {
         console.error("Error fetching campaigns in navbar:", err);
       }
@@ -80,10 +75,25 @@ export default function Navbar({
   const handleSwitchCampaign = async (campaignId: string) => {
     if (!user?.uid) return;
     try {
-      await upsertDocument('users', user.uid, {
-        ...userProfile,
-        active_campaign_id: campaignId
+      // Single-field PATCH through /api/me — the previous
+      // `upsertDocument('users', uid, { ...userProfile, active_campaign_id })`
+      // pattern was H6 risk #1: a malicious client could spread
+      // `{ ..., role: 'admin' }` into the payload and the server had no
+      // column allow-list to drop it. Now the server only honors the
+      // allow-listed fields and the client cannot reach `role` at all.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ active_campaign_id: campaignId }),
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to switch campaign (HTTP ${res.status})`);
+      }
       await refreshProfile();
     } catch (err) {
       console.error("Error switching campaign:", err);

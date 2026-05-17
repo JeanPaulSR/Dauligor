@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchDocument, fetchCollection } from '../../lib/d1';
+import { auth } from '../../lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Book, Map as MapIcon, Users, ChevronRight, Sparkles, ScrollText, History, Shield, Zap, Swords, Wand2, Hammer, Star, Home as HomeIcon, Plus, LogIn } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -26,32 +26,54 @@ export default function Home({ userProfile }: { userProfile: any }) {
           "Backgrounds", "Feats"
         ];
         
+        // /api/lore/articles returns the (server-filtered + dm_notes-
+        // stripped) published list. We filter to the special-article
+        // titles client-side because the set is fixed and tiny; not
+        // worth a query-param surface for this single caller.
         const articlesMap: Record<string, any> = {};
-        const results = await fetchCollection<any>('lore', { 
-          where: `title IN (${titles.map(() => '?').join(',')}) AND status = 'published'`, 
-          params: titles 
+        const idToken = await auth.currentUser?.getIdToken();
+        const listRes = await fetch('/api/lore/articles?orderBy=title%20ASC', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
-
-        results.forEach(art => {
-          articlesMap[art.title] = art;
-        });
+        if (listRes.ok) {
+          const body = await listRes.json();
+          const allArticles: any[] = Array.isArray(body?.articles) ? body.articles : [];
+          const titleSet = new Set(titles);
+          allArticles.forEach((art) => {
+            if (titleSet.has(art.title)) {
+              articlesMap[art.title] = art;
+            }
+          });
+        }
         setSpecialArticles(articlesMap);
 
-        // 2. Fetch Active Campaign and its Recommended Lore via D1 helpers
+        // 2. Fetch Active Campaign and its Recommended Lore via the
+        // per-route endpoints. Active campaign read goes through
+        // /api/campaigns/[id]; the lore read goes through
+        // /api/lore/articles/[id] so draft visibility checks happen
+        // server-side.
         if (userProfile?.active_campaign_id) {
-          const campaignData = await fetchDocument<any>('campaigns', userProfile.active_campaign_id);
+          const campaignRes = await fetch(
+            `/api/campaigns/${encodeURIComponent(userProfile.active_campaign_id)}`,
+            { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+          );
+          const campaignData = campaignRes.ok ? (await campaignRes.json())?.campaign : null;
 
           if (campaignData) {
             setActiveCampaign(campaignData);
 
             if (campaignData.recommended_lore_id) {
-              const loreData = await fetchDocument<any>('lore', campaignData.recommended_lore_id);
-
-              if (loreData) {
-                // Only show if published or user is staff
-                const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
-                if (loreData.status === 'published' || isStaff) {
-                  setRecommendedLore(loreData);
+              const loreRes = await fetch(
+                `/api/lore/articles/${encodeURIComponent(campaignData.recommended_lore_id)}`,
+                { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+              );
+              if (loreRes.ok) {
+                const loreBody = await loreRes.json();
+                // Server already enforces draft visibility — if the
+                // article is draft and viewer is non-staff, the
+                // endpoint returns 404, which we silently skip here.
+                if (loreBody?.article) {
+                  setRecommendedLore(loreBody.article);
                 }
               }
             }

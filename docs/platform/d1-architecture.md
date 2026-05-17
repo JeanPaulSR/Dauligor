@@ -229,7 +229,15 @@ for (const sel of selections)  ops.push({ sql: '...', params: [...] });
 await batchQueryD1(ops);
 ```
 
-## Per-user / per-character tables
+## Per-route endpoints — the preferred shape for new work
+
+The generic `/api/d1/query` proxy still handles most compendium reads, but every new endpoint should be modeled on the per-route pattern: one Vercel function per resource (e.g. `api/me.ts`, `api/lore.ts`, `api/campaigns.ts`, `api/characters/[id].ts`, `api/profiles/[username].ts`), each with its own role gate and its own SQL kept inside the handler. The reference example is [api/spell-favorites.ts](../../api/spell-favorites.ts) — explicit auth scope, user id derived from the verified token, table-specific SQL, ownership checks before writes.
+
+Why this matters: under the legacy generic-proxy path, any signed-in user can paste an arbitrary `SELECT` into devtools and exfiltrate columns the UI never shows. Per-route endpoints column-scope the response so the wire never sees data the caller isn't allowed to read.
+
+See [api-endpoints.md](api-endpoints.md) for the full surface that exists today, and [../../docs/platform/api-endpoint-plan.md](api-endpoint-plan.md) for the migration plan and remaining items.
+
+### Per-user / per-character tables
 
 Two tables back the [spell-favourites](../features/spell-favorites.md) system. Both go through a dedicated Vercel route ([api/spell-favorites.ts](../../api/spell-favorites.ts)) rather than the generic `/api/d1/query` because they're auth-gated to "any signed-in user" (not staff) — `requireAuthenticatedUser` enforces that the row's `user_id` is always the verified-token uid, never a request-body field.
 

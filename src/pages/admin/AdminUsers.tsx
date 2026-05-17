@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy } from 'lucide-react';
+import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy, Link2 } from 'lucide-react';
 
 export default function AdminUsers({ userProfile }: { userProfile: any }) {
   const [users, setUsers] = useState<any[]>([]);
@@ -25,6 +25,19 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     password: '',
     generatedAt: '',
   });
+  // Non-destructive sign-in link. Mirrors temporaryPasswordDialog but
+  // holds the redemption URL + expiry instead of a plaintext password.
+  // We render a separate dialog (rather than overloading the existing
+  // one) so the visual + copy language stays unambiguous — admins need
+  // to know at a glance whether they just overwrote a password or
+  // issued a side-channel link.
+  const [signInLinkDialog, setSignInLinkDialog] = useState<{ isOpen: boolean, displayName: string, link: string, expiresAt: string }>({
+    isOpen: false,
+    displayName: '',
+    link: '',
+    expiresAt: '',
+  });
+  const [signInLinkUserId, setSignInLinkUserId] = useState('');
   const [campaignSearch, setCampaignSearch] = useState('');
   const [newUser, setNewUser] = useState({ username: '', password: '', displayName: '', role: 'user', campaignIds: [] as string[] });
   const [loading, setLoading] = useState(false);
@@ -38,17 +51,40 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
 
     const loadAdminUsersData = async () => {
       try {
-        // Fetch Users via D1 helper (D1-only)
-        const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
+        // Per-route admin endpoint — returns rows column-scoped by
+        // viewer role (admin sees recovery_email; lower staff doesn't)
+        // and includes campaign_ids as a server-side JOIN so we no
+        // longer need to fetchCollection('campaignMembers') separately.
+        // Closes M2 + the second H7-leak path.
+        const idToken = await auth.currentUser?.getIdToken();
+        const usersRes = await fetch('/api/admin/users', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!usersRes.ok) throw new Error(`Failed to load users (HTTP ${usersRes.status})`);
+        const usersBody = await usersRes.json();
+        const usersData: any[] = Array.isArray(usersBody?.users) ? usersBody.users : [];
         setUsers(usersData);
 
-        // Fetch Campaigns via D1 helper (D1-only)
-        const campaignsData = await fetchCollection<any>('campaigns', { orderBy: 'name ASC' });
-        setCampaigns(campaignsData);
+        // Synthesize the membership table the old client logic
+        // expects (so `getUserCampaignIds(uid)` keeps working). One
+        // pass through the joined `campaign_ids` array.
+        const membershipRows = usersData.flatMap((u: any) =>
+          (Array.isArray(u.campaign_ids) ? u.campaign_ids : []).map((cid: string) => ({
+            user_id: u.id,
+            campaign_id: cid,
+          })),
+        );
+        setCampaignMembers(membershipRows);
 
-        // Fetch Campaign Members (Junction Table)
-        const membersData = await fetchCollection<any>('campaignMembers');
-        setCampaignMembers(membersData);
+        // Campaigns list — staff context, still on /api/campaigns
+        // (server-filtered, admin sees all).
+        const campRes = await fetch('/api/campaigns', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (campRes.ok) {
+          const campBody = await campRes.json();
+          setCampaigns(Array.isArray(campBody?.campaigns) ? campBody.campaigns : []);
+        }
       } catch (err) {
         console.error("Error loading admin users data:", err);
       }
@@ -75,46 +111,55 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     setLoading(true);
     setError('');
     try {
-      // Create secondary app to register user without logging out admin
-      const secondaryApp = initializeApp(firebaseConfig, 'Secondary');
-      const secondaryAuth = getAuth(secondaryApp);
-      
-      const email = usernameToEmail(newUser.username);
-      const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, newUser.password);
-      await updateProfile(userCredential.user, { displayName: newUser.displayName });
-      
-      // Create profile in D1
-      const uid = userCredential.user.uid;
-      await upsertDocument('users', uid, {
-        username: newUser.username.toLowerCase(),
-        display_name: newUser.displayName,
-        role: newUser.role,
-        active_campaign_id: newUser.campaignIds[0] || null,
-        created_at: new Date().toISOString()
+      // Server-side create through the admin endpoint. The legacy
+      // secondary-app + client SDK dance is gone — Firebase Admin SDK
+      // on the server does the createUser without ever touching the
+      // admin's session, AND the server is the only place writing to
+      // the `users` table (the proxy now requires admin for direct
+      // users writes, so the old client path would 403 anyway).
+      const idToken = await auth.currentUser?.getIdToken();
+      const createRes = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          username: newUser.username,
+          displayName: newUser.displayName,
+          password: newUser.password,
+          role: newUser.role,
+          campaignIds: newUser.campaignIds,
+        }),
       });
-
-      // Assign campaigns in junction table
-      for (const campaignId of newUser.campaignIds) {
-        await upsertDocument('campaignMembers', `${campaignId}_${uid}`, {
-          campaign_id: campaignId,
-          user_id: uid,
-          role: 'player',
-          joined_at: new Date().toISOString()
-        });
+      if (!createRes.ok) {
+        const errBody = await createRes.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to create user (HTTP ${createRes.status})`);
       }
-
-      // Sign out secondary app and delete it
-      await signOut(secondaryAuth);
 
       setIsAddOpen(false);
       setNewUser({ username: '', password: '', displayName: '', role: 'user', campaignIds: [] });
       toast.success('User created successfully');
       
-      // Refresh data
-      const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
-      setUsers(usersData);
-      const membersData = await fetchCollection<any>('campaignMembers');
-      setCampaignMembers(membersData);
+      // Refresh through the per-route endpoint so the new user's
+      // (now-existing) row shows up with its column-scoped projection
+      // and campaign_ids JOIN.
+      const refreshToken = await auth.currentUser?.getIdToken();
+      const refreshRes = await fetch('/api/admin/users', {
+        headers: refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {},
+      });
+      if (refreshRes.ok) {
+        const refreshBody = await refreshRes.json();
+        const usersData: any[] = Array.isArray(refreshBody?.users) ? refreshBody.users : [];
+        setUsers(usersData);
+        const membershipRows = usersData.flatMap((u: any) =>
+          (Array.isArray(u.campaign_ids) ? u.campaign_ids : []).map((cid: string) => ({
+            user_id: u.id,
+            campaign_id: cid,
+          })),
+        );
+        setCampaignMembers(membershipRows);
+      }
     } catch (err: any) {
       console.error('Failed to create user:', err);
       setError(err.message || 'Failed to create user');
@@ -124,14 +169,30 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (confirm('Are you sure? This only deletes the D1 profile, not the Auth account.')) {
+    if (confirm('Are you sure? This deletes both the Firebase Auth account AND the D1 profile (campaign memberships cascade automatically).')) {
       try {
-        await deleteDocument('users', id);
+        // Server-side delete through the admin endpoint. Removes the
+        // Firebase Auth record AND the D1 row (FK cascade handles
+        // campaign_members). The old client `deleteDocument('users',
+        // id)` path is now blocked at the proxy — `users` writes
+        // require admin and the only admin write surface is here.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error || `Failed to delete user (HTTP ${res.status})`);
+        }
         setUsers(prev => prev.filter(u => u.id !== id));
-        toast.success('User profile deleted');
-      } catch (err) {
+        // Membership cache loses the user's rows automatically since
+        // it was synthesized from the now-removed user row.
+        setCampaignMembers(prev => prev.filter(m => m.user_id !== id));
+        toast.success('User deleted');
+      } catch (err: any) {
         console.error(err);
-        toast.error('Failed to delete user');
+        toast.error(err?.message || 'Failed to delete user');
       }
     }
   };
@@ -148,48 +209,85 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   const handleToggleUserCampaign = async (userId: string, campaignId: string, currentIds: string[] = []) => {
     try {
       const isAssigned = currentIds.includes(campaignId);
-      if (isAssigned) {
-        // Remove from junction table
-        await deleteDocuments('campaignMembers', 'campaign_id = ? AND user_id = ?', [campaignId, userId]);
-      } else {
-        await upsertDocument('campaignMembers', `${campaignId}_${userId}`, {
-          campaign_id: campaignId,
-          user_id: userId,
-          role: 'player',
-          joined_at: new Date().toISOString()
+      const newIds = isAssigned
+        ? currentIds.filter(id => id !== campaignId)
+        : [...currentIds, campaignId];
+
+      // PATCH /api/admin/users/[id] with the full desired campaign_ids
+      // set. The server reconciles (diffs current vs desired) and
+      // writes campaign_members accordingly. Replaces the direct
+      // upsertDocument / deleteDocuments calls against campaignMembers
+      // — same end result, but the write path is admin-gated and
+      // atomic per user.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ campaign_ids: newIds }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to update campaign assignment (HTTP ${res.status})`);
+      }
+      const body = await res.json();
+      const updatedUser = body?.user;
+
+      // Update local state in place — the PATCH response carries the
+      // post-write user row with its joined campaign_ids, so we can
+      // patch the membership cache and the user list without a full
+      // /api/admin/users refresh.
+      if (updatedUser) {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updatedUser } : u));
+        const updatedCampaignIds: string[] = Array.isArray(updatedUser.campaign_ids) ? updatedUser.campaign_ids : [];
+        setCampaignMembers(prev => {
+          const withoutUser = prev.filter(m => m.user_id !== userId);
+          const userRows = updatedCampaignIds.map((cid: string) => ({ user_id: userId, campaign_id: cid }));
+          return [...withoutUser, ...userRows];
         });
       }
-      
-      // Refresh members
-      const membersData = await fetchCollection<any>('campaignMembers');
-      setCampaignMembers(membersData);
 
       if (campaignDialogOpen.isOpen && campaignDialogOpen.userId === userId) {
-        const newIds = isAssigned 
-          ? currentIds.filter(id => id !== campaignId)
-          : [...currentIds, campaignId];
         setCampaignDialogOpen(prev => ({ ...prev, currentIds: newIds }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Failed to update campaign assignment');
+      toast.error(err?.message || 'Failed to update campaign assignment');
     }
   };
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     try {
-      const user = users.find(u => u.id === userId);
-      if (!user) return;
-      await upsertDocument('users', userId, {
-        ...user,
-        role: newRole
+      // PATCH /api/admin/users/[id] — server allow-lists `role` and
+      // validates against the known set. Replaces the old
+      // `upsertDocument('users', uid, { ...user, role })` spread,
+      // which was the most direct H6 vector: a co-dm or lore-writer
+      // with devtools could write `{ role: 'admin' }` for any user
+      // (or themselves) and the proxy admitted it on a staff token.
+      // That write path is now blocked at the proxy (users writes
+      // require admin) and the only legitimate write surface is
+      // here.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ role: newRole }),
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to update role (HTTP ${res.status})`);
+      }
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
       setRoleDialogOpen({ ...roleDialogOpen, isOpen: false });
       toast.success('User role updated');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Failed to update role');
+      toast.error(err?.message || 'Failed to update role');
     }
   };
 
@@ -253,43 +351,119 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
     }
   };
 
+  /**
+   * Non-destructive password recovery. Hits /api/admin/users/:id/sign-in-token
+   * which mints a Firebase custom token (1 hour TTL). We then build a
+   * https://<origin>/auth/redeem?token=... URL the admin can share. The
+   * target user's Firebase Auth password is NOT changed — when they
+   * click the link, signInWithCustomToken authenticates them for that
+   * session only and their original password keeps working.
+   *
+   * Prefer this over handleGenerateTemporaryPassword unless you
+   * explicitly want to invalidate the user's existing password.
+   */
+  const handleGenerateSignInLink = async (userRecord: any) => {
+    if (!auth.currentUser) {
+      toast.error('You must be signed in to generate a sign-in link.');
+      return;
+    }
+
+    setSignInLinkUserId(userRecord.id);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const response = await fetch(`/api/admin/users/${userRecord.id}/sign-in-token`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('Sign-in-token endpoint not found. The deploy may be stale — refresh the page.');
+        }
+        throw new Error(result.error || 'Failed to mint sign-in token.');
+      }
+
+      // Build the redemption URL against the current origin so it works
+      // identically across prod / preview / local dev without the API
+      // having to know its own public URL.
+      const link = `${window.location.origin}/auth/redeem?token=${encodeURIComponent(result.token)}`;
+
+      setSignInLinkDialog({
+        isOpen: true,
+        displayName: userRecord.displayName || userRecord.username || 'User',
+        link,
+        expiresAt: result.expiresAt || '',
+      });
+      toast.success(`Sign-in link generated for ${userRecord.displayName || userRecord.username}.`);
+    } catch (err: any) {
+      console.error('Failed to generate sign-in link:', err);
+      toast.error(err.message || 'Failed to generate sign-in link.');
+    } finally {
+      setSignInLinkUserId('');
+    }
+  };
+
+  const handleCopySignInLink = async () => {
+    try {
+      await navigator.clipboard.writeText(signInLinkDialog.link);
+      toast.success('Sign-in link copied.');
+    } catch (err: any) {
+      console.error('Failed to copy sign-in link:', err);
+      toast.error('Failed to copy sign-in link.');
+    }
+  };
+
   const filteredCampaigns = campaigns.filter(c => 
     c.name.toLowerCase().includes(campaignSearch.toLowerCase())
   );
 
   const handleSeedUsers = async () => {
     const testUsers = [
-      { username: 'codm', displayName: 'Co-DM', role: 'co-dm' },
-      { username: 'lorewriter', displayName: 'Lore Writer', role: 'lore-writer' },
-      { username: 'trustedplayer', displayName: 'Trusted Player', role: 'trusted-player' }
+      { username: 'codm', displayName: 'Co-DM', role: 'co-dm', password: 'password123' },
+      { username: 'lorewriter', displayName: 'Lore Writer', role: 'lore-writer', password: 'password123' },
+      { username: 'trustedplayer', displayName: 'Trusted Player', role: 'trusted-player', password: 'password123' },
     ];
 
     setLoading(true);
     setError('');
     try {
-      const secondaryApp = initializeApp(firebaseConfig, 'SeedApp');
-      const secondaryAuth = getAuth(secondaryApp);
-
+      // POST /api/admin/users for each seed user — server creates
+      // Firebase Auth + D1 row + (optional) memberships in one shot.
+      // Drops the legacy secondary-app pattern entirely. Duplicate
+      // usernames surface as 409 from the duplicate-username
+      // pre-check; we log+continue so re-running the seed against a
+      // partially-populated table doesn't bail.
+      const idToken = await auth.currentUser?.getIdToken();
       for (const u of testUsers) {
         try {
-          const email = usernameToEmail(u.username);
-          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, 'password123');
-          await updateProfile(userCredential.user, { displayName: u.displayName });
-          
-          await upsertDocument('users', userCredential.user.uid, {
-            username: u.username,
-            display_name: u.displayName,
-            role: u.role,
-            created_at: new Date().toISOString()
+          const res = await fetch('/api/admin/users', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+            },
+            body: JSON.stringify(u),
           });
-          await signOut(secondaryAuth);
+          if (!res.ok && res.status !== 409) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error || `HTTP ${res.status}`);
+          }
         } catch (e: any) {
-          console.warn(`User ${u.username} might already exist:`, e.message);
+          console.warn(`User ${u.username} might already exist:`, e?.message);
         }
       }
       toast.success('Test users created! Default password: password123');
-      const usersData = await fetchCollection<any>('users', { orderBy: 'username ASC' });
-      setUsers(usersData);
+      const refreshRes = await fetch('/api/admin/users', {
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+      });
+      if (refreshRes.ok) {
+        const refreshBody = await refreshRes.json();
+        setUsers(Array.isArray(refreshBody?.users) ? refreshBody.users : []);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to seed users');
     } finally {
@@ -537,9 +711,23 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                         <Button
                           variant="ghost"
                           size="xs"
+                          onClick={() => handleGenerateSignInLink(u)}
+                          disabled={signInLinkUserId === u.id}
+                          className="h-6 px-2 text-[10px] text-archive-blue hover:bg-archive-blue/10 border border-archive-blue/10"
+                          title="Mint a one-hour sign-in link. Does NOT change the user's password."
+                        >
+                          <Link2 className="w-3 h-3 mr-1" />
+                          {signInLinkUserId === u.id ? 'Generating...' : 'Sign-in Link'}
+                        </Button>
+                      )}
+                      {userProfile?.role === 'admin' && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
                           onClick={() => handleGenerateTemporaryPassword(u)}
                           disabled={passwordResetUserId === u.id}
                           className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10"
+                          title="Overwrite the user's password with a new random one. Destructive — their existing password stops working."
                         >
                           <KeyRound className="w-3 h-3 mr-1" />
                           {passwordResetUserId === u.id ? 'Generating...' : 'Temp Password'}
@@ -679,7 +867,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl">Temporary Password</DialogTitle>
             <DialogDescription>
-              Share this with {temporaryPasswordDialog.displayName}. It is only shown here once, so copy it before closing.
+              Share this with {temporaryPasswordDialog.displayName}. It is only shown here once, so copy it before closing. <strong>The user's previous password no longer works</strong> — they must use this one to sign in.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -696,6 +884,39 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
               <Copy className="w-4 h-4" /> Copy Password
             </Button>
             <Button onClick={() => setTemporaryPasswordDialog(prev => ({ ...prev, isOpen: false }))} className="bg-gold text-white">
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={signInLinkDialog.isOpen}
+        onOpenChange={(open) => setSignInLinkDialog(prev => ({ ...prev, isOpen: open }))}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl">One-Time Sign-In Link</DialogTitle>
+            <DialogDescription>
+              Share this link with {signInLinkDialog.displayName}. Anyone who opens it within the next hour will be signed in as them. Their current password is unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border border-archive-blue/20 bg-archive-blue/5 p-4">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-archive-blue/70">Redemption Link</p>
+              <p className="mt-2 break-all font-mono text-xs text-ink">{signInLinkDialog.link}</p>
+            </div>
+            <p className="text-xs text-ink/50">
+              {signInLinkDialog.expiresAt
+                ? `Expires at ${new Date(signInLinkDialog.expiresAt).toLocaleString()}.`
+                : 'Expires in approximately one hour.'}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCopySignInLink} className="gap-2">
+              <Copy className="w-4 h-4" /> Copy Link
+            </Button>
+            <Button onClick={() => setSignInLinkDialog(prev => ({ ...prev, isOpen: false }))} className="bg-archive-blue text-white">
               Done
             </Button>
           </DialogFooter>

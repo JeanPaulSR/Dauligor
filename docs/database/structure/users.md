@@ -30,4 +30,5 @@ Dauligor profiles.
 - **Authentication**: Firebase handles the JWT layer. `users` is the authoritative source for RBAC and profile configuration.
 - **`active_campaign_id`**: Stored as plain TEXT with no FK constraint to avoid a circular dependency (`users` → `campaigns` → `users` via `dm_id`). Validity is enforced at the application layer.
 - **`campaignIds` (Firestore array)**: This field does not become a column. It is used during migration to synthesize rows in `campaign_members`.
-- **Sensitive fields**: `recovery_email` is migrated but never returned in public-facing API responses.
+- **Sensitive fields**: `recovery_email` is stripped from public-facing API responses by the per-route endpoints — `GET /api/me` returns it to the user themselves, `GET /api/profiles/[username]` returns it only to admin/co-dm viewers, and the (still-pending) `GET /api/admin/users` will column-scope it for staff lists. The generic `/api/d1/query` proxy still returns the full row to staff callers — that's the audit's M2 follow-up.
+- **No `mustChangePassword` column**: the temp-password recovery flow ([api/admin/users/[id]/[action].ts](../../api/admin/users/[id]/[action].ts)) doesn't write any "force change on next login" flag. Firebase Auth owns the password lifecycle; if a forced-change behavior is desired, it'd need a new column here plus a redirect gate in `App.tsx`.

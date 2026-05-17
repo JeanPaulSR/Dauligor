@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { OperationType, reportClientError } from '../../lib/firebase';
-import { fetchCollection, fetchDocument, queryD1, getSystemMetadata } from '../../lib/d1';
+import { auth, OperationType, reportClientError } from '../../lib/firebase';
+import { fetchCollection, getSystemMetadata } from '../../lib/d1';
 import { fetchLoreArticle, upsertLoreSecret, deleteLoreArticle } from '../../lib/lore';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { useWikiPreview } from '@/lib/wikiPreviewContext';
@@ -125,116 +125,76 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
     const loadData = async () => {
       setLoading(true);
       try {
-        // 1. Fetch main article
-        const articleData = await fetchDocument<any>('lore', id);
-
-        if (articleData) {
-          // Normalize field names from SQL (snake_case to camelCase if needed, or just use as is)
-          // The fetchDocument helper returns what SQL gives. SQL has parent_id, dm_notes.
-          const normalizedArticle = {
-            ...articleData,
-            parentId: articleData.parent_id,
-            dmNotes: articleData.dm_notes,
-            imageUrl: articleData.image_url,
-            imageDisplay: typeof articleData.image_display === 'string' ? JSON.parse(articleData.image_display) : articleData.image_display,
-            cardImageUrl: articleData.card_image_url,
-            cardDisplay: typeof articleData.card_display === 'string' ? JSON.parse(articleData.card_display) : articleData.card_display,
-            previewImageUrl: articleData.preview_image_url,
-            previewDisplay: typeof articleData.preview_display === 'string' ? JSON.parse(articleData.preview_display) : articleData.preview_display,
-            createdAt: articleData.created_at,
-            updatedAt: articleData.updated_at,
-            authorId: articleData.author_id,
-          };
-
-          // Fetch specialized metadata based on category
-          let metadata: any = {};
-          if (normalizedArticle.category === 'character' || normalizedArticle.category === 'deity') {
-            const metaRows = await queryD1<any>(`SELECT * FROM lore_meta_characters WHERE article_id = ?`, [id]);
-            if (metaRows.length > 0) {
-              const m = metaRows[0];
-              metadata = { ...metadata, ...m, lifeStatus: m.life_status, birthDate: m.birth_date, deathDate: m.death_date };
-            }
-            if (normalizedArticle.category === 'deity') {
-              const deityRows = await queryD1<any>(`SELECT * FROM lore_meta_deities WHERE article_id = ?`, [id]);
-              if (deityRows.length > 0) metadata = { ...metadata, ...deityRows[0], holySymbol: deityRows[0].holy_symbol };
-            }
-          } else if (['building', 'settlement', 'geography', 'country'].includes(normalizedArticle.category)) {
-            const metaRows = await queryD1<any>(`SELECT * FROM lore_meta_locations WHERE article_id = ?`, [id]);
-            if (metaRows.length > 0) {
-              const m = metaRows[0];
-              metadata = { ...metadata, ...m, locationType: m.location_type, parentLocation: m.parent_location, owningOrganization: m.owning_organization, foundingDate: m.founding_date };
-            }
-          } else if (['organization', 'religion'].includes(normalizedArticle.category)) {
-            const metaRows = await queryD1<any>(`SELECT * FROM lore_meta_organizations WHERE article_id = ?`, [id]);
-            if (metaRows.length > 0) {
-              const m = metaRows[0];
-              metadata = { ...metadata, ...m, foundingDate: m.founding_date };
-            }
-            if (normalizedArticle.category === 'religion') {
-              const deityRows = await queryD1<any>(`SELECT * FROM lore_meta_deities WHERE article_id = ?`, [id]);
-              if (deityRows.length > 0) metadata = { ...metadata, ...deityRows[0], holySymbol: deityRows[0].holy_symbol };
-            }
-          }
-
-          // Fetch Tags
-          const tagRows = await queryD1<any>(`SELECT tag_id FROM lore_article_tags WHERE article_id = ?`, [id]);
-          const tags = tagRows.map(r => r.tag_id);
-
-          // Visibility Junctions
-          const eraRows = await queryD1<any>(`SELECT era_id FROM lore_article_eras WHERE article_id = ?`, [id]);
-          const campaignRows = await queryD1<any>(`SELECT campaign_id FROM lore_article_campaigns WHERE article_id = ?`, [id]);
-
-          setArticle({
-            ...normalizedArticle,
-            metadata,
-            tags,
-            visibilityEraIds: eraRows.map(r => r.era_id),
-            visibilityCampaignIds: campaignRows.map(r => r.campaign_id),
-          });
-
-          if (normalizedArticle.parentId) {
-            const parent = await fetchDocument<any>('lore', normalizedArticle.parentId);
-            setParentArticle(parent);
-          }
-
-          if (isStaff && normalizedArticle.dmNotes) {
-            setDmNotes({ content: normalizedArticle.dmNotes });
-          }
-        } else {
+        // 1. Fetch the full article packet in one round trip. The
+        // server now does the metadata join, tag lookup, visibility
+        // junction lookup, parent lookup, and mentions lookup. Strips
+        // dm_notes / 404s drafts when the viewer isn't staff.
+        // Replaces the old fetchDocument + 5+ raw queryD1 sequence.
+        const idToken = await auth.currentUser?.getIdToken();
+        const authHeaders = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+        const articleRes = await fetch(`/api/lore/articles/${encodeURIComponent(id)}`, {
+          headers: authHeaders,
+        });
+        if (articleRes.status === 404) {
           setArticle(null);
+          // Skip the secrets/mentions/parent fetches — there's nothing
+          // to attach them to. Foundation reads below still run so the
+          // page can render the "not found" / "different era" branch
+          // with the right preview metadata.
+        } else if (!articleRes.ok) {
+          throw new Error(`Failed to load article (HTTP ${articleRes.status})`);
+        } else {
+          const articleBody = await articleRes.json();
+          const article = articleBody?.article;
+          const parent = articleBody?.parent ?? null;
+          const mentions = Array.isArray(articleBody?.mentions) ? articleBody.mentions : [];
+
+          if (article) {
+            setArticle(article);
+            setParentArticle(parent);
+            setMentions(mentions);
+            if (isStaff && article.dmNotes) {
+              setDmNotes({ content: article.dmNotes });
+            }
+          } else {
+            setArticle(null);
+          }
         }
 
-        // 2. Fetch Secrets
-        const secretsRows = await queryD1<any>(`
-          SELECT s.*, 
-                 (SELECT GROUP_CONCAT(era_id) FROM lore_secret_eras WHERE secret_id = s.id) as era_ids,
-                 (SELECT GROUP_CONCAT(campaign_id) FROM lore_secret_campaigns WHERE secret_id = s.id) as revealed_campaign_ids
-          FROM lore_secrets s 
-          WHERE s.article_id = ?
-        `, [id]);
-        
-        setSecrets(secretsRows.map(s => ({
-          ...s,
-          eraIds: s.era_ids ? s.era_ids.split(',') : [],
-          revealedCampaignIds: s.revealed_campaign_ids ? s.revealed_campaign_ids.split(',') : [],
-          createdAt: s.created_at,
-          updatedAt: s.updated_at
-        })));
+        // 2. Fetch Secrets via the per-route endpoint. Server-side
+        // visibility filter — non-staff readers only ever receive
+        // secrets whose `revealedCampaignIds` includes their active
+        // campaign. Closes H3.
+        const secretsRes = await fetch(
+          `/api/lore/articles/${encodeURIComponent(id)}/secrets`,
+          { headers: authHeaders },
+        );
+        if (secretsRes.status === 404) {
+          setSecrets([]);
+        } else if (!secretsRes.ok) {
+          // Don't bubble — secrets failing shouldn't take down the
+          // article page (the article is the primary content).
+          console.warn(`Failed to load secrets (HTTP ${secretsRes.status})`);
+          setSecrets([]);
+        } else {
+          const secretsBody = await secretsRes.json();
+          setSecrets(Array.isArray(secretsBody?.secrets) ? secretsBody.secrets : []);
+        }
 
-        // 3. Fetch Mentions
-        const mentionsRows = await queryD1<any>(`
-          SELECT a.* FROM lore_articles a
-          JOIN lore_links l ON a.id = l.article_id
-          WHERE l.target_id = ?
-        `, [id]);
-        setMentions(mentionsRows.map(m => ({ ...m, title: m.title, category: m.category })));
-
-        // 4. Foundation Data
-        const [campaignsData, erasData] = await Promise.all([
-          fetchCollection<any>('campaigns'),
-          fetchCollection<any>('eras', { orderBy: '"order" ASC' })
+        // 4. Foundation Data. Campaigns come from /api/campaigns —
+        // server returns role-filtered list (staff sees all, players
+        // see only their own). The article-visibility logic below
+        // matches lookups against the viewer's active campaign id, so
+        // a player-filtered list is the right shape.
+        const foundationIdToken = await auth.currentUser?.getIdToken();
+        const foundationAuth = foundationIdToken ? { Authorization: `Bearer ${foundationIdToken}` } : {};
+        const [campRes, erasData] = await Promise.all([
+          fetch('/api/campaigns', { headers: foundationAuth }),
+          fetchCollection<any>('eras', { orderBy: '"order" ASC' }),
         ]);
-
+        const campaignsData: any[] = campRes.ok
+          ? (await campRes.json())?.campaigns ?? []
+          : [];
 
         setCampaigns(campaignsData);
         setAllCampaigns(campaignsData);

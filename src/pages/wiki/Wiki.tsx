@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { OperationType, reportClientError } from '../../lib/firebase';
-import { fetchCollection } from '../../lib/d1';
+import { auth, OperationType, reportClientError } from '../../lib/firebase';
 import { deleteLoreArticle } from '../../lib/lore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,13 +50,18 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const whereClause = isStaff ? undefined : "status = 'published'";
-        const data = await fetchCollection<any>('lore', { 
-          where: whereClause,
-          orderBy: 'title ASC'
+        // /api/lore/articles enforces the status filter server-side
+        // (non-staff get published only, dm_notes always stripped).
+        // Replaces the raw `fetchCollection('lore', { where:
+        // "status = 'published'" })` pattern which both leaked dm_notes
+        // and trusted the client to enforce the draft filter.
+        const idToken = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/lore/articles?orderBy=title%20ASC', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
-
-        setPages(data);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        setPages(Array.isArray(body?.articles) ? body.articles : []);
         setIsFoundationUsingD1(true);
       } catch (error) {
         console.error("Failed to load Wiki articles:", error);

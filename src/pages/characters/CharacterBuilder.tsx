@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useKeyboardSave } from "../../hooks/useKeyboardSave";
-import { reportClientError, OperationType } from "../../lib/firebase";
+import { auth, reportClientError, OperationType } from "../../lib/firebase";
 import {
-  queryD1,
   upsertDocument,
   fetchCollection,
   fetchDocument,
@@ -67,7 +66,6 @@ function canonicalStringify(value: any): string {
   return out + "}";
 }
 
-import { rebuildCharacterFromSql } from "../../lib/characterShared";
 import {
   uniqueStringList,
   getTotalCharacterLevel,
@@ -188,7 +186,6 @@ import {
   missingPrerequisiteTags,
 } from "../../lib/characterTags";
 import { cn } from "../../lib/utils";
-import { deleteDocument } from "../../lib/d1";
 import { toast } from "sonner";
 
 const getModifier = (score: number) => {
@@ -2223,17 +2220,39 @@ export default function CharacterBuilder({
       // majority of selectedOptions ids. `features` is the fall-through
       // for advancement types whose pool comes from per-class features
       // (e.g. feature-choice advancements that pick from a class's
-      // feature roster rather than a uniqueOptionGroup). Without this
-      // fall-through, anything stored against a feature-pool advancement
-      // shows up as a raw ID on the FEATURES tab's "Selected Advancement
-      // Options" chip strip — which is what the user reported on legacy
-      // characters.
+      // feature roster rather than a uniqueOptionGroup).
+      //
+      // The base-* proficiency / language / feat advancements store
+      // references into other foundation tables — `base-skills` picks
+      // from `skills`, `base-tools` picks from `tools`, etc. Without
+      // those tables in the fall-through list, a player who chose
+      // Investigation + Tinker's Tools at level 1 saw their picks
+      // render as raw IDs ("Unresolved · 7dGhEPlbq7…") in BOTH the
+      // FEATURES tab's chip strip AND the Granted Items list, because
+      // `buildGrantedItemLookups` reads from this same `optionsCache`.
+      //
+      // Sequential per-id fetching is slow worst-case (one round trip
+      // per table per missing id) but the result is cached so the cost
+      // only lands the first time a fresh character loads. A faster
+      // version would parse the `selectedOptionsMap` key's `choice:<T>`
+      // token to pick the right table directly; left for a follow-up
+      // since the band-aid here is small and the perf is acceptable
+      // at the current scale (~10 selections per character).
       //
       // Resolved rows get keyed by `row.id` AND by the originally-
       // requested id (in case the row reports a different canonical id
-      // for whatever reason). Tries each table sequentially per id so
-      // we don't waste a round-trip when the first attempt hits.
-      const fallbackTables = ["uniqueOptionItems", "features"];
+      // for whatever reason).
+      const fallbackTables = [
+        "uniqueOptionItems",
+        "features",
+        "skills",
+        "tools",
+        "armor",
+        "weapons",
+        "languages",
+        "feats",
+        "attributes",
+      ];
 
       try {
         const resolved: any[] = [];
@@ -3180,30 +3199,29 @@ export default function CharacterBuilder({
     const fetchData = async () => {
       try {
         if (id && id !== "new") {
-          const [baseRows, progressionRows, selectionRows, inventoryRows, spellRows, proficiencyRows, extensionRows, loadoutRows] = await Promise.all([
-            queryD1("SELECT * FROM characters WHERE id = ?", [id]),
-            queryD1("SELECT * FROM character_progression WHERE character_id = ?", [id]),
-            queryD1("SELECT * FROM character_selections WHERE character_id = ?", [id]),
-            queryD1("SELECT * FROM character_inventory WHERE character_id = ?", [id]),
-            queryD1("SELECT * FROM character_spells WHERE character_id = ?", [id]),
-            queryD1("SELECT * FROM character_proficiencies WHERE character_id = ?", [id]),
-            queryD1("SELECT * FROM character_spell_list_extensions WHERE character_id = ?", [id]),
-            queryD1("SELECT * FROM character_spell_loadouts WHERE character_id = ?", [id])
-          ]);
+          // Load through the per-route endpoint so the server enforces
+          // ownership / DM access. Closes the H4 leak — the previous
+          // 8-parallel raw queryD1 reads had no ownership check, so any
+          // signed-in user could load any character by id. The server
+          // returns the same reconstructed character shape we used to
+          // build via the local rebuildCharacterFromSql call.
+          const idToken = await auth.currentUser?.getIdToken();
+          const res = await fetch(`/api/characters/${encodeURIComponent(id)}`, {
+            headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+          });
+          if (res.status === 404 || res.status === 403) {
+            // 404 covers both "doesn't exist" and "not yours" — server
+            // collapses them on purpose so probes can't enumerate ids.
+            navigate("/characters");
+            return;
+          }
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error || `Failed to load character (HTTP ${res.status})`);
+          }
+          const { character: data } = await res.json();
 
-          if (baseRows && baseRows.length > 0) {
-            const data = rebuildCharacterFromSql(
-              baseRows[0],
-              progressionRows,
-              selectionRows,
-              inventoryRows,
-              spellRows,
-              proficiencyRows,
-              extensionRows,
-              loadoutRows
-            );
-
-            if (data) {
+          if (data) {
               const normalizedBase: Record<string, number> = {};
               const rawBase = data.stats?.base || { STR: 10, DEX: 10, CON: 10, INT: 10, WIS: 10, CHA: 10 };
               Object.entries(rawBase).forEach(([key, val]) => {
@@ -3229,15 +3247,23 @@ export default function CharacterBuilder({
                 },
                 progressionState: normalizeProgressionState(data.progressionState),
               });
-            }
-          } else {
-            navigate("/characters");
           }
         }
 
         if (isStaff) {
-          const camps = await fetchCollection<any>("campaigns");
-          setCampaigns(camps);
+          // Staff context — /api/campaigns returns every campaign for
+          // admin/co-dm callers, which matches the previous
+          // `fetchCollection("campaigns")` behavior. Players would
+          // see only their own; this branch is gated on isStaff so
+          // that distinction doesn't matter here.
+          const campIdToken = await auth.currentUser?.getIdToken();
+          const campRes = await fetch('/api/campaigns', {
+            headers: campIdToken ? { Authorization: `Bearer ${campIdToken}` } : {},
+          });
+          if (campRes.ok) {
+            const campBody = await campRes.json();
+            setCampaigns(Array.isArray(campBody?.campaigns) ? campBody.campaigns : []);
+          }
         }
 
         // Attributes load first so we can map skill.ability_id → identifier
@@ -3453,10 +3479,25 @@ export default function CharacterBuilder({
         updatedAt: new Date().toISOString(),
       };
 
-      const { generateCharacterSaveQueries } = await import("../../lib/characterShared");
-      const { batchQueryD1 } = await import("../../lib/d1");
-      const queries = generateCharacterSaveQueries(charId, finalChar);
-      await batchQueryD1(queries);
+      // Save through the per-route endpoint. The server now owns the
+      // SQL construction (generateCharacterSaveQueries runs in
+      // api/_lib/_characterShared.ts) so the client can't sneak extra
+      // mutations into the batch, and the endpoint enforces owner-or-DM
+      // access — closes the H5 leak where any signed-in user could
+      // overwrite or delete any character.
+      const idToken = await auth.currentUser?.getIdToken();
+      const saveRes = await fetch(`/api/characters/${encodeURIComponent(charId)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ character: finalChar }),
+      });
+      if (!saveRes.ok) {
+        const errBody = await saveRes.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to save character (HTTP ${saveRes.status})`);
+      }
 
       // Notify the Sidebar (and anything else listening) that the
       // user's character list may have changed so the recent-
@@ -3492,7 +3533,20 @@ export default function CharacterBuilder({
     }
     if (!window.confirm("Permanently delete this character? This cannot be undone.")) return;
     try {
-      await deleteDocument("characters", id);
+      // Per-route endpoint with owner-or-DM gate. The previous
+      // deleteDocument call hit /api/d1/query which (a) routed writes
+      // through requireStaffAccess so non-staff owners would 403 on
+      // their own delete, and (b) had no ownership check anyway. Both
+      // problems go away here.
+      const idToken = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/characters/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Failed to delete character (HTTP ${res.status})`);
+      }
       window.dispatchEvent(new Event("characterListUpdated"));
       toast.success("Character deleted.");
       setSettingsOpen(false);

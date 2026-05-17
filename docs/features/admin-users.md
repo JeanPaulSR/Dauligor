@@ -12,13 +12,14 @@ Admin-only user management. The only way to create accounts (registration is dis
 
 | Action | Server endpoint | Notes |
 |---|---|---|
-| Create user | Creates Firebase Auth record + `users` row in D1 | Username + display name + initial role |
-| Edit user | Updates the D1 `users` row | No role-change UI exposed for self-edits |
-| Promote / demote | Updates `users.role` | Admin only |
-| Generate temporary password | `POST /api/admin/users/:id/temporary-password` | Sets a random password on Firebase Auth, marks `mustChangePassword=true` on the D1 row |
-| Delete user | Removes Firebase Auth record + `users` row | Cascades aren't automatic on delete; cleanup of `characters`, `campaign_members`, etc. requires a sweep |
+| Create user | Client-side `createUserWithEmailAndPassword` + write to D1 `users` | Username + display name + initial role. Write currently goes through `/api/d1/query` (staff-gated); the audit's priority #7 will move it into a dedicated `/api/admin/users` endpoint. |
+| Edit user | Same client write path | No role-change UI exposed for self-edits |
+| Promote / demote | Same client write path | Admin only |
+| Generate temporary password | `POST /api/admin/users/[id]/temporary-password` | **Destructive** — overwrites the target's Firebase Auth password with a random 14-char value and returns it once. The user's previous password no longer works. |
+| Generate sign-in link | `POST /api/admin/users/[id]/sign-in-token` | **Non-destructive** — mints a 1-hour Firebase custom token. Admin shares a `https://<origin>/auth/redeem?token=…` URL; the SPA exchanges it via `signInWithCustomToken` and the user's existing password keeps working. |
+| Delete user | Client-side delete on Firebase Auth + D1 `users` | Cascades aren't automatic on delete; cleanup of `characters`, `campaign_members`, etc. requires a sweep. |
 
-Source: [api/admin/spells/...](../../api/admin/) and the temp-password handler in [server.ts](../../server.ts) (still also wired through Vercel functions).
+Both recovery endpoints live in a single dispatcher at [api/admin/users/[id]/[action].ts](../../api/admin/users/[id]/[action].ts) (consolidated from two separate functions to stay under the Vercel Hobby plan's 12-function deployment cap).
 
 ## RBAC
 
@@ -36,32 +37,48 @@ The email is essentially derived from the username; renaming the username update
 
 ## Create-user flow
 
-1. Admin enters username, display name, role.
-2. Server generates a temporary password.
-3. Server creates Firebase Auth record with `usernameToEmail(username)` and the temp password.
-4. Server upserts `users` row in D1 with the same UID.
-5. Server returns the temp password to the admin (one-time view).
-6. Admin shares the temp password with the user out-of-band.
-7. User signs in with username + temp password; `users.mustChangePassword=true` forces a password change before continuing.
+1. Admin enters username, display name, role, and an initial password.
+2. Client uses a secondary Firebase app instance (so the admin doesn't get logged out) to call `createUserWithEmailAndPassword(usernameToEmail(username), password)`.
+3. Client writes the `users` row to D1 with the same UID.
+4. Admin shares the initial password with the user out-of-band (Discord, in person, etc.).
 
-## Reset-password flow
+There is **no `mustChangePassword` enforcement** — the D1 `users` schema has no such column, and the SPA does not force a password change on first login. If you want that behavior, it's a follow-up: add the column, add the redirect in `App.tsx`. Until then, encourage the user to change their password via `/profile/settings` once signed in.
 
-Same as create, minus the user creation:
-1. Admin clicks "Generate temporary password".
-2. Server sets new password via Firebase Admin SDK.
-3. Server returns it for one-time view.
-4. Admin shares; user changes on next sign-in.
+## Recovery flows
 
-The Firebase `sendPasswordResetEmail` flow is also wired but only works if `users.recovery_email` is populated and points at a real address. The temp-password mechanism avoids that requirement.
+Two flows live side by side on `/admin/users`, exposed as two buttons per user row. Both require `requireAdminAccess` on the server.
+
+### Sign-in link (non-destructive — prefer this)
+
+1. Admin clicks **"Sign-in Link"** on the user's row.
+2. Server endpoint mints a Firebase custom token via `auth.createCustomToken(uid)` (1-hour TTL).
+3. The dialog shows a copy-pastable `https://<origin>/auth/redeem?token=…` URL plus the precise expiry time.
+4. Admin sends the URL to the user out-of-band.
+5. User opens the URL → [`RedeemTokenPage.tsx`](../../src/pages/auth/RedeemTokenPage.tsx) calls `signInWithCustomToken(auth, token)` → they land signed in. Their stored password is untouched.
+
+This is the preferred recovery path because it doesn't invalidate a password the user might still know.
+
+### Temporary password (destructive)
+
+1. Admin clicks **"Temp Password"** on the user's row.
+2. Server generates a random 14-char password and calls `auth.updateUser(uid, { password })` via the Firebase Admin SDK. The user's existing password stops working immediately.
+3. The dialog shows the new password once.
+4. Admin shares; user signs in with it, then optionally changes it.
+
+Use this only when you genuinely want to invalidate the existing credential (compromised account, etc.) or when the user can't follow a sign-in link.
+
+### Firebase email reset
+
+`sendPasswordResetEmail` is also available client-side but only works if `users.recovery_email` is populated with a real address. The two recovery flows above work regardless.
 
 ## Auto-promotion rules
 
-`App.tsx` runs auto-promotion on every sign-in:
+`GET /api/me` runs auto-promotion on every profile load (the logic moved server-side as part of the per-route endpoint migration so the client can't dictate roles):
 - Username `admin` → `users.role = admin` in D1.
 - Username `gm` → `users.role = admin`.
 - Hardcoded staff emails (`luapnaej101@gmail.com`, `admin@archive.internal`, `gm@archive.internal`) → `users.role = admin`.
 
-These are bootstrap promotions — you can always sign in as one of these and recover admin access if the D1 `users` table is wiped.
+These are bootstrap promotions — you can always sign in as one of these and recover admin access if the D1 `users` table is wiped. The same endpoint also auto-creates the `users` row on first sign-in and auto-picks the first `campaign_members` row as `active_campaign_id` if it's null.
 
 ## Privacy fields
 
@@ -89,14 +106,8 @@ These are bootstrap promotions — you can always sign in as one of these and re
 2. The user's existing JWT continues to claim `user` role until refresh; they should sign out and back in (or `getIdToken(true)`).
 
 ### Audit recent password resets
-```sql
-SELECT id, username, display_name, temporary_password_generated_at, temporary_password_generated_by
-FROM users
-WHERE temporary_password_generated_at > date('now', '-7 days')
-ORDER BY temporary_password_generated_at DESC;
-```
 
-(Field names approximate — see [../database/structure/users.md](../database/structure/users.md) for canonical column names.)
+D1 does **not** track temp-password issuance — the columns `temporary_password_generated_at` / `temporary_password_generated_by` don't exist. The temp-password lifecycle is owned entirely by Firebase Auth (which logs the password update internally but doesn't surface it in our D1). If you need an audit trail, check the Firebase Auth console's user activity, or add a `password_reset_log` table and write to it from the server endpoint.
 
 ## Related docs
 
