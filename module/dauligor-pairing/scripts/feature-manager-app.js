@@ -684,6 +684,151 @@ export function openFeatureManager(actorLike, options = {}) {
   return DauligorFeatureManagerApp.open({ actor: actorLike, ...options });
 }
 
+// ─── Long-rest commit prompt ────────────────────────────────────────────
+//
+// Fired by main.js's `dnd5e.restCompleted` hook after a long rest. The
+// flow:
+//
+//   1. Read the actor's queued long-rest entries.
+//   2. If empty → no-op (nothing to commit).
+//   3. If non-empty → open the Feature Manager (auto-switch to Spells
+//      tab when any spell entries are queued, otherwise stay on
+//      Features) and show a DialogV2 with three actions:
+//        - Save changes → clears the queue. (Phase 1 limitation:
+//          spell-change entries are already applied — the queue is
+//          an audit log right now, not a deferred transaction. The
+//          confirmation gives the player + GM a chance to review.)
+//        - Discard changes → clears the queue with a warning chat
+//          summary so the GM sees a "discarded" audit trail.
+//        - Review → closes the dialog, leaves the FM open so the
+//          player can make further changes; the queue is preserved.
+//
+// Phase 2 will defer mutations until commit. Until then, the dialog's
+// "Save" / "Discard" both clear the queue; the difference is whether
+// the chat summary frames them as accepted or discarded.
+
+/**
+ * Format the queued long-rest entries as a short HTML list for the
+ * confirm dialog content. Spell entries get verb-aware descriptions;
+ * other entry kinds fall through to a generic "X queued change".
+ */
+function formatQueueEntryDescriptionHtml(entry) {
+  const escape = (v) => escapeHtml(String(v ?? ""));
+  if (entry.kind === "spellChange") {
+    const verbs = {
+      "added-to-sheet":       "Added to sheet:",
+      "removed-from-sheet":   "Removed from sheet:",
+      "added-to-spellbook":   "Added to spellbook:",
+      "removed-from-spellbook": "Removed from spellbook:",
+      "prepared":             "Prepared:",
+      "unprepared":           "Unprepared:",
+      "added-as-known":       "Added as Known:",
+      "removed-as-known":     "Removed as Known:",
+    };
+    const verb = verbs[entry.transition] ?? "Changed:";
+    return `<li><strong>${verb}</strong> ${escape(entry.spellName)}</li>`;
+  }
+  if (entry.kind === "optionItem") {
+    return `<li><strong>${escape(entry.groupLabel)}:</strong> ${escape(entry.fromName ?? "?")} → ${escape(entry.toName ?? "(picker TBD)")}</li>`;
+  }
+  return `<li>${escape(entry.kind ?? "Queued change")}</li>`;
+}
+
+/**
+ * Open the long-rest commit dialog for an actor. Called from
+ * `main.js` after `dnd5e.restCompleted` fires for a long rest.
+ * No-op when the queue is empty.
+ */
+export async function promptLongRestCommit(actorLike) {
+  const actor = resolveActorDocument(actorLike);
+  if (!actor || actor.type !== "character") return;
+  const queue = getQueue(actor);
+  const entries = queue.longRest.entries;
+  if (!entries.length) return;
+
+  // Decide which tab to focus the FM on. If ANY spell entry is in
+  // the queue, the Spells tab is the most relevant view; otherwise
+  // stay on Features (the only other Phase-1 ready tab).
+  const hasSpellEntry = entries.some((e) => e.kind === "spellChange");
+  const focusedTab = hasSpellEntry ? TAB_SPELLS : TAB_FEATURES;
+
+  // Open / focus the FM so the user can review changes alongside the
+  // dialog.
+  const fmInstance = DauligorFeatureManagerApp.open({ actor, tab: focusedTab });
+
+  const listHtml = entries.map(formatQueueEntryDescriptionHtml).join("");
+  const phase1Note = entries.some((e) => e.kind === "spellChange")
+    ? `<p class="hint" style="opacity:0.7; font-size:0.85em; margin-top:6px;">Note: spell changes applied immediately when you made them. Discarding clears the audit log but does not roll the changes back.</p>`
+    : "";
+
+  let decision = null;
+  try {
+    decision = await DialogV2.wait({
+      window: { title: `Long Rest — Confirm changes for ${actor.name}` },
+      content: `
+        <div class="dauligor-feature-manager__rest-prompt">
+          <p>You finished a long rest with <strong>${entries.length}</strong> queued change${entries.length === 1 ? "" : "s"}:</p>
+          <ul style="margin: 6px 0 0 18px; padding: 0; list-style: disc;">
+            ${listHtml}
+          </ul>
+          ${phase1Note}
+        </div>
+      `,
+      buttons: [
+        {
+          action: "save",
+          label: "Save changes",
+          icon: "fas fa-check",
+          default: true,
+          callback: () => "save"
+        },
+        {
+          action: "discard",
+          label: "Discard",
+          icon: "fas fa-trash",
+          callback: () => "discard"
+        },
+        {
+          action: "review",
+          label: "Make more changes",
+          icon: "fas fa-pen",
+          callback: () => "review"
+        }
+      ],
+      modal: false,
+      rejectClose: false
+    });
+  } catch (err) {
+    console.warn(`${MODULE_ID} | rest dialog failed`, err);
+    return;
+  }
+
+  if (decision === "review") {
+    // Keep the FM open + leave the queue intact. The user will
+    // commit via the FM footer's queue summary buttons (or repeat
+    // the rest).
+    return;
+  }
+
+  if (decision === "save") {
+    await clearScope(actor, SCOPE_LONG_REST);
+    // Re-render the FM so the (now-empty) queue summary updates.
+    fmInstance?.render?.({ force: false });
+    notifyInfo(`Long rest changes saved for ${actor.name}.`);
+    return;
+  }
+
+  if (decision === "discard") {
+    await clearScope(actor, SCOPE_LONG_REST);
+    fmInstance?.render?.({ force: false });
+    notifyInfo(`Long rest changes discarded for ${actor.name}. (Phase 1: applied changes are not rolled back.)`);
+    return;
+  }
+
+  // Dialog closed without a decision (e.g. window close button).
+  // Treat as "review" — keep queue intact, FM stays open.
+}
+
 // Exported for the upcoming rest-trigger / level-up-trigger commit
 // handlers — they read the queue at trigger time and apply each entry
 // according to its `kind`. Keeping these public so they're trivially

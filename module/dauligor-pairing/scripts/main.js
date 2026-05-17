@@ -1,10 +1,11 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
 import { registerDauligorCharacterSheet } from "./dauligor-character-sheet.js";
 import { exportApplicationWindow, exportSpellFolder } from "./export-service.js";
-import { openFeatureManager } from "./feature-manager-app.js";
+import { openFeatureManager, promptLongRestCommit } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
 import { openSpellPreparationManager } from "./spell-preparation-app.js";
+import { openDauligorGmConsole } from "./gm-app.js";
 import { log, notifyWarn } from "./utils.js";
 
 Hooks.once("init", () => {
@@ -17,6 +18,8 @@ Hooks.once("init", () => {
   registerSettingsUiButtons();
   registerSidebarButtons();
   registerRestBarControls();
+  registerGmConsoleControl();
+  registerLongRestCommitHook();
   // Register the opt-in "Dauligor Sheet (D&D 5e)" alt character
   // sheet. Users select it per-actor via the sheet picker; non-opted
   // actors keep dnd5e's stock sheet (where the DOM-injected
@@ -245,6 +248,97 @@ function registerLauncherControl() {
       onClick: async () => openLauncher()
     });
   });
+}
+
+/**
+ * Register a GM-only scene controls toolbar button that opens the
+ * Dauligor GM Console.
+ *
+ * Foundry v13's `getSceneControlButtons` hook passes an OBJECT keyed
+ * by control name (this changed from v12's array form). Each entry
+ * is a category card; each category carries `tools` (object keyed by
+ * tool name). The category is visible iff `visible === true`, so we
+ * gate on `game.user.isGM`. Tools with `button: true` fire `onChange`
+ * on click without staying "active" (which is what we want — open the
+ * window then immediately reset state).
+ *
+ * Reference:
+ *   https://foundryvtt.com/api/functions/hookEvents.getSceneControlButtons.html
+ *   https://foundryvtt.com/api/interfaces/foundry.SceneControl.html
+ *   https://foundryvtt.com/api/interfaces/foundry.SceneControlTool.html
+ */
+function registerGmConsoleControl() {
+  Hooks.on("getSceneControlButtons", (controls) => {
+    const isGm = game.user?.isGM === true;
+    const key = `${MODULE_ID}-gm`;
+    const entry = {
+      name: key,
+      title: "Dauligor GM Console",
+      icon: "fas fa-shield-halved",
+      order: 99,
+      visible: isGm,
+      tools: {
+        open: {
+          name: "open",
+          title: "Open Dauligor GM Console",
+          icon: "fas fa-window-maximize",
+          order: 0,
+          button: true,
+          visible: isGm,
+          onChange: () => openDauligorGmConsole()
+        }
+      }
+    };
+    // v13 object form (canonical):
+    if (controls && typeof controls === "object" && !Array.isArray(controls)) {
+      controls[key] = entry;
+      return;
+    }
+    // v12 array form fallback — kept defensive in case a fork / patch
+    // restores the legacy shape. v13 normally never hits this branch.
+    if (Array.isArray(controls)) {
+      controls.push({ ...entry, tools: Object.values(entry.tools) });
+    }
+  });
+}
+
+/**
+ * Register the `dnd5e.restCompleted` hook so Dauligor pops the
+ * Feature Manager + a confirm dialog after every long rest. The
+ * dialog shows queued Spells changes (audit log from the FM's
+ * embedded Prepare Spells mount) and gives the player a chance to
+ * Save / Discard / Make more changes before the rest "finalizes".
+ *
+ * Short rests are intentionally NOT intercepted — the FM scope is
+ * long-rest + level-up.
+ *
+ * dnd5e fires `dnd5e.restCompleted` with `(actor, result, config)`
+ * where `result.longRest === true` for long rests. Older dnd5e
+ * versions fired separate `dnd5e.longRestCompleted` events; support
+ * both names with the same handler.
+ */
+function registerLongRestCommitHook() {
+  const handler = async (actor, result, _config) => {
+    if (!actor) return;
+    // dnd5e v5.x: `result.longRest` is true for long rests, false for
+    // short. Some older payloads use `result.type === "long"` — accept
+    // either as the long-rest signal.
+    const isLongRest = result?.longRest === true
+      || result?.type === "long"
+      || result?.longRest === undefined; // defensive fallback
+    if (!isLongRest) return;
+    if (actor.type !== "character") return;
+    try {
+      await promptLongRestCommit(actor);
+    } catch (err) {
+      console.warn(`${MODULE_ID} | long-rest commit prompt failed`, err);
+    }
+  };
+  Hooks.on("dnd5e.restCompleted", handler);
+  // Back-compat with older dnd5e versions that fired a dedicated
+  // long-rest hook. v5.x merged into `restCompleted` but the legacy
+  // name is still emitted by some forks / patches.
+  Hooks.on("dnd5e.longRestCompleted", (actor, result) => handler(actor, { ...result, longRest: true }));
 }
 
 function registerSidebarButtons() {

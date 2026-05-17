@@ -141,6 +141,148 @@ function resolveActorDocument(actorLike) {
   return null;
 }
 
+/**
+ * Pick a human-readable verb for a sheetMode transition. Used by the
+ * chat-notification helper and (eventually) the FM queue-entry
+ * description. Known casters get "as Known" phrasing; prepared and
+ * spellbook casters get "prepared" phrasing.
+ *
+ *   transitions:
+ *     null      → free        "added X to the sheet"
+ *     null      → spellbook   "added X to the spellbook"
+ *     null      → prepared    "prepared X" (or "added X as Known")
+ *     free      → spellbook   "added X to the spellbook"
+ *     free      → prepared    "prepared X" (or "added X as Known")
+ *     spellbook → free        "removed X from the spellbook"
+ *     spellbook → prepared    "prepared X" (or "added X as Known")
+ *     prepared  → free        "unprepared X" (or "removed X as Known")
+ *     prepared  → spellbook   "unprepared X" (Wizard keeps in book)
+ *     <any>     → null        "removed X from the sheet"
+ */
+function describeSheetModeTransition(before, after, isKnownCaster = false) {
+  if (after === null) return "removed-from-sheet";
+  if (before === null) {
+    if (after === SHEET_MODE_PREPARED) return isKnownCaster ? "added-as-known" : "prepared";
+    if (after === SHEET_MODE_SPELLBOOK) return "added-to-spellbook";
+    return "added-to-sheet";
+  }
+  if (after === SHEET_MODE_PREPARED) return isKnownCaster ? "added-as-known" : "prepared";
+  if (after === SHEET_MODE_SPELLBOOK) {
+    if (before === SHEET_MODE_PREPARED) return "unprepared";
+    return "added-to-spellbook";
+  }
+  // after === free
+  if (before === SHEET_MODE_PREPARED) return isKnownCaster ? "removed-as-known" : "unprepared";
+  if (before === SHEET_MODE_SPELLBOOK) return "removed-from-spellbook";
+  return "added-to-sheet";
+}
+
+/**
+ * Build the chat-message content for a spell change. Format mirrors
+ * the user's example "{User} from {Character} swapped out {Spell}"
+ * but uses verbs that match the actual transition. The chat message
+ * surfaces every direct (non-queued) prep change so other players +
+ * the GM can see what the actor's spell loadout looked like at any
+ * point — useful for "wait, when did you prepare Counterspell?"
+ * follow-up questions.
+ */
+function buildSpellChangeChatContent(actor, spell, transition) {
+  const userName = String(game.user?.name ?? "Someone");
+  const charName = String(actor?.name ?? "their character");
+  const spellName = String(spell?.name ?? "a spell");
+  const phrases = {
+    "added-to-sheet":       `added <strong>${spellName}</strong> to <strong>${charName}</strong>'s sheet`,
+    "removed-from-sheet":   `removed <strong>${spellName}</strong> from <strong>${charName}</strong>'s sheet`,
+    "added-to-spellbook":   `added <strong>${spellName}</strong> to <strong>${charName}</strong>'s spellbook`,
+    "removed-from-spellbook": `removed <strong>${spellName}</strong> from <strong>${charName}</strong>'s spellbook`,
+    "prepared":             `prepared <strong>${spellName}</strong> on <strong>${charName}</strong>`,
+    "unprepared":           `unprepared <strong>${spellName}</strong> on <strong>${charName}</strong>`,
+    "added-as-known":       `added <strong>${spellName}</strong> as a Known spell on <strong>${charName}</strong>`,
+    "removed-as-known":     `removed <strong>${spellName}</strong> as a Known spell on <strong>${charName}</strong>`,
+  };
+  const verb = phrases[transition] ?? `changed <strong>${spellName}</strong> on <strong>${charName}</strong>`;
+  return `<p class="dauligor-chat-spell-change">${escapeHtmlGlobal(userName)} ${verb}.</p>`;
+}
+
+/**
+ * Cheap escape for the userName part — the other inserts (`charName`,
+ * `spellName`) are wrapped in <strong> by the phrase template and
+ * Foundry's chat sanitizer covers them. We only escape the user name
+ * here because it appears outside the wrapper. Use of escapeHtml
+ * (defined later in the file) wouldn't work at this scope; inline a
+ * tiny escaper to avoid forward-reference issues at import time.
+ */
+function escapeHtmlGlobal(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Post a spell-change notification to chat. Only fires for direct
+ * mutations (the user used the standalone Prepare Spells window) —
+ * mutations made via the Feature Manager's embedded mount are
+ * recorded in the queue instead (see `_logSpellChangeToQueue`) and
+ * don't post here. The GM + every player sees the message; the
+ * speaker is the actor so it groups under their portrait in chat.
+ */
+function postSpellChangeChat(actor, spell, transition) {
+  if (!actor || !spell || !transition) return;
+  try {
+    const ChatMessageImpl = globalThis.ChatMessage;
+    if (!ChatMessageImpl?.create) return;
+    ChatMessageImpl.create({
+      content: buildSpellChangeChatContent(actor, spell, transition),
+      speaker: ChatMessageImpl.getSpeaker({ actor }),
+      user: game.user?.id,
+      style: globalThis.CONST?.CHAT_MESSAGE_STYLES?.OTHER ?? 0,
+    });
+  } catch (err) {
+    console.warn(`${MODULE_ID} | spell change chat post failed`, err);
+  }
+}
+
+/**
+ * Append a queue log entry recording a spell change made via the
+ * Feature Manager's embedded Prepare Spells mount. The entry lives
+ * under `flags.dauligor-pairing.featureManagerQueue.longRest.entries`
+ * with kind=`"spellChange"`, so the long-rest commit dialog has a
+ * concrete list of "things you did during this rest period" to show
+ * the player + GM.
+ *
+ * Phase 1 limitation: the change has ALREADY been applied to the
+ * actor — the queue is an audit log, not a deferred transaction.
+ * Phase 2 would defer the mutation until commit; the data shape
+ * here is forward-compatible with that change.
+ */
+async function logSpellChangeToQueue(actor, spell, transition, { classIdentifier = null } = {}) {
+  if (!actor?.setFlag) return;
+  try {
+    const raw = actor.getFlag?.(MODULE_ID, "featureManagerQueue") ?? null;
+    const queue = {
+      longRest: { entries: Array.isArray(raw?.longRest?.entries) ? [...raw.longRest.entries] : [] },
+      levelUp: { entries: Array.isArray(raw?.levelUp?.entries) ? [...raw.levelUp.entries] : [] }
+    };
+    queue.longRest.entries.push({
+      id: foundry.utils.randomID(),
+      kind: "spellChange",
+      queuedAt: Date.now(),
+      scope: "long-rest",
+      spellId: String(spell?.id ?? ""),
+      spellName: String(spell?.name ?? ""),
+      spellDbId: String(spell?.getFlag?.(MODULE_ID, "entityId") ?? ""),
+      classIdentifier: classIdentifier ? String(classIdentifier) : null,
+      transition: String(transition)
+    });
+    await actor.setFlag(MODULE_ID, "featureManagerQueue", queue);
+  } catch (err) {
+    console.warn(`${MODULE_ID} | logSpellChangeToQueue failed`, err);
+  }
+}
+
 function escapeHtml(value) {
   return foundry.utils.escapeHTML(String(value ?? ""));
 }
@@ -1552,8 +1694,21 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         await this._renderManager();
         return;
       }
+      const beforeMode = getSheetMode(owned);
       try {
         await owned.update(buildSheetModePatch(mode));
+        // Chat / queue: record the transition. Embedded mounts (FM)
+        // log to the long-rest queue; standalone Prepare Spells
+        // posts to chat for everyone to see.
+        const isKnownCaster = classModel?.prepType === "known";
+        const transition = describeSheetModeTransition(beforeMode, mode, isKnownCaster);
+        if (this._isEmbedded) {
+          await logSpellChangeToQueue(this._actor, owned, transition, {
+            classIdentifier: classModel?.identifier ?? null
+          });
+        } else {
+          postSpellChangeChat(this._actor, owned, transition);
+        }
         await this._renderManager();
       } catch (err) {
         console.warn(`${MODULE_ID} | update sheetMode failed`, err);
@@ -1585,8 +1740,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       foundry.utils.setProperty(itemData, "system.prepared", true);
       foundry.utils.setProperty(itemData, "system.method", "spell");
       try {
-        await this._actor.createEmbeddedDocuments("Item", [itemData]);
+        const [created] = await this._actor.createEmbeddedDocuments("Item", [itemData]);
         notifyInfo(`${itemData.name} added to sheet.`);
+        // Importer creates go to chat regardless of embed state —
+        // the importer isn't a long-rest action and shouldn't add
+        // queue entries. Skip when running inside the FM mount
+        // (which currently doesn't happen, but the guard keeps the
+        // contract clean if that ever changes).
+        if (created && !this._isEmbedded) {
+          postSpellChangeChat(this._actor, created, "added-to-sheet");
+        }
         await this._renderManager();
       } catch (err) {
         console.warn(`${MODULE_ID} | importer add spell failed`, err);
@@ -1626,8 +1789,20 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     foundry.utils.setProperty(itemData, "system.method", "spell");
 
     try {
-      await this._actor.createEmbeddedDocuments("Item", [itemData]);
+      const [created] = await this._actor.createEmbeddedDocuments("Item", [itemData]);
       notifyInfo(`${itemData.name} added to sheet.`);
+      // Chat / queue: record the create transition (null → mode).
+      const isKnownCaster = classModel?.prepType === "known";
+      const transition = describeSheetModeTransition(null, mode, isKnownCaster);
+      if (created) {
+        if (this._isEmbedded) {
+          await logSpellChangeToQueue(this._actor, created, transition, {
+            classIdentifier: classModel?.identifier ?? null
+          });
+        } else {
+          postSpellChangeChat(this._actor, created, transition);
+        }
+      }
       await this._renderManager();
     } catch (err) {
       console.warn(`${MODULE_ID} | add spell failed`, err);
@@ -1712,9 +1887,25 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       notifyWarn(`${owned.name} is always prepared and cannot be removed from this manager.`);
       return;
     }
+    // Snapshot before deletion so we can describe the transition.
+    const beforeMode = getSheetMode(owned);
+    const spellSnapshot = {
+      id: owned.id,
+      name: owned.name,
+      getFlag: owned.getFlag?.bind(owned)
+    };
     try {
       await this._actor.deleteEmbeddedDocuments("Item", [owned.id]);
       notifyInfo(`${owned.name} removed from sheet.`);
+      // Chat / queue: record the removal transition (<mode> → null).
+      const transition = "removed-from-sheet";
+      if (this._isEmbedded) {
+        await logSpellChangeToQueue(this._actor, spellSnapshot, transition, {
+          classIdentifier: classModel?.identifier ?? null
+        });
+      } else {
+        postSpellChangeChat(this._actor, spellSnapshot, transition);
+      }
       await this._renderManager();
     } catch (err) {
       console.warn(`${MODULE_ID} | remove spell failed`, err);
@@ -2733,10 +2924,24 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         ${renderBtn(prepBtn)}
       `;
 
+    // Footer note: shown ONLY in standalone sheet mode (not in the
+    // embedded Feature Manager mount, since the FM IS the intended
+    // way to make changes; not in importer mode, which is handled
+    // by a different footer block). Reminds the user that changes
+    // made here apply immediately and bypass the long-rest queue —
+    // the Feature Manager is the canonical path for prep changes.
+    const showSheetModeNote = !this._isEmbedded;
+    const noteHtml = showSheetModeNote
+      ? `<div class="dauligor-spell-manager__footer-note">Add spells from here only if you forgot. Use the Feature Manager instead.</div>`
+      : "";
+
     this._footerRegion.innerHTML = `
-      <div class="dauligor-spell-manager__footer-left">${buttons}</div>
-      <div class="dauligor-spell-manager__footer-right">
-        <button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>
+      ${noteHtml}
+      <div class="dauligor-spell-manager__footer-row">
+        <div class="dauligor-spell-manager__footer-left">${buttons}</div>
+        <div class="dauligor-spell-manager__footer-right">
+          <button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>
+        </div>
       </div>
     `;
 
