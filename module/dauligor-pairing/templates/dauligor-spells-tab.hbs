@@ -114,11 +114,22 @@
                             <span class="dauligor-character-sheet__class-group-stat-label">{{ localize "DND5E.SpellDC" }}</span>
                             <span class="dauligor-character-sheet__class-group-stat-value">{{#if spellcasting}}{{ spellcasting.save }}{{else}}&mdash;{{/if}}</span>
                         </div>
+                        {{!--
+                          Per-prep-type stat column. Label + count + cap
+                          all swap based on `casterKind`:
+                            - prepared / spellbook → "PREPARED  X/Y"  (Y = preparation.max)
+                            - known                → "KNOWN     X/Y"  (Y = spellsKnownLevels[classLevel].spellsKnown)
+                            - non-caster / custom  → "PREPARED  —"
+                          Empty Y renders as just X (no cap), or as a
+                          dash when the value itself is unknown.
+                        --}}
                         <div class="dauligor-character-sheet__class-group-stat dauligor-character-sheet__class-group-stat--prepared">
-                            <span class="dauligor-character-sheet__class-group-stat-label">{{ localize "DND5E.Prepared" }}</span>
+                            <span class="dauligor-character-sheet__class-group-stat-label">
+                                {{#if casterLabel}}{{ casterLabel }}{{else}}{{ localize "DND5E.Prepared" }}{{/if}}
+                            </span>
                             <span class="dauligor-character-sheet__class-group-stat-value">
-                                {{#if isPreparedCaster}}
-                                {{ spellcasting.preparation.value }}{{#if spellcasting.preparation.max}}<span class="dauligor-character-sheet__class-group-stat-cap">/{{ spellcasting.preparation.max }}</span>{{/if}}
+                                {{#if casterKind}}
+                                {{ casterValue }}{{#if casterMax}}<span class="dauligor-character-sheet__class-group-stat-cap">/{{ casterMax }}</span>{{/if}}
                                 {{else}}
                                 &mdash;
                                 {{/if}}

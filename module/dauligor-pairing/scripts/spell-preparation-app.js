@@ -694,9 +694,62 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
           || Number(preparation.formula?.dc ?? 0)
           || 0;
         const atk = String(this._actor?.system?.attributes?.spellatk ?? spellcasting.attack?.formula ?? "");
-        const cantripsCap = (spellcasting.cantrips?.max ?? spellcasting.cantrips?.value);
-        const spellsCap = (spellcasting.spells?.max ?? spellcasting.spells?.value);
+        const classLevel = Number(model.item?.system?.levels ?? 0) || 0;
         const prepType = this._classifyPrepType(model);
+
+        // Spell + cantrip caps. Source of truth depends on prep type:
+        //   - "known": per-level scaling stamped at import time as
+        //     `flags.dauligor-pairing.spellcasting.spellsKnownLevels`
+        //     (the same data shown in the Class Editor's Spells Known
+        //     column). Falls back to the bundle cache when the flag
+        //     hasn't been stamped yet (older imports). Cap = the
+        //     level's `spellsKnown`; cantripsCap = `cantrips`.
+        //   - "prepared" / "spellbook": dnd5e's preparation.max for
+        //     the prepared cap (set by the import's formula). Cantrip
+        //     cap from `spellcasting.cantrips.max`.
+        const moduleFlagSpellcasting = model.item?.getFlag?.(MODULE_ID, "spellcasting")
+          ?? model.item?.flags?.[MODULE_ID]?.spellcasting
+          ?? {};
+        const bundleEntry = this._classBundles?.get(model.identifier);
+        const bundleSpellcasting = bundleEntry?.status === "ready" ? bundleEntry.spellcasting : null;
+        const bundleSourceId = bundleSpellcasting?.spellsKnownSourceId
+          ?? moduleFlagSpellcasting?.spellsKnownSourceId
+          ?? null;
+        const bundleScalings = bundleEntry?.payload?.spellsKnownScalings ?? null;
+        const bundleLevels = bundleSourceId && bundleScalings
+          ? (bundleScalings[bundleSourceId]?.levels ?? null)
+          : null;
+        const flagLevels = moduleFlagSpellcasting.spellsKnownLevels ?? null;
+        const scalingForLevel = (() => {
+          for (const source of [flagLevels, bundleLevels]) {
+            if (!source) continue;
+            const entry = source[classLevel] ?? source[String(classLevel)];
+            if (entry) return entry;
+          }
+          return null;
+        })();
+
+        let cantripsCapRaw = spellcasting.cantrips?.max ?? spellcasting.cantrips?.value;
+        let spellsCapRaw = preparation.max ?? spellcasting.spells?.max ?? spellcasting.spells?.value;
+
+        if (prepType === "known") {
+          // Known casters: scaling is the authoritative cap. Override
+          // whatever dnd5e left in `preparation.max` (which is empty
+          // for `preparation.mode === "always"`).
+          const scaledSpells = Number(scalingForLevel?.spellsKnown);
+          if (Number.isFinite(scaledSpells) && scaledSpells > 0) {
+            spellsCapRaw = scaledSpells;
+          }
+        }
+        // For ANY class with scaling data, prefer scaling cantrip cap
+        // over an unset dnd5e value. Cantrips are author-set per-level
+        // in the same scaling row so this is the same source the
+        // editor's "Cantrips Known" column shows.
+        const scaledCantrips = Number(scalingForLevel?.cantrips);
+        if ((cantripsCapRaw == null || cantripsCapRaw === "") && Number.isFinite(scaledCantrips) && scaledCantrips > 0) {
+          cantripsCapRaw = scaledCantrips;
+        }
+
         return {
           ...model,
           progression,
@@ -704,14 +757,14 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
           ability,
           abilityLabel: describeAbility(ability),
           abilityAbbr: describeAbilityAbbr(ability),
-          levels: Number(model.item?.system?.levels ?? 0) || 0,
+          levels: classLevel,
           preparation,
           prepType,
           prepTypeLabel: PREP_TYPE_LABELS[prepType] ?? "Caster",
           dc: dc || null,
           atk,
-          cantripsCap: (cantripsCap == null || cantripsCap === "") ? null : Number(cantripsCap),
-          spellsCap: (spellsCap == null || spellsCap === "") ? null : Number(spellsCap),
+          cantripsCap: (cantripsCapRaw == null || cantripsCapRaw === "") ? null : Number(cantripsCapRaw),
+          spellsCap: (spellsCapRaw == null || spellsCapRaw === "") ? null : Number(spellsCapRaw),
           ownedCount: model.ownedSpells.length
         };
       })

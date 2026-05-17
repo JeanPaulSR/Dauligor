@@ -1536,22 +1536,92 @@ function buildDauligorCharacterSheetClass() {
         const classItem = !isCustom && !isOther ? spellcastingClasses[bucket.classIdentifier] : null;
         const prepMax = Number(classItem?.system?.spellcasting?.preparation?.max ?? 0);
         const prepMode = String(classItem?.system?.spellcasting?.preparation?.mode ?? "").toLowerCase();
-        // Show the Prepared column when the class actually uses a
-        // daily-preparation slot system. "prepared" + "spell"
-        // (spellbook) + "leveled" are the modes where it's relevant;
-        // the prepMax > 0 fallback catches edge cases / older data.
-        const isPreparedCaster = !isCustom && !isOther && (
-          prepMode === "prepared"
-          || prepMode === "spell"
-          || prepMode === "leveled"
-          || prepMax > 0
-        );
+
+        // Determine the Dauligor preparation type for the class. The
+        // class import stamps `flags.dauligor-pairing.spellcasting.type`
+        // ∈ {"prepared","known","spellbook"} on every class item (since
+        // commit da73802); older imports fall through to a
+        // mode-based heuristic.
+        //   - "always" mode → known caster (Bard, Sorcerer, etc.)
+        //   - "prepared" mode + Wizard/Artificer identifier → spellbook
+        //   - "prepared" mode otherwise → prepared caster
+        //
+        // dnd5e collapses prepared+spellbook into `mode === "prepared"`
+        // (see `normalizeSpellPreparationMode`), so we can't tell them
+        // apart from `preparation.mode` alone — the stamped flag is
+        // the only reliable source. Reasonable Wizard heuristic for
+        // older imports.
+        const moduleFlag = classItem?.getFlag?.(MODULE_ID, "spellcasting")
+          ?? classItem?.flags?.[MODULE_ID]?.spellcasting
+          ?? {};
+        const explicitType = String(moduleFlag.type ?? "").toLowerCase();
+        let casterKind = null;
+        if (explicitType === "prepared" || explicitType === "known" || explicitType === "spellbook") {
+          casterKind = explicitType;
+        } else if (!isCustom && !isOther) {
+          const identifierLower = String(bucket.classIdentifier ?? "").toLowerCase();
+          if (prepMode === "always") casterKind = "known";
+          else if (identifierLower === "wizard" || identifierLower === "artificer") casterKind = "spellbook";
+          else if (prepMode === "prepared" || prepMode === "spell" || prepMode === "leveled" || prepMax > 0) {
+            casterKind = "prepared";
+          }
+        }
+
+        // Stat-column value + max + label per caster kind.
+        //   prepared / spellbook: count of currently-prepared spells /
+        //     max prepared (dnd5e's `preparation.value` / `.max`).
+        //   known: count of owned non-cantrip spells attributed to this
+        //     class / cap from `spellsKnownLevels[classLevel].spellsKnown`.
+        let casterValue = null;
+        let casterMax = null;
+        let casterLabel = null;
+        if (casterKind === "prepared" || casterKind === "spellbook") {
+          casterLabel = casterKind === "spellbook"
+            ? game.i18n.localize("DND5E.Prepared")
+            : game.i18n.localize("DND5E.Prepared");
+          const prepData = spellcastingFor(bucket.classIdentifier)?.preparation;
+          casterValue = Number(prepData?.value ?? 0) || 0;
+          casterMax = Number.isFinite(Number(prepData?.max)) && Number(prepData?.max) > 0
+            ? Number(prepData?.max)
+            : (prepMax > 0 ? prepMax : null);
+        } else if (casterKind === "known") {
+          casterLabel = "Known";
+          // Count owned non-cantrip spells attributed to THIS class.
+          // Cantrips are always known when on the sheet but don't count
+          // against the spells-known cap, so they're excluded here.
+          // (A dedicated Cantrips Known column would live as its own
+          // header column — not the same axis as the prepared column.)
+          casterValue = 0;
+          for (const item of (actor.itemTypes?.spell ?? [])) {
+            const lv = Number(item?.system?.level ?? 0) || 0;
+            if (lv <= 0) continue;
+            if (classOfSpell(item) === bucket.classIdentifier) casterValue++;
+          }
+          // Cap is read from the per-class scaling stamped at import.
+          // Falls back to null (rendered as "—") when the class was
+          // imported before the flag existed; the user just needs to
+          // re-import to populate it.
+          const levels = moduleFlag.spellsKnownLevels ?? null;
+          const classLevel = Number(classItem?.system?.levels ?? 0) || 0;
+          const scaling = levels?.[classLevel] ?? levels?.[String(classLevel)] ?? null;
+          const fromScaling = Number(scaling?.spellsKnown);
+          casterMax = Number.isFinite(fromScaling) && fromScaling > 0 ? fromScaling : null;
+        }
+
+        // `isPreparedCaster` retained for back-compat with older
+        // template snippets; equivalent to "any caster kind that uses
+        // a daily prep budget" — i.e. prepared + spellbook, NOT known.
+        const isPreparedCaster = casterKind === "prepared" || casterKind === "spellbook";
 
         classGroups.push({
           classIdentifier: bucket.classIdentifier,
           className: bucket.className,
           spellcasting: isCustom || isOther ? null : spellcastingFor(bucket.classIdentifier),
           isPreparedCaster,
+          casterKind,
+          casterLabel,
+          casterValue,
+          casterMax,
           isCustom,
           isOther,
           collapsed: collapsedSet.has(bucket.classIdentifier),

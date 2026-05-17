@@ -1620,7 +1620,9 @@ function createSemanticClassItem(context) {
   if (!uniqueOptionGroups.length) {
     delete item.flags[MODULE_ID].optionGroups;
   }
-  const spellcastingMeta = normalizeSpellcastingModuleFlags(classData.spellcasting);
+  const spellcastingMeta = normalizeSpellcastingModuleFlags(classData.spellcasting, {
+    spellsKnownLevels: getSpellsKnownScalingLevels(context.payload, classData)
+  });
   if (spellcastingMeta) item.flags[MODULE_ID].spellcasting = spellcastingMeta;
 
   return item;
@@ -1673,7 +1675,13 @@ function createSemanticSubclassItem(subclass, context) {
         : buildSemanticSubclassAdvancement(subclass, context)
     }
   };
-  const spellcastingMeta = normalizeSpellcastingModuleFlags(subclass?.spellcasting);
+  // Subclasses can have their own spellcasting block (e.g. Eldritch
+  // Knight, Arcane Trickster) with their own spellsKnown scaling.
+  // The scaling map for those lives at the same payload-top-level
+  // path, keyed by the subclass's spellcasting.spellsKnownSourceId.
+  const spellcastingMeta = normalizeSpellcastingModuleFlags(subclass?.spellcasting, {
+    spellsKnownLevels: getSpellsKnownScalingLevels(context.payload, subclass ?? {})
+  });
   if (spellcastingMeta) item.flags[MODULE_ID].spellcasting = spellcastingMeta;
   return item;
 }
@@ -6257,7 +6265,7 @@ function buildFoundrySpellcastingData(spellcasting, {
   };
 }
 
-function normalizeSpellcastingModuleFlags(spellcasting) {
+function normalizeSpellcastingModuleFlags(spellcasting, { spellsKnownLevels = null } = {}) {
   if (!spellcasting || typeof spellcasting !== "object") return null;
 
   const metadata = {};
@@ -6290,6 +6298,17 @@ function normalizeSpellcastingModuleFlags(spellcasting) {
 
   const altProgressionSourceId = trimString(spellcasting.altProgressionSourceId);
   if (altProgressionSourceId) metadata.altProgressionSourceId = altProgressionSourceId;
+
+  // Per-level cantrip + spells-known scaling. Stamped so the alt
+  // character sheet can render "Known X/Y" for known casters AND
+  // "Cantrips Known X/Y" for any class with a cantrip scaling.
+  // Shape is the same {<level>: { cantrips, spellsKnown }} the app
+  // exports — read via `getSpellsKnownScalingLevels` upstream.
+  // Skipped when empty so the flag stays out of the way for
+  // non-scaled classes.
+  if (spellsKnownLevels && typeof spellsKnownLevels === "object" && Object.keys(spellsKnownLevels).length) {
+    metadata.spellsKnownLevels = spellsKnownLevels;
+  }
 
   return Object.keys(metadata).length ? metadata : null;
 }
