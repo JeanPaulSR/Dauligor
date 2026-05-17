@@ -1614,47 +1614,40 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const cantripCap = selectedClass.cantripsCap;
     const prep = selectedClass.prepType;
 
-    const prepLabel = prep === "known" ? "Known Spells" : "Prepared Spells";
-    const prepCounter = `
-      <div class="dauligor-spell-manager__meta-counter">
-        <div class="dauligor-spell-manager__meta-counter-label">${escapeHtml(prepLabel)}</div>
-        <div class="dauligor-spell-manager__meta-counter-value">${preparedCount}<span class="dauligor-spell-manager__meta-counter-cap"> / ${cap ?? "∞"}</span></div>
+    // Counter shape — each counter ends up in one of two row slots:
+    //   Row 1 LEFT:   On Sheet         Row 1 RIGHT:  Prepared / Known
+    //   Row 2 LEFT:   Cantrips         Row 2 RIGHT:  In Spellbook
+    // Labels are short ("On Sheet", "Prepared", "Cantrips",
+    // "In Spellbook") so the strip stays compact and the two rows
+    // stack neatly under the meta strip's left-side title.
+    const renderCounter = (label, value, cap, modifier = "") => `
+      <div class="dauligor-spell-manager__meta-counter ${modifier}">
+        <div class="dauligor-spell-manager__meta-counter-label">${escapeHtml(label)}</div>
+        <div class="dauligor-spell-manager__meta-counter-value">${value}${cap != null ? `<span class="dauligor-spell-manager__meta-counter-cap"> / ${cap}</span>` : ""}</div>
       </div>
     `;
+    // Empty placeholder slot — preserves column alignment when only
+    // one of (Cantrips, In Spellbook) is applicable. Without this, a
+    // single counter in row 2 would float to whichever side flex
+    // decides; the placeholder forces it under the column it pairs
+    // with (Cantrips under On Sheet, In Spellbook under Prepared).
+    const emptySlot = `<div class="dauligor-spell-manager__meta-counter dauligor-spell-manager__meta-counter--placeholder" aria-hidden="true"></div>`;
 
-    const cantripCounter = (cantripCap == null) ? "" : `
-      <div class="dauligor-spell-manager__meta-counter">
-        <div class="dauligor-spell-manager__meta-counter-label">Cantrips Known</div>
-        <div class="dauligor-spell-manager__meta-counter-value">${cantripsOnSheet}<span class="dauligor-spell-manager__meta-counter-cap"> / ${cantripCap}</span></div>
-      </div>
-    `;
-
-    const onSheetCounter = `
-      <div class="dauligor-spell-manager__meta-counter dauligor-spell-manager__meta-counter--muted">
-        <div class="dauligor-spell-manager__meta-counter-label">Spells on Sheet</div>
-        <div class="dauligor-spell-manager__meta-counter-value">${totalOnSheet}</div>
-      </div>
-    `;
-
-    const spellbookCounter = (prep === "spellbook") ? `
-      <div class="dauligor-spell-manager__meta-counter">
-        <div class="dauligor-spell-manager__meta-counter-label">Spells in Spellbook</div>
-        <div class="dauligor-spell-manager__meta-counter-value">${inSpellbookCount}</div>
-      </div>
-    ` : "";
+    const onSheetCounter  = renderCounter("On Sheet", totalOnSheet, null, "dauligor-spell-manager__meta-counter--muted");
+    const prepLabel       = prep === "known" ? "Known" : "Prepared";
+    const prepCounter     = renderCounter(prepLabel, preparedCount, cap ?? "∞");
+    const cantripCounter  = (cantripCap == null) ? null : renderCounter("Cantrips", cantripsOnSheet, cantripCap);
+    const spellbookCounter = (prep === "spellbook") ? renderCounter("In Spellbook", inSpellbookCount, null) : null;
 
     const progressionPart = selectedClass.progressionLabel
       ? `${escapeHtml(selectedClass.progressionLabel)}${selectedClass.abilityAbbr ? " – " + escapeHtml(selectedClass.abilityAbbr) : ""}`
       : (selectedClass.abilityAbbr ? escapeHtml(selectedClass.abilityAbbr) : "");
 
-    // Counters split across TWO rows so they stop bunching up on
-    // narrow viewports:
-    //   Top row (always):     [Spells on Sheet] [Prepared/Known Spells]
-    //   Bottom row (optional): [Cantrips Known] [Spells in Spellbook]
-    // The bottom row only renders when at least one of its counters
-    // is applicable (cantripCap set, or class is spellbook). When
-    // neither applies, only the top row appears.
-    const hasBottomRow = Boolean(cantripCounter) || Boolean(spellbookCounter);
+    // Bottom row renders only when at least one of its slots is
+    // applicable. When only one applies, the other slot becomes the
+    // empty placeholder so the visible counter stays in its proper
+    // column (Cantrips on the LEFT, In Spellbook on the RIGHT).
+    const hasBottomRow = cantripCounter !== null || spellbookCounter !== null;
     this._metaRegion.innerHTML = `
       <div class="dauligor-spell-manager__meta-left">
         <div class="dauligor-spell-manager__meta-title">
@@ -1670,8 +1663,8 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         </div>
         ${hasBottomRow ? `
         <div class="dauligor-spell-manager__meta-counter-row">
-          ${cantripCounter}
-          ${spellbookCounter}
+          ${cantripCounter  ?? emptySlot}
+          ${spellbookCounter ?? emptySlot}
         </div>
         ` : ""}
       </div>

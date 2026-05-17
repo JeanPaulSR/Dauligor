@@ -4347,10 +4347,18 @@ button.dauligor-option-picker__pill:hover {
 }
 
 /* Meta-right stacks two ROWS of counters:
- *   Row 1 (always):  Spells on Sheet · Prepared/Known Spells
- *   Row 2 (opt):     Cantrips Known  · Spells in Spellbook
- * Each row is its own flex line so the counters stay grouped pairwise
- * regardless of viewport width.
+ *   Row 1 (always):  On Sheet      ·  Prepared / Known
+ *   Row 2 (opt):     Cantrips      ·  In Spellbook
+ *
+ * Each row uses a 2-column grid with equal slots so:
+ *   - "Cantrips" lines up under "On Sheet"
+ *   - "In Spellbook" lines up under "Prepared"
+ * When only one of (Cantrips, In Spellbook) is applicable, the other
+ * slot renders as a transparent placeholder so the visible counter
+ * stays in its proper column instead of drifting to the side.
+ *
+ * Top row uses the same grid so col1/col2 widths match across both
+ * rows — alignment is column-stable, not content-relative.
  */
 .dauligor-spell-manager__meta-right {
   display: flex;
@@ -4360,13 +4368,21 @@ button.dauligor-option-picker__pill:hover {
 }
 
 .dauligor-spell-manager__meta-counter-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) minmax(96px, max-content);
   gap: 16px;
+  justify-content: end;
 }
 
 .dauligor-spell-manager__meta-counter {
   text-align: right;
-  min-width: 90px;
+}
+
+/* Empty placeholder counter — keeps row-2 alignment when one of
+ * (Cantrips, In Spellbook) doesn't apply. Reserves layout space
+ * without rendering visible text. */
+.dauligor-spell-manager__meta-counter--placeholder {
+  visibility: hidden;
 }
 
 .dauligor-spell-manager__meta-counter-label {
