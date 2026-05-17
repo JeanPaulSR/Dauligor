@@ -19,6 +19,102 @@ The spell preparation manager should solve four problems:
    - spell-point modules
 4. Support class-by-class spell handling, including prepared casters, known casters, and always-prepared lists.
 
+## Implementation Status (May 2026 refactor)
+
+The manager has now been redesigned to match the `/compendium/spells`
+browser layout on the application side. The notes below reflect the
+**current shipped implementation**; sections further down in this doc
+are the original spec and may diverge.
+
+### Window layout
+
+```
+┌─────────────┬─────────────────────────┬──────────────────────────────┐
+│  CLASSES    │       META STRIP        │       DETAIL HEADER          │
+│  · Bard     │  toolbar (search/filter │   Title + source + ★         │
+│  · Wizard   │           /On Sheet)    │   subtitle (level / school)  │
+│             │                         │                              │
+│  FAVOURITES │                         │   IMAGE  │  CASTING TIME     │
+│  search +   │   POOL LIST             │          │  RANGE            │
+│  filter btn │   (grouped by level)    │          │  COMPONENTS       │
+│  rows…      │   ring / book / empty   │          │  DURATION         │
+│             │   indicators per row    │                              │
+│             │                         │   DESCRIPTION (enriched)     │
+│             │                         │                              │
+│             │                         │   Source · Status            │
+│             │                         │   Show tags (toggle)         │
+└─────────────┴─────────────────────────┴──────────────────────────────┘
+│  FOOTER  · [ Prepare ] [ Add to Sheet ] [ Add to Spellbook? ]  · [ Close ] │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+The detail column absorbs leftover horizontal space when the window is
+resized — the reading-priority content (description) gets the extra
+real estate. The pool column stays at a comfortable fixed-ish width.
+
+### sheetMode flag
+
+Each owned spell carries `flags.dauligor-pairing.sheetMode` ∈
+`"prepared" | "spellbook" | "free"` (source of truth for the manager's
+counter accounting + indicator state). Source-of-truth mapping to
+dnd5e's native fields:
+
+| sheetMode    | `system.prepared` | `system.method` | Counts vs…       | Indicator     | Row highlight |
+|--------------|-------------------|------------------|------------------|---------------|---------------|
+| `prepared`   | `true`            | `"spell"`        | Prepared / Known | filled circle | yes           |
+| `spellbook`  | `false`           | `"spell"`        | Spellbook cap    | book          | no            |
+| `free`       | `true`            | `"always"`       | (none)           | filled circle | no            |
+
+Cantrips never carry a "prepared" semantic — they're always known when
+on the sheet. The cantrip counter is independent of the prepared
+counter.
+
+### Footer buttons
+
+The footer is data-driven by the selected spell's current sheetMode +
+the active class's prep type:
+
+- **Prepare** (or "Add as Known" for known casters) — `sheetMode = "prepared"`.
+- **Add to Sheet** — `sheetMode = "free"`. Doesn't count vs caps.
+- **Add to Spellbook** — `sheetMode = "spellbook"`. Only shown when the
+  active class's prep type is `"spellbook"`.
+- **Close** — `await this.close()`.
+
+When the spell is already in a mode, the corresponding button shows
+the inverse label ("Unprepare" / "Remove from Sheet" / "Remove from
+Spellbook") and clicking deletes the spell item from the actor.
+
+Buttons are disabled for spells whose state is managed externally
+(advancement-granted, dnd5e-native always-prepared).
+
+### Filter modal
+
+Search + filter button live on **both** the favourites toolbar and the
+pool toolbar. The filter button opens a centered modal overlay (matches
+the `/compendium/spells` modal) with sections for:
+
+- Level (0–9)
+- School (8 schools)
+- Source (PHB / XGE / … — resolved via `/api/module/sources/catalog.json`)
+- Casting Time (`activationBucket`)
+- Range (`rangeBucket`)
+- Duration (`durationBucket`)
+- Shape (`shapeBucket`)
+- Properties (Concentration / Ritual / V / S / M)
+
+Each chip is 2-state (selected / unselected) — the include-only model
+of the existing app. Sections have `All` / `Clear` shortcuts. The
+modal carries a `Reset` (clears the entire filter set for its target)
+and `Apply & Close` (just dismisses; chip changes apply live).
+
+### Files
+
+| Path | Role |
+|---|---|
+| `module/dauligor-pairing/scripts/spell-preparation-app.js` | Manager class + helpers + sheetMode logic. |
+| `module/dauligor-pairing/templates/spell-preparation-shell.hbs` | Shell template (3-col grid + footer + modal host). |
+| `module/dauligor-pairing/styles/dauligor-importer.css` | All `.dauligor-spell-manager__*` styling. |
+
 ## Related Documents
 
 Use this guide with:

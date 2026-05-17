@@ -6256,6 +6256,17 @@ function normalizeSpellcastingModuleFlags(spellcasting) {
     metadata.isRitualCaster = Boolean(spellcasting.isRitualCaster);
   }
 
+  // Preparation type (prepared / known / spellbook). Stamped on the
+  // class item so the Prepare Spells manager can:
+  //   - pick the right counter set (Prepared / Known / Spellbook)
+  //   - decide whether to show the "Add to Spellbook" footer button
+  // Without this flag the manager falls back to a Wizard / known-
+  // scaling-id heuristic.
+  const prepType = trimString(spellcasting.type).toLowerCase();
+  if (prepType === "prepared" || prepType === "known" || prepType === "spellbook") {
+    metadata.type = prepType;
+  }
+
   const progressionTypeSourceId = trimString(spellcasting.progressionTypeSourceId);
   if (progressionTypeSourceId) metadata.progressionTypeSourceId = progressionTypeSourceId;
 

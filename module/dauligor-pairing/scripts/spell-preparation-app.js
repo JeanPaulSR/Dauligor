@@ -6,27 +6,121 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const UNKNOWN_CLASS_IDENTIFIER = "__other__";
 
-// Visible label for each preparation mode the dnd5e 5.x class system
-// exposes. Used in the meta strip's prep-type chip. Anything not in
-// this map falls back to the raw mode string.
-const PREPARATION_TYPE_LABELS = {
-  always: "Always Prepared",
-  innate: "Innate",
-  pact: "Pact Magic",
-  prepared: "Prepared Caster",
-  spell: "Spellbook",
-  ritual: "Ritual Only",
-  leveled: "Leveled Caster",
-};
+// ---------------------------------------------------------------------------
+// Filter-bucket constants — mirror src/lib/spellFilters.ts so the manager's
+// filter modal offers the SAME chip vocabulary as /compendium/spells. Keep
+// values in lockstep with the app's authoritative source-of-truth file.
+// ---------------------------------------------------------------------------
 
 const SPELL_LEVELS_ALL = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-const PROPERTY_FILTERS = [
-  { v: "ritual", l: "Ritual" },
-  { v: "concentration", l: "Concentration" },
-  { v: "known", l: "Known" },
-  { v: "prepared", l: "Prepared" },
-];
+const SCHOOL_LABELS = {
+  abj: "Abjuration",
+  con: "Conjuration",
+  div: "Divination",
+  enc: "Enchantment",
+  evo: "Evocation",
+  ill: "Illusion",
+  nec: "Necromancy",
+  trs: "Transmutation"
+};
+const SCHOOL_ORDER = ["abj", "con", "div", "enc", "evo", "ill", "nec", "trs"];
+
+const ACTIVATION_LABELS = {
+  action: "Action",
+  bonus: "Bonus Action",
+  reaction: "Reaction",
+  minute: "Minute",
+  hour: "Hour",
+  special: "Special"
+};
+const ACTIVATION_ORDER = ["action", "bonus", "reaction", "minute", "hour", "special"];
+
+const RANGE_LABELS = {
+  self: "Self",
+  touch: "Touch",
+  "5ft": "Close (≤5 ft)",
+  "30ft": "Short (6–30 ft)",
+  "60ft": "Medium (31–60 ft)",
+  "120ft": "Long (61–120 ft)",
+  long: "Far (>120 ft / sight)",
+  other: "Special"
+};
+const RANGE_ORDER = ["self", "touch", "5ft", "30ft", "60ft", "120ft", "long", "other"];
+
+const DURATION_LABELS = {
+  inst: "Instantaneous",
+  round: "Round",
+  minute: "Minute",
+  hour: "Hour",
+  day: "Day",
+  perm: "Permanent",
+  special: "Special"
+};
+const DURATION_ORDER = ["inst", "round", "minute", "hour", "day", "perm", "special"];
+
+const SHAPE_LABELS = {
+  cone: "Cone",
+  cube: "Cube",
+  cylinder: "Cylinder",
+  line: "Line",
+  radius: "Radius",
+  sphere: "Sphere",
+  square: "Square",
+  wall: "Wall",
+  none: "None"
+};
+const SHAPE_ORDER = ["cone", "cube", "cylinder", "line", "radius", "sphere", "square", "wall", "none"];
+
+const PROPERTY_LABELS = {
+  concentration: "Concentration",
+  ritual: "Ritual",
+  vocal: "Verbal (V)",
+  somatic: "Somatic (S)",
+  material: "Material (M)"
+};
+const PROPERTY_ORDER = ["concentration", "ritual", "vocal", "somatic", "material"];
+
+// Preparation-mode labels — used on the meta strip's "type" chip.
+const PREP_TYPE_LABELS = {
+  prepared: "Prepared Caster",
+  known: "Known Caster",
+  spellbook: "Spellbook Caster"
+};
+
+const PROGRESSION_LABELS = {
+  full: "Full Caster",
+  half: "Half Caster",
+  third: "Third Caster",
+  pact: "Pact Magic",
+  artificer: "Artificer",
+  none: ""
+};
+
+// ---------------------------------------------------------------------------
+// sheetMode — three on-sheet states managed by this manager. Persisted as
+// `flags.dauligor-pairing.sheetMode` on each spell item. Source of truth
+// for counter accounting in the meta strip + indicator/highlight logic in
+// the pool rows.
+//
+//   "prepared"  → counts vs prep cap (prepared casters) / known cap (known
+//                 casters) / prepared cap (spellbook casters).
+//                 dnd5e: system.prepared = true, system.method = "spell".
+//                 Indicator: filled circle; row highlighted.
+//   "spellbook" → in spellbook only (Wizard). Counts vs spellbook cap but
+//                 NOT vs prepared cap.
+//                 dnd5e: system.prepared = false, system.method = "spell".
+//                 Indicator: book icon; row NOT highlighted.
+//   "free"      → on the sheet, doesn't count vs any cap. Granted by
+//                 racial / feat / item, or just user choice.
+//                 dnd5e: system.prepared = true, system.method = "always".
+//                 Indicator: filled circle; row NOT highlighted.
+// ---------------------------------------------------------------------------
+
+const SHEET_MODE_PREPARED  = "prepared";
+const SHEET_MODE_SPELLBOOK = "spellbook";
+const SHEET_MODE_FREE      = "free";
+const DEFAULT_SHEET_MODE   = SHEET_MODE_PREPARED;
 
 // ---------------------------------------------------------------------------
 // Module-local helpers
@@ -49,49 +143,31 @@ function localizeConfigValue(value) {
   return value.startsWith("DND5E.") ? game.i18n.localize(value) : value;
 }
 
-// ----- Actor-spell introspection ------------------------------------------
-
-function getSpellMethod(spell) {
-  return String(spell?.system?.method ?? "").trim();
-}
-
-function getPreparedState(spell) {
-  // Legacy numeric prepared state kept for compatibility with older
-  // dnd5e data. The v5 system uses a boolean `system.prepared` plus
-  // a string `system.method`, but we still tolerate the numeric path.
-  const prepared = Number(spell?.system?.prepared ?? 0);
-  return Number.isFinite(prepared) ? prepared : 0;
-}
-
 function isAlwaysPrepared(spell) {
   if (!spell) return false;
-  if (getSpellMethod(spell) === "always") return true;
-  // Fallback: pre-v5 numeric-prepared state of 2 also meant "always".
-  return getPreparedState(spell) >= 2;
+  const method = String(spell?.system?.method ?? "").trim();
+  if (method === "always") return true;
+  // Back-compat with pre-v5 numeric prepared state.
+  const prepared = Number(spell?.system?.prepared ?? 0);
+  return Number.isFinite(prepared) && prepared >= 2;
 }
 
 function isCurrentlyPrepared(spell) {
   if (!spell) return false;
   const sys = spell.system ?? {};
   if (sys.prepared === true) return true;
-  if (getPreparedState(spell) >= 1) return true;
-  return false;
+  const prepared = Number(sys.prepared ?? 0);
+  return Number.isFinite(prepared) && prepared >= 1;
 }
 
 function isAdvancementGranted(spell) {
   if (!spell) return false;
-  const grantedFlag = spell.getFlag?.(MODULE_ID, "grantedByAdvancementId");
-  return Boolean(grantedFlag);
+  return Boolean(spell.getFlag?.(MODULE_ID, "grantedByAdvancementId"));
 }
 
 function resolveSpellClassIdentifier(spell) {
-  // Primary: module flag we stamp at add-time. Reading our own flag
-  // sidesteps dnd5e's deprecated `system.sourceClass` accessor (the
-  // legacy getter logs a deprecation warning on every read in 5.3+).
   const flag = spell?.getFlag?.(MODULE_ID, "classIdentifier");
   if (flag) return String(flag).trim();
-  // v5.3+ derived getter: resolves `system.sourceItem` (a string like
-  // "class:bard") to the linked class item and returns its identifier.
   const derived = spell?.system?.classIdentifier;
   if (derived) return String(derived).trim();
   return "";
@@ -101,37 +177,65 @@ function getSpellEntityId(spell) {
   return String(spell?.getFlag?.(MODULE_ID, "entityId") ?? "").trim();
 }
 
-// ----- Lightweight pool-summary readers -----------------------------------
+/**
+ * Resolve the sheetMode on an owned spell item. Reads the explicit
+ * module flag first; falls back to a deriveable state from dnd5e's
+ * `prepared` + `method` fields for spells that predate this flag.
+ */
+function getSheetMode(spell) {
+  if (!spell) return DEFAULT_SHEET_MODE;
+  const flag = spell.getFlag?.(MODULE_ID, "sheetMode");
+  if (flag === SHEET_MODE_PREPARED
+      || flag === SHEET_MODE_SPELLBOOK
+      || flag === SHEET_MODE_FREE) {
+    return flag;
+  }
+  const sys = spell.system ?? {};
+  if (String(sys.method ?? "") === "always") return SHEET_MODE_FREE;
+  if (sys.prepared === false) return SHEET_MODE_SPELLBOOK;
+  return SHEET_MODE_PREPARED;
+}
+
+/**
+ * Compose the dnd5e + module-flag patch for putting a spell into a
+ * given sheetMode. Used by `_setSheetMode` and the add-spell flow.
+ */
+function buildSheetModePatch(mode) {
+  if (mode === SHEET_MODE_SPELLBOOK) {
+    return {
+      "system.prepared": false,
+      "system.method": "spell",
+      [`flags.${MODULE_ID}.sheetMode`]: SHEET_MODE_SPELLBOOK
+    };
+  }
+  if (mode === SHEET_MODE_FREE) {
+    return {
+      "system.prepared": true,
+      "system.method": "always",
+      [`flags.${MODULE_ID}.sheetMode`]: SHEET_MODE_FREE
+    };
+  }
+  return {
+    "system.prepared": true,
+    "system.method": "spell",
+    [`flags.${MODULE_ID}.sheetMode`]: SHEET_MODE_PREPARED
+  };
+}
+
+// ----- Pool-summary readers (item is summary JSON, not Foundry doc) --------
 
 function poolFlags(item) {
   return item?.flags?.["dauligor-pairing"] ?? {};
 }
-
-function poolDbId(item) {
-  return String(poolFlags(item).dbId ?? "");
-}
-
-function poolSourceId(item) {
-  return String(poolFlags(item).sourceId ?? "");
-}
-
-function poolLevel(item) {
-  return Number(poolFlags(item).level ?? 0) || 0;
-}
-
-function poolSchool(item) {
-  return String(poolFlags(item).school ?? "");
-}
-
-function poolSpellSourceId(item) {
-  return String(poolFlags(item).spellSourceId ?? "");
-}
-
-function poolName(item) {
-  return String(item?.name ?? "");
-}
-
-// ----- Foundry/DND5E label resolvers --------------------------------------
+function poolDbId(item)         { return String(poolFlags(item).dbId ?? ""); }
+function poolLevel(item)        { return Number(poolFlags(item).level ?? 0) || 0; }
+function poolSchool(item)       { return String(poolFlags(item).school ?? ""); }
+function poolSpellSourceId(item){ return String(poolFlags(item).spellSourceId ?? ""); }
+function poolName(item)         { return String(item?.name ?? ""); }
+function poolActivation(item)   { return String(poolFlags(item).activationBucket ?? ""); }
+function poolRange(item)        { return String(poolFlags(item).rangeBucket ?? ""); }
+function poolDuration(item)     { return String(poolFlags(item).durationBucket ?? ""); }
+function poolShape(item)        { return String(poolFlags(item).shapeBucket ?? ""); }
 
 function describeSpellLevel(level) {
   const label = localizeConfigValue(CONFIG.DND5E.spellLevels?.[level]);
@@ -140,17 +244,8 @@ function describeSpellLevel(level) {
 
 function describeSpellSchool(school) {
   const entry = CONFIG.DND5E.spellSchools?.[school];
-  // dnd5e 5.x: entry is `{ label, icon, fullKey }`. Older versions
-  // shipped a bare string. Unwrap `.label` (a localization key like
-  // "DND5E.SchoolEvo") and let `localizeConfigValue` translate it.
-  // Without this, the object printed as "[object Object]" inside the
-  // detail-pane meta row.
   const label = (entry && typeof entry === "object") ? entry.label : entry;
-  return localizeConfigValue(label ?? school ?? "");
-}
-
-function describeSpellSchoolAbbr(school) {
-  return String(school || "").slice(0, 4).toUpperCase();
+  return localizeConfigValue(label ?? SCHOOL_LABELS[school] ?? school ?? "");
 }
 
 function describeAbility(ability) {
@@ -162,32 +257,74 @@ function describeAbility(ability) {
   );
 }
 
-function describeSpellcastingProgression(progression) {
-  return localizeConfigValue(CONFIG.DND5E.spellcastingProgression?.[progression] ?? progression ?? "");
+function describeAbilityAbbr(ability) {
+  return String(ability || "").toUpperCase().slice(0, 3);
+}
+
+/**
+ * Best-effort classification of a class's preparation type. The
+ * module's importer should stamp `flags.dauligor-pairing.spellcasting.type`
+ * but older imports don't carry it — heuristics below close the gap.
+ */
+function classifyPrepType(classModel) {
+  const item = classModel?.item;
+  if (!item) return "prepared";
+  const flag = item.getFlag?.(MODULE_ID, "spellcasting") ?? {};
+  const explicit = String(flag.type ?? "").toLowerCase();
+  if (explicit === "spellbook" || explicit === "known" || explicit === "prepared") return explicit;
+  if (flag.spellsKnownSourceId) return "known";
+  const id = String(classModel.identifier ?? "").toLowerCase();
+  if (id === "wizard" || id === "artificer") return "spellbook";
+  return "prepared";
+}
+
+/**
+ * Resolve a human-readable progression label from a stored
+ * progression slug (e.g. "full" → "Full Caster"). dnd5e config
+ * usually has a localized label so fall back to that when present.
+ */
+function describeProgression(progression) {
+  if (!progression) return "";
+  const localized = localizeConfigValue(CONFIG.DND5E.spellcastingProgression?.[progression]);
+  if (localized) return localized;
+  return PROGRESSION_LABELS[progression] ?? "";
+}
+
+// ---------------------------------------------------------------------------
+// Activation / range / duration / components — labels from the summary
+// flags. Mirror src/lib/spellImport.ts's format* helpers but consume the
+// pre-computed bucket strings (we don't have the raw Foundry shape on
+// the summary).
+// ---------------------------------------------------------------------------
+
+function formatActivationLabel(item) {
+  return ACTIVATION_LABELS[poolActivation(item)] ?? "—";
+}
+function formatRangeLabel(item) {
+  return RANGE_LABELS[poolRange(item)] ?? "—";
+}
+function formatDurationLabel(item) {
+  return DURATION_LABELS[poolDuration(item)] ?? "—";
+}
+function formatComponentsLabel(item) {
+  const flags = poolFlags(item);
+  const bits = [];
+  if (flags.componentsVocal)    bits.push("V");
+  if (flags.componentsSomatic)  bits.push("S");
+  if (flags.componentsMaterial) bits.push("M");
+  return bits.length ? bits.join(", ") : "—";
 }
 
 // ---------------------------------------------------------------------------
 // Public open() helper
 // ---------------------------------------------------------------------------
 
-/**
- * Open (or re-open) the Dauligor spell preparation manager for the
- * given actor.
- *
- * @param {Actor|object} actorLike - Actor document, sheet, or token-like
- * @param {object}  [options]
- * @param {string}  [options.preselectClassIdentifier] - Class identifier
- *   to focus when the manager opens. Used by per-class "Prepare" buttons
- *   on the sheet so clicking Bard's button opens the manager with the
- *   Bard pool already showing.
- */
 export async function openSpellPreparationManager(actorLike, { preselectClassIdentifier = null } = {}) {
   const actor = resolveActorDocument(actorLike);
   if (!actor || (actor.type !== "character")) {
     notifyWarn("Open Prepare Spells from a character actor.");
     return null;
   }
-
   return DauligorSpellPreparationApp.open({ actor, preselectClassIdentifier });
 }
 
@@ -196,44 +333,37 @@ export async function openSpellPreparationManager(actorLike, { preselectClassIde
 // ---------------------------------------------------------------------------
 
 /**
- * Sheet-side spell preparation manager. Mirrors the layout of the
- * Character Builder's `AddSpellsModal` (3 columns: favorites · pool ·
- * detail) plus a class rail on the far left so multi-class actors can
- * switch the active class without reopening the manager.
+ * Sheet-side spell preparation manager. Three-column body (sidebar
+ * with classes + favorites, middle pool, right detail) plus a footer
+ * with explicit add buttons (Prepare / Add to Sheet / Add to Spellbook
+ * / Close).
  *
  * Data flow:
- *   - Per-class pool: fetched live from
- *     `/api/module/<source>/classes/<class>/spells.json` via the
- *     `spellListUrl` flag stamped on the class item during import.
- *     Summaries only — no description, no system block.
- *   - Detail pane: when a row is selected, the full Foundry-ready spell
- *     item is fetched from `/api/module/spells/<dbId>.json` and cached
- *     by dbId for the lifetime of the open manager. The description,
- *     activation/range/duration/components meta render from that.
- *   - Favorites: stored on `actor.flags.dauligor-pairing.spellFavorites`
- *     as a `dbId[]`. Survives reload; spans classes.
- *   - Add-to-sheet: row-click on a `+` row fetches the full spell,
- *     stamps `system.sourceClass` + `flags.dauligor-pairing.classIdentifier`
- *     + `flags.dauligor-pairing.entityId` (= dbId, for owned-lookup),
- *     and `createEmbeddedDocuments("Item", […])` onto the actor.
- *   - Remove-from-sheet: row-click on a `✓` row finds the matching
- *     spell item by dbId and `deleteEmbeddedDocuments("Item", […])`.
- *     Advancement-granted and always-prepared spells are locked from
- *     removal here (modify via the source advancement instead).
+ *   - Per-class pool: live `/api/module/<source>/classes/<class>/spells.json`
+ *     via the `spellListUrl` flag on the class item.
+ *   - Detail pane: full Foundry-ready item lazy-fetched from
+ *     `/api/module/spells/<dbId>.json` and cached per dbId for the
+ *     lifetime of the open manager.
+ *   - Sources catalog: fetched on open from
+ *     `/api/module/sources/catalog.json` so the detail header + row
+ *     source chips can render shortName (PHB, XGE, …) instead of the
+ *     opaque D1 source id.
+ *   - Favorites: `actor.flags.dauligor-pairing.spellFavorites` as
+ *     `dbId[]`. Survives reload, spans classes.
+ *   - sheetMode: `flags.dauligor-pairing.sheetMode` on each spell item.
+ *     Source of truth for counter accounting + indicator state.
  */
 export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static _instance = null;
 
   static open({ actor, preselectClassIdentifier = null } = {}) {
     if (!actor) return null;
-
     if (this._instance) {
       this._instance.setActor(actor, preselectClassIdentifier);
       this._instance.render({ force: true });
       this._instance.maximize?.();
       return this._instance;
     }
-
     const instance = new this({ actor, preselectClassIdentifier });
     this._instance = instance;
     instance.render({ force: true });
@@ -250,8 +380,6 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         contentClasses: ["dauligor-importer-window"]
       },
       position: {
-        // Wider than the legacy app so the new 4-column body has room
-        // for the favorites + ~400px detail column.
         width: Math.min(window.innerWidth - 80, 1480),
         height: Math.min(window.innerHeight - 80, 820)
       }
@@ -260,48 +388,40 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this._template = SPELL_PREPARATION_TEMPLATE;
     this._actor = actor ?? null;
     this._state = {
-      search: "",
-      filterOpen: false,
-      lvlF: [],
-      schoolF: [],
-      sourceF: [],
-      propF: [],
+      // Pool list state (per-class)
+      poolSearch: "",
+      poolFilters: { axes: {} },
+      onSheetFilter: false,
+
+      // Favorites list state (independent search + filter)
+      favSearch: "",
+      favFilters: { axes: {} },
+
+      // Filter modal — null when closed, "pool" or "favorites" when open.
+      filterModalOpen: null,
+
+      // Selection
       selectedClassIdentifier: preselectClassIdentifier ?? null,
-      // Selection is keyed by dbId so it survives across pool fetches
-      // and works for unowned spells too. The legacy code used Foundry
-      // item id, which only existed for owned spells.
       selectedSpellDbId: null,
+
+      // Detail-pane disclosures
+      showTags: false
     };
 
-    // Live spell-pool cache keyed by classIdentifier. Each entry is
-    // one of:
-    //   { status: "loading" }
-    //   { status: "ready",   spells: [...] }
-    //   { status: "missing", reason: string }
-    //   { status: "error",   reason: string }
+    // Live per-class pool cache.
     this._classPools = new Map();
-
-    // Per-dbId cache of full Foundry-ready spell items (from
-    // `/api/module/spells/<dbId>.json`). Populated lazily as rows are
-    // selected. Used by both the detail pane render and the add-to-
-    // sheet flow so a row select pre-warms the cache for a subsequent
-    // add.
+    // Lazy full-spell cache (dbId → Foundry-ready item).
     this._fullSpellCache = new Map();
     this._fullSpellInFlight = new Set();
-    // Cache of dnd5e-enriched description HTML keyed by dbId. The
-    // raw `system.description.value` contains `&Reference[...]`,
-    // `[[/roll ...]]`, etc. that need TextEditor.enrichHTML to render
-    // as clickable widgets. Enrichment runs once per spell, lazily,
-    // after `_ensureFullSpell` populates the underlying body.
     this._enrichedDescriptionCache = new Map();
+
+    // Foundation catalogs (lazy, loaded once).
+    this._sourcesById = null;       // Map<sourceId, { shortName, name }>
+    this._sourcesInFlight = false;
   }
 
   _configureRenderParts() {
-    return {
-      main: {
-        template: this._template
-      }
-    };
+    return { main: { template: this._template } };
   }
 
   async close(options) {
@@ -314,11 +434,10 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this._actor = actor ?? null;
     this.options.window.title = this._actor ? `Prepare Spells: ${this._actor.name}` : "Prepare Spells";
     if (changedActor) {
-      // Pool + full-spell caches are actor-scoped — clear when the
-      // active actor changes.
       this._classPools.clear();
       this._fullSpellCache.clear();
       this._fullSpellInFlight.clear();
+      this._enrichedDescriptionCache.clear();
       this._state.selectedSpellDbId = null;
     }
     if (preselectClassIdentifier) {
@@ -341,39 +460,67 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     if (!root) return;
 
     const content = root.querySelector(".window-content") ?? root;
-    this._railRegion = content.querySelector(`[data-region="rail"]`);
-    this._favoritesRegion = content.querySelector(`[data-region="favorites"]`);
-    this._metaRegion = content.querySelector(`[data-region="meta"]`);
-    this._toolbarRegion = content.querySelector(`[data-region="toolbar"]`);
-    this._drawerRegion = content.querySelector(`[data-region="drawer"]`);
-    this._poolRegion = content.querySelector(`[data-region="pool"]`);
-    this._detailRegion = content.querySelector(`[data-region="detail"]`);
+    this._railRegion        = content.querySelector(`[data-region="rail"]`);
+    this._favoritesRegion   = content.querySelector(`[data-region="favorites"]`);
+    this._metaRegion        = content.querySelector(`[data-region="meta"]`);
+    this._toolbarRegion     = content.querySelector(`[data-region="toolbar"]`);
+    this._poolRegion        = content.querySelector(`[data-region="pool"]`);
+    this._detailRegion      = content.querySelector(`[data-region="detail"]`);
+    this._footerRegion      = content.querySelector(`[data-region="footer"]`);
+    this._filterModalRegion = content.querySelector(`[data-region="filter-modal"]`);
+
+    // Kick the sources catalog load if we haven't already — populates
+    // the per-row + detail source chip with PHB/XGE/… abbreviations.
+    this._ensureSourcesCatalog();
 
     await this._renderManager();
+  }
+
+  // -----------------------------------------------------------------------
+  // Foundation: sources catalog (PHB / XGE / …)
+  // -----------------------------------------------------------------------
+
+  _ensureSourcesCatalog() {
+    if (this._sourcesById || this._sourcesInFlight) return;
+    this._sourcesInFlight = true;
+    (async () => {
+      try {
+        const response = await fetch("https://www.dauligor.com/api/module/sources/catalog.json", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        const map = new Map();
+        for (const entry of (payload?.entries ?? [])) {
+          if (!entry?.sourceId) continue;
+          map.set(String(entry.sourceId), {
+            shortName: String(entry.shortName ?? entry.slug ?? entry.name ?? ""),
+            name: String(entry.name ?? entry.shortName ?? "")
+          });
+        }
+        this._sourcesById = map;
+        // Re-render so source chips pick up the new labels.
+        this._renderManager?.();
+      } catch (err) {
+        console.warn(`${MODULE_ID} | sources catalog fetch failed`, err);
+        this._sourcesById = new Map();   // mark as "tried; empty"
+      } finally {
+        this._sourcesInFlight = false;
+      }
+    })();
+  }
+
+  _sourceShortName(sourceId) {
+    const entry = this._sourcesById?.get(String(sourceId || ""));
+    if (!entry) return "";
+    return entry.shortName || entry.name || "";
   }
 
   // -----------------------------------------------------------------------
   // Class models + actor introspection
   // -----------------------------------------------------------------------
 
-  _getActorClasses() {
-    return this._actor?.classes ?? {};
-  }
+  _getActorClasses()  { return this._actor?.classes ?? {}; }
+  _getSpellItems()    { return this._actor?.itemTypes?.spell ? [...this._actor.itemTypes.spell] : []; }
 
-  _getSpellItems() {
-    return this._actor?.itemTypes?.spell ? [...this._actor.itemTypes.spell] : [];
-  }
-
-  /**
-   * Lookup map from dbId → owned spell item. Built once per render so
-   * the pool rows can mark themselves ✓ / + cheaply.
-   *
-   * The dbId is stored on every Dauligor-imported spell as
-   * `flags.dauligor-pairing.entityId` (set by the importer pipeline
-   * and re-stamped by this app when a row is added). Spells lacking
-   * the flag don't appear in the map — they're considered "not in any
-   * Dauligor class list" for this manager's purposes.
-   */
   _getOwnedDbIdMap() {
     const map = new Map();
     for (const spell of this._getSpellItems()) {
@@ -412,9 +559,6 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       ensureModel(identifier, classItem);
     }
 
-    // Group owned spells under the class they're attributed to so the
-    // rail count reflects per-class membership. Spells without an
-    // attribution land under "Other Spells".
     for (const spell of this._getSpellItems()) {
       const identifier = resolveSpellClassIdentifier(spell) || UNKNOWN_CLASS_IDENTIFIER;
       ensureModel(identifier).ownedSpells.push(spell);
@@ -433,15 +577,18 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         const atk = String(this._actor?.system?.attributes?.spellatk ?? spellcasting.attack?.formula ?? "");
         const cantripsCap = (spellcasting.cantrips?.max ?? spellcasting.cantrips?.value);
         const spellsCap = (spellcasting.spells?.max ?? spellcasting.spells?.value);
+        const prepType = classifyPrepType(model);
         return {
           ...model,
           progression,
-          progressionLabel: describeSpellcastingProgression(progression),
+          progressionLabel: describeProgression(progression),
           ability,
           abilityLabel: describeAbility(ability),
+          abilityAbbr: describeAbilityAbbr(ability),
           levels: Number(model.item?.system?.levels ?? 0) || 0,
           preparation,
-          preparationType: String(preparation.mode ?? "prepared"),
+          prepType,
+          prepTypeLabel: PREP_TYPE_LABELS[prepType] ?? "Caster",
           dc: dc || null,
           atk,
           cantripsCap: (cantripsCap == null || cantripsCap === "") ? null : Number(cantripsCap),
@@ -471,7 +618,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   // -----------------------------------------------------------------------
-  // Live pool fetcher (unchanged contract from the legacy app)
+  // Per-class spell list (live pool)
   // -----------------------------------------------------------------------
 
   async _ensureClassPool(classModel) {
@@ -485,7 +632,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     if (!spellListUrl) {
       const entry = {
         status: "missing",
-        reason: "This class was imported before the live spell-list URL was tracked. Re-import it to populate the available-spells list.",
+        reason: "This class was imported before the live spell-list URL was tracked. Re-import it to populate the available-spells list."
       };
       this._classPools.set(key, entry);
       return entry;
@@ -498,31 +645,22 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       try {
         const response = await fetch(spellListUrl, { cache: "no-store" });
         if (!response.ok) {
-          this._classPools.set(key, {
-            status: "error",
-            reason: `Spell list endpoint returned ${response.status}`,
-          });
+          this._classPools.set(key, { status: "error", reason: `Spell list endpoint returned ${response.status}` });
         } else {
           const payload = await response.json();
           if (payload?.kind !== "dauligor.class-spell-list.v1") {
-            this._classPools.set(key, {
-              status: "error",
-              reason: `Unexpected payload kind: ${payload?.kind ?? "(missing)"}`,
-            });
+            this._classPools.set(key, { status: "error", reason: `Unexpected payload kind: ${payload?.kind ?? "(missing)"}` });
           } else {
             this._classPools.set(key, {
               status: "ready",
               spells: Array.isArray(payload.spells) ? payload.spells : [],
-              fetchedAt: Date.now(),
+              fetchedAt: Date.now()
             });
           }
         }
       } catch (err) {
         console.warn(`${MODULE_ID} | spell-list fetch failed`, { spellListUrl, err });
-        this._classPools.set(key, {
-          status: "error",
-          reason: err?.message ?? "Network error",
-        });
+        this._classPools.set(key, { status: "error", reason: err?.message ?? "Network error" });
       }
       this._renderManager?.();
     })();
@@ -566,36 +704,95 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     await this._renderManager();
   }
 
+  /**
+   * Build a union pool that covers favorites — pulls from EVERY known
+   * class's live pool so favourites can survive a class swap, plus
+   * any owned spell that's been favourited but isn't in any current
+   * pool (e.g. removed from class list after being favourited).
+   */
+  _buildFavoritesPool(allClassModels) {
+    const favIds = this._getFavoriteDbIds();
+    if (favIds.size === 0) return [];
+
+    const seen = new Set();
+    const out = [];
+
+    for (const model of allClassModels) {
+      const pool = this._getActivePool(model);
+      for (const item of pool) {
+        const id = poolDbId(item);
+        if (!favIds.has(id) || seen.has(id)) continue;
+        seen.add(id);
+        out.push(item);
+      }
+    }
+
+    // Owned-but-not-in-any-current-pool favourites — synthesize a
+    // light summary from the owned spell item so they still display.
+    if (seen.size < favIds.size) {
+      const owned = this._getOwnedDbIdMap();
+      for (const id of favIds) {
+        if (seen.has(id)) continue;
+        const spell = owned.get(id);
+        if (!spell) continue;
+        const sys = spell.system ?? {};
+        const components = sys.properties ?? {};
+        out.push({
+          name: spell.name ?? "",
+          type: "spell",
+          flags: {
+            "dauligor-pairing": {
+              dbId: id,
+              level: Number(sys.level ?? 0) || 0,
+              school: String(sys.school ?? ""),
+              spellSourceId: "",
+              componentsVocal: components instanceof Set ? components.has("vocal") : !!sys.components?.vocal,
+              componentsSomatic: components instanceof Set ? components.has("somatic") : !!sys.components?.somatic,
+              componentsMaterial: components instanceof Set ? components.has("material") : !!sys.components?.material,
+              ritual: components instanceof Set ? components.has("ritual") : !!sys.components?.ritual,
+              concentration: components instanceof Set ? components.has("concentration") : !!sys.components?.concentration,
+              activationBucket: "",
+              rangeBucket: "",
+              durationBucket: "",
+              shapeBucket: ""
+            }
+          }
+        });
+        seen.add(id);
+      }
+    }
+
+    return out;
+  }
+
   // -----------------------------------------------------------------------
-  // Full-spell fetch + cache (for detail pane + add-to-sheet)
+  // Full-spell fetch + cache
   // -----------------------------------------------------------------------
 
-  async _ensureFullSpell(dbId, classModel) {
+  async _ensureFullSpell(dbId, classModelLike) {
     if (!dbId) return null;
     if (this._fullSpellCache.has(dbId)) return this._fullSpellCache.get(dbId);
     if (this._fullSpellInFlight.has(dbId)) return null;
 
-    const spellListUrl = classModel?.item?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
+    // We accept any classModel for the URL; if the current selection
+    // doesn't have one (e.g. a favourite from a removed class), we
+    // walk other classes for any spell-list URL we can borrow.
+    let spellListUrl = classModelLike?.item?.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
+    if (!spellListUrl) {
+      for (const model of this._buildClassModels()) {
+        const url = model.item?.getFlag?.(MODULE_ID, "spellListUrl");
+        if (url) { spellListUrl = url; break; }
+      }
+    }
     if (!spellListUrl) return null;
 
     this._fullSpellInFlight.add(dbId);
-
     try {
       const full = await fetchFullSpellItem(spellListUrl, dbId);
       this._fullSpellInFlight.delete(dbId);
       if (full) {
         this._fullSpellCache.set(dbId, full);
-        // Refresh the detail pane in-place if this fetch corresponded
-        // to the currently selected row — typical case is the user
-        // clicking through rows faster than the network responds.
-        if (this._state.selectedSpellDbId === dbId) {
-          this._renderDetail();
-        }
-        // Enrich the description asynchronously; once it lands, kick
-        // a second `_renderDetail` so the panel swaps the raw HTML
-        // for the enriched (link-resolved, BBCode-resolved) version.
-        // Failures are non-fatal — the detail pane still renders the
-        // raw body.
+        if (this._state.selectedSpellDbId === dbId) this._renderDetail();
         this._enrichSpellDescription(dbId, full).catch((err) => {
           console.warn(`${MODULE_ID} | description enrich failed`, err);
         });
@@ -608,71 +805,113 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     }
   }
 
-  /**
-   * Run dnd5e's enrichHTML pass over a spell's description and stash
-   * the result keyed by dbId. Cached so a re-select doesn't re-enrich.
-   * If the currently-selected spell is the one we just enriched, kick
-   * a render so the panel swaps in the resolved HTML.
-   */
   async _enrichSpellDescription(dbId, fullSpell) {
     const raw = String(fullSpell?.system?.description?.value ?? "").trim();
     if (!raw) return;
     if (this._enrichedDescriptionCache.has(dbId)) return;
     const TextEditor = foundry.applications?.ux?.TextEditor?.implementation;
     if (!TextEditor?.enrichHTML) return;
-    const enriched = await TextEditor.enrichHTML(raw, {
-      // No rollData/relativeTo — these descriptions are read-only;
-      // we want the inline references resolved but not roll-bound to
-      // a specific actor.
-      async: true,
-      secrets: false
-    });
+    const enriched = await TextEditor.enrichHTML(raw, { async: true, secrets: false });
     this._enrichedDescriptionCache.set(dbId, enriched);
-    if (this._state.selectedSpellDbId === dbId) {
-      this._renderDetail();
+    if (this._state.selectedSpellDbId === dbId) this._renderDetail();
+  }
+
+  // -----------------------------------------------------------------------
+  // Filtering — shared axis chip semantics
+  // -----------------------------------------------------------------------
+
+  _filterStateFor(target) {
+    return target === "favorites" ? this._state.favFilters : this._state.poolFilters;
+  }
+  _setFilterStateFor(target, value) {
+    if (target === "favorites") this._state.favFilters = value;
+    else this._state.poolFilters = value;
+  }
+  _searchFor(target) {
+    return target === "favorites" ? this._state.favSearch : this._state.poolSearch;
+  }
+  _setSearchFor(target, value) {
+    if (target === "favorites") this._state.favSearch = value;
+    else this._state.poolSearch = value;
+  }
+
+  _activeFilterCount(target) {
+    const f = this._filterStateFor(target);
+    let n = 0;
+    for (const axis of Object.values(f.axes ?? {})) {
+      n += Object.keys(axis.states ?? {}).filter((k) => axis.states[k]).length;
     }
+    return n;
   }
 
-  // -----------------------------------------------------------------------
-  // Filter helpers
-  // -----------------------------------------------------------------------
-
-  _activeFilterCount() {
-    return this._state.lvlF.length
-      + this._state.schoolF.length
-      + this._state.sourceF.length
-      + this._state.propF.length;
+  _resetFilters(target) {
+    this._setFilterStateFor(target, { axes: {} });
+    this._setSearchFor(target, "");
+    if (target === "pool") this._state.onSheetFilter = false;
   }
 
-  _resetFilters() {
-    this._state.lvlF = [];
-    this._state.schoolF = [];
-    this._state.sourceF = [];
-    this._state.propF = [];
-    this._state.search = "";
+  /** Toggle a chip on the given axis between selected / unselected. */
+  _toggleChip(target, axis, value) {
+    const state = this._filterStateFor(target);
+    const axes = { ...(state.axes ?? {}) };
+    const current = axes[axis] ?? { states: {} };
+    const states = { ...(current.states ?? {}) };
+    if (states[String(value)]) delete states[String(value)];
+    else states[String(value)] = 1;
+    axes[axis] = { ...current, states };
+    this._setFilterStateFor(target, { ...state, axes });
   }
 
-  _getFilteredPool(fullPool) {
-    const search = this._state.search.trim().toLowerCase();
-    const owned = this._getOwnedDbIdMap();
-    return fullPool.filter((item) => {
-      const flags = poolFlags(item);
+  /**
+   * Match an item against a single axis filter. Returns true when the
+   * axis has no chips selected ("match anything") or when the item's
+   * value is among the selected chip set.
+   */
+  _matchesAxis(item, target, axis, valueGetter) {
+    const state = this._filterStateFor(target);
+    const axisState = state.axes?.[axis];
+    const selected = axisState?.states ?? {};
+    const keys = Object.keys(selected).filter((k) => selected[k]);
+    if (keys.length === 0) return true;
+    const v = String(valueGetter(item));
+    return keys.includes(v);
+  }
+
+  _matchesProperties(item, target) {
+    const state = this._filterStateFor(target);
+    const axisState = state.axes?.property;
+    const selected = axisState?.states ?? {};
+    const keys = Object.keys(selected).filter((k) => selected[k]);
+    if (keys.length === 0) return true;
+    const flags = poolFlags(item);
+    for (const key of keys) {
+      if (key === "concentration" && !flags.concentration) return false;
+      if (key === "ritual"        && !flags.ritual)        return false;
+      if (key === "vocal"         && !flags.componentsVocal)    return false;
+      if (key === "somatic"       && !flags.componentsSomatic)  return false;
+      if (key === "material"      && !flags.componentsMaterial) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Apply search + axis filters. Optionally narrow to an explicit set
+   * of dbIds (used by the "On Sheet" toggle to restrict the pool to
+   * spells already attributed to the active class).
+   */
+  _filterList(items, target, { restrictSet = null } = {}) {
+    const search = this._searchFor(target).trim().toLowerCase();
+    return items.filter((item) => {
       if (search && !poolName(item).toLowerCase().includes(search)) return false;
-      if (this._state.lvlF.length && !this._state.lvlF.includes(poolLevel(item))) return false;
-      if (this._state.schoolF.length && !this._state.schoolF.includes(poolSchool(item))) return false;
-      if (this._state.sourceF.length && !this._state.sourceF.includes(poolSpellSourceId(item))) return false;
-      if (this._state.propF.length) {
-        const ownedItem = owned.get(poolDbId(item));
-        for (const prop of this._state.propF) {
-          if (prop === "ritual" && !flags.ritual) return false;
-          if (prop === "concentration" && !flags.concentration) return false;
-          if (prop === "known" && !ownedItem) return false;
-          if (prop === "prepared") {
-            if (!ownedItem) return false;
-            if (!isCurrentlyPrepared(ownedItem) && !isAlwaysPrepared(ownedItem)) return false;
-          }
-        }
-      }
+      if (restrictSet && !restrictSet.has(poolDbId(item))) return false;
+      if (!this._matchesAxis(item, target, "level",      poolLevel))            return false;
+      if (!this._matchesAxis(item, target, "school",     poolSchool))           return false;
+      if (!this._matchesAxis(item, target, "source",     poolSpellSourceId))    return false;
+      if (!this._matchesAxis(item, target, "activation", poolActivation))       return false;
+      if (!this._matchesAxis(item, target, "range",      poolRange))            return false;
+      if (!this._matchesAxis(item, target, "duration",   poolDuration))         return false;
+      if (!this._matchesAxis(item, target, "shape",      poolShape))            return false;
+      if (!this._matchesProperties(item, target)) return false;
       return true;
     });
   }
@@ -687,41 +926,32 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     return [...m.entries()].sort((a, b) => a[0] - b[0]);
   }
 
-  _getSelectedSummary(fullPool) {
-    if (!this._state.selectedSpellDbId) return null;
-    return fullPool.find((item) => poolDbId(item) === this._state.selectedSpellDbId) ?? null;
-  }
-
   // -----------------------------------------------------------------------
-  // Add / Remove
+  // Add / Remove / sheetMode mutations
   // -----------------------------------------------------------------------
 
   /**
-   * Toggle a spell's membership on the actor's sheet. Adds when the
-   * spell isn't owned, removes when it is. Locked rows (advancement-
-   * granted or always-prepared) are skipped silently — the row click
-   * still updates selection so the detail pane explains the lock.
+   * Apply a sheetMode to a spell — either by mutating an existing owned
+   * spell or by embedding a fresh copy from the live class pool. The
+   * `classModel` is used to attribute the new spell + to resolve the
+   * full-spell endpoint for unowned spells.
    */
-  async _toggleKnown(dbId, classModel) {
-    if (!this._actor || !dbId) return;
+  async _applySheetMode(dbId, mode, classModel) {
+    if (!this._actor || !dbId || !mode) return;
+
     const owned = this._findOwnedSpellByDbId(dbId);
 
     if (owned) {
       if (isAdvancementGranted(owned)) {
-        notifyWarn(`${owned.name} is granted by an advancement and can only be removed via the source class.`);
-        return;
-      }
-      if (isAlwaysPrepared(owned)) {
-        notifyWarn(`${owned.name} is always prepared and cannot be removed from this manager.`);
+        notifyWarn(`${owned.name} is granted by an advancement and can only be modified via the source class.`);
         return;
       }
       try {
-        await this._actor.deleteEmbeddedDocuments("Item", [owned.id]);
-        notifyInfo(`${owned.name} removed from sheet.`);
+        await owned.update(buildSheetModePatch(mode));
         await this._renderManager();
       } catch (err) {
-        console.warn(`${MODULE_ID} | remove spell failed`, err);
-        notifyWarn("Failed to remove spell — see console.");
+        console.warn(`${MODULE_ID} | update sheetMode failed`, err);
+        notifyWarn("Failed to update spell — see console.");
       }
       return;
     }
@@ -743,20 +973,15 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       return;
     }
 
-    // Normalize the payload before embedding: stamp class attribution
-    // via `system.sourceItem` (the v5.3+ replacement for the
-    // deprecated `sourceClass`; format is "class:<identifier>") and
-    // mirror onto `flags.dauligor-pairing.classIdentifier` for our
-    // own owned-lookup paths. dnd5e's `system.classIdentifier` getter
-    // derives from sourceItem at read time, so dnd5e's sheet groups
-    // the spell under the right class section without us writing the
-    // legacy field.
     const itemData = foundry.utils.deepClone(full);
     foundry.utils.setProperty(itemData, "system.sourceItem", `class:${classModel.identifier}`);
     if (!itemData.flags) itemData.flags = {};
     if (!itemData.flags[MODULE_ID]) itemData.flags[MODULE_ID] = {};
     itemData.flags[MODULE_ID].classIdentifier = classModel.identifier;
     itemData.flags[MODULE_ID].entityId = dbId;
+    itemData.flags[MODULE_ID].sheetMode = mode;
+    foundry.utils.setProperty(itemData, "system.prepared", mode !== SHEET_MODE_SPELLBOOK);
+    foundry.utils.setProperty(itemData, "system.method", mode === SHEET_MODE_FREE ? "always" : "spell");
 
     try {
       await this._actor.createEmbeddedDocuments("Item", [itemData]);
@@ -765,6 +990,30 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     } catch (err) {
       console.warn(`${MODULE_ID} | add spell failed`, err);
       notifyWarn("Failed to add spell — see console.");
+    }
+  }
+
+  async _removeSpell(dbId) {
+    if (!this._actor || !dbId) return;
+    const owned = this._findOwnedSpellByDbId(dbId);
+    if (!owned) return;
+    if (isAdvancementGranted(owned)) {
+      notifyWarn(`${owned.name} is granted by an advancement and can only be removed via the source class.`);
+      return;
+    }
+    if (isAlwaysPrepared(owned) && getSheetMode(owned) === SHEET_MODE_PREPARED) {
+      // dnd5e-native "always prepared" (not our "free" mode) is treated
+      // as managed by the class — we don't touch it from this manager.
+      notifyWarn(`${owned.name} is always prepared and cannot be removed from this manager.`);
+      return;
+    }
+    try {
+      await this._actor.deleteEmbeddedDocuments("Item", [owned.id]);
+      notifyInfo(`${owned.name} removed from sheet.`);
+      await this._renderManager();
+    } catch (err) {
+      console.warn(`${MODULE_ID} | remove spell failed`, err);
+      notifyWarn("Failed to remove spell — see console.");
     }
   }
 
@@ -777,15 +1026,19 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this._ensureValidSelection(classModels);
     const selectedClass = classModels.find((entry) => entry.identifier === this._state.selectedClassIdentifier) ?? null;
 
-    // Kick off the live pool fetch if not yet cached. The async path
-    // re-fires _renderManager when it lands.
     if (selectedClass) await this._ensureClassPool(selectedClass);
+    // Pre-warm pools for ALL classes so favorites can hit any of them.
+    for (const m of classModels) if (m !== selectedClass) this._ensureClassPool(m);
 
     const fullPool = this._getActivePool(selectedClass);
-    const filteredPool = this._getFilteredPool(fullPool);
+    // "On Sheet" toggle: restrict to spells owned and attributed to
+    // THIS class. The set is empty when the toggle is off so the
+    // filter pipeline passes everything through.
+    const restrictSet = (this._state.onSheetFilter && selectedClass)
+      ? new Set(selectedClass.ownedSpells.map(getSpellEntityId).filter(Boolean))
+      : null;
+    const filteredPool = this._filterList(fullPool, "pool", { restrictSet });
 
-    // Auto-select first filtered row when nothing is selected or the
-    // current selection falls outside the filter.
     if (filteredPool.length > 0) {
       const stillVisible = this._state.selectedSpellDbId
         && filteredPool.some((s) => poolDbId(s) === this._state.selectedSpellDbId);
@@ -796,48 +1049,49 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       this._state.selectedSpellDbId = null;
     }
 
-    const selectedSummary = this._getSelectedSummary(fullPool);
-    if (selectedSummary) this._ensureFullSpell(this._state.selectedSpellDbId, selectedClass);
+    const summary = this._state.selectedSpellDbId
+      ? fullPool.find((it) => poolDbId(it) === this._state.selectedSpellDbId) ?? null
+      : null;
+    if (summary) this._ensureFullSpell(this._state.selectedSpellDbId, selectedClass);
 
     this._renderRail(classModels, selectedClass);
-    this._renderFavorites(fullPool, selectedClass);
+    this._renderFavorites(classModels);
     this._renderMeta(selectedClass, fullPool);
     this._renderToolbar(selectedClass, filteredPool, fullPool);
-    this._renderDrawer(fullPool);
     this._renderPool(fullPool, filteredPool, selectedClass);
-    this._renderDetail(selectedSummary, selectedClass);
+    this._renderDetail(summary, selectedClass);
+    this._renderFooter(selectedClass, summary);
+    this._renderFilterModal(fullPool, classModels);
   }
 
-  // -----------------------------------------------------------------------
-  // Sub-renders
-  // -----------------------------------------------------------------------
+  // ---- Rail (classes) ---------------------------------------------------
 
   _renderRail(classModels, selectedClass) {
     if (!this._railRegion) return;
 
     if (!classModels.length) {
       this._railRegion.innerHTML = `
-        <div class="dauligor-spell-manager__section-title">Classes</div>
+        <div class="dauligor-spell-manager__sidebar-title">Classes</div>
         <div class="dauligor-spell-manager__empty">This actor has no spellcasting classes.</div>
       `;
       return;
     }
 
-    const buttons = classModels.map((entry) => `
+    const rows = classModels.map((entry) => `
       <button
         type="button"
-        class="dauligor-spell-manager__class-button ${selectedClass?.identifier === entry.identifier ? "dauligor-spell-manager__class-button--active" : ""}"
+        class="dauligor-spell-manager__class-row ${selectedClass?.identifier === entry.identifier ? "dauligor-spell-manager__class-row--active" : ""}"
         data-action="select-class"
         data-class-identifier="${escapeHtml(entry.identifier)}"
       >
-        <span class="dauligor-spell-manager__class-label">${escapeHtml(entry.label)}</span>
-        <span class="dauligor-spell-manager__class-meta">${entry.ownedCount}</span>
+        <span class="dauligor-spell-manager__class-row-name">${escapeHtml(entry.label)}</span>
+        <span class="dauligor-spell-manager__class-row-count">${entry.ownedCount}</span>
       </button>
     `).join("");
 
     this._railRegion.innerHTML = `
-      <div class="dauligor-spell-manager__section-title">Classes</div>
-      <div class="dauligor-spell-manager__class-list">${buttons}</div>
+      <div class="dauligor-spell-manager__sidebar-title">Classes</div>
+      <div class="dauligor-spell-manager__class-list">${rows}</div>
     `;
 
     this._railRegion.querySelectorAll(`[data-action="select-class"]`).forEach((button) => {
@@ -849,269 +1103,253 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     });
   }
 
-  _renderFavorites(fullPool, selectedClass) {
+  // ---- Favorites (sidebar's bottom half, fills remaining height) -------
+
+  _renderFavorites(classModels) {
     if (!this._favoritesRegion) return;
 
     const favIds = this._getFavoriteDbIds();
     const ownedMap = this._getOwnedDbIdMap();
-    const favList = fullPool.filter((item) => favIds.has(poolDbId(item)));
+    const allFavorites = this._buildFavoritesPool(classModels);
+    const filtered = this._filterList(allFavorites, "favorites");
+
+    const filtersActive = this._activeFilterCount("favorites");
 
     const header = `
       <div class="dauligor-spell-manager__favorites-header">
         <span class="dauligor-spell-manager__favorites-icon">★</span>
         <span class="dauligor-spell-manager__favorites-title">Favourites</span>
-        <span class="dauligor-spell-manager__favorites-count">${favList.length}</span>
+        <span class="dauligor-spell-manager__favorites-count">${filtered.length}${filtered.length !== allFavorites.length ? ` / ${allFavorites.length}` : ""}</span>
+      </div>
+      <div class="dauligor-spell-manager__favorites-toolbar">
+        <input
+          type="search"
+          class="dauligor-spell-manager__inline-search"
+          data-action="fav-search"
+          placeholder="Search favourites…"
+          value="${escapeHtml(this._state.favSearch)}"
+          autocomplete="off"
+        >
+        <button type="button"
+          class="dauligor-spell-manager__filter-button ${filtersActive > 0 ? "dauligor-spell-manager__filter-button--active" : ""}"
+          data-action="open-filter"
+          data-target="favorites"
+          title="Open filter options"
+        >
+          <span class="dauligor-spell-manager__filter-button-label">Filters</span>
+          ${filtersActive > 0 ? `<span class="dauligor-spell-manager__filter-count-badge">${filtersActive}</span>` : ""}
+        </button>
       </div>
     `;
 
-    if (favList.length === 0) {
+    if (allFavorites.length === 0) {
       this._favoritesRegion.innerHTML = `${header}
         <div class="dauligor-spell-manager__favorites-empty">
           <div class="dauligor-spell-manager__favorites-empty-icon">★</div>
           <div class="dauligor-spell-manager__favorites-empty-hint">Star spells in the middle column to pin them here.</div>
         </div>
       `;
+      this._bindFavoritesToolbar();
       return;
     }
 
-    const rows = favList.map((item) => this._buildPoolRowHtml(item, ownedMap, { showFav: false })).join("");
+    if (filtered.length === 0) {
+      this._favoritesRegion.innerHTML = `${header}
+        <div class="dauligor-spell-manager__favorites-empty">
+          <div class="dauligor-spell-manager__favorites-empty-hint">No favourites match the current filters.</div>
+        </div>
+      `;
+      this._bindFavoritesToolbar();
+      return;
+    }
+
+    // Selected class needed for indicator semantics — fall back to the
+    // first class if no selection (so empty-sidebar still renders icons).
+    const selectedClass = classModels.find((m) => m.identifier === this._state.selectedClassIdentifier) ?? classModels[0] ?? null;
+    const rows = filtered.map((item) => this._buildFavoriteRowHtml(item, ownedMap, selectedClass)).join("");
     this._favoritesRegion.innerHTML = `${header}
       <div class="dauligor-spell-manager__favorites-list">${rows}</div>
     `;
-    this._bindPoolRows(this._favoritesRegion, selectedClass);
+    this._bindFavoritesToolbar();
+    this._bindPoolRows(this._favoritesRegion);
   }
+
+  _bindFavoritesToolbar() {
+    const search = this._favoritesRegion?.querySelector(`[data-action="fav-search"]`);
+    search?.addEventListener("input", async (event) => {
+      const cursor = event.currentTarget.selectionStart;
+      this._state.favSearch = event.currentTarget.value ?? "";
+      await this._renderManager();
+      const next = this._favoritesRegion?.querySelector(`[data-action="fav-search"]`);
+      if (next instanceof HTMLInputElement) {
+        next.focus();
+        try { next.setSelectionRange(cursor, cursor); } catch { /* noop */ }
+      }
+    });
+    this._favoritesRegion?.querySelector(`[data-action="open-filter"]`)?.addEventListener("click", async () => {
+      this._state.filterModalOpen = "favorites";
+      await this._renderManager();
+    });
+  }
+
+  _buildFavoriteRowHtml(item, ownedMap, selectedClass) {
+    const dbId = poolDbId(item);
+    const ownedItem = ownedMap.get(dbId);
+    const isSelected = this._state.selectedSpellDbId === dbId;
+    return this._buildSpellRowHtml(item, {
+      ownedItem,
+      selectedClass,
+      isSelected,
+      isFav: true,
+      showFavStar: false,   // already in favorites — no toggle here
+      compact: true
+    });
+  }
+
+  // ---- Meta strip (pool header) -----------------------------------------
 
   _renderMeta(selectedClass, fullPool) {
     if (!this._metaRegion) return;
 
     if (!selectedClass) {
-      this._metaRegion.innerHTML = ``;
+      this._metaRegion.innerHTML = `<div class="dauligor-spell-manager__meta-empty">Select a class to view its pool.</div>`;
       return;
     }
 
-    const ownedMap = this._getOwnedDbIdMap();
-    const cantripsKnown = fullPool.filter((item) => poolLevel(item) === 0 && ownedMap.has(poolDbId(item))).length;
-    const spellsKnown = fullPool.filter((item) => poolLevel(item) > 0 && ownedMap.has(poolDbId(item))).length;
-    const prepLabel = PREPARATION_TYPE_LABELS[selectedClass.preparationType] || selectedClass.preparationType || "Spells";
+    const owned = selectedClass.ownedSpells;
+    const totalOnSheet = owned.length;
+    const cantripsOnSheet = owned.filter((s) => Number(s.system?.level ?? 0) === 0).length;
+    const preparedCount = owned
+      .filter((s) => Number(s.system?.level ?? 0) > 0)
+      .filter((s) => getSheetMode(s) === SHEET_MODE_PREPARED)
+      .length;
+    const inSpellbookCount = owned
+      .filter((s) => Number(s.system?.level ?? 0) > 0)
+      .filter((s) => {
+        const m = getSheetMode(s);
+        return m === SHEET_MODE_PREPARED || m === SHEET_MODE_SPELLBOOK;
+      })
+      .length;
 
-    const cantripsBlock = (selectedClass.cantripsCap != null) ? `
+    const cap = selectedClass.spellsCap;
+    const cantripCap = selectedClass.cantripsCap;
+    const prep = selectedClass.prepType;
+
+    const prepLabel = prep === "known" ? "Known Spells" : "Prepared Spells";
+    const prepCounter = `
       <div class="dauligor-spell-manager__meta-counter">
-        <div class="dauligor-spell-manager__meta-counter-label">Cantrips</div>
-        <div class="dauligor-spell-manager__meta-counter-value">${cantripsKnown}<span class="dauligor-spell-manager__meta-counter-cap"> / ${selectedClass.cantripsCap}</span></div>
+        <div class="dauligor-spell-manager__meta-counter-label">${escapeHtml(prepLabel)}</div>
+        <div class="dauligor-spell-manager__meta-counter-value">${preparedCount}<span class="dauligor-spell-manager__meta-counter-cap"> / ${cap ?? "∞"}</span></div>
+      </div>
+    `;
+
+    const cantripCounter = (cantripCap == null) ? "" : `
+      <div class="dauligor-spell-manager__meta-counter">
+        <div class="dauligor-spell-manager__meta-counter-label">Cantrips Known</div>
+        <div class="dauligor-spell-manager__meta-counter-value">${cantripsOnSheet}<span class="dauligor-spell-manager__meta-counter-cap"> / ${cantripCap}</span></div>
+      </div>
+    `;
+
+    const onSheetCounter = `
+      <div class="dauligor-spell-manager__meta-counter dauligor-spell-manager__meta-counter--muted">
+        <div class="dauligor-spell-manager__meta-counter-label">Spells on Sheet</div>
+        <div class="dauligor-spell-manager__meta-counter-value">${totalOnSheet}</div>
+      </div>
+    `;
+
+    const spellbookCounter = (prep === "spellbook") ? `
+      <div class="dauligor-spell-manager__meta-counter">
+        <div class="dauligor-spell-manager__meta-counter-label">Spells in Spellbook</div>
+        <div class="dauligor-spell-manager__meta-counter-value">${inSpellbookCount}</div>
       </div>
     ` : "";
 
-    const spellsBlock = `
-      <div class="dauligor-spell-manager__meta-counter">
-        <div class="dauligor-spell-manager__meta-counter-label">Known</div>
-        <div class="dauligor-spell-manager__meta-counter-value">${spellsKnown}${selectedClass.spellsCap != null ? `<span class="dauligor-spell-manager__meta-counter-cap"> / ${selectedClass.spellsCap}</span>` : ""}</div>
-      </div>
-    `;
+    const progressionPart = selectedClass.progressionLabel
+      ? `${escapeHtml(selectedClass.progressionLabel)}${selectedClass.abilityAbbr ? " – " + escapeHtml(selectedClass.abilityAbbr) : ""}`
+      : (selectedClass.abilityAbbr ? escapeHtml(selectedClass.abilityAbbr) : "");
 
     this._metaRegion.innerHTML = `
       <div class="dauligor-spell-manager__meta-left">
         <div class="dauligor-spell-manager__meta-title">
           <span class="dauligor-spell-manager__meta-class">${escapeHtml(selectedClass.label)}</span>
-          <span class="dauligor-spell-manager__meta-chip">${escapeHtml(prepLabel)}</span>
+          <span class="dauligor-spell-manager__meta-chip">${escapeHtml(selectedClass.prepTypeLabel)}</span>
         </div>
-        <div class="dauligor-spell-manager__meta-stats">
-          ${selectedClass.dc ? `<span class="dauligor-spell-manager__meta-stat">DC ${selectedClass.dc}</span>` : ""}
-          ${selectedClass.atk ? `<span class="dauligor-spell-manager__meta-stat">Atk ${escapeHtml(selectedClass.atk)}</span>` : ""}
-          ${selectedClass.progressionLabel ? `<span class="dauligor-spell-manager__meta-stat">${escapeHtml(selectedClass.progressionLabel)}</span>` : ""}
-          ${selectedClass.abilityLabel ? `<span class="dauligor-spell-manager__meta-stat">${escapeHtml(selectedClass.abilityLabel)}</span>` : ""}
-        </div>
+        ${progressionPart ? `<div class="dauligor-spell-manager__meta-progression">${progressionPart}</div>` : ""}
       </div>
-      <div class="dauligor-spell-manager__meta-right">${cantripsBlock}${spellsBlock}</div>
+      <div class="dauligor-spell-manager__meta-right">
+        ${onSheetCounter}
+        ${cantripCounter}
+        ${spellbookCounter}
+        ${prepCounter}
+      </div>
     `;
   }
+
+  // ---- Toolbar (pool search + filter + On Sheet) -----------------------
 
   _renderToolbar(selectedClass, filteredPool, fullPool) {
     if (!this._toolbarRegion) return;
 
-    const activeFilters = this._activeFilterCount();
-    const filterOpen = this._state.filterOpen;
-    const showReset = activeFilters > 0 || Boolean(this._state.search);
+    const filtersActive = this._activeFilterCount("pool");
+    const showReset = filtersActive > 0 || Boolean(this._state.poolSearch) || this._state.onSheetFilter;
 
     const countHtml = fullPool.length === 0
       ? ""
       : `<span class="dauligor-spell-manager__pool-count">${filteredPool.length}${filteredPool.length !== fullPool.length ? ` <span class="dauligor-spell-manager__pool-count-total">/ ${fullPool.length}</span>` : ""}</span>`;
 
     this._toolbarRegion.innerHTML = `
-      ${selectedClass ? "" : `<span class="dauligor-spell-manager__pool-toolbar-title">Spells</span>`}
       <input
         type="search"
-        class="dauligor-spell-manager__pool-search"
-        data-action="search"
+        class="dauligor-spell-manager__inline-search"
+        data-action="pool-search"
         placeholder="Search spell name…"
-        value="${escapeHtml(this._state.search)}"
+        value="${escapeHtml(this._state.poolSearch)}"
         autocomplete="off"
       >
       <button type="button"
-        class="dauligor-spell-manager__filter-button ${(filterOpen || activeFilters > 0) ? "dauligor-spell-manager__filter-button--active" : ""}"
-        data-action="toggle-filters">
-        Filters${activeFilters > 0 ? `<span class="dauligor-spell-manager__filter-count-badge">${activeFilters}</span>` : ""}
+        class="dauligor-spell-manager__filter-button ${filtersActive > 0 ? "dauligor-spell-manager__filter-button--active" : ""}"
+        data-action="open-filter"
+        data-target="pool"
+        title="Open filter options"
+      >
+        <span class="dauligor-spell-manager__filter-button-label">Filters</span>
+        ${filtersActive > 0 ? `<span class="dauligor-spell-manager__filter-count-badge">${filtersActive}</span>` : ""}
       </button>
-      ${showReset ? `<button type="button" class="dauligor-spell-manager__reset-button" data-action="reset">✕ Reset</button>` : ""}
+      <button type="button"
+        class="dauligor-spell-manager__on-sheet-button ${this._state.onSheetFilter ? "dauligor-spell-manager__on-sheet-button--active" : ""}"
+        data-action="toggle-on-sheet"
+        title="Show only spells that are already on this class's sheet"
+      >On Sheet</button>
+      ${showReset ? `<button type="button" class="dauligor-spell-manager__reset-button" data-action="reset-pool">✕ Reset</button>` : ""}
       ${countHtml}
     `;
 
-    const searchInput = this._toolbarRegion.querySelector(`[data-action="search"]`);
-    searchInput?.addEventListener("input", async (event) => {
-      const cursorPos = event.currentTarget.selectionStart;
-      this._state.search = event.currentTarget.value ?? "";
+    const search = this._toolbarRegion.querySelector(`[data-action="pool-search"]`);
+    search?.addEventListener("input", async (event) => {
+      const cursor = event.currentTarget.selectionStart;
+      this._state.poolSearch = event.currentTarget.value ?? "";
       await this._renderManager();
-      // Restore focus after the re-render replaces the input element.
-      const newInput = this._toolbarRegion?.querySelector(`[data-action="search"]`);
-      if (newInput instanceof HTMLInputElement) {
-        newInput.focus();
-        try { newInput.setSelectionRange(cursorPos, cursorPos); } catch { /* noop */ }
+      const next = this._toolbarRegion?.querySelector(`[data-action="pool-search"]`);
+      if (next instanceof HTMLInputElement) {
+        next.focus();
+        try { next.setSelectionRange(cursor, cursor); } catch { /* noop */ }
       }
     });
-
-    this._toolbarRegion.querySelector(`[data-action="toggle-filters"]`)?.addEventListener("click", async () => {
-      this._state.filterOpen = !this._state.filterOpen;
+    this._toolbarRegion.querySelector(`[data-action="open-filter"]`)?.addEventListener("click", async () => {
+      this._state.filterModalOpen = "pool";
       await this._renderManager();
     });
-
-    this._toolbarRegion.querySelector(`[data-action="reset"]`)?.addEventListener("click", async () => {
-      this._resetFilters();
+    this._toolbarRegion.querySelector(`[data-action="toggle-on-sheet"]`)?.addEventListener("click", async () => {
+      this._state.onSheetFilter = !this._state.onSheetFilter;
+      await this._renderManager();
+    });
+    this._toolbarRegion.querySelector(`[data-action="reset-pool"]`)?.addEventListener("click", async () => {
+      this._resetFilters("pool");
       await this._renderManager();
     });
   }
 
-  _renderDrawer(fullPool) {
-    if (!this._drawerRegion) return;
-
-    if (!this._state.filterOpen) {
-      this._drawerRegion.innerHTML = ``;
-      this._drawerRegion.classList.remove("dauligor-spell-manager__drawer--open");
-      return;
-    }
-    this._drawerRegion.classList.add("dauligor-spell-manager__drawer--open");
-
-    const schoolsInPool = [...new Set(fullPool.map(poolSchool).filter(Boolean))].sort();
-    const sourcesInPool = [...new Set(fullPool.map(poolSpellSourceId).filter(Boolean))].sort();
-
-    const levelSection = this._renderFilterChipSection({
-      title: "Level",
-      options: SPELL_LEVELS_ALL.map((l) => ({ v: String(l), l: l === 0 ? "Cantrip" : `Level ${l}` })),
-      selected: this._state.lvlF.map((v) => String(v)),
-      data: "level",
-    });
-
-    const schoolSection = schoolsInPool.length === 0 ? "" : this._renderFilterChipSection({
-      title: "School",
-      options: schoolsInPool.map((k) => ({ v: k, l: describeSpellSchoolAbbr(k) })),
-      selected: this._state.schoolF,
-      data: "school",
-    });
-
-    const sourceSection = sourcesInPool.length === 0 ? "" : this._renderFilterChipSection({
-      title: "Source",
-      options: sourcesInPool.map((sid) => ({ v: sid, l: String(sid).toUpperCase().slice(0, 5) })),
-      selected: this._state.sourceF,
-      data: "source",
-    });
-
-    const propSection = this._renderFilterChipSection({
-      title: "Properties",
-      options: PROPERTY_FILTERS,
-      selected: this._state.propF,
-      data: "prop",
-    });
-
-    this._drawerRegion.innerHTML = `
-      ${levelSection}
-      ${schoolSection}
-      ${sourceSection}
-      ${propSection}
-    `;
-
-    this._drawerRegion.querySelectorAll(`[data-action="chip-toggle"]`).forEach((chip) => {
-      chip.addEventListener("click", async () => {
-        const facet = chip.dataset.facet;
-        const value = chip.dataset.value;
-        if (!facet || value == null) return;
-        const list = this._stateListForFacet(facet);
-        if (!list) return;
-        if (facet === "level") {
-          const num = Number(value);
-          if (list.includes(num)) this._state.lvlF = list.filter((v) => v !== num);
-          else this._state.lvlF = [...list, num];
-        } else {
-          if (list.includes(value)) this._setStateListForFacet(facet, list.filter((v) => v !== value));
-          else this._setStateListForFacet(facet, [...list, value]);
-        }
-        await this._renderManager();
-      });
-    });
-
-    this._drawerRegion.querySelectorAll(`[data-action="chip-all"]`).forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const facet = btn.dataset.facet;
-        if (facet === "level") this._state.lvlF = [...SPELL_LEVELS_ALL];
-        else if (facet === "school") this._state.schoolF = [...new Set(fullPool.map(poolSchool).filter(Boolean))];
-        else if (facet === "source") this._state.sourceF = [...new Set(fullPool.map(poolSpellSourceId).filter(Boolean))];
-        else if (facet === "prop") this._state.propF = PROPERTY_FILTERS.map((p) => p.v);
-        await this._renderManager();
-      });
-    });
-
-    this._drawerRegion.querySelectorAll(`[data-action="chip-clear"]`).forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const facet = btn.dataset.facet;
-        if (facet === "level") this._state.lvlF = [];
-        else if (facet === "school") this._state.schoolF = [];
-        else if (facet === "source") this._state.sourceF = [];
-        else if (facet === "prop") this._state.propF = [];
-        await this._renderManager();
-      });
-    });
-  }
-
-  _stateListForFacet(facet) {
-    if (facet === "level") return this._state.lvlF;
-    if (facet === "school") return this._state.schoolF;
-    if (facet === "source") return this._state.sourceF;
-    if (facet === "prop") return this._state.propF;
-    return null;
-  }
-
-  _setStateListForFacet(facet, value) {
-    if (facet === "level") this._state.lvlF = value;
-    else if (facet === "school") this._state.schoolF = value;
-    else if (facet === "source") this._state.sourceF = value;
-    else if (facet === "prop") this._state.propF = value;
-  }
-
-  _renderFilterChipSection({ title, options, selected, data }) {
-    const selectedSet = new Set(selected.map((v) => String(v)));
-    const chips = options.map((opt) => {
-      const isSel = selectedSet.has(String(opt.v));
-      return `
-        <button
-          type="button"
-          class="dauligor-spell-manager__filter-chip ${isSel ? "dauligor-spell-manager__filter-chip--selected" : ""}"
-          data-action="chip-toggle"
-          data-facet="${escapeHtml(data)}"
-          data-value="${escapeHtml(String(opt.v))}"
-        >${escapeHtml(opt.l)}</button>
-      `;
-    }).join("");
-
-    return `
-      <div class="dauligor-spell-manager__filter-section">
-        <div class="dauligor-spell-manager__filter-section-header">
-          <span class="dauligor-spell-manager__filter-section-title">${escapeHtml(title)}</span>
-          <span class="dauligor-spell-manager__filter-shortcuts">
-            <button type="button" class="dauligor-spell-manager__filter-shortcut" data-action="chip-all" data-facet="${escapeHtml(data)}">All</button>
-            <button type="button" class="dauligor-spell-manager__filter-shortcut" data-action="chip-clear" data-facet="${escapeHtml(data)}">Clear</button>
-          </span>
-        </div>
-        <div class="dauligor-spell-manager__filter-chips">${chips}</div>
-      </div>
-    `;
-  }
+  // ---- Pool list --------------------------------------------------------
 
   _renderPool(fullPool, filteredPool, selectedClass) {
     if (!this._poolRegion) return;
@@ -1134,18 +1372,17 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">Failed to load class spell list: ${escapeHtml(poolStatus.reason)}</div>`;
       return;
     }
-
     if (fullPool.length === 0) {
       this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">No spells curated for this class yet. Curate the list at <code>/compendium/spell-lists</code> in Dauligor.</div>`;
       return;
     }
-
     if (filteredPool.length === 0) {
       this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">No spells match the current filters.</div>`;
       return;
     }
 
     const ownedMap = this._getOwnedDbIdMap();
+    const favIds = this._getFavoriteDbIds();
     const grouped = this._groupByLevel(filteredPool);
 
     const bandsHtml = grouped.map(([level, items]) => `
@@ -1155,65 +1392,88 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
           <span class="dauligor-spell-manager__pool-band-count">${items.length}</span>
         </div>
         <div class="dauligor-spell-manager__pool-band-list">
-          ${items.map((item) => this._buildPoolRowHtml(item, ownedMap, { showFav: true })).join("")}
+          ${items.map((item) => this._buildSpellRowHtml(item, {
+            ownedItem: ownedMap.get(poolDbId(item)),
+            selectedClass,
+            isSelected: this._state.selectedSpellDbId === poolDbId(item),
+            isFav: favIds.has(poolDbId(item)),
+            showFavStar: true,
+            compact: false
+          })).join("")}
         </div>
       </section>
     `).join("");
 
     this._poolRegion.innerHTML = bandsHtml;
-    this._bindPoolRows(this._poolRegion, selectedClass);
+    this._bindPoolRows(this._poolRegion);
   }
 
-  _buildPoolRowHtml(item, ownedMap, { showFav = true } = {}) {
+  /**
+   * Single spell row HTML. Indicator state:
+   *   - Cantrip:
+   *       not on sheet → empty circle
+   *       on sheet     → filled circle (cantrips are always known)
+   *   - Level spell:
+   *       not on sheet → empty circle
+   *       on sheet (any non-spellbook prep type, any sheetMode) → filled circle
+   *       on sheet (spellbook prep) and sheetMode = "spellbook" or "prepared" → book icon
+   *       on sheet (spellbook prep) and sheetMode = "free" → filled circle
+   * Row highlight:
+   *   - sheetMode === "prepared" → highlighted
+   */
+  _buildSpellRowHtml(item, { ownedItem = null, selectedClass = null, isSelected = false, isFav = false, showFavStar = true, compact = false } = {}) {
     const dbId = poolDbId(item);
-    const ownedItem = ownedMap.get(dbId);
+    const level = poolLevel(item);
+    const isCantrip = level === 0;
     const isOwned = !!ownedItem;
-    const isAlways = ownedItem ? isAlwaysPrepared(ownedItem) : false;
-    const isGranted = ownedItem ? isAdvancementGranted(ownedItem) : false;
-    const isLocked = isOwned && (isAlways || isGranted);
-    const isSelected = this._state.selectedSpellDbId === dbId;
-    const favIds = this._getFavoriteDbIds();
-    const isFav = favIds.has(dbId);
-    const flags = poolFlags(item);
-    const school = poolSchool(item);
-    const schoolAbbr = describeSpellSchoolAbbr(school);
-    // Source code is hidden — the summary only ships the raw D1
-    // source UUID prefix (e.g. "JOIOF"), which is not human-readable.
-    // Proper resolution against `/api/module/sources/catalog.json` is
-    // a server-side polish item; for now the source slot is empty so
-    // we don't show gibberish.
-    const sourceAbbr = "";
-    const ritual = flags.ritual;
-    const concentration = flags.concentration;
+    const sheetMode = isOwned ? getSheetMode(ownedItem) : null;
+    const prep = selectedClass ? selectedClass.prepType : "prepared";
+    const isPrepared = sheetMode === SHEET_MODE_PREPARED;
+    const isLocked = ownedItem ? (isAdvancementGranted(ownedItem) || (isAlwaysPrepared(ownedItem) && sheetMode !== SHEET_MODE_FREE)) : false;
 
-    // Indicator is purely informational now — actual add/remove
-    // happens via explicit buttons in the detail pane. The row click
-    // only updates selection.
-    let indicator = "+";
+    // Indicator selection.
+    let indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--empty";
     let indicatorTitle = "Not on sheet";
-    if (isAlways) { indicator = "✦"; indicatorTitle = "Always prepared"; }
-    else if (isGranted) { indicator = "✓"; indicatorTitle = "Granted by an advancement"; }
-    else if (isOwned) { indicator = "✓"; indicatorTitle = "On sheet"; }
+    let indicatorGlyph = "○";
+    if (isOwned) {
+      if (!isCantrip && prep === "spellbook" && (sheetMode === SHEET_MODE_SPELLBOOK || sheetMode === SHEET_MODE_PREPARED)) {
+        indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--book";
+        indicatorGlyph = "📖";
+        indicatorTitle = sheetMode === SHEET_MODE_PREPARED ? "In spellbook · Prepared" : "In spellbook";
+      } else {
+        indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--filled";
+        indicatorGlyph = "●";
+        if (isCantrip) indicatorTitle = "Cantrip on sheet";
+        else if (sheetMode === SHEET_MODE_PREPARED) indicatorTitle = prep === "known" ? "Known" : "Prepared";
+        else if (sheetMode === SHEET_MODE_FREE) indicatorTitle = "On sheet (does not count)";
+        else indicatorTitle = "On sheet";
+      }
+    }
 
     const rowClasses = [
       "dauligor-spell-manager__pool-row",
+      compact && "dauligor-spell-manager__pool-row--compact",
       isSelected && "dauligor-spell-manager__pool-row--selected",
       isOwned && "dauligor-spell-manager__pool-row--owned",
-      isLocked && "dauligor-spell-manager__pool-row--locked",
+      isPrepared && "dauligor-spell-manager__pool-row--prepared",
+      isLocked && "dauligor-spell-manager__pool-row--locked"
     ].filter(Boolean).join(" ");
 
+    const flags = poolFlags(item);
     const badges = [];
-    if (ritual) badges.push(`<span class="dauligor-spell-manager__row-badge" title="Ritual">R</span>`);
-    if (concentration) badges.push(`<span class="dauligor-spell-manager__row-badge" title="Concentration">C</span>`);
+    if (flags.ritual)        badges.push(`<span class="dauligor-spell-manager__row-badge" title="Ritual">R</span>`);
+    if (flags.concentration) badges.push(`<span class="dauligor-spell-manager__row-badge" title="Concentration">C</span>`);
+
+    const school = poolSchool(item);
+    const schoolLabel = describeSpellSchool(school);
 
     return `
       <div class="${rowClasses}" data-action="row" data-db-id="${escapeHtml(dbId)}" title="Click to view details">
-        <span class="dauligor-spell-manager__row-indicator" title="${escapeHtml(indicatorTitle)}">${indicator}</span>
+        <span class="${indicatorClass}" title="${escapeHtml(indicatorTitle)}">${indicatorGlyph}</span>
         <span class="dauligor-spell-manager__row-name">${escapeHtml(poolName(item))}</span>
         <span class="dauligor-spell-manager__row-badges">${badges.join("")}</span>
-        <span class="dauligor-spell-manager__row-school" title="${escapeHtml(school)}">${escapeHtml(schoolAbbr)}</span>
-        <span class="dauligor-spell-manager__row-source">${escapeHtml(sourceAbbr)}</span>
-        ${showFav ? `
+        <span class="dauligor-spell-manager__row-school" title="${escapeHtml(schoolLabel)}">${escapeHtml(school.toUpperCase().slice(0, 3))}</span>
+        ${showFavStar ? `
           <button type="button"
             class="dauligor-spell-manager__row-star ${isFav ? "dauligor-spell-manager__row-star--active" : ""}"
             data-action="star" data-db-id="${escapeHtml(dbId)}"
@@ -1223,22 +1483,17 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     `;
   }
 
-  _bindPoolRows(container, _classModel) {
+  _bindPoolRows(container) {
     container.querySelectorAll(`[data-action="row"]`).forEach((row) => {
       row.addEventListener("click", (event) => {
-        // Don't process the row click when it bubbled up from the
-        // favourite-star button (the star handles its own toggle).
         if ((event.target instanceof HTMLElement) && event.target.closest(`[data-action="star"]`)) return;
         const dbId = row.dataset.dbId;
         if (!dbId) return;
-        // Selection only — no add/remove from row clicks. Add and
-        // remove are explicit buttons in the detail pane.
         if (this._state.selectedSpellDbId === dbId) return;
         this._state.selectedSpellDbId = dbId;
         this._renderManager();
       });
     });
-
     container.querySelectorAll(`[data-action="star"]`).forEach((btn) => {
       btn.addEventListener("click", async (event) => {
         event.stopPropagation();
@@ -1249,25 +1504,33 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     });
   }
 
+  // ---- Detail pane (SpellDetailPanel-style layout) ---------------------
+
   _renderDetail(summaryArg = undefined, classArg = undefined) {
     if (!this._detailRegion) return;
 
-    // Allow the in-flight full-spell fetch to call us without args —
-    // we'll re-resolve the selection from current state in that case.
     let summary = summaryArg;
     let classModel = classArg;
     if (summary === undefined || classModel === undefined) {
       const classModels = this._buildClassModels();
       classModel = classModels.find((entry) => entry.identifier === this._state.selectedClassIdentifier) ?? null;
       const fullPool = this._getActivePool(classModel);
-      summary = this._getSelectedSummary(fullPool);
+      summary = this._state.selectedSpellDbId
+        ? fullPool.find((it) => poolDbId(it) === this._state.selectedSpellDbId) ?? null
+        : null;
+      if (!summary && this._fullSpellCache.has(this._state.selectedSpellDbId)) {
+        // Favorite from a different class — synthesize a placeholder
+        // summary so the detail pane still renders.
+        const full = this._fullSpellCache.get(this._state.selectedSpellDbId);
+        if (full) summary = this._synthesizeSummaryFromFull(full);
+      }
     }
 
     if (!summary) {
       this._detailRegion.innerHTML = `
         <div class="dauligor-spell-manager__detail-empty">
           <div class="dauligor-spell-manager__detail-empty-title">No spell selected</div>
-          <div class="dauligor-spell-manager__detail-empty-hint">Click a row in the middle column to inspect its details and add it to the sheet.</div>
+          <div class="dauligor-spell-manager__detail-empty-hint">Click a row in the middle column to inspect its details.</div>
         </div>
       `;
       return;
@@ -1278,102 +1541,357 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const ownedItem = this._findOwnedSpellByDbId(dbId);
     const flags = poolFlags(summary);
 
-    // Description / activity meta come from the full payload. While
-    // we wait for the fetch the header + level/school strip render
-    // from the summary alone so the panel doesn't visibly empty out.
-    // Once enriched HTML lands in the cache, swap that in so
-    // `&Reference[...]`, `[[/roll ...]]`, etc. become live widgets.
     const enrichedHtml = this._enrichedDescriptionCache.get(dbId);
     const description = enrichedHtml
       ?? String(full?.system?.description?.value ?? "").trim();
+
     const schoolLabel = describeSpellSchool(poolSchool(summary));
     const levelLabel = describeSpellLevel(poolLevel(summary));
+    const sourceShort = this._sourceShortName(poolSpellSourceId(summary)) || "—";
 
     const ritual = Boolean(flags.ritual);
     const concentration = Boolean(flags.concentration);
-    const activation = String(flags.activationBucket || "").replace(/-/g, " ");
-    const range = String(flags.rangeBucket || "").replace(/-/g, " ");
-    const duration = String(flags.durationBucket || "").replace(/-/g, " ");
-    const shape = String(flags.shapeBucket || "").replace(/-/g, " ");
-    const componentsBits = [];
-    if (flags.componentsVocal) componentsBits.push("V");
-    if (flags.componentsSomatic) componentsBits.push("S");
-    if (flags.componentsMaterial) componentsBits.push("M");
-    const components = componentsBits.join("·");
+    const fav = this._getFavoriteDbIds().has(dbId);
 
-    const isOwned = Boolean(ownedItem);
-    const isAlways = ownedItem ? isAlwaysPrepared(ownedItem) : false;
-    const isGranted = ownedItem ? isAdvancementGranted(ownedItem) : false;
-    const isLocked = isOwned && (isAlways || isGranted);
+    const imageHtml = full?.img
+      ? `<div class="dauligor-spell-manager__detail-image"><img src="${escapeHtml(full.img)}" alt="${escapeHtml(summary.name)}"></div>`
+      : `<div class="dauligor-spell-manager__detail-image dauligor-spell-manager__detail-image--placeholder" aria-hidden="true"></div>`;
 
-    const ownerLine = isOwned
-      ? `On sheet${isAlways ? " · Always prepared" : isGranted ? " · Granted by advancement" : isCurrentlyPrepared(ownedItem) ? " · Prepared" : ""}`
-      : "Not on sheet";
-
-    // Tags are stored on the summary as opaque DB ids (e.g. "00001"),
-    // which aren't useful to display directly. We'd need a tag catalog
-    // resolver (or a `tagNames` field on the summary) to render them
-    // as the human-readable chips the compendium page uses. Hidden
-    // for now; tracked as a server-side polish item.
-    const tagLine = "";
-
-    const descriptionHtml = full
-      ? (description
-        ? `<div class="dauligor-spell-manager__detail-body">${description}</div>`
-        : `<div class="dauligor-spell-manager__detail-body dauligor-spell-manager__empty">No description stored on this spell.</div>`)
-      : `<div class="dauligor-spell-manager__detail-body dauligor-spell-manager__empty">Loading description…</div>`;
-
-    // Action buttons: add OR remove OR disabled-locked-reason. The
-    // row click never mutates owned-state — these are the only entry
-    // points for adding / removing a spell from the sheet.
-    const className = classModel?.label ?? "this class";
-    let actionsHtml = "";
-    if (!classModel) {
-      actionsHtml = `<button type="button" class="dauligor-spell-manager__detail-action dauligor-spell-manager__detail-action--locked" disabled>Select a class</button>`;
-    } else if (isAlways) {
-      actionsHtml = `<button type="button" class="dauligor-spell-manager__detail-action dauligor-spell-manager__detail-action--locked" disabled>Always prepared — managed by class</button>`;
-    } else if (isGranted) {
-      actionsHtml = `<button type="button" class="dauligor-spell-manager__detail-action dauligor-spell-manager__detail-action--locked" disabled>Granted by an advancement</button>`;
-    } else if (isOwned) {
-      actionsHtml = `<button type="button" class="dauligor-spell-manager__detail-action dauligor-spell-manager__detail-action--remove" data-action="remove-spell">Remove from ${escapeHtml(className)}</button>`;
-    } else {
-      actionsHtml = `<button type="button" class="dauligor-spell-manager__detail-action dauligor-spell-manager__detail-action--add" data-action="add-spell">Add to ${escapeHtml(className)}</button>`;
-    }
-
-    this._detailRegion.innerHTML = `
-      <div class="dauligor-spell-manager__detail-card">
-        <div class="dauligor-spell-manager__detail-heading">${escapeHtml(summary.name)}</div>
-        <div class="dauligor-spell-manager__detail-meta">
-          <span>${escapeHtml(levelLabel)}</span>
-          <span>${escapeHtml(schoolLabel)}</span>
-          ${ritual ? `<span title="Ritual">Ritual</span>` : ""}
-          ${concentration ? `<span title="Concentration">Concentration</span>` : ""}
-        </div>
-        <div class="dauligor-spell-manager__detail-actions">${actionsHtml}</div>
-        <dl class="dauligor-spell-manager__detail-grid">
-          ${activation ? `<dt>Activation</dt><dd>${escapeHtml(activation)}</dd>` : ""}
-          ${range ? `<dt>Range</dt><dd>${escapeHtml(range)}</dd>` : ""}
-          ${duration ? `<dt>Duration</dt><dd>${escapeHtml(duration)}</dd>` : ""}
-          ${shape ? `<dt>Shape</dt><dd>${escapeHtml(shape)}</dd>` : ""}
-          ${components ? `<dt>Components</dt><dd>${escapeHtml(components)}</dd>` : ""}
-          <dt>Status</dt><dd>${escapeHtml(ownerLine)}</dd>
-          ${classModel?.label ? `<dt>Active class</dt><dd>${escapeHtml(classModel.label)}</dd>` : ""}
-          ${tagLine}
-        </dl>
-        ${descriptionHtml}
+    // 2-col info grid: Casting Time / Range / Components / Duration
+    const infoRow = (label, value) => `
+      <div class="dauligor-spell-manager__detail-info-row">
+        <div class="dauligor-spell-manager__detail-info-label">${escapeHtml(label)}</div>
+        <div class="dauligor-spell-manager__detail-info-value">${escapeHtml(value ?? "—")}</div>
       </div>
     `;
 
-    // Bind detail action buttons. Both call _toggleKnown which
-    // dispatches by current owned-state — single source of truth for
-    // the add/remove side-effects.
-    const dbIdForAction = dbId;
-    const classForAction = classModel;
-    this._detailRegion.querySelector(`[data-action="add-spell"]`)?.addEventListener("click", async () => {
-      await this._toggleKnown(dbIdForAction, classForAction);
+    const descriptionHtml = full
+      ? (description
+        ? `<div class="dauligor-spell-manager__detail-description">${description}</div>`
+        : `<div class="dauligor-spell-manager__detail-description dauligor-spell-manager__empty">No description stored on this spell.</div>`)
+      : `<div class="dauligor-spell-manager__detail-description dauligor-spell-manager__empty">Loading description…</div>`;
+
+    const ownedLine = ownedItem
+      ? (() => {
+          const mode = getSheetMode(ownedItem);
+          if (isAlwaysPrepared(ownedItem) && mode === SHEET_MODE_PREPARED) return "On sheet · Always prepared";
+          if (isAdvancementGranted(ownedItem)) return "On sheet · Granted by advancement";
+          if (mode === SHEET_MODE_PREPARED)  return classModel?.prepType === "known" ? "On sheet · Known" : "On sheet · Prepared";
+          if (mode === SHEET_MODE_SPELLBOOK) return "On sheet · In spellbook";
+          if (mode === SHEET_MODE_FREE)      return "On sheet · Free (no cap)";
+          return "On sheet";
+        })()
+      : "Not on sheet";
+
+    const tagIds = Array.isArray(flags.tagIds) ? flags.tagIds : [];
+    const tagsHtml = tagIds.length === 0
+      ? `<div class="dauligor-spell-manager__detail-tags-empty">No tags.</div>`
+      : `<div class="dauligor-spell-manager__detail-tags-list">
+          ${tagIds.map((id) => `<span class="dauligor-spell-manager__detail-tag">${escapeHtml(id)}</span>`).join("")}
+        </div>`;
+
+    this._detailRegion.innerHTML = `
+      <div class="dauligor-spell-manager__detail-scroll">
+        <header class="dauligor-spell-manager__detail-header">
+          <div class="dauligor-spell-manager__detail-title-row">
+            <h2 class="dauligor-spell-manager__detail-title">${escapeHtml(summary.name)}</h2>
+            <span class="dauligor-spell-manager__detail-source-chip">${escapeHtml(sourceShort)}</span>
+            <button type="button"
+              class="dauligor-spell-manager__detail-star ${fav ? "dauligor-spell-manager__detail-star--active" : ""}"
+              data-action="detail-toggle-fav"
+              title="${fav ? "Remove from favourites" : "Add to favourites"}"
+            >★</button>
+          </div>
+          <p class="dauligor-spell-manager__detail-subtitle">
+            ${escapeHtml(levelLabel)} <span class="dauligor-spell-manager__detail-subtitle-sep">·</span> ${escapeHtml(schoolLabel)}
+            ${ritual ? `<span class="dauligor-spell-manager__detail-subtitle-sep">·</span> <span title="Ritual">Ritual</span>` : ""}
+            ${concentration ? `<span class="dauligor-spell-manager__detail-subtitle-sep">·</span> <span title="Concentration">Concentration</span>` : ""}
+          </p>
+        </header>
+
+        <section class="dauligor-spell-manager__detail-hero">
+          ${imageHtml}
+          <div class="dauligor-spell-manager__detail-info-grid">
+            ${infoRow("Casting Time", formatActivationLabel(summary))}
+            ${infoRow("Range",        formatRangeLabel(summary))}
+            ${infoRow("Components",   formatComponentsLabel(summary))}
+            ${infoRow("Duration",     formatDurationLabel(summary))}
+          </div>
+        </section>
+
+        <section class="dauligor-spell-manager__detail-body">
+          ${descriptionHtml}
+        </section>
+
+        <footer class="dauligor-spell-manager__detail-footer">
+          <div class="dauligor-spell-manager__detail-source-line">
+            <span class="dauligor-spell-manager__detail-source-label">Source:</span>
+            <span class="dauligor-spell-manager__detail-source-value">${escapeHtml(sourceShort)}</span>
+          </div>
+          <div class="dauligor-spell-manager__detail-status">${escapeHtml(ownedLine)}</div>
+          <button type="button"
+            class="dauligor-spell-manager__detail-tags-toggle"
+            data-action="toggle-tags"
+            aria-expanded="${this._state.showTags ? "true" : "false"}"
+          >
+            ${this._state.showTags ? "Hide tags" : "Show tags"}
+            <span class="dauligor-spell-manager__detail-tags-count">(${tagIds.length})</span>
+          </button>
+          ${this._state.showTags ? `<div class="dauligor-spell-manager__detail-tags">${tagsHtml}</div>` : ""}
+        </footer>
+      </div>
+    `;
+
+    this._detailRegion.querySelector(`[data-action="detail-toggle-fav"]`)?.addEventListener("click", async () => {
+      await this._toggleFavorite(dbId);
     });
-    this._detailRegion.querySelector(`[data-action="remove-spell"]`)?.addEventListener("click", async () => {
-      await this._toggleKnown(dbIdForAction, classForAction);
+    this._detailRegion.querySelector(`[data-action="toggle-tags"]`)?.addEventListener("click", () => {
+      this._state.showTags = !this._state.showTags;
+      this._renderDetail();
+    });
+  }
+
+  /** Build a summary-shaped object from a Foundry-ready full spell item. */
+  _synthesizeSummaryFromFull(full) {
+    const sys = full?.system ?? {};
+    const props = sys.properties ?? {};
+    const has = (k) => props instanceof Set ? props.has(k) : !!props?.[k];
+    return {
+      name: full?.name ?? "",
+      type: "spell",
+      flags: {
+        "dauligor-pairing": {
+          dbId: String(full?.flags?.["dauligor-pairing"]?.dbId ?? ""),
+          level: Number(sys.level ?? 0) || 0,
+          school: String(sys.school ?? ""),
+          spellSourceId: String(full?.flags?.["dauligor-pairing"]?.spellSourceId ?? ""),
+          componentsVocal: has("vocal"),
+          componentsSomatic: has("somatic"),
+          componentsMaterial: has("material"),
+          ritual: has("ritual"),
+          concentration: has("concentration"),
+          activationBucket: "",
+          rangeBucket: "",
+          durationBucket: "",
+          shapeBucket: ""
+        }
+      }
+    };
+  }
+
+  // ---- Footer (action buttons) ------------------------------------------
+
+  _renderFooter(selectedClass, summary) {
+    if (!this._footerRegion) return;
+
+    const dbId = summary ? poolDbId(summary) : null;
+    const owned = dbId ? this._findOwnedSpellByDbId(dbId) : null;
+    const ownedMode = owned ? getSheetMode(owned) : null;
+    const prep = selectedClass?.prepType ?? null;
+    const prepLabel = prep === "known" ? "Add as Known" : "Prepare";
+    const prepActiveLabel = prep === "known" ? "Remove (Known)" : "Unprepare";
+
+    const isAlways = owned ? isAlwaysPrepared(owned) : false;
+    const isGranted = owned ? isAdvancementGranted(owned) : false;
+    const locked = isAlways || isGranted;
+
+    // Each button's active state mirrors the spell's current sheetMode.
+    const btn = (mode, label, activeLabel, tooltip, visible) => {
+      if (!visible) return "";
+      const active = ownedMode === mode;
+      const cssActive = active ? "dauligor-spell-manager__footer-button--active" : "";
+      const cssLocked = locked ? "dauligor-spell-manager__footer-button--locked" : "";
+      const labelHtml = active ? activeLabel : label;
+      const action = active ? "footer-remove" : "footer-set-mode";
+      return `<button type="button"
+        class="dauligor-spell-manager__footer-button ${cssActive} ${cssLocked}"
+        data-action="${action}"
+        data-mode="${escapeHtml(mode)}"
+        title="${escapeHtml(tooltip)}"
+        ${locked ? "disabled" : ""}
+      >${escapeHtml(labelHtml)}</button>`;
+    };
+
+    const preparedTooltip = `Add to sheet as a prepared/known spell. It will count against your spells prepared/known.`;
+    const freeTooltip     = `Add to sheet as a ${selectedClass?.label ?? "Class"} spell. This spell does not count against your spells known or prepared.`;
+    const bookTooltip     = `This spell will be added to your spell book. A Spellbook Caster can only prepare spells they have in their spellbook.`;
+
+    const noSelection = !selectedClass || !summary;
+    const buttons = noSelection
+      ? `<div class="dauligor-spell-manager__footer-hint">Select a spell to enable add buttons.</div>`
+      : `
+        ${btn(SHEET_MODE_PREPARED,  prepLabel,        prepActiveLabel,     preparedTooltip, true)}
+        ${btn(SHEET_MODE_FREE,      "Add to Sheet",   "Remove from Sheet", freeTooltip,     true)}
+        ${btn(SHEET_MODE_SPELLBOOK, "Add to Spellbook","Remove from Spellbook", bookTooltip, prep === "spellbook")}
+      `;
+
+    this._footerRegion.innerHTML = `
+      <div class="dauligor-spell-manager__footer-left">${buttons}</div>
+      <div class="dauligor-spell-manager__footer-right">
+        <button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>
+      </div>
+    `;
+
+    this._footerRegion.querySelectorAll(`[data-action="footer-set-mode"]`).forEach((button) => {
+      button.addEventListener("click", async () => {
+        const mode = button.dataset.mode;
+        if (!mode || !dbId) return;
+        await this._applySheetMode(dbId, mode, selectedClass);
+      });
+    });
+    this._footerRegion.querySelectorAll(`[data-action="footer-remove"]`).forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!dbId) return;
+        await this._removeSpell(dbId);
+      });
+    });
+    this._footerRegion.querySelector(`[data-action="footer-close"]`)?.addEventListener("click", async () => {
+      await this.close();
+    });
+  }
+
+  // ---- Filter modal (shared, opens for pool or favorites) --------------
+
+  _renderFilterModal(fullPool, classModels) {
+    if (!this._filterModalRegion) return;
+    const target = this._state.filterModalOpen;
+    if (!target) {
+      this._filterModalRegion.hidden = true;
+      this._filterModalRegion.innerHTML = "";
+      return;
+    }
+    this._filterModalRegion.hidden = false;
+
+    // Aggregate source/school ids visible in the relevant pool so the
+    // chip set isn't cluttered by sources that produce no matches.
+    const visibleItems = target === "favorites"
+      ? this._buildFavoritesPool(classModels)
+      : fullPool;
+    const sourcesInPool = [...new Set(visibleItems.map(poolSpellSourceId).filter(Boolean))].sort();
+    const schoolsInPool = [...new Set(visibleItems.map(poolSchool).filter(Boolean))].sort();
+
+    const ax = (axis) => this._filterStateFor(target).axes?.[axis]?.states ?? {};
+    const chipsFor = (axis, options) => options.map((opt) => {
+      const sel = !!ax(axis)[String(opt.v)];
+      return `<button type="button"
+        class="dauligor-spell-manager__modal-chip ${sel ? "dauligor-spell-manager__modal-chip--selected" : ""}"
+        data-action="modal-chip"
+        data-axis="${escapeHtml(axis)}"
+        data-value="${escapeHtml(String(opt.v))}"
+      >${escapeHtml(opt.l)}</button>`;
+    }).join("");
+
+    const section = (title, axis, options) => `
+      <div class="dauligor-spell-manager__modal-section">
+        <div class="dauligor-spell-manager__modal-section-header">
+          <span class="dauligor-spell-manager__modal-section-title">${escapeHtml(title)}</span>
+          <span class="dauligor-spell-manager__modal-section-actions">
+            <button type="button" class="dauligor-spell-manager__modal-shortcut" data-action="modal-all" data-axis="${escapeHtml(axis)}">All</button>
+            <button type="button" class="dauligor-spell-manager__modal-shortcut" data-action="modal-clear" data-axis="${escapeHtml(axis)}">Clear</button>
+          </span>
+        </div>
+        <div class="dauligor-spell-manager__modal-chips">${chipsFor(axis, options)}</div>
+      </div>
+    `;
+
+    const levelOptions = SPELL_LEVELS_ALL.map((n) => ({ v: String(n), l: n === 0 ? "Cantrip" : `Level ${n}` }));
+    const schoolOptions = SCHOOL_ORDER
+      .filter((k) => schoolsInPool.includes(k) || schoolsInPool.length === 0)
+      .map((k) => ({ v: k, l: SCHOOL_LABELS[k] || k }));
+    const activationOptions = ACTIVATION_ORDER.map((b) => ({ v: b, l: ACTIVATION_LABELS[b] }));
+    const rangeOptions      = RANGE_ORDER.map((b) => ({ v: b, l: RANGE_LABELS[b] }));
+    const durationOptions   = DURATION_ORDER.map((b) => ({ v: b, l: DURATION_LABELS[b] }));
+    const shapeOptions      = SHAPE_ORDER.map((b) => ({ v: b, l: SHAPE_LABELS[b] }));
+    const propertyOptions   = PROPERTY_ORDER.map((b) => ({ v: b, l: PROPERTY_LABELS[b] }));
+
+    const sourceOptions = sourcesInPool.length === 0
+      ? []
+      : sourcesInPool.map((sid) => ({
+          v: sid,
+          l: this._sourceShortName(sid) || sid
+        }));
+
+    const title = target === "favorites" ? "Filter Favourites" : "Filter Spells";
+
+    this._filterModalRegion.innerHTML = `
+      <div class="dauligor-spell-manager__modal-backdrop" data-action="close-modal"></div>
+      <div class="dauligor-spell-manager__modal-card" role="dialog" aria-modal="true">
+        <header class="dauligor-spell-manager__modal-header">
+          <h2 class="dauligor-spell-manager__modal-title">${escapeHtml(title)}</h2>
+          <button type="button" class="dauligor-spell-manager__modal-close" data-action="close-modal" title="Close">×</button>
+        </header>
+        <div class="dauligor-spell-manager__modal-body">
+          ${section("Level", "level", levelOptions)}
+          ${section("School", "school", schoolOptions)}
+          ${sourceOptions.length ? section("Source", "source", sourceOptions) : ""}
+          ${section("Casting Time", "activation", activationOptions)}
+          ${section("Range", "range", rangeOptions)}
+          ${section("Duration", "duration", durationOptions)}
+          ${section("Shape", "shape", shapeOptions)}
+          ${section("Properties", "property", propertyOptions)}
+        </div>
+        <footer class="dauligor-spell-manager__modal-footer">
+          <button type="button" class="dauligor-spell-manager__modal-button dauligor-spell-manager__modal-button--ghost" data-action="modal-reset">Reset</button>
+          <button type="button" class="dauligor-spell-manager__modal-button" data-action="close-modal">Apply &amp; Close</button>
+        </footer>
+      </div>
+    `;
+
+    const close = async () => {
+      this._state.filterModalOpen = null;
+      await this._renderManager();
+    };
+
+    this._filterModalRegion.querySelectorAll(`[data-action="close-modal"]`).forEach((el) => {
+      el.addEventListener("click", close);
+    });
+    this._filterModalRegion.querySelectorAll(`[data-action="modal-chip"]`).forEach((chip) => {
+      chip.addEventListener("click", async () => {
+        const axis = chip.dataset.axis;
+        const value = chip.dataset.value;
+        if (!axis || value == null) return;
+        this._toggleChip(target, axis, value);
+        await this._renderManager();
+      });
+    });
+    this._filterModalRegion.querySelectorAll(`[data-action="modal-all"]`).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const axis = btn.dataset.axis;
+        if (!axis) return;
+        const state = this._filterStateFor(target);
+        const axes = { ...(state.axes ?? {}) };
+        const states = {};
+        const allValues = (() => {
+          if (axis === "level")      return SPELL_LEVELS_ALL.map(String);
+          if (axis === "school")     return SCHOOL_ORDER;
+          if (axis === "activation") return ACTIVATION_ORDER;
+          if (axis === "range")      return RANGE_ORDER;
+          if (axis === "duration")   return DURATION_ORDER;
+          if (axis === "shape")      return SHAPE_ORDER;
+          if (axis === "property")   return PROPERTY_ORDER;
+          if (axis === "source")     return sourcesInPool;
+          return [];
+        })();
+        for (const v of allValues) states[String(v)] = 1;
+        axes[axis] = { ...(axes[axis] ?? {}), states };
+        this._setFilterStateFor(target, { ...state, axes });
+        await this._renderManager();
+      });
+    });
+    this._filterModalRegion.querySelectorAll(`[data-action="modal-clear"]`).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const axis = btn.dataset.axis;
+        if (!axis) return;
+        const state = this._filterStateFor(target);
+        const axes = { ...(state.axes ?? {}) };
+        delete axes[axis];
+        this._setFilterStateFor(target, { ...state, axes });
+        await this._renderManager();
+      });
+    });
+    this._filterModalRegion.querySelector(`[data-action="modal-reset"]`)?.addEventListener("click", async () => {
+      this._resetFilters(target);
+      await this._renderManager();
     });
   }
 }
