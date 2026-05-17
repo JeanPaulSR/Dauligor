@@ -281,9 +281,14 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         resizable: true,
         contentClasses: ["dauligor-importer-window"]
       },
+      // Window size matches the standalone Prepare Spells window
+      // (1480×820) so the embedded Spells tab body has room for the
+      // 3-col grid + footer without scrunching. The other tabs
+      // (Overview, Features, …) are happy with less but render
+      // comfortably at this size too.
       position: centeredAppPosition(
-        Math.min(window.innerWidth - 120, 960),
-        Math.min(window.innerHeight - 120, 720)
+        Math.min(window.innerWidth - 80, 1480),
+        Math.min(window.innerHeight - 80, 820)
       )
     });
 
@@ -618,11 +623,16 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
    * by scope. The long-rest hook in main.js opens the FM to this
    * tab so the user sees the queue first.
    *
-   * As of May 2026, spell-prep changes do NOT queue — the FM-embedded
-   * Prepare Spells mount applies changes immediately. So the queue
-   * here is exclusively for advancement-style picks (Phase 1 ships
-   * placeholder Features entries; Phase 2 will add real picker UI
-   * for ASI / feat / class / subclass / proficiency choices).
+   * Always renders a "Take Long Rest" call-to-action at the top:
+   *   - With queued entries: applies them (via `actor.longRest`)
+   *     and triggers a long rest in one click.
+   *   - Without queued entries: still available; rest applies with
+   *     no queue commit.
+   *
+   * The FM is also the configured intercept target for dnd5e's
+   * built-in Long Rest button (see `registerLongRestIntercept` in
+   * main.js), so this Overview tab is what the player sees whenever
+   * a long rest is initiated.
    */
   _renderOverviewTab() {
     const queue = getQueue(this._actor);
@@ -630,14 +640,40 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     const levelUpEntries = queue.levelUp.entries;
     const total = longRestEntries.length + levelUpEntries.length;
 
+    // Long-rest action card — always rendered. The button is the
+    // entry point for committing queued changes AND for triggering
+    // dnd5e's rest mechanics (HP recovery, spell slots, etc.). After
+    // the rest completes our `restCompleted` hook applies the queue.
+    const restCardHtml = `
+      <section class="dauligor-feature-manager__rest-card">
+        <div class="dauligor-feature-manager__rest-card-body">
+          <i class="fas fa-bed dauligor-feature-manager__rest-card-icon"></i>
+          <div class="dauligor-feature-manager__rest-card-text">
+            <h3>Take Long Rest</h3>
+            <p>${total > 0
+              ? `Apply your ${total} queued change${total === 1 ? "" : "s"} and complete a long rest. HP, spell slots, and rest features recover.`
+              : "Complete a long rest. HP, spell slots, and rest features recover."}</p>
+          </div>
+        </div>
+        <button type="button"
+                class="dauligor-feature-manager__rest-card-button"
+                data-action="take-long-rest"
+                title="Run the dnd5e long rest workflow + apply any queued changes.">
+          Take Long Rest
+        </button>
+      </section>
+    `;
+
     if (total === 0) {
       this._bodyRegion.innerHTML = `
+        ${restCardHtml}
         <div class="dauligor-feature-manager__overview-empty">
           <i class="fas fa-circle-check"></i>
           <h3>No queued advancements</h3>
-          <p>Queued changes from the other tabs will show up here. Spell prep changes apply immediately and don't queue — they post to chat as an audit trail.</p>
+          <p>Queue changes from the other tabs (Spells, Features, …) and they'll appear here for review before your next rest.</p>
         </div>
       `;
+      this._bindRestCardButton();
       return;
     }
 
@@ -714,6 +750,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     }
 
     this._bodyRegion.innerHTML = `
+      ${restCardHtml}
       <div class="dauligor-feature-manager__overview">
         ${sections.join("")}
       </div>
@@ -731,6 +768,59 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         this.render({ force: false });
       });
     }
+    this._bindRestCardButton();
+  }
+
+  /**
+   * Wire the "Take Long Rest" call-to-action on the Overview tab.
+   * Click handler calls `actor.longRest({ dialog: false })` — the
+   * `dialog: false` skips dnd5e's HD-spending dialog (which we'd
+   * otherwise re-enter via the libWrapper intercept and create a
+   * loop). Rest completes → `dnd5e.restCompleted` fires →
+   * main.js's hook applies our long-rest queue.
+   *
+   * For HD spending in v1, the user can still use dnd5e's native
+   * Long Rest button if they want to spend HD before resting; the
+   * intercept routes that case through this same FM Overview tab,
+   * so the player sees the queued changes before hitting "Take
+   * Long Rest" anyway.
+   */
+  _bindRestCardButton() {
+    const btn = this._bodyRegion?.querySelector(`[data-action="take-long-rest"]`);
+    if (!btn) return;
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        // 1. Apply queued long-rest changes BEFORE triggering the
+        //    rest. This way:
+        //      - Spell items reflect the player's pending picks
+        //        before HP/slots recover (matters for known casters
+        //        who swapped a known spell; the new known spell is
+        //        on the sheet during the rest's slot computation).
+        //      - dnd5e's `restCompleted` hook sees an empty queue
+        //        when our handler in main.js fires, so it doesn't
+        //        re-prompt the commit dialog.
+        const applied = await applyLongRestQueue(this._actor);
+        if (applied > 0) {
+          notifyInfo(`Applied ${applied} queued change${applied === 1 ? "" : "s"}.`);
+        }
+        // 2. Trigger the actual rest. `dialog: false` skips dnd5e's
+        //    built-in dialog so the rest applies straight through
+        //    (HP recovery, spell slot reset, rest features). dnd5e
+        //    fires `restCompleted` after — our hook in main.js
+        //    treats an empty queue as a no-op and returns silently.
+        await this._actor.longRest({ dialog: false, advanceTime: true });
+        // 3. Re-render the Overview so the (now-empty) queue
+        //    summary + rest-card subtitle refresh. The actor flag
+        //    write triggers our updateActor hook too — this is a
+        //    safety belt.
+        this.render({ force: false });
+      } catch (err) {
+        console.warn(`${MODULE_ID} | long rest from FM failed`, err);
+        notifyWarn("Long rest failed — see console.");
+      }
+    });
   }
 
   /**
@@ -793,7 +883,6 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         <div class="dauligor-feature-manager__queue-stat">
           <i class="fas fa-bed"></i>
           <span>${longRestSummary}</span>
-          ${longRestCount ? `<button type="button" class="dauligor-feature-manager__queue-apply" data-action="apply-long-rest" title="Apply queued long-rest changes to the actor now (without taking a rest)">Save now</button>` : ""}
           ${longRestCount ? `<button type="button" class="dauligor-feature-manager__queue-clear" data-action="clear-queue" data-scope="${SCOPE_LONG_REST}">Discard</button>` : ""}
         </div>
         <div class="dauligor-feature-manager__queue-stat">
@@ -820,25 +909,6 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
         this.render({ force: false });
       });
     }
-
-    // Save Now — applies the long-rest queue without waiting for a
-    // rest. Same code path as the rest-dialog's Save button. Tucked
-    // next to the bed icon so it reads as "commit this batch now".
-    this._footerRegion.querySelector(`[data-action="apply-long-rest"]`)
-      ?.addEventListener("click", async (event) => {
-        event.preventDefault();
-        const applied = await applyLongRestQueue(this._actor);
-        notifyInfo(`Applied ${applied} change${applied === 1 ? "" : "s"} for ${this._actor?.name ?? "actor"}.`);
-        // Re-render the FM (tabs + footer queue summary). If the
-        // Spells tab is active, also re-render the embedded prep
-        // mount so its pool rows + indicators reflect the now-
-        // applied actor state. Otherwise the embedded mount would
-        // still show "pending" until the user switched tabs.
-        this.render({ force: false });
-        if (this._embeddedSpellManager?._renderManager) {
-          try { await this._embeddedSpellManager._renderManager(); } catch { /* noop */ }
-        }
-      });
   }
 
   // ─── change-queue actions ──────────────────────────────────────────────

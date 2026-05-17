@@ -6157,6 +6157,72 @@ button.dauligor-option-picker__pill:hover {
 
 /* ─── Feature Manager Overview tab ──────────────────────────────────── */
 
+/* Rest card — the "Take Long Rest" hero block at the top of the
+   Overview tab. Always shown; subtitle text adapts based on queued
+   entries. */
+.dauligor-feature-manager__rest-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--dauligor-border, rgba(0, 0, 0, 0.4));
+  border-left: 3px solid var(--dauligor-success, #4ea96b);
+  border-radius: 6px;
+  background: rgba(78, 169, 107, 0.06);
+}
+
+.dauligor-feature-manager__rest-card-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dauligor-feature-manager__rest-card-icon {
+  font-size: 1.6em;
+  color: var(--dauligor-success, #4ea96b);
+  opacity: 0.85;
+}
+
+.dauligor-feature-manager__rest-card-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dauligor-feature-manager__rest-card-text h3 {
+  margin: 0 0 2px;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.dauligor-feature-manager__rest-card-text p {
+  margin: 0;
+  font-size: 0.85em;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.dauligor-feature-manager__rest-card-button {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  background: var(--dauligor-success, #4ea96b);
+  color: #fff;
+  border: 1px solid var(--dauligor-success, #4ea96b);
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.dauligor-feature-manager__rest-card-button:hover {
+  background: rgba(78, 169, 107, 0.85);
+  opacity: 0.95;
+}
+
 .dauligor-feature-manager__overview {
   display: flex;
   flex-direction: column;

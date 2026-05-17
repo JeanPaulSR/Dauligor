@@ -1066,6 +1066,122 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   // -----------------------------------------------------------------------
+  // Cap + swap gating (FM-embedded mount only)
+  // -----------------------------------------------------------------------
+  //
+  // House rules from the user:
+  //   - Prepared casters (Cleric, Druid, …)  unlimited swaps per
+  //     long rest, BUT never exceed max prepared.
+  //   - Spellbook casters (Wizard, Artificer): same as prepared.
+  //   - Known casters (Bard, Sorcerer, Warlock): one swap per rest.
+  //     Defined as "Remove 1 as Known and Add 1 Known Max" — so the
+  //     queue may contain at most one add-as-known and at most one
+  //     remove-as-known. Also never exceed max known.
+  //
+  // Cap check applies to every caster type when transitioning to
+  // SHEET_MODE_PREPARED. Non-prepared transitions (spellbook, free,
+  // remove) don't count toward the cap.
+
+  /**
+   * Count the effective number of spells at level=cantrip-or-not
+   * that would be "prepared" if the proposed transition went
+   * through. Walks owned spells with queue overlay + counts pending
+   * adds. Used by `_canQueueTransition` for the cap check.
+   */
+  _countEffectivePrepared(classModel, isCantrip, excludeDbId, proposedAfter) {
+    if (!classModel) return 0;
+    let count = 0;
+    for (const spell of (classModel.ownedSpells ?? [])) {
+      const level = Number(spell?.system?.level ?? 0) || 0;
+      if (isCantrip && level !== 0) continue;
+      if (!isCantrip && level === 0) continue;
+      const dbId = getSpellEntityId(spell);
+      if (String(dbId) === String(excludeDbId)) continue;
+      const pending = this._getPendingChange(dbId);
+      const mode = pending ? (pending.after ?? null) : getSheetMode(spell);
+      if (mode === SHEET_MODE_PREPARED) count++;
+    }
+    // Pending ADDS (entries for spells not currently on the actor)
+    const raw = this._actor?.getFlag?.(MODULE_ID, "featureManagerQueue");
+    const entries = Array.isArray(raw?.longRest?.entries) ? raw.longRest.entries : [];
+    for (const entry of entries) {
+      if (entry?.kind !== "spellChange") continue;
+      if (entry.before !== null) continue;
+      if (entry.after !== SHEET_MODE_PREPARED) continue;
+      if (String(entry.spellDbId) === String(excludeDbId)) continue;
+      if (entry.classIdentifier && entry.classIdentifier !== classModel.identifier) continue;
+      const level = Number(entry.spellItemData?.system?.level ?? 0) || 0;
+      if (isCantrip && level !== 0) continue;
+      if (!isCantrip && level === 0) continue;
+      count++;
+    }
+    // Include the proposed change
+    if (proposedAfter === SHEET_MODE_PREPARED) count++;
+    return count;
+  }
+
+  /**
+   * Check whether queueing this transition is allowed under the
+   * caster-type rules + caps. Returns `{ allowed: bool, reason: string }`.
+   * Only consulted in FM-embedded mode; standalone mutations bypass
+   * (the user is making a direct change and accepts the consequence).
+   */
+  _canQueueTransition(dbId, before, after, classModel, summary) {
+    if (!classModel) return { allowed: true };
+    const prepType = classModel.prepType;
+    const isCantrip = poolLevel(summary) === 0;
+
+    // === CAP CHECK ===
+    // Promoting to PREPARED — count effective prepared after this
+    // change. Cap is `cantripsCap` for cantrips, `spellsCap` for
+    // leveled spells.
+    if (after === SHEET_MODE_PREPARED) {
+      const cap = isCantrip ? classModel.cantripsCap : classModel.spellsCap;
+      if (cap != null && Number.isFinite(cap)) {
+        const effective = this._countEffectivePrepared(classModel, isCantrip, dbId, after);
+        if (effective > cap) {
+          const noun = isCantrip
+            ? "cantrips"
+            : (prepType === "known" ? "known spells" : "prepared spells");
+          return {
+            allowed: false,
+            reason: `${classModel.label} is at the ${noun} cap (${cap}). Unprepare another first.`
+          };
+        }
+      }
+    }
+
+    // === KNOWN-SWAP CHECK ===
+    // Known casters: max 1 add-as-known + max 1 remove-as-known per
+    // long rest. Applies to leveled spells only (cantrips for known
+    // casters follow their own scaling; cap check above is enough).
+    if (prepType === "known" && !isCantrip) {
+      const raw = this._actor?.getFlag?.(MODULE_ID, "featureManagerQueue");
+      const entries = Array.isArray(raw?.longRest?.entries) ? raw.longRest.entries : [];
+      let adds = 0;
+      let removes = 0;
+      for (const entry of entries) {
+        if (entry?.kind !== "spellChange") continue;
+        if (String(entry.spellDbId) === String(dbId)) continue; // upsert candidate
+        const wasKnown = entry.before === SHEET_MODE_PREPARED;
+        const isKnown = entry.after === SHEET_MODE_PREPARED;
+        if (!wasKnown && isKnown) adds++;
+        if (wasKnown && !isKnown) removes++;
+      }
+      const proposedAdd = before !== SHEET_MODE_PREPARED && after === SHEET_MODE_PREPARED;
+      const proposedRemove = before === SHEET_MODE_PREPARED && after !== SHEET_MODE_PREPARED;
+      if ((adds + (proposedAdd ? 1 : 0)) > 1) {
+        return { allowed: false, reason: "Known casters can only add 1 known spell per long rest." };
+      }
+      if ((removes + (proposedRemove ? 1 : 0)) > 1) {
+        return { allowed: false, reason: "Known casters can only remove 1 known spell per long rest." };
+      }
+    }
+
+    return { allowed: true };
+  }
+
+  // -----------------------------------------------------------------------
   // Class bundle fetch — authoritative source for `class.spellcasting.type`
   // -----------------------------------------------------------------------
 
@@ -1859,6 +1975,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       // sees their click took effect; the actual mutation happens
       // when the player chooses "Save" on the long-rest dialog.
       if (this._isEmbedded) {
+        // Pre-check caster-type caps + swap limits. Rejects throw
+        // a notify toast and the queue is left untouched.
+        const summary = this._classPools.get(classModel?.identifier)?.spells
+          ?.find?.((s) => String(s.flags?.["dauligor-pairing"]?.dbId ?? "") === String(dbId))
+          ?? null;
+        const gate = this._canQueueTransition(dbId, beforeMode, mode, classModel, summary);
+        if (!gate.allowed) {
+          notifyWarn(gate.reason);
+          return;
+        }
         await queueSpellChange(this._actor, {
           spellDbId: dbId,
           spellId: owned.id,
@@ -1965,6 +2091,17 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // Store the full itemData so the commit path can hand it to
     // createEmbeddedDocuments without re-fetching the API.
     if (this._isEmbedded) {
+      // Pre-check caps + swap limits before queueing the create.
+      // For "create" entries, `before === null` (not on actor yet),
+      // `after === mode` (target sheetMode).
+      const poolEntry = this._classPools.get(classModel?.identifier);
+      const summary = poolEntry?.spells?.find?.((s) =>
+        String(s.flags?.["dauligor-pairing"]?.dbId ?? "") === String(dbId)) ?? null;
+      const gate = this._canQueueTransition(dbId, null, mode, classModel, summary);
+      if (!gate.allowed) {
+        notifyWarn(gate.reason);
+        return;
+      }
       await queueSpellChange(this._actor, {
         spellDbId: dbId,
         spellId: null,
@@ -2093,6 +2230,16 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // shows the row as "queued remove" so the user sees the click
     // registered.
     if (this._isEmbedded && dauligorDbId) {
+      // Pre-check the known-caster swap limit. Removing a known
+      // spell counts as a "remove" toward the 1-swap-per-rest cap.
+      const poolEntry = this._classPools.get(classModel?.identifier);
+      const summary = poolEntry?.spells?.find?.((s) =>
+        String(s.flags?.["dauligor-pairing"]?.dbId ?? "") === String(dauligorDbId)) ?? null;
+      const gate = this._canQueueTransition(dauligorDbId, beforeMode, null, classModel, summary);
+      if (!gate.allowed) {
+        notifyWarn(gate.reason);
+        return;
+      }
       await queueSpellChange(this._actor, {
         spellDbId: dauligorDbId,
         spellId: owned.id,
@@ -3187,25 +3334,30 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         ${renderBtn(prepBtn)}
       `;
 
-    // Footer note:
-    //   - Standalone sheet mode: remind the user that changes here
-    //     apply immediately and bypass the long-rest queue.
-    //   - FM-embedded mode: explain that changes queue for the next
-    //     long rest (so the user understands why row indicators
-    //     show a "pending" outline instead of the actor's actual
-    //     state changing). The importer-mode branch above renders
-    //     its own footer; this code doesn't apply there.
+    // Footer composition is mode-aware:
+    //   - Standalone sheet mode: shows the "use FM instead" reminder
+    //     note + action buttons + Close (closes the window).
+    //   - FM-embedded mode: shows the action buttons only. No Close
+    //     (the FM window's own close handles that — the prep app's
+    //     Close would only destroy the embed, leaving an empty body
+    //     inside the FM, which confused the user). No queue
+    //     reminder note either (the FM header already explains the
+    //     queue semantics).
+    //   - Importer mode is handled by an earlier branch and never
+    //     reaches this code path.
     const noteHtml = this._isEmbedded
-      ? `<div class="dauligor-spell-manager__footer-note">Changes queue for the next long rest. Click <em>Save changes</em> on the rest dialog to apply.</div>`
+      ? ""
       : `<div class="dauligor-spell-manager__footer-note">Add spells from here only if you forgot. Use the Feature Manager instead.</div>`;
+
+    const closeBtnHtml = this._isEmbedded
+      ? ""
+      : `<button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>`;
 
     this._footerRegion.innerHTML = `
       ${noteHtml}
       <div class="dauligor-spell-manager__footer-row">
         <div class="dauligor-spell-manager__footer-left">${buttons}</div>
-        <div class="dauligor-spell-manager__footer-right">
-          <button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>
-        </div>
+        <div class="dauligor-spell-manager__footer-right">${closeBtnHtml}</div>
       </div>
     `;
 
