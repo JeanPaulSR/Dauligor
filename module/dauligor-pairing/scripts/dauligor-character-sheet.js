@@ -1337,6 +1337,18 @@ function buildDauligorCharacterSheetClass() {
         return bucket;
       };
 
+      // Pre-create buckets for every spellcasting class on the actor.
+      // This guarantees the class section ALWAYS renders, even when
+      // the actor has zero spells attributed to it yet. Without this,
+      // a freshly-imported Bard with no spells would have no Bard
+      // section at all — and the user couldn't drag a spell onto it,
+      // right-click → Add Folder, or even see that Bard exists in the
+      // Spells tab. Empty class sections still emit their stat columns
+      // (Attack / DC / Prepared) and the Prepare book button.
+      for (const identifier of Object.keys(spellcastingClasses)) {
+        ensureBucket(identifier);
+      }
+
       // Pre-create buckets for every custom section so empty ones
       // still survive the filter below.
       for (const cs of customSections) {
@@ -1488,14 +1500,17 @@ function buildDauligorCharacterSheetClass() {
         const isOther = id === "__other__";
 
         // Determine if there's any content (folders + level entries).
-        // We treat the bucket as renderable when:
-        //   - It's a custom section (always render, even empty), OR
-        //   - It's a custom-section with declared folders (render even
-        //     if zero level entries), OR
-        //   - It has at least one entry (level or folder).
+        //   - Custom sections: always render (even empty — the user can
+        //     drag spells in later).
+        //   - Class sections: always render (so a freshly-imported class
+        //     with zero spells still shows up; the user shouldn't have
+        //     to add a spell before they can SEE the class).
+        //   - "__other__": only render when it has at least one entry.
+        //     The orphan bucket is meant for spells without class
+        //     attribution; empty is the happy path so we hide it.
         const hasFolders = (customFolders[id]?.length ?? 0) > 0;
         const hasAnyEntries = bucket.entries.size > 0;
-        if (!isCustom && !hasAnyEntries) continue;
+        if (isOther && !hasAnyEntries) continue;
 
         // Sort entries: folders first (in customFolders order), then
         // level entries (ascending). Folder collapse-state keys are
