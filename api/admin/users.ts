@@ -1,4 +1,4 @@
-// /api/admin/users — admin/staff user listing + password recovery actions.
+// /api/admin/users — admin user CRUD + password recovery actions.
 //
 // Catch-all dispatcher with one file at the resource root, mirroring the
 // pattern from api/me.ts / api/lore.ts / api/campaigns.ts. The
@@ -6,46 +6,45 @@
 // every sub-path here; the handler parses the original URL out of
 // req.url. Single function — preserves the 11/12 Hobby plan budget.
 //
-// Closes M2 from the audit: previously AdminUsers, AdminCampaigns, and
-// CampaignEditor all ran `fetchCollection('users')` against the generic
-// proxy, which returns the full row (including recovery_email) to any
-// staff caller. The proxy was staff-gated, so the leak was
-// staff-within-staff: lore-writer (allowed to read users today via the
-// relaxed read gate) sees every player's recovery_email, etc. Now the
-// list endpoint column-scopes by viewer role.
+// Closes M2 + the H6 staff-side bypass: the AdminUsers / AdminCampaigns
+// / CampaignEditor pages used to call `fetchCollection('users')` and
+// `upsertDocument('users', …)` against the generic proxy, which let
+// any staff (including lore-writer) read every recovery_email and
+// promote themselves to admin via direct devtools writes. The proxy
+// gate now refuses raw `users` reads and writes (`PROTECTED_READ_TABLES`
+// + `PROTECTED_WRITE_TABLES`), forcing every caller through this file.
 //
 // Routes:
 //
-//   GET   /api/admin/users
-//     Staff-gated user list. Column visibility depends on viewer role:
-//       - Admin: full row including recovery_email and active_campaign_id.
-//       - Other staff (co-dm / lore-writer): minimal identity only —
-//         id, username, display_name, role, avatar_url, hide_username,
-//         is_private. No recovery_email, no bio, no theme/accent_color.
-//     Every row is enriched with `campaign_ids: string[]` via a JOIN on
-//     campaign_members. Closes the second H7-leak path where AdminUsers
-//     also called `fetchCollection('campaignMembers')` (full enumeration
-//     of every membership row) to compute the same per-user list
-//     client-side.
+//   GET    /api/admin/users
+//     Staff list (isWikiStaff). Column visibility depends on viewer
+//     role: admin gets the full row including recovery_email, other
+//     staff get the basic identity column set. Each row enriched with
+//     `campaign_ids: string[]` via a JOIN on campaign_members (closes
+//     the second H7-leak path).
 //
-//   POST  /api/admin/users/<uid>/temporary-password
-//     Destructive — overwrites the target's Firebase Auth password with
-//     a random 14-char value and returns it once. Admin only.
+//   POST   /api/admin/users
+//     Create (requireAdminAccess). Provisions the Firebase Auth user
+//     and inserts the D1 row in one go. Server picks a uuid if `id`
+//     is omitted.
 //
-//   POST  /api/admin/users/<uid>/sign-in-token
-//     Non-destructive — mints a 1-hour Firebase custom token. Admin
-//     shares a /auth/redeem?token=... URL; SPA exchanges via
-//     signInWithCustomToken. Admin only.
+//   PATCH  /api/admin/users/<uid>
+//     Update (requireAdminAccess). Allow-listed columns. Username
+//     changes push through adminAuth.updateUser so the auth email
+//     (`<username>@archive.internal`) stays in sync. `campaign_ids`
+//     in the body triggers a server-side reconciliation against
+//     campaign_members (diff and INSERT/DELETE the delta).
 //
-// Out of scope (still on /api/d1/query — audit follow-up):
-//   - POST /api/admin/users — create user (admin-only, but client still
-//     uses the secondary-app + upsertDocument pattern).
-//   - PATCH /api/admin/users/<uid> — role changes. Currently the client
-//     calls upsertDocument('users', uid, {…role}), which the proxy
-//     admits for any staff role. A co-dm / lore-writer can in principle
-//     promote themselves to admin via direct devtools writes. Tracked
-//     as the H6 staff-side follow-up.
-//   - DELETE /api/admin/users/<uid> — delete user. Same shape.
+//   DELETE /api/admin/users/<uid>
+//     Delete (requireAdminAccess). Removes both the Firebase Auth
+//     record and the D1 row. FK cascade clears campaign_members.
+//
+//   POST   /api/admin/users/<uid>/temporary-password
+//     Destructive — overwrites the target's Firebase Auth password
+//     with a random 14-char value and returns it once.
+//
+//   POST   /api/admin/users/<uid>/sign-in-token
+//     Non-destructive — mints a 1-hour Firebase custom token.
 
 import type { IncomingMessage } from "node:http";
 import {

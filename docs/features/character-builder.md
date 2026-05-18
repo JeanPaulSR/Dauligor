@@ -128,7 +128,7 @@ On save:
 4. Mirror per-package `advancementSelections` into a flat top-level `selectedOptions` map (compatibility).
 5. Derive `proficiencyBonus` from total character level.
 6. Derive `derivedHpMax` from class HP advancements; only persist `hp.max` if there's an explicit override.
-7. Batch write: `characters` row + `character_progression` rows + `character_selections` rows + `character_inventory` rows + `character_spells` rows + `character_proficiencies` rows. One round-trip via `batchQueryD1`.
+7. Build the full character payload and `PUT /api/characters/[id]`. The per-route handler runs `generateCharacterSaveQueries` server-side, executing the multi-table batch (`characters` row + `character_progression` rows + `character_selections` rows + `character_inventory` rows + `character_spells` rows + `character_proficiencies` rows + `character_spell_list_extensions` rows + `character_spell_loadouts` rows) via `executeD1QueryInternal`. PUT handles both create and update; ownership + DM access is enforced server-side. This is the only path a regular player can save through — the proxy gate refuses raw `SELECT FROM character_*` (closes H4), and raw writes still require the staff gate at the proxy, so non-staff users have no devtools alternative. See [api-endpoints.md §/api/characters](../platform/api-endpoints.md).
 
 ## Foundry export
 

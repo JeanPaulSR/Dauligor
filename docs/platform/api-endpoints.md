@@ -89,10 +89,21 @@ The proxy refuses direct writes to `campaigns` and `campaign_members` (`CAMPAIGN
 | Method | Path | Gate | File |
 |---|---|---|---|
 | GET | `/api/admin/characters` | `requireAuthenticatedUser` + `isCharacterDM(role)` | [api/admin/characters.ts](../../api/admin/characters.ts) — list-view columns only (no JSON blobs). |
-| POST | `/api/admin/users/[id]/temporary-password` | `requireAdminAccess` | [api/admin/users/[id]/[action].ts](../../api/admin/users/[id]/[action].ts) — destructive password reset. |
-| POST | `/api/admin/users/[id]/sign-in-token` | `requireAdminAccess` | Same file — non-destructive 1-hour Firebase custom token. |
 
-`/api/admin/users` (list + admin-only role changes + delete) doesn't exist yet — that's the next audit batch (M2 closure). It'll fold into the same `api/admin/users/[id]/[action].ts` file or a sibling at `api/admin/users.ts` depending on Vercel routing constraints.
+### /api/admin/users (dispatcher)
+
+[api/admin/users.ts](../../api/admin/users.ts) — catch-all dispatcher at the resource root, mirroring `api/me.ts` / `api/lore.ts` / `api/campaigns.ts`. `vercel.json` rewrite `/api/admin/users/(.*) → /api/admin/users` routes every sub-path; the handler parses `req.url`. Single function — preserves the 11/12 Hobby plan budget.
+
+| Method | Path | Gate | Returns |
+|---|---|---|---|
+| GET | `/api/admin/users` | `isWikiStaff` (admin / co-dm / lore-writer) | `{ users }`. Column visibility depends on viewer role: admin sees full row (including `recovery_email`, `active_campaign_id`, `bio`, `theme`, `accent_color`); co-dm and lore-writer see only the basic identity columns (`id`, `username`, `display_name`, `role`, `avatar_url`, `hide_username`, `is_private`, `created_at`). Each row enriched with `campaign_ids: string[]` via a JOIN on `campaign_members` — closes the second-leak path where the old AdminUsers also called `fetchCollection('campaignMembers')`. Closes M2. |
+| POST | `/api/admin/users` | `requireAdminAccess` | `{ user }`. Creates the user via Firebase Admin SDK (`adminAuth.createUser`) and inserts the D1 row. Body: `{ username, display_name, role, recovery_email?, … }`. Server picks a uuid if `id` is omitted. |
+| PATCH | `/api/admin/users/[id]` | `requireAdminAccess` | `{ user }`. Allow-listed columns including `role`, `username`, `display_name`, `recovery_email`, plus a `campaign_ids: string[]` field that the server reconciles by diffing against current `campaign_members` and INSERT/DELETEing the delta. Username changes also push through `adminAuth.updateUser` so the auth email (`<username>@archive.internal`) stays in sync. |
+| DELETE | `/api/admin/users/[id]` | `requireAdminAccess` | `{ ok, id }`. Deletes the Firebase Auth record and the D1 row. FK cascade clears `campaign_members`; other tables that reference users (`characters.user_id`, `lore_articles.author_id`) are left as orphaned rows / nulls. |
+| POST | `/api/admin/users/[id]/temporary-password` | `requireAdminAccess` | Destructive — overwrites the target's Firebase Auth password with a random 14-char value and returns it once. |
+| POST | `/api/admin/users/[id]/sign-in-token` | `requireAdminAccess` | Non-destructive — mints a 1-hour Firebase custom token. Admin shares a `/auth/redeem?token=...` URL; the SPA exchanges via `signInWithCustomToken`. |
+
+The proxy refuses raw SELECT against `users` (`PROTECTED_READ_TABLES`) and raw mutations against `users` (`PROTECTED_WRITE_TABLES`, admin-gated when admitted) — every legitimate path flows through one of the routes above or `GET/PATCH /api/me` for own-row access.
 
 ## /api/d1/query (generic proxy + table-aware gate)
 

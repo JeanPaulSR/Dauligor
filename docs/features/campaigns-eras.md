@@ -85,7 +85,7 @@ For DMs and co-DMs of an active campaign:
 
 Admin-only. Lists all campaigns + all eras. Inline create / edit / delete. Same panel hosts era management.
 
-This page also writes to `config/wiki_settings` (a Firestore document during migration) — flagged in [../database/README.md](../database/README.md) for designation of a D1 home.
+This page also writes the `wiki_settings` singleton (currently just the wiki default-background-image URL) via `PUT /api/lore/system-metadata/wiki-settings` — admin-only. The blob lives in `system_metadata.wiki_settings`; the generic proxy refuses any other write to `system_metadata`, so this endpoint is the only path. See [../platform/security-gates.md](../platform/security-gates.md).
 
 ## Common tasks
 

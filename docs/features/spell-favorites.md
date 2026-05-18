@@ -177,7 +177,7 @@ Lives in the favourites pane header on `/compendium/spells`. Two-section popover
 
 When the user has no characters, the popover still opens and shows "You have no saved characters." under the Universal option, so the affordance stays discoverable.
 
-Characters list is fetched on mount via `SELECT id, name FROM characters WHERE user_id = ? ORDER BY updated_at DESC`. Load failures fall back to an empty list (the dropdown still renders with just the Universal option).
+Characters list is fetched on mount via `GET /api/me/characters?fields=id,name`. The per-route endpoint pulls the caller's own characters by uid from the verified token and supports an allow-listed `?fields=` query param so the wire only carries `id` + `name` (the dropdown doesn't need anything else). Load failures fall back to an empty list (the dropdown still renders with just the Universal option). The legacy raw `SELECT id, name FROM characters WHERE user_id = ?` path is blocked by the proxy's `PROTECTED_READ_TABLES` gate — even with a correct `WHERE user_id = ?` filter, direct character reads must go through this endpoint or `GET /api/characters/[id]`.
 
 ## Related docs
 

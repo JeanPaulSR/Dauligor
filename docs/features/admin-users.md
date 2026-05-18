@@ -12,14 +12,14 @@ Admin-only user management. The only way to create accounts (registration is dis
 
 | Action | Server endpoint | Notes |
 |---|---|---|
-| Create user | Client-side `createUserWithEmailAndPassword` + write to D1 `users` | Username + display name + initial role. Write currently goes through `/api/d1/query` (staff-gated); the audit's priority #7 will move it into a dedicated `/api/admin/users` endpoint. |
-| Edit user | Same client write path | No role-change UI exposed for self-edits |
-| Promote / demote | Same client write path | Admin only |
+| List users | `GET /api/admin/users` | Column-scoped by viewer role: admin sees `recovery_email` and the full row; co-dm / lore-writer see the basic identity columns only. Each row pre-joined with `campaign_ids: string[]` from `campaign_members`. |
+| Create user | `POST /api/admin/users` | Admin only. Server provisions the Firebase Auth record via `adminAuth.createUser` and inserts the D1 row atomically. Body: `{ username, display_name, role, recovery_email? }`. |
+| Edit user / promote / demote | `PATCH /api/admin/users/[id]` | Admin only. Allow-listed columns including `role` and a `campaign_ids: string[]` field the server reconciles by diffing against current `campaign_members`. Username changes push through `adminAuth.updateUser` to keep the auth email in sync. |
+| Delete user | `DELETE /api/admin/users/[id]` | Admin only. Removes both the Firebase Auth record and the D1 row. FK cascade clears `campaign_members`; `characters.user_id` rows are left as orphans (separate cleanup). |
 | Generate temporary password | `POST /api/admin/users/[id]/temporary-password` | **Destructive** — overwrites the target's Firebase Auth password with a random 14-char value and returns it once. The user's previous password no longer works. |
 | Generate sign-in link | `POST /api/admin/users/[id]/sign-in-token` | **Non-destructive** — mints a 1-hour Firebase custom token. Admin shares a `https://<origin>/auth/redeem?token=…` URL; the SPA exchanges it via `signInWithCustomToken` and the user's existing password keeps working. |
-| Delete user | Client-side delete on Firebase Auth + D1 `users` | Cascades aren't automatic on delete; cleanup of `characters`, `campaign_members`, etc. requires a sweep. |
 
-Both recovery endpoints live in a single dispatcher at [api/admin/users/[id]/[action].ts](../../api/admin/users/[id]/[action].ts) (consolidated from two separate functions to stay under the Vercel Hobby plan's 12-function deployment cap).
+All of these live in a single catch-all dispatcher at [api/admin/users.ts](../../api/admin/users.ts) (vercel.json rewrite `/api/admin/users/(.*) → /api/admin/users`; the handler parses `req.url` for the original sub-path). The proxy refuses raw `SELECT … FROM users` and raw mutations against `users`, so every legitimate read/write flows through this dispatcher (own-row access goes through `/api/me` instead).
 
 ## RBAC
 
