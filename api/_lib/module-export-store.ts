@@ -88,15 +88,15 @@ export function classBundleKey(sourceSlug: string, classIdentifier: string) {
  *
  * `process.env.PUBLIC_SITE_URL` is the origin the Vercel function
  * should warm against (e.g. `https://www.dauligor.com`). Falls back to
- * `https://${VERCEL_URL}` (Vercel's per-deployment hostname) when
- * unset — that path works in preview deployments too. If neither is
- * available the helper exits silently.
+ * the Pages-injected `CF_PAGES_URL` for the per-deployment hostname
+ * (that path works in branch previews too). If neither is available
+ * the helper exits silently.
  */
 function getPublicSiteUrl(): string | null {
   const explicit = (process.env.PUBLIC_SITE_URL || "").trim().replace(/\/+$/, "");
   if (explicit) return explicit;
-  const vercel = (process.env.VERCEL_URL || "").trim();
-  if (vercel) return `https://${vercel.replace(/\/+$/, "")}`;
+  const pages = (process.env.CF_PAGES_URL || "").trim();
+  if (pages) return pages.replace(/\/+$/, "");
   return null;
 }
 
