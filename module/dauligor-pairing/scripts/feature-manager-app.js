@@ -515,26 +515,63 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
   }
 
   /**
-   * Features tab — 2-column option-picker layout.
+   * Resolve an option group's subclass name (if any) so Column 1
+   * can section groups by class AND subclass. Walks the chain:
+   *   option-item.featureSourceId → feature item on actor
+   *     → if sourceType === "subclassFeature":
+   *         feature.parentSourceId → subclass item on actor → .name
+   *     → otherwise: null (class-level group)
    *
-   *   ┌──────────────────────────┬──────────────────────────────┐
-   *   │ ELDRITCH INVOCATIONS [B] │  Agonizing Blast             │
-   *   │   ● Agonizing Blast      │                              │
-   *   │   ○ Devil's Sight        │  ‹description›               │
-   *   │ METAMAGIC OPTION [Sor]   │                              │
-   *   │   ● Quicken Spell        │  [Re-select via Advancement]  │
-   *   └──────────────────────────┴──────────────────────────────┘
+   * Class-level option groups (Eldritch Invocations on Warlock,
+   * Metamagic on Sorcerer) return null. Subclass-level groups
+   * (Battle Master Maneuvers, etc.) return the subclass's display
+   * name so the section header reads "FIGHTER · Battle Master".
    *
-   * Left column lists every option group on the actor with its
-   * picks underneath the group header. Click a pick to focus it;
-   * the right pane shows its description. The Re-select button
-   * opens dnd5e's `AdvancementManager.forModifyChoices` for the
-   * level at which the option-group's ItemChoice advancement
-   * resolves (so the player can re-pick the option).
+   * Returns null on any resolution miss — the row falls through to
+   * the class-level section, which is the right fallback.
+   */
+  _resolveOptionGroupSubclassName(group) {
+    if (!group?.items?.length) return null;
+    const featureSourceId = group.items[0]?.featureSourceId;
+    if (!featureSourceId) return null;
+    const featureItem = this._actor.items.find((it) =>
+      it.type === "feat"
+      && it.getFlag?.(MODULE_ID, "sourceId") === featureSourceId
+    );
+    if (!featureItem) return null;
+    const featureSourceType = featureItem.getFlag?.(MODULE_ID, "sourceType");
+    if (featureSourceType !== "subclassFeature") return null;
+    const parentSourceId = featureItem.getFlag?.(MODULE_ID, "parentSourceId");
+    if (!parentSourceId) return null;
+    const subclassItem = this._actor.items.find((it) =>
+      it.type === "subclass"
+      && it.getFlag?.(MODULE_ID, "sourceId") === parentSourceId
+    );
+    return subclassItem?.name ?? null;
+  }
+
+  /**
+   * Features tab — 3-col layout matching the subclass preview +
+   * import-time option-picker. The previous 2-col stack stuffed
+   * the option-group headers and their picks into one narrow left
+   * column, which clipped feature names. This layout reuses the
+   * same column proportions as `.dauligor-subclass-preview`:
    *
-   * Replaces the prior Phase-1 "Queue Change" stub — clicking the
-   * Re-select button actually opens the dnd5e advancement window
-   * instead of just adding a queue placeholder.
+   *   ┌────────────┬────────────────┬─────────────────────────┐
+   *   │ GROUPS     │ PICKS          │ DETAIL                  │
+   *   │            │                │                         │
+   *   │ Eldritch   │ Agonizing      │ Agonizing Blast          │
+   *   │   Invoc.   │   Blast         │                         │
+   *   │ Metamagic  │ Devil's Sight  │ When you cast Eldritch  │
+   *   │            │ Hellish        │ Blast, add your         │
+   *   │            │   Rebuke        │ Charisma modifier...    │
+   *   │            │                │                         │
+   *   │            │                │ [Swap this pick]        │
+   *   └────────────┴────────────────┴─────────────────────────┘
+   *
+   * Each column reuses the importer's `.dauligor-subclass-preview__col`
+   * chrome (rounded panel, scroll-y) so the FM tab reads as part of
+   * the same family of windows.
    */
   _renderFeaturesTab() {
     const inventory = buildOptionGroupInventory(this._actor);
@@ -550,56 +587,148 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       return;
     }
 
-    // Restore focus from prior render if the focused item is still
-    // valid; otherwise pick the first item in the first group.
-    const allItems = inventory.flatMap((g) => g.items);
-    const currentFocus = this._state.focusedOptionItemId;
-    const focusedItem = (currentFocus && allItems.find((it) => it.itemId === currentFocus))
-      ?? allItems[0]
+    // Restore focus across renders. Fall back gracefully:
+    //   focusedGroupSourceId → first group
+    //   focusedOptionItemId  → first item in the focused group
+    const focusedGroup = (this._state.focusedOptionGroupId
+      && inventory.find((g) => g.groupSourceId === this._state.focusedOptionGroupId))
+      ?? inventory[0];
+    this._state.focusedOptionGroupId = focusedGroup?.groupSourceId ?? null;
+
+    const focusedItem = (this._state.focusedOptionItemId
+      && focusedGroup?.items.find((it) => it.itemId === this._state.focusedOptionItemId))
+      ?? focusedGroup?.items?.[0]
       ?? null;
     this._state.focusedOptionItemId = focusedItem?.itemId ?? null;
 
-    const focusedGroup = inventory.find((g) => g.items.some((it) => it.itemId === focusedItem?.itemId)) ?? null;
+    // ─── Col 1: groups, sectioned by class + subclass ──────────────
+    // Build sections keyed by (className, subclassName). Each
+    // section renders as a sticky header (e.g. "WARLOCK" or
+    // "FIGHTER · Battle Master") with the section's option groups
+    // listed underneath. Class-level groups appear first within
+    // each class; subclass-level groups follow alphabetically by
+    // subclass name.
+    //
+    // Subclass attribution walks: option-item.featureSourceId →
+    // feature on actor → if featureSourceType === "subclassFeature"
+    // → feature.parentSourceId → subclass item on actor → its name.
+    // Falls through to "class-level" if any step misses.
+    const sectionsMap = new Map();
+    for (const group of inventory) {
+      const className = group.className || "Other";
+      const subclassName = this._resolveOptionGroupSubclassName(group);
+      const key = `${className}|||${subclassName ?? ""}`;
+      if (!sectionsMap.has(key)) {
+        sectionsMap.set(key, { className, subclassName, groups: [] });
+      }
+      sectionsMap.get(key).groups.push(group);
+    }
+    const sections = [...sectionsMap.values()].sort((a, b) => {
+      // Class first, then class-level groups (null subclass) before
+      // subclass-level, then subclass alphabetical.
+      const cmp = a.className.localeCompare(b.className);
+      if (cmp !== 0) return cmp;
+      if (a.subclassName == null && b.subclassName != null) return -1;
+      if (a.subclassName != null && b.subclassName == null) return 1;
+      return String(a.subclassName ?? "").localeCompare(String(b.subclassName ?? ""));
+    });
 
-    // Left column — every option group with its picks underneath
-    // the group header. Picks render as the same `.dauligor-option-picker__row`
-    // pattern the importer's subclass preview uses (checkbox + img +
-    // name + badge) so the visual treatment matches.
-    const groupsHtml = inventory.map((group) => this._renderOptionGroupColumn(group, focusedItem?.itemId ?? null)).join("");
+    const renderGroupRow = (group) => {
+      const isFocused = group.groupSourceId === focusedGroup?.groupSourceId;
+      return `
+        <div class="dauligor-option-picker__row dauligor-subclass-preview__row--no-check ${isFocused ? "dauligor-option-picker__row--focused" : ""}"
+             data-action="focus-option-group"
+             data-group-source-id="${escapeHtml(group.groupSourceId)}">
+          <div class="dauligor-feature-manager__group-row-glyph"><i class="fas fa-star"></i></div>
+          <div class="dauligor-option-picker__row-text">
+            <div class="dauligor-option-picker__row-name">${escapeHtml(group.groupLabel)}</div>
+          </div>
+        </div>
+      `;
+    };
 
-    // Right column — focused pick's description + Re-select.
+    const groupsHtml = sections.map((section) => {
+      const headerLabel = section.subclassName
+        ? `${section.className} · ${section.subclassName}`
+        : section.className;
+      const sortedGroups = [...section.groups]
+        .sort((a, b) => a.groupLabel.localeCompare(b.groupLabel));
+      return `
+        <header class="dauligor-subclass-preview__level-header">
+          <span>${escapeHtml(headerLabel)}</span>
+          <span class="dauligor-subclass-preview__level-count">${section.groups.length}</span>
+        </header>
+        ${sortedGroups.map(renderGroupRow).join("")}
+      `;
+    }).join("");
+
+    // ─── Col 2: picks for the focused group ────────────────────────
+    // Reuses the `--feature` row variant (single text column, no
+    // checkbox / image) so long pick names get the full column width.
+    const picksHtml = focusedGroup?.items.map((item) => {
+      const isFocused = item.itemId === focusedItem?.itemId;
+      return `
+        <div class="dauligor-option-picker__row dauligor-subclass-preview__row--feature ${isFocused ? "dauligor-option-picker__row--focused" : ""}"
+             data-action="focus-option-item"
+             data-item-id="${escapeHtml(item.itemId)}">
+          <div class="dauligor-option-picker__row-text">
+            <div class="dauligor-option-picker__row-name">${escapeHtml(item.name)}</div>
+          </div>
+        </div>
+      `;
+    }).join("") ?? "";
+
+    // ─── Col 3: focused pick's detail ──────────────────────────────
     const detailHtml = focusedItem
       ? this._renderOptionPickDetail(focusedItem, focusedGroup)
-      : `<div class="dauligor-feature-manager__option-detail-empty">Select a pick on the left to see its description.</div>`;
+      : `<div class="dauligor-subclass-preview__detail-empty">Select a pick on the left to see its description.</div>`;
 
     this._bodyRegion.innerHTML = `
-      <div class="dauligor-feature-manager__option-picker">
-        <aside class="dauligor-feature-manager__option-picker-col dauligor-feature-manager__option-picker-col--list">
+      <div class="dauligor-feature-manager__option-three-col">
+        <aside class="dauligor-subclass-preview__col dauligor-feature-manager__option-col--groups">
           ${groupsHtml}
         </aside>
-        <section class="dauligor-feature-manager__option-picker-col dauligor-feature-manager__option-picker-col--detail">
+        <section class="dauligor-subclass-preview__col dauligor-feature-manager__option-col--picks">
+          <header class="dauligor-subclass-preview__level-header">
+            <span>${escapeHtml(focusedGroup?.groupLabel ?? "Picks")}</span>
+            <span class="dauligor-subclass-preview__level-count">${focusedGroup?.items.length ?? 0}</span>
+          </header>
+          ${picksHtml || `<div class="dauligor-subclass-preview__detail-empty">No picks for this group yet.</div>`}
+        </section>
+        <section class="dauligor-subclass-preview__col dauligor-subclass-preview__col--detail dauligor-feature-manager__option-col--detail">
           ${detailHtml}
         </section>
       </div>
     `;
 
-    // Wire row focus
+    // Wire group-focus (col 1)
+    for (const row of this._bodyRegion.querySelectorAll(`[data-action="focus-option-group"]`)) {
+      row.addEventListener("click", (event) => {
+        event.preventDefault();
+        const gid = row.dataset.groupSourceId;
+        if (!gid || gid === this._state.focusedOptionGroupId) return;
+        this._state.focusedOptionGroupId = gid;
+        // Reset item focus to the first item of the newly-focused
+        // group so the right pane shows something matching.
+        this._state.focusedOptionItemId = null;
+        this._renderFeaturesTab();
+      });
+    }
+
+    // Wire pick-focus (col 2)
     for (const row of this._bodyRegion.querySelectorAll(`[data-action="focus-option-item"]`)) {
       row.addEventListener("click", (event) => {
         event.preventDefault();
         const id = row.dataset.itemId;
         if (!id || id === this._state.focusedOptionItemId) return;
         this._state.focusedOptionItemId = id;
-        // Re-render features tab only (no full FM re-render — avoids
-        // tearing down other tabs' embedded mounts).
         this._renderFeaturesTab();
       });
     }
 
-    // Wire Re-select button — opens our in-module option picker
-    // (DauligorSequencePromptApp + a 2-pane body) rather than
-    // dnd5e's AdvancementManager. The focused pick's item id is
-    // forwarded so the picker knows which option to replace.
+    // Wire "Swap this pick" — opens the in-module option picker
+    // (runOptionGroupStep) for the focused group. The button is
+    // rendered inside the detail pane via `_renderOptionPickDetail`.
     for (const button of this._bodyRegion.querySelectorAll(`[data-action="reselect-option"]`)) {
       button.addEventListener("click", async (event) => {
         event.preventDefault();
@@ -613,65 +742,31 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
   }
 
   /**
-   * Left-column block for a single option group: header (group
-   * label + class badge) + list of pick rows underneath. The
-   * focused row gets the `--focused` modifier so the row chrome
-   * matches the importer's subclass preview / option picker.
-   */
-  _renderOptionGroupColumn(group, focusedItemId) {
-    const classBadge = group.className
-      ? `<span class="dauligor-feature-manager__option-group-class">${escapeHtml(group.className)}</span>`
-      : "";
-
-    const rowsHtml = group.items.map((item) => {
-      const isFocused = item.itemId === focusedItemId;
-      return `
-        <div class="dauligor-option-picker__row dauligor-feature-manager__option-row ${isFocused ? "dauligor-option-picker__row--focused" : ""}"
-             data-action="focus-option-item"
-             data-item-id="${escapeHtml(item.itemId)}">
-          <img class="dauligor-option-picker__row-img" src="${escapeHtml(item.img)}" alt="" loading="lazy">
-          <div class="dauligor-option-picker__row-text">
-            <div class="dauligor-option-picker__row-name">${escapeHtml(item.name)}</div>
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    return `
-      <section class="dauligor-feature-manager__option-group">
-        <header class="dauligor-feature-manager__option-group-header">
-          <span class="dauligor-feature-manager__option-group-title">${escapeHtml(group.groupLabel)}</span>
-          ${classBadge}
-          <span class="dauligor-feature-manager__option-group-count">${group.items.length}</span>
-        </header>
-        <div class="dauligor-feature-manager__option-group-rows">
-          ${rowsHtml}
-        </div>
-      </section>
-    `;
-  }
-
-  /**
-   * Right-column detail for the focused option pick. Shows the
-   * pick's description + a "Re-select" button that opens dnd5e's
-   * AdvancementManager.forModifyChoices for the level at which
-   * the option-group's ItemChoice advancement resolves.
+   * Right-column detail for the focused option pick. Mirrors the
+   * subclass preview's `.dauligor-subclass-preview__detail` recipe
+   * (large title + meta line + labeled DESCRIPTION section) so the
+   * FM and the importer share the same detail-pane vocabulary.
+   * Adds a "Swap this pick" button at the bottom that opens the
+   * canonical option-picker for the group.
    */
   _renderOptionPickDetail(item, group) {
     const groupLabel = group?.groupLabel ?? "Class Option";
     const className = group?.className ?? "";
     return `
-      <div class="dauligor-feature-manager__option-detail">
-        <header class="dauligor-feature-manager__option-detail-header">
-          <div class="dauligor-feature-manager__option-detail-eyebrow">
-            ${escapeHtml(groupLabel)}${className ? ` · <em>${escapeHtml(className)}</em>` : ""}
+      <div class="dauligor-subclass-preview__detail dauligor-feature-manager__option-detail">
+        <header class="dauligor-subclass-preview__detail-header">
+          <h2 class="dauligor-subclass-preview__detail-name">${escapeHtml(item.name)}</h2>
+          <div class="dauligor-subclass-preview__detail-meta">
+            ${escapeHtml(groupLabel)}${className ? ` · ${escapeHtml(className)}` : ""}
           </div>
-          <h2 class="dauligor-feature-manager__option-detail-title">${escapeHtml(item.name)}</h2>
         </header>
-        <div class="dauligor-feature-manager__option-detail-body">
-          ${item.description || `<p class="dauligor-feature-manager__option-detail-empty-body">No description authored for this option.</p>`}
+        <div class="dauligor-subclass-preview__detail-section">
+          <div class="dauligor-subclass-preview__detail-section-title">Description</div>
+          <div class="dauligor-subclass-preview__detail-body">
+            ${item.description || `<p><em>No description authored for this option.</em></p>`}
+          </div>
         </div>
-        <footer class="dauligor-feature-manager__option-detail-footer">
+        <div class="dauligor-feature-manager__option-detail-actions">
           <button type="button"
                   class="dauligor-feature-manager__option-reselect"
                   data-action="reselect-option"
@@ -682,7 +777,7 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
             <i class="fas fa-arrow-right-arrow-left"></i>
             Swap this pick
           </button>
-        </footer>
+        </div>
       </div>
     `;
   }
