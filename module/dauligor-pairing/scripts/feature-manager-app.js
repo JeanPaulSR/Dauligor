@@ -55,7 +55,11 @@
 import { FEATURE_MANAGER_TEMPLATE, MODULE_ID } from "./constants.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { DauligorSpellPreparationApp } from "./spell-preparation-app.js";
-import { fetchJson } from "./class-import-service.js";
+import {
+  buildActorOptionItemFromPayload,
+  fetchJson,
+  getSemanticOptionsForGroup
+} from "./class-import-service.js";
 import { DauligorSequencePromptApp } from "./importer-app.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
@@ -743,8 +747,14 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     }
 
     // Step 3 — find the option group + its items in the bundle.
-    const groupOptions = (bundle.optionItems ?? [])
-      .filter((opt) => (opt.flags?.[MODULE_ID]?.groupSourceId ?? null) === groupSourceId);
+    //
+    // The live class bundle (`dauligor.semantic.class-export`) ships
+    // semantic option records under `uniqueOptionItems`, each with
+    // `groupSourceId` at the top level (NOT under `flags.dauligor-pairing`).
+    // The matching `getSemanticOptionsForGroup` helper in
+    // class-import-service.js centralises that knowledge so this
+    // call site doesn't drift if the field name changes.
+    const groupOptions = getSemanticOptionsForGroup(bundle, groupSourceId);
     if (!groupOptions.length) {
       notifyWarn(`No options found in the ${className} bundle for this group.`);
       return;
@@ -769,14 +779,18 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     // body has two regions: a left-column option list (one row per
     // option) and a right-column description panel for the focused
     // option. We rebuild the body on each focus change.
-    const state = { focusedSourceId: currentSourceId ?? groupOptions[0]?.flags?.[MODULE_ID]?.sourceId };
+    //
+    // Semantic option records carry their identity at top level
+    // (sourceId, name, description, imageUrl) — NOT under flags.
+    // `imageUrl` is the bundle's field name (Foundry items use `img`).
+    const state = { focusedSourceId: currentSourceId ?? groupOptions[0]?.sourceId };
 
     const renderBody = (app) => {
       const focused = groupOptions.find((o) =>
-        String(o.flags?.[MODULE_ID]?.sourceId ?? "") === String(app._state.focusedSourceId));
+        String(o?.sourceId ?? "") === String(app._state.focusedSourceId));
 
       const rowsHtml = groupOptions.map((opt) => {
-        const sid = String(opt.flags?.[MODULE_ID]?.sourceId ?? "");
+        const sid = String(opt?.sourceId ?? "");
         const isCurrent = sid === currentSourceId;
         const isOwned = ownedSourceIds.has(sid);
         const isFocused = sid === String(app._state.focusedSourceId);
@@ -787,16 +801,19 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
           <div class="dauligor-option-picker__row ${isFocused ? "dauligor-option-picker__row--focused" : ""} ${isOwned ? "dauligor-option-picker__row--owned" : ""}"
                data-action="focus-option"
                data-source-id="${escapeHtml(sid)}">
-            <img class="dauligor-option-picker__row-img" src="${escapeHtml(opt.img ?? "")}" alt="" loading="lazy">
+            <img class="dauligor-option-picker__row-img" src="${escapeHtml(opt?.imageUrl ?? opt?.img ?? "")}" alt="" loading="lazy">
             <div class="dauligor-option-picker__row-text">
-              <div class="dauligor-option-picker__row-name">${escapeHtml(opt.name ?? "")}</div>
+              <div class="dauligor-option-picker__row-name">${escapeHtml(opt?.name ?? "")}</div>
               ${badge ? `<div class="dauligor-option-picker__row-badge">${escapeHtml(badge)}</div>` : ""}
             </div>
           </div>
         `;
       }).join("");
 
-      const descRaw = focused?.system?.description?.value
+      // Semantic records carry `description` as a plain HTML string at
+      // top level (Foundry items use `system.description.value`).
+      const descRaw = focused?.description
+        ?? focused?.system?.description?.value
         ?? focused?.system?.description
         ?? "<em>No description available.</em>";
 
@@ -840,22 +857,31 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       if (!newSourceId) return { status: "noop" };
       if (newSourceId === currentSourceId) return { status: "noop", value: { unchanged: true } };
 
-      const newOption = groupOptions.find((o) =>
-        String(o.flags?.[MODULE_ID]?.sourceId ?? "") === String(newSourceId));
-      if (!newOption) {
-        notifyWarn("Selected option couldn't be resolved from the bundle.");
+      // Convert the chosen semantic option to a Foundry-ready feat
+      // item using the SAME pipeline the class importer runs:
+      //   semantic record → createSemanticOptionItem (world item)
+      //                    → normalizeEmbeddedActorFeature (actor item)
+      // Exposed via `buildActorOptionItemFromPayload` so the FM
+      // doesn't need to know the internals. Returns null on
+      // resolution failure (unknown sourceId, bad payload, etc.).
+      const newItemData = buildActorOptionItemFromPayload(bundle, newSourceId, {
+        classSourceId
+      });
+      if (!newItemData) {
+        notifyWarn("Selected option couldn't be converted from the bundle.");
         return false;
       }
 
-      // Step 5 — swap. Delete first so the actor's already-owned
-      // index doesn't trip the bundle's duplicate guard on create.
+      // Swap atomically — delete the current item first so the
+      // upsert/duplicate guards on the actor don't reject the
+      // create. The semantic→Foundry pipeline already stamped the
+      // right classIdentifier + sourceType flags on `newItemData`.
       try {
         if (currentItem) {
           await this._actor.deleteEmbeddedDocuments("Item", [currentItem.id]);
         }
-        const itemData = foundry.utils.deepClone(newOption);
-        await this._actor.createEmbeddedDocuments("Item", [itemData]);
-        return { status: "swapped", value: { newName: newOption.name } };
+        await this._actor.createEmbeddedDocuments("Item", [newItemData]);
+        return { status: "swapped", value: { newName: newItemData?.name ?? "the new option" } };
       } catch (err) {
         console.warn(`${MODULE_ID} | option reselect swap failed`, err);
         notifyWarn("Failed to swap the option — see console.");

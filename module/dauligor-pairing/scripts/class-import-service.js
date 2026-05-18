@@ -6164,6 +6164,101 @@ export async function fetchFullSpellItem(classBundleUrl, dbId) {
   return payload.spell ?? null;
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Re-select helpers (consumed by Feature Manager option-swap picker)
+// ──────────────────────────────────────────────────────────────────────
+//
+// During class import the option-picker UI converts semantic option
+// records (the `uniqueOptionItems` array shipped by the
+// `dauligor.semantic.class-export` payload) into Foundry-ready feat
+// items via `createSemanticOptionItem` + `normalizeEmbeddedActorFeature`.
+//
+// The Feature Manager's "Swap this pick" button needs the SAME
+// conversion when the user picks a different option, without
+// running the full class-import workflow. These helpers build the
+// minimal semantic context + run the conversion for one option.
+//
+// They're class-agnostic — no hard-coded class names or option types.
+// Whatever option groups + items the bundle ships gets handled, so
+// Artificer Infusions, Warlock Invocations, Sorcerer Metamagic,
+// Fighter Maneuvers, etc. all work without per-class branches.
+
+/**
+ * Filter the live class bundle's `uniqueOptionItems` to those that
+ * belong to a given option group. Each semantic option carries
+ * `groupSourceId` at the TOP LEVEL (not nested under flags) — this
+ * helper centralises that knowledge so call-sites can't drift.
+ */
+export function getSemanticOptionsForGroup(payload, groupSourceId) {
+  if (!payload || !groupSourceId) return [];
+  return ensureArray(payload?.uniqueOptionItems)
+    .filter((opt) => String(opt?.groupSourceId ?? "") === String(groupSourceId));
+}
+
+/**
+ * Build a Foundry-ready actor item for a single semantic option
+ * from the live class bundle payload. Mirrors what
+ * `buildClassImportWorkflow` does internally, scoped to one option
+ * + minimal context. Returns null when:
+ *   - the option sourceId doesn't resolve in the payload
+ *   - the semantic → Foundry conversion fails
+ *
+ * The returned object is suitable for
+ * `actor.createEmbeddedDocuments("Item", [result])`.
+ */
+export function buildActorOptionItemFromPayload(payload, optionSourceId, { classSourceId = null } = {}) {
+  if (!payload || !optionSourceId) return null;
+
+  const classData = getSemanticClassData(payload) ?? {};
+  const subclasses = ensureArray(payload?.subclasses);
+  const normalizedFeatures = ensureArray(payload?.features);
+  const scalingColumns = ensureArray(payload?.scalingColumns);
+  const uniqueOptionGroups = ensureArray(payload?.uniqueOptionGroups);
+  const uniqueOptionItems = ensureArray(payload?.uniqueOptionItems);
+  const sourceMeta = buildSemanticSourceMeta(payload);
+  const sourceBookId = trimString(sourceMeta?.sourceId ?? classData?.sourceId) || null;
+  const resolvedClassSourceId = classSourceId
+    ?? resolveSemanticEntitySourceId("class", classData, { sourceBookId });
+
+  // Minimal context — same keys `createSemanticOptionItem` reads
+  // (`optionGroupsBySourceId`, `featuresBySourceId`, etc.). Built
+  // here so we don't have to extract the full context-builder out
+  // of `buildClassImportWorkflow`.
+  const context = {
+    payload,
+    classData,
+    subclasses,
+    features: normalizedFeatures,
+    scalingColumns,
+    uniqueOptionGroups,
+    uniqueOptionItems,
+    sourceMeta,
+    sourceBookId,
+    classSourceId: resolvedClassSourceId,
+    classIdentifier: normalizeSemanticIdentifier(classData?.identifier ?? classData?.name ?? classData?.id, "class"),
+    featuresById: indexBy(normalizedFeatures, "id"),
+    featuresBySourceId: indexBy(normalizedFeatures, "sourceId"),
+    subclassesById: indexBy(subclasses, "id"),
+    subclassesBySourceId: indexBy(subclasses, "sourceId"),
+    scalingColumnsById: indexBy(scalingColumns, "id"),
+    scalingColumnsBySourceId: indexBy(scalingColumns, "sourceId"),
+    optionGroupsById: indexBy(uniqueOptionGroups, "id"),
+    optionGroupsBySourceId: indexBy(uniqueOptionGroups, "sourceId")
+  };
+
+  const semanticOption = uniqueOptionItems.find((opt) =>
+    String(opt?.sourceId ?? "") === String(optionSourceId));
+  if (!semanticOption) return null;
+
+  const worldItem = createSemanticOptionItem(semanticOption, context);
+  if (!worldItem) return null;
+
+  return normalizeEmbeddedActorFeature(worldItem, resolvedClassSourceId, {
+    existingItem: null,
+    payloadMeta: payload
+  });
+}
+
 export async function fetchJson(url) {
   try {
     const response = await fetch(url, { cache: "no-store" });
