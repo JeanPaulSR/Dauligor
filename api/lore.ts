@@ -554,6 +554,19 @@ export default async function handler(req: NodeLikeRequest, res: NodeLikeRespons
       return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 
+    // DELETE /api/lore/secrets/<secretId> — secret delete without
+    // requiring the client to know the parent article id. The legacy
+    // client flow looked up `article_id` via a raw `SELECT * FROM
+    // lore_secrets` so it could build the
+    // `/articles/<articleId>/secrets/<secretId>` URL above. That
+    // direct SELECT is now blocked by the proxy's
+    // PROTECTED_READ_TABLES gate, so the client calls this simpler
+    // route instead. Same FK cascade clears the visibility junctions.
+    if (path.length === 2 && path[0] === "secrets") {
+      if (req.method === "DELETE") return await handleSecretDelete(res, path[1]);
+      return res.status(405).json({ error: `Method ${req.method} not allowed.` });
+    }
+
     return res.status(404).json({ error: `Unknown lore route: /${path.join("/")}` });
   } catch (error) {
     const credentialMessage = getCredentialErrorMessage(error);

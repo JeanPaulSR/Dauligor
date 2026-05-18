@@ -1,23 +1,31 @@
-// Client helpers for the lore (wiki) write surface.
+// Client helpers for the lore (wiki) read + write surface.
 //
 // These are thin fetch wrappers around the per-route endpoints in
 // `api/lore.ts`. The SQL building they used to do client-side (via
 // batchQueryD1 / deleteDocument against `lore_*` tables) lives in
 // `api/_lib/_lore.ts` now — the server is the single source of truth
-// for what a lore save means. The d1-proxy gate also blocks direct
-// `lore_*` writes from the client, so call sites MUST go through
-// here (or the per-route endpoint directly).
+// for what a lore save means. The d1-proxy gate blocks direct
+// `lore_*` writes AND direct `lore_secrets` reads from the client,
+// so call sites MUST go through here (or the per-route endpoint
+// directly).
 //
 // Function signatures are deliberately preserved from the legacy
 // helpers so the existing call sites in Wiki.tsx, LoreEditor.tsx, and
 // LoreArticle.tsx don't need updates.
 //
-// Reads (fetchLoreArticle, fetchLoreSecrets) still go through the
-// generic /api/d1/query proxy for now — the per-route /api/lore GET
-// endpoints exist and are preferred for client UI, but the editor's
-// load path (LoreEditor.tsx) still uses fetchLoreArticle to get the
-// raw row with dm_notes attached. That migration is a smaller
-// follow-up; both paths return equivalent shapes today.
+// `fetchLoreSecrets` migrated to the per-route `GET
+// /api/lore/articles/[id]/secrets` endpoint, which applies the
+// server-side visibility filter (non-staff only see secrets revealed
+// to their active campaign). The legacy raw `SELECT * FROM
+// lore_secrets` path it used to take is now blocked by the proxy's
+// PROTECTED_READ_TABLES gate.
+//
+// `fetchLoreArticle` still uses `fetchDocument('lore', id)` for the
+// editor load path — `lore_articles` reads aren't proxy-blocked
+// because `dm_notes` is stripped at the per-route GET layer and the
+// editor specifically needs the raw row. Migrating it to a per-route
+// endpoint is a smaller follow-up that doesn't gate on the
+// read-protection work.
 
 import { auth } from "./firebase";
 import { deleteDocument, queryD1 } from "./d1";
@@ -65,22 +73,20 @@ export async function upsertLoreSecret(articleId: string, secretId: string, data
 }
 
 export async function deleteLoreSecret(secretId: string) {
-  // DELETE path needs the article id too — fetch it once so the
-  // server can do the cascading FK delete via lore_articles. We could
-  // accept it as a param to drop the lookup, but every call site
-  // currently invokes this with just the secret id, so keep the
-  // signature stable and pay the one round-trip.
-  const articleRow = await queryD1<{ article_id: string }>(
-    "SELECT article_id FROM lore_secrets WHERE id = ? LIMIT 1",
-    [secretId],
-  );
-  const articleId = articleRow[0]?.article_id;
-  if (!articleId) {
-    // Nothing to delete — secret already gone or never existed.
-    return { ok: true, id: secretId };
-  }
+  // Server-side cascade does the work — `lore_secrets` rows have an
+  // FK that clears `lore_secret_eras` / `lore_secret_campaigns`
+  // automatically. The client no longer needs to look up the
+  // article id first; previously this round-tripped through
+  // `SELECT article_id FROM lore_secrets WHERE id = ?` just to build
+  // the `/articles/<articleId>/secrets/<secretId>` URL, but that
+  // direct SELECT path is now blocked by the proxy's
+  // PROTECTED_READ_TABLES gate (lore_secrets content is sensitive
+  // even for staff querying outside the per-route endpoint).
+  //
+  // The simpler URL `/api/lore/secrets/<secretId>` exists in
+  // api/lore.ts specifically to support this client flow.
   const res = await fetch(
-    `/api/lore/articles/${encodeURIComponent(articleId)}/secrets/${encodeURIComponent(secretId)}`,
+    `/api/lore/secrets/${encodeURIComponent(secretId)}`,
     { method: "DELETE", headers: await authHeader() },
   );
   return jsonOrThrow(res, "Failed to delete secret");
@@ -95,14 +101,23 @@ export async function deleteLoreArticle(articleId: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Reads — still on /api/d1/query for now                                      */
+/* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
 //
-// fetchLoreArticle / fetchLoreSecrets are kept here on the legacy
-// path because LoreEditor's load flow expects them. The per-route
-// `GET /api/lore/articles/[id]` and `/secrets` already exist — UI
-// consumers (LoreArticle.tsx, Wiki.tsx, Home.tsx, etc.) have all
-// migrated. The editor's migration is a smaller follow-up.
+// `fetchLoreArticle` still goes through the generic proxy
+// (`fetchDocument('lore', id)` + a handful of `lore_meta_*` /
+// `lore_article_*` joins). Those tables are NOT in the proxy's
+// PROTECTED_READ_TABLES gate — `lore_articles.dm_notes` is the only
+// sensitive column there, and it's stripped at the per-route GET
+// layer. The editor needs the raw shape (including dm_notes) so it
+// still calls the generic helpers; migrating to a dedicated
+// editor-side GET is a small follow-up. UI consumers
+// (LoreArticle.tsx, Wiki.tsx, Home.tsx, etc.) have already migrated
+// to the per-route GET that strips dm_notes.
+//
+// `fetchLoreSecrets` is now per-route (see below) because
+// `lore_secrets` IS in PROTECTED_READ_TABLES — the visibility filter
+// MUST run server-side for the H3 closure to hold.
 
 /**
  * Fetch a complete Lore Article with all metadata, tags, and junctions.
@@ -170,27 +185,24 @@ export async function fetchLoreArticle(id: string) {
 }
 
 /**
- * Fetch all secrets for a lore article with their visibility links.
+ * Fetch the secrets for a lore article — server-filtered to the
+ * caller's visibility (staff see all; players see only secrets
+ * revealed to their active campaign).
+ *
+ * The per-route GET `/api/lore/articles/[id]/secrets` does the
+ * GROUP_CONCAT'd era/campaign join and the visibility filter
+ * server-side, so the client just consumes the normalized array. The
+ * legacy direct `SELECT * FROM lore_secrets` path is blocked by the
+ * proxy's PROTECTED_READ_TABLES gate — secrets MUST flow through
+ * this endpoint so the visibility check actually runs.
  */
 export async function fetchLoreSecrets(articleId: string) {
-  const rows = await queryD1<any>(
-    `
-    SELECT s.*,
-           (SELECT GROUP_CONCAT(era_id) FROM lore_secret_eras WHERE secret_id = s.id) as era_ids,
-           (SELECT GROUP_CONCAT(campaign_id) FROM lore_secret_campaigns WHERE secret_id = s.id) as revealed_campaign_ids
-    FROM lore_secrets s
-    WHERE s.article_id = ?
-  `,
-    [articleId],
+  const res = await fetch(
+    `/api/lore/articles/${encodeURIComponent(articleId)}/secrets`,
+    { headers: await authHeader() },
   );
-
-  return rows.map((s) => ({
-    ...s,
-    eraIds: s.era_ids ? s.era_ids.split(",") : [],
-    revealedCampaignIds: s.revealed_campaign_ids ? s.revealed_campaign_ids.split(",") : [],
-    createdAt: s.created_at,
-    updatedAt: s.updated_at,
-  }));
+  const body = await jsonOrThrow(res, "Failed to load secrets");
+  return Array.isArray(body?.secrets) ? body.secrets : [];
 }
 
 // `deleteDocument` import kept above; not currently used here but

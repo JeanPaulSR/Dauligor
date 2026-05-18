@@ -154,8 +154,54 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     //              backdoor a lore row write to set `dm_notes` content
     //              the per-route endpoint would otherwise gate.
     const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras|lore_\w+)\b/i;
+    // Protected READ tables — tables whose rows carry per-row privacy
+    // contracts that the generic proxy cannot enforce. Direct SELECTs
+    // against any of these are refused; callers must go through the
+    // per-route endpoint that does the column-scoping / ownership
+    // check / visibility filter server-side.
+    //
+    //   `users`        — `recovery_email` is PII; per-route
+    //                    `/api/me`, `/api/profiles/[username]`,
+    //                    `/api/admin/users` column-scope by role.
+    //                    Without this gate, a signed-in player could
+    //                    `SELECT * FROM users` via devtools and
+    //                    exfiltrate every recovery_email — bypassing
+    //                    the entire column-scoping layer in those
+    //                    per-route endpoints.
+    //   `lore_secrets` — secret `content` MUST be filtered by the
+    //                    viewer's active campaign (lore_secret_campaigns
+    //                    join). Per-route
+    //                    `GET /api/lore/articles/[id]/secrets` does
+    //                    the filter; a raw SELECT here would return
+    //                    every secret regardless of visibility.
+    //   `characters` + `character_*` — `info_json` on the base row
+    //                    is the character's private backstory/notes,
+    //                    and the per-character relation tables
+    //                    (character_progression, character_selections,
+    //                    character_inventory, character_spells,
+    //                    character_proficiencies,
+    //                    character_spell_list_extensions,
+    //                    character_spell_loadouts) make up the rest
+    //                    of the H4 leak surface. Per-route
+    //                    `GET /api/characters/[id]` returns the
+    //                    fully reconstructed bundle for owner-or-DM
+    //                    callers; `GET /api/me/characters` returns
+    //                    the caller's own list. Without this gate, a
+    //                    signed-in user could read anyone else's
+    //                    sheet via raw `SELECT * FROM characters
+    //                    WHERE id = ?` or piece it together from the
+    //                    8 character_* tables.
+    //
+    // The matcher only fires on `FROM <table>` (not JOIN'd subqueries
+    // against the same table, which are rare and we'd want to lock
+    // down anyway). Normalized SQL is what we test, so quoted
+    // identifiers (`"users"`, `` `users` ``, `[users]`) and SQL
+    // comments can't slip past.
+    const PROTECTED_READ_TABLES = /\bFROM\s+(?:users|lore_secrets|characters|character_\w+)\b/i;
+
     const isMutation = MUTATION_KEYWORDS.test(normalizedSql);
     const targetsProtectedTable = isMutation && PROTECTED_WRITE_TABLES.test(normalizedSql);
+    const targetsProtectedReadTable = !isMutation && PROTECTED_READ_TABLES.test(normalizedSql);
 
     if (targetsProtectedTable) {
       await requireAdminAccess(authHeader);
@@ -163,6 +209,15 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     } else if (isMutation) {
       await requireStaffAccess(authHeader);
       console.log(`[D1 Proxy] Executing mutation: ${sql.substring(0, 100)}${sql.length > 100 ? '...' : ''}`);
+    } else if (targetsProtectedReadTable) {
+      // 403 not 404 — we know the table exists; we just refuse to
+      // serve it through the generic proxy. The error message points
+      // the caller at the per-route alternative so a legitimate
+      // (post-migration) caller knows where to go.
+      throw new HttpError(
+        403,
+        "Direct reads of this table are not permitted through /api/d1/query. Use the per-route endpoint (/api/me, /api/profiles/[username], /api/admin/users, /api/characters/[id], /api/me/characters, or /api/lore/articles/[id]/secrets) instead."
+      );
     } else {
       await requireAuthenticatedUser(authHeader);
     }

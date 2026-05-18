@@ -4,7 +4,8 @@ import { Lock, Star, ChevronUp, ChevronDown, Settings, X } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
-import { fetchCollection, queryD1, fetchDocument } from '../../lib/d1';
+import { fetchCollection, fetchDocument } from '../../lib/d1';
+import { auth } from '../../lib/firebase';
 import { fetchClassSpellIds } from '../../lib/classSpellLists';
 import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../lib/spellImport';
 import { cn } from '../../lib/utils';
@@ -208,11 +209,20 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     }
     (async () => {
       try {
-        const rows = await queryD1<any>(
-          'SELECT id, name FROM characters WHERE user_id = ? ORDER BY updated_at DESC',
-          [userProfile.id],
-        );
-        setMyCharacters(rows.map((r: any) => ({ id: String(r.id), name: String(r.name || 'Unnamed') })));
+        // Per-route /api/me/characters supports ?fields= column allow-list
+        // and derives the user from the verified token — no need to pass
+        // user_id in the URL (the legacy raw `SELECT id, name FROM
+        // characters WHERE user_id = ?` path here is now blocked by the
+        // proxy's PROTECTED_READ_TABLES gate; even an owner-scoped
+        // SELECT can't reach `characters` directly anymore).
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/me/characters?fields=id,name', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const body = await res.json();
+        const rows: any[] = Array.isArray(body?.characters) ? body.characters : [];
+        setMyCharacters(rows.map((r) => ({ id: String(r.id), name: String(r.name || 'Unnamed') })));
       } catch (err) {
         console.warn('[SpellList] Failed to load characters for favorites scope:', err);
         setMyCharacters([]);

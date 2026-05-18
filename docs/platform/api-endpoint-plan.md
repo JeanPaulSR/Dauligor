@@ -35,22 +35,31 @@ historical record + remaining-work tracker.
 | L2 — image scan returns `users` rows | Open | Backlog |
 | L3 — image rename `updateDocument` against any column | Open | Backlog |
 | L4 — `checkFoundationUpdate` polling raw SELECT | Deferred | Low severity; closing would burn the last Vercel function slot (11/12 → 12/12). Revisit after the next consolidation gives budget. |
+| Read-protect H1/H3/H4 at the proxy | ✅ Closed | `PROTECTED_READ_TABLES` added to d1-proxy covering `users`, `lore_secrets`, `characters`, `character_*`. The per-route endpoints were the right shape; this seals the devtools bypass. Two client migrations rode along: `fetchLoreSecrets` → `GET /api/lore/articles/[id]/secrets`, `SpellList`'s character picker → `GET /api/me/characters`, and `deleteLoreSecret` no longer round-trips through a raw `SELECT article_id`. |
 
 Out-of-scope / drift items from Section 5 below remain open and are tracked
 there.
 
 ## Threat model (one paragraph)
 
-Today every signed-in user (including `user` / `trusted-player`) can SELECT
-anything on any table the client-side `queryD1` / `fetchCollection` /
-`fetchDocument` helpers reach. The proxy gate
-([`api/_lib/d1-proxy.ts`](../../api/_lib/d1-proxy.ts)) was recently split so
-that mutations require `requireStaffAccess` and reads require
-`requireAuthenticatedUser` — but reads are still raw SQL: a hostile signed-in
-user can paste `SELECT * FROM users` (or any other table) into devtools and
-exfiltrate the entire row. The fix is to remove the generic read path entirely
-and replace each call site with a route that returns only the columns + rows
-the caller is allowed to see.
+**Historical** (as the audit was written): every signed-in user (including
+`user` / `trusted-player`) could SELECT anything on any table the client-side
+`queryD1` / `fetchCollection` / `fetchDocument` helpers reached. The proxy
+gate ([`api/_lib/d1-proxy.ts`](../../api/_lib/d1-proxy.ts)) was split so
+mutations required `requireStaffAccess` and reads required
+`requireAuthenticatedUser`, but reads were still raw SQL: a hostile signed-in
+user could paste `SELECT * FROM users` into devtools and exfiltrate every
+row.
+
+**Current**: the proxy now has a `PROTECTED_READ_TABLES` regex alongside
+`PROTECTED_WRITE_TABLES`. Direct SELECTs against `users`, `lore_secrets`,
+`characters`, and `character_*` return 403 with a pointer to the per-route
+endpoint. Other tables stay on the generic proxy because their rows carry no
+per-user privacy contract (compendium foundation: skills, tools, weapons,
+armor, spells, feats, items, classes, subclasses, tags, tag_groups, etc.).
+The original plan to decommission `/api/d1/query` entirely was scaled down to
+this gate (see item 15 below) once it became clear the actual threat was
+concentrated in four table prefixes, not the proxy as a concept.
 
 ---
 
@@ -703,13 +712,32 @@ so it can be checked off concretely. Leaks first, convenience second.
     `d1.ts:143-179` external surface.
 14. **`POST /api/admin/purge/[table]`** — closes the maintenance DDL hole.
     Removes `Settings.tsx:634`, `compendium.ts:554`.
-15. **Decommission `/api/d1/query`** — remove `api/_lib/d1-proxy.ts`,
-    `api/d1/query.ts`, and the `queryD1` / `batchQueryD1` /
-    `fetchCollection` / `fetchDocument` / `upsertDocument` /
-    `updateDocument` / `deleteDocument` / `deleteDocuments` /
-    `upsertDocumentBatch` exports from `src/lib/d1.ts`. Keep the in-memory and
-    sessionStorage caches but reshape them around the new endpoint URLs
-    (replace the SQL-keyed cache with route-keyed caching).
+15. **Decommission `/api/d1/query`** — ~~remove `api/_lib/d1-proxy.ts`,
+    `api/d1/query.ts`, …~~ **WON'T DO.** The full-decommission framing was
+    overkill once we understood the actual threat shape. The proxy gate is
+    now layered:
+
+    - `MUTATION_KEYWORDS` + `PROTECTED_WRITE_TABLES` forces every write
+      (and DDL) to staff, with `users` / `eras` / `lore_*` further
+      restricted to admin.
+    - `PROTECTED_READ_TABLES` forces SELECT against `users`,
+      `lore_secrets`, `characters`, and `character_*` to go through the
+      per-route endpoints (where column-scoping, ownership checks, and
+      visibility filters live).
+    - All other tables (compendium foundation: skills, tools, weapons,
+      armor, spells, feats, items, classes, subclasses, tags,
+      tag_groups, attributes, scaling_columns, … plus `lore_articles`
+      with `dm_notes` stripped at the per-route GET layer) remain
+      callable via the generic proxy. These are public-among-signed-in
+      data; the leak the audit worried about (PII / per-row privacy
+      contracts) is concentrated in the four protected-read prefixes
+      and is now sealed.
+
+    Migrating every compendium read to per-route endpoints would burn
+    significant Vercel function budget for no real privacy gain.
+    Re-evaluate if a new table joins the privacy-contract category
+    (extend `PROTECTED_READ_TABLES`), not because the catalog tables
+    should be hidden.
 
 ---
 
