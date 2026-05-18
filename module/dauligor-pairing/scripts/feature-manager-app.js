@@ -771,11 +771,37 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       return;
     }
 
-    // Snapshot the current picks BEFORE the picker opens so we can
-    // compute a diff after Confirm. The workflow's optionSelections
-    // is also populated with these, but it's keyed by group — pull
-    // out just THIS group's sourceIds for the diff.
+    // Snapshot the current picks BEFORE clearing so we can:
+    //   a) tell the picker which sourceIds to exclude from the
+    //      "owned" set (so they're deselectable, not greyed-locked)
+    //   b) compute a diff after Confirm against what the user ended
+    //      up with
     const currentSourceIds = new Set(workflow.selection.optionSelections[groupSourceId] ?? []);
+
+    // CRITICAL: drop the target group's picks from `optionSelections`
+    // before handing the workflow to `runOptionGroupStep`. The picker
+    // unions every group's `optionSelections` into `priorSelections`,
+    // then unions that with the in-prompt `state.selectedSourceIds`
+    // to derive each row's status. As long as the target group's
+    // picks live in `priorSelections`, every row in the target group
+    // computes as "selected" forever — checkboxes appear checked
+    // even after the user unchecks them (the state mutation drops
+    // them from `selectedSourceIds`, but the union still sees them
+    // via `priorSelections`).
+    //
+    // `targetGroup.selectedSourceIds` (a separate field) keeps the
+    // pre-check behaviour — the picker initialises
+    // `state.selectedSourceIds` from that, so the current picks
+    // still open pre-checked, just deselectable.
+    //
+    // Other groups' picks STAY in `optionSelections` so cross-group
+    // prereqs (e.g. "Requires Pact of the Blade" while re-selecting
+    // an invocation) still resolve.
+    if (workflow.selection.optionSelections[groupSourceId]) {
+      const next = { ...workflow.selection.optionSelections };
+      delete next[groupSourceId];
+      workflow.selection.optionSelections = next;
+    }
 
     // Step 5 — fake sequence + progress (no-op stubs that satisfy
     // `runOptionGroupStep`'s reads). The picker uses sequence for
