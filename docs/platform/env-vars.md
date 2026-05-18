@@ -8,9 +8,8 @@ Every env var the app reads, where it's read, what it's for, and a sample value.
 |---|---|---|---|
 | `R2_WORKER_URL` | Express + Vercel proxies | yes | `http://localhost:8787` |
 | `R2_API_SECRET` | Express + Vercel proxies | yes | `dauligor-asset-secret` |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Express + Vercel proxies (`firebase-admin` init) | yes (one of) | unset |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Express + Vercel proxies (alt to JSON) | yes (one of) | unset |
-| `FIREBASE_PROJECT_ID` | `api/_lib/firebase-admin.ts` | optional | `gen-lang-client-0493579997` |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Express + Vercel proxies (Identity Toolkit REST for admin user-management) | required for admin ops; verification works without it | unset |
+| `FIREBASE_PROJECT_ID` | `api/_lib/firebase-admin.ts` (used by JWKS verifier + REST base URL) | optional | `gen-lang-client-0493579997` |
 | `NODE_ENV` | `server.ts` | optional | unset (dev) |
 | `VITE_R2_WORKER_URL` | Browser bundle (legacy direct R2 path) | optional | unset |
 | `VITE_R2_API_SECRET` | Browser bundle (legacy direct R2 path) | optional | unset |
@@ -32,14 +31,14 @@ The shared secret between the proxy and the Worker. The proxy adds `Authorizatio
 - **Production**: a strong secret stored in both the Vercel project env and the Worker secret store.
 
 ### `FIREBASE_SERVICE_ACCOUNT_JSON`
-The full service-account JSON document, JSON-stringified, used to initialise `firebase-admin` for verifying user JWTs.
-- Either this **or** `GOOGLE_APPLICATION_CREDENTIALS` must be set.
+The full service-account JSON document, JSON-stringified (one line, with `\n` literal newlines inside `private_key`). Used to mint OAuth2 access tokens for Firebase Identity Toolkit REST calls (`/accounts`, `/accounts:update`, `/accounts:delete`) and to sign custom tokens for the sign-in-link recovery flow.
 
-### `GOOGLE_APPLICATION_CREDENTIALS`
-Filesystem path to a service-account JSON. Used as an alternative to `FIREBASE_SERVICE_ACCOUNT_JSON`.
+**Not needed for JWT verification.** `api/_lib/firebase-admin.ts` verifies ID tokens via Firebase's public JWKS endpoint (`jose.createRemoteJWKSet`), which has no credential dependency. Only the admin user-management endpoints (`createUser`, `updateUser`, `deleteUser`, `createCustomToken`) need the service account; they 503 with a clear message when it's missing.
+
+`GOOGLE_APPLICATION_CREDENTIALS` is no longer read — that code path went away with the `firebase-admin` SDK exit in May 2026. Inline the JSON into `FIREBASE_SERVICE_ACCOUNT_JSON` instead.
 
 ### `FIREBASE_PROJECT_ID`
-Override the Firebase project ID. Defaults to `gen-lang-client-0493579997`.
+Override the Firebase project ID. Used as both the JWKS verifier's `audience` claim and the base path of every Identity Toolkit REST call. Defaults to `gen-lang-client-0493579997`.
 
 ### `NODE_ENV`
 When `"production"`, `server.ts` serves the static `dist/` build. Otherwise it mounts Vite middleware for dev.

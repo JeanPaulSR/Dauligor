@@ -6,10 +6,10 @@ The Firestore-to-D1 migration completed in May 2026; **Firebase Authentication r
 
 | Service | Status | Why |
 |---|---|---|
-| Firebase Authentication | **Kept** | Solid JWT issuer; integrates with the existing Admin SDK on the proxy; user accounts already exist |
+| Firebase Authentication | **Kept** | Solid JWT issuer; user accounts already exist; verification done locally via JWKS, no SDK lock-in |
 | Firestore | Removed | Replaced by Cloudflare D1 (May 2026) |
 | Firebase Storage | Removed | Replaced by Cloudflare R2 |
-| `firebase-admin` SDK on the proxy | **Kept** | Verifies the JWT and reads RBAC role from D1 `users` |
+| `firebase-admin` SDK on the proxy | **Removed** (May 2026) | Replaced by `jose` (JWKS-based JWT verify) + direct Firebase Identity Toolkit REST calls for admin operations (createUser / updateUser / deleteUser / createCustomToken). Runtime-portable: works in Node and Cloudflare Workers. |
 | Firestore security rules | Removed | Replaced by per-route RBAC checks in `api/_lib/firebase-admin.ts` + the table-aware proxy gate in `api/_lib/d1-proxy.ts`. See [security-gates.md](security-gates.md). |
 
 ## Pseudo-username identity layer
@@ -69,7 +69,7 @@ This whole sequence used to live on the client (with `fetchDocument('users', uid
 ### 3. Authorised request to D1 / R2
 1. Browser fetches an ID token: `await auth.currentUser.getIdToken()`.
 2. Adds `Authorization: Bearer <id-token>` to the request.
-3. Proxy verifies the token via `firebase-admin` (`auth.verifyIdToken`).
+3. Proxy verifies the token via `jose` against Firebase's public JWKS endpoint (`https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`). No credentials required server-side — verification is signature-checked against the public keys.
 4. Proxy checks the user's role against the route's required role. Which helper fires depends on the endpoint — see the helpers table below.
 5. Proxy forwards to the Worker with the shared `R2_API_SECRET`.
 
@@ -96,12 +96,12 @@ All in [api/_lib/firebase-admin.ts](../../api/_lib/firebase-admin.ts):
 
 Each `require*` helper:
 1. Validates the `Bearer <token>` header is present.
-2. Verifies the token via `firebase-admin`.
+2. Verifies the token via `jose` (`jwtVerify` against the cached Firebase JWKS).
 3. Reads the user's role from the D1 `users` table.
 4. Throws `HttpError(401|403|404, message)` on failure.
 5. Returns `{ decoded, role }` (or richer for `requireCharacterAccess`) on success.
 
-There's also a fallback path that parses the JWT signaturelessly when Firebase Admin credentials aren't configured — used only for local dev when no service account is loaded. It logs a warning and grants admin to make development possible without secrets. **Never trust this path in production**; verify your Vercel env has `FIREBASE_SERVICE_ACCOUNT_JSON` set.
+There is **no** signatureless fallback. Token verification has no credential dependency (JWKS is public), so every token is signature-checked unconditionally on every request. If verification fails the helper throws 401 and the caller sees an "Invalid auth token" message.
 
 ## RBAC role matrix
 
@@ -122,7 +122,7 @@ Preview mode does not bypass server-side checks — it only simulates the UI as 
 | Action | How |
 |---|---|
 | **Create** | `AdminUsers.tsx` (`/admin/users`) — admin only. Uses a secondary Firebase app instance (so the admin doesn't get logged out) to call `createUserWithEmailAndPassword`, then writes the D1 `users` row. |
-| **Update own profile** | `Settings.tsx` → `PATCH /api/me`. Allow-listed columns only (`username`, `display_name`, `pronouns`, `bio`, `avatar_url`, `theme`, `accent_color`, `hide_username`, `is_private`, `recovery_email`, `active_campaign_id`). `role` is deliberately NOT in the allow-list. Username changes also push through the Firebase Admin SDK to update the auth email. |
+| **Update own profile** | `Settings.tsx` → `PATCH /api/me`. Allow-listed columns only (`username`, `display_name`, `pronouns`, `bio`, `avatar_url`, `theme`, `accent_color`, `hide_username`, `is_private`, `recovery_email`, `active_campaign_id`). `role` is deliberately NOT in the allow-list. Username changes also call Firebase Identity Toolkit REST (`/accounts:update`) to keep the auth email in sync. |
 | **Switch active campaign** | Same `PATCH /api/me`, single-field payload. Used by the navbar's campaign switcher. |
 | **Reset password (destructive)** | `AdminUsers.tsx` "Temp Password" button → `POST /api/admin/users/[id]/temporary-password`. Overwrites the Firebase Auth password with a random 14-char value and returns it once. There is no `mustChangePassword` flag in D1 — the temp-password lifecycle is owned entirely by Firebase Auth. |
 | **Sign-in link (non-destructive)** | `AdminUsers.tsx` "Sign-in Link" button → `POST /api/admin/users/[id]/sign-in-token`. Mints a 1-hour Firebase custom token; admin shares a `/auth/redeem?token=…` URL; the SPA's `RedeemTokenPage` calls `signInWithCustomToken` so the user signs in without their password being touched. |
@@ -142,13 +142,13 @@ The proxy-gate decision tree (which tables are read-blocked, which are write-blo
 
 - **Stale token after role change**: If an admin promotes a user, the user's existing JWT continues to claim their old role until refresh. The client calls `getIdToken(true)` (force refresh) on profile snapshots that detect a role change.
 - **Anonymous registration is disabled**: There is no `signInAnonymously` path. Account creation is admin-only.
-- **Lost service account locally**: If `firebase-admin` can't initialise, the proxy falls back to signatureless JWT parsing and logs a warning. Production must always have a real service account configured.
+- **Missing service account locally**: Without `FIREBASE_SERVICE_ACCOUNT_JSON`, JWT verification still works (JWKS is public) — only the admin user-management endpoints (`createUser`, `updateUser`, `deleteUser`, `createCustomToken` → `/api/admin/users/*` operations) return 503. The rest of the app loads normally.
 
 ## Related docs
 
 - [api-endpoints.md](api-endpoints.md) — the per-route endpoint surface and which `require*` helper each one uses
 - [runtime.md](runtime.md) — full request flow including the auth chain
 - [d1-architecture.md](d1-architecture.md) — `getAuthHeaders()` in the D1 client
-- [env-vars.md](env-vars.md) — `FIREBASE_SERVICE_ACCOUNT_JSON`, `GOOGLE_APPLICATION_CREDENTIALS`
+- [env-vars.md](env-vars.md) — `FIREBASE_SERVICE_ACCOUNT_JSON` (the only Firebase env var the server reads after the SDK exit)
 - [../architecture/permissions-rbac.md](../architecture/permissions-rbac.md) — role definitions and `effectiveProfile`
 - [../features/admin-users.md](../features/admin-users.md) — admin user management UI

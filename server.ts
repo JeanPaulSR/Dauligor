@@ -4,8 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
-import { applicationDefault, cert, getApp, getApps, initializeApp as initializeAdminApp } from "firebase-admin/app";
-import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import {
   handleR2Delete,
   handleR2List,
@@ -15,6 +13,7 @@ import {
 } from "./api/_lib/r2-proxy.js";
 import { handleD1Query } from "./api/_lib/d1-proxy.js";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./api/_lib/d1-internal.js";
+import { HttpError, getAdminServices, getCredentialErrorMessage } from "./api/_lib/firebase-admin.js";
 import moduleHandler from "./api/module.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -25,37 +24,32 @@ const HARDCODED_STAFF_EMAILS = new Set([
   "gm@archive.internal",
 ]);
 
-type FirebaseAppletConfig = {
-  projectId: string;
-};
-
-function loadFirebaseConfig(): FirebaseAppletConfig {
-  const configPath = path.join(__dirname, "firebase-applet-config.json");
-  const raw = JSON.parse(fs.readFileSync(configPath, "utf8")) as { projectId: string };
-  return { projectId: raw.projectId };
-}
-
-// Firestore is decommissioned. Firebase Admin lives on only as a JWT verifier
-// (and password updater for admin temp-password flows). All user/role data
-// reads go through D1 via loadUserRoleFromD1.
-function getAdminServices() {
-  const firebaseConfig = loadFirebaseConfig();
-
-  const app = getApps().length
-    ? getApp()
-    : initializeAdminApp(
-        process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-          ? {
-              credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)),
-              projectId: firebaseConfig.projectId,
-            }
-          : {
-              credential: applicationDefault(),
-              projectId: firebaseConfig.projectId,
-            }
-      );
-
-  return { auth: getAdminAuth(app) };
+/**
+ * Inline admin gate used by the dev-server's hand-rolled admin endpoints
+ * (temp-password + the legacy spell admin routes). Mirrors the
+ * `requireAdminAccess` helper in `api/_lib/firebase-admin.ts`: wraps the
+ * JWT verify in a try/catch so jose verify failures surface as 401
+ * instead of bubbling up as a generic 500 from the handler's outer catch.
+ */
+async function verifyAdminToken(authHeader: string | string[] | undefined): Promise<void> {
+  const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  if (!headerValue?.startsWith("Bearer ")) {
+    throw new HttpError(401, "Missing bearer token.");
+  }
+  const idToken = headerValue.slice("Bearer ".length);
+  let decoded: any;
+  try {
+    const { auth } = getAdminServices();
+    decoded = await auth.verifyIdToken(idToken);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new HttpError(401, `Invalid auth token: ${reason}`);
+  }
+  const actingRole = await loadUserRoleFromD1(decoded.uid);
+  const isAdmin = HARDCODED_STAFF_EMAILS.has(decoded.email ?? "") || actingRole === "admin";
+  if (!isAdmin) {
+    throw new HttpError(403, "Admin access required.");
+  }
 }
 
 function createTemporaryPassword(length = 14) {
@@ -108,21 +102,7 @@ async function startServer() {
 
   app.post("/api/admin/users/:id/temporary-password", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Missing bearer token." });
-      }
-
-      const idToken = authHeader.slice("Bearer ".length);
-      const { auth } = getAdminServices();
-      const decoded = await auth.verifyIdToken(idToken);
-
-      const actingRole = await loadUserRoleFromD1(decoded.uid);
-      const isAdmin = HARDCODED_STAFF_EMAILS.has(decoded.email ?? "") || actingRole === "admin";
-
-      if (!isAdmin) {
-        return res.status(403).json({ error: "Admin access required." });
-      }
+      await verifyAdminToken(req.headers.authorization);
 
       // Verify the target user exists in our D1 directory before resetting their
       // Firebase Auth password. This guards against typos / stale UIDs.
@@ -147,17 +127,14 @@ async function startServer() {
         generatedAt: new Date().toISOString(),
       });
     } catch (error) {
+      if (error instanceof HttpError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       console.error("Failed to generate temporary password:", error);
       const message = error instanceof Error ? error.message : String(error);
-      const missingCredentials =
-        message.includes("Could not load the default credentials") ||
-        message.includes("Failed to parse private key") ||
-        message.includes("Service account object must contain");
-
-      return res.status(missingCredentials ? 503 : 500).json({
-        error: missingCredentials
-          ? "Firebase Admin credentials are not configured. Set GOOGLE_APPLICATION_CREDENTIALS or FIREBASE_SERVICE_ACCOUNT_JSON."
-          : message,
+      const credentialMessage = getCredentialErrorMessage(error);
+      return res.status(credentialMessage ? 503 : 500).json({
+        error: credentialMessage ?? message,
       });
     }
   });
@@ -217,21 +194,7 @@ async function startServer() {
   // Spell Admin Endpoints
   app.post("/api/admin/spells/upsert", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Missing bearer token." });
-      }
-
-      const idToken = authHeader.slice("Bearer ".length);
-      const { auth } = getAdminServices();
-      const decoded = await auth.verifyIdToken(idToken);
-
-      const actingRole = await loadUserRoleFromD1(decoded.uid);
-      const isAdmin = HARDCODED_STAFF_EMAILS.has(decoded.email ?? "") || actingRole === "admin";
-
-      if (!isAdmin) {
-        return res.status(403).json({ error: "Admin access required." });
-      }
+      await verifyAdminToken(req.headers.authorization);
 
       const { id, payload } = req.body;
       const targetId = id || Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -259,27 +222,16 @@ async function startServer() {
       });
     } catch (error) {
       console.error("Error upserting spell:", error);
+      if (error instanceof HttpError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       return res.status(500).json({ error: error instanceof Error ? error.message : "Internal Server Error" });
     }
   });
 
   app.post("/api/admin/spells/import-batch", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Missing bearer token." });
-      }
-
-      const idToken = authHeader.slice("Bearer ".length);
-      const { auth } = getAdminServices();
-      const decoded = await auth.verifyIdToken(idToken);
-
-      const actingRole = await loadUserRoleFromD1(decoded.uid);
-      const isAdmin = HARDCODED_STAFF_EMAILS.has(decoded.email ?? "") || actingRole === "admin";
-
-      if (!isAdmin) {
-        return res.status(403).json({ error: "Admin access required." });
-      }
+      await verifyAdminToken(req.headers.authorization);
 
       const { entries } = req.body;
       if (!Array.isArray(entries)) {
@@ -311,27 +263,16 @@ async function startServer() {
       });
     } catch (error) {
       console.error("Error importing spells:", error);
+      if (error instanceof HttpError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       return res.status(500).json({ error: error instanceof Error ? error.message : "Internal Server Error" });
     }
   });
 
   app.post("/api/admin/spells/delete", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Missing bearer token." });
-      }
-
-      const idToken = authHeader.slice("Bearer ".length);
-      const { auth } = getAdminServices();
-      const decoded = await auth.verifyIdToken(idToken);
-
-      const actingRole = await loadUserRoleFromD1(decoded.uid);
-      const isAdmin = HARDCODED_STAFF_EMAILS.has(decoded.email ?? "") || actingRole === "admin";
-
-      if (!isAdmin) {
-        return res.status(403).json({ error: "Admin access required." });
-      }
+      await verifyAdminToken(req.headers.authorization);
 
       const { id } = req.body;
       if (!id) {
@@ -346,6 +287,9 @@ async function startServer() {
       return res.json({ success: true, id });
     } catch (error) {
       console.error("Error deleting spell:", error);
+      if (error instanceof HttpError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       return res.status(500).json({ error: error instanceof Error ? error.message : "Internal Server Error" });
     }
   });
@@ -365,6 +309,9 @@ async function startServer() {
       return res.json(payload);
     } catch (error) {
       console.error("Error generating character export:", error);
+      if (error instanceof HttpError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       return res.status(500).json({ error: error instanceof Error ? error.message : "Internal Server Error" });
     }
   });
@@ -411,6 +358,9 @@ async function startServer() {
       return res.json({ url: uploadData.url, key });
     } catch (error) {
       console.error("Error exporting character to R2:", error);
+      if (error instanceof HttpError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       return res.status(500).json({ error: error instanceof Error ? error.message : "Internal Server Error" });
     }
   });

@@ -6,7 +6,11 @@ The Archive runs as **two parallel processes** locally: a Cloudflare Worker for 
 
 - **Node.js** ≥ 20
 - **npm** (lockfile is committed)
-- **`firebase-service-account.json`** at the repo root (project owner provides it)
+- A **Firebase service account JSON** inlined into your `.env` as
+  `FIREBASE_SERVICE_ACCOUNT_JSON` (project owner provides the JSON).
+  Required only if you exercise the admin user-management flows locally
+  (create user / temp password / sign-in link) — JWT verification works
+  without it.
 
 ## One-time setup
 
@@ -24,9 +28,8 @@ npx wrangler login        # only the first time
 
 | File | Purpose |
 |---|---|
-| `.env` | Server env vars for the Express dev server |
+| `.env` | Server env vars for the Express dev server, including the Firebase service account JSON for admin operations |
 | `worker/.dev.vars` | Worker secrets for `wrangler dev` |
-| `firebase-service-account.json` | Firebase Admin SDK credential — used by Express to verify JWTs in admin endpoints. Required only if you exercise admin features locally; without it, the admin routes return 503 but the rest of the app works. |
 
 #### Sample `.env`
 ```
@@ -35,7 +38,17 @@ R2_API_SECRET=dauligor-asset-secret
 FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 ```
 
-(or set `GOOGLE_APPLICATION_CREDENTIALS=/abs/path/to/firebase-service-account.json` instead)
+The service account JSON drives admin user-management (`createUser` /
+`updateUser` / temp-password / sign-in-link) which calls Firebase
+Identity Toolkit REST under the hood. **JWT verification does NOT need
+it** — verification runs against Firebase's public JWKS via `jose`, so
+the rest of the app (lore, characters, compendium) works without a
+service account configured. The admin routes return 503 with a
+clear message if you hit them without it.
+
+`GOOGLE_APPLICATION_CREDENTIALS` is no longer read — inline the JSON
+into `FIREBASE_SERVICE_ACCOUNT_JSON` (one line, escape newlines as
+`\n` in the `private_key` value).
 
 #### Sample `worker/.dev.vars`
 ```
@@ -156,8 +169,19 @@ The proxy and Worker secrets don't match. `.env`'s `R2_API_SECRET` must equal `w
 ### Worker won't start: "no D1 database bound"
 Run from `worker/`, not from the repo root. The wrangler.toml is in that subdirectory.
 
-### "Could not load the default credentials"
-Either `FIREBASE_SERVICE_ACCOUNT_JSON` or `GOOGLE_APPLICATION_CREDENTIALS` must be set, and the credential must be valid for the configured project. The proxy has a signatureless-token fallback for local dev that grants admin — the warning in the console is expected behaviour. Production must always have a real service account.
+### "Firebase service account is not configured" (503)
+The admin user-management endpoints (`/api/admin/users/[id]/temporary-password`,
+`/api/admin/users/[id]/sign-in-token`, `POST /api/admin/users` to
+create) need `FIREBASE_SERVICE_ACCOUNT_JSON` in your `.env`. JWT
+verification works without it (jose + JWKS), so login and read-only
+admin pages still load; only operations that call Firebase Identity
+Toolkit REST will 503. Paste the full JSON value (one line, escape
+newlines in `private_key` as `\n`) and restart the Express server.
+
+There is **no** signatureless-token fallback. The firebase-admin SDK
+exit ([../../api/_lib/firebase-admin.ts](../../api/_lib/firebase-admin.ts))
+removed it — every token now has its signature verified against
+Firebase's public JWKS unconditionally.
 
 ### Newly added `/api/...` route returns 404
 The Express server reloads on save (because of `tsx watch`), but if you added a route to a deeply-imported file the watcher might miss it. Stop and restart `npm run dev`.
