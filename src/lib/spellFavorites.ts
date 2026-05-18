@@ -2,17 +2,32 @@
  * Per-user spell favorites — local-first with D1 sync for logged-in users.
  *
  * Storage layers:
- *   1. localStorage (`dauligor.spellFavorites`) — primary read source and
- *      first writer. Survives anonymous browsing, supports offline toggles.
- *   2. `/api/spell-favorites` (D1 `user_spell_favorites`) — cloud copy
- *      for logged-in users only. On hook init: union of local + cloud
- *      is computed, written back to both. Subsequent toggles write
- *      through to both.
+ *   1. localStorage (`dauligor.spellFavorites`) — the **anonymous** snapshot.
+ *      Writable only while logged out; while signed in it's read-only and
+ *      represents what the user will see again on next logout.
+ *   2. `/api/spell-favorites` (D1 `user_spell_favorites`) — the **account**
+ *      copy for signed-in users. On sign-in, any anon-only entries are
+ *      promoted into the account (one-way migration). Subsequent toggles
+ *      while signed in write to the account only.
  *
- * Design intent: a player browsing on PC and phone should see the same
- * starred spells. Anonymous browsing still works (localStorage only).
- * Login → device-A favorites added in anon mode get promoted to D1 and
- * propagate to device-B on its next mount.
+ * Why the split:
+ *   - Anonymous favorites added on this browser should follow the user
+ *     into their account on first sign-in ("I starred a few things while
+ *     browsing logged-out; keep them once I log in").
+ *   - When the user signs out, they should see exactly what they had
+ *     before signing in — not the account's full set. Otherwise the next
+ *     account that signs in on this browser would inherit the previous
+ *     user's stars (and worse, have them promoted into its cloud copy
+ *     via the migration step).
+ *
+ * Concretely, the rules are:
+ *   • Anonymous toggle      → write localStorage; cloud untouched.
+ *   • Sign-in cloud sync    → union (cloud + local) shown in memory;
+ *                              local-only entries pushed to cloud;
+ *                              **localStorage is NOT overwritten**.
+ *   • Signed-in toggle      → write cloud; localStorage untouched.
+ *   • Sign-out              → in-memory state reverts to localStorage
+ *                              (the unchanged pre-login snapshot).
  *
  * The endpoint accepts any authenticated user (not just staff) and
  * always derives the user_id from the verified token — the client
@@ -194,17 +209,20 @@ export function useSpellFavorites(
     (async () => {
       const cloud = await fetchCloudFavorites(scope);
       const local = readLocal(scope);
-      // Union: any starred in either place counts. (Removing a
-      // favorite is rare enough that this asymmetric "merge then
-      // promote" wins simplicity vs. last-write timestamps.)
+      // In-memory display = union of both. Removals while signed in
+      // happen against cloud only and don't affect the in-memory
+      // result here because this effect re-runs on next sign-in.
       const union = new Set<string>([...cloud, ...local]);
-      // Promote local-only entries to cloud (login / scope-switch
-      // migration). The cloud endpoint is idempotent under
-      // ON CONFLICT DO NOTHING so this is safe to re-run.
+      // One-way migration: any anon-only entries get promoted to the
+      // cloud account. Idempotent (`ON CONFLICT DO NOTHING`).
       const onlyInLocal = Array.from(local).filter((id) => !cloud.has(id));
       if (onlyInLocal.length > 0) await postFavorite('bulkAdd', { spellIds: onlyInLocal }, scope);
       if (cancelled) return;
-      writeLocal(union, scope);
+      // NOTE: deliberately NOT writing localStorage here. localStorage
+      // is the pre-login anon snapshot and stays read-only for the
+      // duration of this signed-in session — see the file header
+      // comment for the full rule set. Sign-out restores in-memory
+      // state to whatever this snapshot still holds.
       setFavorites(union);
       setHydrating(false);
     })();
@@ -221,12 +239,15 @@ export function useSpellFavorites(
       const wasStarred = next.has(spellId);
       if (wasStarred) next.delete(spellId);
       else next.add(spellId);
-      writeLocal(next, scope);
-      // Cloud-sync the single-spell change for any signed-in user,
-      // regardless of scope. Anonymous users stay localStorage-only.
+      // Persistence destination depends on auth state:
+      //   - Anonymous → localStorage. Cloud has no row to write.
+      //   - Signed-in → cloud only. localStorage stays as the
+      //     pre-login snapshot so it survives the next sign-out.
       if (userId) {
         if (wasStarred) void postFavorite('remove', { spellId }, scope);
         else void postFavorite('add', { spellId }, scope);
+      } else {
+        writeLocal(next, scope);
       }
       return next;
     });
