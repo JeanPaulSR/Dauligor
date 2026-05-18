@@ -36,10 +36,15 @@ import {
   requireAuthenticatedUser,
 } from "./_lib/firebase-admin.js";
 import { executeD1QueryInternal } from "./_lib/d1-internal.js";
+import {
+  buildLoreArticleSaveQueries,
+  buildLoreSecretSaveQueries,
+} from "./_lib/_lore.js";
 
 type NodeLikeRequest = IncomingMessage & {
   headers: Record<string, string | string[] | undefined>;
   query?: Record<string, unknown>;
+  body?: any;
 };
 
 type NodeLikeResponse = {
@@ -415,14 +420,100 @@ async function handleSecrets(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Write handlers — PUT / DELETE for articles and secrets                      */
+/* -------------------------------------------------------------------------- */
+
+async function readJsonBody(req: NodeLikeRequest): Promise<any> {
+  if (req.body && typeof req.body === "object") return req.body;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req as any) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as any));
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  return raw ? JSON.parse(raw) : {};
+}
+
+/**
+ * Idempotent upsert. Client supplies the id (so the same call creates
+ * or updates); the server runs the multi-table batch from
+ * api/_lib/_lore.ts and never trusts authorId from the body — it
+ * comes from the verified token.
+ */
+async function handleArticleUpsert(req: NodeLikeRequest, res: NodeLikeResponse, decoded: any, articleId: string) {
+  const body = await readJsonBody(req);
+  const payload = body?.article;
+  const dmNotes: string = typeof body?.dmNotes === "string" ? body.dmNotes : "";
+  if (!payload || typeof payload !== "object") {
+    throw new HttpError(400, "Missing `article` in request body.");
+  }
+  if (typeof payload.title !== "string" || !payload.title.trim()) {
+    throw new HttpError(400, "Article `title` is required.");
+  }
+  if (typeof payload.category !== "string" || !payload.category.trim()) {
+    throw new HttpError(400, "Article `category` is required.");
+  }
+  if (typeof payload.content !== "string") {
+    throw new HttpError(400, "Article `content` must be a string.");
+  }
+
+  const queries = buildLoreArticleSaveQueries(articleId, payload, dmNotes, decoded.uid);
+  await executeD1QueryInternal(queries);
+
+  return res.status(200).json({ ok: true, id: articleId });
+}
+
+async function handleArticleDelete(res: NodeLikeResponse, articleId: string) {
+  // D1 FK cascade on lore_articles.id clears every related row:
+  // lore_meta_*, lore_article_eras / _campaigns / _tags, lore_secrets
+  // (which itself cascades to lore_secret_eras/_campaigns), lore_links.
+  // One DELETE does the full sweep.
+  await executeD1QueryInternal({
+    sql: "DELETE FROM lore_articles WHERE id = ?",
+    params: [articleId],
+  });
+  return res.status(200).json({ ok: true, id: articleId });
+}
+
+async function handleSecretUpsert(req: NodeLikeRequest, res: NodeLikeResponse, articleId: string, secretId: string) {
+  const body = await readJsonBody(req);
+  const payload = body?.secret ?? body;
+  if (!payload || typeof payload !== "object") {
+    throw new HttpError(400, "Missing secret payload in request body.");
+  }
+  if (typeof payload.content !== "string") {
+    throw new HttpError(400, "Secret `content` must be a string.");
+  }
+
+  // Sanity: refuse to upsert a secret for an article that doesn't exist
+  // — without this, a typo'd article id silently orphans a row.
+  const check = await executeD1QueryInternal({
+    sql: "SELECT id FROM lore_articles WHERE id = ? LIMIT 1",
+    params: [articleId],
+  });
+  if (!Array.isArray(check?.results) || check.results.length === 0) {
+    throw new HttpError(404, "Article not found.");
+  }
+
+  const queries = buildLoreSecretSaveQueries(articleId, secretId, payload);
+  await executeD1QueryInternal(queries);
+
+  return res.status(200).json({ ok: true, articleId, secretId });
+}
+
+async function handleSecretDelete(res: NodeLikeResponse, secretId: string) {
+  // FK cascade clears lore_secret_eras / _campaigns automatically.
+  await executeD1QueryInternal({
+    sql: "DELETE FROM lore_secrets WHERE id = ?",
+    params: [secretId],
+  });
+  return res.status(200).json({ ok: true, id: secretId });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Dispatcher                                                                  */
 /* -------------------------------------------------------------------------- */
 
 export default async function handler(req: NodeLikeRequest, res: NodeLikeResponse) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: `Method ${req.method} not allowed.` });
-  }
-
   try {
     const { decoded, role } = await requireAuthenticatedUser(req.headers.authorization);
     const staff = isWikiStaff(role);
@@ -430,16 +521,37 @@ export default async function handler(req: NodeLikeRequest, res: NodeLikeRespons
 
     const path = parsePath(req);
 
-    // path[0] is always "articles" for the routes we support today —
-    // future shapes (e.g. /api/lore/categories) can branch here.
-    if (path.length === 1 && path[0] === "articles") {
-      return await handleList(req, res, staff);
+    // GET routes (unchanged) — any authenticated user, server-filtered.
+    if (req.method === "GET") {
+      if (path.length === 1 && path[0] === "articles") return await handleList(req, res, staff);
+      if (path.length === 2 && path[0] === "articles") return await handleSingle(req, res, staff, path[1]);
+      if (path.length === 3 && path[0] === "articles" && path[2] === "secrets") {
+        return await handleSecrets(req, res, staff, uid, path[1]);
+      }
+      return res.status(404).json({ error: `Unknown lore route: /${path.join("/")}` });
     }
+
+    // Write routes — wiki staff only (admin / co-dm / lore-writer).
+    // `lore-writer` is included because that role exists specifically
+    // to author wiki content.
+    if (!staff) {
+      throw new HttpError(403, "Wiki staff access required.");
+    }
+
+    // PUT /api/lore/articles/<id> — idempotent article upsert
+    // DELETE /api/lore/articles/<id> — delete article (cascade)
     if (path.length === 2 && path[0] === "articles") {
-      return await handleSingle(req, res, staff, path[1]);
+      if (req.method === "PUT") return await handleArticleUpsert(req, res, decoded, path[1]);
+      if (req.method === "DELETE") return await handleArticleDelete(res, path[1]);
+      return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
-    if (path.length === 3 && path[0] === "articles" && path[2] === "secrets") {
-      return await handleSecrets(req, res, staff, uid, path[1]);
+
+    // PUT /api/lore/articles/<articleId>/secrets/<secretId> — upsert
+    // DELETE /api/lore/articles/<articleId>/secrets/<secretId> — delete
+    if (path.length === 4 && path[0] === "articles" && path[2] === "secrets") {
+      if (req.method === "PUT") return await handleSecretUpsert(req, res, path[1], path[3]);
+      if (req.method === "DELETE") return await handleSecretDelete(res, path[3]);
+      return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 
     return res.status(404).json({ error: `Unknown lore route: /${path.join("/")}` });

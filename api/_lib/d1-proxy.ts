@@ -133,13 +133,27 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     const sql = body.sql || (Array.isArray(body) ? body[0]?.sql : '');
     const normalizedSql = normalizeSqlForGate(sql);
     const MUTATION_KEYWORDS = /\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER|TRUNCATE|ATTACH|DETACH|REINDEX|VACUUM|PRAGMA)\b/i;
-    // `eras` joins `users` in the admin-only protected set: the docs at
-    // docs/architecture/permissions-rbac.md describe era CRUD as admin-only,
-    // but the legacy proxy admitted any staff role. Adding `eras` here
-    // matches the documented intent. Co-dm users on /admin/campaigns get
-    // a 403 if they try to write through the proxy; the page itself also
-    // hides the era CRUD buttons for non-admin viewers.
-    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras)\b/i;
+    // Protected mutation tables — direct writes via this generic proxy
+    // require admin specifically (not just staff).
+    //
+    //   `users`  — H6 staff-side closure. Co-dm / lore-writer can no
+    //              longer self-promote via direct upsertDocument.
+    //              Legitimate writes go through /api/admin/users.
+    //   `eras`   — L1 closure. Docs at permissions-rbac.md mark era
+    //              CRUD as admin-only; this enforces that. AdminCampaigns
+    //              also hides the era CRUD UI for non-admin viewers so
+    //              co-dm doesn't see buttons that 403.
+    //   `lore_*` — Lore-writes batch closure. Every lore_* table
+    //              (lore_articles, lore_secrets, lore_meta_*, lore_article_*,
+    //              lore_secret_*, lore_links) is now write-blocked at the
+    //              proxy. Legitimate writes go through PUT/DELETE
+    //              /api/lore/articles/[id][/secrets/[secretId]], which
+    //              enforces isWikiStaff (admin/co-dm/lore-writer) and
+    //              keeps lore-writer's legitimate authoring path open.
+    //              Without this, a hostile signed-in staff member could
+    //              backdoor a lore row write to set `dm_notes` content
+    //              the per-route endpoint would otherwise gate.
+    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras|lore_\w+)\b/i;
     const isMutation = MUTATION_KEYWORDS.test(normalizedSql);
     const targetsProtectedTable = isMutation && PROTECTED_WRITE_TABLES.test(normalizedSql);
 
