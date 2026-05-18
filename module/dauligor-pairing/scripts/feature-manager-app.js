@@ -55,6 +55,8 @@
 import { FEATURE_MANAGER_TEMPLATE, MODULE_ID } from "./constants.js";
 import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { DauligorSpellPreparationApp } from "./spell-preparation-app.js";
+import { fetchJson } from "./class-import-service.js";
+import { DauligorSequencePromptApp } from "./importer-app.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 
@@ -589,13 +591,18 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       });
     }
 
-    // Wire Re-select button
+    // Wire Re-select button — opens our in-module option picker
+    // (DauligorSequencePromptApp + a 2-pane body) rather than
+    // dnd5e's AdvancementManager. The focused pick's item id is
+    // forwarded so the picker knows which option to replace.
     for (const button of this._bodyRegion.querySelectorAll(`[data-action="reselect-option"]`)) {
       button.addEventListener("click", async (event) => {
         event.preventDefault();
         const groupSourceId = event.currentTarget?.dataset?.groupSourceId;
         const classSourceId = event.currentTarget?.dataset?.classSourceId;
-        await this._openAdvancementForOptionGroup(groupSourceId, classSourceId);
+        const currentItemId = event.currentTarget?.dataset?.currentItemId
+          ?? this._state.focusedOptionItemId;
+        await this._openOptionGroupReselect(groupSourceId, classSourceId, currentItemId);
       });
     }
   }
@@ -665,9 +672,10 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
                   data-action="reselect-option"
                   data-group-source-id="${escapeHtml(group?.groupSourceId ?? "")}"
                   data-class-source-id="${escapeHtml(group?.classSourceId ?? "")}"
-                  title="Open the dnd5e advancement window to re-pick this option.">
+                  data-current-item-id="${escapeHtml(item.itemId)}"
+                  title="Pick a different option for this group. Opens the Dauligor option picker.">
             <i class="fas fa-arrow-right-arrow-left"></i>
-            Re-select via Advancement
+            Swap this pick
           </button>
         </footer>
       </div>
@@ -675,26 +683,33 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
   }
 
   /**
-   * Open dnd5e's `AdvancementManager.forModifyChoices` for the
-   * class + level at which this option-group's ItemChoice
-   * advancement resolves. Walks the class item's advancements to
-   * find the matching ItemChoice (by `flags.dauligor-pairing.groupSourceId`),
-   * falling back to the actor's current class level if no flag
-   * match is found.
+   * Open the Dauligor option-reselect picker for a specific option
+   * group. Uses our own UI surface (`DauligorSequencePromptApp` with
+   * a list-and-detail body) rather than dnd5e's `AdvancementManager`
+   * — per the module's contract, every advancement family should be
+   * handled by an in-module window (see
+   * `docs/advancement-and-activity-implementation-guide.md`).
    *
-   * The manager mutates the actor directly when the user confirms
-   * a new pick. We listen for `dnd5e.advancementManagerComplete`
-   * (registered in the constructor) to refresh the FM.
-   *
-   * Source ref: dnd5e 5.3.x `module/applications/advancement/
-   * advancement-manager.mjs:268` (forModifyChoices) + 674 (hook).
+   * Flow:
+   *   1. Resolve the class item from `group.classSourceId`.
+   *   2. Derive the class bundle URL from the class item's
+   *      `spellListUrl` flag (the same URL the prep manager uses;
+   *      stripped of `/spells.json`).
+   *   3. Fetch the bundle; pull its `optionItems` filtered to the
+   *      group's `groupSourceId`. The bundle ships Foundry-ready
+   *      feat items including flags + descriptions.
+   *   4. Render a 2-pane picker (list + description) inside
+   *      `DauligorSequencePromptApp`. Owned options (already on
+   *      the actor) render as greyed-out — including the one being
+   *      re-selected, which the user can pick again as a no-op.
+   *   5. On confirm: delete the current item, create the new item
+   *      via `createEmbeddedDocuments`. The actor flag write
+   *      triggers our `updateActor` hook, which re-renders the FM.
    */
-  async _openAdvancementForOptionGroup(groupSourceId, classSourceId) {
+  async _openOptionGroupReselect(groupSourceId, classSourceId, currentItemId) {
     if (!groupSourceId) return;
-    // Find the class item this option-group belongs to. Match by
-    // the option-item's classSourceId flag (which the importer
-    // stamps onto every classOption item — see
-    // `createSemanticOptionItem` in class-import-service.js).
+
+    // Step 1 — resolve class item
     const classItem = this._actor.items.find((it) =>
       it.type === "class"
       && it.getFlag?.(MODULE_ID, "sourceId") === classSourceId
@@ -703,38 +718,174 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       notifyWarn("Couldn't find the class item this option belongs to.");
       return;
     }
-    // Walk the class's advancement collection looking for an
-    // ItemChoice with a `groupSourceId` flag matching ours. If
-    // found, use its `level` for `forModifyChoices`. Otherwise
-    // fall back to the actor's current class level — the manager
-    // will re-walk all choices at that level instead.
-    let level = null;
-    const advancements = classItem.advancement?.byId
-      ? Object.values(classItem.advancement.byId)
-      : (classItem.system?.advancement ?? []);
-    for (const adv of advancements) {
-      if ((adv.type ?? adv.constructor?.typeName) !== "ItemChoice") continue;
-      const advFlags = adv.flags?.[MODULE_ID] ?? adv.configuration?.flags?.[MODULE_ID];
-      if (advFlags?.groupSourceId === groupSourceId) {
-        level = Number(adv.level) || null;
-        break;
-      }
-    }
-    if (level == null) {
-      level = Number(classItem.system?.levels) || 1;
-      notifyInfo(`Couldn't pin the option's source level — opening the advancement window at level ${level}.`);
-    }
-    const AdvancementManager = globalThis.dnd5e?.applications?.advancement?.AdvancementManager;
-    if (!AdvancementManager?.forModifyChoices) {
-      notifyWarn("dnd5e AdvancementManager not available.");
+    const className = classItem.name;
+
+    // Step 2 — derive bundle URL via the class item's spellListUrl
+    // flag (set at import time; same convention the Prepare Spells
+    // manager uses to find the live class bundle).
+    const spellListUrl = classItem.getFlag?.(MODULE_ID, "spellListUrl") ?? null;
+    if (!spellListUrl) {
+      notifyWarn(`${className} was imported before live class bundles were tracked — re-import the class to enable re-selection.`);
       return;
     }
+    const bundleUrl = String(spellListUrl).replace(/\/spells\.json(\?.*)?$/i, ".json");
+
+    notifyInfo(`Loading ${className} options…`);
+    let bundle = null;
     try {
-      const manager = AdvancementManager.forModifyChoices(this._actor, classItem.id, level);
-      manager.render(true);
+      bundle = await fetchJson(bundleUrl);
     } catch (err) {
-      console.warn(`${MODULE_ID} | Re-select advancement failed`, err);
-      notifyWarn("Failed to open the advancement window — see console.");
+      console.warn(`${MODULE_ID} | bundle fetch failed`, err);
+    }
+    if (!bundle) {
+      notifyWarn(`Failed to load ${className} bundle — see console.`);
+      return;
+    }
+
+    // Step 3 — find the option group + its items in the bundle.
+    const groupOptions = (bundle.optionItems ?? [])
+      .filter((opt) => (opt.flags?.[MODULE_ID]?.groupSourceId ?? null) === groupSourceId);
+    if (!groupOptions.length) {
+      notifyWarn(`No options found in the ${className} bundle for this group.`);
+      return;
+    }
+
+    // Resolve the current pick's sourceId so we can preselect it +
+    // mark it as the "outgoing" pick. Other owned options should
+    // still appear as greyed so the user can't pick a duplicate.
+    const currentItem = currentItemId ? this._actor.items.get(currentItemId) : null;
+    const currentSourceId = currentItem?.getFlag?.(MODULE_ID, "sourceId") ?? null;
+    const ownedSourceIds = new Set();
+    for (const it of this._actor.items) {
+      const sid = it.getFlag?.(MODULE_ID, "sourceId");
+      if (sid && sid !== currentSourceId) ownedSourceIds.add(String(sid));
+    }
+
+    const groupLabel = currentItem?.getFlag?.(MODULE_ID, "featureTypeLabel")
+      ?? currentItem?.flags?.[MODULE_ID]?.featureTypeLabel
+      ?? "Class Option";
+
+    // Step 4 — render the picker via DauligorSequencePromptApp. The
+    // body has two regions: a left-column option list (one row per
+    // option) and a right-column description panel for the focused
+    // option. We rebuild the body on each focus change.
+    const state = { focusedSourceId: currentSourceId ?? groupOptions[0]?.flags?.[MODULE_ID]?.sourceId };
+
+    const renderBody = (app) => {
+      const focused = groupOptions.find((o) =>
+        String(o.flags?.[MODULE_ID]?.sourceId ?? "") === String(app._state.focusedSourceId));
+
+      const rowsHtml = groupOptions.map((opt) => {
+        const sid = String(opt.flags?.[MODULE_ID]?.sourceId ?? "");
+        const isCurrent = sid === currentSourceId;
+        const isOwned = ownedSourceIds.has(sid);
+        const isFocused = sid === String(app._state.focusedSourceId);
+        const badge = isCurrent
+          ? "Current"
+          : (isOwned ? "Already Owned" : "");
+        return `
+          <div class="dauligor-option-picker__row ${isFocused ? "dauligor-option-picker__row--focused" : ""} ${isOwned ? "dauligor-option-picker__row--owned" : ""}"
+               data-action="focus-option"
+               data-source-id="${escapeHtml(sid)}">
+            <img class="dauligor-option-picker__row-img" src="${escapeHtml(opt.img ?? "")}" alt="" loading="lazy">
+            <div class="dauligor-option-picker__row-text">
+              <div class="dauligor-option-picker__row-name">${escapeHtml(opt.name ?? "")}</div>
+              ${badge ? `<div class="dauligor-option-picker__row-badge">${escapeHtml(badge)}</div>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const descRaw = focused?.system?.description?.value
+        ?? focused?.system?.description
+        ?? "<em>No description available.</em>";
+
+      return `
+        <div class="dauligor-feature-manager__reselect">
+          <aside class="dauligor-feature-manager__reselect-list">
+            ${rowsHtml}
+          </aside>
+          <section class="dauligor-feature-manager__reselect-detail">
+            <header class="dauligor-feature-manager__reselect-detail-header">
+              <div class="dauligor-feature-manager__reselect-detail-eyebrow">
+                ${escapeHtml(groupLabel)} · <em>${escapeHtml(className)}</em>
+              </div>
+              <h2 class="dauligor-feature-manager__reselect-detail-title">${escapeHtml(focused?.name ?? "Select an option")}</h2>
+            </header>
+            <div class="dauligor-feature-manager__reselect-detail-body">${descRaw}</div>
+          </section>
+        </div>
+      `;
+    };
+
+    const onRenderBody = (app, region) => {
+      for (const row of region.querySelectorAll(`[data-action="focus-option"]`)) {
+        row.addEventListener("click", () => {
+          const sid = row.dataset.sourceId;
+          if (!sid) return;
+          // Don't allow focusing already-owned options (other than
+          // the current one being re-selected). Clicking them is a
+          // visual cue, not an action.
+          if (ownedSourceIds.has(sid)) return;
+          if (sid === app._state.focusedSourceId) return;
+          app._state.focusedSourceId = sid;
+          app.rerenderPrompt();
+        });
+      }
+    };
+
+    const onAction = async (app, actionId) => {
+      if (actionId !== "confirm") return undefined;
+      const newSourceId = app._state.focusedSourceId;
+      if (!newSourceId) return { status: "noop" };
+      if (newSourceId === currentSourceId) return { status: "noop", value: { unchanged: true } };
+
+      const newOption = groupOptions.find((o) =>
+        String(o.flags?.[MODULE_ID]?.sourceId ?? "") === String(newSourceId));
+      if (!newOption) {
+        notifyWarn("Selected option couldn't be resolved from the bundle.");
+        return false;
+      }
+
+      // Step 5 — swap. Delete first so the actor's already-owned
+      // index doesn't trip the bundle's duplicate guard on create.
+      try {
+        if (currentItem) {
+          await this._actor.deleteEmbeddedDocuments("Item", [currentItem.id]);
+        }
+        const itemData = foundry.utils.deepClone(newOption);
+        await this._actor.createEmbeddedDocuments("Item", [itemData]);
+        return { status: "swapped", value: { newName: newOption.name } };
+      } catch (err) {
+        console.warn(`${MODULE_ID} | option reselect swap failed`, err);
+        notifyWarn("Failed to swap the option — see console.");
+        return false;
+      }
+    };
+
+    const result = await DauligorSequencePromptApp.prompt({
+      title: `Re-select ${groupLabel}: ${className}`,
+      subtitle: `Choose a different ${groupLabel.toLowerCase()} option. The current pick will be replaced.`,
+      width: 920,
+      height: 580,
+      state,
+      renderBody,
+      onRenderBody,
+      onAction,
+      actions: [
+        { id: "confirm", label: "Confirm", primary: true },
+        { id: "cancel", label: "Cancel" }
+      ]
+    });
+
+    if (result?.status === "swapped") {
+      notifyInfo(`Swapped to ${result.value?.newName ?? "the new option"}.`);
+      // The actor mutation already fires updateActor → FM re-render
+      // via the hook in the constructor. Explicit render here is a
+      // belt for cases where the hook gate skipped (e.g. mid-flush).
+      this.render({ force: false });
+    } else if (result?.status === "noop" && result.value?.unchanged) {
+      notifyInfo("No change — you re-confirmed the current pick.");
     }
   }
 
