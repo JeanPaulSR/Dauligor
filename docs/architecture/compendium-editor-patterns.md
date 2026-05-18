@@ -179,12 +179,12 @@ Estimated total effort: 1 focused week, broken across the priorities below.
 - [ ] Migrate JSON-array tag references (`classes.tag_ids`, `feats.tags`, `items.tags`, `spells.tags`) into proper junction tables. Enables queries like "find all classes with the Combat tag" without LIKE-on-JSON. Phase 4e architecture doc explicitly defers this.
 - [ ] Schema-vs-code lint: a CI check that ensures `migrate.js` mappers and editor save payloads agree with `worker/migrations/*.sql`. Or: delete `migrate.js` once Firestore is gone (the only reason it exists).
 - [ ] **Adopt `<name-slug>-<source-slug>` identifier convention for source-specific entities.** Today most identifiers are bare `<name-slug>` (e.g., `blade-of-disaster`, `wall-of-force`). When a spell/feat/class appears in multiple source books with mechanical differences, this collides under D1's `UNIQUE` constraint and silently drops the loser.
-  - Discovered when the Foundry import collapsed two `Blade of Disaster` versions (FRHF vs TCE) into the same identifier. Resolved one-off via `scripts/rename-blade-of-disaster.js`.
+  - Discovered when the Foundry import collapsed two `Blade of Disaster` versions (FRHF vs TCE) into the same identifier. Resolved one-off via `scripts/_archive/rename-blade-of-disaster.js`.
   - **Going forward**: identifiers for source-specific entities should be `<name-slug>-<source-slug>` (e.g., `blade-of-disaster-tce`, `blade-of-disaster-frhof`). The bare `<name-slug>` form is reserved for unambiguous entities or canonical/core-rules versions.
   - **Implementation paths to update**:
     - [src/lib/spellImport.ts](../../src/lib/spellImport.ts) — Foundry spell folder importer should append the source slug to the identifier when creating a candidate.
     - `slugify` callers in editors — when an editor auto-generates an identifier from name (e.g., [src/components/compendium/DevelopmentCompendiumManager.tsx](../../src/components/compendium/DevelopmentCompendiumManager.tsx) at save time), append the source slug if the entity has a `sourceId`.
-  - **Migration path for existing identifiers**: a sweep-and-rename script that scans for collision-prone identifiers, resolves the source for each, and rewrites in place. Same pattern as `scripts/rename-blade-of-disaster.js` but generalised across spells/feats/items/classes/subclasses. Prefer to run this once before final Firestore cut so D1 stays clean from the start.
+  - **Migration path for existing identifiers**: a sweep-and-rename script that scans for collision-prone identifiers, resolves the source for each, and rewrites in place. Same pattern as `scripts/_archive/rename-blade-of-disaster.js` but generalised across spells/feats/items/classes/subclasses. The Firestore cut already shipped, so a future generalised version would be a D1-only sweep.
 
 ### Priority 7 — Final Firestore-removal cleanup ✅
 
@@ -200,8 +200,8 @@ The Firestore-cut shipped in 2026-05. This section's tasks are complete:
 
 Still open as a follow-up:
 
-- [ ] **Drop the Firebase Admin SDK dependency.** `api/_lib/firebase-admin.ts` and `server.ts` still call `auth.verifyIdToken()` for JWT verification. Replace with manual JWKS verification via `jose` (~1 day). Plan in memory: `~/.claude/projects/E--DnD-Professional-Dev-Dauligor/memory/project_firebase_auth_exit_plan.md`. After this, `firebase-admin` and `firebase-service-account.json` go away.
-- [ ] **Move historical migration scripts to `scripts/_archive/`** (`migrate.js`, `migrate_subclasses.js`, `check_firestore.js`, `cleanup-firestore-orphans.js`, `delete-replaced-sorcerer-set.js`, `_audit-*.py`). Optional housekeeping; they don't interfere by living in `scripts/`.
+- [ ] **Trim the Firebase Admin SDK surface (stage 1 of the auth exit plan).** Replace the 5 `auth.verifyIdToken()` calls in `api/_lib/firebase-admin.ts` and `server.ts` with manual JWKS verification via [`jose`](https://github.com/panva/jose) (~1 day). This removes the SDK from the JWT-verify path; the read-side stops needing the service-account JSON loaded. **The SDK does NOT go away** — `api/admin/users.ts` still uses `auth.createUser` / `updateUser` / `deleteUser` / `createCustomToken` for user CRUD, and `api/me.ts` uses `auth.updateUser` for the username-to-email sync. Service-account JSON is still required for those calls. Full removal is stage 2 (~3-5 days) — self-rolled auth on the Cloudflare stack, see `~/.claude/projects/E--DnD-Professional-Dev-Dauligor/memory/project_firebase_auth_exit_plan.md`.
+- [ ] **Move M4 closer to closure (spell-rules recompute DoS).** `recomputeAppliedRulesForSpell` runs ~5 raw queryD1 calls from the client whenever `upsertSpell` saves; a staff user could DoS the recompute path by repeatedly saving. Closing requires moving the recompute server-side — either by adding a `/api/spells` endpoint family or by folding a thin `POST /api/spell-rules/recompute` into an existing dispatcher. Deferred during the May 2026 audit pass because the risk is staff-only DoS (no privacy leak) and the scope (new endpoint surface) outweighs the value.
 
 ---
 

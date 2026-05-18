@@ -91,16 +91,19 @@ File-resolution guide. Pair with [AGENTS.md](AGENTS.md) for the agent briefing a
 | `worker/.dev.vars` | Local Worker secrets (`API_SECRET`) — gitignored |
 | `worker/.wrangler/state/` | Local D1 + R2 emulation state — gitignored |
 
-## 5. Migration scripts (historical)
-
-The Firestore→D1 migration is complete. These scripts are kept for posterity and as reference material if a similar migration is ever needed; they are **not part of the regular dev or deploy loop**.
+## 5. Operational scripts (active)
 
 | Path | Purpose |
 |---|---|
-| [scripts/migrate.js](scripts/migrate.js) | Firestore → local D1 (one-time, completed) |
-| [scripts/migrate_subclasses.js](scripts/migrate_subclasses.js) | Targeted subclass migration (one-time) |
-| [scripts/check_firestore.js](scripts/check_firestore.js) | Pre-migration sanity check (no longer applicable) |
-| `scripts/_audit-*.py`, `scripts/_audit_field_drift.js` | Field-drift audit scripts used to compare Firestore JSON dumps against migrated D1 rows during the cut |
+| [scripts/backup-d1.mjs](scripts/backup-d1.mjs) | D1 backup runner (`npm run backup:d1`) |
+| [scripts/restore-d1.mjs](scripts/restore-d1.mjs) | D1 restore runner (`npm run restore:d1`) |
+| [scripts/d1-timetravel.mjs](scripts/d1-timetravel.mjs) | D1 Time Travel diagnostic (`npm run timetravel`) |
+| [scripts/install-nightly-backup.ps1](scripts/install-nightly-backup.ps1) / [uninstall-nightly-backup.ps1](scripts/uninstall-nightly-backup.ps1) | Windows scheduled-task installer for nightly backups |
+| [scripts/_repro_progression_loop.mjs](scripts/_repro_progression_loop.mjs) | Headless regression harness for the character-builder normalize/build loop — `npx tsx scripts/_repro_progression_loop.mjs` |
+
+## 5a. Historical scripts ([scripts/_archive/](scripts/_archive/))
+
+The Firestore→D1 migration is complete. The migration utilities + one-shot codemods that supported it live under `scripts/_archive/` for reference material; **none of them are part of the regular dev or deploy loop** and they're not invoked from `package.json`. Contents include the migration runners (`migrate.js`, `migrate_subclasses.js`), the pre-cut sanity check (`check_firestore.js`), the orphan-row cleanup (`cleanup-firestore-orphans.js`), the field-drift audit tools (`_audit-*.py`, `_audit_field_drift.js`), the codemods that retired client-side Firestore patterns (`_rename_error_helper.mjs`, `_rewrite_fetchers.mjs`), and the one-off rename / dedup scripts (`rename-blade-of-disaster.js`, `delete-replaced-sorcerer-set.js`).
 
 ## 6. Foundry pairing module
 

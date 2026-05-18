@@ -114,7 +114,7 @@ The Worker is intentionally stateless and trusts only the proxy-layer auth. **Th
 | [api/_lib/](../../api/_lib/) | Both | Shared proxy logic and `firebase-admin` JWT verification |
 | [server.ts](../../server.ts) | Local dev only | Express server that wires the same routes as Vercel + Vite middleware |
 | [worker/](../../worker/) | Cloudflare Worker | The stateless gateway to D1 and R2 |
-| [scripts/](../../scripts/) | Node CLI | Operational + drift-audit utilities — never deployed. The historical Firestore migration scripts (`migrate.js`, `check_firestore.js`) are kept here as reference; they have no live use post-D1. |
+| [scripts/](../../scripts/) | Node CLI | Active operational scripts (D1 backup / restore / Time Travel; the headless `_repro_progression_loop.mjs` regression harness) — never deployed. Historical Firestore migration utilities live under [scripts/_archive/](../../scripts/_archive/). |
 | [worker/migrations/](../../worker/migrations/) | wrangler CLI | D1 schema migrations |
 
 ## Process boundaries / what runs where

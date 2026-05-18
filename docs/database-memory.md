@@ -96,4 +96,4 @@ ON CONFLICT(id) DO UPDATE SET col1 = excluded.col1, col2 = excluded.col2, ...
 - Junction tables continue to use `INSERT OR IGNORE` — that variant does not delete on conflict and is safe.
 - The `ON DELETE CASCADE` constraints themselves are kept; they are correct for genuine row deletion (e.g. ClassList "Delete Class"), just not for upsert via REPLACE.
 
-Fixed sites: `src/lib/d1.ts` (`upsertDocument`, `upsertDocumentBatch`), `src/lib/lore.ts` (`upsertLoreArticle`, `upsertLoreSecret`), `src/lib/characterShared.ts` (`generateCharacterSaveQueries`), `scripts/migrate.js` (`insert` helper). The migrate helper resolves the PK column at runtime via `pragma_table_info`, so `lore_meta_*` tables (whose PK is `article_id`) work correctly.
+Fixed sites: `src/lib/d1.ts` (`upsertDocument`, `upsertDocumentBatch`), `src/lib/lore.ts` (`upsertLoreArticle`, `upsertLoreSecret`), `src/lib/characterShared.ts` (`generateCharacterSaveQueries`), `scripts/_archive/migrate.js` (`insert` helper — historical, kept as reference). The migrate helper resolves the PK column at runtime via `pragma_table_info`, so `lore_meta_*` tables (whose PK is `article_id`) work correctly.

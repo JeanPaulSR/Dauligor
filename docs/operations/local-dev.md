@@ -68,7 +68,7 @@ rm ./remote-dump.sql
 cd ..
 ```
 
-`scripts/migrate.js` is the historical Firestore→D1 importer; it is **not** part of the regular dev loop and should not be run today. Use the remote-snapshot pattern above to refresh local data instead.
+`scripts/_archive/migrate.js` is the historical Firestore→D1 importer; it is **not** part of the regular dev loop and should not be run today. Use the remote-snapshot pattern above to refresh local data instead.
 
 ## Daily run
 
@@ -177,15 +177,17 @@ If the row is missing, applying `0011_system_metadata.sql` will seed it.
 
 ## Useful supporting scripts
 
-In [scripts/](../../scripts/):
+Active scripts in [scripts/](../../scripts/):
 
 | Script | Purpose |
 |---|---|
-| `migrate.js` | Firestore → local D1 (Phase 1–4 data) |
-| `migrate_subclasses.js` | Targeted migration for a subset of subclass docs |
-| `check_firestore.js` | Counts documents in selected Firestore collections — useful as a pre-migration sanity check |
+| `backup-d1.mjs` | D1 backup runner (`npm run backup:d1`). |
+| `restore-d1.mjs` | D1 restore runner (`npm run restore:d1`). |
+| `d1-timetravel.mjs` | D1 Time Travel diagnostic (`npm run timetravel`). |
+| `_repro_progression_loop.mjs` | Headless regression harness for the character-builder normalize/build loop. Run with `npx tsx scripts/_repro_progression_loop.mjs`. |
+| `install-nightly-backup.ps1` / `uninstall-nightly-backup.ps1` | Windows scheduled-task installer for nightly backups. |
 
-All scripts use `firebase-service-account.json` at the repo root.
+The historical Firestore→D1 migration utilities and one-shot codemods live in [scripts/_archive/](../../scripts/_archive/) for reference. None of them are part of the dev loop; they're documented in [../../DIRECTORY_MAP.md §5a](../../DIRECTORY_MAP.md).
 
 ## Related docs
 
