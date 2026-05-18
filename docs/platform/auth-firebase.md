@@ -105,20 +105,7 @@ There's also a fallback path that parses the JWT signaturelessly when Firebase A
 
 ## RBAC role matrix
 
-Defined in the D1 `users.role` column. Five roles:
-
-| Role | UI label | Capabilities |
-|---|---|---|
-| `admin` | GM | Full CRUD on all collections; user/campaign management; can access `/api/admin/*` |
-| `co-dm` | Co-DM | CRUD on lore; manage campaigns where they're listed in `campaign_members.role = 'co-dm'` |
-| `lore-writer` | Librarian | CRUD on lore (drafts and published) |
-| `trusted-player` | Player+ | Same as `user`, but with extended visibility on certain DM-tagged content |
-| `user` | Adventurer | Read-only access to published lore and revealed secrets |
-
-Role enforcement happens in three places:
-- **Client** — `effectiveProfile` hides UI affordances. Not a security boundary; it's UX.
-- **Proxy** — `requireXAccess` helpers reject the request before it reaches the Worker. This is the security boundary.
-- **D1 schema** — `users.role` is constrained by a `CHECK` clause in the schema migrations.
+The five roles (`admin`, `co-dm`, `lore-writer`, `trusted-player`, `user`) and their per-table policy live in [../architecture/permissions-rbac.md](../architecture/permissions-rbac.md) — that's the canonical RBAC reference. This doc covers the auth-flow half of the picture (helpers above + auth flow below); the RBAC doc covers role definitions, enforcement points (client / server / schema), preview mode, and the per-table policy matrix.
 
 ## Preview mode (RBAC simulation)
 
