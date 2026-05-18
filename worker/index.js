@@ -35,7 +35,11 @@ async function handleRequest(request, env) {
 
   if (url.pathname === '/list' && request.method === 'GET') {
     const prefix = url.searchParams.get('prefix') ?? '';
-    const delimiter = url.searchParams.get('delimiter') ?? '/';
+    // Empty string and missing param both mean "recursive — no delimiter".
+    // R2's behaviour with an explicit empty-string delimiter is undefined; pass
+    // undefined to get a guaranteed fully recursive listing.
+    const delimiterParam = url.searchParams.get('delimiter');
+    const delimiter = delimiterParam ? delimiterParam : undefined;
 
     const listed = await env.BUCKET.list({ prefix, delimiter });
 

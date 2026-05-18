@@ -140,6 +140,7 @@ Foundry-FilePicker-style browse-and-select modal for icon/token slots. Toolbar c
 - **Display mode** — Tile (5-col grid) or List (thumb + name + size + date)
 - **Filter** — searches recursively across the **current folder and its subtree**, lazy-loaded; cache invalidates on folder change
 - **Upload** *(admin only)* — saves to current folder, or to `<source>/_temp/` for later sorting via the Image Manager
+- **Drag-and-drop** *(admin only)* — drop files from the OS onto the modal; uploads sequentially into the current folder
 
 The caller passes `rootFolder` as the *initial* source. Admin-only buttons read the role from [`src/lib/currentUser.ts`](../../src/lib/currentUser.ts) (set by App.tsx); the server proxy is the authoritative gate. Auto-cropped to 126² for icons / 400² for tokens; WebP conversion automatic.
 

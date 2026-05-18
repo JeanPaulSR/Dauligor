@@ -43,6 +43,14 @@ interface Favorite {
   path: string;
 }
 
+interface UploadQueueItem {
+  id: string;
+  name: string;
+  progress: number; // 0–100
+  status: 'pending' | 'uploading' | 'done' | 'error';
+  error?: string;
+}
+
 type DisplayMode = 'tiles' | 'list';
 
 export interface IconPickerModalProps {
@@ -136,7 +144,10 @@ export function IconPickerModal({
 
   const [showUpload, setShowUpload] = useState(false);
   const [uploadToTemp, setUploadToTemp] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+
+  // `uploading` derived from the queue — true while any item is pending or in flight.
+  const uploading = uploadQueue.some((q) => q.status === 'uploading' || q.status === 'pending');
 
   const [showPrivate, setShowPrivate] = useState(false);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('tiles');
@@ -146,6 +157,9 @@ export function IconPickerModal({
   const [createBusy, setCreateBusy] = useState(false);
 
   const [favorites, setFavorites] = useState<Favorite[]>(loadFavorites);
+
+  // Drag-and-drop upload onto the modal body
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const canManage = isAdmin();
 
@@ -276,31 +290,110 @@ export function IconPickerModal({
 
   // ── upload ────────────────────────────────────────────────────────────────
 
-  const handleFileUpload = async (file: File) => {
-    if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
-    setUploading(true);
+  // Upload one queued item end-to-end: WebP conversion → r2Upload with progress
+  // → optimistic insert into the current listing. Updates the queue entry as
+  // it progresses (pending → uploading%→ done | error). Returns true on success.
+  const runQueueUpload = async (
+    file: File,
+    queueId: string,
+    opts: { toTemp: boolean },
+  ): Promise<boolean> => {
+    setUploadQueue((prev) =>
+      prev.map((q) => q.id === queueId ? { ...q, status: 'uploading', progress: 0 } : q),
+    );
     try {
       const targetSize = activeSource === 'tokens' ? { width: 400, height: 400 } : { width: 126, height: 126 };
       const converted = await convertToWebP(file, 1.0, targetSize);
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.webp`;
-      const uploadPath = uploadToTemp
+      const uploadPath = opts.toTemp
         ? `${activeSource}/_temp/${fileName}`
         : `${currentPath}/${fileName}`;
-      const { url } = await r2Upload(converted, uploadPath);
-      toast.success(uploadToTemp ? 'Uploaded to _temp — move it via Image Manager' : `${activeSource === 'tokens' ? 'Token' : 'Icon'} uploaded`);
-      if (!uploadToTemp) {
+      const { url } = await r2Upload(converted, uploadPath, (pct) => {
+        setUploadQueue((prev) =>
+          prev.map((q) => q.id === queueId ? { ...q, progress: pct } : q),
+        );
+      });
+      setUploadQueue((prev) =>
+        prev.map((q) => q.id === queueId ? { ...q, status: 'done', progress: 100 } : q),
+      );
+      if (!opts.toTemp) {
         setIcons((prev) => [
           ...prev,
           { key: uploadPath, url, name: fileName.replace('.webp', ''), size: converted.size, uploaded: new Date().toISOString() },
         ]);
         setAllIcons(null);
       }
-      setShowUpload(false);
+      return true;
     } catch (err: any) {
-      toast.error('Upload failed: ' + err.message);
-    } finally {
-      setUploading(false);
+      setUploadQueue((prev) =>
+        prev.map((q) => q.id === queueId ? { ...q, status: 'error', error: err?.message ?? 'Unknown error' } : q),
+      );
+      return false;
     }
+  };
+
+  // Clear the queue a few seconds after the last upload settles so users see
+  // the "Done" / "Failed" state before it disappears.
+  const scheduleQueueClear = () => {
+    setTimeout(() => {
+      setUploadQueue((prev) =>
+        prev.some((q) => q.status === 'uploading' || q.status === 'pending') ? prev : [],
+      );
+    }, 3000);
+  };
+
+  // Drag-and-drop: enqueue all files upfront, then upload sequentially so the
+  // worker's WebP conversion path doesn't get slammed in parallel.
+  const handleDroppedFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+    if (files.length === 0) { toast.error('Drop image files only'); return; }
+
+    const newItems: UploadQueueItem[] = files.map((f) => ({
+      id: Math.random().toString(36).slice(2),
+      name: f.name,
+      progress: 0,
+      status: 'pending',
+    }));
+    setUploadQueue((prev) => [...prev, ...newItems]);
+
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < files.length; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      const success = await runQueueUpload(files[i], newItems[i].id, { toTemp: false });
+      if (success) ok++; else fail++;
+    }
+    if (files.length === 1) {
+      if (ok) toast.success(`${activeSource === 'tokens' ? 'Token' : 'Icon'} uploaded`);
+      // single-file failures show their error in the queue entry; no separate toast
+    } else {
+      const parts: string[] = [];
+      if (ok) parts.push(`${ok} uploaded`);
+      if (fail) parts.push(`${fail} failed`);
+      (fail && !ok ? toast.error : toast.success)(parts.join(' · '));
+    }
+    scheduleQueueClear();
+  };
+
+  // Single-file upload from the panel's Choose File button. Uses the same queue
+  // pipeline so the user sees per-file progress instead of a generic spinner.
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+    const item: UploadQueueItem = {
+      id: Math.random().toString(36).slice(2),
+      name: file.name,
+      progress: 0,
+      status: 'pending',
+    };
+    setUploadQueue((prev) => [...prev, item]);
+    const ok = await runQueueUpload(file, item.id, { toTemp: uploadToTemp });
+    if (ok) {
+      toast.success(uploadToTemp
+        ? 'Uploaded to _temp — move it via Image Manager'
+        : `${activeSource === 'tokens' ? 'Token' : 'Icon'} uploaded`);
+      setShowUpload(false);
+    }
+    scheduleQueueClear();
   };
 
   // ── create folder ─────────────────────────────────────────────────────────
@@ -377,9 +470,55 @@ export function IconPickerModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-[700px] max-h-[88vh] flex flex-col gap-0 p-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-4 pb-3 shrink-0 border-b border-gold/10">
-          <DialogTitle className="text-base font-serif">{title}</DialogTitle>
+      <DialogContent
+        // Do NOT add `relative` here — DialogContent ships with `position: fixed`
+        // for centering. tailwind-merge would drop `fixed` in favour of `relative`,
+        // dumping the modal at the bottom of the page. `fixed` already creates a
+        // containing block for the absolutely-positioned drag overlay below.
+        //
+        // `dialog-content` brings the site bg/border tokens; sizing is per the
+        // standard wide-editor pattern (95vw on mobile, capped at max-w-5xl).
+        // Fixed h-[720px] keeps the modal a stable shape regardless of folder
+        // content count (it doesn't grow/shrink as you navigate).
+        className="dialog-content sm:max-w-[95vw] lg:max-w-5xl flex flex-col h-[720px] max-h-[90vh] gap-0"
+        onDragEnter={(e) => {
+          if (!canManage) return;
+          if (!e.dataTransfer.types.includes('Files')) return;
+          e.preventDefault();
+          setIsDraggingOver(true);
+        }}
+        onDragOver={(e) => {
+          if (!canManage) return;
+          if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+        }}
+        onDragLeave={(e) => {
+          if (!isDraggingOver) return;
+          const related = e.relatedTarget as Node | null;
+          if (!related || !e.currentTarget.contains(related)) {
+            setIsDraggingOver(false);
+          }
+        }}
+        onDrop={(e) => {
+          if (!canManage) return;
+          if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+          e.preventDefault();
+          setIsDraggingOver(false);
+          handleDroppedFiles(e.dataTransfer.files);
+        }}
+      >
+        {/* Drag-over overlay (admin only) */}
+        {canManage && isDraggingOver && (
+          <div className="absolute inset-0 z-30 rounded-xl border-2 border-dashed border-gold bg-gold/10 backdrop-blur-sm flex flex-col items-center justify-center gap-3 pointer-events-none">
+            <Upload className="w-10 h-10 text-gold" />
+            <p className="text-sm font-semibold text-gold">
+              Drop into {currentPath}/
+            </p>
+            <p className="text-xs text-gold/60">Auto-cropped to {sizeLabel} · WebP</p>
+          </div>
+        )}
+
+        <DialogHeader className="dialog-header shrink-0">
+          <DialogTitle className="dialog-title">{title}</DialogTitle>
         </DialogHeader>
 
         {/* Source tabs — only rendered when more than one source is enabled */}
@@ -492,7 +631,7 @@ export function IconPickerModal({
         {/* Favorites strip */}
         {currentSourceFavorites.length > 0 && (
           <div className="px-4 py-2 border-b border-gold/10 shrink-0 flex items-start gap-2 flex-wrap">
-            <span className="text-[10px] uppercase tracking-widest text-ink/40 shrink-0 pt-0.5">Favorites</span>
+            <span className="label-text shrink-0 pt-0.5">Favorites</span>
             <div className="flex items-center gap-1 flex-wrap">
               {currentSourceFavorites.map((fav) => {
                 const isActive = fav.path === currentPath;
@@ -628,7 +767,7 @@ export function IconPickerModal({
         {canManage && showUpload && (
           <div className="px-4 py-3 border-b border-gold/10 shrink-0 bg-gold/5 space-y-2.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] uppercase tracking-widest text-ink/40 shrink-0">Upload to:</span>
+              <span className="label-text shrink-0">Upload to:</span>
               {([
                 { value: false, label: `Current (${currentPath.split('/').pop()})` },
                 { value: true, label: 'Temp (_temp)' },
@@ -676,12 +815,106 @@ export function IconPickerModal({
           </div>
         )}
 
+        {/* Upload queue — per-file progress with aggregate bar (cap visible to 10 rows) */}
+        {uploadQueue.length > 0 && (() => {
+          const total = uploadQueue.length;
+          const settled = uploadQueue.filter((q) => q.status === 'done' || q.status === 'error').length;
+          const failedCount = uploadQueue.filter((q) => q.status === 'error').length;
+          // Aggregate counts each item 0–100; settled rows count as 100, the in-flight one contributes its current progress
+          const aggregatePct = Math.round(
+            uploadQueue.reduce((sum, q) =>
+              sum + (q.status === 'done' || q.status === 'error' ? 100 : q.progress),
+              0,
+            ) / total,
+          );
+          // Sort uploading → pending → error → done so the most-relevant rows are at the top
+          const sortRank = { uploading: 0, pending: 1, error: 2, done: 3 } as const;
+          const sorted = [...uploadQueue].sort((a, b) => sortRank[a.status] - sortRank[b.status]);
+          const VISIBLE_CAP = 10;
+          const visible = sorted.slice(0, VISIBLE_CAP);
+          const hidden = total - visible.length;
+          const hiddenPending = sorted.slice(VISIBLE_CAP).filter((q) => q.status === 'pending' || q.status === 'uploading').length;
+          const hiddenDone = sorted.slice(VISIBLE_CAP).filter((q) => q.status === 'done').length;
+          const hiddenFailed = sorted.slice(VISIBLE_CAP).filter((q) => q.status === 'error').length;
+
+          return (
+            <div className="px-4 py-3 border-b border-gold/10 shrink-0 bg-card/40 space-y-2.5">
+              {/* Aggregate row */}
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <span className="text-[10px] uppercase tracking-widest text-ink/50">
+                    {uploading
+                      ? `Uploading · ${settled}/${total} complete${failedCount ? ` · ${failedCount} failed` : ''}`
+                      : failedCount && failedCount === total
+                        ? `Upload failed (${failedCount}/${total})`
+                        : `Upload complete · ${settled}/${total}${failedCount ? ` (${failedCount} failed)` : ''}`}
+                  </span>
+                  <span className="text-[10px] text-gold/70 tabular-nums">{aggregatePct}%</span>
+                </div>
+                <div className="h-1.5 bg-gold/10 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-200',
+                      failedCount && failedCount === total ? 'bg-blood/60' : 'bg-gold',
+                    )}
+                    style={{ width: `${aggregatePct}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Per-file rows (sorted, capped) */}
+              <div className="space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                {visible.map((item) => (
+                  <div key={item.id} className="text-xs">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <span className="text-ink/60 truncate">{item.name}</span>
+                      {item.status === 'done' && (
+                        <span className="text-green-400 text-[10px] shrink-0 font-bold">Done</span>
+                      )}
+                      {item.status === 'error' && (
+                        <span className="text-blood text-[10px] shrink-0 font-bold">Failed</span>
+                      )}
+                      {item.status === 'uploading' && (
+                        <span className="text-gold/60 text-[10px] shrink-0 tabular-nums">{Math.round(item.progress)}%</span>
+                      )}
+                      {item.status === 'pending' && (
+                        <span className="text-ink/30 text-[10px] shrink-0">Queued</span>
+                      )}
+                    </div>
+                    {item.status === 'uploading' && (
+                      <div className="h-1 bg-gold/10 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gold rounded-full transition-all duration-200"
+                          style={{ width: `${item.progress}%` }}
+                        />
+                      </div>
+                    )}
+                    {item.status === 'done' && <div className="h-1 bg-green-500/30 rounded-full" />}
+                    {item.status === 'error' && (
+                      <p className="text-[10px] text-blood mt-0.5 truncate">{item.error}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {hidden > 0 && (
+                <p className="text-[10px] text-ink/35 italic">
+                  …and {hidden} more
+                  {hiddenPending ? ` · ${hiddenPending} queued` : ''}
+                  {hiddenDone ? ` · ${hiddenDone} done` : ''}
+                  {hiddenFailed ? ` · ${hiddenFailed} failed` : ''}
+                </p>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 min-h-0 custom-scrollbar">
           {loading && !search ? (
             displayMode === 'tiles' ? (
-              <div className="grid grid-cols-5 gap-2">
-                {Array.from({ length: 15 }).map((_, i) => (
+              <div className="grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-9 gap-2">
+                {Array.from({ length: 27 }).map((_, i) => (
                   <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded border border-gold/10" />
                 ))}
               </div>
@@ -698,9 +931,12 @@ export function IconPickerModal({
                 <Loader2 className="w-6 h-6 animate-spin text-gold/40" />
               </div>
             ) : displayedIcons.length === 0 ? (
-              <p className="text-center text-sm text-ink/40 italic py-12">
-                No {activeSource === 'tokens' ? 'tokens' : 'icons'} match "{search}"
-              </p>
+              <div className="empty-state">
+                <Search className="w-10 h-10 text-gold/20 mb-3" />
+                <p className="text-sm text-ink/40 italic">
+                  No {activeSource === 'tokens' ? 'tokens' : 'icons'} match "{search}"
+                </p>
+              </div>
             ) : (
               <>
                 <p className="text-xs text-ink/40 mb-3">
@@ -745,7 +981,7 @@ export function IconPickerModal({
                   onSelect={(url) => { onSelect(url); onClose(); }}
                 />
               ) : visibleFolders.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
+                <div className="empty-state">
                   <ImageIcon className="w-10 h-10 text-gold/20 mb-3" />
                   <p className="text-sm text-ink/40 italic">
                     No {activeSource === 'tokens' ? 'tokens' : 'icons'} here yet
@@ -784,7 +1020,7 @@ function IconGrid({
   onSelect: (url: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-5 gap-1">
+    <div className="grid grid-cols-5 sm:grid-cols-7 lg:grid-cols-9 gap-1.5">
       {icons.map((icon) => (
         <button
           key={icon.key}

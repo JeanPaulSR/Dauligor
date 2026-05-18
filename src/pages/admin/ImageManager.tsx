@@ -25,7 +25,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom';
 import { fetchCollection } from '../../lib/d1';
 import { auth } from '../../lib/firebase';
-import { r2List, r2Delete, r2Rename, r2Upload, r2MoveFolder } from '../../lib/r2';
+import { r2List, r2Delete, r2Rename, r2Upload, r2MoveFolder, r2DeleteFolder } from '../../lib/r2';
 import { convertToWebP } from '../../lib/imageUtils';
 import {
   ImageMetadata,
@@ -40,6 +40,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import {
   Image as ImageIcon, Folder, ChevronRight, Home, Copy, Edit2, Save,
@@ -261,6 +262,22 @@ async function countFolderFiles(prefix: string): Promise<number> {
   return here + subCounts.reduce((a, b) => a + b, 0);
 }
 
+// Recursive count of files + subfolders under prefix. Used by the folder
+// detail panel so admins can see "X files · Y subfolders" before they
+// rename or delete.
+async function countFolderContents(prefix: string): Promise<{ files: number; folders: number }> {
+  const p = prefix.endsWith('/') ? prefix : `${prefix}/`;
+  const result = await r2List(p, '/');
+  const filesHere = result.objects.filter(
+    (o) => !o.key.endsWith('/.keep') && !o.key.endsWith('/.gitkeep'),
+  ).length;
+  const subPrefixes = result.delimitedPrefixes.map((p2) => p2.replace(/\/$/, ''));
+  const subResults = await Promise.all(subPrefixes.map(countFolderContents));
+  const totalFiles = filesHere + subResults.reduce((a, b) => a + b.files, 0);
+  const totalFolders = subPrefixes.length + subResults.reduce((a, b) => a + b.folders, 0);
+  return { files: totalFiles, folders: totalFolders };
+}
+
 async function moveR2Folder(
   oldPrefix: string,
   newPrefix: string,
@@ -367,6 +384,105 @@ function MetadataPanel({
   );
 }
 
+// ── folder detail panel ───────────────────────────────────────────────────────
+
+function FolderDetailPanel({
+  folder,
+  stats,
+  renameInput,
+  onRenameInput,
+  onRename,
+  onDelete,
+  onClose,
+  busy,
+  canManage,
+}: {
+  folder: StorageFolder;
+  stats: { files: number; folders: number } | null;
+  renameInput: string;
+  onRenameInput: (v: string) => void;
+  onRename: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+  busy: boolean;
+  canManage: boolean;
+}) {
+  const parentPath = folder.fullPath.split('/').slice(0, -1).join('/');
+  const renameChanged = renameInput.trim() && renameInput.trim() !== folder.name;
+  return (
+    <>
+      <div className="rounded-lg border border-gold/20 bg-card/50 p-5 flex items-center justify-center min-h-24">
+        <Folder className="w-12 h-12 text-gold/60" />
+      </div>
+
+      <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30 relative">
+        <button
+          onClick={onClose}
+          title="Close folder preview"
+          className="absolute top-2 right-2 text-ink/30 hover:text-ink/70 transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+        <p className="label-text text-gold/80">Folder</p>
+        <div className="space-y-1 text-xs text-ink/60">
+          <p className="break-all"><span className="text-ink/40">Name: </span>{folder.name}</p>
+          <p className="break-all"><span className="text-ink/40">Path: </span>{parentPath ? `${parentPath}/` : ''}{folder.name}/</p>
+          <p>
+            <span className="text-ink/40">Contains: </span>
+            {stats === null
+              ? <span className="italic text-ink/40">counting…</span>
+              : <>{stats.files} file{stats.files !== 1 ? 's' : ''} · {stats.folders} subfolder{stats.folders !== 1 ? 's' : ''}</>}
+          </p>
+        </div>
+      </div>
+
+      {canManage && (
+        <div className="border border-gold/20 rounded-lg p-4 space-y-2 bg-card/30">
+          <p className="label-text text-gold/80">Rename</p>
+          <Input
+            value={renameInput}
+            onChange={(e) => onRenameInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && renameChanged && !busy) onRename(); }}
+            placeholder="new-folder-name"
+            spellCheck={false}
+            className="h-7 text-xs bg-background/50 border-gold/20 font-mono"
+            disabled={busy}
+          />
+          <p className="text-[9px] text-ink/30 font-mono truncate">
+            → {parentPath ? `${parentPath}/` : ''}{renameInput.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || '…'}/
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-full text-xs btn-gold gap-1"
+            onClick={onRename}
+            disabled={!renameChanged || busy}
+          >
+            <Save className="w-3 h-3" />
+            Rename folder
+          </Button>
+        </div>
+      )}
+
+      {canManage && (
+        <div className="border border-blood/20 rounded-lg p-4 space-y-3 bg-card/30">
+          <p className="label-text text-blood/70">Danger Zone</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="w-full h-8 text-xs text-blood/60 hover:text-blood hover:bg-blood/10 border border-blood/20 gap-2"
+            onClick={onDelete}
+            disabled={busy}
+          >
+            <Trash2 className="w-3 h-3" />
+            Delete folder
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function ImageManager({ userProfile }: { userProfile: any }) {
@@ -391,6 +507,30 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   const [movingFolder, setMovingFolder] = useState(false);
   const [folderMoveProgress, setFolderMoveProgress] = useState(0);
   const [folderMoveTotal, setFolderMoveTotal] = useState(0);
+  // 'counting' before we know the total file count, 'moving' once the worker is
+  // actively moving objects. Shapes the progress-bar label so users aren't
+  // staring at "0%" while a deep tree is being counted.
+  const [folderMovePhase, setFolderMovePhase] = useState<'counting' | 'moving'>('counting');
+  const [folderMoveLabel, setFolderMoveLabel] = useState('');
+
+  // Folder delete — confirm dialog + same two-phase progress UX as the move bar
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<StorageFolder | null>(null);
+  const [deleteFolderReload, setDeleteFolderReload] = useState<(() => void) | null>(null);
+  const [deleteFolderCount, setDeleteFolderCount] = useState<number | null>(null); // null while counting
+  const [deletingFolder, setDeletingFolder] = useState(false);
+  const [folderDeleteProgress, setFolderDeleteProgress] = useState(0);
+  const [folderDeleteTotal, setFolderDeleteTotal] = useState(0);
+  const [folderDeletePhase, setFolderDeletePhase] = useState<'counting' | 'deleting'>('counting');
+  const [folderDeleteLabel, setFolderDeleteLabel] = useState('');
+
+  // Folder preview / manage — selected folder shown in the right panel
+  type FolderStats = { files: number; folders: number } | null; // null while loading
+  const [selectedFolder, setSelectedFolder] = useState<StorageFolder | null>(null);
+  const [selectedFolderStats, setSelectedFolderStats] = useState<FolderStats>(null);
+  const [folderRenameInput, setFolderRenameInput] = useState('');
+  const [selectedIconFolder, setSelectedIconFolder] = useState<StorageFolder | null>(null);
+  const [selectedIconFolderStats, setSelectedIconFolderStats] = useState<FolderStats>(null);
+  const [iconFolderRenameInput, setIconFolderRenameInput] = useState('');
 
   // ── IMAGE LIBRARY state ───────────────────────────────────────────────────
 
@@ -424,6 +564,9 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   const [renameFolder, setRenameFolder] = useState('');
   const [renameValue, setRenameValue] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
+  // Sub-phase of the rename so the button shows what's actually happening
+  // (R2 copy/delete vs. D1 reference rewrite vs. metadata save).
+  const [renamePhase, setRenamePhase] = useState<'idle' | 'moving' | 'updating-refs' | 'saving-meta'>('idle');
 
   // Filter / display / private-folder toggles shared across the Image Library
   // and Icons tabs. Each tab keeps its own search input value because they
@@ -696,6 +839,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   const handleRename = async () => {
     if (!selectedItem || !renameValue.trim()) return;
     setRenameSaving(true);
+    setRenamePhase('moving');
     try {
       const ext = selectedItem.key.split('.').pop() || 'webp';
       const safeName = renameValue.trim().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase();
@@ -705,9 +849,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
       if (newKey === selectedItem.key) { setRenaming(false); return; }
 
       const { url } = await r2Rename(selectedItem.key, newKey);
+
+      setRenamePhase('updating-refs');
       const refCount = await updateImageReferences(selectedItem.url, url);
 
       if (metadata) {
+        setRenamePhase('saving-meta');
         await saveImageMetadata(newKey, { ...metadata, url, filename: `${safeName}.${ext}`, folder: safeFolder });
         await deleteImageMetadata(selectedItem.key);
       }
@@ -726,6 +873,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
       toast.error('Move failed: ' + (err.message ?? 'Unknown error'));
     } finally {
       setRenameSaving(false);
+      setRenamePhase('idle');
     }
   };
 
@@ -1061,33 +1209,195 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
     setTimeout(() => setUploadQueue([]), 3000);
   };
 
-  const performFolderMove = async (folder: StorageFolder, targetPath: string, reload: () => void) => {
+  // Shared core for any folder relocate (move-to-new-parent OR rename-in-place).
+  // Both operations boil down to "move every key under oldPrefix to newPrefix",
+  // with the same counting → moving phase progression for the bar.
+  const performFolderRelocate = async (
+    folder: StorageFolder,
+    newPrefix: string,
+    operation: 'Moving' | 'Renaming',
+    reload: () => void,
+  ) => {
     // Clear drag state immediately so a bubbled duplicate drop event bails out here.
     setDraggingFolder(null);
     setDropTargetPath(null);
-    const newPrefix = `${targetPath}/${folder.name}`;
     if (newPrefix === folder.fullPath) return;
     setMovingFolder(true);
     setFolderMoveProgress(0);
     setFolderMoveTotal(0);
+    setFolderMovePhase('counting');
+    setFolderMoveLabel(`Counting files in "${folder.name}"…`);
     try {
-      // Count total files first so we can show a percentage
+      // Count total files first so we can show a percentage. countFolderFiles
+      // recursively lists subfolders; for deep trees this is the slow bit, so
+      // surface "Counting…" rather than a stalled 0%.
       try {
         const total = await countFolderFiles(folder.fullPath);
         setFolderMoveTotal(total);
       } catch { /* non-fatal — progress bar falls back to count display */ }
 
+      setFolderMovePhase('moving');
+      const newName = newPrefix.split('/').pop() || newPrefix;
+      setFolderMoveLabel(
+        operation === 'Renaming'
+          ? `Renaming "${folder.name}" → "${newName}"`
+          : `Moving "${folder.name}" → ${newPrefix.split('/').slice(0, -1).join('/')}/`,
+      );
+
       const { count } = await moveR2Folder(folder.fullPath, newPrefix, (moved) => {
         setFolderMoveProgress(moved);
       });
       reload();
-      toast.success(`Moved "${folder.name}" → ${targetPath}/ (${count} file${count !== 1 ? 's' : ''})`);
+      const verb = operation === 'Renaming' ? 'Renamed' : 'Moved';
+      toast.success(`${verb} "${folder.name}" (${count} file${count !== 1 ? 's' : ''})`);
     } catch (err: any) {
-      toast.error('Move failed: ' + (err.message ?? 'Unknown error'));
+      toast.error(`${operation} failed: ` + (err.message ?? 'Unknown error'));
     } finally {
       setMovingFolder(false);
       setFolderMoveProgress(0);
       setFolderMoveTotal(0);
+      setFolderMovePhase('counting');
+      setFolderMoveLabel('');
+    }
+  };
+
+  const performFolderMove = (folder: StorageFolder, targetPath: string, reload: () => void) =>
+    performFolderRelocate(folder, `${targetPath}/${folder.name}`, 'Moving', reload);
+
+  // Rename a folder in place by moving all of its objects to a sibling prefix
+  // with the new basename. R2 has no folder concept, so this is a recursive
+  // copy/delete under the hood (handled by the worker).
+  const performFolderRename = async (folder: StorageFolder, newName: string, reload: () => void) => {
+    const safe = newName.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!safe) { toast.error('Folder name cannot be empty'); return; }
+    const parent = folder.fullPath.split('/').slice(0, -1).join('/');
+    const newPrefix = parent ? `${parent}/${safe}` : safe;
+    if (newPrefix === folder.fullPath) return;
+    await performFolderRelocate(folder, newPrefix, 'Renaming', reload);
+  };
+
+  // Select a folder for the right-side detail panel. Clears any item/icon
+  // selection so the panel renders one thing at a time.
+  const selectFolderForPreview = (folder: StorageFolder) => {
+    setSelectedItem(null);
+    setMetadata(null);
+    setReferences(null);
+    setShowDeleteConfirm(false);
+    setRenaming(false);
+    setSelectedFolder(folder);
+    setFolderRenameInput(folder.name);
+  };
+
+  const selectIconFolderForPreview = (folder: StorageFolder) => {
+    setSelectedIcon(null);
+    setIconDeleteConfirm(false);
+    setSelectedIconFolder(folder);
+    setIconFolderRenameInput(folder.name);
+  };
+
+  // Recompute folder stats whenever the selected folder changes.
+  useEffect(() => {
+    if (!selectedFolder) { setSelectedFolderStats(null); return; }
+    let cancelled = false;
+    setSelectedFolderStats(null);
+    countFolderContents(selectedFolder.fullPath)
+      .then((s) => { if (!cancelled) setSelectedFolderStats(s); })
+      .catch(() => { if (!cancelled) setSelectedFolderStats({ files: 0, folders: 0 }); });
+    return () => { cancelled = true; };
+  }, [selectedFolder]);
+
+  useEffect(() => {
+    if (!selectedIconFolder) { setSelectedIconFolderStats(null); return; }
+    let cancelled = false;
+    setSelectedIconFolderStats(null);
+    countFolderContents(selectedIconFolder.fullPath)
+      .then((s) => { if (!cancelled) setSelectedIconFolderStats(s); })
+      .catch(() => { if (!cancelled) setSelectedIconFolderStats({ files: 0, folders: 0 }); });
+    return () => { cancelled = true; };
+  }, [selectedIconFolder]);
+
+  // Clear folder selection when the parent listing navigates elsewhere — the
+  // selected folder may no longer be visible / may have been renamed.
+  useEffect(() => { setSelectedFolder(null); }, [currentPath]);
+  useEffect(() => { setSelectedIconFolder(null); }, [iconBrowsePath]);
+
+  // Mutex: a file/icon selection wins out over folder selection, so clicking
+  // an image after previewing a folder swaps the right panel cleanly.
+  useEffect(() => { if (selectedItem) setSelectedFolder(null); }, [selectedItem]);
+  useEffect(() => { if (selectedIcon) setSelectedIconFolder(null); }, [selectedIcon]);
+
+  // Open the delete-folder confirm dialog. Records the target + reload callback,
+  // then kicks off a recursive file-count in the background so the dialog can
+  // show "N files will be removed" before the admin confirms.
+  const openFolderDelete = (folder: StorageFolder, reload: () => void) => {
+    setDeleteFolderTarget(folder);
+    setDeleteFolderReload(() => reload);
+    setDeleteFolderCount(null);
+    (async () => {
+      try {
+        const total = await countFolderFiles(folder.fullPath);
+        setDeleteFolderCount(total);
+      } catch {
+        setDeleteFolderCount(0); // count failed — admin can still proceed
+      }
+    })();
+  };
+
+  const handleConfirmDeleteFolder = async () => {
+    if (!deleteFolderTarget) return;
+    const folder = deleteFolderTarget;
+    const prefix = folder.fullPath.endsWith('/') ? folder.fullPath : folder.fullPath + '/';
+
+    setDeletingFolder(true);
+    setFolderDeletePhase('counting');
+    setFolderDeleteLabel(`Listing files in "${folder.name}"…`);
+    setFolderDeleteProgress(0);
+    setFolderDeleteTotal(0);
+
+    try {
+      // Re-list to capture exact keys for both the delete loop AND the
+      // metadata cleanup pass that runs afterward. Re-listing here means the
+      // count we show is fresh even if the folder mutated between the
+      // background pre-count and the confirm click.
+      const listResult = await r2List(prefix, '');
+      const keys = listResult.objects.map((o) => o.key);
+      setFolderDeleteTotal(keys.length);
+
+      if (keys.length === 0) {
+        // Folder is already empty — nothing to do at R2 level
+        deleteFolderReload?.();
+        toast.success(`"${folder.name}" was already empty`);
+        return;
+      }
+
+      setFolderDeletePhase('deleting');
+      setFolderDeleteLabel(`Deleting "${folder.name}"`);
+      const { count } = await r2DeleteFolder(prefix, (deleted) => {
+        setFolderDeleteProgress(deleted);
+      });
+
+      // Clean up image_metadata rows for every key we just removed. Failure
+      // here is non-fatal (orphan rows are harmless); we swallow to keep the
+      // user-facing toast positive.
+      await Promise.all(keys.map((k) => deleteImageMetadata(k).catch(() => {})));
+
+      // If the user had one of the deleted files selected, clear that selection.
+      if (selectedItem && keys.includes(selectedItem.key)) setSelectedItem(null);
+      if (selectedIcon && keys.includes(selectedIcon.fullPath)) setSelectedIcon(null);
+
+      deleteFolderReload?.();
+      toast.success(`Deleted "${folder.name}" (${count} file${count !== 1 ? 's' : ''})`);
+    } catch (err: any) {
+      toast.error('Delete failed: ' + (err.message ?? 'Unknown error'));
+    } finally {
+      setDeletingFolder(false);
+      setFolderDeleteProgress(0);
+      setFolderDeleteTotal(0);
+      setFolderDeletePhase('counting');
+      setFolderDeleteLabel('');
+      setDeleteFolderCount(null);
+      setDeleteFolderTarget(null);
+      setDeleteFolderReload(null);
     }
   };
 
@@ -1379,18 +1689,33 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
               {/* Folder move progress bar */}
               {movingFolder && (
-                <div className="flex items-center justify-between px-3 py-2 bg-gold/10 border border-gold/20 rounded-lg text-xs text-gold/80">
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
-                    <span>Moving folder…</span>
+                <div className="px-3 py-2 bg-gold/10 border border-gold/20 rounded-lg text-xs text-gold/80 space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
+                      <span className="truncate">{folderMoveLabel || 'Moving folder…'}</span>
+                    </div>
+                    <span className="tabular-nums shrink-0">
+                      {folderMovePhase === 'counting'
+                        ? '—'
+                        : folderMoveTotal > 0
+                          ? `${Math.min(100, Math.round((folderMoveProgress / folderMoveTotal) * 100))}%`
+                          : `${folderMoveProgress} files`}
+                    </span>
                   </div>
-                  {folderMoveTotal > 0 ? (
-                    <span>{Math.min(100, Math.round((folderMoveProgress / folderMoveTotal) * 100))}%</span>
-                  ) : folderMoveProgress > 0 ? (
-                    <span>{folderMoveProgress} files moved</span>
-                  ) : (
-                    <span>0%</span>
-                  )}
+                  <div className="h-1 bg-gold/10 rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all duration-200',
+                        folderMovePhase === 'counting' ? 'bg-gold/40 animate-pulse w-1/3' : 'bg-gold',
+                      )}
+                      style={
+                        folderMovePhase === 'moving' && folderMoveTotal > 0
+                          ? { width: `${Math.min(100, Math.round((folderMoveProgress / folderMoveTotal) * 100))}%` }
+                          : undefined
+                      }
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1555,48 +1880,64 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   {visibleFolders.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                       {visibleFolders.map((folder) => (
-                        <button
-                          key={folder.fullPath}
-                          draggable
-                          onClick={() => setCurrentPath(folder.fullPath)}
-                          onDragStart={(e) => {
-                            setDraggingFolder(folder);
-                            e.dataTransfer.setData('application/x-r2-folder', folder.fullPath);
-                            e.dataTransfer.effectAllowed = 'move';
-                          }}
-                          onDragEnd={() => { setDraggingFolder(null); setDropTargetPath(null); }}
-                          onDragEnter={(e) => { e.preventDefault(); setDropTargetPath(folder.fullPath); }}
-                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                          onDragLeave={(e) => {
-                            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetPath(null);
-                          }}
-                          onDrop={async (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDropTargetPath(null);
-                            if (draggingFolder && draggingFolder.fullPath !== folder.fullPath) {
-                              await performFolderMove(draggingFolder, folder.fullPath, () => loadFolder(currentPath));
-                            } else if (e.dataTransfer.files.length > 0) {
-                              uploadImagesToPath(await readDroppedItems(e.dataTransfer), folder.fullPath);
-                            }
-                          }}
-                          className={cn(
-                            'flex items-center gap-2 p-3 border rounded-lg transition-all text-left group',
-                            dropTargetPath === folder.fullPath
-                              ? 'border-gold bg-gold/15 shadow-md shadow-gold/20'
-                              : draggingFolder?.fullPath === folder.fullPath
-                              ? 'opacity-40 border-gold/30 bg-gold/5'
-                              : 'border-gold/20 bg-gold/5 hover:bg-gold/10 hover:border-gold/40',
-                          )}
-                        >
-                          <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/60 group-hover:text-gold')} />
-                          <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
-                            {folder.name}
-                          </span>
-                          {folder.name.startsWith('_') && (
-                            <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
-                          )}
-                        </button>
+                        <div key={folder.fullPath} className="relative group/folder">
+                          <button
+                            draggable
+                            onClick={() => setCurrentPath(folder.fullPath)}
+                            onDragStart={(e) => {
+                              setDraggingFolder(folder);
+                              e.dataTransfer.setData('application/x-r2-folder', folder.fullPath);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragEnd={() => { setDraggingFolder(null); setDropTargetPath(null); }}
+                            onDragEnter={(e) => { e.preventDefault(); setDropTargetPath(folder.fullPath); }}
+                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                            onDragLeave={(e) => {
+                              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetPath(null);
+                            }}
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDropTargetPath(null);
+                              if (draggingFolder && draggingFolder.fullPath !== folder.fullPath) {
+                                await performFolderMove(draggingFolder, folder.fullPath, () => loadFolder(currentPath));
+                              } else if (e.dataTransfer.files.length > 0) {
+                                uploadImagesToPath(await readDroppedItems(e.dataTransfer), folder.fullPath);
+                              }
+                            }}
+                            className={cn(
+                              'w-full flex items-center gap-2 p-3 border rounded-lg transition-all text-left group',
+                              dropTargetPath === folder.fullPath
+                                ? 'border-gold bg-gold/15 shadow-md shadow-gold/20'
+                                : draggingFolder?.fullPath === folder.fullPath
+                                ? 'opacity-40 border-gold/30 bg-gold/5'
+                                : 'border-gold/20 bg-gold/5 hover:bg-gold/10 hover:border-gold/40',
+                            )}
+                          >
+                            <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/60 group-hover:text-gold')} />
+                            <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
+                              {folder.name}
+                            </span>
+                            {folder.name.startsWith('_') && (
+                              <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectFolderForPreview(folder);
+                            }}
+                            title={`Preview / manage "${folder.name}"`}
+                            className={cn(
+                              'absolute top-1 right-1 p-1 rounded transition-opacity',
+                              selectedFolder?.fullPath === folder.fullPath
+                                ? 'opacity-100 text-gold bg-gold/15'
+                                : 'opacity-0 group-hover/folder:opacity-100 text-ink/30 hover:text-gold hover:bg-gold/10',
+                            )}
+                          >
+                            <Info className="w-3 h-3" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -1667,7 +2008,19 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
             {/* Right: detail panel */}
             <div className="space-y-4 sticky top-4">
-              {selectedItem ? (
+              {selectedFolder ? (
+                <FolderDetailPanel
+                  folder={selectedFolder}
+                  stats={selectedFolderStats}
+                  renameInput={folderRenameInput}
+                  onRenameInput={setFolderRenameInput}
+                  onRename={() => performFolderRename(selectedFolder, folderRenameInput, () => loadFolder(currentPath)).then(() => setSelectedFolder(null))}
+                  onDelete={() => openFolderDelete(selectedFolder, () => loadFolder(currentPath))}
+                  onClose={() => setSelectedFolder(null)}
+                  busy={movingFolder || deletingFolder}
+                  canManage={isAdmin}
+                />
+              ) : selectedItem ? (
                 <>
                   <div className="rounded-lg overflow-hidden border border-gold/20 bg-card">
                     <img src={selectedItem.url} alt={selectedItem.name} className="w-full object-contain max-h-52" referrerPolicy="no-referrer" />
@@ -1724,7 +2077,13 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                             Cancel
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 text-xs btn-gold gap-1 flex-1" onClick={handleRename} disabled={renameSaving}>
-                            <Save className="w-3 h-3" /> {renameSaving ? 'Moving…' : 'Move & Update Links'}
+                            {renameSaving
+                              ? <RefreshCw className="w-3 h-3 animate-spin" />
+                              : <Save className="w-3 h-3" />}
+                            {renamePhase === 'moving' ? 'Moving file…'
+                              : renamePhase === 'updating-refs' ? 'Updating references…'
+                              : renamePhase === 'saving-meta' ? 'Saving metadata…'
+                              : 'Move & Update Links'}
                           </Button>
                         </div>
                       </div>
@@ -2531,60 +2890,76 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   {visibleIconFolders.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                       {visibleIconFolders.map((folder) => (
-                        <button
-                          key={folder.fullPath}
-                          draggable
-                          onClick={() => setIconBrowsePath(folder.fullPath)}
-                          onDragStart={(e) => {
-                            setDraggingFolder(folder);
-                            e.dataTransfer.setData('application/x-r2-folder', folder.fullPath);
-                            e.dataTransfer.effectAllowed = 'move';
-                          }}
-                          onDragEnd={() => { setDraggingFolder(null); setDropTargetPath(null); }}
-                          onDragEnter={(e) => { e.preventDefault(); setDropTargetPath(folder.fullPath); }}
-                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                          onDragLeave={(e) => {
-                            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetPath(null);
-                          }}
-                          onDrop={async (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setDropTargetPath(null);
-                            if (draggingFolder && draggingFolder.fullPath !== folder.fullPath) {
-                              await performFolderMove(draggingFolder, folder.fullPath, () => loadIconFolder(iconBrowsePath));
-                            } else if (draggingItem && draggingItem.fullPath !== `${folder.fullPath}/${draggingItem.name}`) {
-                              const item = draggingItem;
-                              setDraggingItem(null);
-                              try {
-                                const newKey = `${folder.fullPath}/${item.name}`;
-                                await r2Rename(item.fullPath, newKey);
-                                toast.success(`Moved "${item.name}" to ${folder.name}/`);
-                                if (selectedIcon?.fullPath === item.fullPath) setSelectedIcon(null);
-                                loadIconFolder(iconBrowsePath);
-                              } catch (err: any) {
-                                toast.error('Move failed: ' + (err.message ?? 'Unknown error'));
+                        <div key={folder.fullPath} className="relative group/folder">
+                          <button
+                            draggable
+                            onClick={() => setIconBrowsePath(folder.fullPath)}
+                            onDragStart={(e) => {
+                              setDraggingFolder(folder);
+                              e.dataTransfer.setData('application/x-r2-folder', folder.fullPath);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragEnd={() => { setDraggingFolder(null); setDropTargetPath(null); }}
+                            onDragEnter={(e) => { e.preventDefault(); setDropTargetPath(folder.fullPath); }}
+                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                            onDragLeave={(e) => {
+                              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTargetPath(null);
+                            }}
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDropTargetPath(null);
+                              if (draggingFolder && draggingFolder.fullPath !== folder.fullPath) {
+                                await performFolderMove(draggingFolder, folder.fullPath, () => loadIconFolder(iconBrowsePath));
+                              } else if (draggingItem && draggingItem.fullPath !== `${folder.fullPath}/${draggingItem.name}`) {
+                                const item = draggingItem;
+                                setDraggingItem(null);
+                                try {
+                                  const newKey = `${folder.fullPath}/${item.name}`;
+                                  await r2Rename(item.fullPath, newKey);
+                                  toast.success(`Moved "${item.name}" to ${folder.name}/`);
+                                  if (selectedIcon?.fullPath === item.fullPath) setSelectedIcon(null);
+                                  loadIconFolder(iconBrowsePath);
+                                } catch (err: any) {
+                                  toast.error('Move failed: ' + (err.message ?? 'Unknown error'));
+                                }
+                              } else if (!draggingFolder && !draggingItem && e.dataTransfer.files.length > 0) {
+                                uploadIconItems(await readDroppedItems(e.dataTransfer), folder.fullPath);
                               }
-                            } else if (!draggingFolder && !draggingItem && e.dataTransfer.files.length > 0) {
-                              uploadIconItems(await readDroppedItems(e.dataTransfer), folder.fullPath);
-                            }
-                          }}
-                          className={cn(
-                            'flex items-center gap-2 p-3 border rounded-lg transition-all text-left group',
-                            dropTargetPath === folder.fullPath
-                              ? 'border-gold bg-gold/15 shadow-md shadow-gold/20'
-                              : draggingFolder?.fullPath === folder.fullPath
-                              ? 'opacity-40 border-gold/30 bg-gold/5'
-                              : 'border-gold/20 bg-gold/5 hover:bg-gold/10 hover:border-gold/40',
-                          )}
-                        >
-                          <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/60 group-hover:text-gold')} />
-                          <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
-                            {folder.name}
-                          </span>
-                          {folder.name.startsWith('_') && (
-                            <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
-                          )}
-                        </button>
+                            }}
+                            className={cn(
+                              'w-full flex items-center gap-2 p-3 border rounded-lg transition-all text-left group',
+                              dropTargetPath === folder.fullPath
+                                ? 'border-gold bg-gold/15 shadow-md shadow-gold/20'
+                                : draggingFolder?.fullPath === folder.fullPath
+                                ? 'opacity-40 border-gold/30 bg-gold/5'
+                                : 'border-gold/20 bg-gold/5 hover:bg-gold/10 hover:border-gold/40',
+                            )}
+                          >
+                            <Folder className={cn('w-4 h-4 shrink-0', dropTargetPath === folder.fullPath ? 'text-gold' : 'text-gold/60 group-hover:text-gold')} />
+                            <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
+                              {folder.name}
+                            </span>
+                            {folder.name.startsWith('_') && (
+                              <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectIconFolderForPreview(folder);
+                            }}
+                            title={`Preview / manage "${folder.name}"`}
+                            className={cn(
+                              'absolute top-1 right-1 p-1 rounded transition-opacity',
+                              selectedIconFolder?.fullPath === folder.fullPath
+                                ? 'opacity-100 text-gold bg-gold/15'
+                                : 'opacity-0 group-hover/folder:opacity-100 text-ink/30 hover:text-gold hover:bg-gold/10',
+                            )}
+                          >
+                            <Info className="w-3 h-3" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -2684,7 +3059,19 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
           {/* Right: selected icon detail panel */}
           <div className="space-y-4 sticky top-4">
-            {selectedIcon ? (
+            {selectedIconFolder ? (
+              <FolderDetailPanel
+                folder={selectedIconFolder}
+                stats={selectedIconFolderStats}
+                renameInput={iconFolderRenameInput}
+                onRenameInput={setIconFolderRenameInput}
+                onRename={() => performFolderRename(selectedIconFolder, iconFolderRenameInput, () => loadIconFolder(iconBrowsePath)).then(() => setSelectedIconFolder(null))}
+                onDelete={() => openFolderDelete(selectedIconFolder, () => loadIconFolder(iconBrowsePath))}
+                onClose={() => setSelectedIconFolder(null)}
+                busy={movingFolder || deletingFolder}
+                canManage={isAdmin}
+              />
+            ) : selectedIcon ? (
               <>
                 <div className="rounded-lg overflow-hidden border border-gold/20 bg-card/50 p-4 flex items-center justify-center min-h-24">
                   <img
@@ -2781,6 +3168,96 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Delete folder confirm dialog (admin only) */}
+      <Dialog
+        open={!!deleteFolderTarget}
+        onOpenChange={(v) => {
+          if (!v && !deletingFolder) {
+            setDeleteFolderTarget(null);
+            setDeleteFolderReload(null);
+            setDeleteFolderCount(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-base">Delete folder?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-ink/70">
+              <span className="font-mono text-gold/80">{deleteFolderTarget?.fullPath}/</span>
+            </p>
+            {deletingFolder ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs text-blood/80 min-w-0">
+                    <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
+                    <span className="truncate">{folderDeleteLabel}</span>
+                  </div>
+                  <span className="text-xs text-blood/80 tabular-nums shrink-0">
+                    {folderDeletePhase === 'counting'
+                      ? '—'
+                      : folderDeleteTotal > 0
+                        ? `${folderDeleteProgress} / ${folderDeleteTotal}`
+                        : `${folderDeleteProgress}`}
+                  </span>
+                </div>
+                <div className="h-1.5 bg-blood/10 rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-200',
+                      folderDeletePhase === 'counting' ? 'bg-blood/40 animate-pulse w-1/3' : 'bg-blood',
+                    )}
+                    style={
+                      folderDeletePhase === 'deleting' && folderDeleteTotal > 0
+                        ? { width: `${Math.min(100, Math.round((folderDeleteProgress / folderDeleteTotal) * 100))}%` }
+                        : undefined
+                    }
+                  />
+                </div>
+              </div>
+            ) : deleteFolderCount === null ? (
+              <p className="flex items-center gap-2 text-ink/50 text-xs">
+                <RefreshCw className="w-3 h-3 animate-spin" /> Counting files…
+              </p>
+            ) : (
+              <>
+                <p className="text-ink/70">
+                  <strong className="text-blood/80">{deleteFolderCount}</strong> file{deleteFolderCount !== 1 ? 's' : ''} will be permanently deleted along with the folder itself.
+                </p>
+                <div className="flex items-start gap-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-xs text-yellow-200/80">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-yellow-400" />
+                  <p>
+                    This cannot be undone. If any of these images are referenced by classes, features, or characters, those references will break.
+                  </p>
+                </div>
+              </>
+            )}
+            {!deletingFolder && (
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="flex-1 h-8 text-xs text-ink/40 border border-gold/10 hover:text-ink"
+                  onClick={() => setDeleteFolderTarget(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="flex-1 h-8 text-xs bg-blood hover:bg-blood/90 text-white gap-1"
+                  onClick={handleConfirmDeleteFolder}
+                  disabled={deleteFolderCount === null}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Delete folder
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

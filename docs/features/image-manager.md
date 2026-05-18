@@ -20,6 +20,14 @@ For freely organised content images — article inline images, battle maps, misc
 - Row 1 — **Breadcrumb** (each segment is also a drag-drop target for folder moves) · **Up-arrow** to step out one level · **+ Folder** inline creation · **Upload** toggle · **Refresh**
 - Row 2 — **Filter** input (searches recursively under the current folder + its subtree; cache invalidates on folder change) · **Display mode toggle** (Tiles / List — list shows thumb + name + size + uploaded date) · **Hide-private toggle** (eye-slash; hides folders starting with `_` like `_temp`; default **on**)
 
+**Folder-move progress** — dragging a folder onto a breadcrumb segment or another folder card runs a two-phase bar: *Counting files in "X"…* (pulsing partial bar — `countFolderFiles` recursively lists subtrees) → *Moving "X" → target/* (percent based on `moved / total`, falling back to "N files" if the count failed). Both Image Library and Icons tabs use this bar.
+
+**Folder preview / manage** (admin only) — hover a folder card to reveal an info icon. Click it → the folder takes over the right-side detail panel (replacing any selected image). The panel shows folder name + full path, a recursive "*X files · Y subfolders*" stat (computed via `countFolderContents`), a rename input (writes through `performFolderRename`, which is the same move-with-progress machinery), and a Danger Zone with a Delete button. Selection auto-clears when the user navigates the parent listing or selects an image.
+
+**Folder delete** — triggered from the Danger Zone button inside the folder detail panel. Opens a confirm dialog that pre-counts files, shows "*N files will be permanently deleted*" with a "*references will break*" warning, and (on confirm) runs the same two-phase pattern as the move bar (counting → deleting) with the bar styled in `bg-blood`. Implementation: [r2DeleteFolder](../../src/lib/r2.ts) lists in pages of up to 1000 and parallel-deletes with concurrency 10; afterwards every key gets a best-effort `deleteImageMetadata` cleanup. The dialog can't be dismissed while a delete is in flight.
+
+**Folder rename** — inline in the detail panel; reuses `performFolderRelocate` (same shared core as the drag-and-drop folder move) with a sibling target prefix. Filename sanitisation matches the create-folder rules (`[a-zA-Z0-9_-]+`). Watching the progress bar above the listing: the same "*Renaming "X" → "Y"*" two-phase pattern.
+
 **Upload panel** (when expanded):
 - Optional filename — blank uses timestamp + random suffix
 - Type selector — Standard / Icon (126×126) / Token (400×400); determines client-side resize before upload
@@ -30,7 +38,7 @@ For freely organised content images — article inline images, battle maps, misc
 - File info — name, path, size, upload date
 - Copy URL button
 - View button (opens `/images/view?url=`)
-- Rename / Move — folder + filename inputs; **"Move & Update Links"** also rewrites every D1 row referencing the URL (see Reference scanning)
+- Rename / Move — folder + filename inputs; **"Move & Update Links"** also rewrites every D1 row referencing the URL (see Reference scanning). The button cycles through phase labels — *Moving file…* → *Updating references…* → *Saving metadata…* — so users see what step is in flight instead of a flat "Moving…"
 - Metadata editor — creator, description, license, source URL, tags
 - Danger Zone (admin only) — delete; runs reference scan first
 
@@ -107,6 +115,10 @@ Foundry-FilePicker-style modal for browsing and selecting from R2. Props:
 **Upload panel** (admin only) — toggle reveals upload form with two targets:
 - **Current folder** — saves to the browsed path
 - **Temp (`_temp`)** — saves to `<activeSource>/_temp/` for later organisation via Image Manager rename
+
+**Drag-and-drop** (admin only) — drag files from the OS onto any part of the modal to drop them into the current folder. Multi-drop is supported; files upload sequentially (no parallel slamming of the worker's WebP conversion). Drops always go to `currentPath`, ignoring the upload panel's Temp toggle.
+
+**Upload queue** — both drag-drop and Choose-File uploads enqueue into the same per-file progress panel below the toolbar. Each row shows filename + queued/uploading%/done/failed state with a real percent driven by `r2Upload`'s XHR `onProgress`. Above the rows sits an aggregate bar (`settled/total` plus the in-flight item's progress) so a 50-file batch reads as a single number; only the top 10 rows are rendered to avoid blowing up the modal — overflow is summarised as "…and N more · K queued · J done · M failed". The panel auto-clears 3 seconds after the last upload settles, so the Done/Failed badges are visible long enough to read.
 
 Resize on upload: 126² for the Icons source, 400² for Tokens.
 
