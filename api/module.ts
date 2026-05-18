@@ -1,5 +1,3 @@
-import path from "node:path";
-import fs from "node:fs";
 import {
   buildClassBundleForIdentifier,
   buildSourceClassCatalog,
@@ -348,23 +346,14 @@ export default async function handler(req: any, res: any) {
     console.error("Dynamic Module API Error:", error);
   }
 
-  // ── Fallback: serve static fixture files under module/dauligor-pairing ──
-  let filePath = path.join(process.cwd(), "module/dauligor-pairing/data/sources", cleanSubpath);
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(filePath, "catalog.json");
-  } else if (!filePath.endsWith(".json")) {
-    if (fs.existsSync(filePath + ".json")) {
-      filePath = filePath + ".json";
-    } else if (fs.existsSync(path.join(filePath, "catalog.json"))) {
-      filePath = path.join(filePath, "catalog.json");
-    }
-  }
-
-  if (fs.existsSync(filePath)) {
-    res.setHeader("Content-Type", "application/json");
-    return res.end(fs.readFileSync(filePath, "utf-8"));
-  }
-
+  // No live builder matched this path. The legacy filesystem fallback
+  // (reading static fixtures from `module/dauligor-pairing/data/sources/`)
+  // is gone — it only worked on Node/Vercel and not on the Workers
+  // runtime that Cloudflare Pages Functions targets. In normal operation
+  // R2 is populated by the bake pipeline (`POST /api/module/rebake-now`
+  // + the queue-driven cascade); any path that didn't hit a live builder
+  // above is genuinely unmapped and should 404. Dev mirrors prod here so
+  // local breakage matches what would happen on a real deployment.
   res.statusCode = 404;
-  return res.end(JSON.stringify({ error: `Source not found at: ${subpath}` }));
+  return res.end(JSON.stringify({ error: `Module path not found: ${subpath}` }));
 }
