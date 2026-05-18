@@ -5452,6 +5452,56 @@ button.dauligor-option-picker__pill:hover {
   display: inline-block;
 }
 
+/* Importer-mode Select All Displayed chip in the pool toolbar.
+ * Mirrors `.dauligor-spell-manager__on-sheet-button` sizing so the
+ * toolbar row stays a single height, with a Plutonium-style 3-state
+ * checkmark on the left. */
+.dauligor-spell-manager__select-all {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--dauligor-text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.dauligor-spell-manager__select-all:hover {
+  background: rgba(170, 130, 80, 0.12);
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-spell-manager__select-all--some,
+.dauligor-spell-manager__select-all--all {
+  border-color: rgba(110, 168, 100, 0.55);
+  color: #cce5c4;
+  background: rgba(110, 168, 100, 0.10);
+}
+
+.dauligor-spell-manager__select-all--all {
+  background: rgba(110, 168, 100, 0.20);
+  color: #e6f3e0;
+}
+
+.dauligor-spell-manager__select-all-check {
+  font-size: 13px;
+  line-height: 1;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.dauligor-spell-manager__select-all-label {
+  white-space: nowrap;
+}
+
 /* === Pool rows: indicator states + prepared highlight === */
 .dauligor-spell-manager__row-indicator {
   flex-shrink: 0;
@@ -5476,6 +5526,49 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-spell-manager__row-indicator--book {
   font-size: 13px;
+}
+
+/* Importer-mode checkbox + "already on sheet" badge. Sits in the
+ * same lead-cell slot as the indicator, so we mirror its size to
+ * keep row geometry stable when the lead element swaps between
+ * indicator / checkbox / on-sheet badge. */
+.dauligor-spell-manager__row-checkbox {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin: 0 2px;
+  /* Sit centered in the same 20px column as the indicator. */
+  vertical-align: middle;
+  cursor: pointer;
+  accent-color: #d2b350;
+}
+
+.dauligor-spell-manager__row-on-sheet {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+  line-height: 1;
+  color: #6fa86a;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  opacity: 0.85;
+}
+
+/* Highlight rows selected for import (multi-select checkbox ticked).
+ * Keeps the prepared-state highlight winning when both apply — sheet
+ * mode never marks rows for import so this only shows in importer. */
+.dauligor-spell-manager__pool-row--marked {
+  background: rgba(110, 168, 100, 0.10);
+  border-left: 3px solid rgba(110, 168, 100, 0.55);
+  padding-left: 5px;
+}
+
+.dauligor-spell-manager__pool-row--marked.dauligor-spell-manager__pool-row--selected {
+  background: rgba(110, 168, 100, 0.18);
 }
 
 /* Highlight rows whose sheetMode is "prepared" — the "pops a little"

@@ -771,6 +771,11 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       selectedClassIdentifier: preselectClassIdentifier ?? null,
       selectedSpellDbId: null,
 
+      // Importer mode multi-select. Set of dbIds the user has checked
+      // to batch-import on the "Add to Sheet" button. Cleared after a
+      // successful batch.
+      selectedForImport: new Set(),
+
       // Detail-pane disclosures
       showTags: false
     };
@@ -857,6 +862,9 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       this._fullSpellInFlight.clear();
       this._enrichedDescriptionCache.clear();
       this._state.selectedSpellDbId = null;
+      // Drop the importer multi-select set — its dbIds reference a
+      // different actor's "already on sheet" state, which is stale now.
+      this._state.selectedForImport = new Set();
       this._lastDetailDbId = null;
     }
     if (preselectClassIdentifier) {
@@ -1337,37 +1345,50 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const actor = this._actor;
     if (!actor) return [];
 
-    // Importer mode: return pseudo-class-models built from the source
-    // slugs the user picked in the wizard. Each acts like a class for
-    // the rail / pool / detail render but carries `isSource: true` so
-    // mode-specific branches (pool URL, footer, mutations) can detect
-    // it. No actor classes are walked — the browser is class-agnostic.
+    // Importer mode: return a SINGLE pseudo-class-model that represents
+    // the UNION of all source slugs the user picked in the wizard. The
+    // sources rail was retired — the browser merges every selected
+    // source's spells into one pool so the user doesn't have to click
+    // through sources individually. The model carries `isMergedSources`
+    // (and the inherited `isSource: true`) so mode-specific branches
+    // (pool URL, meta strip, footer, mutations) can detect it.
     if (this._mode === "importer") {
-      return this._sourceSlugs.map((slug) => {
-        const label = this._sourceLabels.get(slug) || this._sourceShortName(`source-${slug}-2014`) || String(slug).toUpperCase();
-        return {
-          identifier: `__source__:${slug}`,
-          label,
-          item: null,
-          ownedSpells: [],
-          isSource: true,
-          sourceSlug: slug,
-          progression: "none",
-          progressionLabel: "",
-          ability: "",
-          abilityLabel: "",
-          abilityAbbr: "",
-          levels: 0,
-          preparation: {},
-          prepType: null,
-          prepTypeLabel: "",
-          dc: null,
-          atk: "",
-          cantripsCap: null,
-          spellsCap: null,
-          ownedCount: 0
-        };
-      });
+      if (!this._sourceSlugs.length) return [];
+      // Resolve human-friendly source labels via the sources catalog.
+      // Slugs from the wizard may be either semantic ids ("source-phb-2014")
+      // or short slugs ("phb"), so we try both shapes against the catalog
+      // map before falling back to the slug uppercased.
+      const labels = this._sourceSlugs.map((slug) =>
+        this._sourceLabels.get(slug)
+        || this._sourceShortName(slug)
+        || this._sourceShortName(`source-${slug}-2014`)
+        || String(slug).toUpperCase()
+      );
+      const label = labels.length === 1 ? labels[0] : `${labels.length} Sources`;
+      return [{
+        identifier: `__source__:all`,
+        label,
+        item: null,
+        ownedSpells: [],
+        isSource: true,
+        isMergedSources: true,
+        sourceSlugs: [...this._sourceSlugs],
+        sourceLabels: labels,
+        progression: "none",
+        progressionLabel: "",
+        ability: "",
+        abilityLabel: "",
+        abilityAbbr: "",
+        levels: 0,
+        preparation: {},
+        prepType: null,
+        prepTypeLabel: "",
+        dc: null,
+        atk: "",
+        cantripsCap: null,
+        spellsCap: null,
+        ownedCount: 0
+      }];
     }
 
     const actorClasses = this._getActorClasses();
@@ -1509,6 +1530,57 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   async _ensureClassPool(classModel) {
     if (!classModel?.identifier) return null;
     const key = classModel.identifier;
+
+    // Merged-sources pseudo-model (importer mode, single rail-less view):
+    // the merged status is COMPUTED on every call from the per-source
+    // sub-caches — we don't durably cache the merged state, otherwise
+    // a "loading" sentinel would survive past the moment all sub-fetches
+    // resolved. Sub-fetches are kicked off here (fire-and-forget) and
+    // re-trigger `_renderManager` on completion, which re-enters this
+    // branch and flips the merged status forward.
+    if (classModel.isMergedSources) {
+      const slugs = Array.isArray(classModel.sourceSlugs) ? classModel.sourceSlugs : [];
+      for (const slug of slugs) {
+        const subKey = `__source__:${slug}`;
+        if (!this._classPools.has(subKey)) {
+          this._ensureClassPool({
+            identifier: subKey,
+            isSource: true,
+            sourceSlug: slug,
+            item: null
+          });
+        }
+      }
+      const subEntries = slugs.map((s) => this._classPools.get(`__source__:${s}`));
+      const stillLoading = subEntries.some((e) => !e || e.status === "loading");
+      if (stillLoading) {
+        const loadingEntry = { status: "loading" };
+        this._classPools.set(key, loadingEntry);
+        return loadingEntry;
+      }
+      // All sub-fetches resolved — merge by dbId (first source wins on
+      // dedupe collisions; in practice spells don't appear in multiple
+      // source-lists so collisions are rare).
+      const seen = new Set();
+      const merged = [];
+      let firstErr = null;
+      for (const entry of subEntries) {
+        if (entry?.status === "error" && !firstErr) firstErr = entry;
+        for (const spell of entry?.spells ?? []) {
+          const id = String(spell?.flags?.["dauligor-pairing"]?.dbId ?? spell?._id ?? "");
+          if (id && !seen.has(id)) { seen.add(id); merged.push(spell); }
+        }
+      }
+      let entry;
+      if (merged.length === 0 && firstErr) {
+        entry = { status: "error", reason: firstErr.reason };
+      } else {
+        entry = { status: "ready", spells: merged, fetchedAt: Date.now() };
+      }
+      this._classPools.set(key, entry);
+      return entry;
+    }
+
     const cached = this._classPools.get(key);
     if (cached) return cached;
 
@@ -2269,6 +2341,109 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   // -----------------------------------------------------------------------
+  // Importer batch import
+  // -----------------------------------------------------------------------
+
+  /**
+   * Batch-create every dbId currently in the multi-select set as a
+   * fresh actor item. Spells are fetched in parallel, deduped against
+   * the actor (any already-on-sheet dbId is skipped — the row should
+   * not have offered a checkbox for them, but we belt-and-brace), then
+   * passed to `createEmbeddedDocuments` as a single batch so the sheet
+   * only re-renders once. Each created item lands in the alt sheet's
+   * "Other Spells" / __other__ orphan bucket (no class attribution).
+   *
+   * Called from the footer's "Add N to Sheet" button. Importer mode
+   * only — sheet/embedded modes use the single-spell `_applySheetMode`
+   * flow that handles caps, prep-type, and the long-rest queue.
+   */
+  async _runBatchImport() {
+    if (this._mode !== "importer") return;
+    if (!this._actor) {
+      notifyWarn("No target actor — close and re-open the importer from a character.");
+      return;
+    }
+    const selectedIds = [...(this._state.selectedForImport ?? new Set())];
+    if (selectedIds.length === 0) return;
+
+    // Drop any that are somehow already on the sheet (defensive — the
+    // row builder skips the checkbox for on-sheet spells, but state
+    // could have been mutated between selection and click).
+    const ownedMap = this._getOwnedDbIdMap();
+    const toImport = selectedIds.filter((id) => !ownedMap.has(String(id)));
+    const skippedAlreadyOnSheet = selectedIds.length - toImport.length;
+    if (toImport.length === 0) {
+      notifyInfo("All selected spells are already on the sheet — nothing to add.");
+      this._state.selectedForImport = new Set();
+      await this._renderManager();
+      return;
+    }
+
+    // Fetch full spell payloads in parallel. Falls back to the
+    // synthesized per-dbId endpoint via `_ensureFullSpellAnyway`
+    // since importer mode has no class context to derive the URL.
+    const fetches = await Promise.all(toImport.map(async (dbId) => {
+      try {
+        let full = this._fullSpellCache.get(dbId);
+        if (!full) full = await this._ensureFullSpellAnyway(dbId, null);
+        return { dbId, full };
+      } catch (err) {
+        console.warn(`${MODULE_ID} | batch import: full-spell fetch failed`, { dbId, err });
+        return { dbId, full: null };
+      }
+    }));
+
+    const items = [];
+    const failedFetches = [];
+    for (const { dbId, full } of fetches) {
+      if (!full) { failedFetches.push(dbId); continue; }
+      const itemData = foundry.utils.deepClone(full);
+      if (!itemData.flags) itemData.flags = {};
+      if (!itemData.flags[MODULE_ID]) itemData.flags[MODULE_ID] = {};
+      itemData.flags[MODULE_ID].entityId = dbId;
+      itemData.flags[MODULE_ID].sheetMode = SHEET_MODE_FREE;
+      foundry.utils.setProperty(itemData, "system.prepared", true);
+      foundry.utils.setProperty(itemData, "system.method", "spell");
+      items.push(itemData);
+    }
+
+    if (items.length === 0) {
+      notifyWarn(`Could not fetch ${failedFetches.length} spell${failedFetches.length === 1 ? "" : "s"} from Dauligor — see console.`);
+      return;
+    }
+
+    let created = [];
+    try {
+      created = await this._actor.createEmbeddedDocuments("Item", items) ?? [];
+    } catch (err) {
+      console.warn(`${MODULE_ID} | batch import: createEmbeddedDocuments failed`, err);
+      notifyWarn("Failed to add spells — see console.");
+      return;
+    }
+
+    // Post one chat message per created spell so each pickup is
+    // visible in the audit. Done sequentially (not awaited in a
+    // promise.all) to keep the chat log order deterministic.
+    for (const doc of created) {
+      try {
+        postSpellChangeChat(this._actor, doc, "added-to-sheet", { classIdentifier: null });
+      } catch (err) {
+        console.warn(`${MODULE_ID} | batch import: chat audit failed`, err);
+      }
+    }
+
+    const summaryParts = [`Added ${created.length} spell${created.length === 1 ? "" : "s"} to ${this._actor.name}.`];
+    if (skippedAlreadyOnSheet > 0) summaryParts.push(`(${skippedAlreadyOnSheet} already on sheet — skipped.)`);
+    if (failedFetches.length > 0) summaryParts.push(`(${failedFetches.length} failed to fetch — see console.)`);
+    notifyInfo(summaryParts.join(" "));
+
+    // Clear the multi-select set; the re-render will repaint rows
+    // with the new "on sheet" indicator for newly-imported spells.
+    this._state.selectedForImport = new Set();
+    await this._renderManager();
+  }
+
+  // -----------------------------------------------------------------------
   // Render pipeline
   // -----------------------------------------------------------------------
 
@@ -2325,11 +2500,23 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   _renderRail(classModels, selectedClass) {
     if (!this._railRegion) return;
 
-    const isImporter = this._mode === "importer";
-    const railTitle = isImporter ? "Sources" : "Classes";
-    const emptyMsg = isImporter
-      ? "No sources selected. Re-open the importer and pick a source."
-      : "This actor has no spellcasting classes.";
+    // Importer mode: hide the rail entirely. The browser now merges
+    // all selected sources into a single pool (no rail to pick
+    // between sources), and the favourites region below fills the
+    // whole sidebar via `flex: 1`. Setting display:none on the
+    // sidebar-classes slot prevents the empty 10px-padded bar from
+    // appearing above favourites.
+    if (this._mode === "importer") {
+      this._railRegion.style.display = "none";
+      this._railRegion.innerHTML = "";
+      return;
+    }
+    // Sheet mode: ensure the rail is visible (in case the manager
+    // was previously in importer mode and got switched).
+    this._railRegion.style.display = "";
+
+    const railTitle = "Classes";
+    const emptyMsg = "This actor has no spellcasting classes.";
 
     if (!classModels.length) {
       this._railRegion.innerHTML = `
@@ -2340,11 +2527,9 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     }
 
     const rows = classModels.map((entry) => {
-      // Importer mode: count is the source's total spell count (from
-      // the loaded pool). Sheet mode: count is owned-by-this-class.
-      const count = isImporter
-        ? (this._classPools.get(entry.identifier)?.spells?.length ?? "—")
-        : entry.ownedCount;
+      // Sheet mode: count is owned-by-this-class. (Importer mode no
+      // longer renders the rail — see the early return above.)
+      const count = entry.ownedCount;
       return `
         <button
           type="button"
@@ -2470,24 +2655,18 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     // target so the user has a clear "what's about to be imported and
     // where to" readout above the pool.
     if (this._mode === "importer") {
-      const sourceLabel = selectedClass?.label || "Source";
-      const totalCount = fullPool?.length ?? 0;
-      const actorName = this._actor?.name ?? "Actor";
-      this._metaRegion.innerHTML = `
-        <div class="dauligor-spell-manager__meta-importer">
-          <div class="dauligor-spell-manager__meta-importer-left">
-            <div class="dauligor-spell-manager__meta-importer-title">${escapeHtml(sourceLabel)}</div>
-            <div class="dauligor-spell-manager__meta-importer-subtitle">${totalCount} spell${totalCount === 1 ? "" : "s"} in source</div>
-          </div>
-          <div class="dauligor-spell-manager__meta-importer-right">
-            <div class="dauligor-spell-manager__meta-importer-label">Importing to</div>
-            <div class="dauligor-spell-manager__meta-importer-target">${escapeHtml(actorName)}</div>
-            <div class="dauligor-spell-manager__meta-importer-hint">Other Spells (unsorted)</div>
-          </div>
-        </div>
-      `;
+      // Importer mode strips the meta header — the user only wants the
+      // search bar + filter button in the middle column. The actor name
+      // and import-target hint live in the window title. Hide the
+      // region entirely (display:none) so the parent's padding +
+      // border-bottom don't leave a thin bar above the toolbar.
+      this._metaRegion.innerHTML = "";
+      this._metaRegion.style.display = "none";
       return;
     }
+    // Sheet mode: ensure the meta region is visible (in case the
+    // manager was previously in importer mode and got switched).
+    this._metaRegion.style.display = "";
 
     if (!selectedClass) {
       this._metaRegion.innerHTML = `<div class="dauligor-spell-manager__meta-empty">Select a class to view its pool.</div>`;
@@ -2639,7 +2818,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
    * No more inline "Reset" button — the search field's clear ✕ and
    * the filter modal's own Reset button cover the same surface.
    */
-  _buildToolbarHtml({ target, placeholder, filteredCount, totalCount, showOnSheet }) {
+  _buildToolbarHtml({ target, placeholder, filteredCount, totalCount, showOnSheet, selectAllState = null }) {
     const searchValue = this._searchFor(target);
     const filtersActive = this._activeFilterCount(target);
     const countLabel = totalCount === 0
@@ -2647,6 +2826,38 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       : (filteredCount !== totalCount
         ? `${filteredCount} <span class="dauligor-spell-manager__inline-search-count-total">/ ${totalCount}</span>`
         : `${totalCount}`);
+
+    // Select-all chip (importer mode only — passed in by the pool toolbar
+    // when target === "pool"). `selectAllState` is one of:
+    //   { state: "none",  total } — no currently-displayed selectable spells are ticked
+    //   { state: "some",  total, selected } — partial (indeterminate)
+    //   { state: "all",   total } — every currently-displayed selectable spell is ticked
+    //   null — chip hidden (sheet mode + favourites toolbar)
+    // Plutonium's analogous "cb-select-all" lives above the list in its
+    // own row; we squeeze it into the existing toolbar row to keep our
+    // vertical density.
+    let selectAllHtml = "";
+    if (selectAllState && selectAllState.total > 0) {
+      const cls = `dauligor-spell-manager__select-all ${
+        selectAllState.state === "all" ? "dauligor-spell-manager__select-all--all" :
+        selectAllState.state === "some" ? "dauligor-spell-manager__select-all--some" : ""
+      }`;
+      const title = selectAllState.state === "all"
+        ? `Deselect all ${selectAllState.total} displayed spell${selectAllState.total === 1 ? "" : "s"}`
+        : `Select all ${selectAllState.total} displayed spell${selectAllState.total === 1 ? "" : "s"} (excludes spells already on the sheet)`;
+      const label = selectAllState.state === "all"
+        ? `Deselect ${selectAllState.total}`
+        : (selectAllState.state === "some"
+          ? `Select ${selectAllState.total - (selectAllState.selected ?? 0)} more`
+          : `Select all ${selectAllState.total}`);
+      selectAllHtml = `<button type="button"
+        class="${cls}"
+        data-action="toggle-select-all"
+        title="${escapeHtml(title)}"
+      ><span class="dauligor-spell-manager__select-all-check" aria-hidden="true">${
+        selectAllState.state === "all" ? "☑" : (selectAllState.state === "some" ? "▣" : "☐")
+      }</span><span class="dauligor-spell-manager__select-all-label">${escapeHtml(label)}</span></button>`;
+    }
 
     return `
       <div class="dauligor-spell-manager__inline-search-wrap">
@@ -2661,6 +2872,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         ${searchValue ? `<button type="button" class="dauligor-spell-manager__inline-search-clear" data-action="clear-search" title="Clear search" aria-label="Clear search">×</button>` : ""}
         ${countLabel ? `<span class="dauligor-spell-manager__inline-search-count" aria-live="polite">${countLabel}</span>` : ""}
       </div>
+      ${selectAllHtml}
       ${showOnSheet ? `
       <button type="button"
         class="dauligor-spell-manager__on-sheet-button ${this._state.onSheetFilter ? "dauligor-spell-manager__on-sheet-button--active" : ""}"
@@ -2714,15 +2926,74 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       this._state.onSheetFilter = !this._state.onSheetFilter;
       await this._renderManager();
     });
+
+    region.querySelector(`[data-action="toggle-select-all"]`)?.addEventListener("click", async () => {
+      await this._toggleSelectAllDisplayed();
+    });
+  }
+
+  /**
+   * Toggle the multi-select set against the currently-displayed
+   * (filtered) pool. Plutonium parity:
+   *   - If every visible-and-importable row is ticked → untick them
+   *     all (acts as a "Deselect All Displayed" button).
+   *   - Otherwise → tick every visible-and-importable row (the
+   *     "Select All Displayed" branch — fills up partials too).
+   * Already-on-sheet spells are excluded because they don't render a
+   * checkbox in the first place. This applies to the POOL only —
+   * favourites have their own toolbar that doesn't surface this chip.
+   */
+  async _toggleSelectAllDisplayed() {
+    if (this._mode !== "importer") return;
+    const classModels = this._buildClassModels();
+    const selectedClass = classModels.find((m) => m.identifier === this._state.selectedClassIdentifier) ?? null;
+    if (!selectedClass) return;
+    const fullPool = this._getActivePool(selectedClass);
+    const filteredPool = this._filterList(fullPool, "pool");
+    const ownedMap = this._getOwnedDbIdMap();
+    const importable = filteredPool
+      .map((s) => poolDbId(s))
+      .filter((id) => id && !ownedMap.has(id));
+    if (importable.length === 0) return;
+    if (!this._state.selectedForImport) this._state.selectedForImport = new Set();
+    const allSelected = importable.every((id) => this._state.selectedForImport.has(id));
+    if (allSelected) {
+      // Drop only the visible-and-importable ids — leaves any
+      // out-of-view selections intact (e.g., the user filtered down,
+      // unselected, then changed the filter — their off-screen picks
+      // should survive a "deselect all displayed" click).
+      for (const id of importable) this._state.selectedForImport.delete(id);
+    } else {
+      for (const id of importable) this._state.selectedForImport.add(id);
+    }
+    await this._renderManager();
   }
 
   _renderToolbar(selectedClass, filteredPool, fullPool) {
     if (!this._toolbarRegion) return;
+    // Compute the select-all chip state from the currently-displayed
+    // (filtered) pool, scoped to spells that aren't already on the
+    // sheet (those rows render a "✓" badge instead of a checkbox).
+    // Plutonium's `setCheckboxes({isChecked})` walks the visible items
+    // and skips disabled ones; we mirror that by gating the count on
+    // !isOwned.
+    let selectAllState = null;
+    if (this._mode === "importer") {
+      const ownedMap = this._getOwnedDbIdMap();
+      const importable = filteredPool
+        .map((s) => poolDbId(s))
+        .filter((id) => id && !ownedMap.has(id));
+      const total = importable.length;
+      const selected = importable.filter((id) => this._state.selectedForImport?.has(id)).length;
+      const state = total === 0 ? "none" : (selected === 0 ? "none" : (selected === total ? "all" : "some"));
+      selectAllState = { state, total, selected };
+    }
     this._toolbarRegion.innerHTML = this._buildToolbarHtml({
       target: "pool",
       placeholder: "Search spell name…",
       filteredCount: filteredPool.length,
       totalCount: fullPool.length,
+      selectAllState,
       // Hide the "On Sheet" toggle in importer mode — it filters by
       // per-class ownership, which doesn't apply to source-wide
       // browsing. The pool indicator on each row still shows the
@@ -2738,14 +3009,22 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   _renderPool(fullPool, filteredPool, selectedClass) {
     if (!this._poolRegion) return;
 
+    const isImporter = this._mode === "importer";
+
     if (!selectedClass) {
-      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">Select a class on the left to browse its spells.</div>`;
+      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">${
+        isImporter
+          ? "Re-open the importer wizard and pick at least one source."
+          : "Select a class on the left to browse its spells."
+      }</div>`;
       return;
     }
 
     const poolStatus = this._getActivePoolStatus(selectedClass);
     if (!poolStatus || poolStatus.status === "loading") {
-      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">Loading class spell list…</div>`;
+      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">${
+        isImporter ? "Loading spells from selected sources…" : "Loading class spell list…"
+      }</div>`;
       return;
     }
     if (poolStatus.status === "missing") {
@@ -2753,11 +3032,19 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       return;
     }
     if (poolStatus.status === "error") {
-      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">Failed to load class spell list: ${escapeHtml(poolStatus.reason)}</div>`;
+      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">${
+        isImporter
+          ? `Failed to load spells from selected sources: ${escapeHtml(poolStatus.reason)}`
+          : `Failed to load class spell list: ${escapeHtml(poolStatus.reason)}`
+      }</div>`;
       return;
     }
     if (fullPool.length === 0) {
-      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">No spells curated for this class yet. Curate the list at <code>/compendium/spell-lists</code> in Dauligor.</div>`;
+      this._poolRegion.innerHTML = `<div class="dauligor-spell-manager__empty">${
+        isImporter
+          ? "No spells available in the selected source(s)."
+          : "No spells curated for this class yet. Curate the list at <code>/compendium/spell-lists</code> in Dauligor."
+      }</div>`;
       return;
     }
     if (filteredPool.length === 0) {
@@ -2821,6 +3108,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const dbId = poolDbId(item);
     const level = poolLevel(item);
     const isCantrip = level === 0;
+    const isImporter = this._mode === "importer";
     // Effective state: queued change wins over actor state in
     // FM-embedded mode. Standalone mode falls through to the
     // actor's actual sheetMode.
@@ -2832,29 +3120,53 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     const isPrepared = sheetMode === SHEET_MODE_PREPARED;
     const isLocked = ownedItem ? (isAdvancementGranted(ownedItem) || (isAlwaysPrepared(ownedItem) && sheetMode !== SHEET_MODE_FREE)) : false;
 
-    // Indicator selection.
-    let indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--empty";
-    let indicatorTitle = "Not on sheet";
-    let indicatorGlyph = "○";
-    if (isOwned) {
-      if (!isCantrip && prep === "spellbook" && (sheetMode === SHEET_MODE_SPELLBOOK || sheetMode === SHEET_MODE_PREPARED)) {
-        indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--book";
-        indicatorGlyph = "📖";
-        indicatorTitle = sheetMode === SHEET_MODE_PREPARED ? "In spellbook · Prepared" : "In spellbook";
+    // Lead-cell selection — checkbox in importer mode (multi-select),
+    // indicator glyph in sheet mode. The checkbox is checked when the
+    // dbId is in the multi-select set; it's disabled-and-checked for
+    // spells already on the sheet (so the user sees the state but
+    // can't re-add them).
+    let leadCellHtml;
+    if (isImporter) {
+      const isMarked = this._state.selectedForImport?.has(dbId) ?? false;
+      if (isOwned) {
+        leadCellHtml = `<span class="dauligor-spell-manager__row-on-sheet" title="Already on sheet">✓</span>`;
       } else {
-        indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--filled";
-        indicatorGlyph = "●";
-        if (isCantrip) indicatorTitle = "Cantrip on sheet";
-        else if (sheetMode === SHEET_MODE_PREPARED) indicatorTitle = prep === "known" ? "Known" : "Prepared";
-        else if (sheetMode === SHEET_MODE_FREE) indicatorTitle = "On sheet (does not count)";
-        else indicatorTitle = "On sheet";
+        leadCellHtml = `<input
+          type="checkbox"
+          class="dauligor-spell-manager__row-checkbox"
+          data-action="toggle-select"
+          data-db-id="${escapeHtml(dbId)}"
+          ${isMarked ? "checked" : ""}
+          title="Select to add this spell to the sheet"
+        />`;
       }
+    } else {
+      let indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--empty";
+      let indicatorTitle = "Not on sheet";
+      let indicatorGlyph = "○";
+      if (isOwned) {
+        if (!isCantrip && prep === "spellbook" && (sheetMode === SHEET_MODE_SPELLBOOK || sheetMode === SHEET_MODE_PREPARED)) {
+          indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--book";
+          indicatorGlyph = "📖";
+          indicatorTitle = sheetMode === SHEET_MODE_PREPARED ? "In spellbook · Prepared" : "In spellbook";
+        } else {
+          indicatorClass = "dauligor-spell-manager__row-indicator dauligor-spell-manager__row-indicator--filled";
+          indicatorGlyph = "●";
+          if (isCantrip) indicatorTitle = "Cantrip on sheet";
+          else if (sheetMode === SHEET_MODE_PREPARED) indicatorTitle = prep === "known" ? "Known" : "Prepared";
+          else if (sheetMode === SHEET_MODE_FREE) indicatorTitle = "On sheet (does not count)";
+          else indicatorTitle = "On sheet";
+        }
+      }
+      if (isPending) {
+        // Append a "(pending commit)" hint to the indicator tooltip so
+        // the user knows the visual state isn't on the actor yet.
+        indicatorTitle += " — pending next long rest";
+      }
+      leadCellHtml = `<span class="${indicatorClass}" title="${escapeHtml(indicatorTitle)}">${indicatorGlyph}</span>`;
     }
-    if (isPending) {
-      // Append a "(pending commit)" hint to the indicator tooltip so
-      // the user knows the visual state isn't on the actor yet.
-      indicatorTitle += " — pending next long rest";
-    }
+
+    const isMarkedForImport = isImporter && (this._state.selectedForImport?.has(dbId) ?? false);
 
     const rowClasses = [
       "dauligor-spell-manager__pool-row",
@@ -2863,7 +3175,8 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       isOwned && "dauligor-spell-manager__pool-row--owned",
       isPrepared && "dauligor-spell-manager__pool-row--prepared",
       isLocked && "dauligor-spell-manager__pool-row--locked",
-      isPending && "dauligor-spell-manager__pool-row--pending"
+      isPending && "dauligor-spell-manager__pool-row--pending",
+      isMarkedForImport && "dauligor-spell-manager__pool-row--marked"
     ].filter(Boolean).join(" ");
 
     const flags = poolFlags(item);
@@ -2876,7 +3189,7 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
     return `
       <div class="${rowClasses}" data-action="row" data-db-id="${escapeHtml(dbId)}" title="Click to view details">
-        <span class="${indicatorClass}" title="${escapeHtml(indicatorTitle)}">${indicatorGlyph}</span>
+        ${leadCellHtml}
         <span class="dauligor-spell-manager__row-name">${escapeHtml(poolName(item))}</span>
         <span class="dauligor-spell-manager__row-badges">${badges.join("")}</span>
         <span class="dauligor-spell-manager__row-school" title="${escapeHtml(schoolLabel)}">${escapeHtml(school.toUpperCase().slice(0, 3))}</span>
@@ -2893,7 +3206,12 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   _bindPoolRows(container) {
     container.querySelectorAll(`[data-action="row"]`).forEach((row) => {
       row.addEventListener("click", (event) => {
-        if ((event.target instanceof HTMLElement) && event.target.closest(`[data-action="star"]`)) return;
+        if (event.target instanceof HTMLElement) {
+          // Star toggles favourite, checkbox toggles import-select.
+          // Neither should trigger the row's detail-load.
+          if (event.target.closest(`[data-action="star"]`)) return;
+          if (event.target.closest(`[data-action="toggle-select"]`)) return;
+        }
         const dbId = row.dataset.dbId;
         if (!dbId) return;
         if (this._state.selectedSpellDbId === dbId) return;
@@ -2909,6 +3227,24 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         await this._toggleFavorite(dbId);
       });
     });
+    container.querySelectorAll(`[data-action="toggle-select"]`).forEach((box) => {
+      box.addEventListener("click", (event) => { event.stopPropagation(); });
+      box.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const dbId = box.dataset.dbId;
+        if (!dbId) return;
+        this._toggleImportSelection(dbId, box.checked);
+      });
+    });
+  }
+
+  /** Add or remove a dbId from the importer multi-select set. */
+  _toggleImportSelection(dbId, isChecked) {
+    if (!this._state.selectedForImport) this._state.selectedForImport = new Set();
+    if (isChecked) this._state.selectedForImport.add(dbId);
+    else this._state.selectedForImport.delete(dbId);
+    // Re-render so the footer count + row "marked" style refresh.
+    this._renderManager();
   }
 
   // ---- Detail pane (SpellDetailPanel-style layout) ---------------------
@@ -3197,41 +3533,42 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
 
     const dbId = summary ? poolDbId(summary) : null;
 
-    // Importer mode: single "Add to Sheet" toggle (creates without a
-    // class attribution → lands in the alt sheet's __other__ orphan
-    // bucket). Owned lookup is actor-wide here (no per-class scope in
-    // importer mode), so if ANY copy of the spell is already on the
-    // sheet we toggle into "Remove from Sheet". Re-using
-    // `_applySheetMode` + `_removeSpell` keeps the mutation semantics
-    // consistent with the sheet flow.
+    // Importer mode: multi-select batch import. Each pool row has a
+    // checkbox; the footer shows "Add N to Sheet" anchored to the
+    // bottom right. Spells already on the sheet render with a "✓"
+    // badge instead of a checkbox so the user can't accidentally
+    // re-add them. Created items get NO class attribution — they
+    // land in the alt sheet's __other__ orphan bucket and can be
+    // moved into a class section later (gated by class spell-list
+    // membership).
     if (this._mode === "importer") {
-      const ownedAny = dbId ? this._findOwnedSpellByDbId(dbId) : null;
-      const onSheet = !!ownedAny;
-      const noSelection = !summary;
-      const btnHtml = noSelection
-        ? `<div class="dauligor-spell-manager__footer-hint">Select a spell to enable the import button.</div>`
-        : `<button type="button"
-            class="dauligor-spell-manager__footer-button ${onSheet ? "dauligor-spell-manager__footer-button--active" : ""}"
-            data-action="footer-importer-toggle"
-            title="${escapeHtml(onSheet
-              ? "Remove this spell from the actor (deletes the spell item)."
-              : "Add this spell to the actor. It lands in the Other Spells (unsorted) section and can be moved to a class section if eligible.")}"
-          >${escapeHtml(onSheet ? "Remove from Sheet" : "Add to Sheet (Unsorted)")}</button>`;
+      const selectedIds = this._state.selectedForImport ?? new Set();
+      const count = selectedIds.size;
+      const hasSelection = count > 0;
+      const importBtnHtml = `<button type="button"
+        class="dauligor-spell-manager__footer-button ${hasSelection ? "dauligor-spell-manager__footer-button--active" : ""}"
+        data-action="footer-batch-import"
+        title="${escapeHtml(hasSelection
+          ? `Add ${count} selected spell${count === 1 ? "" : "s"} to ${this._actor?.name ?? "the actor"}. They land in Other Spells (unsorted).`
+          : "Tick the checkbox on one or more spells in the list to enable this button.")}"
+        ${hasSelection ? "" : "disabled"}
+      >${escapeHtml(hasSelection ? `Add ${count} to Sheet` : "Add to Sheet")}</button>`;
 
+      // Footer body lives inside __footer-row (which is `display: flex
+      // row, justify-content: space-between`). The outer __footer is
+      // `flex-direction: column`, so without this wrapper the left/right
+      // sides would stack vertically.
       this._footerRegion.innerHTML = `
-        <div class="dauligor-spell-manager__footer-left">${btnHtml}</div>
-        <div class="dauligor-spell-manager__footer-right">
-          <button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>
+        <div class="dauligor-spell-manager__footer-row">
+          <div class="dauligor-spell-manager__footer-left">
+            <button type="button" class="dauligor-spell-manager__footer-button dauligor-spell-manager__footer-button--ghost" data-action="footer-close">Close</button>
+          </div>
+          <div class="dauligor-spell-manager__footer-right">${importBtnHtml}</div>
         </div>
       `;
 
-      this._footerRegion.querySelector(`[data-action="footer-importer-toggle"]`)?.addEventListener("click", async () => {
-        if (!dbId) return;
-        if (onSheet) {
-          await this._removeSpell(dbId, null);
-        } else {
-          await this._applySheetMode(dbId, SHEET_MODE_FREE, selectedClass);
-        }
+      this._footerRegion.querySelector(`[data-action="footer-batch-import"]`)?.addEventListener("click", async () => {
+        await this._runBatchImport();
       });
       this._footerRegion.querySelector(`[data-action="footer-close"]`)?.addEventListener("click", async () => {
         await this.close();
@@ -3591,14 +3928,17 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
  * Spell browser launched from the Dauligor Importer wizard's Spells
  * page. Identical 3-column layout to the Prepare Spells manager, but:
  *
- *   - The left rail shows SOURCES (PHB, XGE, ...) instead of classes.
- *   - The pool draws from `/api/module/<slug>/spells.json` (all spells
- *     in a source) instead of the per-class spell list.
- *   - The footer has a single "Add to Sheet (Unsorted)" toggle. Added
- *     spells get NO class attribution — they land in the alt sheet's
- *     "Other Spells" / __other__ orphan bucket, which the user can
- *     then move into a class section (gated by class spell-list
- *     membership) or a custom section.
+ *   - No sources rail. The left column holds Favourites only — every
+ *     selected source's spell-list is merged into a SINGLE pool so the
+ *     user doesn't have to click through sources individually. The
+ *     pseudo-class-model carries `isMergedSources: true` and walks
+ *     `/api/module/<slug>/spells.json` for each selected slug,
+ *     deduping by dbId.
+ *   - The footer has a single "Add to Sheet (Unsorted)" toggle pinned
+ *     to the bottom right. Added spells get NO class attribution —
+ *     they land in the alt sheet's "Other Spells" / __other__ orphan
+ *     bucket, which the user can then move into a class section
+ *     (gated by class spell-list membership) or a custom section.
  *
  * Implemented as a thin subclass of `DauligorSpellPreparationApp` with
  * its own static singleton + opener. The base class handles
@@ -3631,9 +3971,10 @@ export class DauligorSpellBrowserApp extends DauligorSpellPreparationApp {
       appId: `${MODULE_ID}-spell-browser`,
       windowTitle: actor ? `Import Spells: ${actor.name}` : "Import Spells"
     });
-    // Preselect the first source so the pool fills in on first paint.
+    // Merged-sources pseudo-model: the browser always shows the union
+    // of every selected source under one identifier.
     if (sourceSlugs?.length) {
-      this._state.selectedClassIdentifier = `__source__:${String(sourceSlugs[0])}`;
+      this._state.selectedClassIdentifier = `__source__:all`;
     }
   }
 
@@ -3642,15 +3983,17 @@ export class DauligorSpellBrowserApp extends DauligorSpellPreparationApp {
     const changed = next.join(",") !== this._sourceSlugs.join(",");
     this._sourceSlugs = next;
     if (changed) {
-      // Pool cache keyed by `__source__:<slug>` — drop stale entries
-      // so the pool refetches for the new selection.
+      // Drop ALL source-keyed cache entries — both per-source
+      // (`__source__:<slug>`) and the merged (`__source__:all`) so
+      // the pool refetches against the new selection.
       for (const key of [...this._classPools.keys()]) {
         if (key.startsWith("__source__:")) this._classPools.delete(key);
       }
-      this._state.selectedClassIdentifier = next.length
-        ? `__source__:${next[0]}`
-        : null;
+      this._state.selectedClassIdentifier = next.length ? `__source__:all` : null;
       this._state.selectedSpellDbId = null;
+      // Source change clears the multi-select set — its dbIds may
+      // no longer be present in the new pool.
+      this._state.selectedForImport = new Set();
     }
   }
 
