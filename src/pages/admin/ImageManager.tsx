@@ -1,7 +1,7 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  ⚠  IMAGE MANAGER BRANCH — COORDINATION NOTE  ⚠                          ║
 // ║                                                                          ║
-// ║  Security work landed in commit 952882f that affects this page:         ║
+// ║  Security work landed in commit 515eb0e that affects this page:         ║
 // ║                                                                          ║
 // ║   • `scanForReferences` and `updateImageReferences` from                 ║
 // ║     `src/lib/imageMetadata.ts` are now server-side                       ║

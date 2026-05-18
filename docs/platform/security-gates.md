@@ -185,20 +185,20 @@ The following are open in [api-endpoint-plan.md](api-endpoint-plan.md):
 - **M4** — `recomputeAppliedRulesForSpell` runs ~5 raw queryD1 calls from the client during `upsertSpell`. Staff-only, but a DoS vector (repeatedly save → repeatedly recompute). Closing this needs a `POST /api/spells` family that doesn't exist yet.
 - **L4** — `checkFoundationUpdate` polling. A raw SELECT against `system_metadata.last_foundation_update` from every signed-in tab every 30s. Low data sensitivity; deferred for function-budget pressure.
 - **Audit #9** — `eras` writes still flow through the proxy (admin-gated). Migrating to dedicated `/api/admin/eras/*` routes is the audit's final per-table closure.
-- **LoreEditor `dm_notes` raw read** — closed via `dfb835c`; the per-route GET now returns `dm_notes` for staff. The historical defensive fallback in `src/lib/lore.ts:fetchLoreArticle` is removed.
+- **LoreEditor `dm_notes` raw read** — closed via `8f70135`; the per-route GET now returns `dm_notes` for staff. The historical defensive fallback in `src/lib/lore.ts:fetchLoreArticle` is removed.
 
 ## Audit history
 
-Six commits closed the high + medium + most low items between `952882f` and `1b1c2de`:
+Six commits closed the high + medium + most low items between `515eb0e` and `c065c17`:
 
 | Commit | Closes | Notes |
 |---|---|---|
-| `952882f` | H1, H3, H4 (read leaks) | `PROTECTED_READ_TABLES` + lore_secrets + SpellList characters migration |
-| `0786db0` | L2, L3 | Image scan / rewrite moved to `POST /api/r2/scan-references` and `POST /api/r2/rewrite-references` |
-| `dfb835c` | LoreEditor reads migration | `fetchLoreArticle` → per-route GET |
-| `f5070f9` | M1 | Map JOIN dropped; titles looked up from gate-filtered `allArticles` |
-| `ee1e7cb` | M3 | Foundation-bump fingerprint allowlist + `PUT /api/lore/system-metadata/wiki-settings` |
-| `1b1c2de` | Audit #8 | Per-route campaign writes; proxy refuses direct writes |
+| `515eb0e` | H1, H3, H4 (read leaks) | `PROTECTED_READ_TABLES` + lore_secrets + SpellList characters migration |
+| `977d71e` | L2, L3 | Image scan / rewrite moved to `POST /api/r2/scan-references` and `POST /api/r2/rewrite-references` |
+| `8f70135` | LoreEditor reads migration | `fetchLoreArticle` → per-route GET |
+| `c2ea4d6` | M1 | Map JOIN dropped; titles looked up from gate-filtered `allArticles` |
+| `4548518` | M3 | Foundation-bump fingerprint allowlist + `PUT /api/lore/system-metadata/wiki-settings` |
+| `c065c17` | Audit #8 | Per-route campaign writes; proxy refuses direct writes |
 
 Earlier closures (H1 read side, H2, H5, H6, H7, M2, L1, audit #6) landed in the work tracked at the top of [api-endpoint-plan.md](api-endpoint-plan.md).
 

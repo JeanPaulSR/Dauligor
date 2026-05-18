@@ -129,7 +129,7 @@ For the full security model — threat model, defense layers, normalization deta
 | POST | `/api/r2/scan-references` | `requireImageManagerAccess` | Body `{ url }`. Returns `{ references: ImageReference[] }`. Server walks `SCAN_TARGETS` (the (table, column) allow-list) via `executeD1QueryInternal` so it can reach `users` / `characters` that `PROTECTED_READ_TABLES` blocks from raw SELECT. |
 | POST | `/api/r2/rewrite-references` | `requireImageManagerAccess` | Body `{ oldUrl, newUrl }`. Returns `{ count }`. The (table, column) pairs are pinned server-side in `SCAN_TARGETS` — a compromised client can't ship UPDATE against arbitrary columns. Closes audit L3. |
 
-Consolidated from five separate files in commit `b267db9`. The `scan-references` / `rewrite-references` actions arrived in commit `0786db0` to fix L2 / L3 — the client-side scan would have silently 403'd against the new `PROTECTED_READ_TABLES` gate, hiding real references on `users` and `characters` from image admin.
+Consolidated from five separate files in commit `b267db9`. The `scan-references` / `rewrite-references` actions arrived in commit `977d71e` to fix L2 / L3 — the client-side scan would have silently 403'd against the new `PROTECTED_READ_TABLES` gate, hiding real references on `users` and `characters` from image admin.
 
 The `SCAN_TARGETS` list lives ONLY in [api/_lib/r2-proxy.ts](../../api/_lib/r2-proxy.ts) now. Adding a new image-bearing column means updating that one list; do not reintroduce a parallel client-side `SCAN_TARGETS`.
 

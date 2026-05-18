@@ -5,7 +5,7 @@ import { auth } from './firebase';
 // ║  ⚠  COORDINATION NOTE FOR THE IMAGE MANAGER BRANCH  ⚠                    ║
 // ║                                                                          ║
 // ║  The reference scanner and rewriter have moved SERVER-SIDE as part of    ║
-// ║  the read-protection security work (commit 952882f). If your branch     ║
+// ║  the read-protection security work (commit 515eb0e). If your branch     ║
 // ║  adds a new image-bearing column to any table:                           ║
 // ║                                                                          ║
 // ║    1. Update SCAN_TARGETS in `api/_lib/r2-proxy.ts` (server-side copy).  ║
