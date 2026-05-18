@@ -31,10 +31,10 @@ historical record + remaining-work tracker.
 | M2 — `users` table fully enumerable (PII) for staff | Open | Next natural target — `/api/admin/users` family |
 | M3 — `system_metadata` writes not column-scoped | Open | Backlog |
 | M4 — class_spell_lists rebuild from client | Open | Backlog |
-| L1 — `eras` writes through staff gate | Open | Backlog |
+| L1 — `eras` writes through staff gate | ✅ Closed | `eras` added to `PROTECTED_WRITE_TABLES` in d1-proxy + AdminCampaigns hides era CRUD UI for non-admin |
 | L2 — image scan returns `users` rows | Open | Backlog |
 | L3 — image rename `updateDocument` against any column | Open | Backlog |
-| L4 — `checkFoundationUpdate` polling raw SELECT | Open | Backlog |
+| L4 — `checkFoundationUpdate` polling raw SELECT | Deferred | Low severity; closing would burn the last Vercel function slot (11/12 → 12/12). Revisit after the next consolidation gives budget. |
 
 Out-of-scope / drift items from Section 5 below remain open and are tracked
 there.

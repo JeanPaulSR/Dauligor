@@ -133,7 +133,13 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     const sql = body.sql || (Array.isArray(body) ? body[0]?.sql : '');
     const normalizedSql = normalizeSqlForGate(sql);
     const MUTATION_KEYWORDS = /\b(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER|TRUNCATE|ATTACH|DETACH|REINDEX|VACUUM|PRAGMA)\b/i;
-    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+users\b/i;
+    // `eras` joins `users` in the admin-only protected set: the docs at
+    // docs/architecture/permissions-rbac.md describe era CRUD as admin-only,
+    // but the legacy proxy admitted any staff role. Adding `eras` here
+    // matches the documented intent. Co-dm users on /admin/campaigns get
+    // a 403 if they try to write through the proxy; the page itself also
+    // hides the era CRUD buttons for non-admin viewers.
+    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras)\b/i;
     const isMutation = MUTATION_KEYWORDS.test(normalizedSql);
     const targetsProtectedTable = isMutation && PROTECTED_WRITE_TABLES.test(normalizedSql);
 

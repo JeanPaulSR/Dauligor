@@ -21,6 +21,15 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const [newEra, setNewEra] = useState({ name: '', description: '', order: 0, backgroundImageUrl: '' });
   const [wikiSettings, setWikiSettings] = useState<{ defaultBackgroundImageUrl?: string }>({});
 
+  // Eras live as foundation data — the docs at permissions-rbac.md mark
+  // era CRUD as admin-only. The d1-proxy gate now enforces that
+  // server-side (writes to the `eras` table require admin), so co-dm
+  // viewers of this page need their era buttons hidden to avoid a
+  // confusing 403. Co-dm still sees the era LIST (it's useful context
+  // for the campaign-era dropdown); only the create / delete / image
+  // upload controls are admin-gated.
+  const isAdmin = userProfile?.role === 'admin';
+
   useEffect(() => {
     if (userProfile?.role !== 'admin' && userProfile?.role !== 'co-dm') return;
 
@@ -319,19 +328,24 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                       <Input type="number" value={newEra.order} onChange={e => setNewEra({...newEra, order: parseInt(e.target.value)})} className="h-8 text-xs" />
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase block">Background Image</label>
-                    <div className="flex gap-4 items-end">
-                      <div className="flex-grow">
-                        <ImageUpload 
-                          currentImageUrl={newEra.backgroundImageUrl || ''}
-                          storagePath="images/wiki/eras"
-                          onUpload={(url) => setNewEra({...newEra, backgroundImageUrl: url})}
-                        />
+                  {/* Admin-only — era CRUD is admin-gated server-side
+                      (d1-proxy PROTECTED_WRITE_TABLES). Co-dm viewers
+                      see the era list below but not these controls. */}
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase block">Background Image</label>
+                      <div className="flex gap-4 items-end">
+                        <div className="flex-grow">
+                          <ImageUpload
+                            currentImageUrl={newEra.backgroundImageUrl || ''}
+                            storagePath="images/wiki/eras"
+                            onUpload={(url) => setNewEra({...newEra, backgroundImageUrl: url})}
+                          />
+                        </div>
+                        <Button onClick={handleCreateEra} className="h-10 bg-gold text-white text-xs px-4">Add Era</Button>
                       </div>
-                      <Button onClick={handleCreateEra} className="h-10 bg-gold text-white text-xs px-4">Add Era</Button>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
@@ -342,27 +356,33 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                           <Badge variant="outline" className="text-gold border-gold/20 font-mono">{era.order}</Badge>
                           <span className="font-serif font-bold">{era.name}</span>
                         </div>
-                        <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteEra(era.id)}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {/* Admin-only — server-side d1-proxy gate
+                            rejects co-dm writes to the eras table. */}
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" className="btn-danger h-8 w-8" onClick={() => handleDeleteEra(era.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
-                      <div className="pt-2 border-t border-gold/5 space-y-1">
-                        <label className="text-[9px] text-ink/40 uppercase tracking-wider block">Background Image</label>
-                        <ImageUpload
-                          currentImageUrl={era.backgroundImageUrl || ''}
-                          storagePath="images/wiki/eras"
-                          onUpload={async (url) => {
-                            try {
-                              await upsertDocument('eras', era.id, { ...era, background_image_url: url });
-                              setEras(prev => prev.map(e => e.id === era.id ? { ...e, background_image_url: url } : e));
-                              toast.success('Era background updated');
-                            } catch (err) {
-                              console.error(err);
-                              toast.error('Failed to update background');
-                            }
-                          }}
-                        />
-                      </div>
+                      {isAdmin && (
+                        <div className="pt-2 border-t border-gold/5 space-y-1">
+                          <label className="text-[9px] text-ink/40 uppercase tracking-wider block">Background Image</label>
+                          <ImageUpload
+                            currentImageUrl={era.backgroundImageUrl || ''}
+                            storagePath="images/wiki/eras"
+                            onUpload={async (url) => {
+                              try {
+                                await upsertDocument('eras', era.id, { ...era, background_image_url: url });
+                                setEras(prev => prev.map(e => e.id === era.id ? { ...e, background_image_url: url } : e));
+                                toast.success('Era background updated');
+                              } catch (err) {
+                                console.error(err);
+                                toast.error('Failed to update background');
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
