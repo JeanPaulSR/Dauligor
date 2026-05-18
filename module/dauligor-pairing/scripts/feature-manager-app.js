@@ -57,10 +57,11 @@ import { log, notifyInfo, notifyWarn } from "./utils.js";
 import { DauligorSpellPreparationApp } from "./spell-preparation-app.js";
 import {
   buildActorOptionItemFromPayload,
+  buildReselectWorkflowFromPayload,
   fetchJson,
   getSemanticOptionsForGroup
 } from "./class-import-service.js";
-import { DauligorSequencePromptApp } from "./importer-app.js";
+import { DauligorSequencePromptApp, runOptionGroupStep } from "./importer-app.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 
@@ -687,30 +688,32 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
   }
 
   /**
-   * Open the Dauligor option-reselect picker for a specific option
-   * group. Uses our own UI surface (`DauligorSequencePromptApp` with
-   * a list-and-detail body) rather than dnd5e's `AdvancementManager`
-   * — per the module's contract, every advancement family should be
-   * handled by an in-module window (see
-   * `docs/advancement-and-activity-implementation-guide.md`).
+   * Open the Dauligor option re-select picker for a specific option
+   * group. Reuses `runOptionGroupStep` — the SAME UI the class
+   * importer uses for option-group picks. Status badges, level
+   * grouping, prereq pills, out-of-group overlay, blocked
+   * detection all come for free.
    *
    * Flow:
-   *   1. Resolve the class item from `group.classSourceId`.
+   *   1. Resolve the class item from `classSourceId`.
    *   2. Derive the class bundle URL from the class item's
-   *      `spellListUrl` flag (the same URL the prep manager uses;
-   *      stripped of `/spells.json`).
-   *   3. Fetch the bundle; pull its `optionItems` filtered to the
-   *      group's `groupSourceId`. The bundle ships Foundry-ready
-   *      feat items including flags + descriptions.
-   *   4. Render a 2-pane picker (list + description) inside
-   *      `DauligorSequencePromptApp`. Owned options (already on
-   *      the actor) render as greyed-out — including the one being
-   *      re-selected, which the user can pick again as a no-op.
-   *   5. On confirm: delete the current item, create the new item
-   *      via `createEmbeddedDocuments`. The actor flag write
-   *      triggers our `updateActor` hook, which re-renders the FM.
+   *      `spellListUrl` flag, strip `/spells.json`.
+   *   3. Fetch the live semantic class bundle.
+   *   4. Build a minimal workflow context via
+   *      `buildReselectWorkflowFromPayload` so `runOptionGroupStep`
+   *      has the right shape (option groups, current selections,
+   *      spell-rule allowlists, etc.).
+   *   5. Find the target group within the built workflow.
+   *   6. Call `runOptionGroupStep` with the workflow + a fake
+   *      sequence + a fake progress tracker. Pass the current
+   *      group's picks via `excludeFromOwnedSet` so they show as
+   *      deselectable rather than greyed-and-locked.
+   *   7. Compute the diff vs the actor's current picks; delete
+   *      removed items + create added items via the same
+   *      semantic→Foundry pipeline class import uses (exposed via
+   *      `buildActorOptionItemFromPayload`).
    */
-  async _openOptionGroupReselect(groupSourceId, classSourceId, currentItemId) {
+  async _openOptionGroupReselect(groupSourceId, classSourceId, _currentItemId) {
     if (!groupSourceId) return;
 
     // Step 1 — resolve class item
@@ -746,172 +749,117 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       return;
     }
 
-    // Step 3 — find the option group + its items in the bundle.
-    //
-    // The live class bundle (`dauligor.semantic.class-export`) ships
-    // semantic option records under `uniqueOptionItems`, each with
-    // `groupSourceId` at the top level (NOT under `flags.dauligor-pairing`).
-    // The matching `getSemanticOptionsForGroup` helper in
-    // class-import-service.js centralises that knowledge so this
-    // call site doesn't drift if the field name changes.
+    // Step 3 — quick sanity check: do any options exist in this
+    // group? `runOptionGroupStep` would error out further down with
+    // a less-friendly notification, so we pre-empt.
     const groupOptions = getSemanticOptionsForGroup(bundle, groupSourceId);
     if (!groupOptions.length) {
       notifyWarn(`No options found in the ${className} bundle for this group.`);
       return;
     }
 
-    // Resolve the current pick's sourceId so we can preselect it +
-    // mark it as the "outgoing" pick. Other owned options should
-    // still appear as greyed so the user can't pick a duplicate.
-    const currentItem = currentItemId ? this._actor.items.get(currentItemId) : null;
-    const currentSourceId = currentItem?.getFlag?.(MODULE_ID, "sourceId") ?? null;
-    const ownedSourceIds = new Set();
-    for (const it of this._actor.items) {
-      const sid = it.getFlag?.(MODULE_ID, "sourceId");
-      if (sid && sid !== currentSourceId) ownedSourceIds.add(String(sid));
+    // Step 4 — build the minimal workflow + locate the target group
+    // within it. The workflow builder converts every semantic option
+    // to a Foundry world item via the same `createSemanticOptionItem`
+    // path the class importer uses, so the picker sees the exact
+    // shape it expects.
+    const workflow = buildReselectWorkflowFromPayload(bundle, this._actor, classItem);
+    const targetGroup = workflow.optionGroups.find((g) =>
+      String(g.sourceId) === String(groupSourceId));
+    if (!targetGroup) {
+      notifyWarn(`Couldn't find the target group in the ${className} bundle.`);
+      return;
     }
 
-    const groupLabel = currentItem?.getFlag?.(MODULE_ID, "featureTypeLabel")
-      ?? currentItem?.flags?.[MODULE_ID]?.featureTypeLabel
-      ?? "Class Option";
+    // Snapshot the current picks BEFORE the picker opens so we can
+    // compute a diff after Confirm. The workflow's optionSelections
+    // is also populated with these, but it's keyed by group — pull
+    // out just THIS group's sourceIds for the diff.
+    const currentSourceIds = new Set(workflow.selection.optionSelections[groupSourceId] ?? []);
 
-    // Step 4 — render the picker via DauligorSequencePromptApp. The
-    // body has two regions: a left-column option list (one row per
-    // option) and a right-column description panel for the focused
-    // option. We rebuild the body on each focus change.
-    //
-    // Semantic option records carry their identity at top level
-    // (sourceId, name, description, imageUrl) — NOT under flags.
-    // `imageUrl` is the bundle's field name (Foundry items use `img`).
-    const state = { focusedSourceId: currentSourceId ?? groupOptions[0]?.sourceId };
-
-    const renderBody = (app) => {
-      const focused = groupOptions.find((o) =>
-        String(o?.sourceId ?? "") === String(app._state.focusedSourceId));
-
-      const rowsHtml = groupOptions.map((opt) => {
-        const sid = String(opt?.sourceId ?? "");
-        const isCurrent = sid === currentSourceId;
-        const isOwned = ownedSourceIds.has(sid);
-        const isFocused = sid === String(app._state.focusedSourceId);
-        const badge = isCurrent
-          ? "Current"
-          : (isOwned ? "Already Owned" : "");
-        return `
-          <div class="dauligor-option-picker__row ${isFocused ? "dauligor-option-picker__row--focused" : ""} ${isOwned ? "dauligor-option-picker__row--owned" : ""}"
-               data-action="focus-option"
-               data-source-id="${escapeHtml(sid)}">
-            <img class="dauligor-option-picker__row-img" src="${escapeHtml(opt?.imageUrl ?? opt?.img ?? "")}" alt="" loading="lazy">
-            <div class="dauligor-option-picker__row-text">
-              <div class="dauligor-option-picker__row-name">${escapeHtml(opt?.name ?? "")}</div>
-              ${badge ? `<div class="dauligor-option-picker__row-badge">${escapeHtml(badge)}</div>` : ""}
-            </div>
-          </div>
-        `;
-      }).join("");
-
-      // Semantic records carry `description` as a plain HTML string at
-      // top level (Foundry items use `system.description.value`).
-      const descRaw = focused?.description
-        ?? focused?.system?.description?.value
-        ?? focused?.system?.description
-        ?? "<em>No description available.</em>";
-
-      return `
-        <div class="dauligor-feature-manager__reselect">
-          <aside class="dauligor-feature-manager__reselect-list">
-            ${rowsHtml}
-          </aside>
-          <section class="dauligor-feature-manager__reselect-detail">
-            <header class="dauligor-feature-manager__reselect-detail-header">
-              <div class="dauligor-feature-manager__reselect-detail-eyebrow">
-                ${escapeHtml(groupLabel)} · <em>${escapeHtml(className)}</em>
-              </div>
-              <h2 class="dauligor-feature-manager__reselect-detail-title">${escapeHtml(focused?.name ?? "Select an option")}</h2>
-            </header>
-            <div class="dauligor-feature-manager__reselect-detail-body">${descRaw}</div>
-          </section>
-        </div>
-      `;
+    // Step 5 — fake sequence + progress (no-op stubs that satisfy
+    // `runOptionGroupStep`'s reads). The picker uses sequence for
+    // in-flight delta reads (we have no in-flight changes) and
+    // progress for step-tracker updates (irrelevant outside the
+    // import wizard).
+    const fakeSequence = {
+      characterUpdater: { delta: {} },
+      setActivePrompt: () => {}
+    };
+    const fakeProgress = {
+      markStep: () => {},
+      setStatus: () => {},
+      setCurrentPrompt: () => {}
     };
 
-    const onRenderBody = (app, region) => {
-      for (const row of region.querySelectorAll(`[data-action="focus-option"]`)) {
-        row.addEventListener("click", () => {
-          const sid = row.dataset.sourceId;
-          if (!sid) return;
-          // Don't allow focusing already-owned options (other than
-          // the current one being re-selected). Clicking them is a
-          // visual cue, not an action.
-          if (ownedSourceIds.has(sid)) return;
-          if (sid === app._state.focusedSourceId) return;
-          app._state.focusedSourceId = sid;
-          app.rerenderPrompt();
-        });
-      }
-    };
-
-    const onAction = async (app, actionId) => {
-      if (actionId !== "confirm") return undefined;
-      const newSourceId = app._state.focusedSourceId;
-      if (!newSourceId) return { status: "noop" };
-      if (newSourceId === currentSourceId) return { status: "noop", value: { unchanged: true } };
-
-      // Convert the chosen semantic option to a Foundry-ready feat
-      // item using the SAME pipeline the class importer runs:
-      //   semantic record → createSemanticOptionItem (world item)
-      //                    → normalizeEmbeddedActorFeature (actor item)
-      // Exposed via `buildActorOptionItemFromPayload` so the FM
-      // doesn't need to know the internals. Returns null on
-      // resolution failure (unknown sourceId, bad payload, etc.).
-      const newItemData = buildActorOptionItemFromPayload(bundle, newSourceId, {
-        classSourceId
+    // Step 6 — call the canonical picker. `excludeFromOwnedSet`
+    // lets the current group's picks be deselectable; everything
+    // outside this group still greys out as "already owned".
+    let result;
+    try {
+      result = await runOptionGroupStep({
+        workflow,
+        actor: this._actor,
+        group: targetGroup,
+        sequence: fakeSequence,
+        progress: fakeProgress,
+        excludeFromOwnedSet: currentSourceIds
       });
-      if (!newItemData) {
-        notifyWarn("Selected option couldn't be converted from the bundle.");
-        return false;
-      }
+    } catch (err) {
+      console.warn(`${MODULE_ID} | runOptionGroupStep failed`, err);
+      notifyWarn("Option picker failed — see console.");
+      return;
+    }
 
-      // Swap atomically — delete the current item first so the
-      // upsert/duplicate guards on the actor don't reject the
-      // create. The semantic→Foundry pipeline already stamped the
-      // right classIdentifier + sourceType flags on `newItemData`.
-      try {
-        if (currentItem) {
-          await this._actor.deleteEmbeddedDocuments("Item", [currentItem.id]);
+    // Step 7 — interpret the result + apply diff.
+    if (result === "cancelled") return; // user backed out
+    if (result === undefined) return; // skipped (no-op)
+    if (!Array.isArray(result)) return;
+
+    const nextSourceIds = new Set(result.map(String));
+    const toRemove = [...currentSourceIds].filter((sid) => !nextSourceIds.has(sid));
+    const toAdd = [...nextSourceIds].filter((sid) => !currentSourceIds.has(sid));
+
+    if (!toRemove.length && !toAdd.length) {
+      notifyInfo("No change — selections are the same as before.");
+      return;
+    }
+
+    try {
+      // Remove obsolete picks first so the actor's already-owned
+      // index doesn't trip duplicate guards on the create pass.
+      if (toRemove.length) {
+        const removeIds = [];
+        for (const sid of toRemove) {
+          const item = this._actor.items.find((it) =>
+            it.type === "feat"
+            && it.getFlag?.(MODULE_ID, "sourceType") === "classOption"
+            && it.getFlag?.(MODULE_ID, "groupSourceId") === groupSourceId
+            && it.getFlag?.(MODULE_ID, "sourceId") === sid);
+          if (item) removeIds.push(item.id);
         }
-        await this._actor.createEmbeddedDocuments("Item", [newItemData]);
-        return { status: "swapped", value: { newName: newItemData?.name ?? "the new option" } };
-      } catch (err) {
-        console.warn(`${MODULE_ID} | option reselect swap failed`, err);
-        notifyWarn("Failed to swap the option — see console.");
-        return false;
+        if (removeIds.length) {
+          await this._actor.deleteEmbeddedDocuments("Item", removeIds);
+        }
       }
-    };
 
-    const result = await DauligorSequencePromptApp.prompt({
-      title: `Re-select ${groupLabel}: ${className}`,
-      subtitle: `Choose a different ${groupLabel.toLowerCase()} option. The current pick will be replaced.`,
-      width: 920,
-      height: 580,
-      state,
-      renderBody,
-      onRenderBody,
-      onAction,
-      actions: [
-        { id: "confirm", label: "Confirm", primary: true },
-        { id: "cancel", label: "Cancel" }
-      ]
-    });
-
-    if (result?.status === "swapped") {
-      notifyInfo(`Swapped to ${result.value?.newName ?? "the new option"}.`);
-      // The actor mutation already fires updateActor → FM re-render
-      // via the hook in the constructor. Explicit render here is a
-      // belt for cases where the hook gate skipped (e.g. mid-flush).
+      // Create new picks via the same semantic→Foundry pipeline
+      // class import uses, so flags + classIdentifier match.
+      if (toAdd.length) {
+        const itemDataList = [];
+        for (const sid of toAdd) {
+          const data = buildActorOptionItemFromPayload(bundle, sid, { classSourceId });
+          if (data) itemDataList.push(data);
+        }
+        if (itemDataList.length) {
+          await this._actor.createEmbeddedDocuments("Item", itemDataList);
+        }
+      }
+      notifyInfo(`Updated ${className} picks — added ${toAdd.length}, removed ${toRemove.length}.`);
       this.render({ force: false });
-    } else if (result?.status === "noop" && result.value?.unchanged) {
-      notifyInfo("No change — you re-confirmed the current pick.");
+    } catch (err) {
+      console.warn(`${MODULE_ID} | option reselect apply failed`, err);
+      notifyWarn("Failed to apply the new picks — see console.");
     }
   }
 

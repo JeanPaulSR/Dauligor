@@ -4529,7 +4529,22 @@ async function runToolSelectionStep({ workflow, sequence, progress, advancement 
   return result.value;
 }
 
-async function runOptionGroupStep({ workflow, actor, group, sequence, progress }) {
+// Exported so non-import callers (e.g. the Feature Manager's
+// "Swap this pick" button) can reuse the same option-picker UI —
+// status badges, level grouping, prereq pills, out-of-group
+// overlay, the lot. The caller is responsible for assembling a
+// workflow / sequence / progress shape the step recognises; see
+// `buildReselectWorkflowFromPayload` in class-import-service.js
+// for the canonical minimal shape.
+//
+// Optional `excludeFromOwnedSet` lets the caller mark certain
+// already-on-actor option sourceIds as NOT "owned" for the
+// purposes of the row-state computation (so re-select can show
+// the user's current picks as deselectable rather than greyed
+// out + locked). The requirements walker still sees those items
+// in `ownedSourceIds` so cross-option prereqs continue to
+// resolve.
+export async function runOptionGroupStep({ workflow, actor, group, sequence, progress, excludeFromOwnedSet = null }) {
   const stepId = `option:${group.sourceId}`;
   progress.markStep(stepId, "active", `Choose ${group.maxSelections} option(s) from ${group.name || group.featureName || "this pool"}.`);
   progress.setStatus(`Waiting for ${group.name || group.featureName || "class option"} choices...`);
@@ -4558,10 +4573,16 @@ async function runOptionGroupStep({ workflow, actor, group, sequence, progress }
   // to grey-out (and prevent re-picking) selections the actor already has
   // on the books. The user-facing rule is "already selected = greyed",
   // which on a re-import surfaces as the old picks being locked in.
+  //
+  // `excludeFromOwnedSet` (re-select callers): sourceIds in this set
+  // are deliberately excluded so the FM can show the current group's
+  // picks as deselectable rather than greyed-and-locked. Cross-option
+  // prereq satisfaction (the requirements walker's `ownedSourceIds`
+  // set below) is unaffected.
   const previouslyOwnedSourceIds = new Set();
   for (const item of ensureArray(actor?.items)) {
     const sid = item?.flags?.[MODULE_ID]?.sourceId;
-    if (sid) previouslyOwnedSourceIds.add(sid);
+    if (sid && !excludeFromOwnedSet?.has?.(sid)) previouslyOwnedSourceIds.add(sid);
   }
 
   // Global sourceId → option-record lookup across every option group in

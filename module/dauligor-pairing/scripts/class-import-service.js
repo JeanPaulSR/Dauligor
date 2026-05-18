@@ -6196,6 +6196,115 @@ export function getSemanticOptionsForGroup(payload, groupSourceId) {
 }
 
 /**
+ * Build the minimal workflow context shape that `runOptionGroupStep`
+ * expects, scoped for re-select / swap usage from the Feature
+ * Manager (no full import in flight). The picker reads from the
+ * workflow for prereq evaluation, prior-selection display, class
+ * level + name, and spell-rule allowlists; everything else
+ * (`characterUpdater.delta`, etc.) is supplied via a fake sequence.
+ *
+ * Steps:
+ *   1. Build the semantic context (same `featuresById` /
+ *      `optionGroupsBySourceId` etc. used by `createSemanticOptionItem`).
+ *   2. Convert every `uniqueOptionItem` in the payload to a Foundry
+ *      world item via `createSemanticOptionItem`.
+ *   3. Group the world items by `groupSourceId` and assemble the
+ *      `optionGroups[]` array the picker iterates.
+ *   4. Pre-populate each group's `selectedSourceIds` from the
+ *      actor's currently-owned classOption items so they show as
+ *      pre-checked when the picker opens.
+ *   5. Return a workflow object the picker can read.
+ */
+export function buildReselectWorkflowFromPayload(payload, actor, classItem) {
+  const classData = getSemanticClassData(payload) ?? {};
+  const subclasses = ensureArray(payload?.subclasses);
+  const normalizedFeatures = ensureArray(payload?.features);
+  const scalingColumns = ensureArray(payload?.scalingColumns);
+  const uniqueOptionGroups = ensureArray(payload?.uniqueOptionGroups);
+  const uniqueOptionItems = ensureArray(payload?.uniqueOptionItems);
+  const sourceMeta = buildSemanticSourceMeta(payload);
+  const sourceBookId = trimString(sourceMeta?.sourceId ?? classData?.sourceId) || null;
+  const classSourceId = resolveSemanticEntitySourceId("class", classData, { sourceBookId });
+  const context = {
+    payload,
+    classData,
+    subclasses,
+    features: normalizedFeatures,
+    scalingColumns,
+    uniqueOptionGroups,
+    uniqueOptionItems,
+    sourceMeta,
+    sourceBookId,
+    classSourceId,
+    classIdentifier: normalizeSemanticIdentifier(classData?.identifier ?? classData?.name ?? classData?.id, "class"),
+    featuresById: indexBy(normalizedFeatures, "id"),
+    featuresBySourceId: indexBy(normalizedFeatures, "sourceId"),
+    subclassesById: indexBy(subclasses, "id"),
+    subclassesBySourceId: indexBy(subclasses, "sourceId"),
+    scalingColumnsById: indexBy(scalingColumns, "id"),
+    scalingColumnsBySourceId: indexBy(scalingColumns, "sourceId"),
+    optionGroupsById: indexBy(uniqueOptionGroups, "id"),
+    optionGroupsBySourceId: indexBy(uniqueOptionGroups, "sourceId")
+  };
+
+  // Convert every semantic option to a Foundry world item so the
+  // picker can read `flags.dauligor-pairing.groupSourceId`, descriptions
+  // from `system.description.value`, etc. — the exact shape its UI
+  // expects.
+  const worldOptionItems = uniqueOptionItems
+    .map((opt) => createSemanticOptionItem(opt, context))
+    .filter(Boolean);
+
+  const classFeatures = normalizedFeatures
+    .filter((feature) => shouldTreatAsClassGrantFeature(feature, context))
+    .map((feature) => createSemanticFeatureItem(feature, context, { sourceType: "classFeature" }));
+
+  // Snapshot the actor's currently-owned classOption picks per
+  // group. Keyed by `groupSourceId`; values are arrays of option
+  // `sourceId`s. The picker prefills these as the in-prompt
+  // selection so re-checking the same options is a no-op.
+  const optionSelections = {};
+  for (const item of (actor?.items ?? [])) {
+    if (item.type !== "feat") continue;
+    const f = item.flags?.[MODULE_ID];
+    if (f?.sourceType !== "classOption") continue;
+    const gid = String(f.groupSourceId ?? "");
+    const sid = String(f.sourceId ?? "");
+    if (!gid || !sid) continue;
+    if (!optionSelections[gid]) optionSelections[gid] = [];
+    optionSelections[gid].push(sid);
+  }
+
+  const targetLevel = Number(classItem?.system?.levels) || 1;
+
+  const optionGroups = uniqueOptionGroups.map((group) => {
+    const availableOptions = worldOptionItems
+      .filter((item) => String(item.flags?.[MODULE_ID]?.groupSourceId ?? "") === String(group.sourceId))
+      .sort((left, right) => String(left.name).localeCompare(String(right.name)));
+    const maxSelections = getSelectionCountForLevel(group.selectionCountsByLevel, targetLevel);
+    return {
+      ...group,
+      maxSelections,
+      options: availableOptions,
+      selectedSourceIds: optionSelections[group.sourceId] ?? [],
+      featureName: classFeatures.find((item) =>
+        item.flags?.[MODULE_ID]?.sourceId === group.featureSourceId)?.name ?? null
+    };
+  });
+
+  return {
+    classItem,
+    targetLevel,
+    optionGroups,
+    spellRuleAllowlists: payload?.spellRuleAllowlists ?? {},
+    spellRuleNameById: payload?.spellRuleNameById ?? {},
+    selection: { optionSelections },
+    // Identity fields a few picker code paths consult.
+    classSourceId
+  };
+}
+
+/**
  * Build a Foundry-ready actor item for a single semantic option
  * from the live class bundle payload. Mirrors what
  * `buildClassImportWorkflow` does internally, scoped to one option
