@@ -213,7 +213,22 @@ export default async function handler(req: any, res: any) {
 
   try {
     if (!cleanSubpath || cleanSubpath === "catalog.json") {
-      const result = await getOrBuild(topLevelCatalogKey(), buildTopLevelCatalog);
+      // Stale-shape detector: catalogs baked before the spell-count
+      // patch don't carry `supportedImportTypes` on each entry, and
+      // their `counts.spells` was hard-coded to 0. The Foundry
+      // importer's Spells wizard relies on both to filter
+      // spell-capable sources, so a stale catalog leaves the picker
+      // empty. Rebuilding on detection lets the cache self-heal
+      // without a manual rebake.
+      const result = await getOrBuild(
+        topLevelCatalogKey(),
+        buildTopLevelCatalog,
+        (cached: any) => {
+          const entries = cached?.entries ?? [];
+          if (!entries.length) return true; // empty catalog is fine
+          return entries.every((e: any) => Array.isArray(e?.supportedImportTypes));
+        },
+      );
       if (result) return serveCached(res, result);
     }
 

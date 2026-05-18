@@ -87,18 +87,42 @@ export async function buildTopLevelCatalog() {
   const sourcesRes = await executeD1QueryInternal({ sql: "SELECT * FROM sources" });
   const allSources = (sourcesRes.results || []).map(denormalizeSourceRow);
 
-  const countsRes = await executeD1QueryInternal({
+  const classCountsRes = await executeD1QueryInternal({
     sql: "SELECT source_id, COUNT(*) AS class_count FROM classes GROUP BY source_id",
   });
   const classCountsBySourceId = new Map<string, number>();
-  for (const row of countsRes.results || []) {
+  for (const row of classCountsRes.results || []) {
     classCountsBySourceId.set(String(row.source_id), Number(row.class_count) || 0);
+  }
+
+  // Spell counts per source — same shape as the class counts above.
+  // Used by the Foundry importer's wizard to filter "spell-capable"
+  // sources when the user picks the Spells importer. Without this,
+  // every source ships `counts.spells === 0` and the client filter
+  // (`counts.spells > 0` OR unknown) rejects all rows. Cheap query;
+  // one row per source.
+  const spellCountsRes = await executeD1QueryInternal({
+    sql: "SELECT source_id, COUNT(*) AS spell_count FROM spells GROUP BY source_id",
+  });
+  const spellCountsBySourceId = new Map<string, number>();
+  for (const row of spellCountsRes.results || []) {
+    spellCountsBySourceId.set(String(row.source_id), Number(row.spell_count) || 0);
   }
 
   const entries = allSources
     .filter((s: any) => s.status === "ready" || s.status === "active")
     .map((s: any) => {
       const slug = s.slug || s.id;
+      const classCount = classCountsBySourceId.get(String(s.id)) || 0;
+      const spellCount = spellCountsBySourceId.get(String(s.id)) || 0;
+      // `supportedImportTypes` — explicit allow-list the Foundry
+      // wizard reads to decide which importer modes a source can
+      // feed. Derived from the per-table counts so the catalog
+      // doesn't need a separate manual flag. Mirrors the wizard's
+      // own client-side fallback (`counts.X > 0 → supports X`).
+      const supportedImportTypes: string[] = [];
+      if (classCount > 0) supportedImportTypes.push("classes-subclasses");
+      if (spellCount > 0) supportedImportTypes.push("spells");
       return {
         // Public semantic id. The internal D1 row id is intentionally
         // NOT exposed — consumers join against this synthesized id,
@@ -114,14 +138,28 @@ export async function buildTopLevelCatalog() {
         rules: s.rules || "2014",
         tags: s.tags || [],
         counts: {
-          classes: classCountsBySourceId.get(String(s.id)) || 0,
-          spells: 0,
+          classes: classCount,
+          spells: spellCount,
           items: 0,
           bestiary: 0,
           journals: 0,
         },
+        supportedImportTypes,
         detailUrl: `${slug}/source.json`,
         classCatalogUrl: `${slug}/classes/catalog.json`,
+        // Mirrors the `classCatalogUrl` field — both endpoints
+        // expose the source's full set in one fetch. Spells don't
+        // need an intermediate "catalog of class entries" layer
+        // (every class is its own bundle URL); they ship as one
+        // flat lightweight-summary list per source.
+        //
+        // Named `spellCatalogUrl` to match the existing
+        // `class/item/feat/actorCatalogUrl` family the client's
+        // `fetchSourceCatalog` already resolves through
+        // `resolveCatalogUrl`. Without this field the client would
+        // construct the URL itself from `slug`, which works but
+        // duplicates server knowledge on the client.
+        spellCatalogUrl: `${slug}/spells.json`,
       };
     });
 

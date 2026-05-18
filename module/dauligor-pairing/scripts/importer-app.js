@@ -461,9 +461,10 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       : (readySourceIds.length ? readySourceIds : this._sourceEntries.map((entry) => entry.id));
     this._state.sourceTypeId = this._state.selectedSourceIds[0] ?? this._sourceEntries[0]?.id ?? null;
 
+    const importerLabel = isSpells ? "spells" : "classes";
     this._state.status = this._sourceEntries.length
-      ? `Loaded ${this._sourceEntries.length} source${this._sourceEntries.length === 1 ? "" : "s"} for classes.`
-      : "No class-capable sources were found in the local source library.";
+      ? `Loaded ${this._sourceEntries.length} source${this._sourceEntries.length === 1 ? "" : "s"} for ${importerLabel}.`
+      : `No ${importerLabel}-capable sources were found in the local source library.`;
     this._state.statusLevel = this._sourceEntries.length ? "success" : "danger";
     this._sourcesLoaded = true;
     // Pair with `_sourcesLoaded = true` so a same-URL reopen can
