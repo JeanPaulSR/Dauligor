@@ -167,15 +167,23 @@ The `SCAN_TARGETS` list lives ONLY in [api/_lib/r2-proxy.ts](../../api/_lib/r2-p
 
 ## /api/module
 
-[api/module.ts](../../api/module.ts) — Foundry export endpoints. Dispatcher pattern with `req.url` parsing. Out of scope for the audit; it serves the Dauligor Pairing Foundry module.
+[api/module.ts](../../api/module.ts) — Foundry export endpoints. Dispatcher pattern with `req.url` parsing. Out of scope for the audit (no user-private data); it serves the Dauligor Pairing Foundry module.
 
-| Method | Path family | Gate | Purpose |
+All GET routes are public (the Foundry module fetches without auth), cached via R2 for the heavy bundles and live read-through with short `Cache-Control` for the lightweight summaries. POST routes are staff-only.
+
+| Method | Path | Gate | Returns / Purpose |
 |---|---|---|---|
-| GET | `/api/module/sources/...` | Public (cached) | Source / class / spell bundles for the Foundry module to fetch. |
-| POST | `/api/module/queue-rebake` | `requireStaffAccess` | Mark a bundle for regeneration. |
-| POST | `/api/module/bake/...` | `requireStaffAccess` | Force-regenerate a specific bundle. |
+| GET | `/api/module/sources/catalog.json` | Public | `dauligor.source-catalog.v1` — every active source. Each entry carries `counts.{classes,spells}` and `supportedImportTypes` so the wizard knows which import flows light up. |
+| GET | `/api/module/<slug>/classes/catalog.json` | Public | `dauligor.class-catalog.v1` — class entries for one source, with `tagIndex` for filter chips. |
+| GET | `/api/module/<slug>/classes/<class>.json` | Public (R2-cached) | `dauligor.semantic.class-export` — full class bundle (class, subclasses, features, scalings, optionGroups/Items, spellRuleAllowlists, source). |
+| GET | `/api/module/<slug>/classes/<class>/spells.json` | Public | `dauligor.class-spell-list.v1` — lightweight per-class curated spell summaries (no `system` block). Live read-through, `Cache-Control: public, max-age=60`. |
+| GET | `/api/module/<slug>/spells.json` | Public | `dauligor.source-spell-list.v1` — every spell in the source, same summary shape. Feeds the standalone Spell Browser. |
+| GET | `/api/module/spells/<dbId>.json` | Public | `dauligor.spell-item.v1` — full Foundry-ready spell item, fetched lazily per row select / embed. |
+| GET | `/api/module/tags/catalog.json` | Public | Spell-classified tag groups + tags, for the filter modal chips. |
+| POST | `/api/module/queue-rebake` | `requireStaffAccess` | `{ kind: "class" \| "subclass" \| "feature" \| "scalingColumn" \| "optionGroup" \| "optionItem" \| "source", id }` — mark a bundle for regeneration. |
+| POST | `/api/module/rebake-now` | `requireStaffAccess` | Same body — immediate rebake + R2 write + CDN warm. |
 
-See [../features/foundry-export.md](../features/foundry-export.md) for the full export contract.
+All GET routes fall back to a static filesystem read at `module/dauligor-pairing/data/sources/<path>` if D1 doesn't have the resource. See [../features/foundry-export.md](../features/foundry-export.md) for the wire formats and migration history.
 
 ## Related docs
 

@@ -74,13 +74,17 @@ The pairing module reads layer 3 — but the app stores layer 1 and produces lay
 
 | Path | Returns |
 |---|---|
-| `/api/module/sources/catalog.json` | All `status='ready'` sources |
-| `/api/module/sources/<slug>/classes/catalog.json` | Class catalog for one source |
-| `/api/module/sources/<slug>/classes/<class-identifier>.json` | Single semantic class export |
-| `/api/module/sources/<slug>/classes/<class-identifier>/spells.json` | Per-class curated spell list (lightweight summaries, live read-through, see below) |
+| `/api/module/sources/catalog.json` | Every active source row. Entries carry `counts.{classes, spells}` and `supportedImportTypes` so the Foundry wizard can light up the right import types per source. |
+| `/api/module/<slug>/classes/catalog.json` | Class catalog for one source (with `tagIndex` for filter chips) |
+| `/api/module/<slug>/classes/<class-identifier>.json` | Single semantic class export |
+| `/api/module/<slug>/classes/<class-identifier>/spells.json` | Per-class curated spell list (lightweight summaries, live read-through, see below) |
+| `/api/module/<slug>/spells.json` | **Per-source** spell list — every spell in the source, same lightweight summary shape as the per-class endpoint. Feeds the standalone Spell Browser (multi-select bulk import) launched from the wizard's "Spells" import type. |
 | `/api/module/spells/<dbId>.json` | Full Foundry-ready spell item (live read-through, fetched per pick at embed time) |
+| `/api/module/tags/catalog.json` | Tag taxonomy filtered to spell-classified groups. Powers the filter modal in both the Prepare Spells manager (sheet side) and the Spell Browser (importer side). |
 
 Falls back to filesystem read at `module/dauligor-pairing/data/sources/<path>` if D1 doesn't have the requested resource. Useful as a transitional convenience: classes created in the app are immediately available in Foundry without manual ZIP redeploys.
+
+The catalog cache validator at `api/module.ts` rebuilds the top-level catalog when `supportedImportTypes` is missing on cached entries — this self-heals across deploys without needing a manual rebake.
 
 ### Spell list decoupling (May 2026)
 
@@ -181,6 +185,17 @@ Beyond the standard `dauligor-pairing` identity flags, the importer stamps a few
 **What stays bundled in the class export:** spellcasting scaling tables (`spellsKnownScalings`), pact magic scaling (`alternativeSpellcastingScalings`), spell-rule allowlists (`spellRuleAllowlists`), rule display names (`spellRuleNameById`). These all change much less frequently than the per-class curated spell list and the class rebake cascade picks them up.
 
 **What doesn't auto-propagate:** `upsertSpellBatch` (used by the spell import workbench) does NOT call `recomputeAppliedRulesForSpell` per entry — a bulk import of 500 spells would fan out to thousands of D1 round-trips. After a batch import, the `SpellListManager`'s stale-detection indicator catches affected classes (any class whose applied rule sees a changed `updated_at` in the rule's matching spells is marked stale until rebuilt). The admin can hit "Rebuild Stale" to flush them.
+
+### Standalone Spell Browser (importer mode)
+
+Separate from the class-import flow, the Foundry wizard can launch the **standalone Spell Browser** ([`DauligorSpellBrowserApp`](../../module/dauligor-pairing/scripts/spell-preparation-app.js)) when the user picks the "Spells" import type. The browser is a thin subclass of the Prepare Spells manager — same 3-column shell, same row renderer, same filter modal — with mode-specific branches keyed on `this._mode === "importer"`:
+
+- **No source rail.** Every selected source's `/api/module/<slug>/spells.json` is fetched in parallel and merged into one pseudo-class-model (`identifier: "__source__:all"`) deduped by `dbId`. The merged pool's status is computed on every render from the per-source sub-caches, so any single sub-fetch resolving re-flips the merged status forward.
+- **Multi-select with checkboxes.** Each pool row's lead cell renders an `<input type="checkbox">` when the spell is not already on the sheet, or a green `✓` badge (`.dauligor-spell-manager__row-on-sheet`) when it is — the on-sheet rows are intentionally not selectable so the user can't double-add. Selection state lives in `this._state.selectedForImport: Set<dbId>` and is cleared on actor swap, source-slug change, and successful batch import.
+- **Plutonium-style select-all chip.** The pool toolbar shows a 3-state affordance (`none` ☐ / `some` ▣ / `all` ☑) computed from `filteredPool ∖ ownedMap` so the click target always matches what the user sees. Toggle handler `_toggleSelectAllDisplayed` adds the visible-and-importable ids; clicking again with all selected drops only the visible ones, leaving off-screen picks intact (matches Plutonium's `setCheckboxes({isChecked})` semantics).
+- **Batch import.** Footer button "Add N to Sheet" anchored bottom-right (inside `.dauligor-spell-manager__footer-row` — without that wrapper the parent's `flex-direction: column` stacks the left/right slots vertically). `_runBatchImport` fetches every selected payload in parallel via `_ensureFullSpellAnyway` (the importer has no class context to derive a URL, so it falls through to the synthesized `/api/module/spells/<dbId>.json` path), builds the item-data array, then hits `createEmbeddedDocuments("Item", items)` in a single batch so the sheet only re-renders once. Each created item lands in the alt sheet's `__other__` orphan bucket (no class attribution) and can be moved to a class section later via drag-drop, gated by class spell-list membership.
+
+**When to extend this code path:** any new state that depends on actor identity (favourites, multi-select, future "selected for swap" sets) must be cleared in both `setActor()` (actor change) and `setSourceSlugs()` (source change). The same pattern applies to `_classPools` cache invalidation.
 
 ## Actor bundle export
 
@@ -284,17 +299,15 @@ The Foundry module accepts:
 
 App side: BBCode is the preferred rich-text transport for export. The module converts BBCode → HTML during import.
 
-## Foundry "corpus" reference files
+## Foundry "corpus" reference captures
 
-Per major data type exported, the module's `corpus/` directory holds two reference files:
-- An **empty** schema with placeholder/null values
-- An **example** schema fully populated to demonstrate field mapping
+The pairing module keeps real reference captures from shipped 5etools / dnd5e exports under `module/dauligor-pairing/docs/corpus/` (not `module/dauligor-pairing/corpus/` — the older empty-schema design described in earlier drafts of this doc was retired in favour of capturing real evidence). The corpus is now an audit trail, not a contract template:
 
-Path: `module/dauligor-pairing/corpus/<entity>/`. For example:
-- `corpus/classes/export-class.json` (empty), `corpus/classes/export-class-example.json` (filled)
-- `corpus/subclasses/export-subclass.json`, `corpus/subclasses/export-subclass-example.json`
+- [`module/dauligor-pairing/docs/corpus/catalog.md`](../../module/dauligor-pairing/docs/corpus/catalog.md) — index of what's been captured
+- [`module/dauligor-pairing/docs/corpus/capture-template.md`](../../module/dauligor-pairing/docs/corpus/capture-template.md) — how to add a new capture
+- `5etools-class-*.json` / `5etools-fluff-*.json` — pinned examples of what the upstream sources actually ship
 
-This lets a pairing-module developer model their import logic against concrete examples.
+The canonical wire-format contracts (what the module expects to receive from `/api/module/*`) live under `module/dauligor-pairing/docs/` — `class-import-contract.md`, `spell-import-contract.md`, `actor-import-contract.md`, etc. The contract docs are the source of truth; the corpus shows real-world evidence the contract has to satisfy.
 
 ## Common tasks
 

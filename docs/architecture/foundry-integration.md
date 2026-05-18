@@ -35,17 +35,11 @@ Dauligor's architecture is **NOT** designed to implement the actual Foundry VTT 
 
 A completely separate module (the `dauligor-pairing` module or alternative third-party tools) will handle the actual implementation on Foundry's end. This module will ingest the semantic Dauligor JSON, resolve IDs, trigger the Foundry document creations, and attach the necessary flags.
 
-## 5. The Corpus Directory: Empty and Example Schemas
+## 5. Reference Captures
 
-To allow the pairing module an easier time modeling and working around how Foundry expects information, we maintain a `corpus` directory within the module's structure (`module/dauligor-pairing/corpus`).
+Because the import flow has to round-trip data through Foundry's `system` schema, the pairing module keeps reference captures from live Foundry items under [`module/dauligor-pairing/docs/corpus/`](../../module/dauligor-pairing/docs/corpus/). These are not "empty / example schemas" anymore — that older design was retired in favour of capturing real shipped 5etools / dnd5e exports and pinning them as evidence the import contract has to satisfy. The capture template + index live in [`module/dauligor-pairing/docs/corpus/catalog.md`](../../module/dauligor-pairing/docs/corpus/catalog.md) and [`capture-template.md`](../../module/dauligor-pairing/docs/corpus/capture-template.md).
 
-For every major data type exported from Dauligor to Foundry, the corpus must contain two reference files:
-- An **"empty"** schema: Showing the base structural requirements for the Foundry importer with placeholder or null values.
-- An **"example"** schema: Demonstrating a fully populated export bundle with real data mapping to demonstrate how Dauligor features map into it.
-
-For instance, classes require both an `export-class.json` and an `export-class-example.json` under `corpus/classes`. Subclasses follow the same pattern under `corpus/subclasses`.
-
-Because of this dual state, we can heavily leverage native Foundry syntax directly within our web app's mechanical inputs without confusing the front-end user.
+Because of the dual-state architecture, we can heavily leverage native Foundry syntax directly within our web app's mechanical inputs without confusing the front-end user.
 
 While the user reads a friendly description ("At 1st level, you deal additional fire damage equal to your proficiency bonus"), the backend mechanic can be explicitly configured to use Foundry's interpolation syntax.
 
@@ -58,13 +52,18 @@ By inputting this terminology in the "Mechanics" or "Automation" tabs of our fea
 
 ## 6. How the Pipeline is Wired Today
 
-The Foundry pairing flow has three live entry points, all served by `api/module.ts` (Vercel) and mirrored by `server.ts` (local Express):
+The Foundry pairing flow is served by `api/module.ts` (Vercel) and mirrored by `server.ts` (local Express). For the per-endpoint wire format, payload kinds, cache behavior, and migration history see [foundry-export.md](../features/foundry-export.md#dynamic-catalog-api). The headline routes:
 
 | Endpoint | Returns | Built by |
 |---|---|---|
-| `/api/module/sources/catalog.json` | `dauligor.source-catalog.v1` — list of every `sources` row that has at least one mapped class | `api/module.ts` (server-side joins) |
-| `/api/module/sources/<slug>/classes/catalog.json` | `dauligor.class-catalog.v1` — list of class entries for one source, each with a `payloadKind: dauligor.semantic.class-export` link | `api/module.ts` (server-side joins) |
-| `/api/module/sources/<slug>/classes/<identifier>.json` | `dauligor.semantic.class-export` — the full bundle: `{class, subclasses, features, scalingColumns, uniqueOptionGroups, uniqueOptionItems, spellsKnownScalings, alternativeSpellcastingScalings, source}` | `exportClassSemantic` |
+| `/api/module/sources/catalog.json` | `dauligor.source-catalog.v1` — every active source, each entry carrying `counts.{classes,spells}`, `supportedImportTypes`, and per-payload URLs the wizard uses to decide which import flows light up | `buildTopLevelCatalog` ([`api/_lib/module-export-pipeline.ts`](../../api/_lib/module-export-pipeline.ts)) |
+| `/api/module/<source>/classes/catalog.json` | `dauligor.class-catalog.v1` — class entries for one source, each with a `payloadKind: dauligor.semantic.class-export` link + `tagIndex` for filter chips | `buildSourceClassCatalog` ([`api/_lib/module-export-pipeline.ts`](../../api/_lib/module-export-pipeline.ts)) |
+| `/api/module/<source>/classes/<identifier>.json` | `dauligor.semantic.class-export` — the full bundle: `{class, subclasses, features, scalingColumns, uniqueOptionGroups, uniqueOptionItems, spellsKnownScalings, alternativeSpellcastingScalings, spellRuleAllowlists, source}` | `exportClassSemantic` ([`api/_lib/_classExport.ts`](../../api/_lib/_classExport.ts)) |
+| `/api/module/<source>/classes/<identifier>/spells.json` | `dauligor.class-spell-list.v1` — lightweight per-class curated spell summaries (no `system` block) the Prepare Spells manager loads on class select | `buildClassSpellListByIdentifier` ([`api/_lib/_classSpellList.ts`](../../api/_lib/_classSpellList.ts)) — live read-through, `Cache-Control: public, max-age=60` |
+| `/api/module/<source>/spells.json` | `dauligor.source-spell-list.v1` — same lightweight summary shape, but every spell in the source (not class-curated). Feeds the standalone Spell Browser launched from the wizard's Spells import type | `buildSourceSpellListBundle` ([`api/_lib/_sourceSpellList.ts`](../../api/_lib/_sourceSpellList.ts)) — live read-through |
+| `/api/module/spells/<dbId>.json` | `dauligor.spell-item.v1` — full Foundry-ready spell item (`system`, `effects`, flags) | `buildSpellItemBundle` ([`api/_lib/_spellExport.ts`](../../api/_lib/_spellExport.ts)) — live read-through, fetched lazily per row select / embed |
+| `/api/module/tags/catalog.json` | Tag taxonomy filtered to spell-classified groups; powers the Prepare Spells filter modal | `buildTagCatalog` ([`api/_lib/_tagCatalog.ts`](../../api/_lib/_tagCatalog.ts)) |
+| `POST /api/module/queue-rebake` · `POST /api/module/rebake-now` | Staff-only bundle invalidation / regeneration entry points | `module-export-queue.ts` / `module-export-pipeline.ts` |
 
 `exportClassSemantic` exists in two places:
 - **Client copy**: [`src/lib/classExport.ts`](../../src/lib/classExport.ts) — used by the `Export` buttons in `ClassView.tsx` and the source-zip downloaders.

@@ -69,9 +69,17 @@ App-team notes:
 - `scripts/reference-service.js`
   - semantic reference normalization for formulas, prose lookups, scales, and UUID links
 - `scripts/class-import-service.js`
-  - class catalog browser and world-item class import logic
+  - class bundle fetch + actor mutation helpers (workflow build, option-pick step, full-spell fetch, reselect-workflow factory)
 - `scripts/importer-app.js`
-  - import wizard shell, class browser window, and launch helpers
+  - import wizard shell, class browser window, launch helpers, and the `runOptionGroupStep` picker shared with the Feature Manager re-select flow
+- `scripts/spell-preparation-app.js`
+  - `DauligorSpellPreparationApp` (sheet-side Prepare Spells manager) + `DauligorSpellBrowserApp` (the standalone Spell Browser launched from the wizard's Spells import type — merges every selected source's spells into one pool, supports multi-select bulk import)
+- `scripts/feature-manager-app.js`
+  - post-import "Feature Manager" with Overview / Spells / Features tabs; long-rest commit dialog with deferred-mutation queue
+- `scripts/dauligor-character-sheet.js`
+  - alt character sheet, hosts the per-class spell-list gating for cross-class drag-drops
+- `scripts/gm-app.js`
+  - GM-only console placeholder (scene-controls button + ApplicationV2 window)
 - `data/sample-character.json`
   - minimal bundled payload for import testing
 - `data/classes/catalog.json`
@@ -146,14 +154,14 @@ App-team notes:
 ### Import wizard
 
 - three-column wizard:
-  - `Import Type`
-  - `Source Type`
+  - `Import Type` — `Classes & Subclasses`, `Spells`, `Items` (planned), `Feats` (planned)
+  - `Source Type` — sources filtered by `supportedImportTypes` on the active import type
   - `Import Options`
 - bottom-right actions:
   - `Cancel`
   - `Open Importer`
 
-Opening the class importer launches a dedicated class browser with:
+**Classes & Subclasses** launches a dedicated class browser with:
 
 - search
 - tag filter
@@ -161,6 +169,14 @@ Opening the class importer launches a dedicated class browser with:
 - nested subclasses
 - single-class radio selection
 - a follow-up class options workflow for actor imports
+
+**Spells** launches the standalone Spell Browser (`DauligorSpellBrowserApp`):
+
+- merges every selected source's spell list into a single pool (no source rail — sources picked in the wizard step compose into one view)
+- favourites pane on the left, level-banded pool in the middle, full spell detail on the right
+- per-row checkbox for multi-select; spells already on the actor render a green ✓ badge instead and are excluded from bulk-add
+- Plutonium-style 3-state Select-All chip in the pool toolbar (none / partial / all of currently-displayed)
+- bottom-right "Add N to Sheet" button — batches the selected dbIds into a single `createEmbeddedDocuments` call and lands each spell in the alt sheet's "Other Spells" (unsorted) bucket, ready to be dragged into a class section
 
 ### Settings sidebar
 
@@ -310,7 +326,8 @@ The current importer is deliberately conservative:
 - it resolves `ItemGrant` references from `sourceId` when using `dauligor.class-bundle.v1`
 - it now uses a Dauligor-driven actor level-up flow rather than relying on native `dnd5e` to fetch external class features
 - it now relinks actor-side granted class features back to `dnd5e` advancement rows after import, following the same general pattern Plutonium uses
-- it still does not yet attempt full subclass automation or spell-list import
+- it now ships a standalone Spell Browser (wizard → `Spells`) with multi-select bulk import — picks land in the alt sheet's "Other Spells" bucket and can be moved into a class section later (gated by class spell-list membership)
+- the Feature Manager handles post-import re-selection of option groups + spell preparation on long rest, with a deferred-mutation queue so changes commit atomically when the player chooses Save
 
 The exporter is now more research-oriented:
 

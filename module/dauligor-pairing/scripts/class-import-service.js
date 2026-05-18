@@ -1,4 +1,4 @@
-import { CLASS_CATALOG_FILE, CLASS_OPTIONS_TEMPLATE, MODULE_ID, SETTINGS, SOURCE_LIBRARY_FILE } from "./constants.js";
+import { CLASS_OPTIONS_TEMPLATE, MODULE_ID, SOURCE_LIBRARY_FILE } from "./constants.js";
 import { applyReferenceNormalization, syncDocumentReferences } from "./reference-service.js";
 import { log, notifyInfo, notifyWarn, warn } from "./utils.js";
 
@@ -10,11 +10,6 @@ const DEFAULT_SOURCE_BOOK = "Dauligor";
 const FEATURE_SUPPORTED_ADVANCEMENT_TYPES = new Set(["AbilityScoreImprovement", "ItemChoice", "ItemGrant", "ScaleValue", "Trait"]);
 const SUPPORTED_SEMANTIC_ACTIVITY_TYPES = new Set(["attack", "cast", "check", "damage", "enchant", "forward", "heal", "save", "summon", "transform", "utility"]);
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
-
-export async function openClassImportBrowser() {
-  const catalogUrl = game.settings.get(MODULE_ID, SETTINGS.defaultClassCatalogUrl) || CLASS_CATALOG_FILE;
-  notifyWarn(`The legacy class dialog is no longer used. Open the Dauligor importer app instead. Current catalog: ${catalogUrl}`);
-}
 
 export async function fetchSourceCatalog(url = SOURCE_LIBRARY_FILE) {
   const payload = await fetchJson(url);
