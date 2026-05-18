@@ -42,7 +42,7 @@ Spell List Extensions panels alongside the existing casting metadata).
 The Spellbook Manager project is feature-complete on the app side. The only open
 work is the **Foundry export round-trip**, handed off to
 `claude/pedantic-antonelli-ce1c7f` via
-[../handoff-spellbook-to-importer.md](../handoff-spellbook-to-importer.md).
+[../handoff-foundry-spell-manager.md](../handoff-foundry-spell-manager.md).
 
 Once that lands, this branch is ready to merge.
 

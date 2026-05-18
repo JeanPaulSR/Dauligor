@@ -1,16 +1,16 @@
-# Firebase Authentication (the part of Firebase that's staying)
+# Firebase Authentication (the part of Firebase that stayed)
 
-After the Firestore-to-D1 migration, **Firebase Authentication remains the JWT layer**. Firestore and Firebase Storage are being decommissioned. This doc explains what stays, why, and the full auth flow end-to-end.
+The Firestore-to-D1 migration completed in May 2026; **Firebase Authentication remains the JWT layer** and is the only Firebase service still in use. This doc explains what stayed, why, and the full auth flow end-to-end.
 
-## What's kept vs. what's going
+## What's kept vs. what's gone
 
 | Service | Status | Why |
 |---|---|---|
 | Firebase Authentication | **Kept** | Solid JWT issuer; integrates with the existing Admin SDK on the proxy; user accounts already exist |
-| Firestore | Being decommissioned | Replaced by Cloudflare D1 |
-| Firebase Storage | Decommissioned | Replaced by Cloudflare R2 |
+| Firestore | Removed | Replaced by Cloudflare D1 (May 2026) |
+| Firebase Storage | Removed | Replaced by Cloudflare R2 |
 | `firebase-admin` SDK on the proxy | **Kept** | Verifies the JWT and reads RBAC role from D1 `users` |
-| Firestore security rules | Going | Replaced by per-route RBAC checks in `api/_lib/firebase-admin.ts` |
+| Firestore security rules | Removed | Replaced by per-route RBAC checks in `api/_lib/firebase-admin.ts` + the table-aware proxy gate in `api/_lib/d1-proxy.ts`. See [security-gates.md](security-gates.md). |
 
 ## Pseudo-username identity layer
 
@@ -43,7 +43,7 @@ These addresses bypass the role lookup and are always treated as `admin` on the 
 - [api/_lib/firebase-admin.ts](../../api/_lib/firebase-admin.ts)
 - [server.ts](../../server.ts)
 
-The list must stay in sync between those files. `firestore.rules` (legacy, going away) also has the same list.
+The list must stay in sync between those two files.
 
 ## End-to-end auth flow
 

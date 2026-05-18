@@ -144,7 +144,7 @@ Two real-world incidents from the migration era surfaced this:
 
 **Where to implement:** the delete handlers in [src/pages/compendium/ClassEditor.tsx](../../src/pages/compendium/ClassEditor.tsx) and [src/pages/compendium/SubclassEditor.tsx](../../src/pages/compendium/SubclassEditor.tsx). The reference-scan helper could go in [src/lib/compendium.ts](../../src/lib/compendium.ts) so other editors (feats, items, spells) can reuse the pattern when they need cross-table cascade behaviour.
 
-**Until this lands**, occasional Firestore-side cleanup remains necessary. The `scripts/cleanup-firestore-orphans.js` (during the migration window) and the editor itself (post-migration) cover cases where this pattern recurs.
+**Until this lands**, orphans accumulate silently in D1 and need to be cleaned up via ad-hoc SQL queries against the affected tables (`subclasses.class_id`, `features.parent_id`, `unique_option_groups.feature_id`, etc.). The editor catches the common case where the orphan is created in the same session, but cross-session orphans need manual sweep.
 
 ## Exporting classes
 

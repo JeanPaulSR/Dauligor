@@ -295,7 +295,7 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
 
   const isAdmin = userProfile?.role === 'admin';
 
-  // ── Firestore subscription ──────────────────────────────────────────────────
+  // ── Data loading ────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const loadItems = async () => {

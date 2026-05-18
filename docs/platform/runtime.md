@@ -38,7 +38,7 @@ This doc explains where each piece of the application runs, how requests flow be
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-Authentication is handled by **Firebase**, but Firebase Authentication is only used as a JWT issuer. Firestore is being decommissioned. See [auth-firebase.md](auth-firebase.md).
+Authentication is handled by **Firebase**, but Firebase Authentication is only used as a JWT issuer. Firestore was decommissioned in May 2026 and replaced by Cloudflare D1. See [auth-firebase.md](auth-firebase.md).
 
 ## Local dev vs production
 
@@ -114,13 +114,13 @@ The Worker is intentionally stateless and trusts only the proxy-layer auth. **Th
 | [api/_lib/](../../api/_lib/) | Both | Shared proxy logic and `firebase-admin` JWT verification |
 | [server.ts](../../server.ts) | Local dev only | Express server that wires the same routes as Vercel + Vite middleware |
 | [worker/](../../worker/) | Cloudflare Worker | The stateless gateway to D1 and R2 |
-| [scripts/](../../scripts/) | Node CLI | Migration utilities (`migrate.js`, `check_firestore.js`) — never deployed |
+| [scripts/](../../scripts/) | Node CLI | Operational + drift-audit utilities — never deployed. The historical Firestore migration scripts (`migrate.js`, `check_firestore.js`) are kept here as reference; they have no live use post-D1. |
 | [worker/migrations/](../../worker/migrations/) | wrangler CLI | D1 schema migrations |
 
 ## Process boundaries / what runs where
 
 - **Firebase Admin SDK** runs only on the proxy (Express / Vercel), never in the Worker. The Worker has no Firebase dependency.
-- **Firestore client** is being decommissioned. Where it still appears, treat it as a temporary fallback. See [database/README.md](../database/README.md).
+- **No Firestore client.** The `firebase/firestore` package is no longer imported anywhere in the codebase; D1 fully replaced it. See [d1-architecture.md](d1-architecture.md) for the current data layer.
 - **R2 operations** never touch the proxy's filesystem. Uploads stream from browser through the proxy to the Worker.
 
 ## Environment configuration

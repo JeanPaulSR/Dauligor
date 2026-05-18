@@ -86,19 +86,20 @@ There's also a set of API-side rewrites for the per-route endpoint family. Verce
 ```json
 {
   "rewrites": [
-    { "source": "/api/module/(.*)",      "destination": "/api/module" },
-    { "source": "/api/module",           "destination": "/api/module" },
-    { "source": "/api/me/(.*)",          "destination": "/api/me" },
-    { "source": "/api/lore/(.*)",        "destination": "/api/lore" },
-    { "source": "/api/campaigns/(.*)",   "destination": "/api/campaigns" },
-    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+    { "source": "/api/module/(.*)",       "destination": "/api/module" },
+    { "source": "/api/module",            "destination": "/api/module" },
+    { "source": "/api/me/(.*)",           "destination": "/api/me" },
+    { "source": "/api/lore/(.*)",         "destination": "/api/lore" },
+    { "source": "/api/campaigns/(.*)",    "destination": "/api/campaigns" },
+    { "source": "/api/admin/users/(.*)",  "destination": "/api/admin/users" },
+    { "source": "/((?!api/|assets/).*)",  "destination": "/index.html" }
   ]
 }
 ```
 
 The catch-all's negative lookahead `(?!api/|assets/)` skips paths under `/api/` (so the serverless functions still resolve) and `/assets/` (so missing JS chunks return real 404s instead of being rewritten to `index.html`, which used to mask stale-bundle errors as MIME-type failures). Static files in `/public` and built assets in `/assets` are served from the filesystem before rewrites are evaluated, so they're unaffected.
 
-When you add a new client-side route, you don't have to update `vercel.json` — the SPA catch-all handles it automatically. When you add a new multi-segment **API** dispatcher, add a `/api/<resource>/(.*)` rewrite alongside the existing three.
+When you add a new client-side route, you don't have to update `vercel.json` — the SPA catch-all handles it automatically. When you add a new multi-segment **API** dispatcher, add a `/api/<resource>/(.*)` rewrite alongside the existing ones.
 
 ## Navigation patterns
 

@@ -101,7 +101,7 @@ Defined in `HARDCODED_STAFF_EMAILS` in:
 
 These bootstrap the system: even if the D1 `users` table is wiped, you can still log in as one of these emails and re-create roles. The auto-promote logic in `/api/me` forces `role = admin` for any of these three on every profile load, so role drift can't lock you out.
 
-The lists must stay in sync between those files. `firestore.rules` is no longer relevant — Firestore has been decommissioned.
+The lists must stay in sync between those files.
 
 ## Per-table access patterns
 
@@ -159,7 +159,7 @@ The same endpoint also auto-creates the `users` row on first sign-in (with role 
 
 ## Why Firebase Auth still gates D1
 
-Even though Firestore is being decommissioned, Firebase **Authentication** is staying. It's the JWT issuer; the D1 proxy verifies tokens via `firebase-admin` and reads the role from D1. See [../platform/auth-firebase.md](../platform/auth-firebase.md) for the full chain.
+Firestore is gone but Firebase **Authentication** stayed — it's a solid JWT issuer with existing user accounts and a working Admin SDK. The D1 proxy verifies tokens via `firebase-admin` and reads the role from D1 `users.role`. See [../platform/auth-firebase.md](../platform/auth-firebase.md) for the full chain.
 
 ## Related docs
 

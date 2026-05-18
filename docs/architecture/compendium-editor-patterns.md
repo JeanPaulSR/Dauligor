@@ -128,9 +128,7 @@ If your new entity has 0 junctions and just sits in a table, pick A or C. If it 
 
 ## Post-migration cleanup roadmap
 
-> **Read this when** the [Firestore-cut punchlist](../_archive/firestore-cut-punchlist.md) Phase E is complete (Firestore client deleted, `firestore.rules` removed, all `firebaseFallback` args are `null`).
->
-> **Don't start any of this mid-migration.** Refactoring while still half-on-Firestore creates more risk than the cleanup is worth.
+> The Firestore cut shipped in 2026-05. This roadmap is now eligible to start; see Priority 7 below for the closure record.
 
 Estimated total effort: 1 focused week, broken across the priorities below.
 

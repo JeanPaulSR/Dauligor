@@ -11,7 +11,6 @@ Every env var the app reads, where it's read, what it's for, and a sample value.
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Express + Vercel proxies (`firebase-admin` init) | yes (one of) | unset |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Express + Vercel proxies (alt to JSON) | yes (one of) | unset |
 | `FIREBASE_PROJECT_ID` | `api/_lib/firebase-admin.ts` | optional | `gen-lang-client-0493579997` |
-| `FIRESTORE_DATABASE_ID` | `api/_lib/firebase-admin.ts` | optional | `ai-studio-923ef1e5-9f79-409a-94a2-971dd56e6ef0` |
 | `NODE_ENV` | `server.ts` | optional | unset (dev) |
 | `VITE_R2_WORKER_URL` | Browser bundle (legacy direct R2 path) | optional | unset |
 | `VITE_R2_API_SECRET` | Browser bundle (legacy direct R2 path) | optional | unset |
@@ -33,7 +32,7 @@ The shared secret between the proxy and the Worker. The proxy adds `Authorizatio
 - **Production**: a strong secret stored in both the Vercel project env and the Worker secret store.
 
 ### `FIREBASE_SERVICE_ACCOUNT_JSON`
-The full service-account JSON document, JSON-stringified, used to initialise `firebase-admin` for verifying user JWTs and (during migration) reading legacy Firestore data via `migrate.js`.
+The full service-account JSON document, JSON-stringified, used to initialise `firebase-admin` for verifying user JWTs.
 - Either this **or** `GOOGLE_APPLICATION_CREDENTIALS` must be set.
 
 ### `GOOGLE_APPLICATION_CREDENTIALS`
@@ -41,9 +40,6 @@ Filesystem path to a service-account JSON. Used as an alternative to `FIREBASE_S
 
 ### `FIREBASE_PROJECT_ID`
 Override the Firebase project ID. Defaults to `gen-lang-client-0493579997`.
-
-### `FIRESTORE_DATABASE_ID`
-Override the Firestore database ID. Defaults to `ai-studio-923ef1e5-9f79-409a-94a2-971dd56e6ef0`. Only relevant during migration; once Firestore is decommissioned this can be removed.
 
 ### `NODE_ENV`
 When `"production"`, `server.ts` serves the static `dist/` build. Otherwise it mounts Vite middleware for dev.
