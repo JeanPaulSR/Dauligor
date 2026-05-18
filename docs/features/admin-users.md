@@ -19,7 +19,7 @@ Admin-only user management. The only way to create accounts (registration is dis
 | Generate temporary password | `POST /api/admin/users/[id]/temporary-password` | **Destructive** — overwrites the target's Firebase Auth password with a random 14-char value and returns it once. The user's previous password no longer works. |
 | Generate sign-in link | `POST /api/admin/users/[id]/sign-in-token` | **Non-destructive** — mints a 1-hour Firebase custom token. Admin shares a `https://<origin>/auth/redeem?token=…` URL; the SPA exchanges it via `signInWithCustomToken` and the user's existing password keeps working. |
 
-All of these live in a single catch-all dispatcher at [api/admin/users.ts](../../api/admin/users.ts) (vercel.json rewrite `/api/admin/users/(.*) → /api/admin/users`; the handler parses `req.url` for the original sub-path). The proxy refuses raw `SELECT … FROM users` and raw mutations against `users`, so every legitimate read/write flows through this dispatcher (own-row access goes through `/api/me` instead).
+All of these live in a single catch-all dispatcher at [api/admin/users.ts](../../api/admin/users.ts), routed via the `functions/api/admin/users/[[path]].ts` Pages Function shim — Pages's filesystem-based catch-all (`[[path]]`) matches every sub-path under `/api/admin/users/` and the dispatcher parses `req.url` to route internally. The proxy refuses raw `SELECT … FROM users` and raw mutations against `users`, so every legitimate read/write flows through this dispatcher (own-row access goes through `/api/me` instead).
 
 ## RBAC
 
