@@ -21,7 +21,7 @@
 // ║     not in `src/lib/imageMetadata.ts`.                                  ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchCollection } from '../../lib/d1';
 import { auth } from '../../lib/firebase';
@@ -45,6 +45,7 @@ import {
   Image as ImageIcon, Folder, ChevronRight, Home, Copy, Edit2, Save,
   X, Trash2, RefreshCw, ExternalLink, AlertTriangle, Info, Search,
   Upload, Lock, Shield,
+  ArrowUp, LayoutGrid, List as ListIcon, Eye, EyeOff,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -118,13 +119,6 @@ interface StorageFolder {
   name: string;
   fullPath: string;
   displayName?: string;
-}
-
-interface IconEntry {
-  id: string;
-  name: string;
-  category: string;
-  url: string;
 }
 
 interface UploadQueueItem {
@@ -431,6 +425,15 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   const [renameValue, setRenameValue] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
 
+  // Filter / display / private-folder toggles shared across the Image Library
+  // and Icons tabs. Each tab keeps its own search input value because they
+  // operate on different prefixes.
+  const [libFilter, setLibFilter] = useState('');
+  const [libAllItems, setLibAllItems] = useState<StorageItem[] | null>(null);
+  const [libLoadingAll, setLibLoadingAll] = useState(false);
+  const [libDisplayMode, setLibDisplayMode] = useState<'tiles' | 'list'>('tiles');
+  const [libShowPrivate, setLibShowPrivate] = useState(false);
+
   // ── SYSTEM IMAGES state ───────────────────────────────────────────────────
 
   const [sysSection, setSysSection] = useState<SysSection | null>(null);
@@ -447,11 +450,6 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   const [sysSavingMeta, setSysSavingMeta] = useState(false);
 
   // ── ICON LIBRARY state ────────────────────────────────────────────────────
-
-  const [iconSearch, setIconSearch] = useState('');
-  const [iconCatalog, setIconCatalog] = useState<IconEntry[] | null>(null);
-  const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   const [iconBrowsePath, setIconBrowsePath] = useState('icons');
   const [iconBrowseFolders, setIconBrowseFolders] = useState<StorageFolder[]>([]);
@@ -472,6 +470,17 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   const [iconMoving, setIconMoving] = useState(false);
   const [iconDeleting, setIconDeleting] = useState(false);
   const [iconDeleteConfirm, setIconDeleteConfirm] = useState(false);
+
+  // Icons tab: new toolbar state (mirrors Image Library)
+  const [iconFilter, setIconFilter] = useState('');
+  const [iconAllItems, setIconAllItems] = useState<StorageItem[] | null>(null);
+  const [iconLoadingAll, setIconLoadingAll] = useState(false);
+  const [iconDisplayMode, setIconDisplayMode] = useState<'tiles' | 'list'>('tiles');
+  const [iconShowPrivate, setIconShowPrivate] = useState(false);
+
+  // System Images tab: filter + display mode (read-only, so no upload/private)
+  const [sysFilter, setSysFilter] = useState('');
+  const [sysDisplayMode, setSysDisplayMode] = useState<'tiles' | 'list'>('tiles');
 
   // ── IMAGE LIBRARY: folder loading ─────────────────────────────────────────
 
@@ -505,6 +514,55 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
   useEffect(() => { loadFolder(currentPath); }, [currentPath, loadFolder]);
 
+  // ── IMAGE LIBRARY: filter / hide-private helpers ──────────────────────────
+
+  // Recursive listing under currentPath used for filter-mode search. Lazy-loaded
+  // when the filter input becomes non-empty; invalidated whenever currentPath
+  // changes so results never leak across folders.
+  useEffect(() => { setLibAllItems(null); }, [currentPath]);
+
+  useEffect(() => {
+    if (!libFilter || libAllItems !== null || libLoadingAll) return;
+    setLibLoadingAll(true);
+    (async () => {
+      try {
+        const prefix = currentPath.endsWith('/') ? currentPath : currentPath + '/';
+        const result = await r2List(prefix, '');
+        setLibAllItems(
+          mapObjects(
+            result.objects.filter((o) => !o.key.endsWith('/.keep') && !o.key.endsWith('/.gitkeep')),
+          ),
+        );
+      } catch {
+        setLibAllItems([]);
+      } finally {
+        setLibLoadingAll(false);
+      }
+    })();
+  }, [libFilter, libAllItems, libLoadingAll, currentPath]);
+
+  const libUnderPrivate = (key: string) =>
+    key.split('/').slice(0, -1).some((seg) => seg.startsWith('_'));
+
+  const visibleFolders = useMemo(
+    () => libShowPrivate ? folders : folders.filter((f) => !f.name.startsWith('_')),
+    [folders, libShowPrivate],
+  );
+
+  const visibleItems = useMemo(
+    () => libShowPrivate ? items : items.filter((i) => !libUnderPrivate(i.key)),
+    [items, libShowPrivate],
+  );
+
+  const filteredItems = useMemo(() => {
+    if (!libFilter) return visibleItems;
+    const q = libFilter.toLowerCase();
+    const base = (libAllItems ?? []).filter(
+      (i) => i.name.toLowerCase().includes(q) || i.key.toLowerCase().includes(q),
+    );
+    return libShowPrivate ? base : base.filter((i) => !libUnderPrivate(i.key));
+  }, [libFilter, visibleItems, libAllItems, libShowPrivate]);
+
   // ── ICON LIBRARY: folder loading ──────────────────────────────────────────
 
   const loadIconFolder = useCallback(async (path: string) => {
@@ -530,6 +588,70 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
   }, []);
 
   useEffect(() => { loadIconFolder(iconBrowsePath); }, [iconBrowsePath, loadIconFolder]);
+
+  // ── ICONS tab: filter / hide-private helpers ──────────────────────────────
+
+  useEffect(() => { setIconAllItems(null); }, [iconBrowsePath]);
+
+  useEffect(() => {
+    if (!iconFilter || iconAllItems !== null || iconLoadingAll) return;
+    setIconLoadingAll(true);
+    (async () => {
+      try {
+        const prefix = iconBrowsePath.endsWith('/') ? iconBrowsePath : iconBrowsePath + '/';
+        const result = await r2List(prefix, '');
+        setIconAllItems(
+          mapObjects(
+            result.objects.filter((o) => !o.key.endsWith('/.keep') && !o.key.endsWith('/.gitkeep')),
+          ),
+        );
+      } catch {
+        setIconAllItems([]);
+      } finally {
+        setIconLoadingAll(false);
+      }
+    })();
+  }, [iconFilter, iconAllItems, iconLoadingAll, iconBrowsePath]);
+
+  const iconUnderPrivate = (key: string) =>
+    key.split('/').slice(0, -1).some((seg) => seg.startsWith('_'));
+
+  const visibleIconFolders = useMemo(
+    () => iconShowPrivate ? iconBrowseFolders : iconBrowseFolders.filter((f) => !f.name.startsWith('_')),
+    [iconBrowseFolders, iconShowPrivate],
+  );
+
+  const visibleIconItems = useMemo(
+    () => iconShowPrivate ? iconBrowseItems : iconBrowseItems.filter((i) => !iconUnderPrivate(i.key)),
+    [iconBrowseItems, iconShowPrivate],
+  );
+
+  const filteredIconItems = useMemo(() => {
+    if (!iconFilter) return visibleIconItems;
+    const q = iconFilter.toLowerCase();
+    const base = (iconAllItems ?? []).filter(
+      (i) => i.name.toLowerCase().includes(q) || i.key.toLowerCase().includes(q),
+    );
+    return iconShowPrivate ? base : base.filter((i) => !iconUnderPrivate(i.key));
+  }, [iconFilter, visibleIconItems, iconAllItems, iconShowPrivate]);
+
+  // ── SYSTEM IMAGES tab: filter helpers ─────────────────────────────────────
+
+  const filteredSysFolders = useMemo(() => {
+    if (!sysFilter) return sysFolders;
+    const q = sysFilter.toLowerCase();
+    return sysFolders.filter((f) =>
+      (f.displayName ?? f.name).toLowerCase().includes(q) || f.name.toLowerCase().includes(q),
+    );
+  }, [sysFolders, sysFilter]);
+
+  const filteredSysItems = useMemo(() => {
+    if (!sysFilter) return sysItems;
+    const q = sysFilter.toLowerCase();
+    return sysItems.filter((i) =>
+      i.name.toLowerCase().includes(q) || i.key.toLowerCase().includes(q),
+    );
+  }, [sysItems, sysFilter]);
 
   // ── IMAGE LIBRARY: item selection ─────────────────────────────────────────
 
@@ -728,27 +850,6 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
 
   // ── ICON LIBRARY ──────────────────────────────────────────────────────────
 
-  const loadIconCatalog = async () => {
-    setLoadingCatalog(true);
-    setCatalogError(null);
-    try {
-      const result = await r2List('icons/', '');
-      const icons: IconEntry[] = result.objects.map((obj) => {
-        const parts = obj.key.split('/');
-        const filename = parts[parts.length - 1];
-        const name = filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-        const category = parts.length > 2 ? parts[parts.length - 2] : 'General';
-        return { id: obj.key, name, category, url: obj.url };
-      });
-      setIconCatalog(icons);
-    } catch (err: any) {
-      setCatalogError(err.message);
-      setIconCatalog(null);
-    } finally {
-      setLoadingCatalog(false);
-    }
-  };
-
   // ── ICON LIBRARY: upload ─────────────────────────────────────────────────
 
   const uploadIconItems = async (items: { file: File; relativePath: string }[], targetPath?: string) => {
@@ -794,8 +895,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
     );
 
     loadIconFolder(iconBrowsePath);
-    if (iconCatalog !== null) loadIconCatalog();
-    setTimeout(() => setIconUploadQueue([]), 3000);
+        setTimeout(() => setIconUploadQueue([]), 3000);
   };
 
   const handleIconDrop = async (e: React.DragEvent) => {
@@ -815,8 +915,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
           toast.success(`Moved to ${iconBrowsePath}/`);
           if (selectedIcon?.fullPath === item.fullPath) setSelectedIcon(null);
           loadIconFolder(iconBrowsePath);
-          if (iconCatalog !== null) loadIconCatalog();
-        } catch (err: any) {
+                  } catch (err: any) {
           toast.error('Move failed: ' + (err.message ?? 'Unknown error'));
         }
       }
@@ -839,8 +938,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
       setSelectedIcon(null);
       setIconMoveTarget('');
       loadIconFolder(iconBrowsePath);
-      if (iconCatalog !== null) loadIconCatalog();
-    } catch (err: any) {
+          } catch (err: any) {
       toast.error('Move failed: ' + (err.message ?? 'Unknown error'));
     } finally {
       setIconMoving(false);
@@ -857,8 +955,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
       setSelectedIcon(null);
       setIconDeleteConfirm(false);
       loadIconFolder(iconBrowsePath);
-      if (iconCatalog !== null) loadIconCatalog();
-    } catch (err: any) {
+          } catch (err: any) {
       toast.error('Delete failed: ' + (err.message ?? 'Unknown error'));
     } finally {
       setIconDeleting(false);
@@ -1142,6 +1239,24 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   );
                 })}
                 <div className="ml-auto flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (currentPath === 'images') return;
+                      const segs = currentPath.split('/');
+                      segs.pop();
+                      setCurrentPath(segs.join('/') || 'images');
+                    }}
+                    disabled={currentPath === 'images'}
+                    title="Up one level"
+                    className={cn(
+                      'transition-colors rounded px-1 py-0.5',
+                      currentPath === 'images'
+                        ? 'text-ink/15 cursor-not-allowed'
+                        : 'text-ink/40 hover:text-gold',
+                    )}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
                   {/* New Folder inline control */}
                   {creatingFolder ? (
                     <div className="flex items-center gap-1">
@@ -1201,6 +1316,65 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     <RefreshCw className={`w-3.5 h-3.5 ${loadingFolder ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
+              </div>
+
+              {/* Filter / display / private toolbar */}
+              <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
+                  <Input
+                    value={libFilter}
+                    onChange={(e) => setLibFilter(e.target.value)}
+                    placeholder={`Filter results in ${currentPath}/…`}
+                    className="pl-8 h-7 text-xs bg-background/50 border-gold/20"
+                  />
+                  {libFilter && (
+                    <button
+                      onClick={() => setLibFilter('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center border border-gold/20 rounded shrink-0 overflow-hidden">
+                  <button
+                    onClick={() => setLibDisplayMode('list')}
+                    title="List view"
+                    className={cn(
+                      'p-1.5 transition-colors',
+                      libDisplayMode === 'list'
+                        ? 'bg-gold/20 text-gold'
+                        : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                    )}
+                  >
+                    <ListIcon className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setLibDisplayMode('tiles')}
+                    title="Tile view"
+                    className={cn(
+                      'p-1.5 transition-colors border-l border-gold/20',
+                      libDisplayMode === 'tiles'
+                        ? 'bg-gold/20 text-gold'
+                        : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                    )}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => setLibShowPrivate((v) => !v)}
+                  title={libShowPrivate ? 'Hide private folders' : 'Show private folders (_temp, etc.)'}
+                  className={cn(
+                    'p-1.5 rounded border transition-colors shrink-0',
+                    libShowPrivate
+                      ? 'bg-gold/20 text-gold border-gold/40'
+                      : 'text-ink/40 hover:text-gold border-gold/20',
+                  )}
+                >
+                  {libShowPrivate ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
               </div>
 
               {/* Folder move progress bar */}
@@ -1290,16 +1464,97 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               )}
 
               {loadingFolder ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
-                  ))}
+                libDisplayMode === 'tiles' ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <div key={i} className="h-10 bg-gold/5 animate-pulse rounded border border-gold/10" />
+                    ))}
+                  </div>
+                )
+              ) : libFilter ? (
+                /* ── FILTER MODE — flat list of all matching items in subtree ── */
+                <div className="space-y-3">
+                  {libLoadingAll && libAllItems === null ? (
+                    <div className="flex items-center justify-center py-16">
+                      <RefreshCw className="w-6 h-6 animate-spin text-gold/40" />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-ink/40">
+                        {filteredItems.length} match{filteredItems.length !== 1 ? 'es' : ''} in {currentPath}/ for "{libFilter}"
+                      </p>
+                      {filteredItems.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
+                          <Search className="w-10 h-10 text-gold/20 mb-3" />
+                          <p className="text-sm text-ink/40 italic">No images match your filter</p>
+                        </div>
+                      ) : libDisplayMode === 'list' ? (
+                        <div className="space-y-0.5">
+                          {filteredItems.map((item) => (
+                            <button
+                              key={item.fullPath}
+                              onClick={() => selectItem(item)}
+                              title={item.fullPath}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
+                                selectedItem?.fullPath === item.fullPath
+                                  ? 'border-gold bg-gold/10'
+                                  : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                              )}
+                            >
+                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                                <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
+                              </div>
+                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                                {item.name}
+                              </span>
+                              {item.size != null && (
+                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                              )}
+                              {item.timeCreated && (
+                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                          {filteredItems.map((item) => (
+                            <button
+                              key={item.fullPath}
+                              onClick={() => selectItem(item)}
+                              className={cn(
+                                'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
+                                selectedItem?.fullPath === item.fullPath
+                                  ? 'border-gold shadow-lg shadow-gold/20'
+                                  : 'border-gold/20 hover:border-gold/50',
+                              )}
+                            >
+                              <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                              <div className="absolute bottom-0 inset-x-0 bg-black/70 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <p className="text-[9px] text-white truncate">{item.name}</p>
+                                {item.size && <p className="text-[8px] text-white/50">{formatBytes(item.size)}</p>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
+                /* ── BROWSE MODE ── */
                 <div className="space-y-3">
-                  {folders.length > 0 && (
+                  {visibleFolders.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {folders.map((folder) => (
+                      {visibleFolders.map((folder) => (
                         <button
                           key={folder.fullPath}
                           draggable
@@ -1338,34 +1593,68 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                           <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
                             {folder.name}
                           </span>
+                          {folder.name.startsWith('_') && (
+                            <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
+                          )}
                         </button>
                       ))}
                     </div>
                   )}
 
-                  {items.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {items.map((item) => (
-                        <button
-                          key={item.fullPath}
-                          onClick={() => selectItem(item)}
-                          className={cn(
-                            'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
-                            selectedItem?.fullPath === item.fullPath
-                              ? 'border-gold shadow-lg shadow-gold/20'
-                              : 'border-gold/20 hover:border-gold/50',
-                          )}
-                        >
-                          <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                          <div className="absolute bottom-0 inset-x-0 bg-black/70 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <p className="text-[9px] text-white truncate">{item.name}</p>
-                            {item.size && <p className="text-[8px] text-white/50">{formatBytes(item.size)}</p>}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : folders.length === 0 ? (
+                  {visibleItems.length > 0 ? (
+                    libDisplayMode === 'list' ? (
+                      <div className="space-y-0.5">
+                        {visibleItems.map((item) => (
+                          <button
+                            key={item.fullPath}
+                            onClick={() => selectItem(item)}
+                            title={item.fullPath}
+                            className={cn(
+                              'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
+                              selectedItem?.fullPath === item.fullPath
+                                ? 'border-gold bg-gold/10'
+                                : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                            )}
+                          >
+                            <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                              <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
+                            </div>
+                            <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                              {item.name}
+                            </span>
+                            {item.size != null && (
+                              <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                            )}
+                            {item.timeCreated && (
+                              <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {visibleItems.map((item) => (
+                          <button
+                            key={item.fullPath}
+                            onClick={() => selectItem(item)}
+                            className={cn(
+                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
+                              selectedItem?.fullPath === item.fullPath
+                                ? 'border-gold shadow-lg shadow-gold/20'
+                                : 'border-gold/20 hover:border-gold/50',
+                            )}
+                          >
+                            <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                            <div className="absolute bottom-0 inset-x-0 bg-black/70 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <p className="text-[9px] text-white truncate">{item.name}</p>
+                              {item.size && <p className="text-[8px] text-white/50">{formatBytes(item.size)}</p>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  ) : visibleFolders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
                       <Upload className="w-10 h-10 text-gold/20 mb-3" />
                       <p className="text-sm text-ink/40 italic">Drop images here to upload</p>
@@ -1560,14 +1849,54 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 )}
               </div>
 
-              {/* Read-only notice */}
-              <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/20 rounded text-xs text-ink/50">
-                <Lock className="w-3.5 h-3.5 text-gold/50 shrink-0 mt-0.5" />
-                <p>
-                  These images are managed through their respective editors. You can browse, copy
-                  URLs, and edit metadata — but rename and delete are disabled to prevent broken links.
-                </p>
-              </div>
+              {/* Filter / display toolbar — only meaningful inside a section */}
+              {sysSection && (
+                <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
+                    <Input
+                      value={sysFilter}
+                      onChange={(e) => setSysFilter(e.target.value)}
+                      placeholder={`Filter ${sysSection.label.toLowerCase()}…`}
+                      className="pl-8 h-7 text-xs bg-background/50 border-gold/20"
+                    />
+                    {sysFilter && (
+                      <button
+                        onClick={() => setSysFilter('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center border border-gold/20 rounded shrink-0 overflow-hidden">
+                    <button
+                      onClick={() => setSysDisplayMode('list')}
+                      title="List view"
+                      className={cn(
+                        'p-1.5 transition-colors',
+                        sysDisplayMode === 'list'
+                          ? 'bg-gold/20 text-gold'
+                          : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                      )}
+                    >
+                      <ListIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setSysDisplayMode('tiles')}
+                      title="Tile view"
+                      className={cn(
+                        'p-1.5 transition-colors border-l border-gold/20',
+                        sysDisplayMode === 'tiles'
+                          ? 'bg-gold/20 text-gold'
+                          : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                      )}
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Section overview */}
               {!sysSection && (
@@ -1601,62 +1930,131 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                   </div>
                 ) : (
                   <div className="space-y-3">
+                    {sysFilter && (
+                      <p className="text-xs text-ink/40">
+                        {filteredSysFolders.length} folder{filteredSysFolders.length !== 1 ? 's' : ''}
+                        {' · '}{filteredSysItems.length} image{filteredSysItems.length !== 1 ? 's' : ''} matching "{sysFilter}"
+                      </p>
+                    )}
+
                     {/* Subfolders — display resolved names, show raw ID beneath */}
-                    {sysFolders.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {sysFolders.map((folder) => (
-                          <button
-                            key={folder.fullPath}
-                            onClick={() => enterSysFolder(folder, sysNameMap)}
-                            className="flex items-start gap-2 p-3 border border-gold/20 rounded-lg bg-gold/5 hover:bg-gold/10 hover:border-gold/40 transition-all text-left group"
-                          >
-                            <Folder className="w-4 h-4 text-gold/60 group-hover:text-gold shrink-0 mt-0.5" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium text-ink/80 group-hover:text-ink truncate">
+                    {filteredSysFolders.length > 0 && (
+                      sysDisplayMode === 'list' ? (
+                        <div className="space-y-0.5">
+                          {filteredSysFolders.map((folder) => (
+                            <button
+                              key={folder.fullPath}
+                              onClick={() => enterSysFolder(folder, sysNameMap)}
+                              className="w-full flex items-center gap-3 px-2 py-1.5 border border-transparent hover:border-gold/30 hover:bg-gold/8 rounded transition-all text-left group"
+                            >
+                              <Folder className="w-4 h-4 text-gold/60 group-hover:text-gold shrink-0" />
+                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
                                 {folder.displayName ?? folder.name}
-                              </p>
+                              </span>
                               {folder.displayName && folder.displayName !== folder.name && (
-                                <p className="text-[8px] font-mono text-ink/25 truncate">{folder.name}</p>
+                                <span className="text-[10px] font-mono text-ink/25 shrink-0 truncate max-w-[180px]">{folder.name}</span>
                               )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                          {filteredSysFolders.map((folder) => (
+                            <button
+                              key={folder.fullPath}
+                              onClick={() => enterSysFolder(folder, sysNameMap)}
+                              className="flex items-start gap-2 p-3 border border-gold/20 rounded-lg bg-gold/5 hover:bg-gold/10 hover:border-gold/40 transition-all text-left group"
+                            >
+                              <Folder className="w-4 h-4 text-gold/60 group-hover:text-gold shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-ink/80 group-hover:text-ink truncate">
+                                  {folder.displayName ?? folder.name}
+                                </p>
+                                {folder.displayName && folder.displayName !== folder.name && (
+                                  <p className="text-[8px] font-mono text-ink/25 truncate">{folder.name}</p>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )
                     )}
 
                     {/* Images */}
-                    {sysItems.length > 0 ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {sysItems.map((item) => (
-                          <button
-                            key={item.fullPath}
-                            onClick={() => selectSysItem(item)}
-                            className={cn(
-                              'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
-                              sysSelectedItem?.fullPath === item.fullPath
-                                ? 'border-gold shadow-lg shadow-gold/20'
-                                : 'border-gold/20 hover:border-gold/50',
-                            )}
-                          >
-                            <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                            <div className="absolute bottom-0 inset-x-0 bg-black/70 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <p className="text-[9px] text-white truncate">{item.name}</p>
-                              {item.size && <p className="text-[8px] text-white/50">{formatBytes(item.size)}</p>}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : sysFolders.length === 0 ? (
+                    {filteredSysItems.length > 0 ? (
+                      sysDisplayMode === 'list' ? (
+                        <div className="space-y-0.5">
+                          {filteredSysItems.map((item) => (
+                            <button
+                              key={item.fullPath}
+                              onClick={() => selectSysItem(item)}
+                              title={item.fullPath}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
+                                sysSelectedItem?.fullPath === item.fullPath
+                                  ? 'border-gold bg-gold/10'
+                                  : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                              )}
+                            >
+                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                                <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              </div>
+                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">{item.name}</span>
+                              {item.size != null && (
+                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                              )}
+                              {item.timeCreated && (
+                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-24 text-right">{new Date(item.timeCreated).toLocaleDateString()}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                          {filteredSysItems.map((item) => (
+                            <button
+                              key={item.fullPath}
+                              onClick={() => selectSysItem(item)}
+                              className={cn(
+                                'relative aspect-square rounded-lg overflow-hidden border-2 transition-all group',
+                                sysSelectedItem?.fullPath === item.fullPath
+                                  ? 'border-gold shadow-lg shadow-gold/20'
+                                  : 'border-gold/20 hover:border-gold/50',
+                              )}
+                            >
+                              <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                              <div className="absolute bottom-0 inset-x-0 bg-black/70 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <p className="text-[9px] text-white truncate">{item.name}</p>
+                                {item.size && <p className="text-[8px] text-white/50">{formatBytes(item.size)}</p>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    ) : filteredSysFolders.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
                         <ImageIcon className="w-10 h-10 text-gold/20 mb-3" />
-                        <p className="text-sm text-ink/40 italic">No images here yet</p>
-                        <p className="text-xs text-ink/30 mt-1">Images appear here once uploaded via the editor</p>
+                        <p className="text-sm text-ink/40 italic">
+                          {sysFilter ? 'No matches for your filter' : 'No images here yet'}
+                        </p>
+                        {!sysFilter && (
+                          <p className="text-xs text-ink/30 mt-1">Images appear here once uploaded via the editor</p>
+                        )}
                       </div>
                     ) : null}
                   </div>
                 )
               )}
+
+              {/* Read-only notice — moved to bottom */}
+              <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/20 rounded text-xs text-ink/50">
+                <Lock className="w-3.5 h-3.5 text-gold/50 shrink-0 mt-0.5" />
+                <p>
+                  These images are managed through their respective editors. You can browse, copy
+                  URLs, and edit metadata — but rename and delete are disabled to prevent broken links.
+                </p>
+              </div>
             </div>
 
             {/* Right: System Images detail panel — no rename / delete */}
@@ -1765,8 +2163,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                       toast.success('Moved to icons/');
                       if (selectedIcon?.fullPath === item.fullPath) setSelectedIcon(null);
                       loadIconFolder(iconBrowsePath);
-                      if (iconCatalog !== null) loadIconCatalog();
-                    } catch (err: any) { toast.error('Move failed: ' + (err.message ?? 'Unknown error')); }
+                                          } catch (err: any) { toast.error('Move failed: ' + (err.message ?? 'Unknown error')); }
                   }
                 }}
                 className={cn(
@@ -1801,8 +2198,7 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                           toast.success(`Moved to ${segPath}/`);
                           if (selectedIcon?.fullPath === item.fullPath) setSelectedIcon(null);
                           loadIconFolder(iconBrowsePath);
-                          if (iconCatalog !== null) loadIconCatalog();
-                        } catch (err: any) { toast.error('Move failed: ' + (err.message ?? 'Unknown error')); }
+                                                  } catch (err: any) { toast.error('Move failed: ' + (err.message ?? 'Unknown error')); }
                       }
                     }}
                     className={cn(
@@ -1820,6 +2216,24 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 );
               })}
               <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    if (iconBrowsePath === 'icons') return;
+                    const segs = iconBrowsePath.split('/');
+                    segs.pop();
+                    setIconBrowsePath(segs.join('/') || 'icons');
+                  }}
+                  disabled={iconBrowsePath === 'icons'}
+                  title="Up one level"
+                  className={cn(
+                    'transition-colors rounded px-1 py-0.5',
+                    iconBrowsePath === 'icons'
+                      ? 'text-ink/15 cursor-not-allowed'
+                      : 'text-ink/40 hover:text-gold',
+                  )}
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
                 {creatingIconFolder ? (
                   <div className="flex items-center gap-1">
                     <Input
@@ -1880,6 +2294,65 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               </div>
             </div>
 
+            {/* Filter / display / private toolbar */}
+            <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
+                <Input
+                  value={iconFilter}
+                  onChange={(e) => setIconFilter(e.target.value)}
+                  placeholder={`Filter results in ${iconBrowsePath}/…`}
+                  className="pl-8 h-7 text-xs bg-background/50 border-gold/20"
+                />
+                {iconFilter && (
+                  <button
+                    onClick={() => setIconFilter('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center border border-gold/20 rounded shrink-0 overflow-hidden">
+                <button
+                  onClick={() => setIconDisplayMode('list')}
+                  title="List view"
+                  className={cn(
+                    'p-1.5 transition-colors',
+                    iconDisplayMode === 'list'
+                      ? 'bg-gold/20 text-gold'
+                      : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                  )}
+                >
+                  <ListIcon className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setIconDisplayMode('tiles')}
+                  title="Tile view"
+                  className={cn(
+                    'p-1.5 transition-colors border-l border-gold/20',
+                    iconDisplayMode === 'tiles'
+                      ? 'bg-gold/20 text-gold'
+                      : 'text-ink/40 hover:text-gold hover:bg-gold/10',
+                  )}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <button
+                onClick={() => setIconShowPrivate((v) => !v)}
+                title={iconShowPrivate ? 'Hide private folders' : 'Show private folders (_temp, etc.)'}
+                className={cn(
+                  'p-1.5 rounded border transition-colors shrink-0',
+                  iconShowPrivate
+                    ? 'bg-gold/20 text-gold border-gold/40'
+                    : 'text-ink/40 hover:text-gold border-gold/20',
+                )}
+              >
+                {iconShowPrivate ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
             {/* Folder move progress bar */}
             {movingFolder && (
               <div className="flex items-center justify-between px-3 py-2 bg-gold/10 border border-gold/20 rounded-lg text-xs text-gold/80">
@@ -1896,17 +2369,6 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                 )}
               </div>
             )}
-
-            {/* Info notice */}
-            <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/20 rounded text-xs text-ink/60">
-              <Info className="w-3.5 h-3.5 text-gold/60 shrink-0 mt-0.5" />
-              <p>
-                Icons are auto-cropped to <strong className="text-ink/70">126×126 px</strong>.
-                Click an icon to select it — then copy its URL, move, or delete it from the right panel.
-                Drag icons onto a folder or breadcrumb to move them directly.
-                Use <strong className="text-ink/70">Search</strong> to query across all categories at once.
-              </p>
-            </div>
 
             {/* Upload panel */}
             {showIconUpload && (
@@ -1973,41 +2435,102 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               </div>
             )}
 
-            {/* Search bar */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/30 pointer-events-none" />
-              <Input
-                placeholder="Search all icons by name or folder…"
-                value={iconSearch}
-                onChange={(e) => {
-                  setIconSearch(e.target.value);
-                  if (e.target.value && iconCatalog === null && !loadingCatalog) loadIconCatalog();
-                }}
-                className="pl-9 bg-background/50 border-gold/20"
-              />
-              {iconSearch && (
-                <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink/30 hover:text-ink/60"
-                  onClick={() => setIconSearch('')}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Browse mode */}
-            {!iconSearch && (
-              iconBrowseLoading ? (
+            {/* Unified browse + filter listing */}
+            {iconBrowseLoading ? (
                 <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
                   {Array.from({ length: 12 }).map((_, i) => (
                     <div key={i} className="aspect-square bg-gold/5 animate-pulse rounded-lg border border-gold/10" />
                   ))}
                 </div>
-              ) : (
+              ) : iconFilter ? (
+                /* ── FILTER MODE — matches under current folder + subtree ── */
                 <div className="space-y-3">
-                  {iconBrowseFolders.length > 0 && (
+                  {iconLoadingAll && iconAllItems === null ? (
+                    <div className="flex items-center justify-center py-16">
+                      <RefreshCw className="w-6 h-6 animate-spin text-gold/40" />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-ink/40">
+                        {filteredIconItems.length} match{filteredIconItems.length !== 1 ? 'es' : ''} in {iconBrowsePath}/ for "{iconFilter}"
+                      </p>
+                      {filteredIconItems.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
+                          <Search className="w-10 h-10 text-gold/20 mb-3" />
+                          <p className="text-sm text-ink/40 italic">No icons match your filter</p>
+                        </div>
+                      ) : iconDisplayMode === 'list' ? (
+                        <div className="space-y-0.5">
+                          {filteredIconItems.map((item) => (
+                            <button
+                              key={item.fullPath}
+                              onClick={() => {
+                                setSelectedIcon(item);
+                                setIconMoveTarget(item.fullPath.split('/').slice(0, -1).join('/'));
+                                setIconDeleteConfirm(false);
+                              }}
+                              title={item.fullPath}
+                              className={cn(
+                                'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
+                                selectedIcon?.fullPath === item.fullPath ? 'border-gold bg-gold/10' : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                              )}
+                            >
+                              <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                                <img src={item.url} alt={item.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
+                              </div>
+                              <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                                {item.name.replace(/\.[^.]+$/, '')}
+                              </span>
+                              {item.size != null && (
+                                <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+                          {filteredIconItems.map((item) => (
+                            <button
+                              key={item.fullPath}
+                              draggable
+                              title={item.fullPath}
+                              onClick={() => {
+                                setSelectedIcon(item);
+                                setIconMoveTarget(item.fullPath.split('/').slice(0, -1).join('/'));
+                                setIconDeleteConfirm(false);
+                              }}
+                              onDragStart={(e) => {
+                                setDraggingItem(item);
+                                e.dataTransfer.setData('application/x-r2-item', item.fullPath);
+                                e.dataTransfer.effectAllowed = 'move';
+                              }}
+                              onDragEnd={() => setDraggingItem(null)}
+                              className={cn(
+                                'flex flex-col items-center gap-1.5 p-2 border rounded-lg transition-all group',
+                                selectedIcon?.fullPath === item.fullPath
+                                  ? 'border-gold bg-gold/10'
+                                  : draggingItem?.fullPath === item.fullPath
+                                  ? 'opacity-40 border-gold/30 bg-gold/5'
+                                  : 'border-gold/10 hover:border-gold/40 hover:bg-gold/5',
+                              )}
+                            >
+                              <img src={item.url} alt={item.name} className="w-8 h-8 object-contain opacity-80 group-hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
+                              <span className="text-[9px] text-ink/50 group-hover:text-ink/80 truncate w-full text-center leading-tight">
+                                {item.name.replace(/\.[^.]+$/, '')}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                /* ── BROWSE MODE ── */
+                <div className="space-y-3">
+                  {visibleIconFolders.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {iconBrowseFolders.map((folder) => (
+                      {visibleIconFolders.map((folder) => (
                         <button
                           key={folder.fullPath}
                           draggable
@@ -2038,7 +2561,6 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                                 toast.success(`Moved "${item.name}" to ${folder.name}/`);
                                 if (selectedIcon?.fullPath === item.fullPath) setSelectedIcon(null);
                                 loadIconFolder(iconBrowsePath);
-                                if (iconCatalog !== null) loadIconCatalog();
                               } catch (err: any) {
                                 toast.error('Move failed: ' + (err.message ?? 'Unknown error'));
                               }
@@ -2059,52 +2581,86 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                           <span className="text-xs font-medium text-ink/70 group-hover:text-ink truncate">
                             {folder.name}
                           </span>
+                          {folder.name.startsWith('_') && (
+                            <span className="text-[8px] uppercase tracking-widest text-ink/30 ml-auto shrink-0">private</span>
+                          )}
                         </button>
                       ))}
                     </div>
                   )}
 
-                  {iconBrowseItems.length > 0 ? (
-                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                      {iconBrowseItems.map((item) => (
-                        <button
-                          key={item.fullPath}
-                          draggable
-                          title={item.name}
-                          onClick={() => {
-                            setSelectedIcon(item);
-                            setIconMoveTarget(item.fullPath.split('/').slice(0, -1).join('/'));
-                            setIconDeleteConfirm(false);
-                          }}
-                          onDragStart={(e) => {
-                            setDraggingItem(item);
-                            e.dataTransfer.setData('application/x-r2-item', item.fullPath);
-                            e.dataTransfer.effectAllowed = 'move';
-                          }}
-                          onDragEnd={() => setDraggingItem(null)}
-                          className={cn(
-                            'flex flex-col items-center gap-1.5 p-2 border rounded-lg transition-all group',
-                            selectedIcon?.fullPath === item.fullPath
-                              ? 'border-gold bg-gold/10'
-                              : draggingItem?.fullPath === item.fullPath
-                              ? 'opacity-40 border-gold/30 bg-gold/5'
-                              : 'border-gold/10 hover:border-gold/40 hover:bg-gold/5',
-                          )}
-                        >
-                          <img
-                            src={item.url}
-                            alt={item.name}
-                            className="w-8 h-8 object-contain opacity-80 group-hover:opacity-100 transition-opacity"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }}
-                          />
-                          <span className="text-[9px] text-ink/50 group-hover:text-ink/80 truncate w-full text-center leading-tight">
-                            {item.name.replace(/\.[^.]+$/, '')}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : iconBrowseFolders.length === 0 ? (
+                  {visibleIconItems.length > 0 ? (
+                    iconDisplayMode === 'list' ? (
+                      <div className="space-y-0.5">
+                        {visibleIconItems.map((item) => (
+                          <button
+                            key={item.fullPath}
+                            draggable
+                            onClick={() => {
+                              setSelectedIcon(item);
+                              setIconMoveTarget(item.fullPath.split('/').slice(0, -1).join('/'));
+                              setIconDeleteConfirm(false);
+                            }}
+                            onDragStart={(e) => {
+                              setDraggingItem(item);
+                              e.dataTransfer.setData('application/x-r2-item', item.fullPath);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragEnd={() => setDraggingItem(null)}
+                            title={item.name}
+                            className={cn(
+                              'w-full flex items-center gap-3 px-2 py-1.5 border rounded transition-all text-left group',
+                              selectedIcon?.fullPath === item.fullPath ? 'border-gold bg-gold/10' : 'border-transparent hover:border-gold/30 hover:bg-gold/8',
+                            )}
+                          >
+                            <div className="w-9 h-9 shrink-0 flex items-center justify-center bg-background/40 rounded border border-gold/10 overflow-hidden">
+                              <img src={item.url} alt={item.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
+                            </div>
+                            <span className="text-sm text-ink/70 group-hover:text-ink/95 truncate flex-1 min-w-0">
+                              {item.name.replace(/\.[^.]+$/, '')}
+                            </span>
+                            {item.size != null && (
+                              <span className="text-[10px] text-ink/30 tabular-nums shrink-0 w-16 text-right">{formatBytes(item.size)}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+                        {visibleIconItems.map((item) => (
+                          <button
+                            key={item.fullPath}
+                            draggable
+                            title={item.name}
+                            onClick={() => {
+                              setSelectedIcon(item);
+                              setIconMoveTarget(item.fullPath.split('/').slice(0, -1).join('/'));
+                              setIconDeleteConfirm(false);
+                            }}
+                            onDragStart={(e) => {
+                              setDraggingItem(item);
+                              e.dataTransfer.setData('application/x-r2-item', item.fullPath);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragEnd={() => setDraggingItem(null)}
+                            className={cn(
+                              'flex flex-col items-center gap-1.5 p-2 border rounded-lg transition-all group',
+                              selectedIcon?.fullPath === item.fullPath
+                                ? 'border-gold bg-gold/10'
+                                : draggingItem?.fullPath === item.fullPath
+                                ? 'opacity-40 border-gold/30 bg-gold/5'
+                                : 'border-gold/10 hover:border-gold/40 hover:bg-gold/5',
+                            )}
+                          >
+                            <img src={item.url} alt={item.name} className="w-8 h-8 object-contain opacity-80 group-hover:opacity-100 transition-opacity" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }} />
+                            <span className="text-[9px] text-ink/50 group-hover:text-ink/80 truncate w-full text-center leading-tight">
+                              {item.name.replace(/\.[^.]+$/, '')}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  ) : visibleIconFolders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
                       <Upload className="w-10 h-10 text-gold/20 mb-3" />
                       <p className="text-sm text-ink/40 italic">Empty folder — drop icons here to upload</p>
@@ -2112,94 +2668,18 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
                     </div>
                   ) : null}
                 </div>
-              )
-            )}
+              )}
 
-            {/* Search mode */}
-            {iconSearch && (() => {
-              const filtered = (iconCatalog ?? []).filter(
-                (icon) =>
-                  icon.name.toLowerCase().includes(iconSearch.toLowerCase()) ||
-                  icon.category.toLowerCase().includes(iconSearch.toLowerCase()),
-              );
-              return (
-                <div className="space-y-3">
-                  {catalogError && (
-                    <div className="flex items-center gap-2 p-3 border border-blood/30 bg-blood/5 rounded text-sm text-blood/80">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span>Could not load search index — {catalogError}</span>
-                    </div>
-                  )}
-                  {loadingCatalog && (
-                    <div className="flex items-center gap-2 p-3 text-sm text-ink/40">
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Loading search index…</span>
-                    </div>
-                  )}
-                  {iconCatalog !== null && (
-                    <>
-                      <p className="text-xs text-ink/40">
-                        {filtered.length} icon{filtered.length !== 1 ? 's' : ''} matching "{iconSearch}"
-                      </p>
-                      {filtered.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 border border-dashed border-gold/20 rounded-lg">
-                          <ImageIcon className="w-10 h-10 text-gold/20 mb-3" />
-                          <p className="text-sm text-ink/40 italic">No icons match your search</p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-                          {filtered.map((icon) => {
-                            const item: StorageItem = {
-                              key: icon.id,
-                              url: icon.url,
-                              name: icon.id.split('/').pop() || icon.id,
-                              fullPath: icon.id,
-                            };
-                            return (
-                              <button
-                                key={icon.id}
-                                draggable
-                                title={`${icon.name} (${icon.category})`}
-                                onClick={() => {
-                                  setSelectedIcon(item);
-                                  setIconMoveTarget(icon.id.split('/').slice(0, -1).join('/'));
-                                  setIconDeleteConfirm(false);
-                                }}
-                                onDragStart={(e) => {
-                                  setDraggingItem(item);
-                                  e.dataTransfer.setData('application/x-r2-item', icon.id);
-                                  e.dataTransfer.effectAllowed = 'move';
-                                }}
-                                onDragEnd={() => setDraggingItem(null)}
-                                className={cn(
-                                  'flex flex-col items-center gap-1.5 p-2 border rounded-lg transition-all group',
-                                  selectedIcon?.fullPath === icon.id
-                                    ? 'border-gold bg-gold/10'
-                                    : draggingItem?.fullPath === icon.id
-                                    ? 'opacity-40 border-gold/30 bg-gold/5'
-                                    : 'border-gold/10 hover:border-gold/40 hover:bg-gold/5',
-                                )}
-                              >
-                                <img
-                                  src={icon.url}
-                                  alt={icon.name}
-                                  className="w-8 h-8 object-contain opacity-80 group-hover:opacity-100 transition-opacity"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.15'; }}
-                                />
-                                <span className="text-[9px] text-ink/50 group-hover:text-ink/80 truncate w-full text-center leading-tight">
-                                  {icon.name}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            })()}
+            {/* Info notice — moved to bottom of left column */}
+            <div className="flex items-start gap-2 p-3 bg-gold/5 border border-gold/20 rounded text-xs text-ink/60">
+              <Info className="w-3.5 h-3.5 text-gold/60 shrink-0 mt-0.5" />
+              <p>
+                Icons are auto-cropped to <strong className="text-ink/70">126×126 px</strong>.
+                Click an icon to select it — then copy its URL, move, or delete it from the right panel.
+                Drag icons onto a folder or breadcrumb to move them directly.
+                Use the <strong className="text-ink/70">filter</strong> at the top to search the current folder and its subfolders.
+              </p>
+            </div>
           </div>
 
           {/* Right: selected icon detail panel */}

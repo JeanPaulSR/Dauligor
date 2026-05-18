@@ -16,10 +16,9 @@ For the underlying R2 bucket structure and Worker endpoints, see [../platform/r2
 ### Image Library
 For freely organised content images — article inline images, battle maps, miscellaneous artwork. Browses `images/` and **hides the system subfolders** (`classes/`, `subclasses/`, `lore/`, `characters/`, `sources/`, `users/`) — those live in the System Images tab.
 
-**Toolbar:**
-- **Breadcrumb** — click any segment to navigate up; Home returns to `images/`
-- **Upload** toggle — expands an inline upload panel
-- **Refresh** — re-fetches the current folder
+**Toolbar (two rows):**
+- Row 1 — **Breadcrumb** (each segment is also a drag-drop target for folder moves) · **Up-arrow** to step out one level · **+ Folder** inline creation · **Upload** toggle · **Refresh**
+- Row 2 — **Filter** input (searches recursively under the current folder + its subtree; cache invalidates on folder change) · **Display mode toggle** (Tiles / List — list shows thumb + name + size + uploaded date) · **Hide-private toggle** (eye-slash; hides folders starting with `_` like `_temp`; default **on**)
 
 **Upload panel** (when expanded):
 - Optional filename — blank uses timestamp + random suffix
@@ -49,8 +48,12 @@ Read-only browser for entity-linked image folders. Rename and delete are disable
 
 System folders use D1 row IDs as the key segment. The manager fetches the relevant table and builds an `id → name` map so cards show "Sorcerer" with the raw ID below.
 
+**Toolbar (inside a section):** **Filter** input (matches resolved name + raw ID) · **Display mode toggle** (Tiles / List). The read-only notice now lives at the bottom of the tab.
+
 ### Icons
-Browses `icons/` recursively (no breadcrumb — flat listing). Clicking an icon copies its URL.
+Folder browser for `icons/`. Same Foundry-style toolbar as Image Library: breadcrumb (drag-drop target) + **Up-arrow** + **+ Folder** + **Upload** + **Refresh** on row 1; **Filter** (current folder + subtree) + **Display mode toggle** (Tiles / List) + **Hide-private toggle** on row 2.
+
+The previous global "search across all icons" catalog was removed — searches are now scoped to the current folder plus its subfolders, which matches the picker behaviour and avoids the prior 1000-object listing cap on the whole `icons/` tree. The auto-cropped-to-126×126 reminder lives at the bottom of the tab.
 
 ## Reusable components
 
@@ -77,23 +80,37 @@ Compact mode (used in the 128px feature icon slot inside `ClassEditor` / `Subcla
 
 ### `IconPickerModal` (`src/components/ui/IconPickerModal.tsx`)
 
-Dialog for browsing and selecting from R2. Props:
+Foundry-FilePicker-style modal for browsing and selecting from R2. Props:
 
 | Prop | Type | Description |
 |---|---|---|
 | `open` | `boolean` | Controls visibility |
 | `onClose` | `() => void` | Dismiss |
 | `onSelect` | `(url: string) => void` | Selection — modal closes automatically |
-| `rootFolder` | `string?` | `'icons'` or `'tokens'` (default `'icons'`) |
-| `imageType` | `'icon'\|'token'?` | Resize size on direct upload (default `'icon'`) |
+| `rootFolder` | `'icons'\|'tokens'?` | **Initial** source tab (default `'icons'`); user can switch in-modal |
+| `imageType` | `'icon'\|'token'?` | Kept for back-compat; runtime resize is derived from the active source tab |
 
-**Browse mode** — opens to `rootFolder`. Subfolders show as cards. Breadcrumb relative to root.
+**Source tabs** — strip below the title toggles between enabled sources. The machinery supports both `icons/` and `tokens/`, but the `AVAILABLE_SOURCES` constant currently exposes only `icons` — the tab strip is hidden when only one source is active. Add `'tokens'` to that const to re-enable when the creature/NPC system needs it.
 
-**Search mode** — non-empty search input switches to a flat recursive listing of all objects under the root, fetched once and cached for the session. Filters by filename and path.
+**Path navigation** — up-arrow steps out one level; the editable path input shows the path relative to the active source (the `<source>/` prefix is rendered as a non-editable hint). Press Enter or blur to navigate.
 
-**Upload panel** — toggle reveals upload form with two targets:
+**Favorites** — star button in the toolbar pins the current path. Stored in `localStorage` at `dauligor.iconPicker.favorites.v1.<firebase-uid>`, so admins sharing a browser don't see each other's pins. Signed-out users see nothing and writes are skipped. The chip strip below the toolbar lists favorites for the active source; click a chip to jump, hover-X to remove.
+
+**Create folder** (admin only) — folder-plus button opens an inline name row. Sanitized to `[a-zA-Z0-9_-]+`. R2 has no folder concept, so creation writes a `.keep` marker under the new prefix; `.keep` and any other dotfile is filtered out of the displayed listings.
+
+**Hide private** (admin only) — eye-slash toggle hides folders starting with `_` (e.g. `_temp`). Default **on**. Non-admins always have private folders hidden and never see the toggle. Folders still visible when toggled get a small "private" badge. In search mode, files passing through a private folder are also filtered.
+
+**Display mode** — Tile (5-col grid; thumbs + truncated name) or List (small thumb + name + size + date). Default Tile.
+
+**Search mode** — non-empty filter input switches to a flat recursive listing of all objects under the **current folder** (not the entire source), fetched once and cached per folder. Filters by filename and key. Cache invalidates when the folder changes.
+
+**Upload panel** (admin only) — toggle reveals upload form with two targets:
 - **Current folder** — saves to the browsed path
-- **Temp (`_temp`)** — saves to `{rootFolder}/_temp/` for later organisation via Image Manager rename
+- **Temp (`_temp`)** — saves to `<activeSource>/_temp/` for later organisation via Image Manager rename
+
+Resize on upload: 126² for the Icons source, 400² for Tokens.
+
+**Admin gate** — Upload, Create Folder, and Hide-Private are gated to `role === 'admin'` (read from the module-level cache in [src/lib/currentUser.ts](../../src/lib/currentUser.ts), fed by `App.tsx`). Non-admins (co-dm, lore-writer, user) see a read-only browser. The server proxy is the authoritative gate; the client gate is a UX hint.
 
 ## Reference scanning
 

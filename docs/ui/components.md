@@ -131,7 +131,17 @@ Reusable upload widget. Three image types (`standard` / `icon` / `token`) determ
 Compact mode (`compact={true}`) renders an avatar-style square picker for feature icon slots.
 
 ### `IconPickerModal` (`src/components/ui/IconPickerModal.tsx`)
-Browse-and-select modal for icon/token slots. Browses an R2 prefix (`icons/` or `tokens/`) with breadcrumb navigation, search across all subfolders, and an inline upload panel for staging new icons in a `_temp/` folder.
+Foundry-FilePicker-style browse-and-select modal for icon/token slots. Toolbar covers:
+- **Source tabs** — would switch between `icons/` and `tokens/`. Only shown when `AVAILABLE_SOURCES` lists more than one source; currently set to `['icons']` so the strip is hidden. Tokens remain wired up for the future creature/NPC system
+- **Path navigation** — up-arrow + editable path input (Enter to navigate); the `<source>/` prefix is shown as a non-editable hint
+- **Favorites** — star button pins the current path; saved per Firebase uid in `localStorage` (`dauligor.iconPicker.favorites.v1.<uid>`). Each user sees only their own pins. A chip strip below the toolbar lists pins for the active source, each with hover-X to remove
+- **Create folder** *(admin only)* — folder-plus opens an inline name row; implemented by writing a `.keep` placeholder under the new prefix (`.keep` and any dotfile is filtered out of listings)
+- **Hide private** *(admin only)* — eye-slash toggle hides folders starting with `_` (e.g. `_temp`); default **on**. Non-admins always have these hidden
+- **Display mode** — Tile (5-col grid) or List (thumb + name + size + date)
+- **Filter** — searches recursively across the **current folder and its subtree**, lazy-loaded; cache invalidates on folder change
+- **Upload** *(admin only)* — saves to current folder, or to `<source>/_temp/` for later sorting via the Image Manager
+
+The caller passes `rootFolder` as the *initial* source. Admin-only buttons read the role from [`src/lib/currentUser.ts`](../../src/lib/currentUser.ts) (set by App.tsx); the server proxy is the authoritative gate. Auto-cropped to 126² for icons / 400² for tokens; WebP conversion automatic.
 
 See [../features/image-manager.md](../features/image-manager.md) for the wider image system.
 

@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { auth, onAuthStateChanged, User } from './lib/firebase';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
 import { fetchDocument, upsertDocument, fetchCollection, checkFoundationUpdate, clearCache } from './lib/d1';
+import { setCurrentUserRole } from './lib/currentUser';
 import Navbar from './components/Navbar';
 
 import Home from './pages/core/Home';
@@ -71,9 +72,15 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Computed profile that respects preview mode
-  const effectiveProfile = (userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer') && previewMode 
-    ? { ...userProfile, role: 'user' } 
+  const effectiveProfile = (userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer') && previewMode
+    ? { ...userProfile, role: 'user' }
     : userProfile;
+
+  // Mirror the active role to the module-level cache so components off the
+  // userProfile prop-drill chain (e.g. IconPickerModal) can gate admin-only UI.
+  useEffect(() => {
+    setCurrentUserRole(effectiveProfile?.role ?? null);
+  }, [effectiveProfile?.role]);
 
   useEffect(() => {
     const theme = effectiveProfile?.theme || 'parchment';
