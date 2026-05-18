@@ -6255,6 +6255,188 @@ button.dauligor-option-picker__pill:hover {
   user-select: none;
 }
 
+/* ─── Feature Manager Features tab (2-col option picker) ────────────── */
+
+.dauligor-feature-manager__option-picker {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-feature-manager__option-picker-col {
+  border: 1px solid var(--dauligor-border, rgba(0, 0, 0, 0.4));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dauligor-feature-manager__option-picker-col--list {
+  overflow-y: auto;
+  padding: 8px 8px 12px;
+}
+
+.dauligor-feature-manager__option-picker-col--detail {
+  padding: 0;
+}
+
+/* Each option-group section in the left column: header + rows. */
+.dauligor-feature-manager__option-group {
+  margin-top: 14px;
+}
+
+.dauligor-feature-manager__option-group:first-child {
+  margin-top: 0;
+}
+
+.dauligor-feature-manager__option-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--dauligor-accent, rgba(180, 140, 80, 0.55));
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 4px;
+}
+
+.dauligor-feature-manager__option-group-title {
+  flex: 1 1 auto;
+  font-size: 0.82em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--dauligor-text, #cbb98f);
+  opacity: 0.85;
+}
+
+.dauligor-feature-manager__option-group-class {
+  font-size: 0.7em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(180, 140, 80, 0.16);
+  color: var(--dauligor-text, #cbb98f);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.dauligor-feature-manager__option-group-count {
+  font-size: 0.74em;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--dauligor-text-muted, rgba(255, 255, 255, 0.55));
+}
+
+.dauligor-feature-manager__option-group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 2px;
+}
+
+/* Override option-picker row sizing for our denser context. */
+.dauligor-feature-manager__option-row {
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 3px;
+  transition: background 0.12s ease;
+}
+
+.dauligor-feature-manager__option-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Right column — focused-pick detail. */
+.dauligor-feature-manager__option-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.dauligor-feature-manager__option-detail-header {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--dauligor-border, rgba(0, 0, 0, 0.4));
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dauligor-feature-manager__option-detail-eyebrow {
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dauligor-text-muted, rgba(255, 255, 255, 0.55));
+  margin-bottom: 4px;
+}
+
+.dauligor-feature-manager__option-detail-title {
+  margin: 0;
+  font-size: 1.15em;
+  font-weight: 600;
+  color: var(--dauligor-text, #cbb98f);
+}
+
+.dauligor-feature-manager__option-detail-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px 18px;
+  font-family: var(--font-primary, var(--font-sans, "Signika"));
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.dauligor-feature-manager__option-detail-body p {
+  margin: 0 0 0.7em;
+}
+
+.dauligor-feature-manager__option-detail-body p:last-child {
+  margin-bottom: 0;
+}
+
+.dauligor-feature-manager__option-detail-empty,
+.dauligor-feature-manager__option-detail-empty-body {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--dauligor-text-muted, rgba(255, 255, 255, 0.55));
+  font-style: italic;
+  font-size: 0.9em;
+}
+
+.dauligor-feature-manager__option-detail-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--dauligor-border, rgba(0, 0, 0, 0.4));
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.dauligor-feature-manager__option-reselect {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--dauligor-accent-strong, #d6a55b);
+  border: 1px solid var(--dauligor-accent-strong, #d6a55b);
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dauligor-feature-manager__option-reselect:hover {
+  background: var(--dauligor-accent-strong, #d6a55b);
+  color: #1a1612;
+}
+
+.dauligor-feature-manager__option-reselect i {
+  font-size: 0.9em;
+}
+
 /* Per-class group inside a scope section. The header reads the
    class name; the list below contains rows for spells affecting
    THAT class only. Makes multi-class characters legible — Bard

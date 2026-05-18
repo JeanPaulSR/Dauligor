@@ -295,7 +295,11 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     this._template = FEATURE_MANAGER_TEMPLATE;
     this._actor = actor;
     this._state = {
-      activeTab: TAB_IDS.includes(tab) ? tab : TAB_OVERVIEW
+      activeTab: TAB_IDS.includes(tab) ? tab : TAB_OVERVIEW,
+      // Features tab — sticky focused pick. Restored across
+      // `_renderFeaturesTab` calls so clicking Re-select doesn't
+      // lose the user's position; cleared on FM close.
+      focusedOptionItemId: null
     };
 
     // Re-render the FM (tabs + footer queue summary) whenever the
@@ -322,6 +326,22 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       }
       this.render({ force: false });
     });
+
+    // Re-render the FM after a dnd5e advancement re-pick commits.
+    // The Features tab's "Re-select" button opens
+    // `AdvancementManager.forModifyChoices`; that manager fires
+    // `dnd5e.advancementManagerComplete` post-commit (dnd5e 5.3.x
+    // `advancement-manager.mjs:674`). We refresh so the focused
+    // pick reflects the new selection.
+    this._advancementCompleteHook = Hooks.on("dnd5e.advancementManagerComplete", (manager) => {
+      if (manager?.actor?.id !== this._actor?.id) return;
+      // Re-pick changes can drop the previously-focused option
+      // entirely (e.g. swap Agonizing Blast for Devil's Sight).
+      // Clear the focus so `_renderFeaturesTab` picks a sensible
+      // default on the next render.
+      this._state.focusedOptionItemId = null;
+      this.render({ force: false });
+    });
   }
 
   _configureRenderParts() {
@@ -335,6 +355,10 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     if (this._actorUpdateHook) {
       try { Hooks.off("updateActor", this._actorUpdateHook); } catch { /* noop */ }
       this._actorUpdateHook = null;
+    }
+    if (this._advancementCompleteHook) {
+      try { Hooks.off("dnd5e.advancementManagerComplete", this._advancementCompleteHook); } catch { /* noop */ }
+      this._advancementCompleteHook = null;
     }
     // Tear down the embedded Spells manager (if any) so its region
     // refs don't leak into the next open. The standalone Prepare
@@ -483,12 +507,32 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
     }
   }
 
+  /**
+   * Features tab — 2-column option-picker layout.
+   *
+   *   ┌──────────────────────────┬──────────────────────────────┐
+   *   │ ELDRITCH INVOCATIONS [B] │  Agonizing Blast             │
+   *   │   ● Agonizing Blast      │                              │
+   *   │   ○ Devil's Sight        │  ‹description›               │
+   *   │ METAMAGIC OPTION [Sor]   │                              │
+   *   │   ● Quicken Spell        │  [Re-select via Advancement]  │
+   *   └──────────────────────────┴──────────────────────────────┘
+   *
+   * Left column lists every option group on the actor with its
+   * picks underneath the group header. Click a pick to focus it;
+   * the right pane shows its description. The Re-select button
+   * opens dnd5e's `AdvancementManager.forModifyChoices` for the
+   * level at which the option-group's ItemChoice advancement
+   * resolves (so the player can re-pick the option).
+   *
+   * Replaces the prior Phase-1 "Queue Change" stub — clicking the
+   * Re-select button actually opens the dnd5e advancement window
+   * instead of just adding a queue placeholder.
+   */
   _renderFeaturesTab() {
     const inventory = buildOptionGroupInventory(this._actor);
-    const queue = getQueue(this._actor);
-    const longRestEntries = queue.longRest.entries.filter((e) => e.kind === "optionItem");
 
-    if (!inventory.length && !longRestEntries.length) {
+    if (!inventory.length) {
       this._bodyRegion.innerHTML = `
         <div class="dauligor-feature-manager__empty">
           <i class="fas fa-circle-info"></i>
@@ -499,46 +543,206 @@ export class DauligorFeatureManagerApp extends HandlebarsApplicationMixin(Applic
       return;
     }
 
-    // Build a quick lookup: groupSourceId → array of queued entries
-    const queuedByGroup = new Map();
-    for (const entry of longRestEntries) {
-      const key = entry.groupSourceId ?? "__ungrouped__";
-      if (!queuedByGroup.has(key)) queuedByGroup.set(key, []);
-      queuedByGroup.get(key).push(entry);
-    }
+    // Restore focus from prior render if the focused item is still
+    // valid; otherwise pick the first item in the first group.
+    const allItems = inventory.flatMap((g) => g.items);
+    const currentFocus = this._state.focusedOptionItemId;
+    const focusedItem = (currentFocus && allItems.find((it) => it.itemId === currentFocus))
+      ?? allItems[0]
+      ?? null;
+    this._state.focusedOptionItemId = focusedItem?.itemId ?? null;
 
-    const groupHtml = inventory
-      .map((group) => this._renderGroupSection(group, queuedByGroup.get(group.groupSourceId) ?? []))
-      .join("");
+    const focusedGroup = inventory.find((g) => g.items.some((it) => it.itemId === focusedItem?.itemId)) ?? null;
+
+    // Left column — every option group with its picks underneath
+    // the group header. Picks render as the same `.dauligor-option-picker__row`
+    // pattern the importer's subclass preview uses (checkbox + img +
+    // name + badge) so the visual treatment matches.
+    const groupsHtml = inventory.map((group) => this._renderOptionGroupColumn(group, focusedItem?.itemId ?? null)).join("");
+
+    // Right column — focused pick's description + Re-select.
+    const detailHtml = focusedItem
+      ? this._renderOptionPickDetail(focusedItem, focusedGroup)
+      : `<div class="dauligor-feature-manager__option-detail-empty">Select a pick on the left to see its description.</div>`;
 
     this._bodyRegion.innerHTML = `
-      <div class="dauligor-feature-manager__groups">
-        ${groupHtml}
+      <div class="dauligor-feature-manager__option-picker">
+        <aside class="dauligor-feature-manager__option-picker-col dauligor-feature-manager__option-picker-col--list">
+          ${groupsHtml}
+        </aside>
+        <section class="dauligor-feature-manager__option-picker-col dauligor-feature-manager__option-picker-col--detail">
+          ${detailHtml}
+        </section>
       </div>
     `;
 
-    // Wire Queue Change buttons.
-    for (const button of this._bodyRegion.querySelectorAll(`[data-action="queue-change"]`)) {
-      button.addEventListener("click", async (event) => {
+    // Wire row focus
+    for (const row of this._bodyRegion.querySelectorAll(`[data-action="focus-option-item"]`)) {
+      row.addEventListener("click", (event) => {
         event.preventDefault();
-        const groupSourceId = event.currentTarget?.dataset?.groupSourceId;
-        const groupLabel = event.currentTarget?.dataset?.groupLabel ?? "Class Option";
-        await this._handleQueueOptionItemChange(groupSourceId, groupLabel);
+        const id = row.dataset.itemId;
+        if (!id || id === this._state.focusedOptionItemId) return;
+        this._state.focusedOptionItemId = id;
+        // Re-render features tab only (no full FM re-render — avoids
+        // tearing down other tabs' embedded mounts).
+        this._renderFeaturesTab();
       });
     }
 
-    // Wire per-entry "Remove from queue" buttons.
-    for (const button of this._bodyRegion.querySelectorAll(`[data-action="remove-queue-entry"]`)) {
+    // Wire Re-select button
+    for (const button of this._bodyRegion.querySelectorAll(`[data-action="reselect-option"]`)) {
       button.addEventListener("click", async (event) => {
         event.preventDefault();
-        const entryId = event.currentTarget?.dataset?.entryId;
-        if (!entryId) return;
-        await removeQueueEntry(this._actor, SCOPE_LONG_REST, entryId);
-        this.render({ force: false });
+        const groupSourceId = event.currentTarget?.dataset?.groupSourceId;
+        const classSourceId = event.currentTarget?.dataset?.classSourceId;
+        await this._openAdvancementForOptionGroup(groupSourceId, classSourceId);
       });
     }
   }
 
+  /**
+   * Left-column block for a single option group: header (group
+   * label + class badge) + list of pick rows underneath. The
+   * focused row gets the `--focused` modifier so the row chrome
+   * matches the importer's subclass preview / option picker.
+   */
+  _renderOptionGroupColumn(group, focusedItemId) {
+    const classBadge = group.className
+      ? `<span class="dauligor-feature-manager__option-group-class">${escapeHtml(group.className)}</span>`
+      : "";
+
+    const rowsHtml = group.items.map((item) => {
+      const isFocused = item.itemId === focusedItemId;
+      return `
+        <div class="dauligor-option-picker__row dauligor-feature-manager__option-row ${isFocused ? "dauligor-option-picker__row--focused" : ""}"
+             data-action="focus-option-item"
+             data-item-id="${escapeHtml(item.itemId)}">
+          <img class="dauligor-option-picker__row-img" src="${escapeHtml(item.img)}" alt="" loading="lazy">
+          <div class="dauligor-option-picker__row-text">
+            <div class="dauligor-option-picker__row-name">${escapeHtml(item.name)}</div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <section class="dauligor-feature-manager__option-group">
+        <header class="dauligor-feature-manager__option-group-header">
+          <span class="dauligor-feature-manager__option-group-title">${escapeHtml(group.groupLabel)}</span>
+          ${classBadge}
+          <span class="dauligor-feature-manager__option-group-count">${group.items.length}</span>
+        </header>
+        <div class="dauligor-feature-manager__option-group-rows">
+          ${rowsHtml}
+        </div>
+      </section>
+    `;
+  }
+
+  /**
+   * Right-column detail for the focused option pick. Shows the
+   * pick's description + a "Re-select" button that opens dnd5e's
+   * AdvancementManager.forModifyChoices for the level at which
+   * the option-group's ItemChoice advancement resolves.
+   */
+  _renderOptionPickDetail(item, group) {
+    const groupLabel = group?.groupLabel ?? "Class Option";
+    const className = group?.className ?? "";
+    return `
+      <div class="dauligor-feature-manager__option-detail">
+        <header class="dauligor-feature-manager__option-detail-header">
+          <div class="dauligor-feature-manager__option-detail-eyebrow">
+            ${escapeHtml(groupLabel)}${className ? ` · <em>${escapeHtml(className)}</em>` : ""}
+          </div>
+          <h2 class="dauligor-feature-manager__option-detail-title">${escapeHtml(item.name)}</h2>
+        </header>
+        <div class="dauligor-feature-manager__option-detail-body">
+          ${item.description || `<p class="dauligor-feature-manager__option-detail-empty-body">No description authored for this option.</p>`}
+        </div>
+        <footer class="dauligor-feature-manager__option-detail-footer">
+          <button type="button"
+                  class="dauligor-feature-manager__option-reselect"
+                  data-action="reselect-option"
+                  data-group-source-id="${escapeHtml(group?.groupSourceId ?? "")}"
+                  data-class-source-id="${escapeHtml(group?.classSourceId ?? "")}"
+                  title="Open the dnd5e advancement window to re-pick this option.">
+            <i class="fas fa-arrow-right-arrow-left"></i>
+            Re-select via Advancement
+          </button>
+        </footer>
+      </div>
+    `;
+  }
+
+  /**
+   * Open dnd5e's `AdvancementManager.forModifyChoices` for the
+   * class + level at which this option-group's ItemChoice
+   * advancement resolves. Walks the class item's advancements to
+   * find the matching ItemChoice (by `flags.dauligor-pairing.groupSourceId`),
+   * falling back to the actor's current class level if no flag
+   * match is found.
+   *
+   * The manager mutates the actor directly when the user confirms
+   * a new pick. We listen for `dnd5e.advancementManagerComplete`
+   * (registered in the constructor) to refresh the FM.
+   *
+   * Source ref: dnd5e 5.3.x `module/applications/advancement/
+   * advancement-manager.mjs:268` (forModifyChoices) + 674 (hook).
+   */
+  async _openAdvancementForOptionGroup(groupSourceId, classSourceId) {
+    if (!groupSourceId) return;
+    // Find the class item this option-group belongs to. Match by
+    // the option-item's classSourceId flag (which the importer
+    // stamps onto every classOption item — see
+    // `createSemanticOptionItem` in class-import-service.js).
+    const classItem = this._actor.items.find((it) =>
+      it.type === "class"
+      && it.getFlag?.(MODULE_ID, "sourceId") === classSourceId
+    );
+    if (!classItem) {
+      notifyWarn("Couldn't find the class item this option belongs to.");
+      return;
+    }
+    // Walk the class's advancement collection looking for an
+    // ItemChoice with a `groupSourceId` flag matching ours. If
+    // found, use its `level` for `forModifyChoices`. Otherwise
+    // fall back to the actor's current class level — the manager
+    // will re-walk all choices at that level instead.
+    let level = null;
+    const advancements = classItem.advancement?.byId
+      ? Object.values(classItem.advancement.byId)
+      : (classItem.system?.advancement ?? []);
+    for (const adv of advancements) {
+      if ((adv.type ?? adv.constructor?.typeName) !== "ItemChoice") continue;
+      const advFlags = adv.flags?.[MODULE_ID] ?? adv.configuration?.flags?.[MODULE_ID];
+      if (advFlags?.groupSourceId === groupSourceId) {
+        level = Number(adv.level) || null;
+        break;
+      }
+    }
+    if (level == null) {
+      level = Number(classItem.system?.levels) || 1;
+      notifyInfo(`Couldn't pin the option's source level — opening the advancement window at level ${level}.`);
+    }
+    const AdvancementManager = globalThis.dnd5e?.applications?.advancement?.AdvancementManager;
+    if (!AdvancementManager?.forModifyChoices) {
+      notifyWarn("dnd5e AdvancementManager not available.");
+      return;
+    }
+    try {
+      const manager = AdvancementManager.forModifyChoices(this._actor, classItem.id, level);
+      manager.render(true);
+    } catch (err) {
+      console.warn(`${MODULE_ID} | Re-select advancement failed`, err);
+      notifyWarn("Failed to open the advancement window — see console.");
+    }
+  }
+
+  // The legacy _renderGroupSection (cards layout) is kept below
+  // for reference but is no longer called — _renderFeaturesTab
+  // routes through the 2-column option-picker layout above. The
+  // helper can be removed in a follow-up pass once the new layout
+  // ships and we're confident the picker meets the use cases.
   _renderGroupSection(group, queuedEntries) {
     const classBadge = group.className
       ? `<span class="dauligor-feature-manager__badge">${escapeHtml(group.className)}</span>`
