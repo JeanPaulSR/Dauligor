@@ -25,6 +25,14 @@
       "destination": "/api/admin/users"
     },
     {
+      "source": "/api/admin/eras/(.*)",
+      "destination": "/api/campaigns"
+    },
+    {
+      "source": "/api/admin/eras",
+      "destination": "/api/campaigns"
+    },
+    {
       "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }

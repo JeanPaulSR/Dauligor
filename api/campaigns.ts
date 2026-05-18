@@ -92,6 +92,22 @@ function parsePath(req: NodeLikeRequest): string[] {
   return tail.split("/").filter(Boolean).map(decodeURIComponent);
 }
 
+/**
+ * `/api/admin/eras/*` also routes here (eras are campaign world-state;
+ * folding into this file saves the function slot). Detected by sniffing
+ * `req.url` for the `/api/admin/eras` prefix BEFORE the campaign-prefix
+ * parse runs. Returns the path-array after the eras prefix, or null if
+ * the request is not an eras request.
+ */
+function parseErasPath(req: NodeLikeRequest): string[] | null {
+  const url = req.url || "";
+  const pathname = url.split("?")[0];
+  if (!pathname.startsWith("/api/admin/eras")) return null;
+  const tail = pathname.replace(/^\/api\/admin\/eras\/?/, "");
+  if (!tail) return [];
+  return tail.split("/").filter(Boolean).map(decodeURIComponent);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Shared helpers                                                              */
 /* -------------------------------------------------------------------------- */
@@ -453,6 +469,137 @@ async function handleMemberDelete(res: NodeLikeResponse, campaignId: string, use
 }
 
 /* -------------------------------------------------------------------------- */
+/* Eras (admin-only writes; reads stay on the proxy as public taxonomy)        */
+/* -------------------------------------------------------------------------- */
+//
+// Audit #9 close. Era writes used to flow through the generic
+// /api/d1/query proxy with admin gated via PROTECTED_WRITE_TABLES
+// (the L1 close). That kept the access boundary correct but left the
+// client crafting the SQL — same shape concern that drove the
+// campaign-writes per-route migration in audit #8.
+//
+// Folded into this file rather than a dedicated api/admin/eras.ts to
+// preserve the 11/12 Vercel function budget. Detected by the
+// dispatcher sniffing `req.url` for the `/api/admin/eras` prefix.
+//
+// Reads (`fetchCollection('eras', …)` from AdminCampaigns,
+// CampaignEditor, LoreArticle) stay on the proxy — eras are a
+// public-among-signed-in taxonomy and the read gate already admits
+// the necessary callers. The `eras` table is NOT in
+// PROTECTED_READ_TABLES; it IS still in PROTECTED_WRITE_TABLES as a
+// defense-in-depth backstop (any direct write that escapes this
+// path still gets admin-gated at the proxy).
+
+const ALLOWED_ERA_FIELDS = new Set([
+  "name",
+  "description",
+  "order",
+  "background_image_url",
+]);
+
+async function handleEraCreate(req: NodeLikeRequest, res: NodeLikeResponse) {
+  await requireAdminAccess(req.headers.authorization);
+
+  const body = await readJsonBody(req);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "Request body must be a JSON object.");
+  }
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) throw new HttpError(400, "`name` is required.");
+
+  const id: string = typeof body.id === "string" && body.id ? body.id : crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+
+  const columns: string[] = ["id", "name", "created_at", "updated_at"];
+  const values: any[] = [id, name, nowIso, nowIso];
+
+  for (const [key, val] of Object.entries(body)) {
+    if (key === "id" || key === "name") continue;
+    if (!ALLOWED_ERA_FIELDS.has(key)) continue;
+    columns.push(key);
+    values.push(val ?? null);
+  }
+
+  // `order` is a SQL reserved word — quote every column on write so we
+  // don't have to special-case which fields need quoting.
+  const colSql = columns.map((c) => `"${c}"`).join(", ");
+  const placeholders = columns.map(() => "?").join(", ");
+  await executeD1QueryInternal({
+    sql: `INSERT INTO eras (${colSql}) VALUES (${placeholders})`,
+    params: values,
+  });
+
+  return res.status(200).json({ era: { id, name } });
+}
+
+async function handleEraUpdate(req: NodeLikeRequest, res: NodeLikeResponse, eraId: string) {
+  await requireAdminAccess(req.headers.authorization);
+
+  const body = await readJsonBody(req);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "Request body must be a JSON object.");
+  }
+
+  const setClauses: string[] = [];
+  const params: any[] = [];
+  for (const [key, val] of Object.entries(body)) {
+    if (!ALLOWED_ERA_FIELDS.has(key)) continue;
+    // Quote every column on write so `order` (SQL reserved) is safe.
+    setClauses.push(`"${key}" = ?`);
+    params.push(val ?? null);
+  }
+
+  if (setClauses.length === 0) {
+    return res.status(200).json({ ok: true, id: eraId, noop: true });
+  }
+
+  // Existence check so a typo'd id surfaces as 404 rather than a
+  // silent zero-row UPDATE.
+  const check = await executeD1QueryInternal({
+    sql: "SELECT id FROM eras WHERE id = ? LIMIT 1",
+    params: [eraId],
+  });
+  if (!Array.isArray(check?.results) || check.results.length === 0) {
+    throw new HttpError(404, "Era not found.");
+  }
+
+  setClauses.push(`"updated_at" = CURRENT_TIMESTAMP`);
+  params.push(eraId);
+  await executeD1QueryInternal({
+    sql: `UPDATE eras SET ${setClauses.join(", ")} WHERE id = ?`,
+    params,
+  });
+
+  return res.status(200).json({ ok: true, id: eraId });
+}
+
+async function handleEraDelete(req: NodeLikeRequest, res: NodeLikeResponse, eraId: string) {
+  await requireAdminAccess(req.headers.authorization);
+
+  const check = await executeD1QueryInternal({
+    sql: "SELECT id FROM eras WHERE id = ? LIMIT 1",
+    params: [eraId],
+  });
+  if (!Array.isArray(check?.results) || check.results.length === 0) {
+    throw new HttpError(404, "Era not found.");
+  }
+
+  // No FK cascade — `campaigns.era_id` references this table but the
+  // schema lets it nullify on delete naturally (the column is
+  // nullable). We deliberately don't null campaigns' era_id here
+  // either; the AdminCampaigns "Are you sure?" warning explicitly
+  // says "this will remove the Era but not the campaigns assigned to
+  // it" — they get left with a dangling era_id that the UI shows as
+  // unassigned. Matches the legacy `deleteDocument('eras', id)`
+  // behavior.
+  await executeD1QueryInternal({
+    sql: "DELETE FROM eras WHERE id = ?",
+    params: [eraId],
+  });
+  return res.status(200).json({ ok: true, id: eraId });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Dispatcher                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -461,6 +608,27 @@ export default async function handler(req: NodeLikeRequest, res: NodeLikeRespons
     const { decoded, role } = await requireAuthenticatedUser(req.headers.authorization);
     const uid: string = decoded.uid;
     if (!uid) throw new HttpError(401, "Missing uid in token.");
+
+    // ── /api/admin/eras/* — folded into this file (see header) ────────
+    // Detected first so the /api/campaigns parser doesn't try to
+    // interpret the path. Reads are deliberately NOT exposed here —
+    // they stay on the proxy (eras are a public-among-signed-in
+    // taxonomy and migration would just add round-trips). The handlers
+    // each call `requireAdminAccess` inline so the campaign-DM gate
+    // below doesn't run for this branch.
+    const erasPath = parseErasPath(req);
+    if (erasPath !== null) {
+      if (req.method === "POST" && erasPath.length === 0) {
+        return await handleEraCreate(req, res);
+      }
+      if (req.method === "PATCH" && erasPath.length === 1) {
+        return await handleEraUpdate(req, res, erasPath[0]);
+      }
+      if (req.method === "DELETE" && erasPath.length === 1) {
+        return await handleEraDelete(req, res, erasPath[0]);
+      }
+      return res.status(405).json({ error: `Method ${req.method} not allowed for /api/admin/eras/${erasPath.join("/")}` });
+    }
 
     // Campaign DM = admin or co-dm. Same set as character DM access
     // because both flows are about running a session; lore-writer is

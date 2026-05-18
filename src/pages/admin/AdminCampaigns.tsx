@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { auth, OperationType, reportClientError } from '../../lib/firebase';
-import { fetchCollection, upsertDocument, deleteDocument, getSystemMetadata } from '../../lib/d1';
+import { fetchCollection, getSystemMetadata } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
@@ -182,13 +182,29 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const handleCreateEra = async () => {
     try {
       const id = crypto.randomUUID();
-      await upsertDocument('eras', id, {
-        name: newEra.name,
-        description: newEra.description,
-        order: newEra.order,
-        background_image_url: newEra.backgroundImageUrl || '',
-        created_at: new Date().toISOString(),
+      // Per-route POST /api/admin/eras — admin-only, folded into the
+      // campaigns dispatcher (audit #9). Generic proxy still admits
+      // admin writes to `eras` via PROTECTED_WRITE_TABLES as defense
+      // in depth, but the per-route is the documented path.
+      const createToken = await auth.currentUser?.getIdToken();
+      const createRes = await fetch('/api/admin/eras', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(createToken ? { Authorization: `Bearer ${createToken}` } : {}),
+        },
+        body: JSON.stringify({
+          id,
+          name: newEra.name,
+          description: newEra.description,
+          order: newEra.order,
+          background_image_url: newEra.backgroundImageUrl || '',
+        }),
       });
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error((err as any).error || `Create failed (HTTP ${createRes.status})`);
+      }
       setNewEra({ name: '', description: '', order: eras.length + 1, backgroundImageUrl: '' });
       toast.success('Era created');
 
@@ -210,7 +226,18 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const handleDeleteEra = async (id: string) => {
     if (confirm('Are you sure? This will remove the Era but not the campaigns assigned to it.')) {
       try {
-        await deleteDocument('eras', id);
+        // DELETE /api/admin/eras/[id] — admin-only via the campaigns
+        // dispatcher (audit #9). campaigns.era_id rows are deliberately
+        // left dangling (the confirm prompt warns about this).
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/admin/eras/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err as any).error || `Delete failed (HTTP ${res.status})`);
+        }
         toast.success('Era deleted');
         setEras(prev => prev.filter(e => e.id !== id));
       } catch (err) {
@@ -422,7 +449,23 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
                             storagePath="images/wiki/eras"
                             onUpload={async (url) => {
                               try {
-                                await upsertDocument('eras', era.id, { ...era, background_image_url: url });
+                                // PATCH /api/admin/eras/[id] — partial update,
+                                // admin-only (audit #9). Real UPDATE so we don't
+                                // resupply name + other NOT NULL columns like
+                                // the legacy upsertDocument path did.
+                                const token = await auth.currentUser?.getIdToken();
+                                const res = await fetch(`/api/admin/eras/${encodeURIComponent(era.id)}`, {
+                                  method: 'PATCH',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                                  },
+                                  body: JSON.stringify({ background_image_url: url }),
+                                });
+                                if (!res.ok) {
+                                  const err = await res.json().catch(() => ({}));
+                                  throw new Error((err as any).error || `Update failed (HTTP ${res.status})`);
+                                }
                                 setEras(prev => prev.map(e => e.id === era.id ? { ...e, background_image_url: url } : e));
                                 toast.success('Era background updated');
                               } catch (err) {

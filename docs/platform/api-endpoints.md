@@ -84,6 +84,18 @@ The proxy gate at [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) blocks dire
 
 The proxy refuses direct writes to `campaigns` and `campaign_members` (`CAMPAIGN_WRITE_PATTERN`). lore-writer is admitted by the wiki-staff gate elsewhere but is 403'd here — campaign management is admin + co-dm only per [../architecture/permissions-rbac.md](../architecture/permissions-rbac.md).
 
+### Era writes — folded into the same dispatcher
+
+`api/campaigns.ts` also handles `/api/admin/eras/*` (via `vercel.json` rewrite `/api/admin/eras/(.*) → /api/campaigns`). The dispatcher sniffs the `/api/admin/eras` URL prefix and routes to era handlers before the campaign-prefix parse runs. Eras are world-state taxonomy that own campaigns; folding into this file avoided spending a function slot on a dedicated `api/admin/eras.ts`.
+
+| Method | Path | Gate | Returns |
+|---|---|---|---|
+| POST | `/api/admin/eras` | `requireAdminAccess` (inside the handler) | `{ era: { id, name } }`. Allow-listed fields: `name`, `description`, `order`, `background_image_url`. Server picks a uuid if `id` is omitted. `order` is a SQL reserved word so every column is quoted on write. |
+| PATCH | `/api/admin/eras/[id]` | `requireAdminAccess` | `{ ok, id }`. Real UPDATE — partial payloads don't need to resupply `name`. |
+| DELETE | `/api/admin/eras/[id]` | `requireAdminAccess` | `{ ok, id }`. No FK cascade onto `campaigns.era_id` (the column is nullable; campaigns assigned to the deleted era show as unassigned in the UI). |
+
+Era reads (`fetchCollection('eras', …)` from AdminCampaigns, CampaignEditor, LoreArticle) stay on the generic proxy — eras are public-among-signed-in taxonomy and the read gate already admits the necessary callers. `eras` remains in `PROTECTED_WRITE_TABLES` as a defense-in-depth backstop: any direct write that escapes the per-route path still gets admin-gated at the proxy.
+
 ## /api/admin
 
 | Method | Path | Gate | File |

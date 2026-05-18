@@ -92,12 +92,16 @@ There's also a set of API-side rewrites for the per-route endpoint family. Verce
     { "source": "/api/lore/(.*)",         "destination": "/api/lore" },
     { "source": "/api/campaigns/(.*)",    "destination": "/api/campaigns" },
     { "source": "/api/admin/users/(.*)",  "destination": "/api/admin/users" },
+    { "source": "/api/admin/eras/(.*)",   "destination": "/api/campaigns" },
+    { "source": "/api/admin/eras",        "destination": "/api/campaigns" },
     { "source": "/((?!api/|assets/).*)",  "destination": "/index.html" }
   ]
 }
 ```
 
 The catch-all's negative lookahead `(?!api/|assets/)` skips paths under `/api/` (so the serverless functions still resolve) and `/assets/` (so missing JS chunks return real 404s instead of being rewritten to `index.html`, which used to mask stale-bundle errors as MIME-type failures). Static files in `/public` and built assets in `/assets` are served from the filesystem before rewrites are evaluated, so they're unaffected.
+
+The two `/api/admin/eras` rewrites both point at `/api/campaigns` because era writes are folded into that file (see [api-endpoints.md §Era writes](../platform/api-endpoints.md)) — the dispatcher in `api/campaigns.ts` sniffs the original `req.url` for the `/api/admin/eras` prefix and routes to the era handlers before its campaign-prefix parse runs.
 
 When you add a new client-side route, you don't have to update `vercel.json` — the SPA catch-all handles it automatically. When you add a new multi-segment **API** dispatcher, add a `/api/<resource>/(.*)` rewrite alongside the existing ones.
 

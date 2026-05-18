@@ -184,7 +184,7 @@ The following are open in [api-endpoint-plan.md](api-endpoint-plan.md):
 
 - **M4** — `recomputeAppliedRulesForSpell` runs ~5 raw queryD1 calls from the client during `upsertSpell`. Staff-only, but a DoS vector (repeatedly save → repeatedly recompute). Closing this needs a `POST /api/spells` family that doesn't exist yet.
 - **L4** — `checkFoundationUpdate` polling. A raw SELECT against `system_metadata.last_foundation_update` from every signed-in tab every 30s. Low data sensitivity; deferred for function-budget pressure.
-- **Audit #9** — `eras` writes still flow through the proxy (admin-gated). Migrating to dedicated `/api/admin/eras/*` routes is the audit's final per-table closure.
+- **Audit #9** — ✅ Closed. `POST` / `PATCH` / `DELETE /api/admin/eras[/id]` folded into `api/campaigns.ts` (dispatcher sniffs the `/api/admin/eras` prefix; admin-only via per-handler `requireAdminAccess`). `eras` stays in `PROTECTED_WRITE_TABLES` as defense-in-depth.
 - **LoreEditor `dm_notes` raw read** — closed via `8f70135`; the per-route GET now returns `dm_notes` for staff. The historical defensive fallback in `src/lib/lore.ts:fetchLoreArticle` is removed.
 
 ## Audit history
