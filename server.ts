@@ -14,7 +14,6 @@ import {
 import { handleD1Query } from "./api/_lib/d1-proxy.js";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./api/_lib/d1-internal.js";
 import { HttpError, getAdminServices, getCredentialErrorMessage } from "./api/_lib/firebase-admin.js";
-import moduleHandler from "./api/module.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -366,20 +365,18 @@ async function startServer() {
     }
   });
 
-  // Serve the data sources from the module directory dynamically via REST.
-  // Local dev delegates to the Vercel handler at api/module.ts so the dispatch
-  // logic, R2 read-through cache, and Cache-Control headers stay in one place.
-  // The handler reads `req.url` directly; `req.params[0]` is unused. R2 writes
-  // go through the local Worker if `R2_WORKER_URL` and `R2_API_SECRET` are
-  // set in `.env` (writes silently no-op otherwise).
-  app.get(["/api/module", "/api/module/*"], async (req, res) => {
-    try {
-      await moduleHandler(req as any, res as any);
-    } catch (error) {
-      console.error("Module endpoint failed (local):", error);
-      if (!res.headersSent) res.status(500).json({ error: "Module endpoint failed." });
-    }
-  });
+  // /api/module/* is now a native Pages Function at
+  // functions/api/module/[[path]].ts and no longer mounted on this
+  // dev server. The dispatcher logic (R2 read-through cache, live
+  // builders, opportunistic queue processing via context.waitUntil)
+  // depends on Pages-runtime APIs (Request / Response / waitUntil)
+  // that Express doesn't have. For local module-export testing run
+  // either:
+  //   - `npx wrangler pages dev` (full Pages-runtime emulator with
+  //     functions/ served alongside the SPA), OR
+  //   - the deployed branch preview at <preview>.dauligor.pages.dev
+  // The Foundry pairing module's "API Endpoint Mode" setting lets
+  // it point at either.
 
   // Serve static files from the module directory if needed for documentation
   app.use("/module", express.static(path.join(__dirname, "module")));
