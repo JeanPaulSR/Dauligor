@@ -27,7 +27,7 @@ historical record + remaining-work tracker.
 | H5 — write others' characters | ✅ Closed | `77a5af1` (+ `33cac35` create-vs-update fix) |
 | H6 — client role self-promote | ✅ Closed | `815e74c` — `PATCH /api/me` allow-list, auto-promote moved server-side |
 | H7 — campaign_members enumeration | ✅ Closed | `aaa310f` — `/api/campaigns` + `/api/me/campaign-memberships` |
-| M1 — draft titles via map | Open | Next batch |
+| M1 — draft titles via map | ✅ Closed | `Map.tsx` no longer JOINs `lore_articles` in the marker/highlight queries. Titles are looked up client-side from the gate-filtered `allArticles` array (which `/api/lore/articles?fields=id,title` already excludes drafts from for non-staff). Markers tied to articles the viewer can't see are dropped — same effective UX as the old client filter, without the wire payload carrying draft titles. No new endpoint. |
 | M2 — `users` table fully enumerable (PII) for staff | Open | Next natural target — `/api/admin/users` family |
 | M3 — `system_metadata` writes not column-scoped | Open | Backlog |
 | M4 — class_spell_lists rebuild from client | Open | Backlog |

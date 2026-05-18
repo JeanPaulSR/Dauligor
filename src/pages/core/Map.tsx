@@ -76,7 +76,11 @@ export default function Map({ userProfile }: { userProfile: any }) {
   const [selectedMarker, setSelectedMarker] = useState<MarkerRecord | null>(null);
   const [selectedHighlight, setSelectedHighlight] = useState<HighlightRecord | null>(null);
 
-  const [allArticles, setAllArticles] = useState<Array<{ id: string; title: string }>>([]);
+  // `null` = lore endpoint hasn't responded yet (used to gate marker
+  // rendering — otherwise the very first paint would drop every marker
+  // tied to an article since titleByArticleId would be empty). `[]` =
+  // responded with an empty list (legitimately no articles published).
+  const [allArticles, setAllArticles] = useState<Array<{ id: string; title: string }> | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newPin, setNewPin] = useState({ x: 50, y: 50, articleId: '', label: '' });
   const [refreshTick, setRefreshTick] = useState(0);
@@ -167,40 +171,95 @@ export default function Map({ userProfile }: { userProfile: any }) {
     }
   }, [eraId, selectedMapId]);
 
-  // 4. Load markers + highlights for the current map. JOIN with lore_articles
-  //    (and child maps) so the side panel can show titles without extra queries.
+  // 4. Load markers + highlights for the current map.
+  //
+  // Title lookup happens client-side now via `allArticles` (which is
+  // already gate-filtered by `/api/lore/articles?fields=id,title` —
+  // non-staff only ever see the published rows there). The legacy
+  // `LEFT JOIN lore_articles` returned `a.title` and `a.status` for
+  // every marker including drafts; even though the page filtered the
+  // draft markers out client-side, the draft titles were still in the
+  // network payload. Closes M1.
+  //
+  // For non-admin: a marker whose `article_id` doesn't appear in
+  // `allArticles` is implicitly a draft they're not allowed to see —
+  // we drop it from the rendered set. Admins keep every marker (their
+  // `allArticles` includes drafts via the staff branch of the
+  // /api/lore/articles handler).
   const loadMarkersAndHighlights = useCallback(async () => {
     if (!selectedMapId) { setMarkers([]); setHighlights([]); return; }
+    // Defer the load until the lore endpoint has responded — otherwise
+    // the first run would treat every marker's article as "not visible"
+    // for non-admin (empty titleByArticleId) and flash an empty map.
+    // `allArticles === null` means we haven't heard back yet; `[]` is
+    // a legit empty response and proceeds normally (only label-only
+    // markers will render, which is correct).
+    if (allArticles === null) { setMarkers([]); setHighlights([]); return; }
     try {
+      // Plain object instead of `new Map(...)` — this component is
+      // named `Map`, which shadows the global constructor inside the
+      // function body.
+      const titleByArticleId: Record<string, string> = {};
+      for (const a of allArticles) titleByArticleId[a.id] = a.title;
+
       const markerRows = await queryD1<any>(
-        `SELECT m.id, m.map_id, m.article_id, m.x, m.y, m.label, m.icon,
-                a.title AS article_title, a.status AS article_status
+        `SELECT m.id, m.map_id, m.article_id, m.x, m.y, m.label, m.icon
          FROM map_markers m
-         LEFT JOIN lore_articles a ON a.id = m.article_id
          WHERE m.map_id = ?`,
         [selectedMapId]
       );
-      const filteredMarkers = isAdmin
-        ? markerRows
-        : markerRows.filter((r: any) => !r.article_id || r.article_status === 'published');
-      setMarkers(filteredMarkers as MarkerRecord[]);
+      const enrichedMarkers: MarkerRecord[] = markerRows.map((r: any) => ({
+        id: r.id,
+        map_id: r.map_id,
+        article_id: r.article_id,
+        article_title: r.article_id ? (titleByArticleId[r.article_id] ?? null) : null,
+        // article_status no longer needed for filtering; kept for the
+        // type signature with a null since the JOIN isn't running.
+        article_status: null,
+        x: r.x,
+        y: r.y,
+        label: r.label,
+        icon: r.icon,
+      }));
+      const visibleMarkers = isAdmin
+        ? enrichedMarkers
+        // Non-admin: drop markers tied to articles they can't see.
+        // A marker without an article_id at all (label-only pin) is
+        // always shown.
+        : enrichedMarkers.filter((m) => !m.article_id || titleByArticleId[m.article_id] !== undefined);
+      setMarkers(visibleMarkers);
 
       const highlightRows = await queryD1<any>(
         `SELECT h.id, h.map_id, h.article_id, h.child_map_id, h.shape,
                 h.x, h.y, h.width, h.height, h.label,
-                a.title AS article_title,
                 cm.name AS child_map_name
          FROM map_highlights h
-         LEFT JOIN lore_articles a ON a.id = h.article_id
          LEFT JOIN maps cm ON cm.id = h.child_map_id
          WHERE h.map_id = ?`,
         [selectedMapId]
       );
-      setHighlights(highlightRows as HighlightRecord[]);
+      const enrichedHighlights: HighlightRecord[] = highlightRows.map((r: any) => ({
+        id: r.id,
+        map_id: r.map_id,
+        article_id: r.article_id,
+        article_title: r.article_id ? (titleByArticleId[r.article_id] ?? null) : null,
+        child_map_id: r.child_map_id,
+        child_map_name: r.child_map_name,
+        shape: r.shape,
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+        label: r.label,
+      }));
+      const visibleHighlights = isAdmin
+        ? enrichedHighlights
+        : enrichedHighlights.filter((h) => !h.article_id || titleByArticleId[h.article_id] !== undefined);
+      setHighlights(visibleHighlights);
     } catch (err) {
       console.error('Failed to load markers/highlights:', err);
     }
-  }, [selectedMapId, isAdmin]);
+  }, [selectedMapId, isAdmin, allArticles]);
 
   useEffect(() => {
     loadMarkersAndHighlights();
@@ -453,7 +512,7 @@ export default function Map({ userProfile }: { userProfile: any }) {
                 onChange={e => setNewPin({ ...newPin, articleId: e.target.value })}
               >
                 <option value="">— No article (placeholder) —</option>
-                {allArticles.map(a => (
+                {(allArticles ?? []).map(a => (
                   <option key={a.id} value={a.id}>{a.title}</option>
                 ))}
               </select>
