@@ -1957,6 +1957,15 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
 
   updateState(patch = {}) {
     Object.assign(this._state, patch);
+    // If the prompt has a dynamic counter, re-render the footer so
+    // the new count surfaces immediately. We deliberately DON'T
+    // full-rerender the prompt here — many call-sites use
+    // `updateState` for incremental tweaks (highlight pulse, focus
+    // breadcrumb) that don't want a body redraw. Footer alone is
+    // cheap + keeps the counter accurate.
+    if (this._footerRegion && typeof this._config?.counter === "function") {
+      try { this._renderFooter(); } catch (err) { /* defensive */ }
+    }
   }
 
   rerenderPrompt() {
@@ -2050,10 +2059,25 @@ export class DauligorSequencePromptApp extends HandlebarsApplicationMixin(Applic
         { id: "cancel", label: "Cancel" }
       ];
 
+    // Optional dynamic counter — config.counter is a function that
+    // takes the current state and returns a short progress string
+    // like "2 / 3 chosen". Re-evaluated every footer render so the
+    // counter updates as the user toggles selections. Prompts that
+    // don't pass a counter render the static footerNote (or nothing)
+    // exactly as before. Counter + footerNote can coexist; the
+    // counter renders on a separate line below the note.
+    const counterText = typeof this._config.counter === "function"
+      ? (() => {
+        try { return this._config.counter(this._state, this._config); }
+        catch (err) { console.warn("DauligorSequencePromptApp counter failed", err); return null; }
+      })()
+      : null;
+
     this._footerRegion.innerHTML = `
       <div class="dauligor-sequence__footer">
         <div class="dauligor-class-browser__status ${this._config.statusLevel ? `dauligor-class-browser__status--${this._config.statusLevel}` : ""}">
           ${this._config.footerNote ? foundry.utils.escapeHTML(this._config.footerNote) : ""}
+          ${counterText ? `<span class="dauligor-sequence__counter">${foundry.utils.escapeHTML(counterText)}</span>` : ""}
         </div>
         <div class="dauligor-class-browser__actions">
           ${actions.map((action) => `
@@ -4045,6 +4069,10 @@ async function runTraitSelectionStep({ title, fieldName, advancement, workflow, 
     subtitle: `Choose ${numberToWord(choiceCount)} option(s).${subtitleFixed}${subtitleSuffix}`,
     width: 650,
     height: 450,
+    // Counter — "1 / 2 chosen". Tracks the user's in-prompt picks
+    // against the target choiceCount; renders in the footer next to
+    // the OK / Cancel buttons.
+    counter: (state) => `${(state?.selections ?? []).length} / ${choiceCount} chosen`,
     state: {
       selections: []
     },
@@ -5291,6 +5319,9 @@ export async function runOptionGroupStep({ workflow, actor, group, sequence, pro
     title: `Choose ${group.maxSelections} Option${group.maxSelections === 1 ? "" : "s"}: ${group.name || group.featureName || "Class Options"} (Level ${workflow.targetLevel})`,
     width: 1040,
     height: 740,
+    // Footer counter — "2 / 3 chosen". Re-evaluated on every footer
+    // render so it tracks the user's clicks in real time.
+    counter: (state) => `${(state?.selectedSourceIds ?? []).length} / ${group.maxSelections} chosen`,
     state: {
       selectedSourceIds: [...(group.selectedSourceIds ?? [])],
       focusedSourceId: initialFocus,

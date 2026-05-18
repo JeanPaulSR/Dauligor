@@ -479,6 +479,33 @@
   font-size: 12px;
 }
 
+/* Selection counter — "2 / 3 chosen". Rendered inside the status
+   area when a prompt has `counter` configured. Uppercase + bold +
+   accent-tinted so it stands out from the static footerNote text
+   without screaming. Wraps to its own line if the status row gets
+   too narrow. */
+.dauligor-sequence__counter {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: rgba(180, 140, 80, 0.18);
+  color: var(--dauligor-text, #cbb98f);
+  font-weight: 600;
+  font-size: 0.92em;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.dauligor-class-browser__status:has(.dauligor-sequence__counter) {
+  /* When the counter is present, allow the status row to stack the
+     footerNote (if any) above the counter pill. */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .dauligor-wizard__status--success,
 .dauligor-class-browser__status--success {
   color: var(--dauligor-success);
@@ -4179,12 +4206,15 @@ button.dauligor-option-picker__pill:hover {
 .dauligor-spell-manager--picker .dauligor-spell-manager__layout-grid {
   display: grid;
   grid-template-columns:
-    minmax(220px, 280px)   /* sidebar (classes + favourites) */
-    minmax(400px, 480px)   /* pool — gained ~80px so the meta-strip
-                              counters + class-header chips have
-                              breathing room and the spell rows don't
-                              feel cramped */
-    minmax(380px, 1fr);    /* detail — absorbs window resize */
+    minmax(180px, 280px)   /* sidebar (classes + favourites) — shrinks
+                              to 180px so narrow FM windows don't push
+                              the 3-col layout into horizontal overflow */
+    minmax(320px, 480px)   /* pool — still gets the breathing room from
+                              the May 2026 widening, but can compress to
+                              320px when the window is tight */
+    minmax(280px, 1fr);    /* detail — absorbs window resize; min lowered
+                              to 280px so the grid fits in ~800px of
+                              available width before scrollbars appear */
   gap: 10px;
   width: 100%;
   flex: 1;
@@ -6259,10 +6289,30 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-feature-manager__option-picker {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
   gap: 14px;
   height: 100%;
   min-height: 0;
+}
+
+/* Narrow FM windows (< 720px content width): stack the option list
+   above the detail pane instead of side-by-side. The body region
+   still scrolls vertically; the list gets a capped max-height so
+   the user can still see the detail without scrolling past it. */
+@container (max-width: 720px) {
+  .dauligor-feature-manager__option-picker {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 0.45fr) minmax(0, 1fr);
+  }
+}
+
+/* Fallback for browsers without container queries — uses viewport
+   width which is close enough since the FM is near the full width. */
+@media (max-width: 800px) {
+  .dauligor-feature-manager__option-picker {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 0.45fr) minmax(0, 1fr);
+  }
 }
 
 .dauligor-feature-manager__option-picker-col {
