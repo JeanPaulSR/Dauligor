@@ -39,6 +39,15 @@
 //     campaign_members + campaigns on the client. Closes the Navbar
 //     half of H7 — we no longer fetch every other user's membership
 //     row to figure out our own.
+//
+//   GET /api/me/foundation-update
+//     Returns the `last_foundation_update` timestamp from
+//     system_metadata. App.tsx polls this every 30s for cross-tab
+//     cache invalidation (when an admin mutates a persistent table
+//     in another tab, this timestamp changes and other tabs bust
+//     their caches). Closes audit L4 — the previous client path did
+//     a raw SELECT against system_metadata via /api/d1/query from
+//     every signed-in tab every 30s.
 
 import type { IncomingMessage } from "node:http";
 import {
@@ -390,6 +399,38 @@ async function handleGetMyMemberships(req: NodeLikeRequest, res: NodeLikeRespons
 }
 
 /* -------------------------------------------------------------------------- */
+/* /api/me/foundation-update                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Returns the current `last_foundation_update` timestamp from
+ * `system_metadata`. App.tsx polls this every 30s; when the value
+ * changes the client busts its persistent caches (the heartbeat for
+ * cross-tab cache invalidation when an admin mutates a persistent
+ * table in another tab).
+ *
+ * Folded into /api/me rather than a dedicated /api/system-metadata
+ * endpoint because (a) every signed-in user polls it on every page
+ * load + every 30s thereafter, and (b) the /api/me handler is the
+ * smallest natural home — it's where "things every signed-in user
+ * needs about their session" already live. Closes audit L4 without
+ * burning a function slot.
+ */
+async function handleGetFoundationUpdate(_req: NodeLikeRequest, res: NodeLikeResponse) {
+  const result = await executeD1QueryInternal({
+    sql: "SELECT value FROM system_metadata WHERE key = 'last_foundation_update' LIMIT 1",
+    params: [],
+  });
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  const timestamp: string | null = rows[0] ? ((rows[0] as any).value ?? null) : null;
+  // Cache-Control: no-store so the polling client gets the live
+  // timestamp every interval instead of an edge cache. The bump
+  // semantics depend on freshness.
+  if (res.setHeader) res.setHeader("Cache-Control", "no-store");
+  return res.status(200).json({ timestamp });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Dispatcher                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -411,6 +452,11 @@ export default async function handler(req: NodeLikeRequest, res: NodeLikeRespons
 
     if (path.length === 1 && path[0] === "campaign-memberships") {
       if (req.method === "GET") return await handleGetMyMemberships(req, res, decoded);
+      return res.status(405).json({ error: `Method ${req.method} not allowed.` });
+    }
+
+    if (path.length === 1 && path[0] === "foundation-update") {
+      if (req.method === "GET") return await handleGetFoundationUpdate(req, res);
       return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 

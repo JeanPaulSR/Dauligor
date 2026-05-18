@@ -148,11 +148,26 @@ export async function bumpFoundationUpdate() {
 /**
  * Checks the latest foundation update timestamp.
  * Used for polling from the client to detect stale cache.
+ *
+ * Goes through `GET /api/me/foundation-update` (closes audit L4 —
+ * the previous path was a raw `SELECT value FROM system_metadata`
+ * via `/api/d1/query` from every signed-in tab every 30s). The
+ * endpoint sets `Cache-Control: no-store` so the polling client
+ * always gets the live value.
  */
 export async function checkFoundationUpdate(): Promise<string | null> {
-  const sql = `SELECT value FROM system_metadata WHERE key = 'last_foundation_update' LIMIT 1`;
-  const results = await queryD1<{ value: string }>(sql, [], { noCache: true });
-  return results.length > 0 ? results[0].value : null;
+  if (!auth.currentUser) return null;
+  try {
+    const token = await auth.currentUser.getIdToken();
+    const res = await fetch('/api/me/foundation-update', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return typeof body?.timestamp === 'string' ? body.timestamp : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
