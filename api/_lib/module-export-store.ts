@@ -2,7 +2,7 @@
 //
 // Reads go to R2 directly via the public URL — `https://images.dauligor.com`
 // is fronted by Cloudflare's CDN, so a hot bundle is an edge-cached HTTP GET
-// from inside the Vercel function. Writes/deletes go through the project
+// from inside the Pages Function. Writes / deletes go through the project
 // Worker (which holds the R2 binding) using the same `R2_API_SECRET` the rest
 // of the project uses.
 //
@@ -67,11 +67,11 @@ export function classBundleKey(sourceSlug: string, classIdentifier: string) {
 
 /**
  * After a fresh R2 write, fire one HEAD-equivalent fetch per affected
- * URL through Vercel so the function runs against the new R2 content
- * and the CDN cache entry is replaced with the fresh body.
+ * public URL so the Pages Function runs against the new R2 content
+ * and the edge CDN cache entry is replaced with the fresh body.
  *
- * Without this, the next *external* reader would hit Vercel's existing
- * stale entry, get served stale, and only THEN trigger the
+ * Without this, the next *external* reader would hit the existing
+ * stale edge entry, get served stale, and only THEN trigger the
  * `stale-while-revalidate` background refresh — so the user who hit
  * "Bake Now" might re-fetch and see their *old* data while the system
  * silently warms in the background. By doing the warm-up ourselves on
@@ -82,11 +82,11 @@ export function classBundleKey(sourceSlug: string, classIdentifier: string) {
  * R2 successfully by the time this runs; warming is just a UX nicety.
  *
  * R2 keys look like `module-export/v6/ll/classes/foo.json`. The
- * corresponding Vercel URL is
+ * corresponding public URL is
  * `https://<host>/api/module/ll/classes/foo.json`. We strip the
  * `${EXPORT_PREFIX}/` prefix and prepend the public origin.
  *
- * `process.env.PUBLIC_SITE_URL` is the origin the Vercel function
+ * `process.env.PUBLIC_SITE_URL` is the origin the Pages Function
  * should warm against (e.g. `https://www.dauligor.com`). Falls back to
  * the Pages-injected `CF_PAGES_URL` for the per-deployment hostname
  * (that path works in branch previews too). If neither is available
@@ -115,9 +115,10 @@ export async function warmPublicUrlsForKeys(keys: readonly string[]): Promise<vo
   if (!urls.length) return;
 
   // Per-request 3s timeout. The function only needs to fetch from R2
-  // and re-serialize, so 3s is generous; if Vercel is slower than that
-  // the warm step would block the bake response and any future
-  // external reader would still get the SWR-promoted bundle anyway.
+  // and re-serialize, so 3s is generous; if the edge round-trip is
+  // slower than that the warm step would block the bake response,
+  // and any future external reader would still get the SWR-promoted
+  // bundle anyway.
   await Promise.all(urls.map(async (url) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 3000);
@@ -144,7 +145,7 @@ export async function warmPublicUrlsForKeys(keys: readonly string[]): Promise<vo
 export async function readBundle<T = unknown>(key: string): Promise<T | null> {
   try {
     const url = `${getPublicBaseUrl()}/${key}`;
-    // `cache: "no-store"` so the Vercel function's own runtime fetch cache
+    // `cache: "no-store"` so the Pages Function's own runtime fetch cache
     // doesn't shadow R2 invalidations. The Cloudflare edge ahead of R2 is the
     // cache we actually want; that one honours object-level Cache-Control.
     const response = await fetch(url, { method: "GET", cache: "no-store" });

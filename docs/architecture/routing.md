@@ -73,37 +73,30 @@ The bootstrap / promote / default-campaign logic used to run client-side with ra
 
 ## Browser router quirks
 
-- **Page reloads in nested routes** require Vercel rewrites (already configured in [vercel.json](../../vercel.json)) — see [SPA fallback](#spa-fallback). In local dev, the Express server serves `index.html` for all non-API paths.
+- **Page reloads in nested routes** are handled by Pages's built-in SPA-fallback behaviour — any path that doesn't match a Pages Function or a static asset falls through to `index.html`. See [SPA fallback](#spa-fallback) below. In local dev, the Express server serves `index.html` for all non-API paths.
 - **Anchor links** (`#section`) work but should be rare; prefer programmatic scroll in editors.
 - **Trailing slashes** are stripped — don't link to `/wiki/`.
 
-## SPA fallback + API resource-root dispatchers
+## SPA fallback + API catch-all dispatchers
 
-Vercel serves static files first and serverless functions at `/api/*`. Client-side routes like `/compendium/spells` don't exist on the filesystem, so a hard refresh or shared deep link would 404 without a rewrite. The catch-all in [vercel.json](../../vercel.json) sends every non-API path to `/index.html` so the SPA bundle loads and React Router resolves the route.
+Cloudflare Pages serves the filesystem in this order: Pages Functions under `functions/` (matched by URL pattern), then static assets from `dist/` (served by the Pages CDN), and finally a built-in SPA fallback to `index.html` for any unmatched path. Client-side routes like `/compendium/spells` don't exist on the filesystem so they fall through to `index.html`, the SPA bundle loads, and React Router resolves the route. No explicit `_routes.json` or `_redirects` rule is needed for this — Pages handles it natively.
 
-There's also a set of API-side rewrites for the per-route endpoint family. Vercel's pure-functions filesystem routing doesn't support real catch-all syntax (the `[...slug]` filename is silently treated as a single-segment dynamic param), so each multi-segment resource is implemented as one top-level file (`api/me.ts`, `api/lore.ts`, `api/campaigns.ts`) and a rewrite forwards `/api/<resource>/(.*)` to it. The handler parses the original path out of `req.url`. Same pattern `api/module.ts` has used since the Foundry export work.
+The catch-all dispatcher pattern uses Pages Functions' native double-bracket syntax. Each multi-segment resource has one file at `functions/api/<resource>/[[path]].ts`; the `[[path]]` filename matches every URL under `/api/<resource>/` (including the bare resource path itself). The handler reads `context.params.path` (an array of segments) to route internally:
 
-```json
-{
-  "rewrites": [
-    { "source": "/api/module/(.*)",       "destination": "/api/module" },
-    { "source": "/api/module",            "destination": "/api/module" },
-    { "source": "/api/me/(.*)",           "destination": "/api/me" },
-    { "source": "/api/lore/(.*)",         "destination": "/api/lore" },
-    { "source": "/api/campaigns/(.*)",    "destination": "/api/campaigns" },
-    { "source": "/api/admin/users/(.*)",  "destination": "/api/admin/users" },
-    { "source": "/api/admin/eras/(.*)",   "destination": "/api/campaigns" },
-    { "source": "/api/admin/eras",        "destination": "/api/campaigns" },
-    { "source": "/((?!api/|assets/).*)",  "destination": "/index.html" }
-  ]
-}
-```
+| URL family | Pages Function file |
+|---|---|
+| `/api/me/*` | [functions/api/me/[[path]].ts](../../functions/api/me/[[path]].ts) |
+| `/api/lore/*` | [functions/api/lore/[[path]].ts](../../functions/api/lore/[[path]].ts) |
+| `/api/campaigns/*` | [functions/api/campaigns/[[path]].ts](../../functions/api/campaigns/[[path]].ts) |
+| `/api/admin/users/*` | [functions/api/admin/users/[[path]].ts](../../functions/api/admin/users/[[path]].ts) |
+| `/api/admin/eras/*` | [functions/api/admin/eras/[[path]].ts](../../functions/api/admin/eras/[[path]].ts) |
+| `/api/module/*` | [functions/api/module/[[path]].ts](../../functions/api/module/[[path]].ts) |
 
-The catch-all's negative lookahead `(?!api/|assets/)` skips paths under `/api/` (so the serverless functions still resolve) and `/assets/` (so missing JS chunks return real 404s instead of being rewritten to `index.html`, which used to mask stale-bundle errors as MIME-type failures). Static files in `/public` and built assets in `/assets` are served from the filesystem before rewrites are evaluated, so they're unaffected.
+Single-segment endpoints use the single-bracket form (`[id].ts`, `[username].ts`, `[action].ts`) instead. Static endpoints have plain filenames (`spell-favorites.ts`, `admin/characters.ts`).
 
-The two `/api/admin/eras` rewrites both point at `/api/campaigns` because era writes are folded into that file (see [api-endpoints.md §Era writes](../platform/api-endpoints.md)) — the dispatcher in `api/campaigns.ts` sniffs the original `req.url` for the `/api/admin/eras` prefix and routes to the era handlers before its campaign-prefix parse runs.
+When you add a new client-side route, no routing config update is needed — Pages's SPA fallback picks it up automatically. When you add a new multi-segment **API** dispatcher, create the corresponding `functions/api/<resource>/[[path]].ts` file; Pages auto-wires it on the next build.
 
-When you add a new client-side route, you don't have to update `vercel.json` — the SPA catch-all handles it automatically. When you add a new multi-segment **API** dispatcher, add a `/api/<resource>/(.*)` rewrite alongside the existing ones.
+This is a change from the pre-2026 Vercel-based architecture, which required a `vercel.json` rewrite for every catch-all because Vercel's filesystem routing didn't support real catch-all syntax (the `[...slug]` filename was silently treated as a single-segment param). On Pages the catch-all `[[path]]` is native, no rewrite layer needed.
 
 ## Navigation patterns
 

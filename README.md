@@ -11,8 +11,8 @@ A specialized D&D 5e campaign-management workspace: hierarchical lore wiki, mech
 - **Frontend**: React 19 · Vite · TypeScript · Tailwind 4 · shadcn/ui · TipTap
 - **Database**: Cloudflare D1 (SQL) via a project-owned Worker
 - **Storage**: Cloudflare R2 (served from `https://images.dauligor.com`)
-- **Auth**: Firebase Authentication (JWT layer only)
-- **Hosting**: Vercel functions; local dev uses Express (`server.ts`) that mirrors the same routes
+- **Auth**: Firebase Authentication (JWT layer only — verified server-side via `jose` against Firebase's public JWKS, no Admin SDK)
+- **Hosting**: Cloudflare Pages (SPA static + Pages Functions at `functions/api/**`). Local dev uses Express (`server.ts`) for most routes; `npx wrangler pages dev` for the Pages-only routes (e.g. `/api/module/*`).
 
 The Firestore→D1 migration is complete; the app is live at [dauligor.com](https://www.dauligor.com). See [AGENTS.md](AGENTS.md) for the rules and [docs/database/README.md](docs/database/README.md) for the database layout.
 
