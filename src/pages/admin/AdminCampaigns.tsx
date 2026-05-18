@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { auth, OperationType, reportClientError } from '../../lib/firebase';
-import { fetchCollection, upsertDocument, deleteDocument, getSystemMetadata, setSystemMetadata } from '../../lib/d1';
+import { fetchCollection, upsertDocument, deleteDocument, getSystemMetadata } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
@@ -294,7 +294,25 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
               onUpload={async (url) => {
                 try {
                   const next = { ...wikiSettings, defaultBackgroundImageUrl: url };
-                  await setSystemMetadata('wiki_settings', next);
+                  // Per-route admin endpoint. The proxy gate at
+                  // api/_lib/d1-proxy.ts now refuses non-bump writes
+                  // to system_metadata, so the previous
+                  // `setSystemMetadata('wiki_settings', next)` path
+                  // (which went through the generic /api/d1/query
+                  // proxy) would 403. Closes M3.
+                  const token = await auth.currentUser?.getIdToken();
+                  const res = await fetch('/api/lore/system-metadata/wiki-settings', {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify(next),
+                  });
+                  if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error((err as any).error || `Save failed (HTTP ${res.status})`);
+                  }
                   setWikiSettings(next);
                 } catch (error) {
                   console.error("Error setting default background image:", error);

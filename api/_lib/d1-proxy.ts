@@ -199,9 +199,45 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     // comments can't slip past.
     const PROTECTED_READ_TABLES = /\bFROM\s+(?:users|lore_secrets|characters|character_\w+)\b/i;
 
+    // `system_metadata` is a special case. The table holds two
+    // distinct kinds of value:
+    //   - `last_foundation_update`: a cache-bust timestamp that
+    //     `src/lib/d1.ts` writes from every staff mutation (compendium
+    //     edits, spell upserts, etc.). Blocking it would silently
+    //     break cache invalidation for non-admin staff. The SQL shape
+    //     is fixed and parameter-free.
+    //   - `wiki_settings` and any future singleton config keys:
+    //     legitimate writes only come from the admin UI. Per-route
+    //     endpoints handle these (e.g. PUT /api/lore/system-metadata/
+    //     wiki-settings); the generic proxy refuses them so a hostile
+    //     client can't stomp `last_foundation_update` (force every
+    //     other client to bust its cache) or invent new keys.
+    //
+    // The bump SQL is fingerprinted by the exact pattern d1.ts emits
+    // — any drift in that helper would silently start failing here,
+    // which is intentional (forces the call site to either match or
+    // move to a per-route endpoint).
+    const FOUNDATION_BUMP_PATTERN = /^\s*UPDATE\s+system_metadata\s+SET\s+value\s*=\s*CURRENT_TIMESTAMP\s+WHERE\s+key\s*=\s*'last_foundation_update'\s*$/i;
+    const SYSTEM_METADATA_WRITE_PATTERN = /\b(?:INTO|FROM|UPDATE|TABLE)\s+system_metadata\b/i;
+
     const isMutation = MUTATION_KEYWORDS.test(normalizedSql);
     const targetsProtectedTable = isMutation && PROTECTED_WRITE_TABLES.test(normalizedSql);
     const targetsProtectedReadTable = !isMutation && PROTECTED_READ_TABLES.test(normalizedSql);
+    const isSystemMetadataWrite = isMutation && SYSTEM_METADATA_WRITE_PATTERN.test(normalizedSql);
+    const isFoundationBump = isSystemMetadataWrite && FOUNDATION_BUMP_PATTERN.test(typeof sql === "string" ? sql : "");
+
+    if (isSystemMetadataWrite && !isFoundationBump) {
+      // Block any non-bump write to system_metadata at the generic
+      // proxy. Admin UI for wiki_settings goes through
+      // `PUT /api/lore/system-metadata/wiki-settings` instead. This
+      // closes M3 — without it, any signed-in staff could call
+      // setSystemMetadata('arbitrary_key', value) and stomp the
+      // singleton-config table.
+      throw new HttpError(
+        403,
+        "Direct writes to system_metadata are not permitted through /api/d1/query. Use the per-route endpoint (currently PUT /api/lore/system-metadata/wiki-settings for wiki settings) instead."
+      );
+    }
 
     if (targetsProtectedTable) {
       await requireAdminAccess(authHeader);

@@ -33,6 +33,7 @@ import {
   HttpError,
   getCredentialErrorMessage,
   isWikiStaff,
+  requireAdminAccess,
   requireAuthenticatedUser,
 } from "./_lib/firebase-admin.js";
 import { executeD1QueryInternal } from "./_lib/d1-internal.js";
@@ -510,6 +511,57 @@ async function handleSecretDelete(res: NodeLikeResponse, secretId: string) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* System metadata: wiki settings (admin-only)                                  */
+/* -------------------------------------------------------------------------- */
+//
+// The `wiki_settings` key in `system_metadata` holds a small JSON
+// blob (currently `{ defaultBackgroundImageUrl }`) consumed by the
+// wiki rendering layer. Reads stay public (any signed-in user via
+// `getSystemMetadata('wiki_settings')` through the generic proxy);
+// writes are admin-only and routed here.
+//
+// The proxy-level fingerprint check in `api/_lib/d1-proxy.ts` refuses
+// any non-bump write to `system_metadata`, so this is the ONLY path
+// to update the table from the UI. New writable singleton-config
+// keys should each get their own handler here (or a parallel
+// allow-list endpoint) — never a generic `PUT /system-metadata/[key]`
+// that could be abused to invent new keys.
+
+async function handleWikiSettingsPut(req: NodeLikeRequest, res: NodeLikeResponse) {
+  await requireAdminAccess(req.headers.authorization);
+
+  const body = await readJsonBody(req);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError(400, "Request body must be a JSON object.");
+  }
+
+  // We don't validate field-by-field — wiki_settings is a freeform
+  // admin-edited blob — but we do require it to be JSON-serializable
+  // and within a sane size cap so a misuse can't write a multi-MB
+  // value that bloats every page's `getSystemMetadata` read.
+  let encoded: string;
+  try {
+    encoded = JSON.stringify(body);
+  } catch {
+    throw new HttpError(400, "Body must be JSON-serializable.");
+  }
+  if (encoded.length > 64 * 1024) {
+    throw new HttpError(413, "wiki_settings payload exceeds the 64KB cap.");
+  }
+
+  await executeD1QueryInternal({
+    sql: `INSERT INTO system_metadata (key, value, updated_at)
+            VALUES ('wiki_settings', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+              value = excluded.value,
+              updated_at = excluded.updated_at`,
+    params: [encoded],
+  });
+
+  return res.status(200).json({ ok: true, key: "wiki_settings" });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Dispatcher                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -564,6 +616,17 @@ export default async function handler(req: NodeLikeRequest, res: NodeLikeRespons
     // route instead. Same FK cascade clears the visibility junctions.
     if (path.length === 2 && path[0] === "secrets") {
       if (req.method === "DELETE") return await handleSecretDelete(res, path[1]);
+      return res.status(405).json({ error: `Method ${req.method} not allowed.` });
+    }
+
+    // PUT /api/lore/system-metadata/wiki-settings — admin-only
+    // writes for the `wiki_settings` singleton config blob.
+    // Wiki-domain endpoint by virtue of the only legitimate key
+    // being wiki-related; future singleton keys (if any) should each
+    // get their own dedicated route — never a generic
+    // /system-metadata/[key] that could be abused.
+    if (path.length === 2 && path[0] === "system-metadata" && path[1] === "wiki-settings") {
+      if (req.method === "PUT") return await handleWikiSettingsPut(req, res);
       return res.status(405).json({ error: `Method ${req.method} not allowed.` });
     }
 

@@ -170,6 +170,16 @@ export async function getSystemMetadata<T = any>(key: string): Promise<T | null>
 
 /**
  * Generic key/value writer for `system_metadata`. JSON-encodes the value.
+ *
+ * @deprecated The proxy gate at api/_lib/d1-proxy.ts now refuses
+ *   non-bump writes to `system_metadata`. Any call to this function
+ *   that isn't the foundation bump will 403. Use the per-route
+ *   endpoint instead — currently only `wiki_settings` has one
+ *   (`PUT /api/lore/system-metadata/wiki-settings`, admin-only). New
+ *   singleton-config keys should each get their own dedicated route.
+ *   Left exported so external callers fail loudly at runtime rather
+ *   than failing silently at build (the import error would mask the
+ *   intent).
  */
 export async function setSystemMetadata<T = any>(key: string, value: T): Promise<void> {
   const sql = `INSERT INTO system_metadata (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
