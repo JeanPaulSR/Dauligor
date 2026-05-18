@@ -116,6 +116,7 @@ async function startServer() {
       }
 
       const temporaryPassword = createTemporaryPassword();
+      const { auth } = getAdminServices();
       await auth.updateUser(targetUserId, { password: temporaryPassword });
       // Note: the legacy Firestore write of `mustChangePassword` /
       // `temporaryPasswordGeneratedAt` / `temporaryPasswordGeneratedBy` is gone.
