@@ -25,6 +25,8 @@ import {
   handleR2MoveFolder,
   handleR2Rename,
   handleR2Upload,
+  handleImageReferencesScan,
+  handleImageReferencesRewrite,
 } from "../_lib/r2-proxy.js";
 
 type NodeLikeRequest = IncomingMessage & {
@@ -57,6 +59,19 @@ export default async function handler(req: NodeLikeRequest, res: any) {
       return handleR2MoveFolder(req as any, res);
     case "upload":
       return handleR2Upload(req as any, res);
+    case "scan-references":
+      // POST { url } → { references: ImageReference[] }
+      // Replaces the client-side fan-out across SCAN_TARGETS that
+      // ran through the generic /api/d1/query proxy. Server-side
+      // path uses executeD1QueryInternal so it can read `users`
+      // and `characters` (both now blocked by PROTECTED_READ_TABLES).
+      return handleImageReferencesScan(req as any, res);
+    case "rewrite-references":
+      // POST { oldUrl, newUrl } → { count }
+      // Same migration as scan-references; also closes L3 (the
+      // (table, column) pair is now pinned server-side instead of
+      // passed in from the client).
+      return handleImageReferencesRewrite(req as any, res);
     default:
       return res.status(404).json({ error: `Unknown R2 action: ${action || "(empty)"}` });
   }

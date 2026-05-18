@@ -1,6 +1,30 @@
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  ⚠  IMAGE MANAGER BRANCH — COORDINATION NOTE  ⚠                          ║
+// ║                                                                          ║
+// ║  Security work landed in commit 952882f that affects this page:         ║
+// ║                                                                          ║
+// ║   • `scanForReferences` and `updateImageReferences` from                 ║
+// ║     `src/lib/imageMetadata.ts` are now server-side                       ║
+// ║     (`/api/r2/scan-references`, `/api/r2/rewrite-references`).           ║
+// ║     Their function signatures are UNCHANGED, but they do real            ║
+// ║     network calls now — handle the latency in any new loading-state     ║
+// ║     UI you add.                                                          ║
+// ║                                                                          ║
+// ║   • Direct `fetchCollection('users')` / `fetchCollection('characters')` ║
+// ║     from the client will 403 (PROTECTED_READ_TABLES). If your branch    ║
+// ║     reaches for either, route it through a per-route endpoint —         ║
+// ║     `/api/admin/users` and `/api/me/characters` are the closest         ║
+// ║     existing matches.                                                    ║
+// ║                                                                          ║
+// ║   • The (table, column) scan list lives in                              ║
+// ║     `api/_lib/r2-proxy.ts:SCAN_TARGETS`. New image columns go there,    ║
+// ║     not in `src/lib/imageMetadata.ts`.                                  ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchCollection } from '../../lib/d1';
+import { auth } from '../../lib/firebase';
 import { r2List, r2Delete, r2Rename, r2Upload, r2MoveFolder } from '../../lib/r2';
 import { convertToWebP } from '../../lib/imageUtils';
 import {
@@ -123,10 +147,44 @@ async function fetchNameMap(col: string, nameField: string): Promise<Map<string,
   try {
     // D1 columns are snake_case; map common camelCase aliases used here.
     const snakeField = nameField === 'displayName' ? 'display_name' : nameField;
+
+    // `users` and `characters` rows can't be SELECT'd via the generic
+    // /api/d1/query proxy anymore (PROTECTED_READ_TABLES). Both tables
+    // have per-route endpoints with a richer auth surface — use those
+    // so this name lookup still works for admin / co-dm. lore-writer
+    // doesn't pass the gate on either, so they fall through to the
+    // empty-map fallback (UI degrades to showing raw ids — acceptable
+    // since lore-writer rarely browses user/character avatar folders).
+    if (col === 'users') {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/admin/users', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return new Map();
+      const body = await res.json();
+      const rows: any[] = Array.isArray(body?.users) ? body.users : [];
+      return new Map(rows.map((r) => [
+        String(r.id),
+        String(r.display_name || r.username || r.handle || r.id),
+      ]));
+    }
+
+    if (col === 'characters') {
+      // /api/admin/characters returns a fixed minimal column set
+      // (no `?fields=` filter); we only need id + name here.
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/admin/characters', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return new Map();
+      const body = await res.json();
+      const rows: any[] = Array.isArray(body?.characters) ? body.characters : [];
+      return new Map(rows.map((r) => [String(r.id), String(r.name || r.id)]));
+    }
+
     const rows = await fetchCollection<any>(col);
     const map = new Map<string, string>(rows.map((r: any) => {
-      let name: string = r[snakeField];
-      if (col === 'users') name = r.display_name || r.username || r.handle;
+      const name: string = r[snakeField];
       return [r.id, name || r.id];
     }));
 

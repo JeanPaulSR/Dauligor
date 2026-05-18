@@ -1,4 +1,26 @@
-import { fetchCollection, fetchDocument, upsertDocument, updateDocument, deleteDocument } from './d1';
+import { fetchDocument, upsertDocument, updateDocument, deleteDocument } from './d1';
+import { auth } from './firebase';
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  ⚠  COORDINATION NOTE FOR THE IMAGE MANAGER BRANCH  ⚠                    ║
+// ║                                                                          ║
+// ║  The reference scanner and rewriter have moved SERVER-SIDE as part of    ║
+// ║  the read-protection security work (commit 952882f). If your branch     ║
+// ║  adds a new image-bearing column to any table:                           ║
+// ║                                                                          ║
+// ║    1. Update SCAN_TARGETS in `api/_lib/r2-proxy.ts` (server-side copy).  ║
+// ║    2. Do NOT add a client-side SCAN_TARGETS — the client no longer       ║
+// ║       walks the tables; it calls `/api/r2/scan-references` and           ║
+// ║       `/api/r2/rewrite-references` which fan out server-side.            ║
+// ║    3. If your branch reintroduces direct `fetchCollection('users')` or  ║
+// ║       `fetchCollection('characters')` from the client, the proxy gate    ║
+// ║       at `api/_lib/d1-proxy.ts` (PROTECTED_READ_TABLES) will 403 it      ║
+// ║       and image admin will silently miss references on those tables.    ║
+// ║                                                                          ║
+// ║  Function signatures of `scanForReferences` and `updateImageReferences`  ║
+// ║  are unchanged — they're just thin fetch wrappers now. Consumers in     ║
+// ║  `ImageManager.tsx` need no edits.                                       ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -27,20 +49,13 @@ export interface ImageReference {
 }
 
 // ── scan targets ──────────────────────────────────────────────────────────────
-// When checking references before a delete, every (collection, field) pair here
-// is queried for the image URL. `col` uses the legacy/camelCase name that
-// `D1_TABLE_MAP` translates into the actual D1 table; `fields` are D1 columns
-// (snake_case); `nameField` is also a D1 column.
-
-const SCAN_TARGETS: { col: string; fields: string[]; nameField: string }[] = [
-  { col: 'classes',    fields: ['image_url', 'card_image_url', 'preview_image_url'], nameField: 'name' },
-  { col: 'subclasses', fields: ['image_url'],                                        nameField: 'name' },
-  { col: 'features',   fields: ['icon_url'],                                         nameField: 'name' },
-  { col: 'characters', fields: ['image_url'],                                        nameField: 'name' },
-  { col: 'sources',    fields: ['image_url'],                                        nameField: 'name' },
-  { col: 'users',      fields: ['avatar_url'],                                       nameField: 'display_name' },
-  { col: 'lore',       fields: ['image_url', 'card_image_url', 'preview_image_url'], nameField: 'title' },
-];
+// The list of (table, column) pairs to walk lives SERVER-SIDE now, in
+// `api/_lib/r2-proxy.ts:SCAN_TARGETS`. The client just POSTs a URL to
+// `/api/r2/scan-references` and the server fans out. Keeping the list
+// server-only stops a hostile client from extending the scan to
+// arbitrary tables (the audit's L3 concern) and lets the scan reach
+// `users` / `characters` which are now blocked from direct SELECT at
+// the d1-proxy gate.
 
 // ── doc-ID helpers ────────────────────────────────────────────────────────────
 // Storage paths contain '/' which we keep escaping for legacy compatibility
@@ -123,72 +138,61 @@ export async function deleteImageMetadata(storagePath: string): Promise<void> {
 }
 
 // ── reference scanner ─────────────────────────────────────────────────────────
+//
+// Thin POST wrapper around `/api/r2/scan-references`. The endpoint
+// gates on `requireImageManagerAccess` (admin / co-dm / lore-writer)
+// and runs the fan-out server-side via `executeD1QueryInternal`,
+// which can read `users` and `characters` that the d1-proxy gate now
+// blocks for direct SELECTs.
+//
+// Previously this function ran a Promise.all across SCAN_TARGETS
+// from the client, with try/catch per (table, column) pair that
+// silently swallowed failures. That made the gate change invisible —
+// after PROTECTED_READ_TABLES landed, scans against `users` and
+// `characters` would 403 and the UI would show "no references found"
+// when references actually existed. Per-route GET surfaces the real
+// row count.
+
+async function bearerHeaders(): Promise<Record<string, string>> {
+  const token = await auth.currentUser?.getIdToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export async function scanForReferences(url: string): Promise<ImageReference[]> {
-  const results: ImageReference[] = [];
-
-  await Promise.all(
-    SCAN_TARGETS.flatMap(({ col, fields, nameField }) =>
-      fields.map(async (field) => {
-        try {
-          const rows = await fetchCollection<any>(col, {
-            select: `id, ${field}, ${nameField}`,
-            where: `${field} = ?`,
-            params: [url],
-          });
-          rows.forEach((r: any) => {
-            results.push({
-              collection: col,
-              id: r.id,
-              name: (r[nameField] as string) || r.id,
-              field,
-            });
-          });
-        } catch {
-          // Skip collections that don't exist or have restricted access
-        }
-      }),
-    ),
-  );
-
-  return results;
+  const res = await fetch('/api/r2/scan-references', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await bearerHeaders()) },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || `Image reference scan failed (HTTP ${res.status})`);
+  }
+  const body = await res.json();
+  return Array.isArray(body?.references) ? body.references : [];
 }
 
 // ── reference updater ─────────────────────────────────────────────────────────
 // Replaces every occurrence of oldUrl with newUrl across all scan targets.
 // Returns the number of rows updated.
+//
+// Server-side via `/api/r2/rewrite-references` so the (table, column)
+// allow-list lives in `api/_lib/r2-proxy.ts:SCAN_TARGETS` and a
+// compromised client can't ship UPDATE statements against arbitrary
+// columns (audit L3). Function signature unchanged.
 
 export async function updateImageReferences(oldUrl: string, newUrl: string): Promise<number> {
-  let count = 0;
-
-  await Promise.all(
-    SCAN_TARGETS.flatMap(({ col, fields }) =>
-      fields.map(async (field) => {
-        try {
-          const matches = await fetchCollection<any>(col, {
-            select: `id`,
-            where: `${field} = ?`,
-            params: [oldUrl],
-          });
-          await Promise.all(
-            matches.map(async (m: any) => {
-              // Real UPDATE — we're patching one column on a row we just
-              // selected by id, and the target tables (classes, features,
-              // users, sources, subclasses, lore) each have NOT NULL
-              // columns that aren't in our payload. upsertDocument would
-              // throw `NOT NULL constraint failed` on those tables.
-              await updateDocument(col, m.id, { [field]: newUrl });
-              count++;
-            }),
-          );
-        } catch {
-          // Skip collections with restricted access
-        }
-      }),
-    ),
-  );
-
-  return count;
+  const res = await fetch('/api/r2/rewrite-references', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await bearerHeaders()) },
+    body: JSON.stringify({ oldUrl, newUrl }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || `Image reference rewrite failed (HTTP ${res.status})`);
+  }
+  const body = await res.json();
+  return typeof body?.count === 'number' ? body.count : 0;
 }
 
 // ── URL → storage path ────────────────────────────────────────────────────────

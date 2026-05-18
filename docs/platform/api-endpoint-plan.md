@@ -32,8 +32,8 @@ historical record + remaining-work tracker.
 | M3 — `system_metadata` writes not column-scoped | Open | Backlog |
 | M4 — class_spell_lists rebuild from client | Open | Backlog |
 | L1 — `eras` writes through staff gate | ✅ Closed | `eras` added to `PROTECTED_WRITE_TABLES` in d1-proxy + AdminCampaigns hides era CRUD UI for non-admin |
-| L2 — image scan returns `users` rows | Open | Backlog |
-| L3 — image rename `updateDocument` against any column | Open | Backlog |
+| L2 — image scan returns `users` rows | ✅ Closed | `scanForReferences` migrated to `POST /api/r2/scan-references`; the SCAN_TARGETS list moved server-side (api/_lib/r2-proxy.ts) so the scan reaches `users`/`characters` via `executeD1QueryInternal` past the new read gate. Folded into the existing `/api/r2/[action]` dispatcher — no function slot consumed. |
+| L3 — image rename `updateDocument` against any column | ✅ Closed | Same migration — `updateImageReferences` → `POST /api/r2/rewrite-references`. The `(table, column)` allow-list is pinned server-side; a compromised client can no longer ship UPDATE against arbitrary columns. |
 | L4 — `checkFoundationUpdate` polling raw SELECT | Deferred | Low severity; closing would burn the last Vercel function slot (11/12 → 12/12). Revisit after the next consolidation gives budget. |
 | Read-protect H1/H3/H4 at the proxy | ✅ Closed | `PROTECTED_READ_TABLES` added to d1-proxy covering `users`, `lore_secrets`, `characters`, `character_*`. The per-route endpoints were the right shape; this seals the devtools bypass. Two client migrations rode along: `fetchLoreSecrets` → `GET /api/lore/articles/[id]/secrets`, `SpellList`'s character picker → `GET /api/me/characters`, and `deleteLoreSecret` no longer round-trips through a raw `SELECT article_id`. |
 
