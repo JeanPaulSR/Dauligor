@@ -13,22 +13,17 @@
 // helpers so the existing call sites in Wiki.tsx, LoreEditor.tsx, and
 // LoreArticle.tsx don't need updates.
 //
-// `fetchLoreSecrets` migrated to the per-route `GET
-// /api/lore/articles/[id]/secrets` endpoint, which applies the
-// server-side visibility filter (non-staff only see secrets revealed
-// to their active campaign). The legacy raw `SELECT * FROM
-// lore_secrets` path it used to take is now blocked by the proxy's
-// PROTECTED_READ_TABLES gate.
-//
-// `fetchLoreArticle` still uses `fetchDocument('lore', id)` for the
-// editor load path — `lore_articles` reads aren't proxy-blocked
-// because `dm_notes` is stripped at the per-route GET layer and the
-// editor specifically needs the raw row. Migrating it to a per-route
-// endpoint is a smaller follow-up that doesn't gate on the
-// read-protection work.
+// `fetchLoreSecrets` and `fetchLoreArticle` both migrated to the
+// per-route GET endpoints in `api/lore.ts`. The server does the
+// multi-table joins (article + lore_meta_* + lore_article_*) and
+// applies the staff-vs-non-staff `dm_notes` strip, so the client
+// just unwraps `body.article` or `body.secrets`. The visibility
+// filter for secrets runs server-side (non-staff only see secrets
+// revealed to their active campaign). No more raw SELECTs against
+// `lore_articles` / `lore_secrets` from this module — the proxy's
+// PROTECTED_READ_TABLES gate blocks the latter anyway.
 
 import { auth } from "./firebase";
-import { deleteDocument, queryD1 } from "./d1";
 
 async function authHeader(): Promise<Record<string, string>> {
   const token = await auth.currentUser?.getIdToken();
@@ -104,84 +99,44 @@ export async function deleteLoreArticle(articleId: string) {
 /* Reads                                                                       */
 /* -------------------------------------------------------------------------- */
 //
-// `fetchLoreArticle` still goes through the generic proxy
-// (`fetchDocument('lore', id)` + a handful of `lore_meta_*` /
-// `lore_article_*` joins). Those tables are NOT in the proxy's
-// PROTECTED_READ_TABLES gate — `lore_articles.dm_notes` is the only
-// sensitive column there, and it's stripped at the per-route GET
-// layer. The editor needs the raw shape (including dm_notes) so it
-// still calls the generic helpers; migrating to a dedicated
-// editor-side GET is a small follow-up. UI consumers
-// (LoreArticle.tsx, Wiki.tsx, Home.tsx, etc.) have already migrated
-// to the per-route GET that strips dm_notes.
+// Both reads now go through the per-route endpoints in `api/lore.ts`.
+// The server does the multi-table join (article + lore_meta_* +
+// lore_article_eras / _campaigns / _tags) and applies the
+// staff-vs-non-staff `dm_notes` strip. The client just unwraps the
+// JSON. This means:
 //
-// `fetchLoreSecrets` is now per-route (see below) because
-// `lore_secrets` IS in PROTECTED_READ_TABLES — the visibility filter
-// MUST run server-side for the H3 closure to hold.
+//   - Drafts return 404 for non-staff (the legacy client-side `if
+//     (article.status !== 'published')` filter ran AFTER the row was
+//     already on the wire — leaked draft titles via timing if nothing
+//     else).
+//   - `dm_notes` only ships when the caller is staff.
+//   - The proxy `lore_articles` SELECT path that `fetchDocument` used
+//     to take is unneeded; one fewer raw read of a sensitive-column
+//     table.
+//
+// `fetchLoreSecrets` goes through its own per-route endpoint (see
+// below) because `lore_secrets` is in PROTECTED_READ_TABLES — direct
+// SELECTs would 403.
 
 /**
  * Fetch a complete Lore Article with all metadata, tags, and junctions.
+ *
+ * Returns `null` for 404 (article doesn't exist OR caller is non-staff
+ * viewing a draft — the server intentionally returns 404 instead of
+ * 403 in both cases so a non-staff probe can't tell a draft id from a
+ * nonexistent one).
+ *
+ * Throws for any other non-2xx so callers can surface a real error
+ * instead of treating a 5xx as "missing article".
  */
 export async function fetchLoreArticle(id: string) {
-  const { fetchDocument } = await import("./d1");
-  const articleData = await fetchDocument<any>("lore", id);
-  if (!articleData) return null;
-
-  const normalized = {
-    ...articleData,
-    parentId: articleData.parent_id,
-    dmNotes: articleData.dm_notes,
-    imageUrl: articleData.image_url,
-    imageDisplay: typeof articleData.image_display === "string" ? JSON.parse(articleData.image_display) : articleData.image_display,
-    cardImageUrl: articleData.card_image_url,
-    cardDisplay: typeof articleData.card_display === "string" ? JSON.parse(articleData.card_display) : articleData.card_display,
-    previewImageUrl: articleData.preview_image_url,
-    previewDisplay: typeof articleData.preview_display === "string" ? JSON.parse(articleData.preview_display) : articleData.preview_display,
-    createdAt: articleData.created_at,
-    updatedAt: articleData.updated_at,
-    authorId: articleData.author_id,
-  };
-
-  let metadata: any = {};
-  if (["character", "deity"].includes(normalized.category)) {
-    const rows = await queryD1<any>(`SELECT * FROM lore_meta_characters WHERE article_id = ?`, [id]);
-    if (rows.length > 0) {
-      const m = rows[0];
-      metadata = { ...metadata, ...m, lifeStatus: m.life_status, birthDate: m.birth_date, deathDate: m.death_date };
-    }
-    if (normalized.category === "deity") {
-      const dRows = await queryD1<any>(`SELECT * FROM lore_meta_deities WHERE article_id = ?`, [id]);
-      if (dRows.length > 0) metadata = { ...metadata, ...dRows[0], holySymbol: dRows[0].holy_symbol };
-    }
-  } else if (["building", "settlement", "geography", "country"].includes(normalized.category)) {
-    const rows = await queryD1<any>(`SELECT * FROM lore_meta_locations WHERE article_id = ?`, [id]);
-    if (rows.length > 0) {
-      const m = rows[0];
-      metadata = { ...metadata, ...m, locationType: m.location_type, parentLocation: m.parent_location, owningOrganization: m.owning_organization, foundingDate: m.founding_date };
-    }
-  } else if (["organization", "religion"].includes(normalized.category)) {
-    const rows = await queryD1<any>(`SELECT * FROM lore_meta_organizations WHERE article_id = ?`, [id]);
-    if (rows.length > 0) {
-      const m = rows[0];
-      metadata = { ...metadata, ...m, foundingDate: m.founding_date };
-    }
-    if (normalized.category === "religion") {
-      const dRows = await queryD1<any>(`SELECT * FROM lore_meta_deities WHERE article_id = ?`, [id]);
-      if (dRows.length > 0) metadata = { ...metadata, ...dRows[0], holySymbol: dRows[0].holy_symbol };
-    }
-  }
-
-  const tagRows = await queryD1<any>(`SELECT tag_id FROM lore_article_tags WHERE article_id = ?`, [id]);
-  const eraRows = await queryD1<any>(`SELECT era_id FROM lore_article_eras WHERE article_id = ?`, [id]);
-  const campRows = await queryD1<any>(`SELECT campaign_id FROM lore_article_campaigns WHERE article_id = ?`, [id]);
-
-  return {
-    ...normalized,
-    metadata,
-    tags: tagRows.map((r) => r.tag_id),
-    visibilityEraIds: eraRows.map((r) => r.era_id),
-    visibilityCampaignIds: campRows.map((r) => r.campaign_id),
-  };
+  const res = await fetch(
+    `/api/lore/articles/${encodeURIComponent(id)}`,
+    { headers: await authHeader() },
+  );
+  if (res.status === 404) return null;
+  const body = await jsonOrThrow(res, "Failed to load article");
+  return body?.article ?? null;
 }
 
 /**
@@ -205,7 +160,3 @@ export async function fetchLoreSecrets(articleId: string) {
   return Array.isArray(body?.secrets) ? body.secrets : [];
 }
 
-// `deleteDocument` import kept above; not currently used here but
-// other consumers may import it transitively — keeping the side-effect-
-// free re-export trail simple.
-void deleteDocument;
