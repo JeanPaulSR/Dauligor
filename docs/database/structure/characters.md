@@ -98,3 +98,8 @@ Explicit overrides or manually added proficiencies.
 | **entity_id** | TEXT | ID of the proficiency (skill ID, attribute ID, etc.). |
 | **entity_type** | TEXT | Type (skill, save, armor, weapon, tool, language). |
 | **proficiency_level** | REAL | Level: 0.5 (Half), 1 (Full), 2 (Expertise). |
+
+---
+
+## Access
+All character reads and writes flow through [`api/characters/[id].ts`](../../../api/characters/[id].ts) (with `GET /api/me/characters` for the owner's own list and `GET /api/admin/characters` for the DM list view) — see [the endpoint table in `api-endpoints.md`](../../platform/api-endpoints.md). The generic `/api/d1/query` proxy refuses any `SELECT` against `characters` or `character_*` (`PROTECTED_READ_TABLES`) — the per-route handlers do the owner-or-DM ownership check before the query runs, and the `info_json` blob (which holds private backstory / DM notes per character) never reaches a caller without that check. See [../../platform/security-gates.md](../../platform/security-gates.md).

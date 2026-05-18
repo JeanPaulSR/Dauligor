@@ -16,6 +16,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 | Adding an R2-stored asset type | [platform/r2-storage.md](platform/r2-storage.md) |
 | Adding a Vercel function or Express route | [platform/runtime.md](platform/runtime.md) |
 | Permissions / RBAC change | [architecture/permissions-rbac.md](architecture/permissions-rbac.md) |
+| Adding a new sensitive table or per-route endpoint | [platform/security-gates.md](platform/security-gates.md) |
 | BBCode tag / TipTap extension | [ui/bbcode.md](ui/bbcode.md) |
 | Filter modal / chip combinators | [ui/filters.md](ui/filters.md) |
 | FoundryVTT pairing or export | [architecture/foundry-integration.md](architecture/foundry-integration.md) |
@@ -31,6 +32,9 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [d1-architecture.md](platform/d1-architecture.md) — D1 client API, cache layers, foundation heartbeat, JSON columns
 - [r2-storage.md](platform/r2-storage.md) — bucket layout, image types, WebP conversion, image-metadata table
 - [auth-firebase.md](platform/auth-firebase.md) — what stays from Firebase (Auth only), JWT flow, RBAC server-side helpers
+- [security-gates.md](platform/security-gates.md) — layered gate model, proxy regexes, per-table policy, how to extend
+- [api-endpoints.md](platform/api-endpoints.md) — full per-route endpoint surface (one row per method + path)
+- [api-endpoint-plan.md](platform/api-endpoint-plan.md) — migration history + remaining audit items
 - [env-vars.md](platform/env-vars.md) — every env var, where it's read, and example values
 
 ### [database/](database/) — D1 schema

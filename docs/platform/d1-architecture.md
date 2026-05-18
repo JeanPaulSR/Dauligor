@@ -231,11 +231,13 @@ await batchQueryD1(ops);
 
 ## Per-route endpoints — the preferred shape for new work
 
-The generic `/api/d1/query` proxy still handles most compendium reads, but every new endpoint should be modeled on the per-route pattern: one Vercel function per resource (e.g. `api/me.ts`, `api/lore.ts`, `api/campaigns.ts`, `api/characters/[id].ts`, `api/profiles/[username].ts`), each with its own role gate and its own SQL kept inside the handler. The reference example is [api/spell-favorites.ts](../../api/spell-favorites.ts) — explicit auth scope, user id derived from the verified token, table-specific SQL, ownership checks before writes.
+The generic `/api/d1/query` proxy still handles compendium reads (skills, tools, weapons, armor, spells, feats, items, classes, subclasses, tags, tag_groups, attributes, scaling_columns, etc.) but every new endpoint that touches sensitive data should be modeled on the per-route pattern: one Vercel function per resource (e.g. `api/me.ts`, `api/lore.ts`, `api/campaigns.ts`, `api/characters/[id].ts`, `api/profiles/[username].ts`), each with its own role gate and its own SQL kept inside the handler. The reference example is [api/spell-favorites.ts](../../api/spell-favorites.ts) — explicit auth scope, user id derived from the verified token, table-specific SQL, ownership checks before writes.
 
-Why this matters: under the legacy generic-proxy path, any signed-in user can paste an arbitrary `SELECT` into devtools and exfiltrate columns the UI never shows. Per-route endpoints column-scope the response so the wire never sees data the caller isn't allowed to read.
+The proxy gate is **layered** with these per-route endpoints. The generic proxy refuses any SELECT against `users` / `lore_secrets` / `characters` / `character_*` (`PROTECTED_READ_TABLES`) and any write to `users` / `eras` / `lore_*` (`PROTECTED_WRITE_TABLES`, admin-gated) or to `campaigns` / `campaign_members` / `system_metadata` (`CAMPAIGN_WRITE_PATTERN` / `SYSTEM_METADATA_WRITE_PATTERN`, 403'd at the proxy with a pointer at the per-route endpoint). The column-scoping and ownership-check promises in the per-route handlers therefore actually hold from a devtools perspective — a hostile signed-in user cannot route around them by sending raw SQL.
 
-See [api-endpoints.md](api-endpoints.md) for the full surface that exists today, and [../../docs/platform/api-endpoint-plan.md](api-endpoint-plan.md) for the migration plan and remaining items.
+For the full security model — the gate decision tree, normalization details (comment + identifier-quote stripping), per-table policy, and how to extend the gate when you add a new sensitive table — see [security-gates.md](security-gates.md).
+
+See [api-endpoints.md](api-endpoints.md) for the full surface that exists today, and [api-endpoint-plan.md](api-endpoint-plan.md) for the migration history + remaining open items.
 
 ### Per-user / per-character tables
 

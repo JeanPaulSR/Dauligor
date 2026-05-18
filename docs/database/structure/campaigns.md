@@ -55,3 +55,7 @@ The DM row from source 1 takes precedence — if the DM's UID also appears in th
 ### `recommended_lore_id`
 Stored as plain TEXT with no FK constraint because `lore_articles` is a Phase 3 table.
 Referential integrity is enforced at the application layer.
+
+## Access
+
+All reads and writes flow through [`api/campaigns.ts`](../../../api/campaigns.ts) — see [the endpoint table in `api-endpoints.md`](../../platform/api-endpoints.md) for method-by-method gates. The generic `/api/d1/query` proxy refuses direct writes to `campaigns` and `campaign_members` (`CAMPAIGN_WRITE_PATTERN`) with a 403 pointing at the per-route endpoint, so a hostile client can't route around the role checks. lore-writer is admitted by the wiki-staff gate elsewhere but is 403'd here — campaign management is `isCharacterDM` (admin + co-dm) only. DELETE additionally re-checks for admin. Schema-side, `campaign_members` has FK ON DELETE CASCADE on both `campaign_id` and `user_id`, so a campaign or user delete sweeps the junction rows automatically.

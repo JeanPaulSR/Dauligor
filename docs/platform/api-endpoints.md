@@ -58,8 +58,14 @@ The PUT branch handles **both create and update**:
 | GET | `/api/lore/articles` | `requireAuthenticatedUser` | `{ articles }`. Non-staff see `status='published'` only; `dm_notes` stripped from every row. `?fields=` (allow-listed), `?folder=`, `?category=`, `?orderBy=`. |
 | GET | `/api/lore/articles/[id]` | `requireAuthenticatedUser` | `{ article, parent, mentions }`. Full packet: base row + category-specific metadata + tags + visibility junctions + parent + mentions. `dm_notes` included for wiki-staff (`isWikiStaff(role)`), stripped otherwise. 404 for drafts when caller isn't staff. |
 | GET | `/api/lore/articles/[id]/secrets` | `requireAuthenticatedUser` | `{ secrets }`. Server-filtered: staff see all; non-staff see only secrets whose `revealedCampaignIds` includes the viewer's `active_campaign_id` (looked up from `users` on the server — not trusted from the request). |
+| PUT  | `/api/lore/articles/[id]` | `isWikiStaff` | `{ ok, id }`. Idempotent create-or-update. Server runs the multi-table batch (`buildLoreArticleSaveQueries`) so the client only ships the payload; `authorId` is always the verified-token uid, never a body field. |
+| DELETE | `/api/lore/articles/[id]` | `isWikiStaff` | `{ ok, id }`. FK cascade clears `lore_meta_*`, `lore_article_*`, `lore_secrets`, `lore_secret_*`, `lore_links` in one DELETE. |
+| PUT  | `/api/lore/articles/[id]/secrets/[secretId]` | `isWikiStaff` | `{ ok, articleId, secretId }`. Idempotent. |
+| DELETE | `/api/lore/articles/[id]/secrets/[secretId]` | `isWikiStaff` | `{ ok, id }`. FK cascade clears `lore_secret_*`. |
+| DELETE | `/api/lore/secrets/[secretId]` | `isWikiStaff` | Same as above but doesn't require the client to know the parent article id. Exists so the client doesn't need to round-trip a `SELECT article_id FROM lore_secrets` lookup first (that direct SELECT is now blocked by `PROTECTED_READ_TABLES`). |
+| PUT  | `/api/lore/system-metadata/wiki-settings` | `requireAdminAccess` | `{ ok, key }`. The legit write path for the `wiki_settings` singleton-config blob. Server caps the JSON at 64KB. The generic proxy refuses any non-bump write to `system_metadata`. |
 
-Lore writes (`upsertLoreArticle`, `upsertLoreSecret`, delete...) still go through the legacy `/api/d1/query` path. They're already staff-gated by the proxy's write check; the audit's priority #6 will fold them into this dispatcher.
+The proxy gate at [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) blocks direct writes to every `lore_*` table (`PROTECTED_WRITE_TABLES`) and direct SELECTs against `lore_secrets` (`PROTECTED_READ_TABLES`). All client-side lore writes flow through this dispatcher; raw SQL paths return 403 with a pointer at the per-route endpoint.
 
 ## /api/campaigns
 
@@ -70,8 +76,13 @@ Lore writes (`upsertLoreArticle`, `upsertLoreSecret`, delete...) still go throug
 | GET | `/api/campaigns` | `requireAuthenticatedUser`; role-filtered | `{ campaigns }`. `isCharacterDM(role)` sees every campaign with `memberCount` pre-computed; everyone else sees only campaigns they're a member of (server-side JOIN on `campaign_members`). |
 | GET | `/api/campaigns/[id]` | `requireAuthenticatedUser` + member-or-staff check | `{ campaign }`. Non-members get 404 (collapsed with "doesn't exist" so probes can't enumerate). |
 | GET | `/api/campaigns/[id]/members` | Same as `/api/campaigns/[id]` | `{ members }`. Each row enriched with `username`, `display_name`, `avatar_url` only — no `recovery_email`, no PII. |
+| POST | `/api/campaigns` | `isCharacterDM` (admin + co-dm) | `{ campaign }`. Server defaults `dm_id` to the verified-token uid if omitted; allow-listed fields only. |
+| PATCH | `/api/campaigns/[id]` | `isCharacterDM` | `{ ok, id }`. Real UPDATE (not upsert), so partial payloads don't need to resupply NOT NULL columns like the legacy `upsertDocument` path did. |
+| DELETE | `/api/campaigns/[id]` | `requireAdminAccess` (re-checked inside the handler) | `{ ok, id }`. FK cascade clears `campaign_members`; other tables that reference campaigns (`characters.campaign_id`, `lore_article_campaigns`, `lore_secret_campaigns`) are left as orphaned rows / nulls. |
+| PUT | `/api/campaigns/[id]/members/[uid]` | `isCharacterDM` | `{ ok, campaign_id, user_id, role }`. Idempotent (ON CONFLICT DO UPDATE on role). Body `{ role?: 'dm'\|'co-dm'\|'player' }`, defaults to `'player'`. |
+| DELETE | `/api/campaigns/[id]/members/[uid]` | `isCharacterDM` | `{ ok, campaign_id, user_id }`. |
 
-Campaign writes (create / update / delete + member add/remove) still go through `/api/d1/query`. Audit priority #8.
+The proxy refuses direct writes to `campaigns` and `campaign_members` (`CAMPAIGN_WRITE_PATTERN`). lore-writer is admitted by the wiki-staff gate elsewhere but is 403'd here — campaign management is admin + co-dm only per [../architecture/permissions-rbac.md](../architecture/permissions-rbac.md).
 
 ## /api/admin
 
@@ -83,17 +94,26 @@ Campaign writes (create / update / delete + member add/remove) still go through 
 
 `/api/admin/users` (list + admin-only role changes + delete) doesn't exist yet — that's the next audit batch (M2 closure). It'll fold into the same `api/admin/users/[id]/[action].ts` file or a sibling at `api/admin/users.ts` depending on Vercel routing constraints.
 
-## /api/d1/query (legacy generic proxy)
+## /api/d1/query (generic proxy + table-aware gate)
 
-[api/d1/query.ts](../../api/d1/query.ts) → [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts). The catch-all that accepts arbitrary SQL and forwards to the Cloudflare Worker. Still backs most compendium reads / writes that haven't migrated yet.
+[api/d1/query.ts](../../api/d1/query.ts) → [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts). The catch-all that accepts arbitrary SQL and forwards to the Cloudflare Worker. Still backs every compendium read (skills, tools, weapons, armor, spells, feats, items, classes, subclasses, tags, tag_groups, attributes, scaling_columns, etc.) — these are public-among-signed-in data with no per-row privacy contract.
 
-Gate is split:
-- **Reads** (`SELECT`) → `requireAuthenticatedUser`. Any signed-in user.
-- **Writes / DDL** (INSERT, UPDATE, DELETE, REPLACE, CREATE, DROP, ALTER, TRUNCATE, ATTACH, DETACH, REINDEX, VACUUM, PRAGMA) → `requireStaffAccess`. Admin / co-dm / lore-writer.
+The gate runs `normalizeSqlForGate(sql)` first (strips comments + unwraps SQLite identifier quoting so `"users"` / `` `users` `` / `[users]` and `INSERT/*x*/INTO/*x*/users` evasions don't slip past), then applies the first matching rule:
+
+| Condition | Outcome |
+|---|---|
+| `system_metadata` write AND not the foundation-bump fingerprint | **403** → `PUT /api/lore/system-metadata/wiki-settings` |
+| `campaigns` / `campaign_members` write | **403** → `POST/PATCH/DELETE /api/campaigns[/...]` |
+| Mutation against `users` / `eras` / `lore_*` | `requireAdminAccess` |
+| Any other mutation (INSERT / UPDATE / DELETE / REPLACE / CREATE / DROP / ALTER / TRUNCATE / ATTACH / DETACH / REINDEX / VACUUM / PRAGMA) | `requireStaffAccess` |
+| SELECT against `users` / `lore_secrets` / `characters` / `character_*` | **403** → per-route endpoint (see [security-gates.md](security-gates.md) for the full pointer list) |
+| Any other SELECT | `requireAuthenticatedUser` |
 
 The mutation regex is intentionally broad — a `SELECT` containing the literal word "UPDATE" in a string literal falls to the more restrictive staff path. Safe-by-default.
 
-The long-term goal is to retire this path entirely; everything still using it is a follow-up in the audit plan.
+This path is **not** going to be fully decommissioned. See [api-endpoint-plan.md §15](api-endpoint-plan.md) for the rationale — migrating ~30 public compendium reads to per-route endpoints would burn the function budget for no real privacy gain, and the table-aware gate already closes every sensitive-data leak the audit flagged.
+
+For the full security model — threat model, defense layers, normalization details, per-table policy, how to extend the gate — see [security-gates.md](security-gates.md).
 
 ## /api/r2/[action]
 
@@ -106,8 +126,12 @@ The long-term goal is to retire this path entirely; everything still using it is
 | POST | `/api/r2/rename` | `requireImageManagerAccess` |
 | POST | `/api/r2/move-folder` | `requireImageManagerAccess` |
 | POST | `/api/r2/upload` | `requireImageManagerAccess` |
+| POST | `/api/r2/scan-references` | `requireImageManagerAccess` | Body `{ url }`. Returns `{ references: ImageReference[] }`. Server walks `SCAN_TARGETS` (the (table, column) allow-list) via `executeD1QueryInternal` so it can reach `users` / `characters` that `PROTECTED_READ_TABLES` blocks from raw SELECT. |
+| POST | `/api/r2/rewrite-references` | `requireImageManagerAccess` | Body `{ oldUrl, newUrl }`. Returns `{ count }`. The (table, column) pairs are pinned server-side in `SCAN_TARGETS` — a compromised client can't ship UPDATE against arbitrary columns. Closes audit L3. |
 
-Consolidated from five separate files in commit `b267db9`. Same client URLs, no behavior change.
+Consolidated from five separate files in commit `b267db9`. The `scan-references` / `rewrite-references` actions arrived in commit `0786db0` to fix L2 / L3 — the client-side scan would have silently 403'd against the new `PROTECTED_READ_TABLES` gate, hiding real references on `users` and `characters` from image admin.
+
+The `SCAN_TARGETS` list lives ONLY in [api/_lib/r2-proxy.ts](../../api/_lib/r2-proxy.ts) now. Adding a new image-bearing column means updating that one list; do not reintroduce a parallel client-side `SCAN_TARGETS`.
 
 ## /api/spell-favorites
 
@@ -132,8 +156,9 @@ See [../features/foundry-export.md](../features/foundry-export.md) for the full 
 
 ## Related docs
 
+- [security-gates.md](security-gates.md) — full security model, gate regexes, per-table policy, how to extend
 - [api-endpoint-plan.md](api-endpoint-plan.md) — the migration plan + remaining items
 - [auth-firebase.md](auth-firebase.md) — JWT verification, server-side helpers
 - [../architecture/permissions-rbac.md](../architecture/permissions-rbac.md) — role definitions and per-table policy
-- [d1-architecture.md](d1-architecture.md) — D1 client API and the legacy proxy
+- [d1-architecture.md](d1-architecture.md) — D1 client API and proxy mechanics
 - [runtime.md](runtime.md) — request flow examples across the runtimes

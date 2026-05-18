@@ -97,12 +97,17 @@ Dialog for browsing and selecting from R2. Props:
 
 ## Reference scanning
 
-`scanForReferences(url)` runs parallel D1 queries across:
-`classes`, `subclasses`, `characters`, `sources`, `users`, `lore_articles` (plus their card_image_url / preview_image_url / image_url variants).
+`scanForReferences(url)` is now a thin fetch wrapper around `POST /api/r2/scan-references` (`requireImageManagerAccess`). The server fans out across the `SCAN_TARGETS` list:
 
-If any row references the URL, the deletion or rename UI shows the list before confirmation. **"Move & Update Links"** in the detail panel rewrites every found reference automatically, then renames the R2 object.
+`classes`, `subclasses`, `features`, `characters`, `sources`, `users`, `lore_articles` (plus their `image_url` / `card_image_url` / `preview_image_url` / `icon_url` / `avatar_url` variants).
 
-The scan and metadata CRUD live in [src/lib/imageMetadata.ts](../../src/lib/imageMetadata.ts) and write to the `image_metadata` D1 table.
+If any row references the URL, the deletion or rename UI shows the list before confirmation. **"Move & Update Links"** in the detail panel calls `updateImageReferences(oldUrl, newUrl)` which POSTs to `/api/r2/rewrite-references`; the server runs an `UPDATE` per (table, column) pair and returns the affected row count. The R2 object rename happens client-side after the rewrite returns.
+
+Both endpoints run server-side via `executeD1QueryInternal` — not through the generic `/api/d1/query` proxy. This is deliberate: the proxy's `PROTECTED_READ_TABLES` gate refuses raw SELECTs against `users` and `characters`, which would silently 403 the scan and hide real references. The server-side scan bypasses that gate intentionally (it runs with the shared worker secret) so image admin actually sees every reference.
+
+The `SCAN_TARGETS` list lives in [api/_lib/r2-proxy.ts](../../api/_lib/r2-proxy.ts) only. Adding a new image-bearing column means updating that one list; do not reintroduce a parallel client-side `SCAN_TARGETS` (the proxy gate would silently hide some of the scan from the client).
+
+The thin client wrappers + metadata CRUD live in [src/lib/imageMetadata.ts](../../src/lib/imageMetadata.ts) and write to the `image_metadata` D1 table.
 
 ## Image life cycle (concise)
 
@@ -119,7 +124,7 @@ The scan and metadata CRUD live in [src/lib/imageMetadata.ts](../../src/lib/imag
 1. Pick the convention (`images/items/<itemId>/`).
 2. In the Item editor, use `ImageUpload` with `storagePath="images/items/<id>/"` and `imageType="icon"` (or whatever fits).
 3. Add a new row to the System Images tab in `ImageManager.tsx` referencing the `items` table.
-4. Add `items` to `scanForReferences` if you want delete-warnings to cover it.
+4. Add `items` to the `SCAN_TARGETS` list in [api/_lib/r2-proxy.ts](../../api/_lib/r2-proxy.ts) (server-side, not client-side) if you want delete-warnings and "Move & Update Links" to cover it.
 
 ### Move an image without breaking references
 - Open Image Manager → select image → Rename / Move → "Move & Update Links". This is the only safe path.

@@ -143,11 +143,13 @@ Preview mode does not bypass server-side checks — it only simulates the UI as 
 
 ## Privacy
 
-These promises are now enforced server-side via the per-route endpoint family — none of them rely on the client to filter:
+These promises are enforced server-side and the proxy gate makes them unforgeable from devtools — direct SELECTs against `users` return 403 (`PROTECTED_READ_TABLES`), so a hostile signed-in caller can't route around the per-route endpoints to grab columns they strip:
 
-- `users.recovery_email` is stripped from every response that isn't the user's own (`GET /api/me`) or admin-driven (`GET /api/profiles/[username]` when viewer is admin/co-dm). Reads via the generic `/api/d1/query` proxy still return the column for staff, so the staff `AdminUsers` page sees it. Tightening that — column-scoping the staff read — is the audit's M2 item.
+- `users.recovery_email` is stripped from every response that isn't the user's own (`GET /api/me`) or admin-driven (`GET /api/admin/users` returns it only when the caller's role is `admin`; staff get the basic column set). `GET /api/profiles/[username]` always strips it. The generic `/api/d1/query` proxy refuses `SELECT … FROM users` outright with a 403 pointing at these per-route endpoints, so even the staff `AdminUsers` page MUST go through the column-scoped path.
 - `users.hide_username` controls whether the handle is shown in lore attributions, comments, etc.
 - `users.is_private` makes `GET /api/profiles/[username]` return only the "sealed" placeholder shape (username + display_name + `is_private: true`) to non-self non-staff viewers — no bio, no campaigns, no role.
+
+The proxy-gate decision tree (which tables are read-blocked, which are write-blocked, which 403 with a per-route pointer) lives in [security-gates.md](security-gates.md).
 
 ## Common gotchas
 

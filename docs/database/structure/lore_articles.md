@@ -29,3 +29,6 @@ The foundation of the Dauligor Wiki. Every article exists here first; specialize
 ## Implementation Notes
 - **Normalization**: Fields like `dm_notes` are moved from sub-collections directly into the base table to reduce query complexity.
 - **Hierarchical Wiki**: `parent_id` allows for a recursive folder structure in the UI.
+
+## Access
+All article reads and writes flow through [`api/lore.ts`](../../../api/lore.ts) — see [the endpoint table in `api-endpoints.md`](../../platform/api-endpoints.md) for method-by-method gates. The generic `/api/d1/query` proxy refuses any write to `lore_*` tables (`PROTECTED_WRITE_TABLES`, admin-gated for legacy callers) and any direct SELECT against `lore_secrets` (`PROTECTED_READ_TABLES`). `dm_notes` is included only when the per-route GET caller is wiki-staff (`isWikiStaff(role)` = admin + co-dm + lore-writer); the column is stripped for everyone else. Drafts (rows where `status != 'published'`) 404 for non-staff so probes can't enumerate them. See [../../platform/security-gates.md](../../platform/security-gates.md).
