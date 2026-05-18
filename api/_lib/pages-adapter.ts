@@ -112,6 +112,29 @@ export async function runVercelHandler(
       responseBody = JSON.stringify(payload);
       return res;
     },
+    send(payload?: string | object | Uint8Array | null) {
+      // Express-style res.send: string → text body, object → JSON,
+      // Uint8Array → bytes. Used by d1-proxy / r2-proxy to pass
+      // through upstream worker responses; in those call sites
+      // setHeader("Content-Type", …) runs first, so we only default
+      // the content-type if it isn't already pinned by the caller.
+      if (payload == null) {
+        return res;
+      }
+      if (typeof payload === "string") {
+        responseBody = payload;
+      } else if (payload instanceof Uint8Array) {
+        responseBody = payload as BodyInit;
+      } else if (typeof payload === "object") {
+        if (!resHeaders.has("content-type")) {
+          resHeaders.set("content-type", "application/json");
+        }
+        responseBody = JSON.stringify(payload);
+      } else {
+        responseBody = String(payload);
+      }
+      return res;
+    },
     end(payload?: string | Uint8Array) {
       if (payload != null) {
         responseBody = payload as BodyInit;
