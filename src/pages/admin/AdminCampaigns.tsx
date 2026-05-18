@@ -125,14 +125,30 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
     try {
       const id = crypto.randomUUID();
       const slug = newCampaign.name.toLowerCase().replace(/\s+/g, '-');
-      await upsertDocument('campaigns', id, {
-        name: newCampaign.name,
-        description: newCampaign.description,
-        era_id: newCampaign.eraId || null,
-        slug,
-        dm_id: userProfile.id,
-        created_at: new Date().toISOString(),
+      // Per-route POST /api/campaigns — generic proxy refuses
+      // direct campaigns writes now (audit #8). Server defaults
+      // dm_id to the verified token's uid if omitted; we pass the
+      // current user's uid explicitly to preserve legacy behavior.
+      const createToken = await auth.currentUser?.getIdToken();
+      const createRes = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(createToken ? { Authorization: `Bearer ${createToken}` } : {}),
+        },
+        body: JSON.stringify({
+          id,
+          name: newCampaign.name,
+          description: newCampaign.description,
+          era_id: newCampaign.eraId || null,
+          slug,
+          dm_id: userProfile.id,
+        }),
       });
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error((err as any).error || `Create failed (HTTP ${createRes.status})`);
+      }
       setIsAddOpen(false);
       setNewCampaign({ name: '', description: '', eraId: '' });
       toast.success('Campaign created');
@@ -206,23 +222,24 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
   const handleSetCampaignEra = async (campaignId: string, eraId: string) => {
     try {
-      // Partial upsert: only the fields actually changing. The ON CONFLICT
-      // DO UPDATE SET clause leaves other columns alone, BUT SQLite still
-      // validates NOT NULL on the INSERT-side row before routing — so
-      // we must include `name` + `slug` (both NOT NULL on `campaigns`)
-      // even though they aren't being changed. Pull from local state so
-      // we don't have to re-fetch.
-      const existing = campaigns.find(c => c.id === campaignId);
-      if (!existing) {
-        toast.error('Campaign not found in local state');
-        return;
-      }
-      await upsertDocument('campaigns', campaignId, {
-        name: existing.name,
-        slug: existing.slug,
-        era_id: eraId || null,
-        updated_at: new Date().toISOString(),
+      // PATCH /api/campaigns/[id] — server does a real UPDATE so we
+      // don't need to resupply NOT NULL columns (the legacy
+      // upsertDocument path required `name` + `slug` even on a partial
+      // patch because its ON CONFLICT DO UPDATE first validated the
+      // INSERT-side row).
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ era_id: eraId || null }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error || `Update failed (HTTP ${res.status})`);
+      }
       setCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, era_id: eraId, eraId } : c));
       toast.success('Campaign era updated');
     } catch (err) {
@@ -234,7 +251,19 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
   const handleDeleteCampaign = async (id: string) => {
     if (confirm('Are you sure? This will not remove users from the campaign, but they will no longer be associated with it.')) {
       try {
-        await deleteDocument('campaigns', id);
+        // DELETE /api/campaigns/[id] — admin-only per audit spec
+        // (the per-route handler does the role recheck server-side).
+        // Co-dm can edit but not delete; the button visibility on
+        // this page should already gate-check too.
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err as any).error || `Delete failed (HTTP ${res.status})`);
+        }
         toast.success('Campaign deleted');
         setCampaigns(prev => prev.filter(c => c.id !== id));
       } catch (err) {
@@ -246,18 +275,21 @@ export default function AdminCampaigns({ userProfile }: { userProfile: any }) {
 
   const handleSetRecommendedLore = async (campaignId: string, loreId: string) => {
     try {
-      // Same NOT NULL gotcha as handleSetCampaignEra — see comment there.
-      const existing = campaigns.find(c => c.id === campaignId);
-      if (!existing) {
-        toast.error('Campaign not found in local state');
-        return;
-      }
-      await upsertDocument('campaigns', campaignId, {
-        name: existing.name,
-        slug: existing.slug,
-        recommended_lore_id: loreId || null,
-        updated_at: new Date().toISOString(),
+      // PATCH /api/campaigns/[id] — partial update via the per-route
+      // endpoint (audit #8). Same pattern as handleSetCampaignEra.
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/campaigns/${encodeURIComponent(campaignId)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ recommended_lore_id: loreId || null }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error || `Update failed (HTTP ${res.status})`);
+      }
       setCampaigns(prev => prev.map(c => c.id === campaignId
         ? { ...c, recommended_lore_id: loreId, recommendedLoreId: loreId }
         : c

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { auth, OperationType, reportClientError } from '@/lib/firebase';
-import { fetchDocument, fetchCollection, upsertDocument, deleteDocuments } from '@/lib/d1';
+import { fetchDocument, fetchCollection } from '@/lib/d1';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -144,51 +144,82 @@ export default function CampaignEditor({ userProfile }: { userProfile: any }) {
     if (!id || !isStaff) return;
     setSaving(true);
     try {
-      // 1. Save the campaign
-      const campaignData = {
-        name: formData.name,
-        slug: formData.slug,
-        description: formData.description,
-        era_id: formData.eraId,
-        recommended_lore_id: formData.recommendedLoreId,
-        image_url: formData.imageUrl,
-        image_display: formData.imageDisplay,
-        card_image_url: formData.cardImageUrl,
-        card_display: formData.cardDisplay,
-        preview_image_url: formData.previewImageUrl,
-        preview_display: formData.previewDisplay,
-        background_image_url: formData.backgroundImageUrl,
-        updated_at: new Date().toISOString()
-      };
-
-      await upsertDocument('campaigns', id, campaignData);
-
-      // 2. Update junction table — fetch current members via the
-      // per-route endpoint so the read goes through the same gate as
-      // the editor's initial load.
+      // 1. Save the campaign via per-route PATCH /api/campaigns/[id].
+      // Generic proxy refuses direct `campaigns` writes now (audit #8);
+      // the per-route handler gates on isCharacterDM (admin + co-dm)
+      // and does a real UPDATE so partial payloads work.
       const saveIdToken = await auth.currentUser?.getIdToken();
-      const currentRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}/members`, {
-        headers: saveIdToken ? { Authorization: `Bearer ${saveIdToken}` } : {},
+      const campaignRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(saveIdToken ? { Authorization: `Bearer ${saveIdToken}` } : {}),
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          slug: formData.slug,
+          description: formData.description,
+          era_id: formData.eraId,
+          recommended_lore_id: formData.recommendedLoreId,
+          image_url: formData.imageUrl,
+          image_display: formData.imageDisplay,
+          card_image_url: formData.cardImageUrl,
+          card_display: formData.cardDisplay,
+          preview_image_url: formData.previewImageUrl,
+          preview_display: formData.previewDisplay,
+          background_image_url: formData.backgroundImageUrl,
+        }),
       });
-      const currentBody = currentRes.ok ? await currentRes.json() : { members: [] };
-      const currentMembers: any[] = Array.isArray(currentBody?.members) ? currentBody.members : [];
-      const currentUids = currentMembers.map((m) => m.user_id);
-
-      // Users to add
-      const toAdd = formData.playerIds.filter(uid => !currentUids.includes(uid));
-      for (const uid of toAdd) {
-        await upsertDocument('campaignMembers', `${id}_${uid}`, {
-          campaign_id: id,
-          user_id: uid,
-          role: 'player',
-          joined_at: new Date().toISOString()
-        });
+      if (!campaignRes.ok) {
+        const err = await campaignRes.json().catch(() => ({}));
+        throw new Error((err as any).error || `Campaign save failed (HTTP ${campaignRes.status})`);
       }
 
-      // Users to remove
+      // 2. Reconcile members. Fetch current membership via the
+      // per-route GET (same gate as the editor's initial load), then
+      // diff against the form's desired set and PUT / DELETE the
+      // delta via the dedicated member endpoints. Replaces the
+      // legacy upsertDocument('campaignMembers', ...) +
+      // deleteDocuments calls — both blocked by the proxy now.
+      const membersRes = await fetch(`/api/campaigns/${encodeURIComponent(id)}/members`, {
+        headers: saveIdToken ? { Authorization: `Bearer ${saveIdToken}` } : {},
+      });
+      const membersBody = membersRes.ok ? await membersRes.json() : { members: [] };
+      const currentMembers: any[] = Array.isArray(membersBody?.members) ? membersBody.members : [];
+      const currentUids = currentMembers.map((m) => m.user_id);
+
+      const toAdd = formData.playerIds.filter(uid => !currentUids.includes(uid));
+      for (const uid of toAdd) {
+        const addRes = await fetch(
+          `/api/campaigns/${encodeURIComponent(id)}/members/${encodeURIComponent(uid)}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(saveIdToken ? { Authorization: `Bearer ${saveIdToken}` } : {}),
+            },
+            body: JSON.stringify({ role: 'player' }),
+          },
+        );
+        if (!addRes.ok) {
+          const err = await addRes.json().catch(() => ({}));
+          throw new Error((err as any).error || `Failed to add member ${uid} (HTTP ${addRes.status})`);
+        }
+      }
+
       const toRemove = currentUids.filter(uid => !formData.playerIds.includes(uid));
       for (const uid of toRemove) {
-        await deleteDocuments('campaignMembers', 'campaign_id = ? AND user_id = ?', [id, uid]);
+        const rmRes = await fetch(
+          `/api/campaigns/${encodeURIComponent(id)}/members/${encodeURIComponent(uid)}`,
+          {
+            method: 'DELETE',
+            headers: saveIdToken ? { Authorization: `Bearer ${saveIdToken}` } : {},
+          },
+        );
+        if (!rmRes.ok) {
+          const err = await rmRes.json().catch(() => ({}));
+          throw new Error((err as any).error || `Failed to remove member ${uid} (HTTP ${rmRes.status})`);
+        }
       }
 
       toast.success('Campaign saved successfully');

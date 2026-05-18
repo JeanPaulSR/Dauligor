@@ -220,11 +220,21 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     const FOUNDATION_BUMP_PATTERN = /^\s*UPDATE\s+system_metadata\s+SET\s+value\s*=\s*CURRENT_TIMESTAMP\s+WHERE\s+key\s*=\s*'last_foundation_update'\s*$/i;
     const SYSTEM_METADATA_WRITE_PATTERN = /\b(?:INTO|FROM|UPDATE|TABLE)\s+system_metadata\b/i;
 
+    // `campaigns` and `campaign_members` writes have moved to per-route
+    // endpoints (api/campaigns.ts: POST / PATCH /[id] / DELETE /[id] /
+    // PUT|DELETE /[id]/members/[uid]) so the (role, ownership)
+    // checks actually run. The generic proxy used to admit any staff
+    // — including lore-writer — to write any campaign, which is
+    // wider than the permissions-rbac doc says (campaign management
+    // is admin / co-dm only). Closes audit priority #8.
+    const CAMPAIGN_WRITE_PATTERN = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:campaigns|campaign_members)\b/i;
+
     const isMutation = MUTATION_KEYWORDS.test(normalizedSql);
     const targetsProtectedTable = isMutation && PROTECTED_WRITE_TABLES.test(normalizedSql);
     const targetsProtectedReadTable = !isMutation && PROTECTED_READ_TABLES.test(normalizedSql);
     const isSystemMetadataWrite = isMutation && SYSTEM_METADATA_WRITE_PATTERN.test(normalizedSql);
     const isFoundationBump = isSystemMetadataWrite && FOUNDATION_BUMP_PATTERN.test(typeof sql === "string" ? sql : "");
+    const isCampaignWrite = isMutation && CAMPAIGN_WRITE_PATTERN.test(normalizedSql);
 
     if (isSystemMetadataWrite && !isFoundationBump) {
       // Block any non-bump write to system_metadata at the generic
@@ -236,6 +246,13 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
       throw new HttpError(
         403,
         "Direct writes to system_metadata are not permitted through /api/d1/query. Use the per-route endpoint (currently PUT /api/lore/system-metadata/wiki-settings for wiki settings) instead."
+      );
+    }
+
+    if (isCampaignWrite) {
+      throw new HttpError(
+        403,
+        "Direct writes to campaigns / campaign_members are not permitted through /api/d1/query. Use the per-route endpoint (POST /api/campaigns, PATCH /api/campaigns/[id], DELETE /api/campaigns/[id], PUT|DELETE /api/campaigns/[id]/members/[uid]) instead."
       );
     }
 
