@@ -64,6 +64,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 - [image-manager.md](features/image-manager.md) — image library UI, upload/rename/delete, reference scanning
 - [foundry-export.md](features/foundry-export.md) — semantic export pipeline, `dauligor.actor-bundle.v1`
 - [spellbook-manager.md](features/spellbook-manager.md) — *project:* per-class spell lists, spell rules, prereqs, Layer-2 GrantSpells/ExtendSpellList (all modes/resolvers), Layer-3 Spell Manager (filters/detail/caps/prereq gating/favourites/watchlist), Layer-4 Loadouts. **Foundry export round-trip handed off — see [handoff doc](handoff-foundry-spell-manager.md)**.
+- [content-proposals.md](features/content-proposals.md) — *project:* additive `content-creator` permission + scope, `pending_revisions` audit queue, Submission Blocks (draft bundles), approve / reject / revert with drift refuse, per-editor "Propose" routing via `useEntityWriter`. Phase 2 fully shipped; **Phase 4 editor wiring for spells / classes / modular options is handed off — see [handoff doc](handoff-content-proposals-phase4-wiring.md)**.
 
 ### [ui/](ui/) — visual layer
 *Style guide, theming, rich text. No domain logic.*
