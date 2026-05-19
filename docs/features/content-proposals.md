@@ -33,11 +33,16 @@
 >   `spell`, `class`, `unique_option_group`, `unique_option_item`,
 >   plus per-entity configs (writable-column + JSON-column maps)
 >   in `api/_lib/proposals.ts` **— shipped May 2026.** The server
->   side is ready to accept submissions against these four types;
->   the editor wiring (SpellsEditor, ClassEditor,
->   UniqueOptionGroupEditor) is **not yet done** — see the handoff
->   sheet at [docs/../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md)
->   for the resume plan.
+>   side is ready to accept submissions against these four types.
+> - **Phase 4 editor-wiring approach redesigned (May 2026).** The
+>   original plan (mode-aware dispatch baked into each existing
+>   editor) is superseded by a **parallel-route design**:
+>   `/proposals/edit/*` routes wrap the existing editor components
+>   with a `ProposalEditorWrapper` that adds Submit Changes + Drop
+>   Edits. `/compendium/*/manage` stays admin-only with its
+>   existing Save / auto-update UX. Content-creators have zero
+>   access to the admin routes. See the resume plan at
+>   [docs/../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md).
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
 >   UI) follows after the Phase 4 editor wiring.
 
@@ -151,6 +156,12 @@ Indexes:
 `bundle_id` is nullable so single-entity proposals stay simple. When set,
 it groups revisions the creator authored together; the admin reviews them
 as a unit and can approve/reject the bundle atomically.
+
+**Phase 4.1 (planned)** adds a sibling `proposal_bundles` table keyed by
+the same id, storing bundle metadata (`name`, `description`, `status`,
+creator + timestamp). The relationship is a soft FK — no DB-level
+constraint, validated in code — so existing bundles without a metadata
+row keep working.
 
 ## Bundle semantics
 
@@ -311,14 +322,22 @@ changes that landed between the approval and the revert.
 
 ### Creator-side
 
-- **Existing editors stay structurally unchanged.** The wired editors
-  (TagsExplorer, SpellRulesEditor, SpellListManager) keep their Save /
-  Add / Delete affordances; mutations route through
+- **Existing editors stay structurally unchanged (Phase 2c — shipped).**
+  The wired editors (TagsExplorer, SpellRulesEditor, SpellListManager)
+  keep their Save / Add / Delete affordances; mutations route through
   [src/lib/proposalAware.ts](../../src/lib/proposalAware.ts) which
   inspects the user's role + active Block and either direct-writes
   (admin, no block), submits a pending proposal (content-creator,
   no block), or stages a draft (any non-readonly user with a Block
   open).
+- **Phase 4 redesign (in progress).** Content-creator UX moves to
+  parallel `/proposals/edit/*` routes that wrap the same editor
+  components with a `ProposalEditorWrapper` (Submit Changes
+  replaces Save / auto-update; Drop Edits at entity / section /
+  field; pick-or-create-block prompt). Content-creators lose
+  access to `/compendium/*/manage` (standard blocked-page
+  treatment). See build-order items 22–27 + the
+  [handoff sheet](../handoff-content-proposals-phase4-wiring.md).
 - **`/my-proposals` page** — four top-level tabs:
   - **Submissions** — the user's own proposal queue with status sub-
     filters (All / Pending / Approved / Rejected / Withdrawn).
@@ -523,13 +542,54 @@ No updates required in `module/dauligor-pairing/docs/`.
     column allowlist + JSON-column markers for all four. Server
     will accept and apply submissions against any of these types
     today.
-22. **Editor wiring (NOT YET DONE — Phase 4a/4b/4c).**
-    Resume plan + the per-editor checklist live at
-    [../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md).
-    Until those land, content-creators can't produce
-    spell/class/option proposals from the UI; the server
-    nonetheless accepts hand-crafted POSTs at `/api/proposals` with
-    the right `entity_type` / payload shape.
+22. **Block metadata + `proposal_bundles` table (Phase 4.1, NOT
+    YET DONE).** New table giving bundles a `name` +
+    `description`; new endpoints under `/api/proposals/bundles`
+    (POST create, GET list-own-open, PATCH rename); replace the
+    client-only UUID in
+    [src/lib/proposalBlock.tsx](../../src/lib/proposalBlock.tsx)
+    with a server-issued id. Required for the "pick or create"
+    prompt.
+23. **`<ProposalEditorWrapper>` + queued-writer plumbing
+    (Phase 4.2, NOT YET DONE).** New component at
+    `src/components/proposals/ProposalEditorWrapper.tsx` that
+    wraps the existing editor components and exposes Submit
+    Changes via a `ProposalContext`. New
+    `useProposalAccumulator` hook buffers writes locally
+    instead of firing per-change. New `PickOrCreateBlockDialog`
+    surfaces when Submit Changes is clicked with no active
+    block. Navigation-away warning when the queue is non-empty.
+24. **Drop Edits affordances (Phase 4.3, NOT YET DONE).** Entity
+    / section / field-level revert from inside the proposal
+    editor. Reverts both local queue state and any already-
+    staged draft fields server-side.
+25. **Route guards + sidebar (Phase 4.4, NOT YET DONE).** New
+    `/proposals/edit/*` routes in
+    [src/App.tsx](../../src/App.tsx).
+    **Content-creators lose access to `/compendium/*/manage`** —
+    standard blocked-page treatment, no special redirect.
+    Sidebar splits: admins see Compendium + Proposals, creators
+    see Proposals only.
+26. **Per-editor wiring (Phase 4.5, NOT YET DONE).** Each
+    existing editor gets a `mode` prop and a route entry under
+    `/proposals/edit/*`. Build order is TagsExplorer (POC) →
+    SpellRulesEditor → SpellListManager → SpellsEditor →
+    UniqueOptionGroupEditor → ClassEditor. Base editor in
+    `mode='direct'` keeps today's behavior; in `mode='proposal'`
+    delegates writes to the accumulator and hides its Save
+    button.
+27. **Block menu rolled-up view (Phase 4.6, NOT YET DONE).**
+    `/my-proposals → Block` tab rolls drafts up by
+    `entity_type` to one row per editor that contributed.
+    Withdraw drops the whole group; Continue Editing returns
+    to the proposal route filtered to staged entities.
+
+Resume plan + per-editor checklist live at
+[../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md).
+Until Phase 4.1–4.6 land, content-creators can't produce
+spell / class / option proposals from the UI; the server
+nonetheless accepts hand-crafted POSTs at `/api/proposals` with
+the right `entity_type` / payload shape.
 
 ### Phase 3 — Tagging revamp (not yet started)
 
