@@ -228,7 +228,7 @@ export default function Navbar({
                     <span>View Profile</span>
                   </Link>
                 } />
-                {(userProfile?.role === 'admin' || userProfile?.permissions?.['content-creator']) && (
+                {(userProfile?.role === 'admin' || (userProfile?.permissions && 'content-creator' in userProfile.permissions)) && (
                   <DropdownMenuItem nativeButton={false} render={
                     <Link to="/my-proposals" className="w-full flex items-center px-2 py-1.5 cursor-pointer">
                       <ScrollText className="mr-2 h-4 w-4" />
