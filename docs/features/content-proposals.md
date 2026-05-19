@@ -1,15 +1,18 @@
 # Content Proposals
 
-> **Status:** Phase 1 foundation **shipped** (May 2026) — `worlds` +
-> `user_permissions` tables, additive `content-creator` capability,
-> admin UI for granting + scoping, `/admin/worlds` page. The proposal
-> table, review queue, and creator UX are still pending (Phase 2
-> below). Phase 1 stood up the *infrastructure*; nothing is enforced
-> against entity writes yet.
->
-> Phase 1 covers tags, spell rules, and class spell lists; spells join
-> in phase 2; classes / feats / items / lore are out of scope for the
-> initial build.
+> **Status:**
+> - **Phase 1 foundation** (additive `content-creator` permission,
+>   scope JSON, admin grant UI, `worlds` table, `/admin/worlds` page)
+>   **— shipped May 2026.**
+> - **Phase 2a server foundation** (`pending_revisions` table, proxy
+>   hardening on phase-1 entity tables, `/api/proposals*` creator
+>   endpoint, `/api/admin/proposals*` admin queue with approve /
+>   reject / conflict-detection)
+>   **— shipped May 2026.**
+> - **Phase 2b UX** (Propose button on phase-1 editors, `/my-proposals`
+>   page, `/admin/proposals` review page) **— next.**
+> - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
+>   UI) and **Phase 4** (spells in the allowlist) follow.
 
 ## Goal
 
@@ -337,24 +340,45 @@ No updates required in `module/dauligor-pairing/docs/`.
    new `PermissionsManager` component with per-axis scope picker;
    `AdminWorlds.tsx` page at `/admin/worlds`.
 
-### Phase 2 — Proposal workflow (not yet started)
+### Phase 2a — Server foundation (✅ shipped May 2026)
 
-7. **`pending_revisions` schema migration** — table + the audit /
-   bundle / cascade columns.
-8. **Proxy hardening** — add phase-1 tables to
-   `PROTECTED_WRITE_TABLES` for non-admin roles in
-   [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts).
-9. **Pages Functions** —
-   `functions/api/proposals/[[path]].ts` (creator) and
-   `functions/api/admin/proposals/[[path]].ts` (admin queue).
-10. **Creator UI** — "Propose change" button on the phase-1 editors
+7. **`pending_revisions` schema migration** —
+   [20260518-2200_pending_revisions.sql](../../worker/migrations/20260518-2200_pending_revisions.sql).
+   One row per proposed mutation; `proposed_payload` +
+   `snapshot_at_proposal` drive conflict detection + revert; bundle
+   + cascade columns for related-revision grouping.
+8. **Proxy hardening** — phase-1 tables (`tags`, `tag_groups`,
+   `spell_rules`, `spell_rule_applications`, `class_spell_lists`,
+   `pending_revisions`) added to `PROTECTED_WRITE_TABLES` in
+   [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts). Non-admin
+   writes refused with 403; admins keep the direct path.
+9. **Shared helpers** — [api/_lib/proposals.ts](../../api/_lib/proposals.ts):
+   entity allowlist + column allowlist per entity, snapshot loader,
+   sanitized payload builder, `applyApprovedOperation` (the one
+   place that translates an approved revision into the actual
+   INSERT/UPDATE/DELETE), conflict detector.
+10. **Pages Functions** —
+    [functions/api/proposals/[[path]].ts](../../functions/api/proposals/%5B%5Bpath%5D%5D.ts)
+    (creator: POST submit, GET list-own, GET /:id, PATCH /:id while
+    pending, DELETE /:id withdraw) and
+    [functions/api/admin/proposals/[[path]].ts](../../functions/api/admin/proposals/%5B%5Bpath%5D%5D.ts)
+    (admin: GET queue with filters, GET /:id with conflict status,
+    POST /:id/approve, POST /:id/reject with bundle cascade).
+
+### Phase 2b — UX (not yet started)
+
+11. **Creator UI** — "Propose change" button on the phase-1 editors
     ([TagsExplorer](../../src/pages/compendium/TagsExplorer.tsx),
     [SpellRulesEditor](../../src/pages/compendium/SpellRulesEditor.tsx),
-    [SpellListManager](../../src/pages/compendium/SpellListManager.tsx)).
-11. **`/my-proposals` page**.
-12. **`/admin/proposals` page** — tab strip + per-tab queue + approve /
-    reject actions + conflict diff view.
-13. **Revert** — admin-side button on approved revisions, with the
+    [SpellListManager](../../src/pages/compendium/SpellListManager.tsx))
+    visible when `effectiveProfile.permissions['content-creator']` is
+    held. Replaces the Save action for non-admin content-creators.
+12. **`/my-proposals` page** — creator's own queue with status,
+    inline preview, withdraw, edit while pending.
+13. **`/admin/proposals` page** — tab strip + per-tab queue +
+    approve / reject actions + 3-way conflict diff view + bundle
+    expand/collapse + pending-count badge in the admin dropdown.
+14. **Revert** — admin-side button on approved revisions, with the
     drift-check refuse.
 
 ### Phase 3 — Tagging revamp (not yet started)

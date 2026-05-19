@@ -389,6 +389,8 @@ async function startServer() {
     { mount: "/api/admin/users", modulePath: "./functions/api/admin/users/[[path]].ts" },
     { mount: "/api/admin/worlds", modulePath: "./functions/api/admin/worlds/[[path]].ts" },
     { mount: "/api/admin/eras", modulePath: "./functions/api/admin/eras/[[path]].ts" },
+    { mount: "/api/admin/proposals", modulePath: "./functions/api/admin/proposals/[[path]].ts" },
+    { mount: "/api/proposals", modulePath: "./functions/api/proposals/[[path]].ts" },
     { mount: "/api/lore", modulePath: "./functions/api/lore/[[path]].ts" },
     { mount: "/api/campaigns", modulePath: "./functions/api/campaigns/[[path]].ts" },
   ];
