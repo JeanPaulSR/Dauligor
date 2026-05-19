@@ -156,7 +156,27 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     //              Without this, a hostile signed-in staff member could
     //              backdoor a lore row write to set `dm_notes` content
     //              the per-route endpoint would otherwise gate.
-    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras|lore_\w+)\b/i;
+    //   Phase-1 proposal entities — `tags`, `tag_groups`,
+    //              `spell_rules`, `spell_rule_applications`,
+    //              `class_spell_lists`. permissions-rbac.md has
+    //              always declared these admin-only ("Admin
+    //              (intended); currently staff at the proxy"). The
+    //              content-proposals workflow finishes that
+    //              closure: admins keep writing directly; non-
+    //              admins (including `content-creator` holders)
+    //              submit via POST /api/proposals, where an admin
+    //              reviews + approves. Approvals re-apply via
+    //              `executeD1QueryInternal` (the same escape hatch
+    //              `/api/r2/scan-references` uses to bypass the
+    //              read gate), so the proposal endpoint doesn't
+    //              round-trip through this proxy.
+    //   `pending_revisions` — the proposal queue table itself.
+    //              Every legitimate read/write lives behind
+    //              /api/proposals* (creator) or
+    //              /api/admin/proposals* (admin). Block direct
+    //              proxy access so a non-admin can't peek at or
+    //              steamroll another creator's pending rows.
+    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras|lore_\w+|tags|tag_groups|spell_rules|spell_rule_applications|class_spell_lists|pending_revisions)\b/i;
     // Protected READ tables — tables whose rows carry per-row privacy
     // contracts that the generic proxy cannot enforce. Direct SELECTs
     // against any of these are refused; callers must go through the
