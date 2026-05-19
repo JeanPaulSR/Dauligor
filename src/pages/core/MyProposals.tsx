@@ -31,6 +31,7 @@ import {
   Plus, Edit3, Inbox, Swords, Layers, Package, Send, Trash2,
 } from 'lucide-react';
 import { useBlock } from '../../lib/proposalBlock';
+import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
 
 type Status = 'draft' | 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -546,35 +547,56 @@ function EditLauncher() {
 /* -------------------------------------------------------------------------- */
 
 function BlockPanel() {
-  const { activeBundleId, drafts, loading, startBlock, submitBlock, discardBlock } = useBlock();
+  const {
+    activeBundleId,
+    activeBundle,
+    drafts,
+    loading,
+    startBlock,
+    submitBlock,
+    discardBlock,
+    patchActiveBlock,
+  } = useBlock();
   const [working, setWorking] = useState<'submit' | 'discard' | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+
+  const handleCreate = async (name: string, description: string | null) => {
+    await startBlock(name, description);
+    toast.success('Block started. Edits made now will be staged until you submit.');
+  };
 
   if (!activeBundleId) {
     return (
-      <Card className="border-gold/20 bg-gold/5">
-        <CardHeader>
-          <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
-            <Package className="w-4 h-4" /> No block open
-          </CardTitle>
-          <p className="text-xs text-ink/60 mt-2 leading-relaxed">
-            Start a block to stage multiple edits as a single proposal. While a block
-            is active, your Save / Add / Delete actions in any wired editor land as
-            <strong> drafts</strong> tied to the block — invisible to admins. Submit
-            the block when ready and every edit lands as one bundle in the queue.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={() => {
-              startBlock();
-              toast.success('Block started. Edits made now will be staged until you submit.');
-            }}
-            className="gap-2 bg-gold text-white"
-          >
-            <Plus className="w-4 h-4" /> Start Block
-          </Button>
-        </CardContent>
-      </Card>
+      <>
+        <Card className="border-gold/20 bg-gold/5">
+          <CardHeader>
+            <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
+              <Package className="w-4 h-4" /> No block open
+            </CardTitle>
+            <p className="text-xs text-ink/60 mt-2 leading-relaxed">
+              Start a block to stage multiple edits as a single proposal. While a block
+              is active, your Save / Add / Delete actions in any wired editor land as
+              <strong> drafts</strong> tied to the block — invisible to admins. Submit
+              the block when ready and every edit lands as one bundle in the queue.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => setCreateOpen(true)}
+              className="gap-2 bg-gold text-white"
+            >
+              <Plus className="w-4 h-4" /> Start Block
+            </Button>
+          </CardContent>
+        </Card>
+        <BlockMetadataDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          mode="create"
+          onSubmit={handleCreate}
+        />
+      </>
     );
   }
 
@@ -590,7 +612,8 @@ function BlockPanel() {
     }
   };
   const handleDiscard = async () => {
-    if (!confirm(`Discard the active block (${drafts.length} staged change${drafts.length === 1 ? '' : 's'})? This deletes the drafts and clears the block.`)) return;
+    const label = activeBundle?.name ? `"${activeBundle.name}"` : 'the active block';
+    if (!confirm(`Discard ${label} (${drafts.length} staged change${drafts.length === 1 ? '' : 's'})? This deletes the drafts and clears the block.`)) return;
     setWorking('discard');
     try {
       const { discarded } = await discardBlock();
@@ -601,21 +624,39 @@ function BlockPanel() {
       setWorking(null);
     }
   };
+  const handleRename = async (name: string, description: string | null) => {
+    await patchActiveBlock({ name, description });
+    toast.success('Block updated.');
+  };
 
   return (
     <>
       <Card className="border-blood/20 bg-blood/5">
         <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
-              <Package className="w-4 h-4 text-blood" /> Active Block
+          <div className="space-y-1 min-w-0 flex-1">
+            <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2 flex-wrap">
+              <Package className="w-4 h-4 text-blood" />
+              <span className="truncate">{activeBundle?.name || 'Active Block'}</span>
               <Badge variant="outline" className="ml-1 text-[9px] border-blood/30 text-blood">
                 {drafts.length} staged
               </Badge>
             </CardTitle>
-            <p className="text-[11px] text-ink/50 font-mono">{activeBundleId}</p>
+            {activeBundle?.description && (
+              <p className="text-xs text-ink/70 leading-relaxed">
+                {activeBundle.description}
+              </p>
+            )}
+            <p className="text-[11px] text-ink/40 font-mono truncate">{activeBundleId}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => setRenameOpen(true)}
+              disabled={working !== null}
+              className="gap-1.5"
+            >
+              <Edit3 className="w-3.5 h-3.5" /> Rename
+            </Button>
             <Button
               variant="outline"
               onClick={handleDiscard}
@@ -665,6 +706,14 @@ function BlockPanel() {
           )}
         </CardContent>
       </Card>
+      <BlockMetadataDialog
+        open={renameOpen}
+        onOpenChange={setRenameOpen}
+        mode="rename"
+        initialName={activeBundle?.name || ''}
+        initialDescription={activeBundle?.description ?? null}
+        onSubmit={handleRename}
+      />
     </>
   );
 }

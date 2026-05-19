@@ -415,6 +415,163 @@ async function handleWithdraw(
 /* Bundle (submission block) operations                                        */
 /* -------------------------------------------------------------------------- */
 
+const VALID_BUNDLE_STATUS = new Set(["open", "submitted", "discarded"]);
+
+/**
+ * Create a new submission block with name + description metadata.
+ * Returns the server-issued bundle id. The client uses this id as
+ * `bundle_id` on subsequent draft revisions, replacing the previous
+ * client-only UUID flow.
+ */
+async function handleCreateBundle(
+  request: Request,
+  proposerId: string,
+): Promise<Response> {
+  const body = (await request.json().catch(() => ({}))) as any;
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!name) {
+    throw new HttpError(400, "Block name is required.");
+  }
+  if (name.length > 200) {
+    throw new HttpError(400, "Block name must be 200 characters or fewer.");
+  }
+  const description =
+    typeof body?.description === "string" ? body.description : null;
+  if (description && description.length > 2000) {
+    throw new HttpError(
+      400,
+      "Block description must be 2000 characters or fewer.",
+    );
+  }
+  const id = `bundle-${crypto.randomUUID()}`;
+  await executeD1QueryInternal({
+    sql: `INSERT INTO proposal_bundles
+            (id, name, description, created_by_user_id)
+          VALUES (?, ?, ?, ?)`,
+    params: [id, name, description, proposerId],
+  });
+  return Response.json({
+    ok: true,
+    bundle: {
+      id,
+      name,
+      description,
+      status: "open",
+      created_by_user_id: proposerId,
+    },
+  });
+}
+
+/**
+ * List the caller's bundles, filterable by `?status=open|submitted|
+ * discarded`. Default: all statuses, newest first. Used by the "pick
+ * an existing block or create a new one" prompt and the future
+ * cross-block menu.
+ */
+async function handleListBundles(
+  request: Request,
+  proposerId: string,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const statusParam = url.searchParams.get("status");
+  const params: any[] = [proposerId];
+  let sql = `SELECT * FROM proposal_bundles WHERE created_by_user_id = ?`;
+  if (statusParam && VALID_BUNDLE_STATUS.has(statusParam)) {
+    sql += ` AND status = ?`;
+    params.push(statusParam);
+  }
+  sql += ` ORDER BY updated_at DESC LIMIT 200`;
+  const result = await executeD1QueryInternal({ sql, params });
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  return Response.json({ bundles: rows });
+}
+
+/**
+ * Load a single bundle's metadata. Used on mount to hydrate
+ * `activeBundle` from a persisted `activeBundleId`. Returns 404
+ * unless the caller owns the bundle.
+ */
+async function handleGetBundle(
+  bundleId: string,
+  proposerId: string,
+): Promise<Response> {
+  const result = await executeD1QueryInternal({
+    sql: `SELECT * FROM proposal_bundles
+            WHERE id = ? AND created_by_user_id = ?
+            LIMIT 1`,
+    params: [bundleId, proposerId],
+  });
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  if (rows.length === 0) {
+    throw new HttpError(404, "Block not found.");
+  }
+  return Response.json({ bundle: rows[0] });
+}
+
+/**
+ * Rename / re-describe an open bundle. Refuses to touch
+ * submitted/discarded ones — the metadata is part of the audit
+ * trail once the block has been sent for review.
+ */
+async function handlePatchBundle(
+  request: Request,
+  bundleId: string,
+  proposerId: string,
+): Promise<Response> {
+  const owned = await executeD1QueryInternal({
+    sql: `SELECT status FROM proposal_bundles
+            WHERE id = ? AND created_by_user_id = ?
+            LIMIT 1`,
+    params: [bundleId, proposerId],
+  });
+  const ownedRows = Array.isArray(owned?.results) ? owned.results : [];
+  if (ownedRows.length === 0) {
+    throw new HttpError(404, "Block not found.");
+  }
+  if ((ownedRows[0] as any).status !== "open") {
+    throw new HttpError(
+      409,
+      "Cannot edit a submitted or discarded block.",
+    );
+  }
+  const body = (await request.json().catch(() => ({}))) as any;
+  const setClauses: string[] = [];
+  const params: any[] = [];
+  if (typeof body?.name === "string") {
+    const name = body.name.trim();
+    if (!name) {
+      throw new HttpError(400, "Block name cannot be empty.");
+    }
+    if (name.length > 200) {
+      throw new HttpError(400, "Block name must be 200 characters or fewer.");
+    }
+    setClauses.push("name = ?");
+    params.push(name);
+  }
+  if ("description" in body) {
+    const description =
+      typeof body.description === "string" ? body.description : null;
+    if (description && description.length > 2000) {
+      throw new HttpError(
+        400,
+        "Block description must be 2000 characters or fewer.",
+      );
+    }
+    setClauses.push("description = ?");
+    params.push(description);
+  }
+  if (setClauses.length === 0) {
+    return Response.json({ ok: true, id: bundleId, noop: true });
+  }
+  setClauses.push("updated_at = CURRENT_TIMESTAMP");
+  params.push(bundleId);
+  await executeD1QueryInternal({
+    sql: `UPDATE proposal_bundles SET ${setClauses.join(", ")} WHERE id = ?`,
+    params,
+  });
+  return Response.json({ ok: true, id: bundleId });
+}
+
 /**
  * Atomically flip every `draft` row in the bundle to `pending`. The
  * admin queue starts seeing them after this call. Refuses if the
@@ -422,6 +579,10 @@ async function handleWithdraw(
  * any row in the bundle isn't owned by the caller (a sanity check
  * — the proposer-id filter on the SELECT prevents cross-user
  * tampering anyway).
+ *
+ * Phase 4.1: also flips the proposal_bundles metadata row (if one
+ * exists) to `status='submitted'`. Pre-Phase-4.1 bundles have no
+ * metadata row; the UPDATE is a no-op for those.
  */
 async function handleSubmitBundle(
   bundleId: string,
@@ -448,6 +609,12 @@ async function handleSubmitBundle(
             WHERE bundle_id = ? AND proposed_by_user_id = ? AND status = 'draft'`,
     params: [bundleId, proposerId],
   });
+  await executeD1QueryInternal({
+    sql: `UPDATE proposal_bundles
+            SET status = 'submitted', updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND created_by_user_id = ?`,
+    params: [bundleId, proposerId],
+  });
   return Response.json({
     ok: true,
     bundle_id: bundleId,
@@ -460,27 +627,50 @@ async function handleSubmitBundle(
  * caller owns AND is in `draft` status. Pending / approved /
  * rejected rows are left untouched (deleting them would erase audit
  * history). Returns the count actually removed.
+ *
+ * Phase 4.1: also hard-deletes the proposal_bundles metadata row.
+ * A metadata-only bundle (created via POST /api/proposals/bundle
+ * but with no drafts yet) is still discardable — the 404 only fires
+ * when neither metadata nor drafts exist.
  */
 async function handleDiscardBundle(
   bundleId: string,
   proposerId: string,
 ): Promise<Response> {
+  const metadataResult = await executeD1QueryInternal({
+    sql: `SELECT 1 AS exists_flag FROM proposal_bundles
+            WHERE id = ? AND created_by_user_id = ?
+            LIMIT 1`,
+    params: [bundleId, proposerId],
+  });
+  const hasMetadata =
+    Array.isArray(metadataResult?.results) &&
+    metadataResult.results.length > 0;
   const countResult = await executeD1QueryInternal({
     sql: `SELECT COUNT(*) AS n FROM pending_revisions
             WHERE bundle_id = ? AND proposed_by_user_id = ? AND status = 'draft'`,
     params: [bundleId, proposerId],
   });
   const n = Number(
-    (Array.isArray(countResult?.results) && countResult.results[0]?.n) || 0,
+    (Array.isArray(countResult?.results) && (countResult.results[0] as any)?.n) || 0,
   );
-  if (n === 0) {
-    throw new HttpError(404, "No draft rows in this bundle.");
+  if (!hasMetadata && n === 0) {
+    throw new HttpError(404, "No drafts or block metadata to discard.");
   }
-  await executeD1QueryInternal({
-    sql: `DELETE FROM pending_revisions
-            WHERE bundle_id = ? AND proposed_by_user_id = ? AND status = 'draft'`,
-    params: [bundleId, proposerId],
-  });
+  if (n > 0) {
+    await executeD1QueryInternal({
+      sql: `DELETE FROM pending_revisions
+              WHERE bundle_id = ? AND proposed_by_user_id = ? AND status = 'draft'`,
+      params: [bundleId, proposerId],
+    });
+  }
+  if (hasMetadata) {
+    await executeD1QueryInternal({
+      sql: `DELETE FROM proposal_bundles
+              WHERE id = ? AND created_by_user_id = ?`,
+      params: [bundleId, proposerId],
+    });
+  }
   return Response.json({
     ok: true,
     bundle_id: bundleId,
@@ -527,6 +717,50 @@ export const onRequest = async (context: any): Promise<Response> => {
       );
     }
 
+    // /api/proposals/bundle — block metadata + lifecycle.
+    // MUST be checked before the generic /:id branch below, since
+    // `bundle` is reserved as the first segment for these routes.
+    //
+    //   POST   /api/proposals/bundle          create a new block
+    //   GET    /api/proposals/bundle          list own blocks (optional ?status)
+    //   GET    /api/proposals/bundle/:id      get one (hydrates active block)
+    //   PATCH  /api/proposals/bundle/:id      rename / re-describe (open only)
+    //   DELETE /api/proposals/bundle/:id      discard (drafts + metadata)
+    //   POST   /api/proposals/bundle/:id/submit  drafts → pending atomically
+    if (path[0] === "bundle") {
+      if (path.length === 1) {
+        if (request.method === "POST") {
+          return await handleCreateBundle(request, proposerId);
+        }
+        if (request.method === "GET") {
+          return await handleListBundles(request, proposerId);
+        }
+        return Response.json(
+          { error: `Method ${request.method} not allowed.` },
+          { status: 405 },
+        );
+      }
+      const bundleId = path[1];
+      if (path.length === 2) {
+        if (request.method === "GET") {
+          return await handleGetBundle(bundleId, proposerId);
+        }
+        if (request.method === "PATCH") {
+          return await handlePatchBundle(request, bundleId, proposerId);
+        }
+        if (request.method === "DELETE") {
+          return await handleDiscardBundle(bundleId, proposerId);
+        }
+        return Response.json(
+          { error: `Method ${request.method} not allowed.` },
+          { status: 405 },
+        );
+      }
+      if (path.length === 3 && path[2] === "submit" && request.method === "POST") {
+        return await handleSubmitBundle(bundleId, proposerId);
+      }
+    }
+
     if (path.length === 1) {
       const proposalId = path[0];
       if (request.method === "GET") {
@@ -542,18 +776,6 @@ export const onRequest = async (context: any): Promise<Response> => {
         { error: `Method ${request.method} not allowed.` },
         { status: 405 },
       );
-    }
-
-    // /api/proposals/bundle/<id> — submit (POST /submit) or discard
-    // (DELETE the whole bundle).
-    if (path[0] === "bundle" && path.length >= 2) {
-      const bundleId = path[1];
-      if (path.length === 2 && request.method === "DELETE") {
-        return await handleDiscardBundle(bundleId, proposerId);
-      }
-      if (path.length === 3 && path[2] === "submit" && request.method === "POST") {
-        return await handleSubmitBundle(bundleId, proposerId);
-      }
     }
 
     return Response.json(
