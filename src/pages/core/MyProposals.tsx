@@ -566,81 +566,6 @@ function BlockPanel() {
     toast.success('Block started. Edits made now will be staged until you submit.');
   };
 
-  if (!activeBundleId) {
-    return (
-      <>
-        <Card className="border-gold/20 bg-gold/5">
-          <CardHeader>
-            <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
-              <Package className="w-4 h-4" /> No block open
-            </CardTitle>
-            <p className="text-xs text-ink/60 mt-2 leading-relaxed">
-              Start a block to stage multiple edits as a single proposal. While a block
-              is active, your Save / Add / Delete actions in any wired editor land as
-              <strong> drafts</strong> tied to the block — invisible to admins. Submit
-              the block when ready and every edit lands as one bundle in the queue.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <Button
-              onClick={() => setCreateOpen(true)}
-              className="gap-2 bg-gold text-white"
-            >
-              <Plus className="w-4 h-4" /> Start Block
-            </Button>
-          </CardContent>
-        </Card>
-        {openBlocks.length > 0 && (
-          <Card className="border-gold/15 bg-card/50 mt-3">
-            <CardHeader>
-              <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
-                <Package className="w-4 h-4 text-gold/70" /> Resume an open block
-              </CardTitle>
-              <p className="text-xs text-ink/60 mt-2 leading-relaxed">
-                Blocks live on the server, not in this browser. Pick one of your open
-                blocks below to continue editing from anywhere you sign in.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ul className="divide-y divide-foreground/10">
-                {openBlocks.map((b) => (
-                  <li key={b.id}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveBlock(b.id)}
-                      className="w-full text-left py-3 px-2 hover:bg-foreground/5 rounded-md transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        <Package className="w-4 h-4 text-blood mt-0.5 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">{b.name}</p>
-                          {b.description && (
-                            <p className="text-[11px] text-ink/60 mt-0.5 leading-relaxed line-clamp-2">
-                              {b.description}
-                            </p>
-                          )}
-                          <p className="text-[10px] text-ink/40 mt-1">
-                            Last updated {formatSqliteLocal(b.updated_at)}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-        <BlockMetadataDialog
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          mode="create"
-          onSubmit={handleCreate}
-        />
-      </>
-    );
-  }
-
   const handleSubmit = async () => {
     setWorking('submit');
     try {
@@ -669,82 +594,74 @@ function BlockPanel() {
     toast.success('Block updated.');
   };
 
+  // Sort: the currently-active block first, others by most-recently-updated.
+  const sortedBlocks = [...openBlocks].sort((a, b) => {
+    if (a.id === activeBundleId) return -1;
+    if (b.id === activeBundleId) return 1;
+    return b.updated_at.localeCompare(a.updated_at);
+  });
+
   return (
     <>
-      <Card className="border-blood/20 bg-blood/5">
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div className="space-y-1 min-w-0 flex-1">
-            <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2 flex-wrap">
-              <Package className="w-4 h-4 text-blood" />
-              <span className="truncate">{activeBundle?.name || 'Active Block'}</span>
-              <Badge variant="outline" className="ml-1 text-[9px] border-blood/30 text-blood">
-                {drafts.length} staged
-              </Badge>
-            </CardTitle>
-            {activeBundle?.description && (
-              <p className="text-xs text-ink/70 leading-relaxed">
-                {activeBundle.description}
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <Button
-              variant="outline"
-              onClick={() => setRenameOpen(true)}
-              disabled={working !== null}
-              className="gap-1.5"
-            >
-              <Edit3 className="w-3.5 h-3.5" /> Rename
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setDiscardConfirmOpen(true)}
-              disabled={working !== null}
-              className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Discard
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={working !== null || drafts.length === 0}
-              className="gap-1.5 bg-gold text-white"
-            >
-              <Send className="w-3.5 h-3.5" /> Submit Block
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading && drafts.length === 0 ? (
-            <p className="text-ink/50 italic text-center py-12">Loading drafts…</p>
-          ) : drafts.length === 0 ? (
-            <div className="text-center py-8 text-ink/60 text-sm">
-              <p>No drafts yet — open one of the editors (Tags, Spell Rules, Spell Lists) and make a change.</p>
-              <p className="text-[11px] text-ink/40 mt-2">Each Save / Add / Delete you do while the block is open lands here instead of going to the admin queue.</p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-blood/10">
-              {drafts.map((d) => (
-                <li key={d.id} className="py-3 flex items-center gap-3">
-                  <OperationBadge op={d.operation} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {(d.proposed_payload && (d.proposed_payload as any).name)
-                        || d.entity_id
-                        || '(no preview)'}
-                    </p>
-                    <p className="text-[11px] text-ink/50">
-                      <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/50 mr-1">
-                        {ENTITY_LABEL[d.entity_type as EntityType] || d.entity_type}
-                      </Badge>
-                      {formatSqliteLocal(d.proposed_at)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+        <div className="space-y-1 min-w-0 flex-1">
+          <h3 className="text-sm font-bold uppercase tracking-widest text-ink/70">
+            Your Blocks
+          </h3>
+          <p className="text-xs text-ink/55 leading-relaxed">
+            Stage edits across multiple editors in a single proposal. Click a block to
+            make it active; subsequent saves in any wired editor land in it as drafts
+            until you click Submit Block.
+          </p>
+        </div>
+        <Button
+          onClick={() => setCreateOpen(true)}
+          className="gap-2 bg-gold text-white flex-shrink-0"
+        >
+          <Plus className="w-4 h-4" /> Start a new block
+        </Button>
+      </div>
+
+      {openBlocks.length === 0 ? (
+        <Card className="border-gold/20 bg-gold/5">
+          <CardContent className="py-10 text-center space-y-2">
+            <Package className="w-8 h-8 mx-auto text-gold/60" />
+            <p className="text-sm text-ink/70 font-medium">
+              You haven't started a block yet.
+            </p>
+            <p className="text-xs text-ink/55 max-w-md mx-auto">
+              Click <strong>Start a new block</strong> above to begin. Each block bundles
+              your edits into one proposal for an admin to review.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <ul className="space-y-3">
+          {sortedBlocks.map((b) => {
+            const isActive = b.id === activeBundleId;
+            return (
+              <li key={b.id}>
+                {isActive ? (
+                  <ActiveBlockCard
+                    block={b}
+                    drafts={drafts}
+                    loading={loading}
+                    working={working}
+                    onRename={() => setRenameOpen(true)}
+                    onDiscard={() => setDiscardConfirmOpen(true)}
+                    onSubmit={handleSubmit}
+                  />
+                ) : (
+                  <InactiveBlockCard
+                    block={b}
+                    onActivate={() => setActiveBlock(b.id)}
+                  />
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       <BlockMetadataDialog
         open={renameOpen}
         onOpenChange={setRenameOpen}
@@ -767,6 +684,148 @@ function BlockPanel() {
         onConfirm={performDiscard}
       />
     </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Per-block cards rendered inside the BlockPanel list.                         */
+/* -------------------------------------------------------------------------- */
+
+function ActiveBlockCard({
+  block,
+  drafts,
+  loading,
+  working,
+  onRename,
+  onDiscard,
+  onSubmit,
+}: {
+  block: import('../../lib/proposalBlock').ProposalBundle;
+  drafts: import('../../lib/proposalBlock').DraftRevision[];
+  loading: boolean;
+  working: 'submit' | 'discard' | null;
+  onRename: () => void;
+  onDiscard: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Card className="border-blood/30 bg-blood/5 ring-2 ring-blood/20">
+      <CardHeader className="flex flex-row items-start justify-between gap-3">
+        <div className="space-y-1 min-w-0 flex-1">
+          <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2 flex-wrap">
+            <Package className="w-4 h-4 text-blood" />
+            <span className="truncate">{block.name}</span>
+            <Badge variant="outline" className="ml-1 text-[9px] border-blood/30 text-blood">
+              Active
+            </Badge>
+            <Badge variant="outline" className="text-[9px] border-blood/30 text-blood">
+              {drafts.length} staged
+            </Badge>
+          </CardTitle>
+          {block.description && (
+            <p className="text-xs text-ink/70 leading-relaxed">{block.description}</p>
+          )}
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <Button
+            variant="outline"
+            onClick={onRename}
+            disabled={working !== null}
+            className="gap-1.5"
+          >
+            <Edit3 className="w-3.5 h-3.5" /> Rename
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onDiscard}
+            disabled={working !== null}
+            className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Discard
+          </Button>
+          <Button
+            onClick={onSubmit}
+            disabled={working !== null || drafts.length === 0}
+            className="gap-1.5 bg-gold text-white"
+          >
+            <Send className="w-3.5 h-3.5" /> Submit Block
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading && drafts.length === 0 ? (
+          <p className="text-ink/50 italic text-center py-12">Loading drafts…</p>
+        ) : drafts.length === 0 ? (
+          <div className="text-center py-8 text-ink/60 text-sm">
+            <p>
+              No drafts yet — open one of the editors (Tags, Spell Rules, Spell Lists,
+              Spells) and make a change.
+            </p>
+            <p className="text-[11px] text-ink/40 mt-2">
+              Each Save / Add / Delete you do while this block is active lands here
+              instead of going to the admin queue.
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-blood/10">
+            {drafts.map((d) => (
+              <li key={d.id} className="py-3 flex items-center gap-3">
+                <OperationBadge op={d.operation} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {(d.proposed_payload && (d.proposed_payload as any).name)
+                      || d.entity_id
+                      || '(no preview)'}
+                  </p>
+                  <p className="text-[11px] text-ink/50">
+                    <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/50 mr-1">
+                      {ENTITY_LABEL[d.entity_type as EntityType] || d.entity_type}
+                    </Badge>
+                    {formatSqliteLocal(d.proposed_at)}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InactiveBlockCard({
+  block,
+  onActivate,
+}: {
+  block: import('../../lib/proposalBlock').ProposalBundle;
+  onActivate: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onActivate}
+      className="w-full text-left rounded-lg border border-gold/15 bg-card/40 hover:border-gold/40 hover:bg-gold/[0.03] transition-colors p-4"
+    >
+      <div className="flex items-start gap-3">
+        <Package className="w-4 h-4 text-ink/40 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-ink truncate">{block.name}</p>
+            <span className="text-[10px] uppercase tracking-widest text-ink/40">
+              click to make active
+            </span>
+          </div>
+          {block.description && (
+            <p className="text-[11px] text-ink/60 mt-1 leading-relaxed line-clamp-2">
+              {block.description}
+            </p>
+          )}
+          <p className="text-[10px] text-ink/40 mt-1.5">
+            Last updated {formatSqliteLocal(block.updated_at)}
+          </p>
+        </div>
+      </div>
+    </button>
   );
 }
 
