@@ -18,6 +18,7 @@ import LoreArticle from './pages/wiki/LoreArticle';
 import Map from './pages/core/Map';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminCampaigns from './pages/admin/AdminCampaigns';
+import AdminWorlds from './pages/admin/AdminWorlds';
 import AdminProficiencies from './pages/admin/AdminProficiencies';
 import StatusesEditor from './pages/admin/StatusesEditor';
 import ImageManager from './pages/admin/ImageManager';
@@ -260,6 +261,7 @@ export default function App() {
                   
                   <Route path="/map" element={<Map userProfile={effectiveProfile} />} />
                   <Route path="/admin/users" element={<AdminUsers userProfile={effectiveProfile} />} />
+                  <Route path="/admin/worlds" element={<AdminWorlds userProfile={effectiveProfile} />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
                   <Route path="/campaign/:id" element={<CampaignManager userProfile={effectiveProfile} />} />
                   <Route path="/campaign/edit/:id" element={<CampaignEditor userProfile={effectiveProfile} />} />

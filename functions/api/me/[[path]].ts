@@ -52,6 +52,7 @@ import {
   requireAuthenticatedUser,
 } from "../../../api/_lib/firebase-admin.js";
 import { executeD1QueryInternal } from "../../../api/_lib/d1-internal.js";
+import { getUserPermissions } from "../../../api/_lib/permissions.js";
 
 const HARDCODED_OWNER_EMAILS = new Set(["luapnaej101@gmail.com"]);
 const HARDCODED_INTERNAL_ADMIN_USERNAMES = new Set(["admin", "gm"]);
@@ -164,9 +165,22 @@ async function getOwnProfile(decoded: any): Promise<any> {
   return row;
 }
 
+/**
+ * Folds additive `user_permissions` rows into the profile object so the
+ * client gets the full identity shape in one request. `permissions` is
+ * a `{ [key]: scope | null }` map; an absent key means the user does
+ * not hold that permission. `effectiveProfile.permissions[key]` is the
+ * client-side gate surface introduced with the content-creator role.
+ */
+async function attachPermissions(row: any): Promise<any> {
+  if (!row || !row.id) return row;
+  const permissions = await getUserPermissions(String(row.id));
+  return { ...row, permissions };
+}
+
 async function handleGetMe(decoded: any): Promise<Response> {
   const profile = await getOwnProfile(decoded);
-  return Response.json({ profile });
+  return Response.json({ profile: await attachPermissions(profile) });
 }
 
 async function handlePatchMe(request: Request, decoded: any): Promise<Response> {
@@ -190,7 +204,7 @@ async function handlePatchMe(request: Request, decoded: any): Promise<Response> 
 
   if (Object.keys(updates).length === 0) {
     const profile = await getOwnProfile(decoded);
-    return Response.json({ profile, noop: true });
+    return Response.json({ profile: await attachPermissions(profile), noop: true });
   }
 
   if (typeof updates.username === "string" && updates.username) {
@@ -226,7 +240,7 @@ async function handlePatchMe(request: Request, decoded: any): Promise<Response> 
   });
 
   const profile = await getOwnProfile(decoded);
-  return Response.json({ profile });
+  return Response.json({ profile: await attachPermissions(profile) });
 }
 
 /* -------------------------------------------------------------------------- */

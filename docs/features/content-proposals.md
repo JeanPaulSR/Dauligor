@@ -1,10 +1,15 @@
-# Content Proposals (Planning)
+# Content Proposals
 
-> **Status:** Design — not yet implemented. Captures the agreed shape of
-> a review/approval workflow for compendium content authored by non-admin
-> contributors. Phase 1 covers tags, spell rules, and class spell lists;
-> spells join in phase 2; classes / feats / items / lore are out of scope
-> for the initial build.
+> **Status:** Phase 1 foundation **shipped** (May 2026) — `worlds` +
+> `user_permissions` tables, additive `content-creator` capability,
+> admin UI for granting + scoping, `/admin/worlds` page. The proposal
+> table, review queue, and creator UX are still pending (Phase 2
+> below). Phase 1 stood up the *infrastructure*; nothing is enforced
+> against entity writes yet.
+>
+> Phase 1 covers tags, spell rules, and class spell lists; spells join
+> in phase 2; classes / feats / items / lore are out of scope for the
+> initial build.
 
 ## Goal
 
@@ -16,17 +21,24 @@ recompute hooks (rule rebuild, stale-class detection, module bake) fire
 unchanged. Approved proposals are retained as an audit log so an admin
 can revert any change to the state it overwrote.
 
-## Why a new role
+## Why an additive permission, not a new role
 
 The five existing roles (`admin` / `co-dm` / `lore-writer` /
 `trusted-player` / `user`) all carry "trust me to write directly"
 semantics in their respective domains. "Propose changes, await review"
-is a different axis. `content-creator` slots in **below** `lore-writer`
-and **above** `trusted-player` — it grants no direct writes anywhere, only
-the ability to submit proposals through one endpoint.
+is a different axis — a `lore-writer` who *also* wants to propose
+compendium changes shouldn't have to give up their lore writes.
 
-Existing role docs and the canonical RBAC matrix:
-[../architecture/permissions-rbac.md](../architecture/permissions-rbac.md).
+So `content-creator` is **additive**: it's a row in the new
+`user_permissions` table layered on top of whatever single role the
+user already has. The same `user_permissions` row carries optional
+**scope** (worlds / campaigns / eras) so future contributors can be
+narrowed to a specific world without affecting their base role.
+
+The full model — scope JSON shape, the `requireContentCreatorAccess`
+helper, the admin grant UI at `/admin/users` → Permissions tab — is
+documented in
+[../architecture/permissions-rbac.md](../architecture/permissions-rbac.md#additive-permissions-user_permissions).
 
 ## Scope
 
@@ -129,22 +141,30 @@ resolution.
 
 ## Roles + enforcement
 
-### New role: `content-creator`
+### Additive permission: `content-creator`
 
-| Role | UI Label | Capabilities |
-|---|---|---|
-| `content-creator` | Contributor | Submit proposals for phase-1 entities. No direct writes anywhere. |
+Stored as a row in `user_permissions(user_id, permission_key, scope_json)`.
+A user holding this row may submit proposals for phase-1 entities;
+their base `users.role` is unchanged.
 
-Slotted between `trusted-player` and `lore-writer` in the existing
-ladder. The `users.role` CHECK constraint gains this value.
+| Permission key | Capabilities |
+|---|---|
+| `content-creator` | Submit proposals for phase-1 entities (tags, tag groups, spell rules, spell rule applications, class spell lists). No direct writes. |
+
+Scope semantics ([permissions-rbac.md §additive-permissions](../architecture/permissions-rbac.md#additive-permissions-user_permissions)):
+`scope_json = NULL` means unrestricted; otherwise narrowed by world /
+campaign / era subset. Phase 1 allows unrestricted grants; later
+phases may require at-least-one-world.
 
 ### Server-side helpers
 
-In [api/_lib/firebase-admin.ts](../../api/_lib/firebase-admin.ts):
+In [api/_lib/permissions.ts](../../api/_lib/permissions.ts):
 
 | Helper | Admits |
 |---|---|
-| `requireContentCreatorAccess(authHeader)` | `content-creator` and every staff role above it. |
+| `requireContentCreatorAccess(authHeader, requiredScope?)` | `admin` role (always) OR a user with a `content-creator` `user_permissions` row whose scope covers `requiredScope`. |
+| `getUserPermissions(uid)` | Loads + parses every grant for a user. |
+| `hasPermission(uid, key, requiredScope?)` | Boolean predicate, same semantics. |
 
 The existing `requireAdminAccess` continues to gate the admin-only
 review endpoints.
@@ -169,24 +189,21 @@ approvals don't need to round-trip through the proxy.
 
 ## Endpoint surface
 
-Vercel Hobby plan caps functions at **12** and the repo currently uses
-**11** (see [vercel.json](../../vercel.json) plus the per-route endpoint
-list under `api/`). All proposal routes fold into **one** new function:
+Post-Cloudflare-Pages migration, the 12-function cap is gone. The
+proposal routes will land as native Pages Functions split by URL
+family:
 
-| File | URLs served | Dispatcher |
-|---|---|---|
-| `api/proposals.ts` | `/api/proposals*` (creator) and `/api/admin/proposals*` (admin) | Parses `req.url`, branches on path + method + role |
+| File | URLs served |
+|---|---|
+| `functions/api/proposals/[[path]].ts` | `/api/proposals*` (creator submit / list / withdraw) |
+| `functions/api/admin/proposals/[[path]].ts` | `/api/admin/proposals*` (admin queue / approve / reject / revert) |
 
-New `vercel.json` rewrites (mirrors the `api/admin/users.ts` pattern):
+No rewrite layer needed — Pages's native `[[path]]` catch-all wires
+each file on the next deploy. See
+[../architecture/routing.md §SPA fallback + API catch-all dispatchers](../architecture/routing.md#spa-fallback--api-catch-all-dispatchers)
+for the routing pattern this follows.
 
-```jsonc
-{ "source": "/api/proposals/(.*)",       "destination": "/api/proposals" }
-{ "source": "/api/proposals",            "destination": "/api/proposals" }
-{ "source": "/api/admin/proposals/(.*)", "destination": "/api/proposals" }
-{ "source": "/api/admin/proposals",      "destination": "/api/proposals" }
-```
-
-Routes (internal dispatch):
+Routes (Phase 2 build):
 
 | Method | Path | Gate | Purpose |
 |---|---|---|---|
@@ -299,29 +316,59 @@ No updates required in `module/dauligor-pairing/docs/`.
 
 ## Build order
 
-1. **Schema migration** — `pending_revisions` table + add
-   `content-creator` to the `users.role` CHECK constraint.
-2. **Server helper** — `requireContentCreatorAccess` in
-   `firebase-admin.ts`.
-3. **Proxy hardening** — add phase-1 tables to
+### Phase 1 — Foundation (✅ shipped May 2026)
+
+1. **Schema migration** — `worlds` + `user_permissions` tables; seed
+   the default Dauligor world
+   ([20260518-1100_worlds_and_user_permissions.sql](../../worker/migrations/20260518-1100_worlds_and_user_permissions.sql)).
+2. **Server helper** — `getUserPermissions`, `hasPermission`,
+   `requireContentCreatorAccess`, `scopeContains` in
+   [api/_lib/permissions.ts](../../api/_lib/permissions.ts).
+3. **Worlds CRUD** —
+   [functions/api/admin/worlds/[[path]].ts](../../functions/api/admin/worlds/%5B%5Bpath%5D%5D.ts).
+4. **User permissions CRUD** — extended
+   [functions/api/admin/users/[[path]].ts](../../functions/api/admin/users/%5B%5Bpath%5D%5D.ts)
+   with `GET /:id/permissions`, `PUT /:id/permissions/:key`,
+   `DELETE /:id/permissions/:key`. Badge column on the user list.
+5. **`/api/me` extension** — folds `permissions` into the profile
+   response so `effectiveProfile.permissions[key]` is the client-side
+   gate.
+6. **Admin UI** — `AdminUsers.tsx` tabbed shell (Users / Permissions);
+   new `PermissionsManager` component with per-axis scope picker;
+   `AdminWorlds.tsx` page at `/admin/worlds`.
+
+### Phase 2 — Proposal workflow (not yet started)
+
+7. **`pending_revisions` schema migration** — table + the audit /
+   bundle / cascade columns.
+8. **Proxy hardening** — add phase-1 tables to
    `PROTECTED_WRITE_TABLES` for non-admin roles in
    [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts).
-4. **`api/proposals.ts` dispatcher** — CRUD on the revisions table for
-   creator + admin paths. Approve / reject / revert without bundle
-   cascade first; cascade is a second pass.
-5. **vercel.json** — add the four rewrites.
-6. **Creator UI** — "Propose change" button on the phase-1 editors
-   ([TagManager](../../src/pages/compendium/TagManager.tsx),
-   [TagGroupEditor](../../src/pages/compendium/TagGroupEditor.tsx),
-   [SpellRulesEditor](../../src/pages/compendium/SpellRulesEditor.tsx),
-   [SpellListManager](../../src/pages/compendium/SpellListManager.tsx)).
-7. **`/my-proposals` page**.
-8. **`/admin/proposals` page** — tab strip + per-tab queue + approve /
-   reject actions + conflict diff view.
-9. **Revert** — admin-side button on approved revisions, with the
-   drift-check refuse.
-10. **Phase 2** — extend entity-type allowlist to `spells` and surface
-    the Propose button in `SpellsEditor`.
+9. **Pages Functions** —
+   `functions/api/proposals/[[path]].ts` (creator) and
+   `functions/api/admin/proposals/[[path]].ts` (admin queue).
+10. **Creator UI** — "Propose change" button on the phase-1 editors
+    ([TagsExplorer](../../src/pages/compendium/TagsExplorer.tsx),
+    [SpellRulesEditor](../../src/pages/compendium/SpellRulesEditor.tsx),
+    [SpellListManager](../../src/pages/compendium/SpellListManager.tsx)).
+11. **`/my-proposals` page**.
+12. **`/admin/proposals` page** — tab strip + per-tab queue + approve /
+    reject actions + conflict diff view.
+13. **Revert** — admin-side button on approved revisions, with the
+    drift-check refuse.
+
+### Phase 3 — Tagging revamp (not yet started)
+
+14. **Tag descriptions** — `description` column on `tags` +
+    `tag_groups`. Surfaced on hover in pickers and the explorer.
+15. **TagsExplorer UI revamp** — better merge / move / bulk affordances.
+16. **FilterBar / filter modal UI revamp** — apply the new shape to
+    the spell + feat list filters.
+
+### Phase 4 — Spells in the proposal allowlist
+
+17. Extend entity-type allowlist to `spells` and surface the Propose
+    button in `SpellsEditor`.
 
 ## Open questions resolved (May 2026)
 

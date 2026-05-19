@@ -54,6 +54,14 @@ import {
   requireAuthenticatedUser,
 } from "../../../../api/_lib/firebase-admin.js";
 import { executeD1QueryInternal } from "../../../../api/_lib/d1-internal.js";
+import {
+  ALL_PERMISSION_KEYS,
+  getUserPermissions,
+  isValidPermissionKey,
+  parseScope,
+  serializeScope,
+  type Scope,
+} from "../../../../api/_lib/permissions.js";
 
 /* -------------------------------------------------------------------------- */
 /* GET /api/admin/users — list                                                 */
@@ -102,14 +110,21 @@ async function handleList(role: string | null): Promise<Response> {
     ? [...BASIC_USER_COLUMNS, ...ADMIN_EXTRA_COLUMNS]
     : [...BASIC_USER_COLUMNS];
 
-  // SELECT u.col1, u.col2, ..., GROUP_CONCAT(cm.campaign_id) AS campaign_ids
-  // The GROUP_CONCAT closes the second leak path — AdminUsers used to
-  // fetch every campaign_members row separately and bucket them client-
-  // side, which leaked the entire membership graph regardless of which
-  // users were on screen.
+  // SELECT u.col1, u.col2, ..., GROUP_CONCAT(cm.campaign_id) AS campaign_ids,
+  //                              GROUP_CONCAT(up.permission_key) AS permission_keys.
+  // The first GROUP_CONCAT closes the second H7-leak path — AdminUsers
+  // used to fetch every campaign_members row separately and bucket them
+  // client-side, which leaked the entire membership graph regardless of
+  // which users were on screen.
+  //
+  // `permission_keys` is just the key list (not scope) so admins get a
+  // glance-able badge column. The full scope per permission ships via
+  // GET /api/admin/users/<uid>/permissions when the admin opens the
+  // permissions panel.
   const colsSql = visibleCols.map((c) => `u.${c}`).join(", ");
   const sql = `SELECT ${colsSql},
-                      (SELECT GROUP_CONCAT(cm.campaign_id) FROM campaign_members cm WHERE cm.user_id = u.id) AS campaign_ids
+                      (SELECT GROUP_CONCAT(cm.campaign_id) FROM campaign_members cm WHERE cm.user_id = u.id) AS campaign_ids,
+                      (SELECT GROUP_CONCAT(up.permission_key) FROM user_permissions up WHERE up.user_id = u.id) AS permission_keys
                  FROM users u
                 ORDER BY u.username ASC`;
 
@@ -117,11 +132,18 @@ async function handleList(role: string | null): Promise<Response> {
   const rows = Array.isArray(result?.results) ? result.results : [];
 
   const users = rows.map((r: any) => {
-    const { campaign_ids: rawCampaignIds, ...rest } = r;
+    const {
+      campaign_ids: rawCampaignIds,
+      permission_keys: rawPermissionKeys,
+      ...rest
+    } = r;
     const campaignIds = typeof rawCampaignIds === "string" && rawCampaignIds
       ? rawCampaignIds.split(",").filter(Boolean)
       : [];
-    return { ...rest, campaign_ids: campaignIds };
+    const permissionKeys = typeof rawPermissionKeys === "string" && rawPermissionKeys
+      ? rawPermissionKeys.split(",").filter(Boolean)
+      : [];
+    return { ...rest, campaign_ids: campaignIds, permission_keys: permissionKeys };
   });
 
   return Response.json({ users });
@@ -288,7 +310,8 @@ async function reconcileMemberships(userId: string, desiredIds: string[]): Promi
 async function loadUserById(userId: string): Promise<any | null> {
   const result = await executeD1QueryInternal({
     sql: `SELECT u.*,
-                 (SELECT GROUP_CONCAT(cm.campaign_id) FROM campaign_members cm WHERE cm.user_id = u.id) AS campaign_ids
+                 (SELECT GROUP_CONCAT(cm.campaign_id) FROM campaign_members cm WHERE cm.user_id = u.id) AS campaign_ids,
+                 (SELECT GROUP_CONCAT(up.permission_key) FROM user_permissions up WHERE up.user_id = u.id) AS permission_keys
             FROM users u
            WHERE u.id = ?
            LIMIT 1`,
@@ -296,11 +319,18 @@ async function loadUserById(userId: string): Promise<any | null> {
   });
   const rows = Array.isArray(result?.results) ? result.results : [];
   if (rows.length === 0) return null;
-  const { campaign_ids: rawCampaignIds, ...rest } = rows[0] as any;
+  const {
+    campaign_ids: rawCampaignIds,
+    permission_keys: rawPermissionKeys,
+    ...rest
+  } = rows[0] as any;
   const campaignIds = typeof rawCampaignIds === "string" && rawCampaignIds
     ? rawCampaignIds.split(",").filter(Boolean)
     : [];
-  return { ...rest, campaign_ids: campaignIds };
+  const permissionKeys = typeof rawPermissionKeys === "string" && rawPermissionKeys
+    ? rawPermissionKeys.split(",").filter(Boolean)
+    : [];
+  return { ...rest, campaign_ids: campaignIds, permission_keys: permissionKeys };
 }
 
 async function handleCreate(request: Request): Promise<Response> {
@@ -446,6 +476,111 @@ async function handleDelete(targetUserId: string): Promise<Response> {
   return Response.json({ ok: true, id: targetUserId });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Permission grants — additive capability layer (Phase 1)                    */
+/*                                                                              */
+/* The `users.role` column stays a single value on the existing ladder.       */
+/* Extra capabilities like `content-creator` live in `user_permissions` and    */
+/* are managed through these three endpoints. Scope JSON narrows the grant     */
+/* to specific worlds / campaigns / eras; null = unrestricted on every axis.   */
+/* -------------------------------------------------------------------------- */
+
+function sanitizeScope(input: unknown): Scope | null {
+  if (input === null || input === undefined) return null;
+  if (typeof input !== "object" || Array.isArray(input)) {
+    throw new HttpError(400, "`scope` must be an object or null.");
+  }
+  const out: Scope = {};
+  for (const axis of ["worlds", "campaigns", "eras"] as const) {
+    const v = (input as any)[axis];
+    if (v === undefined) continue;
+    if (!Array.isArray(v)) {
+      throw new HttpError(400, `\`scope.${axis}\` must be an array of ids.`);
+    }
+    out[axis] = v.map(String).filter(Boolean);
+  }
+  return Object.keys(out).length === 0 ? null : out;
+}
+
+async function handlePermissionsList(targetUserId: string): Promise<Response> {
+  await ensureTargetExists(targetUserId);
+  const result = await executeD1QueryInternal({
+    sql: `SELECT permission_key, scope_json, granted_at, granted_by_user_id
+            FROM user_permissions
+           WHERE user_id = ?
+        ORDER BY granted_at ASC`,
+    params: [targetUserId],
+  });
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  const permissions = rows.map((row: any) => ({
+    permission_key: row.permission_key,
+    scope: parseScope(row.scope_json),
+    granted_at: row.granted_at ?? null,
+    granted_by_user_id: row.granted_by_user_id ?? null,
+  }));
+  return Response.json({
+    user_id: targetUserId,
+    permissions,
+    available_keys: ALL_PERMISSION_KEYS,
+  });
+}
+
+async function handlePermissionUpsert(
+  request: Request,
+  targetUserId: string,
+  permissionKey: string,
+  grantedByUserId: string,
+): Promise<Response> {
+  if (!isValidPermissionKey(permissionKey)) {
+    throw new HttpError(400, `Invalid permission key: ${permissionKey}`);
+  }
+  await ensureTargetExists(targetUserId);
+
+  const body = (await request.json().catch(() => ({}))) as any;
+  const hasScope = body && typeof body === "object" && "scope" in body;
+  const scope: Scope | null = hasScope ? sanitizeScope(body.scope) : null;
+  const scopeJson = serializeScope(scope);
+
+  const id = crypto.randomUUID();
+  await executeD1QueryInternal({
+    sql: `INSERT INTO user_permissions
+              (id, user_id, permission_key, scope_json, granted_at, granted_by_user_id)
+          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+          ON CONFLICT(user_id, permission_key) DO UPDATE SET
+              scope_json = excluded.scope_json,
+              granted_at = excluded.granted_at,
+              granted_by_user_id = excluded.granted_by_user_id`,
+    params: [id, targetUserId, permissionKey, scopeJson, grantedByUserId],
+  });
+
+  return Response.json({
+    ok: true,
+    user_id: targetUserId,
+    permission_key: permissionKey,
+    scope,
+  });
+}
+
+async function handlePermissionDelete(
+  targetUserId: string,
+  permissionKey: string,
+): Promise<Response> {
+  if (!isValidPermissionKey(permissionKey)) {
+    throw new HttpError(400, `Invalid permission key: ${permissionKey}`);
+  }
+  await ensureTargetExists(targetUserId);
+
+  await executeD1QueryInternal({
+    sql: "DELETE FROM user_permissions WHERE user_id = ? AND permission_key = ?",
+    params: [targetUserId, permissionKey],
+  });
+  return Response.json({
+    ok: true,
+    user_id: targetUserId,
+    permission_key: permissionKey,
+  });
+}
+
 async function handleSignInToken(targetUserId: string): Promise<Response> {
   await ensureTargetExists(targetUserId);
 
@@ -519,8 +654,17 @@ export const onRequest = async (context: any): Promise<Response> => {
       );
     }
 
-    // Recovery actions — POST /api/admin/users/<id>/<action>
+    // Recovery + permissions list — /api/admin/users/<id>/<action>
     if (path.length === 2) {
+      const targetUserId = path[0];
+      const action = path[1];
+
+      // GET /api/admin/users/<id>/permissions — list grants (admin only)
+      if (action === "permissions" && request.method === "GET") {
+        await requireAdminAccess(authHeader);
+        return await handlePermissionsList(targetUserId);
+      }
+
       if (request.method !== "POST") {
         return Response.json(
           { error: `Method ${request.method} not allowed.` },
@@ -531,8 +675,6 @@ export const onRequest = async (context: any): Promise<Response> => {
       // Firebase Auth record, which is unconditionally an admin-level
       // operation regardless of the destructiveness toggle.
       await requireAdminAccess(authHeader);
-      const targetUserId = path[0];
-      const action = path[1];
       switch (action) {
         case "temporary-password":
           return await handleTemporaryPassword(targetUserId);
@@ -544,6 +686,31 @@ export const onRequest = async (context: any): Promise<Response> => {
             { status: 404 },
           );
       }
+    }
+
+    // Permission grant write — /api/admin/users/<id>/permissions/<key>
+    //   PUT    → upsert grant (admin only)
+    //   DELETE → revoke grant (admin only)
+    if (path.length === 3 && path[1] === "permissions") {
+      const targetUserId = path[0];
+      const permissionKey = path[2];
+      const { decoded } = await requireAdminAccess(authHeader);
+
+      if (request.method === "PUT") {
+        return await handlePermissionUpsert(
+          request,
+          targetUserId,
+          permissionKey,
+          decoded.uid,
+        );
+      }
+      if (request.method === "DELETE") {
+        return await handlePermissionDelete(targetUserId, permissionKey);
+      }
+      return Response.json(
+        { error: `Method ${request.method} not allowed.` },
+        { status: 405 },
+      );
     }
 
     return Response.json(

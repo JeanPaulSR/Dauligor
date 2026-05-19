@@ -8,16 +8,26 @@ Admin-only user management. The only way to create accounts (registration is dis
 |---|---|
 | `/admin/users` | [src/pages/admin/AdminUsers.tsx](../../src/pages/admin/AdminUsers.tsx) |
 
+The page is split into two tabs:
+
+- **Users** — base-role CRUD + campaign assignment (the legacy table).
+- **Permissions** — additive-capability grants (`content-creator` for
+  now). Rendered by [PermissionsManager.tsx](../../src/pages/admin/PermissionsManager.tsx).
+  Admin-only tab; hidden for co-dm.
+
 ## What this panel does
 
 | Action | Server endpoint | Notes |
 |---|---|---|
-| List users | `GET /api/admin/users` | Column-scoped by viewer role: admin sees `recovery_email` and the full row; co-dm / lore-writer see the basic identity columns only. Each row pre-joined with `campaign_ids: string[]` from `campaign_members`. |
+| List users | `GET /api/admin/users` | Column-scoped by viewer role: admin sees `recovery_email` and the full row; co-dm / lore-writer see the basic identity columns only. Each row pre-joined with `campaign_ids: string[]` from `campaign_members` and `permission_keys: string[]` from `user_permissions`. |
 | Create user | `POST /api/admin/users` | Admin only. Server provisions the Firebase Auth record via `adminAuth.createUser` and inserts the D1 row atomically. Body: `{ username, display_name, role, recovery_email? }`. |
 | Edit user / promote / demote | `PATCH /api/admin/users/[id]` | Admin only. Allow-listed columns including `role` and a `campaign_ids: string[]` field the server reconciles by diffing against current `campaign_members`. Username changes push through `adminAuth.updateUser` to keep the auth email in sync. |
-| Delete user | `DELETE /api/admin/users/[id]` | Admin only. Removes both the Firebase Auth record and the D1 row. FK cascade clears `campaign_members`; `characters.user_id` rows are left as orphans (separate cleanup). |
+| Delete user | `DELETE /api/admin/users/[id]` | Admin only. Removes both the Firebase Auth record and the D1 row. FK cascade clears `campaign_members` and `user_permissions`; `characters.user_id` rows are left as orphans (separate cleanup). |
 | Generate temporary password | `POST /api/admin/users/[id]/temporary-password` | **Destructive** — overwrites the target's Firebase Auth password with a random 14-char value and returns it once. The user's previous password no longer works. |
 | Generate sign-in link | `POST /api/admin/users/[id]/sign-in-token` | **Non-destructive** — mints a 1-hour Firebase custom token. Admin shares a `https://<origin>/auth/redeem?token=…` URL; the SPA exchanges it via `signInWithCustomToken` and the user's existing password keeps working. |
+| List a user's permissions | `GET /api/admin/users/[id]/permissions` | Admin only. Returns `{ permissions: [{ permission_key, scope, granted_at, granted_by_user_id }], available_keys }`. |
+| Grant / update a permission | `PUT /api/admin/users/[id]/permissions/[key]` | Admin only. Body: `{ scope: { worlds?, campaigns?, eras? } \| null }`. Upsert — repeated PUTs update the scope in place. |
+| Revoke a permission | `DELETE /api/admin/users/[id]/permissions/[key]` | Admin only. Removes the row. |
 
 All of these live in a single catch-all dispatcher at [api/admin/users.ts](../../api/admin/users.ts), routed via the `functions/api/admin/users/[[path]].ts` Pages Function shim — Pages's filesystem-based catch-all (`[[path]]`) matches every sub-path under `/api/admin/users/` and the dispatcher parses `req.url` to route internally. The proxy refuses raw `SELECT … FROM users` and raw mutations against `users`, so every legitimate read/write flows through this dispatcher (own-row access goes through `/api/me` instead).
 
