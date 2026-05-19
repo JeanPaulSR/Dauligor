@@ -46,3 +46,4 @@ The Express server reads `R2_WORKER_URL=http://localhost:8787` from `.env` and p
   - [architecture/](docs/architecture/) — routing, RBAC, foundry integration, reference syntax
   - [operations/](docs/operations/) — local dev, deployment, troubleshooting
 - **[docs/database/structure/](docs/database/structure/)** — per-table SQL schema specs.
+- **[docs/roadmap.md](docs/roadmap.md)** — open ideas / larger pieces of work that aren't blocking but should land eventually.

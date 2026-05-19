@@ -42,6 +42,14 @@ export default function Sidebar({
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
   const isAdmin = userProfile?.role === 'admin';
+  // Content-creators get the same nav entry as admins for any editor
+  // that's been wired through the proposal queue (see
+  // `src/lib/proposalAware.ts`). Without this they'd have no path
+  // to /compendium/tags etc. — the editor admits them but the
+  // sidebar was previously gated to admin-only.
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canProposeOrEdit = isAdmin || isContentCreator;
 
   useEffect(() => {
     const fetchCampaign = async () => {
@@ -185,6 +193,14 @@ export default function Sidebar({
           // the spells list; the admin Feat Manager hangs off the page
           // itself for admins (same pattern as Spells).
           { label: 'Feats', path: '/compendium/feats' },
+          // Tags is reachable for admins (full edit) AND content-creators
+          // (Propose Change on every mutation, routed to /api/proposals
+          // by useEntityWriter in TagsExplorer). Surfacing it in the
+          // sidebar gives content-creators a discoverable entry point
+          // — previously only admins had any path to /compendium/tags.
+          ...(canProposeOrEdit ? [
+            { label: 'Tags', path: '/compendium/tags' },
+          ] : []),
           ...(isAdmin ? [
             { label: 'Items', path: '/compendium/items' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },
