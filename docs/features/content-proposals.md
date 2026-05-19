@@ -34,15 +34,29 @@
 >   plus per-entity configs (writable-column + JSON-column maps)
 >   in `api/_lib/proposals.ts` **— shipped May 2026.** The server
 >   side is ready to accept submissions against these four types.
-> - **Phase 4 editor-wiring approach redesigned (May 2026).** The
->   original plan (mode-aware dispatch baked into each existing
->   editor) is superseded by a **parallel-route design**:
->   `/proposals/edit/*` routes wrap the existing editor components
->   with a `ProposalEditorWrapper` that adds Submit Changes + Drop
->   Edits. `/compendium/*/manage` stays admin-only with its
->   existing Save / auto-update UX. Content-creators have zero
->   access to the admin routes. See the resume plan at
->   [docs/../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md).
+> - **Phase 4 parallel-route design** (supersedes the original
+>   in-place wiring plan): `/proposals/edit/*` routes wrap the
+>   existing editor components with `<ProposalEditorWrapper>` that
+>   adds Submit Changes + Drop Edits. `/compendium/*/manage` stays
+>   admin-only with its existing Save / auto-update UX.
+>   Content-creators have zero access to the admin routes.
+>   - **4.1** `proposal_bundles` table + name/description endpoints
+>     + `<BlockMetadataDialog>` **— shipped May 2026 (`ba1a334`).**
+>   - **4.2** `<ProposalEditorWrapper>`, `useProposalAccumulator`,
+>     `<PickOrCreateBlockDialog>` **— shipped May 2026 (`ae021d7`).**
+>   - **4.3** Drop Edits at entity / section / field levels +
+>     `<DropEntityButton>` / `<DropSectionButton>` / `<DropFieldIcon>`
+>     **— shipped May 2026 (`f30b30e`).**
+>   - **4.4** `<AdminOnly>` guard on `/compendium/{tags,spell-rules,
+>     spell-lists}`, /proposals/edit/* catch-all, sidebar split
+>     **— shipped May 2026 (`cc5d673`).**
+>   - **4.5a–c** TagsExplorer / SpellRulesEditor / SpellListManager
+>     wired through `useProposalAccumulator` + new
+>     `/proposals/edit/<entity>` routes **— shipped May 2026
+>     (`5482507` + `cdd8daa`).**
+>   - **4.5d / 4.5e / 4.5f** SpellsEditor / UniqueOptionGroupEditor /
+>     ClassEditor wiring **— not yet done.** See the resume plan at
+>     [docs/../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md).
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
 >   UI) follows after the Phase 4 editor wiring.
 

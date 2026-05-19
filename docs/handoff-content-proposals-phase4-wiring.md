@@ -1,17 +1,36 @@
 # Handoff — Content Proposals Phase 4 (parallel proposal-editor routes)
 
-> **Status:** Phase 4 foundation (entity-type allowlist + per-entity
-> configs) is in. The editor wiring approach has been **redesigned**
-> since the previous handoff — the in-place wiring plan
-> (`useEntityWriter` baked into each editor with mode-aware dispatch)
-> is **superseded** by a parallel-route design.
-> Branch `claude/loving-banach-d76c40`.
+> **Status (updated 2026-05-19):** Phase 4.1 through 4.5c are
+> **shipped**; the parallel proposal-editor design is live for the
+> three Phase-2c editors (Tags / Spell Rules / Spell Lists). Phase
+> 4.5d/e/f (Spells / Option Groups / Classes — the heavy editors)
+> are still **not done** — they have no proposal route yet and
+> currently gate writes on `isAdmin` directly rather than going
+> through any writer abstraction. Branch `claude/loving-banach-d76c40`.
 >
-> Resume by building the proposal-editor wrapper + a dedicated
-> route prefix `/proposals/edit/*` that wraps the existing editor
-> components in proposal mode. Content-creators only ever see the
-> proposal routes; the admin `/compendium/*` routes stay
-> direct-write and are unreachable to creators.
+> **Shipped this pass:**
+> - `ba1a334` Phase 4.1 — `proposal_bundles` table + name/description
+>   endpoints + `<BlockMetadataDialog>` for create/rename.
+> - `ae021d7` Phase 4.2 — `<ProposalEditorWrapper>`,
+>   `useProposalAccumulator`, `<PickOrCreateBlockDialog>`.
+> - `f30b30e` Phase 4.3 — `dropEntity`/`dropField`/`dropFields` on
+>   the context + `<DropEntityButton>` / `<DropSectionButton>` /
+>   `<DropFieldIcon>` UI primitives.
+> - `cc5d673` Phase 4.4 — `<AdminOnly>` route guard, /proposals/edit/*
+>   catch-all (`<ProposalEditorComingSoon>`), sidebar's new Proposals
+>   section, MyProposals launchers re-pointed.
+> - `5482507` Phase 4.5a — TagsExplorer wired (the POC).
+> - `cdd8daa` Phase 4.5b+c — SpellRulesEditor + SpellListManager
+>   wired; cross-editor `<Link>` paths made route-prefix-aware.
+>
+> **Remaining work — Phase 4.5d / 4.5e / 4.5f.** Each heavy editor
+> currently uses `isAdmin` gates and (in some cases) direct
+> `queryD1` / `batchQueryD1` writes. The wiring pattern is:
+> swap in `useProposalAccumulator`, loosen the gate to
+> `canManage = isAdmin || isContentCreator`, route all writes
+> through the writer, add the `/proposals/edit/<entity>` route,
+> add the sidebar sub-item, and prefix-aware any cross-editor
+> links. See "Remaining editor wiring (4.5d–f)" below.
 
 ## What changed since the previous handoff
 
@@ -179,42 +198,81 @@ so the affordances can show / hide appropriately.
   - Content-creator: only the **Proposals** section. Compendium
     section entirely hidden.
 
-### 4.5 · Editor wiring (order: smallest UX delta last)
+### 4.5 · Editor wiring
 
-Each editor gets:
+The Phase-2c editors (Tags / Spell Rules / Spell Lists) are all
+**shipped**. They use the established template:
 
-1. A `mode: 'direct' | 'proposal'` prop on the base component.
-2. In `mode='proposal'`: Save button hidden, auto-update writes
-   delegated to the accumulator hook, Drop Edits surface points
-   exposed to the wrapper.
-3. A route entry at `/proposals/edit/<thing>` wrapping the editor
-   in `<ProposalEditorWrapper>`.
+1. Swap `useEntityWriter` → `useProposalAccumulator` (drop-in; passes
+   through outside a wrapper, queues inside).
+2. Add `/proposals/edit/<entity>` route in App.tsx wrapping the
+   editor in `<ProposalEditorWrapper entityType="...">`.
+3. Add a sidebar sub-item under the Proposals section.
+4. Make any `navigate()` / cross-editor `<Link>` paths route-prefix
+   aware (compute `basePath` / `editorPrefix` from `useLocation()`)
+   so a content-creator clicking around inside `/proposals/edit/*`
+   doesn't bounce into the AdminOnly-guarded admin route.
 
-Order (progressively more complex):
+#### Shipped
 
 - **4.5a · [TagsExplorer](../src/pages/compendium/TagsExplorer.tsx)** —
-  POC. Today every toggle fires a write. In proposal mode toggles
-  update local state; Submit Changes drains. Biggest UX delta;
-  best stress test of the wrapper.
+  shipped `5482507`. POC; this is the editor that gave the wrapper
+  its first end-to-end test.
 - **4.5b · [SpellRulesEditor](../src/pages/compendium/SpellRulesEditor.tsx)** —
-  single-page editor with mostly a Save button today. Add Drop
-  Edits surface for individual rules.
+  shipped `cdd8daa`. One-line writer swap (no `navigate()`, no
+  cross-editor links to translate).
 - **4.5c · [SpellListManager](../src/pages/compendium/SpellListManager.tsx)** —
-  list of class spell lists; site of the original block-mode 403
-  bug. Apply Changes button goes from "fires immediately" to
-  "queues."
+  shipped `cdd8daa`. Writer swap plus prefix-aware
+  `<Link to={`${editorPrefix}/spell-rules`}>` for the cross-editor
+  "Manage Rules" link. The LinkedRulesPanel sub-component
+  computes its own `editorPrefix` via `useLocation()` because
+  it's defined at file scope.
+
+#### Remaining editor wiring (4.5d–f)
+
+The three heavy editors are bigger lifts than 4.5a–c because they
+don't use `useEntityWriter` today — they call `queryD1` /
+`batchQueryD1` directly and gate writes on `isAdmin`. Each needs:
+
+1. Loosen the gate: `const canManage = isAdmin || isContentCreator;`
+   replacing `isAdmin`-only early returns. Keep multi-row paths
+   (Backfill, Bulk Import, Rebuild) admin-only via `{isAdmin && ...}`.
+2. Replace every direct write call with `useProposalAccumulator`'s
+   `create` / `update` / `remove`. Payload keys must match the
+   D1 column allowlist in `api/_lib/proposals.ts` (snake_case;
+   `created_at` / `updated_at` are server-managed, don't include).
+   **Do NOT pre-stringify JSON columns** — the writer's
+   `sanitizePayload` stringifies them.
+3. Add `/proposals/edit/<entity>` route in App.tsx.
+4. Add sidebar sub-item.
+5. Audit cross-editor `<Link>` paths and `navigate()` calls — make
+   them prefix-aware if any link to another editor.
+
+Per-editor notes:
+
 - **4.5d · [SpellsEditor](../src/pages/compendium/SpellsEditor.tsx)** —
-  first heavy editor. Single-spell form, JSON columns. The base
-  editor mostly already Save-batches per-spell, so the work is
-  largely route + wrapper + Drop Edits.
+  ~1500 lines, single-spell form. Has multiple `isAdmin` gates
+  (lines 238, 381, 490, 1016 at last grep). Doesn't use
+  `upsertDocument` directly — writes go through internal helpers
+  that ultimately hit `queryD1`. Find the save sites and route them
+  through the writer. Skip Bulk Import / Backfill (admin-only).
 - **4.5e · [UniqueOptionGroupEditor](../src/pages/compendium/UniqueOptionGroupEditor.tsx)** —
-  group + items: two entity types feed one editor. The accumulator
-  must handle multi-entity submits per Submit Changes.
+  ~978 lines. Edits one group plus N items. Use TWO writers:
+  `useProposalAccumulator('unique_option_group', userProfile)`
+  for group saves and `useProposalAccumulator('unique_option_item',
+  userProfile)` for item saves. Each item save adds a separate
+  queued change, so a single "save all items" click can end up
+  with 10+ queued revisions — make sure that doesn't push the
+  queue past the server's 50-revision limit per POST in
+  `postQueuedChanges`.
 - **4.5f · [ClassEditor](../src/pages/compendium/ClassEditor.tsx)** —
-  heaviest. 13 JSON columns, tabbed sub-editors. Subclasses /
-  features / activities are still **not** in the allowlist —
-  document the gap in the class editor's Drop Edits header
-  ("Some sections can't be proposed yet — see admin").
+  ~1900 lines, 13 JSON columns. Subclasses, features, activities,
+  items, feats remain **off** the proposal allowlist — the
+  ENTITY_CONFIGS in `api/_lib/proposals.ts` accepts `class` but
+  not those nested entities. Class-editor Drop Edits should
+  suppress section affordances for tabs that mutate those tables
+  (or disable with a tooltip). Multi-row paths (advancement
+  generators, etc.) stay admin-only.
 
 ### 4.6 · Block menu rolled-up view
 
