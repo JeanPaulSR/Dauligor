@@ -6,8 +6,6 @@ import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent } from '../../components/ui/dialog';
 import {
   Repeat,
-  Database,
-  CloudOff,
   ChevronLeft,
   Trash2,
   Save,
@@ -37,7 +35,6 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState<any[]>([]);
-  const [isUsingD1, setIsUsingD1] = useState(false);
 
   // Group State
   const [name, setName] = useState('');
@@ -188,7 +185,6 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
             setDescription(groupData.description || '');
             setSourceId(groupData.source_id || groupData.sourceId || '');
             setGroupClassIds(groupData.class_ids || groupData.classIds || []);
-            setIsUsingD1(true);
           }
 
           // 4. Items — denormalize so camelCase keys (iconUrl, imageUrl,
@@ -442,19 +438,6 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           <h1 className="text-2xl font-serif font-bold text-ink uppercase tracking-tight">
             {id ? `Edit ${name || 'Group'}` : 'New Unique Option Group'}
           </h1>
-          {id && (
-            isUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3 h-3 text-emerald-500" />
-                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">D1 Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3 h-3 text-amber-500" />
-                <span className="text-[9px] font-bold text-amber-500 uppercase tracking-tighter">Legacy Firebase</span>
-              </div>
-            )
-          )}
         </div>
         <div className="flex items-center gap-2">
           {id && (

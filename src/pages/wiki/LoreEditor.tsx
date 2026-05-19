@@ -25,7 +25,7 @@ import {
   FileCode, Languages as LangIcon, Gem, Layers as FormationIcon,
   Flame as MythIcon, Atom, ClipboardList, Hammer as ProfIcon,
   Quote as ProseIcon, Award, Sparkle, FlaskConical as TechIcon,
-  Heart as TradIcon, BookOpen as SessionIcon, Edit, X, Database, CloudOff
+  Heart as TradIcon, BookOpen as SessionIcon, Edit, X
 } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -87,7 +87,6 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
 
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const [formData, setFormData] = useState<any>({
     title: '',
@@ -166,10 +165,8 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         setTagGroups(groupsData);
         setAllTags(tagsData);
         setAllArticles(articlesData);
-        setIsFoundationUsingD1(true);
       } catch (err) {
         console.error("Error loading foundation data for LoreEditor:", err);
-        setIsFoundationUsingD1(false);
       }
     };
     loadFoundation();
@@ -457,17 +454,6 @@ export default function LoreEditor({ userProfile }: { userProfile: any }) {
         </div>
 
           <div className="flex items-center gap-3">
-            {isFoundationUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-              </div>
-            )}
             <Button
               variant="outline"
               onClick={() => setFormData({ ...formData, status: formData.status === 'published' ? 'draft' : 'published' })}

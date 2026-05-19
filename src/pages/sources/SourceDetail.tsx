@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { ChevronLeft, ExternalLink, Edit, Book, Calendar, Clock, Tag, Sword, Download, ChevronDown, Database, CloudOff } from 'lucide-react';
+import { ChevronLeft, ExternalLink, Edit, Book, Calendar, Clock, Tag, Sword, Download, ChevronDown } from 'lucide-react';
 import { fetchDocument, fetchCollection } from '../../lib/d1';
 import BBCodeRenderer from '../../components/BBCodeRenderer';
 import { motion } from 'motion/react';
@@ -22,7 +22,6 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const navigate = useNavigate();
-  const [isUsingD1, setIsUsingD1] = useState(false);
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
 
@@ -58,7 +57,6 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
           });
           
           setLinkedClasses(classesData);
-          setIsUsingD1(true);
         } else {
           setSource(null);
         }
@@ -66,7 +64,6 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
       } catch (error) {
         console.error("Error loading source detail:", error);
         setLoading(false);
-        setIsUsingD1(false);
       }
     };
 
@@ -99,25 +96,14 @@ export default function SourceDetail({ userProfile }: { userProfile: any }) {
     <div className="max-w-5xl mx-auto pb-20">
       <div className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => navigate('/sources')}
             className="text-ink/60 hover:text-gold gap-2"
           >
             <ChevronLeft className="w-4 h-4" /> Back to Sources
           </Button>
-          {isUsingD1 ? (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-              <Database className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-              <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-3">
           {isStaff && (

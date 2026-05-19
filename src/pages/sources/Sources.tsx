@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Book, Plus, ExternalLink, Edit, Search, RefreshCw, AlertTriangle, Download, ChevronDown, Database, CloudOff } from 'lucide-react';
+import { Book, Plus, ExternalLink, Edit, Search, RefreshCw, AlertTriangle, Download, ChevronDown } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
 import { Input } from '../../components/ui/input';
 
@@ -27,7 +27,6 @@ export default function Sources({ userProfile }: { userProfile: any }) {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [exporting, setExporting] = useState(false);
-  const [isUsingD1, setIsUsingD1] = useState(false);
   const navigate = useNavigate();
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
@@ -55,12 +54,10 @@ export default function Sources({ userProfile }: { userProfile: any }) {
         setSources(data);
         setLoading(false);
         setError(null);
-        setIsUsingD1(true);
       } catch (err: any) {
         console.error("Error loading sources:", err);
         setError(err.message);
         setLoading(false);
-        setIsUsingD1(false);
       }
     };
     loadSources();
@@ -116,17 +113,6 @@ export default function Sources({ userProfile }: { userProfile: any }) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gold/20 pb-6">
         <div className="flex items-center gap-4">
           <h1 className="h1-title">Sources & Documents</h1>
-          {isUsingD1 ? (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-              <Database className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-              <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">

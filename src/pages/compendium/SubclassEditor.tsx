@@ -18,9 +18,7 @@ import {
   Zap,
   AlertTriangle,
   ChevronDown,
-  Sliders,
-  Database,
-  CloudOff
+  Sliders
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -178,7 +176,6 @@ export default function SubclassEditor() {
   const [featureTab, setFeatureTab] = useState('description');
   const [managingGroupId, setManagingGroupId] = useState<string | null>(null);
   const [managingGroupSearch, setManagingGroupSearch] = useState('');
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1) => (
     normalizeAdvancementListForEditor(list, {
@@ -235,10 +232,8 @@ export default function SubclassEditor() {
           levels: typeof k.levels === 'string' ? JSON.parse(k.levels) : (k.levels || [])
         })));
 
-        if (sourcesData.length > 0) setIsFoundationUsingD1(true);
       } catch (err) {
         console.error("[SubclassEditor] Error loading foundation data:", err);
-        setIsFoundationUsingD1(false);
       }
     };
 
@@ -613,17 +608,6 @@ export default function SubclassEditor() {
             <div className="flex items-center gap-2">
               {parentClass && (
                 <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
-              )}
-              {isFoundationUsingD1 ? (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                  <Database className="w-3 h-3 text-emerald-500" />
-                  <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-                  <CloudOff className="w-3 h-3 text-amber-500" />
-                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-                </div>
               )}
             </div>
           </div>

@@ -4,13 +4,11 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
 import { slugify } from '../../lib/utils';
-import { 
-  Plus, 
-  Trash2, 
-  Edit, 
-  Crosshair,
-  Database,
-  CloudOff
+import {
+  Plus,
+  Trash2,
+  Edit,
+  Crosshair
 } from 'lucide-react';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
@@ -21,8 +19,7 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
   const [allProperties, setAllProperties] = useState<any[]>([]);
   const [attributes, setAttributes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUsingD1, setIsUsingD1] = useState(false);
-  
+
   // Form State
   const [editingWeapon, setEditingWeapon] = useState<any>(null);
   const [name, setName] = useState('');
@@ -57,7 +54,6 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
         setAllProperties(propsData);
         setWeapons(weaponsData);
         setAttributes(attrsData);
-        setIsUsingD1(weaponsData.length > 0);
       } catch (err) {
         console.error("Error loading weapons data:", err);
       } finally {
@@ -153,17 +149,6 @@ export default function WeaponsEditor({ userProfile, hideHeader }: { userProfile
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Weapon Manager</h1>
-              {isUsingD1 ? (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                  <Database className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                  <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
-                </div>
-              )}
             </div>
             <p className="text-ink/60 font-serif italic">Define the weapons available in your game system.</p>
           </div>

@@ -5,15 +5,13 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
 import { slugify } from '../../lib/utils';
-import { 
-  Plus, 
-  Trash2, 
-  Edit, 
+import {
+  Plus,
+  Trash2,
+  Edit,
   ChevronLeft,
   BookOpen,
-  Brain,
-  Database,
-  CloudOff
+  Brain
 } from 'lucide-react';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
@@ -25,8 +23,7 @@ export default function SkillsEditor({ userProfile, hideHeader }: { userProfile:
   const [skills, setSkills] = useState<any[]>([]);
   const [attributes, setAttributes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUsingD1, setIsUsingD1] = useState(false);
-  
+
   // Form State
   const [editingSkill, setEditingSkill] = useState<any>(null);
   const [name, setName] = useState('');
@@ -50,7 +47,6 @@ export default function SkillsEditor({ userProfile, hideHeader }: { userProfile:
         ]);
         setSkills(skillsData);
         setAttributes(attrsData);
-        setIsUsingD1(skillsData.length > 0);
       } catch (err) {
         console.error("Error loading skills:", err);
       } finally {
@@ -148,17 +144,6 @@ export default function SkillsEditor({ userProfile, hideHeader }: { userProfile:
               </div>
               <div className="flex items-center justify-between">
                 <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Skill Manager</h1>
-                {isUsingD1 ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                    <Database className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                    <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                    <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
-                  </div>
-                )}
               </div>
               <p className="text-ink/60 font-serif italic">Define the core skills available in your game system.</p>
             </div>

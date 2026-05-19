@@ -31,7 +31,7 @@ import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  Tags as TagsIcon, Plus, X, Trash2, Edit2, Check, Database, CloudOff,
+  Tags as TagsIcon, Plus, X, Trash2, Edit2, Check,
   CornerDownRight, Search, ChevronDown, ChevronRight, ArrowRightLeft, Move, CornerLeftUp,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -79,7 +79,6 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUsingD1, setIsUsingD1] = useState(false);
   const [tagUsage, setTagUsage] = useState<Map<string, TagUsageBreakdown> | null>(null);
 
   // Per-group + per-tag UI state. Reset on group switch via the inner
@@ -97,7 +96,6 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
     if (!canManageTags) return;
     const groupsData = await fetchCollection<any>('tagGroups', { orderBy: 'name ASC' });
     setTagGroups(groupsData);
-    setIsUsingD1(groupsData.length > 0);
   }, [canManageTags]);
 
   const reloadTags = useCallback(async () => {
@@ -125,7 +123,6 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
         if (!active) return;
         setTagGroups(groupsData);
         setAllTags(tagsData.map(normalizeTagRow));
-        setIsUsingD1(groupsData.length > 0 || tagsData.length > 0);
       })
       .catch((err) => console.error('[TagsExplorer] initial load failed:', err))
       .finally(() => { if (active) setLoading(false); });
@@ -172,15 +169,6 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
           <h1 className="h1-title text-ink flex items-center gap-3">
             <TagsIcon className="w-7 h-7 text-gold" />
             Tag Management
-            {isUsingD1 ? (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-500 uppercase tracking-widest">
-                <Database className="w-3 h-3" /> D1 Linked
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] font-bold text-amber-500 uppercase tracking-widest">
-                <CloudOff className="w-3 h-3" /> Legacy
-              </span>
-            )}
           </h1>
           <p className="description-text mt-1 text-ink/60">Organize and curate the compendium taxonomy.</p>
         </div>

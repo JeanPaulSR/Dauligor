@@ -47,7 +47,6 @@ import { useSpellFilters } from '../../hooks/useSpellFilters';
 import { cn } from '../../lib/utils';
 import { ClassImageStyle, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { toast } from 'sonner';
-import { Database, CloudOff } from 'lucide-react';
 
 export default function ClassView({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
@@ -91,7 +90,6 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
   const [subclassSpellsKnown, setSubclassSpellsKnown] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(true);
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedOptionItems, setSelectedOptionItems] = useState<Record<string, string>>({});
@@ -516,12 +514,8 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
           return (a.name || '').localeCompare(b.name || '');
         }));
 
-        if (tagGroupsData.length > 0) {
-          setIsFoundationUsingD1(true);
-        }
       } catch (err) {
         console.error("[ClassView] Error loading foundation data:", err);
-        setIsFoundationUsingD1(false);
       }
     };
 
@@ -752,17 +746,6 @@ export default function ClassView({ userProfile }: { userProfile: any }) {
             </div>
             <div className="flex items-center gap-4">
               <h1 className="h1-title uppercase">{classData.name}</h1>
-              {isFoundationUsingD1 ? (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                  <Database className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                  <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-                </div>
-              )}
             </div>
             
             <div className="flex flex-wrap gap-x-6 gap-y-2">

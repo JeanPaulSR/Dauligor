@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
 import { slugify } from '../../lib/utils';
-import { Plus, Trash2, Edit, Database, CloudOff } from 'lucide-react';
+import { Plus, Trash2, Edit } from 'lucide-react';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 
@@ -28,8 +28,7 @@ export default function SimpleProficiencyEditor({
   const [items, setItems] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUsingD1, setIsUsingD1] = useState(false);
-  
+
   // Form State
   const [editingItem, setEditingItem] = useState<any>(null);
   const [name, setName] = useState('');
@@ -46,10 +45,8 @@ export default function SimpleProficiencyEditor({
       try {
         const data = await fetchCollection(collectionName, { orderBy: '"order" ASC, name ASC' });
         setItems(data);
-        if (data.length > 0) setIsUsingD1(true);
       } catch (err) {
         console.error(`Error loading ${collectionName}:`, err);
-        setIsUsingD1(false);
       } finally {
         setLoading(false);
       }
@@ -141,20 +138,7 @@ export default function SimpleProficiencyEditor({
     <div className="grid lg:grid-cols-3 gap-8">
       <div className="lg:col-span-1 space-y-6">
         <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 className="label-text text-gold shrink-0">{title} Manager</h2>
-              {isUsingD1 ? (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                  <Database className="w-3 h-3 text-emerald-500" />
-                  <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">D1 Linked</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-                  <CloudOff className="w-3 h-3 text-amber-500" />
-                  <span className="text-[9px] font-bold text-amber-500 uppercase tracking-tighter">Legacy Firebase</span>
-                </div>
-              )}
-            </div>
+            <h2 className="label-text text-gold shrink-0">{title} Manager</h2>
             <br/>
             <p className="text-ink/60 font-serif italic">{descriptionText}</p>
         </div>

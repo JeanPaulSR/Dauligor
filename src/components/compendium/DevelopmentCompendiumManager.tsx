@@ -4,7 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
 import { normalizeCompendiumData, denormalizeCompendiumData } from '../../lib/compendium';
-import { Database, CloudOff, ChevronLeft, Edit, Plus, Save, Trash2, Wrench } from 'lucide-react';
+import { ChevronLeft, Edit, Plus, Save, Trash2, Wrench } from 'lucide-react';
 import { slugify } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -74,7 +74,6 @@ export default function DevelopmentCompendiumManager({
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<DevelopmentFormData>(makeInitialForm(defaultData));
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const loadEntries = async () => {
     try {
@@ -95,10 +94,8 @@ export default function DevelopmentCompendiumManager({
     try {
       const data = await fetchCollection('sources', { orderBy: 'name ASC' });
       setSources(data);
-      if (data.length > 0) setIsFoundationUsingD1(true);
     } catch (err) {
       console.error(`[${title}] Error loading sources:`, err);
-      setIsFoundationUsingD1(false);
     }
   };
 
@@ -244,17 +241,6 @@ export default function DevelopmentCompendiumManager({
           </div>
           <div className="flex items-center gap-4">
             <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">{title}</h1>
-            {isFoundationUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-              </div>
-            )}
           </div>
           <p className="text-ink/60 font-serif italic max-w-3xl">{description}</p>
           <p className="text-xs text-gold/80 border border-gold/10 bg-gold/5 rounded px-3 py-2 max-w-3xl">
