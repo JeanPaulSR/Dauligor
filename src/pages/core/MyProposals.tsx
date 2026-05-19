@@ -32,8 +32,10 @@ import {
 } from 'lucide-react';
 import { useBlock } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
+import { PickOrCreateBlockDialog } from '../../components/proposals/PickOrCreateBlockDialog';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
+import { useNavigate } from 'react-router-dom';
 
 type Status = 'draft' | 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -364,45 +366,97 @@ type LauncherEntry = {
 };
 
 function LauncherGrid({ entries }: { entries: LauncherEntry[] }) {
+  // Clicking a launcher opens the block picker BEFORE navigating to
+  // the editor. The picker resolves "which block does this work
+  // belong to?" — without it, the user lands in the editor not
+  // knowing which block their next save will hit. Cancelling the
+  // picker means cancelling the navigation entirely.
+  const [pendingEntry, setPendingEntry] = useState<LauncherEntry | null>(null);
+  const { openBlocks, setActiveBlock, startBlock } = useBlock();
+  const navigate = useNavigate();
+
+  const closeAndNavigate = (href: string) => {
+    setPendingEntry(null);
+    navigate(href);
+  };
+
+  const handlePick = (bundleId: string) => {
+    if (!pendingEntry) return;
+    setActiveBlock(bundleId);
+    closeAndNavigate(pendingEntry.href);
+  };
+
+  const handleCreate = async (name: string, description: string | null) => {
+    if (!pendingEntry) return;
+    // startBlock POSTs the new bundle AND sets it active before
+    // resolving — by the time we navigate the editor's wrapper will
+    // see the right active id.
+    await startBlock(name, description);
+    closeAndNavigate(pendingEntry.href);
+  };
+
   return (
-    <ul className="grid gap-3 md:grid-cols-2">
-      {entries.map((editor) => {
-        const Icon = editor.icon;
-        const ready = editor.status === 'ready';
-        const body = (
-          <div
-            className={`group p-3 border rounded transition-colors h-full ${
-              ready
-                ? 'border-gold/20 hover:border-gold hover:bg-gold/10 cursor-pointer'
-                : 'border-ink/10 bg-card/30 cursor-not-allowed opacity-60'
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <Icon className="w-5 h-5 text-gold mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm text-ink flex items-center gap-2">
-                  {editor.title}
-                  {!ready && (
-                    <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/40">
-                      coming soon
-                    </Badge>
-                  )}
-                </p>
-                <p className="text-xs text-ink/60 mt-1 leading-snug">{editor.description}</p>
+    <>
+      <ul className="grid gap-3 md:grid-cols-2">
+        {entries.map((editor) => {
+          const Icon = editor.icon;
+          const ready = editor.status === 'ready';
+          const body = (
+            <div
+              className={`group p-3 border rounded transition-colors h-full ${
+                ready
+                  ? 'border-gold/20 hover:border-gold hover:bg-gold/10 cursor-pointer'
+                  : 'border-ink/10 bg-card/30 cursor-not-allowed opacity-60'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <Icon className="w-5 h-5 text-gold mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-ink flex items-center gap-2">
+                    {editor.title}
+                    {!ready && (
+                      <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/40">
+                        coming soon
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="text-xs text-ink/60 mt-1 leading-snug">{editor.description}</p>
+                </div>
+                {ready && (
+                  <ArrowRight className="w-4 h-4 text-gold/40 group-hover:text-gold shrink-0 mt-0.5" />
+                )}
               </div>
-              {ready && (
-                <ArrowRight className="w-4 h-4 text-gold/40 group-hover:text-gold shrink-0 mt-0.5" />
-              )}
             </div>
-          </div>
-        );
-        return (
-          <li key={editor.title}>
-            {ready ? <Link to={editor.href}>{body}</Link> : body}
-          </li>
-        );
-      })}
-    </ul>
+          );
+          return (
+            <li key={editor.title}>
+              {ready ? (
+                <button
+                  type="button"
+                  onClick={() => setPendingEntry(editor)}
+                  className="w-full text-left"
+                >
+                  {body}
+                </button>
+              ) : (
+                body
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <PickOrCreateBlockDialog
+        open={!!pendingEntry}
+        onOpenChange={(open) => {
+          if (!open) setPendingEntry(null);
+        }}
+        openBlocks={openBlocks}
+        onPick={handlePick}
+        onCreate={handleCreate}
+        title={pendingEntry ? `${pendingEntry.title} — pick a block` : 'Pick a block'}
+        description="Your edits in this editor will be saved to the block you pick. Choose an existing block or create a new one."
+      />
+    </>
   );
 }
 
