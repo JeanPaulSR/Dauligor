@@ -26,13 +26,18 @@ import {
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
 import { Inbox, Check, X, AlertTriangle, Undo2, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen } from 'lucide-react';
+import { recomputeAppliedRulesForSpell } from '../../lib/spellRules';
 
 type EntityType =
   | 'tag'
   | 'tag_group'
   | 'spell_rule'
   | 'spell_rule_application'
-  | 'class_spell_list';
+  | 'class_spell_list'
+  | 'spell'
+  | 'class'
+  | 'unique_option_group'
+  | 'unique_option_item';
 
 type Operation = 'create' | 'update' | 'delete';
 
@@ -72,6 +77,10 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   spell_rule: 'Spell Rule',
   spell_rule_application: 'Rule Application',
   class_spell_list: 'Class Spell List',
+  spell: 'Spell',
+  class: 'Class',
+  unique_option_group: 'Option Group',
+  unique_option_item: 'Option Item',
 };
 
 function describePayloadSummary(p: Proposal): string {
@@ -91,6 +100,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(false);
   const [counts, setCounts] = useState<Record<EntityType, number>>({
     tag: 0, tag_group: 0, spell_rule: 0, spell_rule_application: 0, class_spell_list: 0,
+    spell: 0, class: 0, unique_option_group: 0, unique_option_item: 0,
   });
   const [selected, setSelected] = useState<Proposal | null>(null);
   const [conflictDialog, setConflictDialog] = useState<null | {
@@ -169,9 +179,13 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
           }),
         );
         setCounts(
-          countResults.reduce(
+          countResults.reduce<Record<EntityType, number>>(
             (acc, [id, count]) => ({ ...acc, [id]: count }),
-            { tag: 0, tag_group: 0, spell_rule: 0, spell_rule_application: 0, class_spell_list: 0 },
+            {
+              tag: 0, tag_group: 0, spell_rule: 0, spell_rule_application: 0,
+              class_spell_list: 0, spell: 0, class: 0, unique_option_group: 0,
+              unique_option_item: 0,
+            },
           ),
         );
       }
@@ -209,7 +223,26 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Failed to approve (HTTP ${res.status})`);
       }
+      const body = await res.json().catch(() => ({} as any));
       toast.success('Proposal approved.');
+      // Post-approve hook: when the change touched a spell row,
+      // recompute the rule-driven class_spell_lists rows that
+      // reference it. Same call admin's direct upsertSpell makes —
+      // without it, a tag/level/school change approved via the queue
+      // would leave the class lists stale (the user's stated problem
+      // with "constant battle to update them"). Best-effort: a
+      // failure here logs but doesn't unwind the approval.
+      const touchedSpellId =
+        proposal.entity_type === 'spell'
+          ? (body?.entity_id as string | undefined) || proposal.entity_id || undefined
+          : undefined;
+      if (touchedSpellId) {
+        try {
+          await recomputeAppliedRulesForSpell(touchedSpellId);
+        } catch (err) {
+          console.warn('[AdminProposals] post-approve spell recompute failed:', err);
+        }
+      }
       setSelected(null);
       void load();
     } catch (err: any) {
@@ -275,6 +308,16 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         throw new Error(err.error || `Failed to revert (HTTP ${res.status})`);
       }
       toast.success('Proposal reverted; rollback logged as a new approved revision.');
+      // Same post-write recompute as approve — a revert that rolls
+      // back a spell to its pre-approval state can flip which rules
+      // include/exclude it just like the original approval did.
+      if (proposal.entity_type === 'spell' && proposal.entity_id) {
+        try {
+          await recomputeAppliedRulesForSpell(proposal.entity_id);
+        } catch (err) {
+          console.warn('[AdminProposals] post-revert spell recompute failed:', err);
+        }
+      }
       setSelected(null);
       void load();
     } catch (err: any) {
