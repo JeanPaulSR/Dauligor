@@ -157,10 +157,12 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   // Cross-editor links (to Spell Rules) need to stay on the same
   // route prefix so content-creators on /proposals/edit/spell-lists
   // don't bounce into the AdminOnly-guarded /compendium/spell-rules.
+  // The Back link walks one level up: /compendium/classes on the
+  // admin route, /my-proposals on the proposal route.
   const location = useLocation();
-  const editorPrefix = location.pathname.startsWith('/proposals/edit/')
-    ? '/proposals/edit'
-    : '/compendium';
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const editorPrefix = isProposalRoute ? '/proposals/edit' : '/compendium';
+  const backPath = isProposalRoute ? '/my-proposals' : '/compendium/classes';
   // Both `proposal` (single-revision submit) and `block` (staging
   // into a draft bundle) route mutations through the writer instead
   // of the direct-write d1 helpers — the writer's create/update/
@@ -1138,7 +1140,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           Replaces the old gradient-header card so the page chrome
           shrinks from ~200px to a single ~48px row. */}
       <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
-        <Link to="/compendium/classes">
+        <Link to={backPath}>
           <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
             Back

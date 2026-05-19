@@ -24,6 +24,7 @@ import { Undo2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProposalContext } from '../../lib/proposalAccumulator';
 import { Button } from '../ui/button';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 
 /* -------------------------------------------------------------------------- */
 /* Entity-level: "Drop all edits to <name>"                                    */
@@ -54,27 +55,9 @@ export function DropEntityButton({
 }: DropEntityButtonProps) {
   const ctx = useProposalContext();
   const [working, setWorking] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Visible if there's anything to drop — either local queue or a
-  // server-side draft for this entity. The latter check happens
-  // implicitly through `isEntityDirty` (queue) — we always render
-  // the button when called by the editor, since editors only mount
-  // it when the entity is actually being edited. The button stays
-  // ungreyed once submitted because a server-side draft IS something
-  // the user can still drop.
-  // Hide when neither queue nor draft has anything? That requires
-  // wiring drafts here too — skipped for Phase 4.3 simplicity. The
-  // editor can manage visibility via its own dirty signal.
-
-  const handleClick = useCallback(async () => {
-    if (!skipConfirm) {
-      const name = entityLabel ? `"${entityLabel}"` : 'this entry';
-      if (!window.confirm(
-        `Drop all edits to ${name}? This removes any queued changes and any drafts already in the block.`,
-      )) {
-        return;
-      }
-    }
+  const performDrop = useCallback(async () => {
     setWorking(true);
     try {
       await ctx.dropEntity(entityId);
@@ -82,22 +65,44 @@ export function DropEntityButton({
       toast.success(
         entityLabel ? `Dropped edits to "${entityLabel}".` : 'Edits dropped.',
       );
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to drop edits.');
+      throw err; // keep the ConfirmDialog open on failure
     } finally {
       setWorking(false);
     }
-  }, [ctx, entityId, entityLabel, onDropped, skipConfirm]);
+  }, [ctx, entityId, entityLabel, onDropped]);
+
+  const handleClick = useCallback(() => {
+    if (skipConfirm) {
+      void performDrop();
+      return;
+    }
+    setConfirmOpen(true);
+  }, [skipConfirm, performDrop]);
 
   return (
-    <Button
-      variant="outline"
-      type="button"
-      onClick={handleClick}
-      disabled={working}
-      className={`gap-1.5 border-blood/30 text-blood hover:bg-blood/10 ${className ?? ''}`}
-    >
-      <RotateCcw className="w-3.5 h-3.5" />
-      {working ? 'Dropping…' : 'Drop edits'}
-    </Button>
+    <>
+      <Button
+        variant="outline"
+        type="button"
+        onClick={handleClick}
+        disabled={working}
+        className={`gap-1.5 border-blood/30 text-blood hover:bg-blood/10 ${className ?? ''}`}
+      >
+        <RotateCcw className="w-3.5 h-3.5" />
+        {working ? 'Dropping…' : 'Drop edits'}
+      </Button>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Drop all edits to ${entityLabel ? `"${entityLabel}"` : 'this entry'}?`}
+        description="This removes any queued changes and any drafts already in the block. The live row is unchanged."
+        confirmLabel="Drop edits"
+        destructive
+        onConfirm={performDrop}
+      />
+    </>
   );
 }
 
@@ -129,31 +134,46 @@ export function DropSectionButton({
   className,
 }: DropSectionButtonProps) {
   const ctx = useProposalContext();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Visible only if at least one field in the section is dirty.
   const hasDirty = sectionFields.some((f) => ctx.isFieldDirty(entityId, f));
   if (!hasDirty) return null;
 
-  const handleClick = () => {
-    if (!skipConfirm) {
-      const label = sectionLabel ? `"${sectionLabel}"` : 'this section';
-      if (!window.confirm(`Drop your edits to ${label}?`)) return;
-    }
+  const performDrop = () => {
     ctx.dropFields(entityId, sectionFields);
     onDropped?.();
   };
 
+  const handleClick = () => {
+    if (skipConfirm) {
+      performDrop();
+      return;
+    }
+    setConfirmOpen(true);
+  };
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      type="button"
-      onClick={handleClick}
-      className={`gap-1 text-xs text-blood/80 hover:text-blood hover:bg-blood/10 ${className ?? ''}`}
-    >
-      <Undo2 className="w-3 h-3" />
-      Drop section
-    </Button>
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        type="button"
+        onClick={handleClick}
+        className={`gap-1 text-xs text-blood/80 hover:text-blood hover:bg-blood/10 ${className ?? ''}`}
+      >
+        <Undo2 className="w-3 h-3" />
+        Drop section
+      </Button>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Drop your edits to ${sectionLabel ? `"${sectionLabel}"` : 'this section'}?`}
+        confirmLabel="Drop section"
+        destructive
+        onConfirm={performDrop}
+      />
+    </>
   );
 }
 

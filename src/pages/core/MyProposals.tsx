@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useBlock } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 
 type Status = 'draft' | 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -313,11 +314,6 @@ function SubmissionsPanel({
                       {ENTITY_LABEL[p.entity_type]}
                     </Badge>
                     <StatusBadge status={p.status} />
-                    {p.bundle_id && (
-                      <Badge variant="outline" className="text-[9px] font-mono border-ink/10 text-ink/40">
-                        bundle {p.bundle_id.slice(0, 12)}
-                      </Badge>
-                    )}
                     {p.status === 'pending' && (
                       <Button
                         size="xs"
@@ -560,6 +556,7 @@ function BlockPanel() {
   const [working, setWorking] = useState<'submit' | 'discard' | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
 
   const handleCreate = async (name: string, description: string | null) => {
     await startBlock(name, description);
@@ -611,15 +608,14 @@ function BlockPanel() {
       setWorking(null);
     }
   };
-  const handleDiscard = async () => {
-    const label = activeBundle?.name ? `"${activeBundle.name}"` : 'the active block';
-    if (!confirm(`Discard ${label} (${drafts.length} staged change${drafts.length === 1 ? '' : 's'})? This deletes the drafts and clears the block.`)) return;
+  const performDiscard = async () => {
     setWorking('discard');
     try {
       const { discarded } = await discardBlock();
       toast.success(`Block discarded (${discarded} draft${discarded === 1 ? '' : 's'} removed).`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to discard block.');
+      throw err; // keep the ConfirmDialog open on failure
     } finally {
       setWorking(null);
     }
@@ -646,7 +642,6 @@ function BlockPanel() {
                 {activeBundle.description}
               </p>
             )}
-            <p className="text-[11px] text-ink/40 font-mono truncate">{activeBundleId}</p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
             <Button
@@ -659,7 +654,7 @@ function BlockPanel() {
             </Button>
             <Button
               variant="outline"
-              onClick={handleDiscard}
+              onClick={() => setDiscardConfirmOpen(true)}
               disabled={working !== null}
               className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10"
             >
@@ -713,6 +708,19 @@ function BlockPanel() {
         initialName={activeBundle?.name || ''}
         initialDescription={activeBundle?.description ?? null}
         onSubmit={handleRename}
+      />
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        onOpenChange={setDiscardConfirmOpen}
+        title={`Discard ${activeBundle?.name ? `"${activeBundle.name}"` : 'this block'}?`}
+        description={
+          drafts.length > 0
+            ? `This deletes ${drafts.length} staged change${drafts.length === 1 ? '' : 's'} and clears the block. Approved changes (if any) remain in your audit trail.`
+            : 'This clears the block. There are no staged changes to lose.'
+        }
+        confirmLabel="Discard block"
+        destructive
+        onConfirm={performDiscard}
       />
     </>
   );
