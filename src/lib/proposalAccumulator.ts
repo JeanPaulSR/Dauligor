@@ -223,14 +223,40 @@ export function useProposalContextOptional(): ProposalAccumulatorContextValue | 
   return useContext(ProposalAccumulatorContext);
 }
 
+/** Subset of `DraftRevision` (from proposalBlock) that we need to
+ *  dedupe queue entries against existing drafts. Kept local so we
+ *  don't pull a circular import on the BlockProvider module. */
+export type ExistingDraftRef = {
+  id: string;
+  entity_type: string;
+  entity_id: string | null;
+  operation: 'create' | 'update' | 'delete';
+  proposed_payload: Record<string, any> | null;
+};
+
 /**
  * Internal helper used by ProposalEditorWrapper to do the actual POST.
  * Exported so tests / dev tools can drain a queue without going
  * through the wrapper's UI flow.
+ *
+ * **Draft dedup (Phase 4.5d step 3):** if a queue entry targets the
+ * same (entity_type, entity_id) as an existing server-side draft AND
+ * both operations are create/update, we PATCH the draft's payload
+ * instead of POSTing a new revision. This collapses "create then
+ * edit" into a single CREATE draft rather than CREATE + UPDATE
+ * polluting the bundle. Pass `existingDrafts` from `useBlock().drafts`
+ * (filtered to the active block). Omit for back-compat (always POST).
+ *
+ * The other reconciliation cases (DELETE-after-CREATE → drop the
+ * create draft; DELETE-after-UPDATE → swap to a fresh DELETE revision)
+ * are not handled yet — they currently still POST a new revision and
+ * leave the admin to resolve. TODO once we have real usage to gauge
+ * how disruptive that is.
  */
 export async function postQueuedChanges(
   queue: QueuedChange[],
   bundleId: string,
+  existingDrafts: ExistingDraftRef[] = [],
 ): Promise<{ submitted: number }> {
   if (queue.length === 0) return { submitted: 0 };
   if (queue.length > 50) {
@@ -240,35 +266,86 @@ export async function postQueuedChanges(
   }
   const idToken = await auth.currentUser?.getIdToken();
   if (!idToken) throw new Error('Not signed in.');
+  const auth_header = `Bearer ${idToken}`;
 
-  const res = await fetch('/api/proposals', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({
-      revisions: queue.map((q) => ({
-        entity_type: q.entity_type,
-        // Creates carry their effective id in the queue (so Drop
-        // Edits can target them) but the server expects entity_id=null
-        // for create operations.
-        entity_id: q.operation === 'create' ? null : q.entity_id,
-        operation: q.operation,
-        proposed_payload: q.proposed_payload,
-        notes_from_proposer: q.notes_from_proposer,
-      })),
-      bundle_id: bundleId,
-      is_draft: true,
-    }),
-  });
+  // Partition: queue entries that match an existing draft get PATCHed
+  // (merging payloads); the rest get POSTed as new revisions.
+  const draftPatches: { draftId: string; mergedPayload: Record<string, any> }[] = [];
+  const newRevisions: QueuedChange[] = [];
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(
-      body?.error || `Failed to submit changes (HTTP ${res.status})`,
+  for (const q of queue) {
+    const existing =
+      q.operation !== 'delete'
+        ? existingDrafts.find(
+            (d) =>
+              d.entity_type === q.entity_type &&
+              d.entity_id === q.entity_id &&
+              (d.operation === 'create' || d.operation === 'update'),
+          )
+        : undefined;
+    if (existing && q.proposed_payload) {
+      draftPatches.push({
+        draftId: existing.id,
+        mergedPayload: {
+          ...(existing.proposed_payload || {}),
+          ...q.proposed_payload,
+        },
+      });
+    } else {
+      newRevisions.push(q);
+    }
+  }
+
+  // PATCH existing drafts in parallel.
+  if (draftPatches.length > 0) {
+    await Promise.all(
+      draftPatches.map((p) =>
+        fetch(`/api/proposals/${encodeURIComponent(p.draftId)}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: auth_header,
+          },
+          body: JSON.stringify({ proposed_payload: p.mergedPayload }),
+        }).then(async (res) => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(
+              body?.error || `Failed to patch existing draft (HTTP ${res.status})`,
+            );
+          }
+        }),
+      ),
     );
   }
+
+  if (newRevisions.length > 0) {
+    const res = await fetch('/api/proposals', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: auth_header,
+      },
+      body: JSON.stringify({
+        revisions: newRevisions.map((q) => ({
+          entity_type: q.entity_type,
+          entity_id: q.operation === 'create' ? null : q.entity_id,
+          operation: q.operation,
+          proposed_payload: q.proposed_payload,
+          notes_from_proposer: q.notes_from_proposer,
+        })),
+        bundle_id: bundleId,
+        is_draft: true,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(
+        body?.error || `Failed to submit changes (HTTP ${res.status})`,
+      );
+    }
+  }
+
   return { submitted: queue.length };
 }
 
