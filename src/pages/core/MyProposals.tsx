@@ -80,7 +80,12 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
 
-  const isContentCreator = !!userProfile?.permissions?.['content-creator'];
+  // Use `in` rather than `!!perms[key]` — an unrestricted grant
+  // stores scope as `null`, which is the truthy-check trap that
+  // mis-classified content-creators as not holding the perm.
+  const isContentCreator =
+    !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const isAdmin = userProfile?.role === 'admin';
   const allowed = isContentCreator || isAdmin;
 

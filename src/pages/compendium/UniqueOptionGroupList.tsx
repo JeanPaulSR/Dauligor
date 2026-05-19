@@ -56,9 +56,9 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredGroups.map(group => (
-          <Link 
-            key={group.id} 
-            to={`/compendium/unique-options/edit/${group.id}`}
+          <Link
+            key={group.id}
+            to={`/compendium/unique-options/${group.id}`}
             className="group p-4 border border-gold/20 bg-card/50 hover:bg-gold/5 transition-all space-y-2"
           >
             <div className="flex items-center justify-between">
