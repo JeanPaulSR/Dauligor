@@ -472,12 +472,24 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
 
   // Whether the editor form for `editingId` should render read-only.
-  // Browse mode applies — but only for live spells the user hasn't
-  // unlocked or staged changes against. A New Spell (editingId=null)
-  // is never read-only — the form is the create surface.
+  // The lock is about ENTITY OWNERSHIP, not which focus mode is
+  // active — a base spell the user hasn't claimed should be
+  // protected whether they got to it via Browse Base or by
+  // selecting it before toggling to My Drafts. Earlier this also
+  // required `focusMode === 'browse'`, which let users bypass the
+  // lock by toggling modes; that gap is closed here.
+  //
+  // Read-only when:
+  //   - The wrapper enables the focus-mode feature (admin direct
+  //     route doesn't — it's full-trust by definition).
+  //   - There's a live entity selected (editingId !== null).
+  //   - The user hasn't explicitly "Edit Base"-d this entity.
+  //   - The user has no queued/drafted change against it (their own
+  //     work is always editable).
+  // A New Spell (editingId === null) is never read-only — that's the
+  // create surface and applies in any focus mode.
   const isReadOnly =
     focusModeEnabled &&
-    focusMode === 'browse' &&
     !!editingId &&
     !unlockedBaseIds.has(editingId) &&
     !draftedSpellIds.has(editingId);
