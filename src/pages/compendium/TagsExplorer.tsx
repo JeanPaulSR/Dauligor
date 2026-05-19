@@ -24,7 +24,7 @@
 // =============================================================================
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -40,7 +40,8 @@ import { fetchTagUsageMap, invalidateTagUsageCache, summarizeBreakdown, type Tag
 import { mergeTagInto } from '../../lib/tagMerge';
 import { moveTagToParent } from '../../lib/tagMove';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
-import { useEntityWriter, actionLabel, type WriterApi } from '../../lib/proposalAware';
+import { actionLabel, type WriterApi } from '../../lib/proposalAware';
+import { useProposalAccumulator } from '../../lib/proposalAccumulator';
 
 const SYSTEM_CLASSIFICATIONS = [
   'class', 'subclass', 'race', 'subrace', 'feat', 'background',
@@ -71,10 +72,24 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
   const isContentCreator = !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const canManageTags = isAdmin || isContentCreator;
-  const tagWriter = useEntityWriter('tag', userProfile);
-  const groupWriter = useEntityWriter('tag_group', userProfile);
+  // Inside <ProposalEditorWrapper> (the `/proposals/edit/tags` route)
+  // these queue locally and flush on Submit Changes; outside the
+  // wrapper (admin `/compendium/tags`) they pass through to
+  // useEntityWriter unchanged.
+  const tagWriter = useProposalAccumulator('tag', userProfile);
+  const groupWriter = useProposalAccumulator('tag_group', userProfile);
   const { id: selectedGroupId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Both `/compendium/tags(:/id)?` (admin direct) and
+  // `/proposals/edit/tags(:/id)?` (proposal-wrapped) mount this
+  // component. URLs we navigate to must use the same prefix as the
+  // current location so a group click inside the proposal route
+  // doesn't redirect users back into the AdminOnly-guarded admin
+  // route.
+  const basePath = location.pathname.startsWith('/proposals/edit/tags')
+    ? '/proposals/edit/tags'
+    : '/compendium/tags';
 
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
@@ -183,7 +198,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
           loading={loading}
           searchQuery={groupSearch}
           onSearchChange={setGroupSearch}
-          onSelectGroup={(id) => navigate(`/compendium/tags/${id}`)}
+          onSelectGroup={(id) => navigate(`${basePath}/${id}`)}
           onOpenCreateGroup={() => setCreateGroupOpen(true)}
         />
 
@@ -217,7 +232,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
           onReloadGroups={reloadGroups}
           onReloadTags={reloadTags}
           onReloadUsage={reloadUsage}
-          onSelectedGroupDeleted={() => navigate('/compendium/tags')}
+          onSelectedGroupDeleted={() => navigate(basePath)}
           isAdmin={isAdmin}
           tagWriter={tagWriter}
           groupWriter={groupWriter}
@@ -234,7 +249,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
             // In proposal mode the group doesn't exist yet, so don't
             // navigate to it — let the proposer see their submission
             // on /my-proposals instead.
-            navigate(`/compendium/tags/${newId}`);
+            navigate(`${basePath}/${newId}`);
           }
           setCreateGroupOpen(false);
         }}

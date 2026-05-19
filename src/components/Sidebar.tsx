@@ -216,6 +216,7 @@ export default function Sidebar({
         path: '/my-proposals',
         subItems: [
           { label: 'My Proposals', path: '/my-proposals' },
+          { label: 'Tags', path: '/proposals/edit/tags' },
         ],
       }] : []),
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },

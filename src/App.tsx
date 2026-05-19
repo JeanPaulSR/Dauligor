@@ -65,6 +65,7 @@ import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AdminOnly } from './components/auth/AdminOnly';
 import ProposalEditorComingSoon from './pages/proposals/ProposalEditorComingSoon';
+import { ProposalEditorWrapper } from './components/proposals/ProposalEditorWrapper';
 
 import DebugConsole from './components/DebugConsole';
 import { Toaster } from 'sonner';
@@ -272,9 +273,21 @@ export default function App() {
                   <Route path="/admin/worlds" element={<AdminWorlds userProfile={effectiveProfile} />} />
                   <Route path="/admin/proposals" element={<AdminProposals userProfile={effectiveProfile} />} />
                   <Route path="/my-proposals" element={<MyProposals userProfile={effectiveProfile} />} />
-                  {/* Phase 4.4 — /proposals/edit/* catch-all. Specific routes
-                      get added per editor in Phase 4.5; until then, navigating
-                      here surfaces the ProposalEditorComingSoon placeholder. */}
+                  {/* Phase 4.5 — per-entity proposal-editor routes. Each one
+                      wraps the existing editor component with
+                      ProposalEditorWrapper so Save/auto-update accumulates
+                      locally and flushes on Submit Changes. */}
+                  <Route path="/proposals/edit/tags" element={
+                    <ProposalEditorWrapper entityType="tag">
+                      <TagsExplorer userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
+                  <Route path="/proposals/edit/tags/:id" element={
+                    <ProposalEditorWrapper entityType="tag">
+                      <TagsExplorer userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
+                  {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
                   <Route path="/campaign/:id" element={<CampaignManager userProfile={effectiveProfile} />} />
