@@ -29,6 +29,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { Send } from 'lucide-react';
+import { auth } from '../../lib/firebase';
 import {
   ProposalAccumulatorContext,
   postQueuedChanges,
@@ -66,6 +67,7 @@ export function ProposalEditorWrapper({
   const {
     activeBundleId,
     activeBundle,
+    drafts,
     openBlocks,
     startBlock,
     setActiveBlock,
@@ -100,6 +102,105 @@ export function ProposalEditorWrapper({
     [queue, refreshBlock],
   );
 
+  /* --------------------------------------------------------------- */
+  /* Drop Edits (Phase 4.3)                                            */
+  /* --------------------------------------------------------------- */
+
+  const isEntityDirty = useCallback(
+    (entityId: string) => queue.some((q) => q.entity_id === entityId),
+    [queue],
+  );
+
+  const isFieldDirty = useCallback(
+    (entityId: string, fieldName: string) => {
+      const entry = queue.find((q) => q.entity_id === entityId);
+      if (!entry || entry.operation === 'delete') return false;
+      const payload = entry.proposed_payload;
+      if (!payload) return false;
+      return Object.prototype.hasOwnProperty.call(payload, fieldName);
+    },
+    [queue],
+  );
+
+  const dropFields = useCallback(
+    (entityId: string, fieldNames: string[]) => {
+      if (fieldNames.length === 0) return;
+      setQueue((q) =>
+        q
+          .map((entry) => {
+            if (entry.entity_id !== entityId) return entry;
+            if (entry.operation === 'delete') return entry;
+            const payload = entry.proposed_payload;
+            if (!payload) return entry;
+            const next: Record<string, any> = {};
+            for (const [k, v] of Object.entries(payload)) {
+              if (!fieldNames.includes(k)) next[k] = v;
+            }
+            return { ...entry, proposed_payload: next };
+          })
+          // If the resulting payload has nothing meaningful (only an
+          // `id` key, or nothing at all), the queue entry no longer
+          // represents a change — drop it. Creates with only `id`
+          // would be empty creates, which we never want to submit.
+          .filter((entry) => {
+            if (entry.entity_id !== entityId) return true;
+            if (entry.operation === 'delete') return true;
+            const payload = entry.proposed_payload;
+            if (!payload) return false;
+            const keys = Object.keys(payload).filter((k) => k !== 'id');
+            return keys.length > 0;
+          }),
+      );
+    },
+    [],
+  );
+
+  const dropField = useCallback(
+    (entityId: string, fieldName: string) => {
+      dropFields(entityId, [fieldName]);
+    },
+    [dropFields],
+  );
+
+  const dropEntity = useCallback(
+    async (entityId: string) => {
+      // 1. Clear from local queue.
+      setQueue((q) => q.filter((entry) => entry.entity_id !== entityId));
+      // 2. Delete any matching server-side drafts in the active block.
+      //    Drafts only exist if a block is active and the user has
+      //    previously submitted at least once.
+      const matchingDrafts = activeBundleId
+        ? drafts.filter((d) => d.entity_id === entityId)
+        : [];
+      if (matchingDrafts.length === 0) return;
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) throw new Error('Not signed in.');
+        // DELETE /api/proposals/:id (withdraw — drafts hard-delete server-side).
+        await Promise.all(
+          matchingDrafts.map((d) =>
+            fetch(`/api/proposals/${encodeURIComponent(d.id)}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${idToken}` },
+            }).then((res) => {
+              if (!res.ok) {
+                return res.json().catch(() => ({})).then((b: any) => {
+                  throw new Error(
+                    b?.error || `Failed to delete draft (HTTP ${res.status})`,
+                  );
+                });
+              }
+            }),
+          ),
+        );
+        void refreshBlock();
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to drop entity drafts.');
+      }
+    },
+    [activeBundleId, drafts, refreshBlock],
+  );
+
   const contextValue: ProposalAccumulatorContextValue = useMemo(
     () => ({
       queue,
@@ -107,8 +208,24 @@ export function ProposalEditorWrapper({
       flushToBundle,
       resetQueue,
       submitting,
+      isEntityDirty,
+      isFieldDirty,
+      dropEntity,
+      dropField,
+      dropFields,
     }),
-    [queue, queueChange, flushToBundle, resetQueue, submitting],
+    [
+      queue,
+      queueChange,
+      flushToBundle,
+      resetQueue,
+      submitting,
+      isEntityDirty,
+      isFieldDirty,
+      dropEntity,
+      dropField,
+      dropFields,
+    ],
   );
 
   // Submit Changes button handler.
