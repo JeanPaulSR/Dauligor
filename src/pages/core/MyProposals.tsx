@@ -33,6 +33,7 @@ import {
 import { useBlock } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
+import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 
 type Status = 'draft' | 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -327,8 +328,8 @@ function SubmissionsPanel({
                     )}
                   </div>
                   <p className="text-[11px] text-ink/50">
-                    Submitted {new Date(p.proposed_at).toLocaleString()}
-                    {p.reviewed_at && <> · Reviewed {new Date(p.reviewed_at).toLocaleString()}</>}
+                    Submitted {formatSqliteLocal(p.proposed_at)}
+                    {p.reviewed_at && <> · Reviewed {formatSqliteLocal(p.reviewed_at)}</>}
                   </p>
                   {p.notes_from_proposer && (
                     <p className="text-xs text-ink/70 italic border-l-2 border-gold/30 pl-3">
@@ -619,7 +620,7 @@ function BlockPanel() {
                             </p>
                           )}
                           <p className="text-[10px] text-ink/40 mt-1">
-                            Last updated {new Date(b.updated_at).toLocaleString()}
+                            Last updated {formatSqliteLocal(b.updated_at)}
                           </p>
                         </div>
                       </div>
@@ -735,7 +736,7 @@ function BlockPanel() {
                       <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/50 mr-1">
                         {ENTITY_LABEL[d.entity_type as EntityType] || d.entity_type}
                       </Badge>
-                      {new Date(d.proposed_at).toLocaleString()}
+                      {formatSqliteLocal(d.proposed_at)}
                     </p>
                   </div>
                 </li>
