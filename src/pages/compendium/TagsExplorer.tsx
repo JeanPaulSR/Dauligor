@@ -40,6 +40,7 @@ import { fetchTagUsageMap, invalidateTagUsageCache, summarizeBreakdown, type Tag
 import { mergeTagInto } from '../../lib/tagMerge';
 import { moveTagToParent } from '../../lib/tagMove';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
+import { useEntityWriter, actionLabel, type WriterApi } from '../../lib/proposalAware';
 
 const SYSTEM_CLASSIFICATIONS = [
   'class', 'subclass', 'race', 'subrace', 'feat', 'background',
@@ -59,7 +60,19 @@ const isUniqueConstraintError = (err: unknown): boolean => {
 // ═══════════════════════════════════════════════════════════════════════
 
 export default function TagsExplorer({ userProfile }: { userProfile: any }) {
+  // Admins write directly; content-creators write through the
+  // proposal queue; everyone else is read-only (still rendered, so
+  // signed-in viewers can browse the taxonomy). The writer hook
+  // does the role check internally and exposes `mode` so the UI
+  // can label affordances ("Save" vs "Propose Save") and hide
+  // multi-op flows (merge/move/group-delete cascades) outside of
+  // direct mode.
   const isAdmin = userProfile?.role === 'admin';
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManageTags = isAdmin || isContentCreator;
+  const tagWriter = useEntityWriter('tag', userProfile);
+  const groupWriter = useEntityWriter('tag_group', userProfile);
   const { id: selectedGroupId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
 
@@ -81,27 +94,27 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
 
   // ── Data loading ─────────────────────────────────────────────────────
   const reloadGroups = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!canManageTags) return;
     const groupsData = await fetchCollection<any>('tagGroups', { orderBy: 'name ASC' });
     setTagGroups(groupsData);
     setIsUsingD1(groupsData.length > 0);
-  }, [isAdmin]);
+  }, [canManageTags]);
 
   const reloadTags = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!canManageTags) return;
     const tagsData = await fetchCollection<any>('tags', { orderBy: 'name ASC' });
     setAllTags(tagsData.map(normalizeTagRow));
-  }, [isAdmin]);
+  }, [canManageTags]);
 
   const reloadUsage = useCallback(async (opts: { force?: boolean } = {}) => {
-    if (!isAdmin) return;
+    if (!canManageTags) return;
     if (opts.force) invalidateTagUsageCache();
     const map = await fetchTagUsageMap(opts.force ? { forceRefresh: true } : undefined);
     setTagUsage(map);
-  }, [isAdmin]);
+  }, [canManageTags]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageTags) return;
     let active = true;
     setLoading(true);
     Promise.all([
@@ -120,7 +133,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
       .then((map) => { if (active) setTagUsage(map); })
       .catch((err) => console.warn('[TagsExplorer] tag usage scan failed:', err));
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [canManageTags]);
 
   // Reset tag selection when group changes — different group, different
   // tag set, so a stale selection doesn't apply.
@@ -147,7 +160,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
     return map;
   }, [allTags]);
 
-  if (!isAdmin) {
+  if (!canManageTags) {
     return <div className="text-center py-20 font-serif text-2xl text-ink/40">Access Denied</div>;
   }
 
@@ -196,6 +209,8 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
             onSelectTag={setSelectedTagId}
             onReloadTags={reloadTags}
             onReloadUsage={reloadUsage}
+            isAdmin={isAdmin}
+            tagWriter={tagWriter}
           />
         ) : (
           <Card className="border-gold/10 bg-card/40 flex flex-col items-center justify-center text-center p-10">
@@ -215,15 +230,24 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
           onReloadTags={reloadTags}
           onReloadUsage={reloadUsage}
           onSelectedGroupDeleted={() => navigate('/compendium/tags')}
+          isAdmin={isAdmin}
+          tagWriter={tagWriter}
+          groupWriter={groupWriter}
         />
       </div>
 
       <CreateGroupDialog
         open={createGroupOpen}
         onClose={() => setCreateGroupOpen(false)}
+        groupWriter={groupWriter}
         onCreated={async (newId) => {
           await reloadGroups();
-          navigate(`/compendium/tags/${newId}`);
+          if (groupWriter.mode === 'direct') {
+            // In proposal mode the group doesn't exist yet, so don't
+            // navigate to it — let the proposer see their submission
+            // on /my-proposals instead.
+            navigate(`/compendium/tags/${newId}`);
+          }
           setCreateGroupOpen(false);
         }}
       />
@@ -339,7 +363,7 @@ function GroupRail({
 // ═══════════════════════════════════════════════════════════════════════
 
 function TagTreePane({
-  group, tags, tagUsage, selectedTagId, onSelectTag, onReloadTags, onReloadUsage,
+  group, tags, tagUsage, selectedTagId, onSelectTag, onReloadTags, onReloadUsage, isAdmin, tagWriter,
 }: {
   group: any;
   tags: any[];
@@ -348,7 +372,15 @@ function TagTreePane({
   onSelectTag: (id: string | null) => void;
   onReloadTags: () => Promise<void>;
   onReloadUsage: (opts?: { force?: boolean }) => Promise<void>;
+  isAdmin: boolean;
+  tagWriter: WriterApi;
 }) {
+  // Mutation routing. In `direct` mode the writer's create/update/
+  // remove call upsertDocument / deleteDocument exactly like before;
+  // in `proposal` mode they POST to /api/proposals and the change
+  // sits in the queue until an admin approves. `actionLabel` keeps
+  // toast copy honest in both worlds.
+  const isProposalMode = tagWriter.mode === 'proposal';
   // Per-group editing state — resets on group switch via key prop.
   const [newTagName, setNewTagName] = useState('');
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
@@ -371,7 +403,7 @@ function TagTreePane({
       updated_at: new Date().toISOString(),
     };
     if (parentTagId) d1Data.parent_tag_id = parentTagId;
-    await upsertDocument('tags', newId, d1Data);
+    await tagWriter.create({ id: newId, ...d1Data });
     await onReloadTags();
   };
 
@@ -382,7 +414,7 @@ function TagTreePane({
     try {
       await addTag(trimmed, null);
       setNewTagName('');
-      toast.success('Tag added');
+      toast.success(actionLabel(tagWriter.mode, 'added'));
     } catch (err) {
       console.error(err);
       toast.error(isUniqueConstraintError(err) ? `A tag named "${trimmed}" already exists here.` : 'Failed to add tag');
@@ -397,7 +429,7 @@ function TagTreePane({
       await addTag(trimmed, parentTagId);
       setNewSubtagName('');
       setAddingSubtagOfId(null);
-      toast.success('Subtag added');
+      toast.success(actionLabel(tagWriter.mode, 'added'));
     } catch (err) {
       console.error(err);
       toast.error(isUniqueConstraintError(err) ? `A tag named "${trimmed}" already exists here.` : 'Failed to add subtag');
@@ -416,11 +448,11 @@ function TagTreePane({
         updated_at: new Date().toISOString(),
       };
       if (tag?.parentTagId) d1Data.parent_tag_id = tag.parentTagId;
-      await upsertDocument('tags', tagId, d1Data);
+      await tagWriter.update(tagId, d1Data);
       setEditingTagId(null);
       setEditingTagName('');
       await onReloadTags();
-      toast.success('Tag updated');
+      toast.success(actionLabel(tagWriter.mode, 'updated'));
     } catch (err) {
       console.error(err);
       toast.error(isUniqueConstraintError(err) ? `A tag named "${trimmedName}" already exists here.` : 'Failed to update tag');
@@ -429,6 +461,14 @@ function TagTreePane({
 
   const handleDeleteTag = async (tagId: string) => {
     const children = tags.filter((t) => t.parentTagId === tagId);
+    // The proposal flow doesn't model multi-row bundles for cascades
+    // yet, so refuse subtree deletes for content-creators. Admins
+    // continue to cascade-delete inline.
+    if (isProposalMode && children.length > 0) {
+      toast.error('Subtree deletes aren’t proposable yet. Ask an admin, or propose deletes for the children first.');
+      return;
+    }
+
     const idsBeingDeleted = [tagId, ...children.map((c) => c.id)];
     let usageLine = '';
     if (tagUsage) {
@@ -439,19 +479,24 @@ function TagTreePane({
     }
     const baseMsg = children.length > 0
       ? `Delete this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`
-      : 'Delete this tag?';
+      : (isProposalMode ? 'Propose deleting this tag?' : 'Delete this tag?');
     if (!window.confirm(baseMsg + usageLine)) return;
 
     try {
-      for (const c of children) await deleteDocument('tags', c.id);
-      await deleteDocument('tags', tagId);
+      // Children only fire in direct mode (proposal mode is gated above).
+      for (const c of children) await tagWriter.remove(c.id);
+      await tagWriter.remove(tagId);
       if (selectedTagId && idsBeingDeleted.includes(selectedTagId)) onSelectTag(null);
       invalidateTagUsageCache();
       await onReloadTags();
       await onReloadUsage();
-      toast.success(children.length > 0
-        ? `Deleted tag and ${children.length} subtag${children.length === 1 ? '' : 's'}`
-        : 'Tag deleted');
+      toast.success(
+        isProposalMode
+          ? actionLabel(tagWriter.mode, 'deleted')
+          : children.length > 0
+            ? `Deleted tag and ${children.length} subtag${children.length === 1 ? '' : 's'}`
+            : 'Tag deleted',
+      );
     } catch (err) {
       console.error(err);
       toast.error('Failed to delete tag');
@@ -739,6 +784,7 @@ function TagTreePane({
 function RightPane({
   group, selectedTag, allTagsInGroup, tagUsage,
   onCloseTag, onReloadGroups, onReloadTags, onReloadUsage, onSelectedGroupDeleted,
+  isAdmin, tagWriter, groupWriter,
 }: {
   group: any | null;
   selectedTag: any | null;
@@ -749,6 +795,9 @@ function RightPane({
   onReloadTags: () => Promise<void>;
   onReloadUsage: (opts?: { force?: boolean }) => Promise<void>;
   onSelectedGroupDeleted: () => void;
+  isAdmin: boolean;
+  tagWriter: WriterApi;
+  groupWriter: WriterApi;
 }) {
   if (!group) {
     return (
@@ -767,6 +816,8 @@ function RightPane({
         onClose={onCloseTag}
         onReloadTags={onReloadTags}
         onReloadUsage={onReloadUsage}
+        isAdmin={isAdmin}
+        tagWriter={tagWriter}
       />
     );
   }
@@ -774,8 +825,11 @@ function RightPane({
     <GroupSettingsPanel
       group={group}
       onReloadGroups={onReloadGroups}
+      onReloadTags={onReloadTags}
       onSelectedGroupDeleted={onSelectedGroupDeleted}
       tagsCount={allTagsInGroup.length}
+      isAdmin={isAdmin}
+      groupWriter={groupWriter}
     />
   );
 }
@@ -784,7 +838,7 @@ function RightPane({
 
 function TagDetailPanel({
   group, selectedTag, allTagsInGroup, tagUsage,
-  onClose, onReloadTags, onReloadUsage,
+  onClose, onReloadTags, onReloadUsage, isAdmin, tagWriter,
 }: {
   group: any;
   selectedTag: any;
@@ -793,6 +847,8 @@ function TagDetailPanel({
   onClose: () => void;
   onReloadTags: () => Promise<void>;
   onReloadUsage: (opts?: { force?: boolean }) => Promise<void>;
+  isAdmin: boolean;
+  tagWriter: WriterApi;
 }) {
   const [mergeOpen, setMergeOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -889,43 +945,60 @@ function TagDetailPanel({
             </section>
           )}
 
-          <section className="space-y-2">
-            <h4 className="label-text text-gold">Actions</h4>
-            <div className="flex flex-col gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="btn-gold gap-2 justify-start"
-                disabled={childCount > 0}
-                title={childCount > 0 ? 'Resolve subtags first' : 'Merge this tag into another'}
-                onClick={() => setMergeOpen(true)}
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" /> Merge into…
-              </Button>
-              {isSubtag ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="btn-gold gap-2 justify-start"
-                  disabled={actionInFlight}
-                  onClick={() => handleMove(null)}
-                >
-                  <CornerLeftUp className="w-3.5 h-3.5" /> Promote to root
-                </Button>
-              ) : (
+          {isAdmin && (
+            <section className="space-y-2">
+              <h4 className="label-text text-gold">Actions</h4>
+              {/* Merge / Move are admin-only — both do multi-row writes
+                  (rewriting every reference to the merged tag, plus
+                  the delete) that the single-revision proposal shape
+                  can't capture. A future Phase 2c can teach the queue
+                  to bundle them. */}
+              <div className="flex flex-col gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   className="btn-gold gap-2 justify-start"
                   disabled={childCount > 0}
-                  title={childCount > 0 ? 'Promote subtags first' : 'Make this a subtag of another root'}
-                  onClick={() => setMoveOpen(true)}
+                  title={childCount > 0 ? 'Resolve subtags first' : 'Merge this tag into another'}
+                  onClick={() => setMergeOpen(true)}
                 >
-                  <Move className="w-3.5 h-3.5" /> Move under…
+                  <ArrowRightLeft className="w-3.5 h-3.5" /> Merge into…
                 </Button>
-              )}
-            </div>
-          </section>
+                {isSubtag ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="btn-gold gap-2 justify-start"
+                    disabled={actionInFlight}
+                    onClick={() => handleMove(null)}
+                  >
+                    <CornerLeftUp className="w-3.5 h-3.5" /> Promote to root
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="btn-gold gap-2 justify-start"
+                    disabled={childCount > 0}
+                    title={childCount > 0 ? 'Promote subtags first' : 'Make this a subtag of another root'}
+                    onClick={() => setMoveOpen(true)}
+                  >
+                    <Move className="w-3.5 h-3.5" /> Move under…
+                  </Button>
+                )}
+              </div>
+            </section>
+          )}
+          {!isAdmin && (
+            <section className="space-y-1">
+              <h4 className="label-text text-gold">Restricted Actions</h4>
+              <p className="field-hint">
+                Merging and moving tags are admin-only for now (they touch many
+                rows at once and don't fit the single-revision proposal shape).
+                Ask an admin if you need either.
+              </p>
+            </section>
+          )}
         </div>
       </Card>
 
@@ -953,12 +1026,15 @@ function TagDetailPanel({
 // ─── Group settings panel ────────────────────────────────────────────
 
 function GroupSettingsPanel({
-  group, onReloadGroups, onSelectedGroupDeleted, tagsCount,
+  group, onReloadGroups, onReloadTags, onSelectedGroupDeleted, tagsCount, isAdmin, groupWriter,
 }: {
   group: any;
   onReloadGroups: () => Promise<void>;
+  onReloadTags: () => Promise<void>;
   onSelectedGroupDeleted: () => void;
   tagsCount: number;
+  isAdmin: boolean;
+  groupWriter: WriterApi;
 }) {
   const initialClassifications = group.classifications ?? (group.category ? [group.category] : []);
   const [groupName, setGroupName] = useState(group.name ?? '');
@@ -995,14 +1071,14 @@ function GroupSettingsPanel({
     }
     setSaving(true);
     try {
-      await upsertDocument('tagGroups', group.id, {
+      await groupWriter.update(group.id, {
         name: groupName.trim(),
         description,
         classifications,
         updated_at: new Date().toISOString(),
       });
       await onReloadGroups();
-      toast.success('Group updated');
+      toast.success(actionLabel(groupWriter.mode, 'updated'));
     } catch (err) {
       console.error(err);
       toast.error('Failed to save group');
@@ -1012,6 +1088,12 @@ function GroupSettingsPanel({
   };
 
   const handleDelete = async () => {
+    // Deleting a group cascades all its tags — too many writes to
+    // model as a single proposal revision. Admin-only for now.
+    if (!isAdmin) {
+      toast.error('Deleting a tag group is admin-only (the cascade isn’t proposable yet).');
+      return;
+    }
     const tagsLine = tagsCount > 0
       ? `\n\nThis will also delete the ${tagsCount} tag${tagsCount === 1 ? '' : 's'} in this group.`
       : '';
@@ -1112,8 +1194,13 @@ function GroupSettingsPanel({
 // ═══════════════════════════════════════════════════════════════════════
 
 function CreateGroupDialog({
-  open, onClose, onCreated,
-}: { open: boolean; onClose: () => void; onCreated: (newId: string) => Promise<void>; }) {
+  open, onClose, onCreated, groupWriter,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (newId: string) => Promise<void>;
+  groupWriter: WriterApi;
+}) {
   const [name, setName] = useState('');
   const [classifications, setClassifications] = useState<string[]>([]);
   const [description, setDescription] = useState('');
@@ -1155,15 +1242,16 @@ function CreateGroupDialog({
     setSaving(true);
     try {
       const newId = crypto.randomUUID();
-      await upsertDocument('tagGroups', newId, {
+      const { id: createdId } = await groupWriter.create({
+        id: newId,
         name: name.trim(),
         category: classifications[0],
         classifications,
         description,
         updated_at: new Date().toISOString(),
       });
-      await onCreated(newId);
-      toast.success('Tag group created');
+      await onCreated(createdId);
+      toast.success(actionLabel(groupWriter.mode, 'created'));
     } catch (err) {
       console.error(err);
       toast.error('Failed to create group');
