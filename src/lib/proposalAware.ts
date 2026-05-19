@@ -26,7 +26,11 @@ export type ProposalEntityType =
   | 'tag_group'
   | 'spell_rule'
   | 'spell_rule_application'
-  | 'class_spell_list';
+  | 'class_spell_list'
+  | 'spell'
+  | 'class'
+  | 'unique_option_group'
+  | 'unique_option_item';
 
 // `entity_type` → camelCase collection name used by the d1 helpers
 // (which map to snake_case D1 tables internally).
@@ -36,6 +40,10 @@ const ENTITY_TO_COLLECTION: Record<ProposalEntityType, string> = {
   spell_rule: 'spellRules',
   spell_rule_application: 'spellRuleApplications',
   class_spell_list: 'classSpellLists',
+  spell: 'spells',
+  class: 'classes',
+  unique_option_group: 'uniqueOptionGroups',
+  unique_option_item: 'uniqueOptionItems',
 };
 
 export type WriterMode = 'direct' | 'proposal' | 'block' | 'readonly';

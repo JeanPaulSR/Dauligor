@@ -32,7 +32,11 @@ export type EntityType =
   | "tag_group"
   | "spell_rule"
   | "spell_rule_application"
-  | "class_spell_list";
+  | "class_spell_list"
+  | "spell"
+  | "class"
+  | "unique_option_group"
+  | "unique_option_item";
 
 export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "tag",
@@ -40,6 +44,10 @@ export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "spell_rule",
   "spell_rule_application",
   "class_spell_list",
+  "spell",
+  "class",
+  "unique_option_group",
+  "unique_option_item",
 ];
 
 export function isProposableEntityType(s: unknown): s is EntityType {
@@ -115,6 +123,76 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     pkColumn: "id",
     writableColumns: new Set(["id", "class_id", "spell_id", "source"]),
     jsonColumns: new Set(),
+  },
+  // ── Heavy entities (Phase 4). Allow-list mirrors what the
+  // corresponding editor lets an admin write. Server-managed
+  // timestamps (created_at / updated_at) are intentionally NOT in
+  // the writable set — sanitisation strips them so a proposer can't
+  // forge an "old" updated_at.
+  spell: {
+    tableName: "spells",
+    pkColumn: "id",
+    writableColumns: new Set([
+      "id", "name", "identifier", "level", "school", "preparation_mode",
+      "ritual", "concentration",
+      "components_vocal", "components_somatic", "components_material",
+      "components_material_text", "components_consumed", "components_cost",
+      "description", "image_url",
+      "activities", "effects", "foundry_data",
+      "source_id", "page",
+      "tags", "required_tags", "prerequisite_text",
+      "activation_bucket", "range_bucket", "duration_bucket", "shape_bucket",
+      "activation_type", "activation_value", "activation_condition",
+      "range_units", "range_value", "range_special",
+      "duration_units", "duration_value",
+    ]),
+    jsonColumns: new Set([
+      "activities", "effects", "foundry_data", "tags", "required_tags",
+    ]),
+  },
+  class: {
+    tableName: "classes",
+    pkColumn: "id",
+    writableColumns: new Set([
+      "id", "name", "identifier", "source_id", "category", "tag_ids",
+      "hit_die", "description", "lore", "preview",
+      "image_url", "card_image_url", "preview_image_url",
+      "card_display", "image_display", "preview_display",
+      "saving_throws", "proficiencies", "starting_equipment", "multiclassing",
+      "primary_ability", "primary_ability_choice",
+      "spellcasting", "advancements", "subclass_title", "subclass_feature_levels",
+      "wealth", "multiclass_proficiencies", "excluded_option_ids", "asi_levels",
+      "unique_option_mappings",
+    ]),
+    jsonColumns: new Set([
+      "tag_ids", "saving_throws", "proficiencies", "starting_equipment",
+      "multiclassing", "primary_ability_choice", "spellcasting", "advancements",
+      "subclass_feature_levels", "multiclass_proficiencies",
+      "excluded_option_ids", "asi_levels", "unique_option_mappings",
+    ]),
+  },
+  unique_option_group: {
+    tableName: "unique_option_groups",
+    pkColumn: "id",
+    writableColumns: new Set(["id", "name", "description", "source_id", "class_ids"]),
+    jsonColumns: new Set(["class_ids"]),
+  },
+  unique_option_item: {
+    tableName: "unique_option_items",
+    pkColumn: "id",
+    writableColumns: new Set([
+      "id", "group_id", "name", "description", "icon_url", "source_id",
+      "level_prerequisite", "string_prerequisite", "is_repeatable", "page",
+      "class_ids", "feature_type", "subtype", "image_url",
+      "uses_max", "uses_spent", "uses_recovery",
+      "properties", "activities", "effects", "advancements",
+      "tags", "quantity_column_id", "scaling_column_id",
+      "requirements_tree", "level_prereq_is_total",
+    ]),
+    jsonColumns: new Set([
+      "class_ids", "properties", "activities", "effects", "advancements",
+      "tags", "requirements_tree",
+    ]),
   },
 };
 
