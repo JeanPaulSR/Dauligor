@@ -11,9 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy, Link2 } from 'lucide-react';
+import { UserPlus, Trash2, Shield, User, LayoutGrid, Check, KeyRound, Copy, Link2, ShieldPlus } from 'lucide-react';
+import PermissionsManager from './PermissionsManager';
 
 export default function AdminUsers({ userProfile }: { userProfile: any }) {
+  // Top-level tab strip: 'users' is the legacy CRUD table; 'permissions'
+  // is the additive-role grant editor (PermissionsManager). Adding more
+  // tabs in the future means another entry here + another branch below.
+  const [activeTab, setActiveTab] = useState<'users' | 'permissions'>('users');
   const [users, setUsers] = useState<any[]>([]);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -531,13 +536,42 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-4xl font-serif font-bold text-ink">User Management</h1>
-          <p className="text-ink/60">Manage your players and their access to the archive.</p>
-        </div>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-4xl font-serif font-bold text-ink">User Management</h1>
+        <p className="text-ink/60">Manage your players, their access to the archive, and any additive capabilities.</p>
+      </div>
 
+      {/* Tab strip — Users (legacy CRUD) vs. Permissions (additive grants). */}
+      <div className="flex gap-2 border-b border-gold/10 pb-2">
+        {([
+          { id: 'users', label: 'Users', icon: User, adminOnly: false },
+          { id: 'permissions', label: 'Permissions', icon: ShieldPlus, adminOnly: true },
+        ] as const).map(tab => {
+          if (tab.adminOnly && userProfile?.role !== 'admin') return null;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-t-lg transition-colors font-bold uppercase tracking-widest text-[10px] ${
+                activeTab === tab.id
+                  ? 'bg-gold text-white shadow-sm'
+                  : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === 'permissions' && userProfile?.role === 'admin' ? (
+        <PermissionsManager />
+      ) : (
+      <div className="space-y-8">
+      <div className="flex justify-end items-center">
         <div className="flex items-center gap-4">
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger render={
@@ -631,6 +665,7 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                 <TableHead>User</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Permissions</TableHead>
                 <TableHead>Campaigns</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -658,9 +693,9 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                         {u.role.replace('-', ' ')}
                       </Badge>
                       {(userProfile?.role === 'admin') && (
-                        <Button 
-                          variant="ghost" 
-                          size="xs" 
+                        <Button
+                          variant="ghost"
+                          size="xs"
                           onClick={() => setRoleDialogOpen({ isOpen: true, userId: u.id, currentRole: u.role })}
                           className="h-6 px-2 text-[10px] text-gold hover:bg-gold/10 border border-gold/10"
                         >
@@ -668,6 +703,23 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
                         </Button>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {/* Additive `user_permissions` rows. Empty = no extra capabilities;
+                        otherwise show one badge per key + a pointer to the Permissions
+                        tab. Edits happen on the tab — keeps the column glance-sized. */}
+                    {Array.isArray(u.permission_keys) && u.permission_keys.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {u.permission_keys.map((key: string) => (
+                          <Badge key={key} variant="outline" className="text-[10px] border-gold/30 text-gold capitalize">
+                            <ShieldPlus className="w-3 h-3 mr-1" />
+                            {key.replace('-', ' ')}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-ink/30 italic">None</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -922,6 +974,8 @@ export default function AdminUsers({ userProfile }: { userProfile: any }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
+      )}
     </div>
   );
 }

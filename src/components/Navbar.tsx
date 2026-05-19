@@ -11,7 +11,7 @@ import { useWikiPreview } from '../lib/wikiPreviewContext';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from './ui/dropdown-menu';
-import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu, Wrench } from 'lucide-react';
+import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu, Wrench, Globe2 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Input } from './ui/input';
@@ -243,6 +243,14 @@ export default function Navbar({
                         <span>Manage Campaigns</span>
                       </Link>
                     } />
+                    {userProfile?.role === 'admin' && (
+                      <DropdownMenuItem nativeButton={false} render={
+                        <Link to="/admin/worlds" className="w-full flex items-center px-2 py-1.5 cursor-pointer">
+                          <Globe2 className="mr-2 h-4 w-4" />
+                          <span>Manage Worlds</span>
+                        </Link>
+                      } />
+                    )}
                     <DropdownMenuItem nativeButton={false} render={
                       <Link to="/admin/proficiencies" className="w-full flex items-center px-2 py-1.5 cursor-pointer">
                         <BookOpen className="mr-2 h-4 w-4" />

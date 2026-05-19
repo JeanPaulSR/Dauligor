@@ -1,10 +1,11 @@
 # Permissions & RBAC
 
-Five roles, three enforcement points, and a preview-mode toggle for admins.
+Five base roles + additive `user_permissions` rows, three enforcement
+points, and a preview-mode toggle for admins.
 
 ## Roles
 
-Stored in the D1 `users.role` column.
+Stored in the D1 `users.role` column. Every user has exactly one role.
 
 | Role | UI Label | Capabilities |
 |---|---|---|
@@ -13,6 +14,49 @@ Stored in the D1 `users.role` column.
 | `lore-writer` | Librarian | CRUD on lore (drafts and published) |
 | `trusted-player` | Player+ | Same as `user`, with extended visibility on certain DM-tagged content |
 | `user` | Adventurer | Read-only access to published lore and revealed secrets |
+
+## Additive permissions (`user_permissions`)
+
+Some capabilities don't fit the single-role ladder cleanly — they're
+*additive* and orthogonal to the base role. The `user_permissions`
+table holds those grants: each row pairs a permission key with an
+optional scope JSON narrowing which worlds / campaigns / eras the
+capability applies to.
+
+| Permission key | Capability | Phase |
+|---|---|---|
+| `content-creator` | Submit proposals for tags, spell rules, and class spell lists. No direct writes. Proposals enter a review queue. | 1 — implemented (review queue itself ships in Phase 2) |
+
+Source of truth for the allowlist:
+[api/_lib/permissions.ts](../../api/_lib/permissions.ts) (TypeScript
+type + runtime checker) and the CHECK constraint on
+`user_permissions.permission_key`. Both must agree.
+
+Scope JSON shape:
+
+```jsonc
+// scope_json column — NULL means unrestricted on every axis
+{
+  "worlds":    ["uuid"],  // omit axis = unrestricted on that axis
+  "campaigns": ["uuid"],
+  "eras":      ["uuid"]
+}
+```
+
+`getUserPermissions(uid)` returns `Record<key, scope | null>`;
+`scopeContains(userScope, requiredScope)` performs the intersection
+check; `requireContentCreatorAccess(authHeader, requiredScope?)` is
+the gate helper (admits admin role unconditionally, otherwise looks
+up the row and verifies scope).
+
+Granted permissions are surfaced to the client via
+`effectiveProfile.permissions` — server folds them into the
+`/api/me` response, the same way the user's role is.
+
+Admin UI for granting / revoking lives at `/admin/users` →
+**Permissions** tab. The picker per axis toggles between
+"unrestricted" (axis omitted from scope) and "narrowed to set"
+(multi-select).
 
 ## Three enforcement points
 
@@ -28,6 +72,7 @@ In [api/_lib/firebase-admin.ts](../../api/_lib/firebase-admin.ts):
 | `requireStaffAccess(authHeader)` | `admin`, `co-dm`, `lore-writer` (or hardcoded staff emails) |
 | `requireImageManagerAccess(authHeader)` | Same set as `requireStaffAccess` |
 | `requireAdminAccess(authHeader)` | `admin` only (or hardcoded staff) |
+| `requireContentCreatorAccess(authHeader, scope?)` | `admin` (always passes) OR a user holding a `content-creator` row in `user_permissions` whose scope covers `scope`. Lives in [api/_lib/permissions.ts](../../api/_lib/permissions.ts). |
 | `requireCharacterAccess(authHeader, characterId)` | Owner OR character-DM. Throws 404 (not 403) when the row doesn't exist OR the caller isn't allowed — same shape on purpose so probes can't enumerate ids. |
 | `isCharacterDM(role)` | Predicate: `admin` or `co-dm`. **Excludes** `lore-writer` deliberately — that role is for wiki content, not character management. |
 | `isWikiStaff(role)` | Predicate: `admin`, `co-dm`, or `lore-writer`. Broader than the character set because `lore-writer` exists to author wiki content and needs draft + dm_notes visibility. |

@@ -14,6 +14,7 @@ import {
 import { handleD1Query } from "./api/_lib/d1-proxy.js";
 import { executeD1QueryInternal, loadUserRoleFromD1 } from "./api/_lib/d1-internal.js";
 import { HttpError, getAdminServices, getCredentialErrorMessage } from "./api/_lib/firebase-admin.js";
+import { wrapPagesFunction } from "./api/_lib/pages-to-express.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -365,18 +366,46 @@ async function startServer() {
     }
   });
 
-  // /api/module/* is now a native Pages Function at
-  // functions/api/module/[[path]].ts and no longer mounted on this
-  // dev server. The dispatcher logic (R2 read-through cache, live
-  // builders, opportunistic queue processing via context.waitUntil)
-  // depends on Pages-runtime APIs (Request / Response / waitUntil)
-  // that Express doesn't have. For local module-export testing run
-  // either:
-  //   - `npx wrangler pages dev` (full Pages-runtime emulator with
-  //     functions/ served alongside the SPA), OR
-  //   - the deployed branch preview at <preview>.dauligor.pages.dev
-  // The Foundry pairing module's "API Endpoint Mode" setting lets
-  // it point at either.
+  // Mount Pages Functions onto Express in dev.
+  //
+  // After the May 2026 Vercel→Cloudflare-Pages migration, the
+  // following routes live ONLY as Pages Functions under `functions/`.
+  // In production Cloudflare's runtime serves them; in local dev we
+  // run Express + Vite, so without these mounts every /api/me, every
+  // admin endpoint, and the lore/campaigns/eras APIs would fall
+  // through to the SPA and return `index.html` (the
+  // "Unexpected token '<'" SyntaxError users used to see). The
+  // adapter at api/_lib/pages-to-express.ts translates the Express
+  // req/res pair into the Web Request/Response shape `onRequest`
+  // expects.
+  //
+  // `/api/module/*` is intentionally still NOT mounted here —
+  // its handler uses `context.waitUntil` and other Pages-runtime
+  // APIs that Express doesn't provide. For local module-export
+  // testing run `npx wrangler pages dev` instead, or use a deployed
+  // branch preview at `<preview>.dauligor.pages.dev`.
+  const pagesFunctions: Array<{ mount: string; modulePath: string }> = [
+    { mount: "/api/me", modulePath: "./functions/api/me/[[path]].ts" },
+    { mount: "/api/admin/users", modulePath: "./functions/api/admin/users/[[path]].ts" },
+    { mount: "/api/admin/worlds", modulePath: "./functions/api/admin/worlds/[[path]].ts" },
+    { mount: "/api/admin/eras", modulePath: "./functions/api/admin/eras/[[path]].ts" },
+    { mount: "/api/lore", modulePath: "./functions/api/lore/[[path]].ts" },
+    { mount: "/api/campaigns", modulePath: "./functions/api/campaigns/[[path]].ts" },
+  ];
+
+  for (const { mount, modulePath } of pagesFunctions) {
+    try {
+      const mod = await import(modulePath);
+      const handler = mod.onRequest;
+      if (typeof handler !== "function") {
+        console.warn(`[dev] ${modulePath} has no onRequest export`);
+        continue;
+      }
+      app.use(mount, wrapPagesFunction(handler));
+    } catch (err) {
+      console.warn(`[dev] Failed to mount Pages Function at ${mount}:`, err);
+    }
+  }
 
   // Serve static files from the module directory if needed for documentation
   app.use("/module", express.static(path.join(__dirname, "module")));
