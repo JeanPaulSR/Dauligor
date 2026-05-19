@@ -366,9 +366,14 @@ function TagTreePane({
   // Mutation routing. In `direct` mode the writer's create/update/
   // remove call upsertDocument / deleteDocument exactly like before;
   // in `proposal` mode they POST to /api/proposals and the change
-  // sits in the queue until an admin approves. `actionLabel` keeps
-  // toast copy honest in both worlds.
-  const isProposalMode = tagWriter.mode === 'proposal';
+  // sits in the queue until an admin approves. `block` mode behaves
+  // like proposal except the writer also tags `is_draft: true` and
+  // pins the active bundle_id. From this editor's perspective both
+  // proposal AND block are "don't direct-write — let the writer
+  // dispatch", so we treat them the same here. `actionLabel` picks
+  // mode-appropriate toast copy ("Added" / "Add submitted for
+  // review" / "Add added to block").
+  const isProposalMode = tagWriter.mode === 'proposal' || tagWriter.mode === 'block';
   // Per-group editing state — resets on group switch via key prop.
   const [newTagName, setNewTagName] = useState('');
   const [editingTagId, setEditingTagId] = useState<string | null>(null);

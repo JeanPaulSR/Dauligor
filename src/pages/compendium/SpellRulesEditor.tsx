@@ -95,7 +95,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const canManageRules = isAdmin || isContentCreator;
   const ruleWriter = useEntityWriter('spell_rule', userProfile);
   const ruleAppWriter = useEntityWriter('spell_rule_application', userProfile);
-  const isProposalMode = ruleWriter.mode === 'proposal';
+  // `block` mode also routes through the writer (which posts drafts
+  // with the active bundle_id) — without including it here, block-
+  // mode mutations would fall through to direct queryD1 calls and
+  // 403 at the proxy. See SpellListManager for the same fix.
+  const isProposalMode = ruleWriter.mode === 'proposal' || ruleWriter.mode === 'block';
   const [searchParams, setSearchParams] = useSearchParams();
   const initialRuleId = searchParams.get('rule') || '';
 
