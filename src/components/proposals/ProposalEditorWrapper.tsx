@@ -22,13 +22,12 @@
 
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import { toast } from 'sonner';
-import { Send } from 'lucide-react';
+import { Send, Trash2, FilePlus2, FileEdit, FileMinus2 } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import {
   ProposalAccumulatorContext,
@@ -37,11 +36,12 @@ import {
   type ProposalAccumulatorContextValue,
   type QueuedChange,
 } from '../../lib/proposalAccumulator';
-import { useBlock } from '../../lib/proposalBlock';
+import { useBlock, type DraftRevision } from '../../lib/proposalBlock';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { PickOrCreateBlockDialog } from './PickOrCreateBlockDialog';
 import type { ProposalEntityType } from '../../lib/proposalAware';
+import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 
 const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   tag: 'Tags',
@@ -56,7 +56,13 @@ const ENTITY_LABELS: Record<ProposalEntityType, string> = {
 };
 
 export type ProposalEditorWrapperProps = {
-  entityType: ProposalEntityType;
+  /**
+   * Entity type(s) this editor handles. A single value (back-compat
+   * with Phase 4.5a–c) is normalized to a one-element array. The
+   * pending-drafts panel filters by these types so the panel only
+   * surfaces drafts the editor below can act on.
+   */
+  entityType: ProposalEntityType | ProposalEntityType[];
   children: ReactNode;
 };
 
@@ -64,16 +70,32 @@ export function ProposalEditorWrapper({
   entityType,
   children,
 }: ProposalEditorWrapperProps) {
+  const entityTypes = useMemo<ProposalEntityType[]>(
+    () => (Array.isArray(entityType) ? entityType : [entityType]),
+    [entityType],
+  );
+  const primaryEntityType = entityTypes[0];
   const {
     activeBundleId,
     activeBundle,
-    drafts,
+    drafts: allDrafts,
     openBlocks,
     startBlock,
     setActiveBlock,
     refresh: refreshBlock,
     refreshOpenBlocks,
   } = useBlock();
+  // Subset of the block's drafts that belong to entity types this
+  // editor handles. The pending-drafts panel surfaces these so the
+  // user can see what they've already submitted to the block (and
+  // drop entries if they made a mistake).
+  const drafts = useMemo(
+    () =>
+      allDrafts.filter((d) =>
+        entityTypes.includes(d.entity_type as ProposalEntityType),
+      ),
+    [allDrafts, entityTypes],
+  );
 
   const [queue, setQueue] = useState<QueuedChange[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -281,27 +303,43 @@ export function ProposalEditorWrapper({
     [startBlock, flushToBundle],
   );
 
-  // beforeunload warning when the queue is non-empty. react-router's
-  // useBlocker would also guard SPA navigations — deferred to a later
-  // pass since the API differs across router versions.
-  useEffect(() => {
-    if (queue.length === 0) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      // Chromium requires returnValue to trigger the prompt; the
-      // actual string is ignored in modern browsers.
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [queue.length]);
+  // beforeunload + in-app navigation guard (uses the same shared
+  // hook ClassEditor relies on). The hook installs:
+  //   - a beforeunload listener for tab close / hard refresh
+  //   - a capture-phase click handler that intercepts <a> clicks
+  //     and surfaces a confirm-leave modal before routing
+  useUnsavedChangesWarning(queue.length > 0);
 
-  const entityLabel = ENTITY_LABELS[entityType] ?? entityType;
+  const entityLabel = ENTITY_LABELS[primaryEntityType] ?? primaryEntityType;
   const submitLabel = submitting
     ? 'Submitting…'
     : queue.length === 0
       ? 'Submit Changes'
       : `Submit ${queue.length} Change${queue.length === 1 ? '' : 's'}`;
+
+  const dropDraft = useCallback(
+    async (draftId: string) => {
+      try {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) throw new Error('Not signed in.');
+        const res = await fetch(`/api/proposals/${encodeURIComponent(draftId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(
+            body?.error || `Failed to drop draft (HTTP ${res.status})`,
+          );
+        }
+        void refreshBlock();
+        toast.success('Draft removed from block.');
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to drop draft.');
+      }
+    },
+    [refreshBlock],
+  );
 
   return (
     <ProposalAccumulatorContext.Provider value={contextValue}>
@@ -316,6 +354,9 @@ export function ProposalEditorWrapper({
           disabled={submitting || queue.length === 0}
           onSubmit={handleSubmit}
         />
+        {drafts.length > 0 && (
+          <PendingDraftsPanel drafts={drafts} onDropDraft={dropDraft} />
+        )}
         {children}
       </div>
       <PickOrCreateBlockDialog
@@ -326,6 +367,93 @@ export function ProposalEditorWrapper({
         onCreate={handlePickerCreate}
       />
     </ProposalAccumulatorContext.Provider>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* PendingDraftsPanel — surface server-side drafts already in the block.       */
+/*                                                                              */
+/* Submit Changes drains the local queue as draft revisions in                 */
+/* pending_revisions. Without this panel the user has no in-editor view of      */
+/* what they've already added — they'd have to navigate to /my-proposals to     */
+/* check. The panel filters drafts to entity types the wrapper was mounted     */
+/* with so we only show drafts the editor below could realistically interact    */
+/* with later (when per-editor click-to-edit lands).                           */
+/* -------------------------------------------------------------------------- */
+
+function PendingDraftsPanel({
+  drafts,
+  onDropDraft,
+}: {
+  drafts: DraftRevision[];
+  onDropDraft: (id: string) => Promise<void>;
+}) {
+  const counts = useMemo(() => {
+    let create = 0,
+      update = 0,
+      remove = 0;
+    for (const d of drafts) {
+      if (d.operation === 'create') create++;
+      else if (d.operation === 'update') update++;
+      else if (d.operation === 'delete') remove++;
+    }
+    return { create, update, remove };
+  }, [drafts]);
+
+  return (
+    <div className="rounded border border-gold/30 bg-gold/5 px-3 py-2 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap text-[11px] uppercase tracking-widest text-ink/70 font-bold">
+        <span>In this block:</span>
+        {counts.create > 0 && (
+          <span className="inline-flex items-center gap-1 text-emerald-700">
+            <FilePlus2 className="w-3 h-3" /> {counts.create} create
+          </span>
+        )}
+        {counts.update > 0 && (
+          <span className="inline-flex items-center gap-1 text-archive-blue">
+            <FileEdit className="w-3 h-3" /> {counts.update} update
+          </span>
+        )}
+        {counts.remove > 0 && (
+          <span className="inline-flex items-center gap-1 text-blood">
+            <FileMinus2 className="w-3 h-3" /> {counts.remove} delete
+          </span>
+        )}
+      </div>
+      <ul className="divide-y divide-gold/15">
+        {drafts.map((d) => {
+          const payload = d.proposed_payload || {};
+          const preview =
+            (payload as any).name ||
+            (payload as any).slug ||
+            d.entity_id ||
+            '(no preview)';
+          return (
+            <li key={d.id} className="py-1.5 flex items-center gap-3">
+              <Badge
+                variant="outline"
+                className="text-[9px] uppercase tracking-widest border-ink/20 text-ink/60 flex-shrink-0"
+              >
+                {d.operation}
+              </Badge>
+              <span className="text-xs text-ink truncate flex-1">{preview}</span>
+              <span className="text-[10px] text-ink/40 font-mono flex-shrink-0">
+                {d.entity_type}
+              </span>
+              <button
+                type="button"
+                onClick={() => onDropDraft(d.id)}
+                title="Drop this draft from the block"
+                aria-label="Drop this draft"
+                className="p-1 rounded hover:bg-blood/10 text-blood/60 hover:text-blood transition-colors flex-shrink-0"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
