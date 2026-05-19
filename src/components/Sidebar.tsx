@@ -203,10 +203,10 @@ export default function Sidebar({
           ...(canProposeOrEdit ? [
             { label: 'Tags', path: '/compendium/tags' },
             { label: 'Spell Rules', path: '/compendium/spell-rules' },
+            { label: 'Spell Lists', path: '/compendium/spell-lists' },
           ] : []),
           ...(isAdmin ? [
             { label: 'Items', path: '/compendium/items' },
-            { label: 'Spell Lists', path: '/compendium/spell-lists' },
           ] : []),
         ]
       },

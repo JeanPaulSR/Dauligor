@@ -13,8 +13,12 @@
 >   submit dialog, `/admin/proposals` review page with per-entity
 >   tabs + 3-way conflict diff + cascade-aware reject)
 >   **— shipped May 2026.**
-> - **Phase 2c "Propose change" hooks** on the phase-1 editors
->   (TagsExplorer / SpellRulesEditor / SpellListManager) **— next.**
+> - **Phase 2c-1 / 2c-2 / 2c-3** "Propose change" hooks on the phase-1
+>   editors (TagsExplorer, SpellRulesEditor, SpellListManager)
+>   **— shipped May 2026.** All five proposal-allowlist entity types
+>   are now reachable through their existing editors; content-creators
+>   see the same UI as admins, but their Save / Add / Delete actions
+>   round-trip through `/api/proposals` instead of writing directly.
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
 >   UI) and **Phase 4** (spells in the allowlist) follow.
 
@@ -385,14 +389,26 @@ No updates required in `module/dauligor-pairing/docs/`.
     / current / proposed) when approve refuses on drift. Linked from
     the admin dropdown.
 
-### Phase 2c — Per-editor "Propose change" hooks (next)
+### Phase 2c — Per-editor "Propose change" hooks (✅ shipped May 2026)
 
-13. **TagsExplorer, SpellRulesEditor, SpellListManager** —
-    when `effectiveProfile.permissions['content-creator']` is held
-    (and the user is not admin), the existing Save / Add / Delete
-    affordances swap to "Propose…" variants that round-trip through
-    `POST /api/proposals` with the right `entity_type` / `operation` /
-    `proposed_payload`. Direct writes from these UIs stop hitting D1.
+13. **TagsExplorer, SpellRulesEditor, SpellListManager** — all three
+    editors now route through `useEntityWriter`
+    ([src/lib/proposalAware.ts](../../src/lib/proposalAware.ts)).
+    When `effectiveProfile.permissions['content-creator']` is held
+    (and the user is not admin), Save / Add / Delete / Apply / Pin
+    affordances POST to `/api/proposals` with the right
+    `entity_type` / `operation` / `proposed_payload`. Direct writes
+    stay on the admin path unchanged.
+
+    Multi-row paths that don't fit a single-revision proposal —
+    Tag merge / Tag move / Tag subtree-delete / Tag-group delete
+    cascades / "Rebuild from rules" on class spell lists / spell-
+    rule auto-rebuild on save — stay admin-only. Sidebar +
+    `/my-proposals` launchers extend automatically as new entity
+    types come online.
+
+### Phase 2d — Revert (next)
+
 14. **Revert** — admin-side button on approved revisions, with the
     drift-check refuse. Re-applies `snapshot_at_proposal` and logs a
     new revision (status `approved`, operation flipped) so the audit
