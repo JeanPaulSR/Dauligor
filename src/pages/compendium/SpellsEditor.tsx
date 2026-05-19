@@ -26,9 +26,11 @@ import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite } from '../../lib/compendium';
-import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
+import { useBlock } from '../../lib/proposalBlock';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
+import { Lock, Pencil } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { orderTagsAsTree, normalizeTagRow } from '../../lib/tagHierarchy';
@@ -411,6 +413,52 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const spellWriter = useProposalAccumulator('spell', userProfile);
   const isProposalMode = spellWriter.mode === 'proposal' || spellWriter.mode === 'block';
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // Focus-mode + Browse Base wiring (Phase 4.5d step 5). Null
+  // outside the wrapper — admin direct route on /compendium/spells/
+  // manage renders the unfiltered catalog with no toggle.
+  const proposalContext = useProposalContextOptional();
+  const { drafts: allDrafts, activeBundleId } = useBlock();
+  const focusMode = proposalContext?.focusMode ?? 'drafts';
+  const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  // Track which BASE spells the user has flipped to editable in the
+  // current session via "Edit Base [Name]". Unlocks persist for the
+  // session; switching focus modes doesn't lock them again.
+  const [unlockedBaseIds, setUnlockedBaseIds] = useState<Set<string>>(new Set());
+  const unlockBaseSpell = (id: string) => {
+    setUnlockedBaseIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  // Spell ids the user has staged changes against — queue entries
+  // (not yet submitted) + same-bundle draft revisions (already
+  // submitted via Submit Changes). Drives the My Drafts list filter
+  // and unlocks the editor form even in Browse mode (a draft IS the
+  // user's own work).
+  const draftedSpellIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (proposalContext) {
+      for (const q of proposalContext.queue) {
+        if (q.entity_type === 'spell' && q.entity_id) ids.add(q.entity_id);
+      }
+    }
+    if (activeBundleId) {
+      for (const d of allDrafts) {
+        if (
+          d.entity_type === 'spell' &&
+          d.entity_id &&
+          d.bundle_id === activeBundleId
+        ) {
+          ids.add(d.entity_id);
+        }
+      }
+    }
+    return ids;
+  }, [proposalContext, allDrafts, activeBundleId]);
+
   const [entries, setEntries] = useState<any[]>([]);
   const [spellDetailsById, setSpellDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
@@ -422,6 +470,17 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
+
+  // Whether the editor form for `editingId` should render read-only.
+  // Browse mode applies — but only for live spells the user hasn't
+  // unlocked or staged changes against. A New Spell (editingId=null)
+  // is never read-only — the form is the create surface.
+  const isReadOnly =
+    focusModeEnabled &&
+    focusMode === 'browse' &&
+    !!editingId &&
+    !unlockedBaseIds.has(editingId) &&
+    !draftedSpellIds.has(editingId);
   // Filter modal state. Mirrors the AxisFilter shape from
   // src/pages/compendium/SpellList.tsx so the modal layout +
   // chip semantics (3-state include/exclude + per-axis combine
@@ -649,9 +708,18 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       const effectiveTags = expandTagsWithAncestors(tagIds, parentByTagId);
       if (!matchesTagFilters(effectiveTags, tagGroups, tagsByGroup, tagStates, groupCombineModes, groupExclusionModes)) return false;
 
+      // Focus mode (Phase 4.5d step 5): in My Drafts mode the list
+      // shrinks to only spells the user has staged in the active
+      // block. In Browse Base mode the full catalog renders (current
+      // behavior). The filter is a no-op when focusModeEnabled is
+      // false (admin direct route).
+      if (focusModeEnabled && focusMode === 'drafts') {
+        if (!draftedSpellIds.has(String(entry.id))) return false;
+      }
+
       return true;
     });
-  }, [entries, search, sourceNameById, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId]);
+  }, [entries, search, sourceNameById, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId, focusModeEnabled, focusMode, draftedSpellIds]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -1403,37 +1471,61 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {editingId ? (
+                      {isReadOnly ? (
                         <Button
                           type="button"
-                          variant="outline"
-                          className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
-                          onClick={handleDelete}
+                          className="gap-2 bg-gold text-white"
+                          onClick={() => editingId && unlockBaseSpell(editingId)}
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete Spell
+                          <Pencil className="h-4 w-4" />
+                          Edit Base{formData.name ? ` "${formData.name}"` : ' Spell'}
                         </Button>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
-                        onClick={resetForm}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                        Reset
-                      </Button>
-                      <Button
-                        type="submit"
-                        form="spell-manual-editor-form"
-                        className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                        disabled={saving}
-                      >
-                        <Save className="h-4 w-4" />
-                        {saving ? 'Saving...' : editingId ? 'Update Spell' : 'Save Spell'}
-                      </Button>
+                      ) : (
+                        <>
+                          {editingId ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
+                              onClick={handleDelete}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete Spell
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
+                            onClick={resetForm}
+                          >
+                            <Edit3 className="h-4 w-4" />
+                            Reset
+                          </Button>
+                          <Button
+                            type="submit"
+                            form="spell-manual-editor-form"
+                            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                            disabled={saving}
+                          >
+                            <Save className="h-4 w-4" />
+                            {saving ? 'Saving...' : editingId ? 'Update Spell' : 'Save Spell'}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
+                  {isReadOnly && (
+                    <div className="flex items-start gap-2 rounded-md border border-gold/30 bg-gold/5 px-3 py-2">
+                      <Lock className="h-4 w-4 text-gold/70 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-ink/75 leading-relaxed">
+                        <span className="font-semibold">Base spell — viewing only.</span>{' '}
+                        Click <em>Edit Base</em> to propose changes. Your edits will queue as
+                        an update revision in the active block; the live catalog stays
+                        untouched until an admin approves.
+                      </p>
+                    </div>
+                  )}
                   <TabsList variant="line" className="gap-2 bg-transparent p-0">
                     <TabsTrigger value="basics"     className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Basics</TabsTrigger>
                     <TabsTrigger value="mechanics"  className="rounded-md border border-gold/15 bg-background/30 px-3 py-1.5 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold">Mechanics</TabsTrigger>
@@ -1459,6 +1551,18 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     spellCheck={false}
                     data-1p-ignore="true"
                     data-lpignore="true"
+                  >
+                  {/* <fieldset disabled> natively disables every form
+                      control inside (inputs, selects, textareas, even
+                      type="submit" buttons). Used in Browse mode so
+                      a content-creator can scroll a base spell without
+                      accidentally typing into it. The outer "Edit
+                      Base" / Save / Delete buttons live OUTSIDE this
+                      fieldset (in the header above) so they stay
+                      clickable. */}
+                  <fieldset
+                    disabled={isReadOnly}
+                    className="space-y-6 p-0 m-0 border-0"
                   >
                   <TabsContent value="basics" className="mt-0 space-y-6">
                     <div className="grid gap-6 lg:grid-cols-[126px_minmax(0,1fr)]">
@@ -2051,6 +2155,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       />
                     </div>
                   </TabsContent>
+                  </fieldset>
                   </form>
                 </div>
                 </Tabs>
