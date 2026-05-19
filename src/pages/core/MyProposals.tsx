@@ -397,7 +397,7 @@ const CREATE_ENTRIES: LauncherEntry[] = [
     description: 'Pin a new spell to a class\'s spell list outside the rule-driven set.',
     href: '/compendium/spell-lists',
     icon: BookOpen,
-    status: 'coming-soon',
+    status: 'ready',
   },
 ];
 
@@ -451,7 +451,7 @@ const EDIT_ENTRIES: LauncherEntry[] = [
     description: 'Add or remove pinned spells from a class\'s spell list.',
     href: '/compendium/spell-lists',
     icon: BookOpen,
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     title: 'Spells',

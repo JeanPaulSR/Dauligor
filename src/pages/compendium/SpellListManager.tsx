@@ -16,6 +16,7 @@ import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
   fetchClassSpellIds,
+  fetchClassSpellMembershipIds,
   fetchClassRuleSpellIds,
   fetchLastClassRuleRebuildAt,
   fetchStaleClasses,
@@ -25,6 +26,7 @@ import {
   parseTimestampMs,
   type ClassMembership,
 } from '../../lib/classSpellLists';
+import { useEntityWriter, actionLabel } from '../../lib/proposalAware';
 import {
   fetchAppliedRulesFor,
   rebuildClassSpellListFromAppliedRules,
@@ -112,7 +114,17 @@ type FilteredEntry = {
 };
 
 export default function SpellListManager({ userProfile }: { userProfile: any }) {
+  // Admins write through class_spell_lists directly; content-creators
+  // route through the proposal queue. Bulk operations (Add all / Bulk
+  // remove / Rebuild from rules) and rule linking stay admin-only —
+  // they touch more rows than the single-revision proposal shape can
+  // capture today.
   const isAdmin = userProfile?.role === 'admin';
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManageLists = isAdmin || isContentCreator;
+  const listWriter = useEntityWriter('class_spell_list', userProfile);
+  const isProposalMode = listWriter.mode === 'proposal';
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Fullscreen-page opt-in. Same body class /compendium/spells and
@@ -120,10 +132,10 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   // padding, hides the footer, locks body scroll so each pane
   // handles its own overflow.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageLists) return;
     document.body.classList.add('spell-list-fullscreen');
     return () => document.body.classList.remove('spell-list-fullscreen');
-  }, [isAdmin]);
+  }, [canManageLists]);
 
   // Pane height — derived as
   //
@@ -202,6 +214,12 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const initialClassId = searchParams.get('class') || '';
   const [selectedClassId, setSelectedClassId] = useState<string>(initialClassId);
   const [classListIds, setClassListIds] = useState<Set<string>>(new Set());
+  // Proposal-mode delete proposals need the membership row id, not
+  // just the spell id (the writer requires entity_id). Loaded lazily
+  // alongside `classListIds` when the user holds content-creator but
+  // not admin. Empty in admin mode — the direct-write helper deletes
+  // by composite key and doesn't need the lookup.
+  const [classMembershipIds, setClassMembershipIds] = useState<Map<string, string>>(new Map());
   const [classListLoading, setClassListLoading] = useState(false);
 
   // Map<spellId, ClassMembership[]> — every class that has each spell on its list.
@@ -253,7 +271,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
 
   // Load classes + spells + sources + tags once, then bulk-fetch class memberships.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageLists) return;
     let active = true;
     (async () => {
       try {
@@ -303,12 +321,13 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       }
     })();
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [canManageLists]);
 
   // Reload the selected class's list (membership + linked rules + last-rebuild ts) when the class changes.
   useEffect(() => {
     if (!selectedClassId) {
       setClassListIds(new Set());
+      setClassMembershipIds(new Map());
       setLinkedRules([]);
       setLastRebuildAt(null);
       return;
@@ -322,6 +341,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         if (active) toast.error("Failed to load this class's spell list.");
       })
       .finally(() => { if (active) setClassListLoading(false); });
+    // Content-creators need the row-id map to submit delete proposals.
+    // Admins skip this round-trip (their delete path uses composite
+    // keys directly).
+    if (isProposalMode) {
+      fetchClassSpellMembershipIds(selectedClassId)
+        .then(m => { if (active) setClassMembershipIds(m); })
+        .catch(err => console.error('[SpellListManager] Failed to load membership ids:', err));
+    }
     fetchAppliedRulesFor('class', selectedClassId)
       .then(rs => { if (active) setLinkedRules(rs); })
       .catch(err => console.error('[SpellListManager] Failed to load linked rules:', err));
@@ -334,13 +361,13 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   // Load the full rule catalogue once for the "Link Rule" picker. Cheap (rules table
   // is small, and the d1 cache backs it after the first hit).
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageLists) return;
     let active = true;
     fetchAllRules()
       .then(rs => { if (active) setAllRules(rs); })
       .catch(err => console.error('[SpellListManager] Failed to load rules catalogue:', err));
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [canManageLists]);
 
   // Keep ?class= URL param in sync so the page is link-shareable.
   useEffect(() => {
@@ -592,7 +619,52 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       return next;
     });
 
-    // Optimistic apply
+    // Proposal mode: no optimistic update (the live rows haven't
+    // changed and won't until an admin approves), no membership
+    // map mutation, one revision per spell. Bulk Add / Bulk Remove
+    // become N proposals at once — the admin can approve them
+    // individually or in a batch from /admin/proposals.
+    if (isProposalMode) {
+      try {
+        if (mode === 'add') {
+          for (const spellId of spellIds) {
+            await listWriter.create({
+              class_id: classId,
+              spell_id: spellId,
+              source: 'manual',
+            });
+          }
+        } else {
+          for (const spellId of spellIds) {
+            const rowId = classMembershipIds.get(spellId);
+            if (!rowId) {
+              console.warn('[SpellListManager] no membership row id for spell', spellId);
+              continue;
+            }
+            await listWriter.remove(rowId);
+          }
+        }
+        if (!opts.silent) {
+          const verb = mode === 'add' ? 'addition' : 'removal';
+          const plural = spellIds.length === 1 ? '' : 's';
+          toast.success(
+            `${spellIds.length} spell ${verb}${plural} submitted for review.`,
+          );
+        }
+      } catch (err) {
+        console.error('[SpellListManager] proposal submit failed:', err);
+        toast.error(`Failed to submit ${mode === 'add' ? 'add' : 'remove'} proposals.`);
+      } finally {
+        setPendingSpellIds(prev => {
+          const next = new Set(prev);
+          for (const id of spellIds) next.delete(id);
+          return next;
+        });
+      }
+      return;
+    }
+
+    // Admin direct-write path — optimistic apply + bulk D1 helper.
     setClassListIds(prev => {
       const next = new Set(prev);
       for (const id of spellIds) {
@@ -1000,8 +1072,8 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     set(list.includes(value) ? list.filter(v => v !== value) : [...list, value]);
   }
 
-  if (!isAdmin) {
-    return <div className="text-center py-20 text-ink/70">Access Denied. Admins only.</div>;
+  if (!canManageLists) {
+    return <div className="text-center py-20 text-ink/70">Access Denied.</div>;
   }
 
   return (

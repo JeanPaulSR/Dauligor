@@ -81,6 +81,26 @@ export async function fetchClassSpellList(classId: string): Promise<ClassSpellLi
 }
 
 /**
+ * Fetch membership-row ids keyed by spell id for a class. Lets the
+ * proposal-mode flow in SpellListManager submit deletes by row id
+ * (the writer needs a single entity_id) without paying for the
+ * full join `fetchClassSpellList` does. Admin direct-writes still
+ * call `removeSpellsFromClassList` which deletes by composite key
+ * and doesn't need this map.
+ */
+export async function fetchClassSpellMembershipIds(
+  classId: string,
+): Promise<Map<string, string>> {
+  const rows = await queryD1<{ id: string; spell_id: string }>(
+    `SELECT id, spell_id FROM class_spell_lists WHERE class_id = ?`,
+    [classId],
+  );
+  const map = new Map<string, string>();
+  for (const r of rows) map.set(r.spell_id, r.id);
+  return map;
+}
+
+/**
  * Fetch the set of spell IDs on a class's list. Cheaper than fetchClassSpellList
  * when the caller only needs membership checks.
  */
