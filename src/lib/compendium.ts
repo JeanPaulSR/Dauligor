@@ -473,29 +473,48 @@ function readFoundryDataField(normalized: Record<string, any>): any {
   return normalized.foundry_data ?? normalized.foundryData ?? null;
 }
 
+/**
+ * Take an editor's raw camelCase + nested form payload and produce
+ * the snake_case + flat shape D1 expects, plus the four filter-bucket
+ * scalar columns. Pulled out of `upsertSpell` so the content-proposals
+ * flow can call it before queueing a draft — the proposal endpoint's
+ * `sanitizePayload` only keeps keys that match the writable column
+ * allowlist, so we MUST normalize before crossing the API boundary or
+ * half the spell's fields get silently dropped.
+ *
+ * Steps:
+ *   1. `normalizeCompendiumData` — flatten `components.*` / `uses.*` /
+ *      `prerequisites.*` and camelCase → snake_case the column-name
+ *      keys.
+ *   2. Rename `tagIds` → `tags` (the spells column uses `tags`, not
+ *      `tag_ids` like classes / subclasses).
+ *   3. Materialise the four filter-bucket columns
+ *      (activation_bucket / range_bucket / duration_bucket /
+ *      shape_bucket) from the Foundry payload so the summary view's
+ *      filter chips stay in lockstep.
+ *
+ * Pure — no DB writes, no side effects. Safe to call repeatedly on
+ * the same data.
+ */
+export function prepareSpellPayloadForWrite(
+  data: Record<string, any>,
+): Record<string, any> {
+  const normalized = normalizeCompendiumData(data);
+  if (normalized.tagIds !== undefined) {
+    normalized.tags = normalized.tagIds;
+    delete normalized.tagIds;
+  }
+  const buckets = computeSpellBuckets(readFoundryDataField(normalized));
+  Object.assign(normalized, buckets);
+  return normalized;
+}
+
 export async function upsertSpell(
   id: string,
   data: Record<string, any>,
   options: { skipRuleRecompute?: boolean } = {},
 ) {
-  const normalized = normalizeCompendiumData(data);
-  // The spells table column is `tags` (JSON array), not `tag_ids` like
-  // classes / subclasses use. Editors and the import workbench carry
-  // the selected list as `tagIds` for cross-entity consistency, so
-  // remap on the way in to avoid the "no such column: tagIds" SQLite
-  // error. Mirrors the identical remap inside `upsertFeature` for the
-  // features table, which has the same shape.
-  if (normalized.tagIds !== undefined) {
-    normalized.tags = normalized.tagIds;
-    delete normalized.tagIds;
-  }
-  // Materialise the four filter-bucket columns from the Foundry
-  // payload on every save so the columns stay in lockstep with
-  // foundry_data. Lets the summary projection drop foundry_data
-  // entirely (see src/lib/spellSummary.ts) — critical for cache /
-  // network payload size at scale.
-  const buckets = computeSpellBuckets(readFoundryDataField(normalized));
-  Object.assign(normalized, buckets);
+  const normalized = prepareSpellPayloadForWrite(data);
 
   const result = await upsertDocument('spells', id, normalized);
 
@@ -570,22 +589,14 @@ export async function purgeAllSpells(): Promise<number> {
  * rebuilt.
  */
 export async function upsertSpellBatch(entries: { id: string | null, data: Record<string, any> }[]) {
-  const normalizedEntries = entries.map(entry => {
-    const normalized = normalizeCompendiumData(entry.data);
-    // Mirror the tagIds -> tags remap from upsertSpell. The "Import
-    // Visible" button on the workbench hits this batch path, not the
-    // per-spell one, so it needs the same fix.
-    if (normalized.tagIds !== undefined) {
-      normalized.tags = normalized.tagIds;
-      delete normalized.tagIds;
-    }
-    // Same bucket materialisation as upsertSpell — Foundry imports
-    // (which use this batch path) must populate the four bucket
-    // columns or the imported spells won't show in filtered list
-    // views until the next save.
-    Object.assign(normalized, computeSpellBuckets(readFoundryDataField(normalized)));
-    return { id: entry.id, data: normalized };
-  });
+  // Same prep as upsertSpell — normalize column names, rename tagIds,
+  // materialise the four filter-bucket scalar columns. Foundry imports
+  // (which use this batch path) MUST populate the bucket columns or
+  // the imported spells won't show in filtered list views.
+  const normalizedEntries = entries.map((entry) => ({
+    id: entry.id,
+    data: prepareSpellPayloadForWrite(entry.data),
+  }));
   return upsertDocumentBatch('spells', normalizedEntries);
 }
 
