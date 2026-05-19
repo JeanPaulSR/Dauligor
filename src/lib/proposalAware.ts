@@ -19,6 +19,7 @@
 import { useMemo } from 'react';
 import { auth } from './firebase';
 import { upsertDocument, deleteDocument } from './d1';
+import { useBlock } from './proposalBlock';
 
 export type ProposalEntityType =
   | 'tag'
@@ -37,7 +38,7 @@ const ENTITY_TO_COLLECTION: Record<ProposalEntityType, string> = {
   class_spell_list: 'classSpellLists',
 };
 
-export type WriterMode = 'direct' | 'proposal' | 'readonly';
+export type WriterMode = 'direct' | 'proposal' | 'block' | 'readonly';
 
 export type WriterApi = {
   mode: WriterMode;
@@ -74,7 +75,9 @@ export function useEntityWriter(
   entityType: ProposalEntityType,
   effectiveProfile: any,
 ): WriterApi {
-  const mode: WriterMode = useMemo(() => {
+  const { activeBundleId, refresh: refreshBlock } = useBlock();
+
+  const baseMode: Exclude<WriterMode, 'block'> = useMemo(() => {
     if (!effectiveProfile) return 'readonly';
     if (effectiveProfile.role === 'admin') return 'direct';
     if (
@@ -85,6 +88,13 @@ export function useEntityWriter(
     }
     return 'readonly';
   }, [effectiveProfile]);
+
+  // When a block is open AND the user has at least 'proposal' rights,
+  // writes land in the active bundle as drafts. Admins ALSO go
+  // through the block when one's open — gives them the same staging
+  // UX for testing the workflow and bundling related changes.
+  const blockActive = !!activeBundleId && baseMode !== 'readonly';
+  const mode: WriterMode = blockActive ? 'block' : baseMode;
 
   return useMemo<WriterApi>(() => {
     const collection = ENTITY_TO_COLLECTION[entityType];
@@ -119,7 +129,10 @@ export function useEntityWriter(
       };
     }
 
-    // proposal mode
+    // proposal + block share the POST /api/proposals path. The only
+    // difference is the body: block mode tags `is_draft: true` and
+    // pins the bundle_id; proposal mode lets the server pick a
+    // bundle id (or omit one for a single revision).
     const submitProposal = async (
       op: 'create' | 'update' | 'delete',
       entityId: string | null,
@@ -128,27 +141,40 @@ export function useEntityWriter(
     ) => {
       const idToken = await auth.currentUser?.getIdToken();
       if (!idToken) throw new Error('Not signed in.');
+      const body: Record<string, any> = {
+        revisions: [
+          {
+            entity_type: entityType,
+            entity_id: entityId,
+            operation: op,
+            proposed_payload: payload,
+            notes_from_proposer: notes ?? null,
+          },
+        ],
+      };
+      if (mode === 'block' && activeBundleId) {
+        body.is_draft = true;
+        body.bundle_id = activeBundleId;
+      }
       const res = await fetch('/api/proposals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({
-          revisions: [
-            {
-              entity_type: entityType,
-              entity_id: entityId,
-              operation: op,
-              proposed_payload: payload,
-              notes_from_proposer: notes ?? null,
-            },
-          ],
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Proposal failed (HTTP ${res.status})`);
+        const respBody = await res.json().catch(() => ({}));
+        throw new Error(respBody.error || `Proposal failed (HTTP ${res.status})`);
+      }
+      // Keep the BlockProvider's local draft cache in sync so the
+      // navbar indicator + Drafts tab update without a manual
+      // refresh. No-op outside block mode.
+      if (mode === 'block') {
+        // Don't await — UI doesn't need to block on it; the next
+        // navigation to Drafts will fetch anyway.
+        void refreshBlock();
       }
     };
 
@@ -166,7 +192,7 @@ export function useEntityWriter(
         await submitProposal('delete', id, null, opts?.notes);
       },
     };
-  }, [mode, entityType]);
+  }, [mode, entityType, activeBundleId, refreshBlock]);
 }
 
 /**
@@ -184,6 +210,9 @@ export function actionLabel(
 ): string {
   if (mode === 'proposal') {
     return `${capitalize(pastTense.replace(/d$/, ''))} submitted for review`;
+  }
+  if (mode === 'block') {
+    return `${capitalize(pastTense.replace(/d$/, ''))} added to block`;
   }
   return capitalize(pastTense);
 }

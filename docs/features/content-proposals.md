@@ -24,6 +24,11 @@
 >   revert" revision in `pending_revisions` so the audit log stays
 >   complete; revert-of-revert is just another revert with the
 >   operation flipped again.
+> - **Phase 2e** Submission Blocks (draft bundles) **— shipped May
+>   2026.** A new `draft` status lets users stage many edits across
+>   any wired editor into one bundle, then submit them atomically.
+>   Drafts are user-private (admin queue never sees them). Block
+>   state survives reloads via localStorage.
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
 >   UI) and **Phase 4** (spells in the allowlist) follow.
 

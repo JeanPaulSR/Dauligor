@@ -9,6 +9,7 @@ import { auth, onAuthStateChanged, User } from './lib/firebase';
 import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewContext';
 import { fetchDocument, upsertDocument, fetchCollection, checkFoundationUpdate, clearCache } from './lib/d1';
 import { setCurrentUserRole } from './lib/currentUser';
+import { BlockProvider } from './lib/proposalBlock';
 import Navbar from './components/Navbar';
 
 import Home from './pages/core/Home';
@@ -191,11 +192,12 @@ export default function App() {
   }
 
   return (
-    <WikiPreviewContext.Provider value={{ 
-      previewCampaign, 
+    <WikiPreviewContext.Provider value={{
+      previewCampaign,
       setPreviewCampaign,
       refreshProfile
     }}>
+    <BlockProvider>
     <TooltipProvider>
       <Router>
         <div className="min-h-screen flex">
@@ -311,6 +313,7 @@ export default function App() {
         </div>
       </Router>
     </TooltipProvider>
+    </BlockProvider>
     </WikiPreviewContext.Provider>
   );
 }
