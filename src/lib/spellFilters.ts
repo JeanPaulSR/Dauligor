@@ -280,6 +280,16 @@ export type RuleQuery = {
   duration?: AxisFilter<DurationBucket>;
   shape?: AxisFilter<ShapeBucket>;
   property?: AxisFilter<PropertyFilter>;
+  // Root-level hard exclude — semantically distinct from the per-tag
+  // tri-state in `tagStates`. Applied AFTER `matchAnyClause` returns
+  // true: any spell carrying at least one of these tag ids is rejected
+  // from the rule's result, no matter which clause matched it.
+  //
+  // For multi-clause rules this field lives on the wrapper
+  // (`{ clauses, excludeTagIds }`); the matcher reads from the root
+  // only and ignores any copies on individual clauses. The editor
+  // never writes to clause-level entries.
+  excludeTagIds?: string[];
 };
 
 /**
@@ -926,7 +936,7 @@ export function explainSpellAgainstRule(
  * cost as before for single-clause rules.
  */
 export type RuleClause = RuleQuery;
-export type RuleClauseRoot = RuleQuery | { clauses: RuleClause[] };
+export type RuleClauseRoot = RuleQuery | { clauses: RuleClause[]; excludeTagIds?: string[] };
 
 /** Type guard: does this root use the multi-clause shape? */
 export function isMultiClauseRoot(root: RuleClauseRoot): root is { clauses: RuleClause[] } {
@@ -953,10 +963,29 @@ export function getClauses(root: RuleClauseRoot): RuleClause[] {
 }
 
 /**
+ * Read the root-level hard-exclude tag list. Lives at the wrapper for
+ * multi-clause shapes (`{ clauses, excludeTagIds }`) and at the root
+ * itself for flat-shape rules (where the root IS the single clause).
+ * Per-clause copies are ignored — only the root counts, by contract.
+ */
+export function getRootExcludeTagIds(root: RuleClauseRoot): string[] {
+  if (isMultiClauseRoot(root)) {
+    return Array.isArray(root.excludeTagIds) ? root.excludeTagIds : [];
+  }
+  const flat = root as RuleQuery;
+  return Array.isArray(flat.excludeTagIds) ? flat.excludeTagIds : [];
+}
+
+/**
  * Rule-level OR: a spell matches the rule if ANY of its clauses
- * match. `getClauses` returning empty (the multi-clause-but-zero-
- * elements edge case) makes the rule reject everything; the editor
- * prevents saving in that state, but the matcher stays robust.
+ * match AND the spell doesn't carry any root-level hard-exclude tag.
+ * `getClauses` returning empty (the multi-clause-but-zero-elements
+ * edge case) makes the rule reject everything; the editor prevents
+ * saving in that state, but the matcher stays robust.
+ *
+ * Hard exclude applies AFTER clause matching: a spell that matches
+ * a clause is then checked against `excludeTagIds`. If it carries
+ * any of those tags, it's rejected from the rule's result.
  */
 export function matchAnyClause(
   spell: SpellMatchInput,
@@ -966,6 +995,16 @@ export function matchAnyClause(
 ): boolean {
   const clauses = getClauses(root);
   if (clauses.length === 0) return false;
+  // Hard-exclude check before clause loop so we save the per-clause
+  // axis evaluations entirely for spells that would be vetoed
+  // anyway. Empty / undefined list short-circuits to false.
+  const excludeTagIds = getRootExcludeTagIds(root);
+  if (excludeTagIds.length > 0 && spell.tags) {
+    const spellTagSet = new Set(spell.tags);
+    for (const tagId of excludeTagIds) {
+      if (spellTagSet.has(tagId)) return false;
+    }
+  }
   for (const clause of clauses) {
     if (matchSpellAgainstRule(spell, clause, parentByTagId, tagIndex)) return true;
   }
