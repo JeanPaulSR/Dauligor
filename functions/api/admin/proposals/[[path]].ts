@@ -76,9 +76,19 @@ async function handleList(request: Request): Promise<Response> {
   const whereClauses: string[] = [];
   const params: any[] = [];
 
-  if (VALID_STATUS_FILTERS.has(statusParam as Status)) {
+  // `draft` rows are user-private scratch space for the submission
+  // block UX (see Phase 2e). They are never surfaced to admins; the
+  // proposer flips them to `pending` via POST /api/proposals/bundle/
+  // <id>/submit, at which point they become visible. Force the
+  // status filter into the four non-draft values regardless of what
+  // the client asks for.
+  const statusForQuery =
+    statusParam === "draft" ? "pending" : statusParam;
+  if (VALID_STATUS_FILTERS.has(statusForQuery as Status)) {
     whereClauses.push("status = ?");
-    params.push(statusParam);
+    params.push(statusForQuery);
+  } else {
+    whereClauses.push("status != 'draft'");
   }
   if (entityTypeParam && isProposableEntityType(entityTypeParam)) {
     whereClauses.push("entity_type = ?");
@@ -128,7 +138,14 @@ async function loadRow(revisionId: string): Promise<any> {
   });
   const rows = Array.isArray(result?.results) ? result.results : [];
   if (rows.length === 0) throw new HttpError(404, "Proposal not found.");
-  return rows[0];
+  const row = rows[0] as any;
+  // Drafts are user-private (see handleList). Even by id, an admin
+  // can't reach into someone's in-progress block — the proposer
+  // gets the same row back via /api/proposals/<id> if they own it.
+  if (row.status === "draft") {
+    throw new HttpError(404, "Proposal not found.");
+  }
+  return row;
 }
 
 async function handleGetOne(revisionId: string): Promise<Response> {

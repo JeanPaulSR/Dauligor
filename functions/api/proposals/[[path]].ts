@@ -64,6 +64,7 @@ import {
 } from "../../../api/_lib/proposals.js";
 
 const VALID_STATUS_FILTERS = new Set<Status>([
+  "draft",
   "pending",
   "approved",
   "rejected",
@@ -87,6 +88,7 @@ function normalizeSubmitBody(body: any): {
   revisions: IncomingRevision[];
   bundle_id: string | null;
   notes_from_proposer: string | null;
+  is_draft: boolean;
 } {
   if (!body || typeof body !== "object") {
     throw new HttpError(400, "Body must be a JSON object.");
@@ -96,6 +98,12 @@ function normalizeSubmitBody(body: any): {
     typeof body.bundle_id === "string" && body.bundle_id ? body.bundle_id : null;
   const bundleNotes =
     typeof body.notes_from_proposer === "string" ? body.notes_from_proposer : null;
+  // Draft mode: rows land with status='draft' instead of 'pending'.
+  // Hidden from the admin queue until the caller flips them to
+  // pending via POST /api/proposals/bundle/:id/submit. The Submission
+  // Block UX uses this to stage many edits without spamming the
+  // queue mid-authoring.
+  const isDraft = body.is_draft === true;
 
   let rawRevisions: any[];
   if (Array.isArray(body.revisions)) {
@@ -173,18 +181,25 @@ function normalizeSubmitBody(body: any): {
     // together and the caller didn't supply one. Single-revision
     // submits stay bundle_id=null so the queue doesn't render them
     // as a one-row "bundle".
+    //
+    // Draft submits (block-mode adds) ALWAYS need a bundle_id so
+    // the block can be addressed atomically later (submit-bundle,
+    // discard-bundle). The client should supply one; if missing,
+    // we mint one even for a single-revision draft.
     bundle_id:
       bundleId ||
-      (revisions.length > 1 ? `bundle-${crypto.randomUUID()}` : null),
+      (revisions.length > 1 || isDraft ? `bundle-${crypto.randomUUID()}` : null),
     notes_from_proposer: bundleNotes,
+    is_draft: isDraft,
   };
 }
 
 async function handleSubmit(request: Request, proposerId: string): Promise<Response> {
   const body = await request.json().catch(() => ({}));
-  const { revisions, bundle_id } = normalizeSubmitBody(body);
+  const { revisions, bundle_id, is_draft } = normalizeSubmitBody(body);
 
   const insertedIds: string[] = [];
+  const statusValue = is_draft ? "draft" : "pending";
   // We capture the snapshot for each non-create revision by reading
   // the current entity row at submit time. The shape is whatever the
   // entity table returns from SELECT * — JSON columns stay as
@@ -208,11 +223,12 @@ async function handleSubmit(request: Request, proposerId: string): Promise<Respo
               id, bundle_id, proposed_by_user_id, status, entity_type, entity_id,
               operation, proposed_payload, snapshot_at_proposal,
               notes_from_proposer, cascade_parent_revision_id
-            ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       params: [
         id,
         bundle_id,
         proposerId,
+        statusValue,
         rev.entity_type,
         rev.entity_id,
         rev.operation,
@@ -224,7 +240,12 @@ async function handleSubmit(request: Request, proposerId: string): Promise<Respo
     });
   }
 
-  return Response.json({ ok: true, bundle_id, revision_ids: insertedIds });
+  return Response.json({
+    ok: true,
+    bundle_id,
+    revision_ids: insertedIds,
+    status: statusValue,
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -282,7 +303,7 @@ async function handleGetOne(
 /* Patch + withdraw                                                            */
 /* -------------------------------------------------------------------------- */
 
-async function loadOwnPending(
+async function loadOwnEditable(
   proposalId: string,
   proposerId: string,
 ): Promise<any> {
@@ -296,10 +317,13 @@ async function loadOwnPending(
   if (row.proposed_by_user_id !== proposerId) {
     throw new HttpError(404, "Proposal not found.");
   }
-  if (row.status !== "pending") {
+  // Both `draft` (block-mode staging) and `pending` (queued for
+  // admin review) are editable by the proposer. Approved / rejected
+  // / withdrawn are immutable.
+  if (row.status !== "pending" && row.status !== "draft") {
     throw new HttpError(
       409,
-      `Proposal is ${row.status}; can only edit while pending.`,
+      `Proposal is ${row.status}; can only edit while pending or draft.`,
     );
   }
   return row;
@@ -310,7 +334,7 @@ async function handlePatch(
   proposalId: string,
   proposerId: string,
 ): Promise<Response> {
-  const row = await loadOwnPending(proposalId, proposerId);
+  const row = await loadOwnEditable(proposalId, proposerId);
   const body = (await request.json().catch(() => ({}))) as any;
 
   const setClauses: string[] = [];
@@ -370,12 +394,98 @@ async function handleWithdraw(
   proposalId: string,
   proposerId: string,
 ): Promise<Response> {
-  await loadOwnPending(proposalId, proposerId);
+  const row = await loadOwnEditable(proposalId, proposerId);
+  if (row.status === "draft") {
+    // Drafts never made it to the admin queue — hard-delete instead
+    // of leaving a withdrawn audit trail.
+    await executeD1QueryInternal({
+      sql: `DELETE FROM pending_revisions WHERE id = ?`,
+      params: [proposalId],
+    });
+    return Response.json({ ok: true, id: proposalId, deleted: true });
+  }
   await executeD1QueryInternal({
     sql: `UPDATE pending_revisions SET status = 'withdrawn', reviewed_at = CURRENT_TIMESTAMP WHERE id = ?`,
     params: [proposalId],
   });
   return Response.json({ ok: true, id: proposalId });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Bundle (submission block) operations                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Atomically flip every `draft` row in the bundle to `pending`. The
+ * admin queue starts seeing them after this call. Refuses if the
+ * bundle owns no rows (or none in `draft` status), and refuses if
+ * any row in the bundle isn't owned by the caller (a sanity check
+ * — the proposer-id filter on the SELECT prevents cross-user
+ * tampering anyway).
+ */
+async function handleSubmitBundle(
+  bundleId: string,
+  proposerId: string,
+): Promise<Response> {
+  const result = await executeD1QueryInternal({
+    sql: `SELECT id, status FROM pending_revisions
+            WHERE bundle_id = ? AND proposed_by_user_id = ?`,
+    params: [bundleId, proposerId],
+  });
+  const rows = Array.isArray(result?.results) ? result.results : [];
+  if (rows.length === 0) {
+    throw new HttpError(404, "Bundle not found or empty.");
+  }
+  const draftRows = rows.filter((r: any) => r.status === "draft");
+  if (draftRows.length === 0) {
+    throw new HttpError(
+      409,
+      "Bundle has no draft rows to submit (already submitted or already resolved).",
+    );
+  }
+  await executeD1QueryInternal({
+    sql: `UPDATE pending_revisions SET status = 'pending'
+            WHERE bundle_id = ? AND proposed_by_user_id = ? AND status = 'draft'`,
+    params: [bundleId, proposerId],
+  });
+  return Response.json({
+    ok: true,
+    bundle_id: bundleId,
+    submitted_count: draftRows.length,
+  });
+}
+
+/**
+ * Discard a draft bundle: delete every row in `bundle_id` that the
+ * caller owns AND is in `draft` status. Pending / approved /
+ * rejected rows are left untouched (deleting them would erase audit
+ * history). Returns the count actually removed.
+ */
+async function handleDiscardBundle(
+  bundleId: string,
+  proposerId: string,
+): Promise<Response> {
+  const countResult = await executeD1QueryInternal({
+    sql: `SELECT COUNT(*) AS n FROM pending_revisions
+            WHERE bundle_id = ? AND proposed_by_user_id = ? AND status = 'draft'`,
+    params: [bundleId, proposerId],
+  });
+  const n = Number(
+    (Array.isArray(countResult?.results) && countResult.results[0]?.n) || 0,
+  );
+  if (n === 0) {
+    throw new HttpError(404, "No draft rows in this bundle.");
+  }
+  await executeD1QueryInternal({
+    sql: `DELETE FROM pending_revisions
+            WHERE bundle_id = ? AND proposed_by_user_id = ? AND status = 'draft'`,
+    params: [bundleId, proposerId],
+  });
+  return Response.json({
+    ok: true,
+    bundle_id: bundleId,
+    discarded_count: n,
+  });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -432,6 +542,18 @@ export const onRequest = async (context: any): Promise<Response> => {
         { error: `Method ${request.method} not allowed.` },
         { status: 405 },
       );
+    }
+
+    // /api/proposals/bundle/<id> — submit (POST /submit) or discard
+    // (DELETE the whole bundle).
+    if (path[0] === "bundle" && path.length >= 2) {
+      const bundleId = path[1];
+      if (path.length === 2 && request.method === "DELETE") {
+        return await handleDiscardBundle(bundleId, proposerId);
+      }
+      if (path.length === 3 && path[2] === "submit" && request.method === "POST") {
+        return await handleSubmitBundle(bundleId, proposerId);
+      }
     }
 
     return Response.json(

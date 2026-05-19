@@ -11,7 +11,8 @@ import { useWikiPreview } from '../lib/wikiPreviewContext';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from './ui/dropdown-menu';
-import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu, Wrench, Globe2, Inbox, ScrollText } from 'lucide-react';
+import { Shield, Book, BookOpen, Map as MapIcon, Users, Bookmark, LogOut, LogIn, Eye, EyeOff, Settings, LayoutGrid, UserCircle, ChevronDown, Swords, Menu, Wrench, Globe2, Inbox, ScrollText, Package } from 'lucide-react';
+import { useBlock } from '../lib/proposalBlock';
 import { Badge } from './ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Input } from './ui/input';
@@ -38,6 +39,7 @@ export default function Navbar({
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [activeCampaign, setActiveCampaign] = useState<any>(null);
   const { refreshProfile } = useWikiPreview();
+  const { activeBundleId, drafts } = useBlock();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -196,6 +198,21 @@ export default function Navbar({
             >
               {previewMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               {previewMode ? 'Exit Preview' : 'User Preview'}
+            </Button>
+          )}
+
+          {user && activeBundleId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/my-proposals?tab=block')}
+              className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10 h-8"
+              title="A submission block is open. Click to view / submit / discard."
+            >
+              <Package className="w-3.5 h-3.5" />
+              <span className="text-[10px] uppercase tracking-widest font-bold">
+                Block · {drafts.length}
+              </span>
             </Button>
           )}
 

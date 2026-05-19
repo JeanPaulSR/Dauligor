@@ -28,10 +28,11 @@ import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import {
   ScrollText, X, Tags as TagsIcon, Sparkles, BookOpen, ArrowRight,
-  Plus, Edit3, Inbox, Swords, Layers,
+  Plus, Edit3, Inbox, Swords, Layers, Package, Send, Trash2,
 } from 'lucide-react';
+import { useBlock } from '../../lib/proposalBlock';
 
-type Status = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+type Status = 'draft' | 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
 type EntityType =
   | 'tag'
@@ -40,7 +41,7 @@ type EntityType =
   | 'spell_rule_application'
   | 'class_spell_list';
 
-type TopTab = 'submissions' | 'new' | 'edit';
+type TopTab = 'submissions' | 'new' | 'edit' | 'block';
 
 type Proposal = {
   id: string;
@@ -83,7 +84,13 @@ function previewName(p: Proposal): string {
 }
 
 export default function MyProposals({ userProfile }: { userProfile: any }) {
-  const [topTab, setTopTab] = useState<TopTab>('submissions');
+  const [topTab, setTopTab] = useState<TopTab>(() => {
+    // Allow deep-linking with ?tab=block (navbar Block pill uses this).
+    if (typeof window === 'undefined') return 'submissions';
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'block' || t === 'new' || t === 'edit' || t === 'submissions') return t;
+    return 'submissions';
+  });
   const [filter, setFilter] = useState<Status | 'all'>('all');
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,7 +119,10 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
         throw new Error(body.error || `Failed to load proposals (HTTP ${res.status})`);
       }
       const body = await res.json();
-      setProposals(Array.isArray(body?.proposals) ? body.proposals : []);
+      // Drafts have their own Block tab — never surface them under
+      // Submissions (the queue view), even when filter is 'all'.
+      const all: Proposal[] = Array.isArray(body?.proposals) ? body.proposals : [];
+      setProposals(all.filter((p) => p.status !== 'draft'));
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Failed to load proposals.');
@@ -172,36 +182,18 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
       <div className="space-y-2">
         <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">My Proposals</h1>
         <p className="text-ink/60 font-serif italic">
-          Compendium changes you've submitted for admin review. Use the
-          tabs below to draft something new, edit existing entities, or
-          review the queue of your past submissions.
+          Compendium changes you've submitted for admin review. Stack
+          multiple edits into a <strong>Block</strong> for one combined
+          proposal, use <strong>New</strong> / <strong>Edit</strong> to
+          jump into an editor, or review the queue of your past
+          submissions.
         </p>
       </div>
 
-      {/* Top-level tabs: Submissions / New / Edit */}
-      <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-2">
-        {([
-          { id: 'submissions', label: 'Submissions', icon: Inbox },
-          { id: 'new', label: 'New', icon: Plus },
-          { id: 'edit', label: 'Edit', icon: Edit3 },
-        ] as const).map(tab => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setTopTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-t-md transition-colors font-bold uppercase tracking-widest text-[10px] ${
-                topTab === tab.id
-                  ? 'bg-gold text-white shadow-sm'
-                  : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Top-level tabs: Submissions / Block / New / Edit. Block sits
+          between Submissions and New so users see it as the "active
+          work area" before the launchers. */}
+      <BlockTabBar topTab={topTab} setTopTab={setTopTab} />
 
       {topTab === 'submissions' && (
         <SubmissionsPanel
@@ -215,6 +207,53 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
       )}
       {topTab === 'new' && <CreateLauncher />}
       {topTab === 'edit' && <EditLauncher />}
+      {topTab === 'block' && <BlockPanel />}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tab strip with a live "Block · N" badge.                                   */
+/* -------------------------------------------------------------------------- */
+
+function BlockTabBar({
+  topTab,
+  setTopTab,
+}: {
+  topTab: TopTab;
+  setTopTab: (t: TopTab) => void;
+}) {
+  const { activeBundleId, drafts } = useBlock();
+  return (
+    <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-2">
+      {([
+        { id: 'submissions', label: 'Submissions', icon: Inbox },
+        { id: 'block', label: 'Block', icon: Package },
+        { id: 'new', label: 'New', icon: Plus },
+        { id: 'edit', label: 'Edit', icon: Edit3 },
+      ] as const).map(tab => {
+        const Icon = tab.icon;
+        const showBadge = tab.id === 'block' && activeBundleId && drafts.length > 0;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => setTopTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-t-md transition-colors font-bold uppercase tracking-widest text-[10px] ${
+              topTab === tab.id
+                ? 'bg-gold text-white shadow-sm'
+                : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {tab.label}
+            {showBadge && (
+              <Badge variant="outline" className="ml-1 text-[9px] px-1.5 py-0 bg-blood/15 border-blood/30 text-blood">
+                {drafts.length}
+              </Badge>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -499,6 +538,138 @@ function EditLauncher() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* BlockPanel — the active Submission Block view.                            */
+/*                                                                            */
+/* No block open: a Start button + a short explainer of what blocks do.      */
+/* Block open: list of staged drafts + Submit + Discard + a hint to keep     */
+/* editing.                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function BlockPanel() {
+  const { activeBundleId, drafts, loading, startBlock, submitBlock, discardBlock } = useBlock();
+  const [working, setWorking] = useState<'submit' | 'discard' | null>(null);
+
+  if (!activeBundleId) {
+    return (
+      <Card className="border-gold/20 bg-gold/5">
+        <CardHeader>
+          <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
+            <Package className="w-4 h-4" /> No block open
+          </CardTitle>
+          <p className="text-xs text-ink/60 mt-2 leading-relaxed">
+            Start a block to stage multiple edits as a single proposal. While a block
+            is active, your Save / Add / Delete actions in any wired editor land as
+            <strong> drafts</strong> tied to the block — invisible to admins. Submit
+            the block when ready and every edit lands as one bundle in the queue.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => {
+              startBlock();
+              toast.success('Block started. Edits made now will be staged until you submit.');
+            }}
+            className="gap-2 bg-gold text-white"
+          >
+            <Plus className="w-4 h-4" /> Start Block
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const handleSubmit = async () => {
+    setWorking('submit');
+    try {
+      const { submitted } = await submitBlock();
+      toast.success(`Block submitted (${submitted} revision${submitted === 1 ? '' : 's'} sent for review).`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to submit block.');
+    } finally {
+      setWorking(null);
+    }
+  };
+  const handleDiscard = async () => {
+    if (!confirm(`Discard the active block (${drafts.length} staged change${drafts.length === 1 ? '' : 's'})? This deletes the drafts and clears the block.`)) return;
+    setWorking('discard');
+    try {
+      const { discarded } = await discardBlock();
+      toast.success(`Block discarded (${discarded} draft${discarded === 1 ? '' : 's'} removed).`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to discard block.');
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  return (
+    <>
+      <Card className="border-blood/20 bg-blood/5">
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
+              <Package className="w-4 h-4 text-blood" /> Active Block
+              <Badge variant="outline" className="ml-1 text-[9px] border-blood/30 text-blood">
+                {drafts.length} staged
+              </Badge>
+            </CardTitle>
+            <p className="text-[11px] text-ink/50 font-mono">{activeBundleId}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleDiscard}
+              disabled={working !== null}
+              className="gap-1.5 border-blood/30 text-blood hover:bg-blood/10"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Discard
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={working !== null || drafts.length === 0}
+              className="gap-1.5 bg-gold text-white"
+            >
+              <Send className="w-3.5 h-3.5" /> Submit Block
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading && drafts.length === 0 ? (
+            <p className="text-ink/50 italic text-center py-12">Loading drafts…</p>
+          ) : drafts.length === 0 ? (
+            <div className="text-center py-8 text-ink/60 text-sm">
+              <p>No drafts yet — open one of the editors (Tags, Spell Rules, Spell Lists) and make a change.</p>
+              <p className="text-[11px] text-ink/40 mt-2">Each Save / Add / Delete you do while the block is open lands here instead of going to the admin queue.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-blood/10">
+              {drafts.map((d) => (
+                <li key={d.id} className="py-3 flex items-center gap-3">
+                  <OperationBadge op={d.operation} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {(d.proposed_payload && (d.proposed_payload as any).name)
+                        || d.entity_id
+                        || '(no preview)'}
+                    </p>
+                    <p className="text-[11px] text-ink/50">
+                      <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/50 mr-1">
+                        {ENTITY_LABEL[d.entity_type as EntityType] || d.entity_type}
+                      </Badge>
+                      {new Date(d.proposed_at).toLocaleString()}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Small badge components                                                       */
 /* -------------------------------------------------------------------------- */
 
@@ -517,6 +688,7 @@ function OperationBadge({ op }: { op: Operation }) {
 
 function StatusBadge({ status }: { status: Status }) {
   const classes: Record<Status, string> = {
+    draft: 'bg-blood/10 text-blood border-blood/30',
     pending: 'bg-gold/10 text-gold border-gold/30',
     approved: 'bg-emerald-700/10 text-emerald-700 border-emerald-700/30',
     rejected: 'bg-blood/10 text-blood border-blood/30',

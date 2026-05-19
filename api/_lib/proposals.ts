@@ -64,7 +64,7 @@ export function isAllowedOperation(s: unknown): s is Operation {
   );
 }
 
-export type Status = "pending" | "approved" | "rejected" | "withdrawn";
+export type Status = "draft" | "pending" | "approved" | "rejected" | "withdrawn";
 
 /* -------------------------------------------------------------------------- */
 /* Per-entity config                                                          */
