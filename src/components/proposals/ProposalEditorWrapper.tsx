@@ -120,12 +120,28 @@ export function ProposalEditorWrapper({
   // Drain the queue against a known bundleId. Caller is responsible
   // for ensuring the bundle exists (via setActiveBlock or startBlock)
   // before invoking this.
+  //
+  // Passes `drafts` to `postQueuedChanges` so it can dedupe — queue
+  // entries that target an entity already represented by a draft in
+  // the block PATCH that draft instead of POSTing a redundant
+  // revision (avoids "create then edit" landing as CREATE + UPDATE
+  // in the same bundle).
   const flushToBundle = useCallback(
     async (bundleId: string) => {
       if (queue.length === 0) return { submitted: 0 };
       setSubmitting(true);
       try {
-        const result = await postQueuedChanges(queue, bundleId);
+        // Only drafts in THIS bundle are dedup-eligible — a draft from
+        // a different bundle (impossible today since only one is
+        // active, but defensive) shouldn't get patched here.
+        const sameBundleDrafts = drafts.filter(
+          (d) => d.bundle_id === bundleId,
+        );
+        const result = await postQueuedChanges(
+          queue,
+          bundleId,
+          sameBundleDrafts,
+        );
         setQueue([]);
         // Refresh the BlockProvider's local cache so the navbar
         // pill + Block tab show the new draft count immediately.
@@ -135,7 +151,7 @@ export function ProposalEditorWrapper({
         setSubmitting(false);
       }
     },
-    [queue, refreshBlock],
+    [queue, drafts, refreshBlock],
   );
 
   /* --------------------------------------------------------------- */
