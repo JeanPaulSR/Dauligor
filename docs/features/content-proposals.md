@@ -29,8 +29,31 @@
 >   any wired editor into one bundle, then submit them atomically.
 >   Drafts are user-private (admin queue never sees them). Block
 >   state survives reloads via localStorage.
+> - **Phase 4 foundation** entity-type allowlist extended with
+>   `spell`, `class`, `unique_option_group`, `unique_option_item`,
+>   plus per-entity configs (writable-column + JSON-column maps)
+>   in `api/_lib/proposals.ts` **— shipped May 2026.** The server
+>   side is ready to accept submissions against these four types;
+>   the editor wiring (SpellsEditor, ClassEditor,
+>   UniqueOptionGroupEditor) is **not yet done** — see the handoff
+>   sheet at [docs/../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md)
+>   for the resume plan.
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
->   UI) and **Phase 4** (spells in the allowlist) follow.
+>   UI) follows after the Phase 4 editor wiring.
+
+## Notes / known issues resolved during Phase 2e
+
+- **Block-mode dispatch bug (fixed `d6a485f`).** Each of the wired
+  editors gated its proposal-route branch on `writer.mode ===
+  'proposal'` exclusively. When Phase 2e introduced the `'block'`
+  mode, that strict check missed it and block-mode mutations fell
+  through to the admin-only direct-write path, which 403's at the
+  proxy. The fix is one line per editor — `mode === 'proposal' ||
+  mode === 'block'`. **Any future editor wiring must use this OR
+  pattern by default.** Documented inline in
+  [src/pages/compendium/TagsExplorer.tsx](../../src/pages/compendium/TagsExplorer.tsx),
+  [SpellRulesEditor.tsx](../../src/pages/compendium/SpellRulesEditor.tsx),
+  and [SpellListManager.tsx](../../src/pages/compendium/SpellListManager.tsx).
 
 ## Goal
 
@@ -284,45 +307,70 @@ Revert refuses if the live row has drifted from the post-approval state
 `current_row` exists at all). This protects against silently overwriting
 changes that landed between the approval and the revert.
 
-## UI surfaces
+## UI surfaces (as shipped)
 
 ### Creator-side
 
-- **Existing editors gain a "Propose change" alternate submit button**
-  visible when `effectiveProfile.role === 'content-creator'`. The normal
-  Save button is hidden for that role; "Propose change" replaces it.
-  Clicking opens a modal: free-text "notes for reviewer" + optional
-  bundle picker ("attach to existing pending bundle of mine, or start a
-  new one") + Submit.
-- **A "My Proposals" page** at `/my-proposals` — list of the user's own
-  proposals with status, the entity touched, and the reviewer's
-  response. Pending proposals are editable; withdrawn / rejected /
-  approved are read-only.
+- **Existing editors stay structurally unchanged.** The wired editors
+  (TagsExplorer, SpellRulesEditor, SpellListManager) keep their Save /
+  Add / Delete affordances; mutations route through
+  [src/lib/proposalAware.ts](../../src/lib/proposalAware.ts) which
+  inspects the user's role + active Block and either direct-writes
+  (admin, no block), submits a pending proposal (content-creator,
+  no block), or stages a draft (any non-readonly user with a Block
+  open).
+- **`/my-proposals` page** — four top-level tabs:
+  - **Submissions** — the user's own proposal queue with status sub-
+    filters (All / Pending / Approved / Rejected / Withdrawn).
+    Drafts are filtered out of this view (they belong to the Block
+    tab).
+  - **Block** — the active Submission Block. Empty-state shows a
+    Start Block button; active-state lists staged drafts + Submit
+    Block + Discard buttons + the bundle id for debug clarity.
+  - **New** / **Edit** — launcher cards for the editors wired
+    through the proposal queue (Tags / Spell Rules / Spell Lists
+    today; Spells / Classes / Modular Options appear as
+    "coming soon" until the Phase 4 editor wiring lands).
+- **Navbar pill** ("BLOCK · N") near the avatar when a block is
+  active. Click jumps to `/my-proposals?tab=block`.
 
 ### Admin-side
 
-- **Dedicated review page** at `/admin/proposals`. Top-level tabs split
-  by entity type: **Tags · Tag Groups · Spell Rules · Spell Lists**
-  (phase 1) → **Spells** added in phase 2.
-- Each tab shows pending proposals first, then a "Show resolved" toggle
-  to surface approved/rejected/withdrawn. Within a tab, rows render
-  with proposer, age, conflict indicator, and an inline preview of the
-  change.
-- **Bundle view** — proposals with a `bundle_id` collapse into a single
-  row with an expand affordance; "Approve bundle" / "Reject bundle"
-  appear at the bundle header.
-- **Pending count badge** lives in the admin menu dropdown alongside
-  the existing Settings / Users / Eras entries. Polled on profile load
-  via a new count field in `GET /api/me`.
+- **`/admin/proposals` review page** with per-entity tabs (Tags /
+  Tag Groups / Spell Rules / Rule Applications / Class Spell Lists;
+  the Phase 4 four types are not yet surfaced as tabs — the queue
+  endpoint returns rows of those types but the UI doesn't have tabs
+  yet).
+- Pending counts per entity tab; "Show resolved" toggle.
+- Inline Approve / Reject (with reason + cascade to bundle children)
+  on pending rows; inline Revert (with drift-check refuse) on
+  approved rows. Detail dialog mirrors the inline actions plus
+  shows the snapshot-at-submit / proposed_payload diff side-by-side.
+- On approve, conflict drift (snapshot vs current) surfaces a 3-way
+  diff modal so the admin can resolve manually. On revert, drift
+  surfaces a 2-pane diff (expected vs current).
+- Draft rows are NEVER surfaced to the admin queue — see
+  [functions/api/admin/proposals/[[path]].ts](../../functions/api/admin/proposals/%5B%5Bpath%5D%5D.ts)
+  for the filter (`status != 'draft'` baseline; `?status=draft` is
+  silently rewritten to `pending`).
+- **Bundle-aware actions are partial.** Reject cascades to declared
+  in-bundle children. Approve currently fires per-row — there's no
+  "approve whole bundle in one click" affordance yet; the design
+  doc's `cascade_parent_revision_id` topological-order approval is a
+  follow-up.
 
 ### `effectiveProfile` integration
 
-The role flows through `effectiveProfile` like every other role.
-Preview mode (admin viewing as `user`) hides the entire admin review
-page since it's admin-only — no special handling needed. Creator-side
-UI branches on `effectiveProfile.role === 'content-creator'` rather
-than checking the raw role, so an admin previewing as a content-creator
-also sees the "Propose change" buttons (useful for testing the flow).
+`effectiveProfile.permissions['content-creator']` is the client-side
+gate surface — present (with optional scope JSON) iff the user holds
+the additive permission. The writer reads from this. Admins always
+pass the gate regardless of this map.
+
+Preview mode (admin viewing as `user`) keeps `permissions` intact on
+purpose — preview mode strips `role` only, since the goal is to see
+what a `user`-roled person sees, not to simulate losing additive
+permissions. (If you want to preview as a content-creator without
+admin powers, sign in as a separate test account.)
 
 ## Module-side impact
 
@@ -440,18 +488,57 @@ No updates required in `module/dauligor-pairing/docs/`.
     Drift surface to the admin via a 2-pane diff modal
     (expected vs current) so they can resolve manually.
 
+### Phase 2e — Submission Blocks (✅ shipped May 2026)
+
+15. **Draft status** — `pending_revisions.status` CHECK extended with
+    `draft` ([20260519-1300_pending_revisions_draft_status.sql](../../worker/migrations/20260519-1300_pending_revisions_draft_status.sql)).
+    Drafts are user-private; the admin queue endpoint silently
+    rewrites `?status=draft` to `pending` and adds `status != 'draft'`
+    to its baseline WHERE clause.
+16. **Bundle endpoints** — `POST /api/proposals/bundle/<id>/submit`
+    (drafts → pending, atomic per bundle) and `DELETE /api/proposals
+    /bundle/<id>` (discard the bundle's drafts). `loadOwnEditable`
+    admits both `pending` and `draft` so users can PATCH/DELETE
+    their own staging rows.
+17. **BlockProvider context** — [src/lib/proposalBlock.tsx](../../src/lib/proposalBlock.tsx).
+    `activeBundleId` is persisted to localStorage; the provider
+    fetches the active block's drafts on mount + after every write
+    so the navbar pill + Block tab stay current.
+18. **`useEntityWriter` learned a fourth mode** — `'block'`. Active
+    when `!!activeBundleId && baseMode !== 'readonly'`. Same submit
+    path as `'proposal'`, just adds `is_draft: true` + `bundle_id`
+    to the POST. The `actionLabel` toast helper picks "added to
+    block" copy in this mode.
+19. **`/my-proposals` Block tab** — empty-state Start button, active-
+    state staged-drafts list with Submit Block + Discard buttons.
+    Navbar pill ("BLOCK · N") near the avatar acts as a deep-link.
+
+### Phase 4 — Heavy entities (foundation ✅; editor wiring next)
+
+20. **Entity-type allowlist extended** — `spell`, `class`,
+    `unique_option_group`, `unique_option_item` added via
+    [20260519-1600_proposals_entity_type_phase4.sql](../../worker/migrations/20260519-1600_proposals_entity_type_phase4.sql).
+21. **Per-entity configs** in
+    [api/_lib/proposals.ts](../../api/_lib/proposals.ts) — writable-
+    column allowlist + JSON-column markers for all four. Server
+    will accept and apply submissions against any of these types
+    today.
+22. **Editor wiring (NOT YET DONE — Phase 4a/4b/4c).**
+    Resume plan + the per-editor checklist live at
+    [../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md).
+    Until those land, content-creators can't produce
+    spell/class/option proposals from the UI; the server
+    nonetheless accepts hand-crafted POSTs at `/api/proposals` with
+    the right `entity_type` / payload shape.
+
 ### Phase 3 — Tagging revamp (not yet started)
 
-14. **Tag descriptions** — `description` column on `tags` +
+23. **Tag descriptions** — `description` column on `tags` +
     `tag_groups`. Surfaced on hover in pickers and the explorer.
-15. **TagsExplorer UI revamp** — better merge / move / bulk affordances.
-16. **FilterBar / filter modal UI revamp** — apply the new shape to
+24. **TagsExplorer UI revamp** — better merge / move / bulk
+    affordances.
+25. **FilterBar / filter modal UI revamp** — apply the new shape to
     the spell + feat list filters.
-
-### Phase 4 — Spells in the proposal allowlist
-
-17. Extend entity-type allowlist to `spells` and surface the Propose
-    button in `SpellsEditor`.
 
 ## Open questions resolved (May 2026)
 
