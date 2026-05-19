@@ -13,12 +13,13 @@
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { ScrollText, X } from 'lucide-react';
+import { ScrollText, X, Tags as TagsIcon, Sparkles, BookOpen, ArrowRight } from 'lucide-react';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -155,12 +156,14 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
         <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">My Proposals</h1>
         <p className="text-ink/60 font-serif italic">
           Compendium changes you've submitted for admin review. Pending entries can be
-          withdrawn at any time. To submit a new proposal, open the relevant editor
-          (e.g. <a href="/compendium/tags" className="text-gold underline">/compendium/tags</a> for
-          tag changes) — the editor's existing affordances now route through this
-          queue for content creators.
+          withdrawn at any time. Open one of the editors below to draft a new proposal —
+          their Save / Add / Delete affordances route through this queue for content
+          creators automatically.
         </p>
       </div>
+
+      <EditorLauncher />
+
 
       <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-2">
         {STATUS_FILTERS.map((f) => (
@@ -251,6 +254,98 @@ function OperationBadge({ op }: { op: Operation }) {
     <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${classes[op]}`}>
       {op}
     </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* EditorLauncher                                                              */
+/*                                                                              */
+/* Surfaces the editors that have been wired through the proposal              */
+/* queue. Each card opens the existing editor — for content-creators            */
+/* the editor's Save / Add / Delete affordances submit to                       */
+/* `/api/proposals` (via useEntityWriter); for admins they direct-              */
+/* write. The list grows as new editors are wired in Phase 2c-2 / 2c-3.        */
+/* -------------------------------------------------------------------------- */
+
+const PROPOSAL_EDITORS: Array<{
+  title: string;
+  description: string;
+  href: string;
+  icon: any;
+  status: 'ready' | 'coming-soon';
+}> = [
+  {
+    title: 'Tags & Tag Groups',
+    description: 'Add / rename / delete tags and tag groups under the compendium taxonomy.',
+    href: '/compendium/tags',
+    icon: TagsIcon,
+    status: 'ready',
+  },
+  {
+    title: 'Spell Rules',
+    description: 'Define rules that filter spells onto class lists by tag, level, school, etc.',
+    href: '/compendium/spell-rules',
+    icon: Sparkles,
+    status: 'coming-soon',
+  },
+  {
+    title: 'Class Spell Lists',
+    description: 'Pin specific spells to a class\'s spell list outside the rule-driven set.',
+    href: '/compendium/spell-lists',
+    icon: BookOpen,
+    status: 'coming-soon',
+  },
+];
+
+function EditorLauncher() {
+  return (
+    <Card className="border-gold/20 bg-gold/5">
+      <CardHeader>
+        <CardTitle className="text-base font-bold uppercase tracking-widest">
+          Start a new proposal
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="grid gap-3 md:grid-cols-2">
+          {PROPOSAL_EDITORS.map((editor) => {
+            const Icon = editor.icon;
+            const ready = editor.status === 'ready';
+            const body = (
+              <div
+                className={`group p-3 border rounded transition-colors h-full ${
+                  ready
+                    ? 'border-gold/20 hover:border-gold hover:bg-gold/10 cursor-pointer'
+                    : 'border-ink/10 bg-card/30 cursor-not-allowed opacity-60'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <Icon className="w-5 h-5 text-gold mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-ink flex items-center gap-2">
+                      {editor.title}
+                      {!ready && (
+                        <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/40">
+                          coming soon
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="text-xs text-ink/60 mt-1 leading-snug">{editor.description}</p>
+                  </div>
+                  {ready && (
+                    <ArrowRight className="w-4 h-4 text-gold/40 group-hover:text-gold shrink-0 mt-0.5" />
+                  )}
+                </div>
+              </div>
+            );
+            return (
+              <li key={editor.title}>
+                {ready ? <Link to={editor.href}>{body}</Link> : body}
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
