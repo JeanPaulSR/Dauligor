@@ -25,7 +25,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
-import { Inbox, Check, X, AlertTriangle, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen } from 'lucide-react';
+import { Inbox, Check, X, AlertTriangle, Undo2, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen } from 'lucide-react';
 
 type EntityType =
   | 'tag'
@@ -99,6 +99,17 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     currentRow: any;
   }>(null);
   const [rejectDialog, setRejectDialog] = useState<null | { proposal: Proposal; reason: string }>(null);
+  // Revert-drift modal — server returns 409 + drift payload when the
+  // live row has been edited (or re-created) between the approval and
+  // the revert. Surfaces side-by-side so the admin can decide whether
+  // to fix manually before re-trying.
+  const [revertDrift, setRevertDrift] = useState<null | {
+    proposal: Proposal;
+    reason: string;
+    currentRow: any;
+    expectedRow: any;
+  }>(null);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
 
   const authedFetch = useCallback(async (input: string, init?: RequestInit) => {
     const idToken = await auth.currentUser?.getIdToken();
@@ -239,6 +250,41 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     }
   };
 
+  const handleRevert = async (proposal: Proposal) => {
+    if (!confirm(`Revert this approved ${ENTITY_LABEL[proposal.entity_type].toLowerCase()} change? The live row will roll back to its pre-approval state and a new "approved revert" revision will be logged.`)) return;
+    setRevertingId(proposal.id);
+    try {
+      const res = await authedFetch(
+        `/api/admin/proposals/${encodeURIComponent(proposal.id)}/revert`,
+        { method: 'POST' },
+      );
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({}));
+        if (body?.drift) {
+          setRevertDrift({
+            proposal,
+            reason: body.drift.reason,
+            currentRow: body.drift.current_row,
+            expectedRow: body.drift.expected_row,
+          });
+          return;
+        }
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to revert (HTTP ${res.status})`);
+      }
+      toast.success('Proposal reverted; rollback logged as a new approved revision.');
+      setSelected(null);
+      void load();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Failed to revert.');
+    } finally {
+      setRevertingId(null);
+    }
+  };
+
   const filteredProposals = useMemo(() => {
     return proposals.filter((p) => p.entity_type === activeTab);
   }, [proposals, activeTab]);
@@ -320,6 +366,8 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
                   onSelect={() => setSelected(p)}
                   onApprove={() => handleApprove(p)}
                   onReject={() => setRejectDialog({ proposal: p, reason: '' })}
+                  onRevert={() => handleRevert(p)}
+                  reverting={revertingId === p.id}
                 />
               ))}
             </ul>
@@ -332,7 +380,35 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         onClose={() => setSelected(null)}
         onApprove={() => selected && handleApprove(selected)}
         onReject={() => selected && setRejectDialog({ proposal: selected, reason: '' })}
+        onRevert={() => selected && handleRevert(selected)}
+        reverting={!!(selected && revertingId === selected.id)}
       />
+
+      <Dialog open={!!revertDrift} onOpenChange={(open) => { if (!open) setRevertDrift(null); }}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blood">
+              <AlertTriangle className="w-5 h-5" />
+              Drift — live row has changed since this proposal was approved
+            </DialogTitle>
+            <DialogDescription>
+              {revertDrift?.reason === 'row_changed' && 'The target row has been edited after the original approval landed.'}
+              {revertDrift?.reason === 'row_already_deleted' && 'The target row has been deleted since the approval.'}
+              {revertDrift?.reason === 'row_resurrected' && 'A row at the deleted id has been re-created since the approval.'}
+              {' '}Reverting now would silently overwrite that change. Resolve the drift manually and re-try.
+            </DialogDescription>
+          </DialogHeader>
+          {revertDrift && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <DiffPane title="Expected (state at approval)" data={revertDrift.expectedRow} />
+              <DiffPane title="Current row" data={revertDrift.currentRow} />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRevertDrift(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!conflictDialog} onOpenChange={(open) => { if (!open) setConflictDialog(null); }}>
         <DialogContent className="sm:max-w-[720px]">
@@ -386,14 +462,17 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
 }
 
 function ProposalRow({
-  proposal, onSelect, onApprove, onReject,
+  proposal, onSelect, onApprove, onReject, onRevert, reverting,
 }: {
   proposal: Proposal;
   onSelect: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onRevert: () => void;
+  reverting: boolean;
 }) {
-  const isResolved = proposal.status !== 'pending';
+  const isPending = proposal.status === 'pending';
+  const isApproved = proposal.status === 'approved';
   return (
     <li className="py-3 flex items-center gap-3 hover:bg-gold/5 px-2 -mx-2 rounded transition-colors">
       <button
@@ -414,7 +493,21 @@ function ProposalRow({
         </div>
         <StatusBadge status={proposal.status} />
       </button>
-      {!isResolved && (
+      {isApproved && (
+        <div className="flex gap-2 shrink-0">
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={onRevert}
+            disabled={reverting}
+            className="gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+            title="Roll the live row back to its pre-approval state. Refuses if the row has drifted since approval."
+          >
+            <Undo2 className="w-3.5 h-3.5" /> {reverting ? 'Reverting…' : 'Revert'}
+          </Button>
+        </div>
+      )}
+      {isPending && (
         <div className="flex gap-2 shrink-0">
           <Button size="xs" variant="outline" onClick={onApprove} className="gap-1.5 border-emerald-700/30 text-emerald-700 hover:bg-emerald-700/10">
             <Check className="w-3.5 h-3.5" /> Approve
@@ -456,15 +549,18 @@ function StatusBadge({ status }: { status: Status }) {
 }
 
 function ProposalDetailDialog({
-  proposal, onClose, onApprove, onReject,
+  proposal, onClose, onApprove, onReject, onRevert, reverting,
 }: {
   proposal: Proposal | null;
   onClose: () => void;
   onApprove: () => void;
   onReject: () => void;
+  onRevert: () => void;
+  reverting: boolean;
 }) {
   if (!proposal) return null;
   const isPending = proposal.status === 'pending';
+  const isApproved = proposal.status === 'approved';
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
@@ -514,6 +610,18 @@ function ProposalDetailDialog({
             </Button>
             <Button onClick={onApprove} className="gap-1.5 bg-emerald-700 text-white">
               <Check className="w-3.5 h-3.5" /> Approve
+            </Button>
+          </DialogFooter>
+        )}
+        {isApproved && (
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={onRevert}
+              disabled={reverting}
+              className="gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+            >
+              <Undo2 className="w-3.5 h-3.5" /> {reverting ? 'Reverting…' : 'Revert'}
             </Button>
           </DialogFooter>
         )}

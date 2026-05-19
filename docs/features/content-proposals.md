@@ -19,6 +19,11 @@
 >   are now reachable through their existing editors; content-creators
 >   see the same UI as admins, but their Save / Add / Delete actions
 >   round-trip through `/api/proposals` instead of writing directly.
+> - **Phase 2d** Admin revert button + drift-check refuse on approved
+>   revisions **— shipped May 2026.** A revert logs a new "approved
+>   revert" revision in `pending_revisions` so the audit log stays
+>   complete; revert-of-revert is just another revert with the
+>   operation flipped again.
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
 >   UI) and **Phase 4** (spells in the allowlist) follow.
 
@@ -407,12 +412,28 @@ No updates required in `module/dauligor-pairing/docs/`.
     `/my-proposals` launchers extend automatically as new entity
     types come online.
 
-### Phase 2d — Revert (next)
+### Phase 2d — Admin revert (✅ shipped May 2026)
 
-14. **Revert** — admin-side button on approved revisions, with the
-    drift-check refuse. Re-applies `snapshot_at_proposal` and logs a
-    new revision (status `approved`, operation flipped) so the audit
-    trail captures the rollback.
+14. **Revert** — admin-side button on approved revisions in
+    [src/pages/admin/AdminProposals.tsx](../../src/pages/admin/AdminProposals.tsx).
+    Server-side path: `POST /api/admin/proposals/:id/revert` →
+    drift check via `detectRevertDrift`
+    ([api/_lib/proposals.ts](../../api/_lib/proposals.ts)) → on
+    pass, `applyRevertOperation` runs the inverse op
+    (create→delete, delete→create using the snapshot, update→
+    update back to the snapshot). A new `pending_revisions` row
+    is inserted with status `approved`, operation flipped, notes
+    `[revert of <orig-id>]`, and the post-revert state captured
+    in `proposed_payload` / `snapshot_at_proposal` so a revert-
+    of-revert just flips again with no special case.
+    Drift cases refused with 409:
+      - `row_changed` — live row was edited since approval
+      - `row_already_deleted` — live row was deleted (was
+        create or update originally)
+      - `row_resurrected` — live row exists for a delete-revert
+        (someone re-created the entity)
+    Drift surface to the admin via a 2-pane diff modal
+    (expected vs current) so they can resolve manually.
 
 ### Phase 3 — Tagging revamp (not yet started)
 
