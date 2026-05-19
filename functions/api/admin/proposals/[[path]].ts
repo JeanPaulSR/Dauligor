@@ -43,7 +43,10 @@ import {
 import { executeD1QueryInternal } from "../../../../api/_lib/d1-internal.js";
 import {
   applyApprovedOperation,
+  applyRevertOperation,
   detectConflict,
+  detectRevertDrift,
+  invertOperation,
   isProposableEntityType,
   loadCurrentEntity,
   safeParseJson,
@@ -265,6 +268,121 @@ async function handleReject(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Revert (admin-side rollback of an already-approved revision)                */
+/* -------------------------------------------------------------------------- */
+
+async function handleRevert(
+  revisionId: string,
+  reviewerUid: string,
+): Promise<Response> {
+  const row = await loadRow(revisionId);
+  if (row.status !== "approved") {
+    throw new HttpError(
+      409,
+      `Cannot revert a ${row.status} proposal — only approved revisions can be rolled back.`,
+    );
+  }
+  if (!isProposableEntityType(row.entity_type)) {
+    throw new HttpError(400, "Proposal carries an unknown entity_type.");
+  }
+
+  const proposedPayload = safeParseJson(row.proposed_payload);
+  const snapshot = safeParseJson(row.snapshot_at_proposal);
+  const entityType = row.entity_type as EntityType;
+  const originalOperation = row.operation as Operation;
+  const entityId = row.entity_id;
+
+  // For create/update, the row the approval left behind matches
+  // `proposed_payload`. For delete, the approval left nothing.
+  const expectedRow = originalOperation === "delete" ? null : proposedPayload;
+  const currentRow = entityId ? await loadCurrentEntity(entityType, entityId) : null;
+
+  const drift = detectRevertDrift({
+    entityType,
+    originalOperation,
+    expectedRow,
+    currentRow,
+  });
+  if (drift.drifted) {
+    return Response.json(
+      {
+        error:
+          "The live row has drifted from the post-approval state. Resolve manually before reverting.",
+        drift: {
+          reason: drift.reason,
+          current_row: drift.currentRow,
+          expected_row: drift.expectedRow,
+        },
+      },
+      { status: 409 },
+    );
+  }
+
+  await applyRevertOperation({
+    entityType,
+    originalOperation,
+    entityId,
+    snapshotAtProposal: snapshot,
+  });
+
+  // Log a new revision capturing the revert. The audit trail then
+  // shows two rows: the original approval and the revert. Reverting
+  // a revert just creates a third row with the operation flipped
+  // again — no special case.
+  const flippedOp = invertOperation(originalOperation);
+  // After revert:
+  //   - revert(create) deleted the row → new revision is a delete
+  //     with proposed_payload = null, snapshot = what the create
+  //     wrote (so a later revert-of-revert can re-create).
+  //   - revert(update) restored the snapshot → new revision is an
+  //     update with proposed_payload = snapshot, snapshot = what
+  //     the original approval had written.
+  //   - revert(delete) re-inserted the snapshot → new revision is
+  //     a create with proposed_payload = snapshot, snapshot = null.
+  let newProposedPayload: string | null;
+  let newSnapshot: string | null;
+  if (originalOperation === "create") {
+    newProposedPayload = null;
+    newSnapshot = row.proposed_payload; // raw JSON of what create wrote
+  } else if (originalOperation === "delete") {
+    newProposedPayload = row.snapshot_at_proposal;
+    newSnapshot = null;
+  } else {
+    // update
+    newProposedPayload = row.snapshot_at_proposal;
+    newSnapshot = row.proposed_payload;
+  }
+
+  const newRevisionId = `rev-${crypto.randomUUID()}`;
+  const notes = `[revert of ${revisionId}] Reverted by admin.`;
+  await executeD1QueryInternal({
+    sql: `INSERT INTO pending_revisions (
+            id, bundle_id, proposed_by_user_id, status, entity_type, entity_id,
+            operation, proposed_payload, snapshot_at_proposal,
+            notes_from_proposer, reviewed_by_user_id, reviewed_at
+          ) VALUES (?, NULL, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    params: [
+      newRevisionId,
+      reviewerUid,
+      entityType,
+      entityId,
+      flippedOp,
+      newProposedPayload,
+      newSnapshot,
+      notes,
+      reviewerUid,
+    ],
+  });
+
+  return Response.json({
+    ok: true,
+    reverted_revision_id: revisionId,
+    new_revision_id: newRevisionId,
+    new_operation: flippedOp,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Hydration                                                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -322,6 +440,7 @@ export const onRequest = async (context: any): Promise<Response> => {
       if (action === "approve") return await handleApprove(revisionId, reviewerUid);
       if (action === "reject")
         return await handleReject(request, revisionId, reviewerUid);
+      if (action === "revert") return await handleRevert(revisionId, reviewerUid);
       return Response.json(
         { error: `Unknown action: ${action}` },
         { status: 404 },

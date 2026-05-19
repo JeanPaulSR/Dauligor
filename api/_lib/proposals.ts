@@ -275,6 +275,189 @@ export async function applyApprovedOperation(args: {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Revert                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Flip a proposal operation for the audit-log entry of a revert.
+ *
+ *   - create's revert is a delete.
+ *   - delete's revert is a create.
+ *   - update's revert is another update (back to the snapshot).
+ *
+ * Revert-of-revert just flips again, so the audit trail is fully
+ * symmetric — no special-case for the "this revision IS a revert"
+ * case.
+ */
+export function invertOperation(op: Operation): Operation {
+  if (op === "create") return "delete";
+  if (op === "delete") return "create";
+  return "update";
+}
+
+export type RevertDriftStatus =
+  | { drifted: false }
+  | {
+      drifted: true;
+      reason: "row_changed" | "row_already_deleted" | "row_resurrected";
+      currentRow: Record<string, any> | null;
+      expectedRow: Record<string, any> | null;
+    };
+
+/**
+ * Drift check for the revert path. Compares the live row to the
+ * state the approved revision LEFT behind (not the pre-proposal
+ * snapshot). If the row has been changed / deleted / re-created
+ * between approval and revert, refuse so the revert doesn't
+ * silently stomp those changes.
+ *
+ *   - create/update revert: live row must still match the row the
+ *     approval wrote (i.e. `expectedRow`, derived from
+ *     `proposed_payload`). null current → already deleted; differs
+ *     → edited.
+ *   - delete revert: live row must still be null. A non-null
+ *     current means someone re-created the entity (possibly with
+ *     different content) and reverting would clobber that.
+ *
+ * Same shallow column-compare semantics as detectConflict — only
+ * `writableColumns` are inspected, JSON columns compared as
+ * stringified.
+ */
+export function detectRevertDrift(args: {
+  entityType: EntityType;
+  originalOperation: Operation;
+  expectedRow: Record<string, any> | null;
+  currentRow: Record<string, any> | null;
+}): RevertDriftStatus {
+  const { entityType, originalOperation, expectedRow, currentRow } = args;
+  const config = ENTITY_CONFIGS[entityType];
+
+  if (originalOperation === "delete") {
+    if (currentRow !== null) {
+      return {
+        drifted: true,
+        reason: "row_resurrected",
+        currentRow,
+        expectedRow,
+      };
+    }
+    return { drifted: false };
+  }
+
+  if (currentRow === null) {
+    return {
+      drifted: true,
+      reason: "row_already_deleted",
+      currentRow,
+      expectedRow,
+    };
+  }
+  if (expectedRow === null) {
+    return { drifted: true, reason: "row_changed", currentRow, expectedRow };
+  }
+
+  for (const col of config.writableColumns) {
+    if (!Object.prototype.hasOwnProperty.call(expectedRow, col)) continue;
+    const a = expectedRow[col];
+    const b = currentRow[col];
+    const aStr = a === null || a === undefined ? null : String(a);
+    const bStr = b === null || b === undefined ? null : String(b);
+    if (aStr !== bStr) {
+      return { drifted: true, reason: "row_changed", currentRow, expectedRow };
+    }
+  }
+  return { drifted: false };
+}
+
+/**
+ * Apply the inverse of an approved revision. Like
+ * `applyApprovedOperation`, all writes go through
+ * `executeD1QueryInternal` so the proxy gate is bypassed (the
+ * `r2/scan-references` escape hatch). Caller is expected to have
+ * already run `detectRevertDrift` and refused if drift was found.
+ *
+ *   - revert(create) → DELETE
+ *   - revert(update) → UPDATE back to `snapshot_at_proposal`
+ *   - revert(delete) → INSERT using `snapshot_at_proposal`
+ */
+export async function applyRevertOperation(args: {
+  entityType: EntityType;
+  originalOperation: Operation;
+  entityId: string | null;
+  snapshotAtProposal: Record<string, any> | null;
+}): Promise<{ entityId: string }> {
+  const config = ENTITY_CONFIGS[args.entityType];
+
+  if (args.originalOperation === "create") {
+    const id = args.entityId;
+    if (!id) {
+      throw new HttpError(400, "Revert of a create requires entity_id.");
+    }
+    await executeD1QueryInternal({
+      sql: `DELETE FROM ${config.tableName} WHERE ${config.pkColumn} = ?`,
+      params: [id],
+    });
+    return { entityId: id };
+  }
+
+  if (args.originalOperation === "update") {
+    const id = args.entityId;
+    if (!id) {
+      throw new HttpError(400, "Revert of an update requires entity_id.");
+    }
+    if (!args.snapshotAtProposal) {
+      throw new HttpError(
+        400,
+        "Revert of an update requires snapshot_at_proposal.",
+      );
+    }
+    const sanitized = sanitizePayload(args.entityType, args.snapshotAtProposal);
+    delete sanitized[config.pkColumn];
+    const setCols = Object.keys(sanitized);
+    if (setCols.length === 0) return { entityId: id };
+    const setClause = setCols.map((c) => `"${c}" = ?`).join(", ");
+    const params = setCols.map((c) => sanitized[c]);
+    params.push(id);
+    await executeD1QueryInternal({
+      sql: `UPDATE ${config.tableName} SET ${setClause} WHERE ${config.pkColumn} = ?`,
+      params,
+    });
+    return { entityId: id };
+  }
+
+  // revert(delete) → INSERT from the snapshot.
+  if (!args.snapshotAtProposal) {
+    throw new HttpError(
+      400,
+      "Revert of a delete requires snapshot_at_proposal.",
+    );
+  }
+  const sanitized = sanitizePayload(args.entityType, args.snapshotAtProposal);
+  let id =
+    typeof sanitized.id === "string" && sanitized.id
+      ? sanitized.id
+      : args.entityId;
+  if (!id) {
+    throw new HttpError(400, "Revert of a delete requires an entity id.");
+  }
+  sanitized.id = id;
+  const cols = Object.keys(sanitized);
+  if (cols.length === 0) {
+    throw new HttpError(
+      400,
+      "Snapshot is empty — nothing to insert on delete-revert.",
+    );
+  }
+  const placeholders = cols.map(() => "?").join(", ");
+  const colSql = cols.map((c) => `"${c}"`).join(", ");
+  await executeD1QueryInternal({
+    sql: `INSERT INTO ${config.tableName} (${colSql}) VALUES (${placeholders})`,
+    params: cols.map((c) => sanitized[c]),
+  });
+  return { entityId: id };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Conflict detection                                                         */
 /* -------------------------------------------------------------------------- */
 
