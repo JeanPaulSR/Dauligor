@@ -40,6 +40,7 @@ import { useBlock, type DraftRevision } from '../../lib/proposalBlock';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { PickOrCreateBlockDialog } from './PickOrCreateBlockDialog';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import type { ProposalEntityType } from '../../lib/proposalAware';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 
@@ -317,29 +318,36 @@ export function ProposalEditorWrapper({
       ? 'Submit Changes'
       : `Submit ${queue.length} Change${queue.length === 1 ? '' : 's'}`;
 
-  const dropDraft = useCallback(
-    async (draftId: string) => {
-      try {
-        const idToken = await auth.currentUser?.getIdToken();
-        if (!idToken) throw new Error('Not signed in.');
-        const res = await fetch(`/api/proposals/${encodeURIComponent(draftId)}`, {
+  // Pending-drafts panel uses a ConfirmDialog before actually
+  // dropping. State lives in the wrapper so the dialog stays
+  // controlled by which draft is targeted.
+  const [draftPendingDrop, setDraftPendingDrop] = useState<DraftRevision | null>(null);
+
+  const performDropDraft = useCallback(async () => {
+    if (!draftPendingDrop) return;
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Not signed in.');
+      const res = await fetch(
+        `/api/proposals/${encodeURIComponent(draftPendingDrop.id)}`,
+        {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(
-            body?.error || `Failed to drop draft (HTTP ${res.status})`,
-          );
-        }
-        void refreshBlock();
-        toast.success('Draft removed from block.');
-      } catch (err: any) {
-        toast.error(err?.message || 'Failed to drop draft.');
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          body?.error || `Failed to drop draft (HTTP ${res.status})`,
+        );
       }
-    },
-    [refreshBlock],
-  );
+      void refreshBlock();
+      toast.success('Draft removed from block.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to drop draft.');
+      throw err;
+    }
+  }, [draftPendingDrop, refreshBlock]);
 
   return (
     <ProposalAccumulatorContext.Provider value={contextValue}>
@@ -355,7 +363,10 @@ export function ProposalEditorWrapper({
           onSubmit={handleSubmit}
         />
         {drafts.length > 0 && (
-          <PendingDraftsPanel drafts={drafts} onDropDraft={dropDraft} />
+          <PendingDraftsPanel
+            drafts={drafts}
+            onDropDraft={(d) => setDraftPendingDrop(d)}
+          />
         )}
         {children}
       </div>
@@ -365,6 +376,21 @@ export function ProposalEditorWrapper({
         openBlocks={openBlocks}
         onPick={handlePickerPick}
         onCreate={handlePickerCreate}
+      />
+      <ConfirmDialog
+        open={!!draftPendingDrop}
+        onOpenChange={(open) => {
+          if (!open) setDraftPendingDrop(null);
+        }}
+        title="Drop this draft from the block?"
+        description={
+          draftPendingDrop
+            ? `Removes a "${draftPendingDrop.operation}" draft for ${draftPendingDrop.entity_type}. The live row is unchanged.`
+            : ''
+        }
+        confirmLabel="Drop draft"
+        destructive
+        onConfirm={performDropDraft}
       />
     </ProposalAccumulatorContext.Provider>
   );
@@ -386,7 +412,7 @@ function PendingDraftsPanel({
   onDropDraft,
 }: {
   drafts: DraftRevision[];
-  onDropDraft: (id: string) => Promise<void>;
+  onDropDraft: (draft: DraftRevision) => void;
 }) {
   const counts = useMemo(() => {
     let create = 0,
@@ -442,7 +468,7 @@ function PendingDraftsPanel({
               </span>
               <button
                 type="button"
-                onClick={() => onDropDraft(d.id)}
+                onClick={() => onDropDraft(d)}
                 title="Drop this draft from the block"
                 aria-label="Drop this draft"
                 className="p-1 rounded hover:bg-blood/10 text-blood/60 hover:text-blood transition-colors flex-shrink-0"

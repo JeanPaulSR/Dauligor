@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useLocation } from 'react-router-dom';
 import { ChevronLeft, Wand2, Plus, X, Search, ChevronDown, ChevronRight, Trash2, Save, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
@@ -99,6 +99,14 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   // useEntityWriter unchanged (admin direct write on /compendium/...).
   const ruleWriter = useProposalAccumulator('spell_rule', userProfile);
   const ruleAppWriter = useProposalAccumulator('spell_rule_application', userProfile);
+  // Back-link target depends on which route this editor is mounted
+  // under. On the admin route we walk up to /compendium/classes; on
+  // the proposal route we walk up to /my-proposals (the dashboard
+  // that surfaced the editor in the first place).
+  const editorLocation = useLocation();
+  const backPath = editorLocation.pathname.startsWith('/proposals/edit/')
+    ? '/my-proposals'
+    : '/compendium/classes';
   // `block` mode also routes through the writer (which posts drafts
   // with the active bundle_id) — without including it here, block-
   // mode mutations would fall through to direct queryD1 calls and
@@ -857,7 +865,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       {/* Consolidated top toolbar: Back link + title chip +
           "How rules work" disclosure trigger + dirty banner. */}
       <div className="shrink-0 flex items-center gap-3 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
-        <Link to="/compendium/classes">
+        <Link to={backPath}>
           <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
             Back
