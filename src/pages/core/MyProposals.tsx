@@ -547,8 +547,10 @@ function BlockPanel() {
     activeBundleId,
     activeBundle,
     drafts,
+    openBlocks,
     loading,
     startBlock,
+    setActiveBlock,
     submitBlock,
     discardBlock,
     patchActiveBlock,
@@ -587,6 +589,47 @@ function BlockPanel() {
             </Button>
           </CardContent>
         </Card>
+        {openBlocks.length > 0 && (
+          <Card className="border-gold/15 bg-card/50 mt-3">
+            <CardHeader>
+              <CardTitle className="text-base font-bold uppercase tracking-widest flex items-center gap-2">
+                <Package className="w-4 h-4 text-gold/70" /> Resume an open block
+              </CardTitle>
+              <p className="text-xs text-ink/60 mt-2 leading-relaxed">
+                Blocks live on the server, not in this browser. Pick one of your open
+                blocks below to continue editing from anywhere you sign in.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ul className="divide-y divide-foreground/10">
+                {openBlocks.map((b) => (
+                  <li key={b.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveBlock(b.id)}
+                      className="w-full text-left py-3 px-2 hover:bg-foreground/5 rounded-md transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <Package className="w-4 h-4 text-blood mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{b.name}</p>
+                          {b.description && (
+                            <p className="text-[11px] text-ink/60 mt-0.5 leading-relaxed line-clamp-2">
+                              {b.description}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-ink/40 mt-1">
+                            Last updated {new Date(b.updated_at).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
         <BlockMetadataDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
