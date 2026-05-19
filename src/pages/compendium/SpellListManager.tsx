@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useLocation } from 'react-router-dom';
 import { ChevronLeft, Wand2, Plus, Check, X, ChevronDown, ChevronRight, ChevronUp, Lock, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
@@ -26,7 +26,8 @@ import {
   parseTimestampMs,
   type ClassMembership,
 } from '../../lib/classSpellLists';
-import { useEntityWriter, actionLabel } from '../../lib/proposalAware';
+import { actionLabel } from '../../lib/proposalAware';
+import { useProposalAccumulator } from '../../lib/proposalAccumulator';
 import {
   fetchAppliedRulesFor,
   rebuildClassSpellListFromAppliedRules,
@@ -150,7 +151,16 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const isContentCreator = !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const canManageLists = isAdmin || isContentCreator;
-  const listWriter = useEntityWriter('class_spell_list', userProfile);
+  // Inside <ProposalEditorWrapper> queues locally; outside the
+  // wrapper passes through to useEntityWriter unchanged.
+  const listWriter = useProposalAccumulator('class_spell_list', userProfile);
+  // Cross-editor links (to Spell Rules) need to stay on the same
+  // route prefix so content-creators on /proposals/edit/spell-lists
+  // don't bounce into the AdminOnly-guarded /compendium/spell-rules.
+  const location = useLocation();
+  const editorPrefix = location.pathname.startsWith('/proposals/edit/')
+    ? '/proposals/edit'
+    : '/compendium';
   // Both `proposal` (single-revision submit) and `block` (staging
   // into a draft bundle) route mutations through the writer instead
   // of the direct-write d1 helpers — the writer's create/update/
@@ -1838,7 +1848,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/10 -mx-4">
             {allRules.length === 0 ? (
               <p className="px-4 py-3 text-sm text-ink/45 italic">
-                No rules in the catalogue yet. Visit <Link to="/compendium/spell-rules" className="text-gold hover:underline">Spell Rules</Link> to create one.
+                No rules in the catalogue yet. Visit <Link to={`${editorPrefix}/spell-rules`} className="text-gold hover:underline">Spell Rules</Link> to create one.
               </p>
             ) : (
               allRules.map(rule => {
@@ -2002,6 +2012,12 @@ function LinkedRulesPanel({
 }) {
   const ChevronIcon = expanded ? ChevronDown : ChevronRight;
   const lastRebuildLabel = lastRebuildAt ? formatRelativeTime(lastRebuildAt) : null;
+  // Cross-editor link prefix — keep users on the route they came in
+  // on (admin direct vs proposal-wrapped).
+  const panelLocation = useLocation();
+  const editorPrefix = panelLocation.pathname.startsWith('/proposals/edit/')
+    ? '/proposals/edit'
+    : '/compendium';
   // Aggregate stale-state summary. Drives the amber Rebuild-CTA
   // banner that appears when at least one linked rule is stale.
   const staleCount = staleRuleIds.size;
@@ -2087,7 +2103,7 @@ function LinkedRulesPanel({
             </span>
           </button>
           <Link
-            to="/compendium/spell-rules"
+            to={`${editorPrefix}/spell-rules`}
             className="text-[10px] uppercase tracking-widest text-ink/45 hover:text-gold"
             title="Author / edit rules on the Spell Rules page"
           >
@@ -2123,7 +2139,7 @@ function LinkedRulesPanel({
       {linkedRules.length === 0 ? (
         <p className="text-xs text-ink/45 italic">
           No rules linked to this class. Click <strong>Link Rule</strong> to attach a rule from the catalogue,
-          or visit the <Link to="/compendium/spell-rules" className="text-gold hover:underline">Spell Rules</Link> page to author one first.
+          or visit the <Link to={`${editorPrefix}/spell-rules`} className="text-gold hover:underline">Spell Rules</Link> page to author one first.
         </p>
       ) : (
         <>
@@ -2171,7 +2187,7 @@ function LinkedRulesPanel({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
                       <Link
-                        to={`/compendium/spell-rules?rule=${rule.id}`}
+                        to={`${editorPrefix}/spell-rules?rule=${rule.id}`}
                         className="text-sm text-ink font-bold truncate max-w-[18rem] hover:text-gold"
                       >
                         {rule.name}

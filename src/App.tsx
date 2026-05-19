@@ -287,6 +287,16 @@ export default function App() {
                       <TagsExplorer userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  <Route path="/proposals/edit/spell-rules" element={
+                    <ProposalEditorWrapper entityType="spell_rule">
+                      <SpellRulesEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
+                  <Route path="/proposals/edit/spell-lists" element={
+                    <ProposalEditorWrapper entityType="class_spell_list">
+                      <SpellListManager userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
                   {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
