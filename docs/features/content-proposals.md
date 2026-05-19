@@ -54,9 +54,24 @@
 >     wired through `useProposalAccumulator` + new
 >     `/proposals/edit/<entity>` routes **— shipped May 2026
 >     (`5482507` + `cdd8daa`).**
->   - **4.5d / 4.5e / 4.5f** SpellsEditor / UniqueOptionGroupEditor /
->     ClassEditor wiring **— not yet done.** See the resume plan at
->     [docs/../handoff-content-proposals-phase4-wiring.md](../handoff-content-proposals-phase4-wiring.md).
+>   - **4.5d** SpellsEditor wired with focus-mode + Browse Base +
+>     auto rule-recompute on approval **— shipped May 2026
+>     (`ddff74a` through `4c178c1`).**
+>   - **4.5e** UniqueOptionGroupEditor wired (hybrid: group is
+>     single-work, items are multi-work) **— shipped May 2026
+>     (`b71090f`).**
+>   - **4.5f** ClassEditor wired as pure single-work (per-instance
+>     routes) **— shipped May 2026 (`f5c2510`).** Nested entity
+>     writes (features, scaling columns, subclasses) stay admin-only
+>     until those tables join the proposal allowlist.
+> - **Block-management UX (post-4.5 polish, May 2026):**
+>   - `e3951b7` SQLite UTC timestamps parsed correctly.
+>   - `37cb5c5` BlockPanel rewritten as a unified list (active block
+>     expanded, inactive blocks as click-to-activate cards). No
+>     more "Resume Block" framing.
+>   - `fb8613e` New / Edit launchers open a block picker before
+>     navigating — users always know which block their edits will
+>     land in.
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
 >   UI) follows after the Phase 4 editor wiring.
 

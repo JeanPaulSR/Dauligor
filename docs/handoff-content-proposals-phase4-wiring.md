@@ -1,36 +1,64 @@
 # Handoff — Content Proposals Phase 4 (parallel proposal-editor routes)
 
-> **Status (updated 2026-05-19):** Phase 4.1 through 4.5c are
-> **shipped**; the parallel proposal-editor design is live for the
-> three Phase-2c editors (Tags / Spell Rules / Spell Lists). Phase
-> 4.5d/e/f (Spells / Option Groups / Classes — the heavy editors)
-> are still **not done** — they have no proposal route yet and
-> currently gate writes on `isAdmin` directly rather than going
-> through any writer abstraction. Branch `claude/loving-banach-d76c40`.
+> **Status (updated 2026-05-19):** **Phase 4.1 through 4.5f are all
+> shipped.** Every editor in the proposal allowlist has a
+> `/proposals/edit/*` route and queues writes through the wrapper +
+> accumulator. The block lifecycle (create / list / pick / submit /
+> discard) is fully on the server with a unified BlockPanel that
+> shows all open blocks; the New / Edit launchers gate behind a
+> block picker so users always know which block their work goes
+> into. Branch `claude/loving-banach-d76c40` (29 commits ahead of
+> `origin/main`).
 >
-> **Shipped this pass:**
+> **Shipped foundation (Phases 4.1–4.4):**
 > - `ba1a334` Phase 4.1 — `proposal_bundles` table + name/description
 >   endpoints + `<BlockMetadataDialog>` for create/rename.
 > - `ae021d7` Phase 4.2 — `<ProposalEditorWrapper>`,
 >   `useProposalAccumulator`, `<PickOrCreateBlockDialog>`.
-> - `f30b30e` Phase 4.3 — `dropEntity`/`dropField`/`dropFields` on
->   the context + `<DropEntityButton>` / `<DropSectionButton>` /
->   `<DropFieldIcon>` UI primitives.
-> - `cc5d673` Phase 4.4 — `<AdminOnly>` route guard, /proposals/edit/*
->   catch-all (`<ProposalEditorComingSoon>`), sidebar's new Proposals
->   section, MyProposals launchers re-pointed.
-> - `5482507` Phase 4.5a — TagsExplorer wired (the POC).
-> - `cdd8daa` Phase 4.5b+c — SpellRulesEditor + SpellListManager
->   wired; cross-editor `<Link>` paths made route-prefix-aware.
+> - `f30b30e` Phase 4.3 — `dropEntity` / `dropField` / `dropFields`
+>   on the context + Drop UI primitives.
+> - `cc5d673` Phase 4.4 — `<AdminOnly>` route guard,
+>   `/proposals/edit/*` catch-all, sidebar split.
 >
-> **Remaining work — Phase 4.5d / 4.5e / 4.5f.** Each heavy editor
-> currently uses `isAdmin` gates and (in some cases) direct
-> `queryD1` / `batchQueryD1` writes. The wiring pattern is:
-> swap in `useProposalAccumulator`, loosen the gate to
-> `canManage = isAdmin || isContentCreator`, route all writes
-> through the writer, add the `/proposals/edit/<entity>` route,
-> add the sidebar sub-item, and prefix-aware any cross-editor
-> links. See "Remaining editor wiring (4.5d–f)" below.
+> **Editor wiring (Phase 4.5):**
+> - `5482507` 4.5a — TagsExplorer (POC).
+> - `cdd8daa` 4.5b+c — SpellRulesEditor + SpellListManager.
+> - `ddff74a` / `4eebda6` / `57e4fab` / `5c1f4ff` / `39eb78f` /
+>   `4c178c1` 4.5d — SpellsEditor + supporting infra (focus-mode
+>   toggle, accumulator dedup-PATCH, focus-mode + Browse Base UI,
+>   auto rule-recompute on approval).
+> - `b71090f` 4.5e — UniqueOptionGroupEditor (hybrid group +
+>   items).
+> - `f5c2510` 4.5f — ClassEditor (single-work per-instance routes).
+>
+> **Post-Phase-4.5 UX polish:**
+> - `ac9b8b1` Wrapper: unsaved-changes warning + pending-drafts
+>   panel.
+> - `4675204` Styled confirms, hidden bundle IDs, prefix-aware
+>   Back links.
+> - `1f1e286` Read-only lock mode-agnostic; cross-window block
+>   resume (later superseded by the unified BlockPanel).
+> - `e3951b7` SQLite UTC timestamps parsed correctly.
+> - `37cb5c5` BlockPanel — unified list of all blocks; "Resume"
+>   framing dropped.
+> - `fb8613e` New / Edit launchers gate behind a block picker.
+>
+> **What's NOT done (deferred, not regressed):**
+> - **Phase 4.6 — Block menu roll-up by entity_type.** The active
+>   block's drafts still render as a flat list inside
+>   `<ActiveBlockCard>`. The original design called for grouping by
+>   entity_type with `[Withdraw] [Continue Editing]` per group; the
+>   list-of-all-blocks rewrite shipped first and obviated some of
+>   the need (each draft already shows its entity_type badge), but
+>   the per-group withdraw + continue-editing affordances are still
+>   a valid follow-up.
+> - **Subclasses / features / activities / items / feats joining
+>   the proposal allowlist.** Class editor's nested entity writes
+>   stay admin-only inside the wrapped editor because those tables
+>   aren't in ENTITY_CONFIGS. Each is its own design pass.
+> - **"Approve bundle in one click" admin action.** Today admin
+>   approve still fires per-row; the spell rule-recompute hook
+>   fires after each approval. Bulk-approve is a Phase 5 ask.
 
 ## What changed since the previous handoff
 
