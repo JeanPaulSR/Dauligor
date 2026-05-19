@@ -40,6 +40,10 @@ export type PickOrCreateBlockDialogProps = {
    * the caller then sets it active + resumes the submit flow.
    */
   onCreate: (name: string, description: string | null) => Promise<void>;
+  /** Optional title override. Default suits the Submit Changes flow. */
+  title?: string;
+  /** Optional description override. */
+  description?: string;
 };
 
 export function PickOrCreateBlockDialog({
@@ -48,6 +52,8 @@ export function PickOrCreateBlockDialog({
   openBlocks,
   onPick,
   onCreate,
+  title = 'Pick a block to submit into',
+  description = "You haven't opened a block yet. Choose one of your existing open blocks, or create a new one to bundle these changes.",
 }: PickOrCreateBlockDialogProps) {
   // The create form lives in BlockMetadataDialog; this dialog opens
   // it when the user clicks "+ Create new block". The two dialogs
@@ -74,11 +80,8 @@ export function PickOrCreateBlockDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Pick a block to submit into</DialogTitle>
-            <DialogDescription>
-              You haven't opened a block yet. Choose one of your existing
-              open blocks, or create a new one to bundle these changes.
-            </DialogDescription>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <div className="py-2 max-h-[40vh] overflow-y-auto">
             {openBlocks.length === 0 ? (
@@ -103,9 +106,6 @@ export function PickOrCreateBlockDialog({
                               {b.description}
                             </p>
                           )}
-                          <p className="text-[10px] text-ink/40 mt-1 font-mono truncate">
-                            {b.id}
-                          </p>
                         </div>
                       </div>
                     </button>
