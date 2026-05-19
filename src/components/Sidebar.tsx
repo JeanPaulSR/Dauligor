@@ -219,6 +219,7 @@ export default function Sidebar({
           { label: 'Tags', path: '/proposals/edit/tags' },
           { label: 'Spell Rules', path: '/proposals/edit/spell-rules' },
           { label: 'Spell Lists', path: '/proposals/edit/spell-lists' },
+          { label: 'Spells', path: '/proposals/edit/spells' },
         ],
       }] : []),
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },

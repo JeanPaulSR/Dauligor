@@ -297,6 +297,11 @@ export default function App() {
                       <SpellListManager userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  <Route path="/proposals/edit/spells" element={
+                    <ProposalEditorWrapper entityType="spell" enableFocusMode>
+                      <SpellsEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
                   {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
