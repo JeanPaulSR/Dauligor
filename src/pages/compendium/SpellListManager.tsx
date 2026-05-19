@@ -151,7 +151,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const canManageLists = isAdmin || isContentCreator;
   const listWriter = useEntityWriter('class_spell_list', userProfile);
-  const isProposalMode = listWriter.mode === 'proposal';
+  // Both `proposal` (single-revision submit) and `block` (staging
+  // into a draft bundle) route mutations through the writer instead
+  // of the direct-write d1 helpers — the writer's create/update/
+  // remove handle the bundle_id + is_draft branching internally.
+  // Without the `block` half of this OR, a content-creator in
+  // block mode would fall through to `addSpellsToClassList`, hit
+  // the proxy's admin gate, and 403 with "Admin access required."
+  const isProposalMode = listWriter.mode === 'proposal' || listWriter.mode === 'block';
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Fullscreen-page opt-in. Same body class /compendium/spells and
