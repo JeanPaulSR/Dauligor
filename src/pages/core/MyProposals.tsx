@@ -390,7 +390,7 @@ const CREATE_ENTRIES: LauncherEntry[] = [
     description: 'Define a new rule that filters spells onto class lists by tag, level, school, etc.',
     href: '/compendium/spell-rules',
     icon: Sparkles,
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     title: 'Class Spell Lists',
@@ -441,10 +441,10 @@ const EDIT_ENTRIES: LauncherEntry[] = [
   },
   {
     title: 'Spell Rules',
-    description: 'Edit an existing rule\'s query, name, or manual spell list.',
+    description: 'Edit an existing rule\'s query, name, or manual spell list — and propose applying it to (or removing it from) classes.',
     href: '/compendium/spell-rules',
     icon: Sparkles,
-    status: 'coming-soon',
+    status: 'ready',
   },
   {
     title: 'Class Spell Lists',

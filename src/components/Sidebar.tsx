@@ -193,18 +193,20 @@ export default function Sidebar({
           // the spells list; the admin Feat Manager hangs off the page
           // itself for admins (same pattern as Spells).
           { label: 'Feats', path: '/compendium/feats' },
-          // Tags is reachable for admins (full edit) AND content-creators
+          // Reachable for admins (direct write) AND content-creators
           // (Propose Change on every mutation, routed to /api/proposals
-          // by useEntityWriter in TagsExplorer). Surfacing it in the
-          // sidebar gives content-creators a discoverable entry point
-          // — previously only admins had any path to /compendium/tags.
+          // by useEntityWriter inside each editor). Surfacing the
+          // entries in the sidebar gives content-creators a
+          // discoverable entry point — previously every editor below
+          // was admin-only gated, leaving content-creators with no
+          // path to them.
           ...(canProposeOrEdit ? [
             { label: 'Tags', path: '/compendium/tags' },
+            { label: 'Spell Rules', path: '/compendium/spell-rules' },
           ] : []),
           ...(isAdmin ? [
             { label: 'Items', path: '/compendium/items' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },
-            { label: 'Spell Rules', path: '/compendium/spell-rules' },
           ] : []),
         ]
       },
