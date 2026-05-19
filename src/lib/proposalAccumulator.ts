@@ -38,8 +38,14 @@ export type QueuedChange = {
   /** Stable local id for tracking + future Drop Edits operations. */
   queue_id: string;
   entity_type: ProposalEntityType;
-  /** null when operation === 'create' (no id yet). */
-  entity_id: string | null;
+  /**
+   * Effective entity id. For create operations this is the client-
+   * minted id (also stored in `proposed_payload.id`) so Drop Edits
+   * can target creates the same way as updates. The actual POST to
+   * /api/proposals sends `entity_id: null` for creates — see
+   * `postQueuedChanges`.
+   */
+  entity_id: string;
   operation: 'create' | 'update' | 'delete';
   /** The new row shape; null for delete. */
   proposed_payload: Record<string, any> | null;
@@ -61,6 +67,37 @@ export type ProposalAccumulatorContextValue = {
   resetQueue: () => void;
   /** True while flushToBundle is mid-flight. */
   submitting: boolean;
+  /* ------------------------------------------------------------- */
+  /* Drop Edits (Phase 4.3)                                          */
+  /* ------------------------------------------------------------- */
+  /**
+   * True if any queued change targets this entity. Doesn't reflect
+   * server-side drafts — those are visible via `useBlock().drafts`.
+   */
+  isEntityDirty: (entityId: string) => boolean;
+  /**
+   * True if the entity's queued change touches this field. False for
+   * delete-operation queues (a delete has no field-level granularity).
+   */
+  isFieldDirty: (entityId: string, fieldName: string) => boolean;
+  /**
+   * Drop ALL queued changes for the given entity AND delete any
+   * server-side draft revisions for it in the active bundle. The
+   * editor is responsible for reverting its own in-memory state for
+   * this entity (this hook only manipulates the queue + server drafts).
+   */
+  dropEntity: (entityId: string) => Promise<void>;
+  /**
+   * Drop a single field from the entity's queued change. If the
+   * resulting payload has no fields other than `id`, the entry is
+   * removed. Doesn't touch server-side drafts.
+   */
+  dropField: (entityId: string, fieldName: string) => void;
+  /**
+   * Drop multiple fields at once (section-level drop). Same semantics
+   * as `dropField` per key.
+   */
+  dropFields: (entityId: string, fieldNames: string[]) => void;
 };
 
 /**
@@ -110,7 +147,7 @@ export function useProposalAccumulator(
         const { id: _drop, ...rest } = payload;
         ctx.queueChange({
           entity_type: entityType,
-          entity_id: null,
+          entity_id: id,
           operation: 'create',
           proposed_payload: { ...rest, id },
           notes_from_proposer: opts?.notes ?? null,
@@ -140,6 +177,31 @@ export function useProposalAccumulator(
 }
 
 /**
+ * Hook for editor descendants that need direct access to the queue
+ * + drop methods. Throws if used outside a <ProposalEditorWrapper> —
+ * Drop Edits affordances only make sense in proposal mode.
+ */
+export function useProposalContext(): ProposalAccumulatorContextValue {
+  const ctx = useContext(ProposalAccumulatorContext);
+  if (!ctx) {
+    throw new Error(
+      'useProposalContext must be used inside <ProposalEditorWrapper>.',
+    );
+  }
+  return ctx;
+}
+
+/**
+ * Same as `useProposalContext` but returns null outside a wrapper.
+ * Useful for shared editor components rendered on both admin and
+ * proposal routes — the editor checks `ctx === null` to decide
+ * whether to render Drop Edits affordances.
+ */
+export function useProposalContextOptional(): ProposalAccumulatorContextValue | null {
+  return useContext(ProposalAccumulatorContext);
+}
+
+/**
  * Internal helper used by ProposalEditorWrapper to do the actual POST.
  * Exported so tests / dev tools can drain a queue without going
  * through the wrapper's UI flow.
@@ -166,7 +228,10 @@ export async function postQueuedChanges(
     body: JSON.stringify({
       revisions: queue.map((q) => ({
         entity_type: q.entity_type,
-        entity_id: q.entity_id,
+        // Creates carry their effective id in the queue (so Drop
+        // Edits can target them) but the server expects entity_id=null
+        // for create operations.
+        entity_id: q.operation === 'create' ? null : q.entity_id,
         operation: q.operation,
         proposed_payload: q.proposed_payload,
         notes_from_proposer: q.notes_from_proposer,
