@@ -63,6 +63,8 @@ import RedeemTokenPage from './pages/auth/RedeemTokenPage';
 
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
+import { AdminOnly } from './components/auth/AdminOnly';
+import ProposalEditorComingSoon from './pages/proposals/ProposalEditorComingSoon';
 
 import DebugConsole from './components/DebugConsole';
 import { Toaster } from 'sonner';
@@ -246,8 +248,8 @@ export default function App() {
                   <Route path="/compendium/subclasses/edit/:id" element={<SubclassEditor />} />
                   <Route path="/compendium/spells" element={<SpellList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells/manage" element={<SpellsEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/spell-lists" element={<SpellListManager userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/spell-rules" element={<SpellRulesEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/spell-lists" element={<AdminOnly userProfile={effectiveProfile}><SpellListManager userProfile={effectiveProfile} /></AdminOnly>} />
+                  <Route path="/compendium/spell-rules" element={<AdminOnly userProfile={effectiveProfile}><SpellRulesEditor userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/feats" element={<FeatList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/feats/manage" element={<FeatsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/items" element={<ItemsEditor userProfile={effectiveProfile} />} />
@@ -262,14 +264,18 @@ export default function App() {
                   <Route path="/compendium/unique-options/new" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/edit/:id" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/:id" element={<UniqueOptionGroupView userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/tags" element={<TagsExplorer userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/tags/:id" element={<TagsExplorer userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/tags" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />
+                  <Route path="/compendium/tags/:id" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />
                   
                   <Route path="/map" element={<Map userProfile={effectiveProfile} />} />
                   <Route path="/admin/users" element={<AdminUsers userProfile={effectiveProfile} />} />
                   <Route path="/admin/worlds" element={<AdminWorlds userProfile={effectiveProfile} />} />
                   <Route path="/admin/proposals" element={<AdminProposals userProfile={effectiveProfile} />} />
                   <Route path="/my-proposals" element={<MyProposals userProfile={effectiveProfile} />} />
+                  {/* Phase 4.4 — /proposals/edit/* catch-all. Specific routes
+                      get added per editor in Phase 4.5; until then, navigating
+                      here surfaces the ProposalEditorComingSoon placeholder. */}
+                  <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
                   <Route path="/campaign/:id" element={<CampaignManager userProfile={effectiveProfile} />} />
                   <Route path="/campaign/edit/:id" element={<CampaignEditor userProfile={effectiveProfile} />} />

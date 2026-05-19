@@ -3,11 +3,11 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../lib/firebase';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
-import { 
+import {
   BookOpen, Map as MapIcon, Users, Bookmark, History, Calendar,
   Clock, Book, Shield, Dna, Bug, Scroll, Sword, Wand2,
   Hammer, Bed, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen,
-  Plus, Image as ImageIcon
+  Plus, Image as ImageIcon, Inbox
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -42,14 +42,16 @@ export default function Sidebar({
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
   const isAdmin = userProfile?.role === 'admin';
-  // Content-creators get the same nav entry as admins for any editor
-  // that's been wired through the proposal queue (see
-  // `src/lib/proposalAware.ts`). Without this they'd have no path
-  // to /compendium/tags etc. — the editor admits them but the
-  // sidebar was previously gated to admin-only.
+  // Phase 4: content-creators no longer share admin's `/compendium/*`
+  // editor links — they reach the same editors via `/proposals/edit/*`,
+  // surfaced under the new "Proposals" section below. Admins keep the
+  // existing Compendium sub-items and ALSO see the Proposals section
+  // (they can opt into block-style batching by going there). The
+  // Compendium section's admin editor sub-items therefore gate on
+  // `isAdmin` directly now.
   const isContentCreator = !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
-  const canProposeOrEdit = isAdmin || isContentCreator;
+  const canSeeProposals = isAdmin || isContentCreator;
 
   useEffect(() => {
     const fetchCampaign = async () => {
@@ -193,23 +195,29 @@ export default function Sidebar({
           // the spells list; the admin Feat Manager hangs off the page
           // itself for admins (same pattern as Spells).
           { label: 'Feats', path: '/compendium/feats' },
-          // Reachable for admins (direct write) AND content-creators
-          // (Propose Change on every mutation, routed to /api/proposals
-          // by useEntityWriter inside each editor). Surfacing the
-          // entries in the sidebar gives content-creators a
-          // discoverable entry point — previously every editor below
-          // was admin-only gated, leaving content-creators with no
-          // path to them.
-          ...(canProposeOrEdit ? [
+          // Admin-only editor links. Content-creators reach the same
+          // editors via the "Proposals" section's `/proposals/edit/*`
+          // links — direct-write paths are admin-only post Phase 4.4.
+          ...(isAdmin ? [
             { label: 'Tags', path: '/compendium/tags' },
             { label: 'Spell Rules', path: '/compendium/spell-rules' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },
-          ] : []),
-          ...(isAdmin ? [
             { label: 'Items', path: '/compendium/items' },
           ] : []),
         ]
       },
+      // Proposals — visible to admins (opt-in batching) and to anyone
+      // holding the `content-creator` permission (their only path to
+      // the editors post-Phase-4). Sub-items grow per-entity as Phase
+      // 4.5 wires each editor onto `/proposals/edit/*`.
+      ...(canSeeProposals ? [{
+        label: 'Proposals',
+        icon: Inbox,
+        path: '/my-proposals',
+        subItems: [
+          { label: 'My Proposals', path: '/my-proposals' },
+        ],
+      }] : []),
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },
       { label: 'Sources', icon: Book, path: '/sources' },
       { label: 'Crafting', icon: Hammer, path: '/wiki?category=technology' },
