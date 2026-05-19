@@ -98,6 +98,33 @@ type ClassRow = {
   identifier: string;
 };
 
+/**
+ * `classes.spellcasting` is a nullable JSON column. Non-casters
+ * (Fighter, Barbarian, Rogue, …) store NULL; casters store a JSON
+ * object whose `hasSpellcasting` flag is the authoritative bit (a
+ * blob can sit there with `hasSpellcasting: false` if an editor
+ * cleared it without nulling the column). Accept both the auto-
+ * parsed-object shape (queryD1 has a json-column allowlist) and
+ * the raw-string fallback.
+ */
+function isCastingClass(spellcasting: unknown): boolean {
+  if (spellcasting === null || spellcasting === undefined) return false;
+  if (typeof spellcasting === 'string') {
+    const trimmed = spellcasting.trim();
+    if (!trimmed) return false;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return !!parsed && typeof parsed === 'object' && parsed.hasSpellcasting === true;
+    } catch {
+      return false;
+    }
+  }
+  if (typeof spellcasting === 'object') {
+    return (spellcasting as { hasSpellcasting?: unknown }).hasSpellcasting === true;
+  }
+  return false;
+}
+
 type SourceRow = {
   id: string;
   name?: string;
@@ -283,7 +310,16 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           fetchCollection<any>('tagGroups', { where: "classifications LIKE '%spell%'" }),
         ]);
         if (!active) return;
-        setClasses(classData.map((c: any) => ({ id: c.id, name: c.name, identifier: c.identifier })));
+        // Only classes flagged as spellcasters belong in this manager
+        // — picking, say, Fighter or Barbarian would surface an empty
+        // catalogue and confuse the admin. `classes.spellcasting` is
+        // a JSON column (nullable for non-casters); when present,
+        // `hasSpellcasting === true` confirms the class actually
+        // casts. `queryD1` may auto-parse the JSON column to an
+        // object or return it as a string depending on table-map
+        // registration; handle both shapes.
+        const castersOnly = classData.filter((c: any) => isCastingClass(c.spellcasting));
+        setClasses(castersOnly.map((c: any) => ({ id: c.id, name: c.name, identifier: c.identifier })));
         const mappedSpells: SpellRow[] = spellData.map((s: any) => ({
           id: s.id,
           name: s.name,
