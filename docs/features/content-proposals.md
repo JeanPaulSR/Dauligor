@@ -9,8 +9,12 @@
 >   endpoint, `/api/admin/proposals*` admin queue with approve /
 >   reject / conflict-detection)
 >   **— shipped May 2026.**
-> - **Phase 2b UX** (Propose button on phase-1 editors, `/my-proposals`
->   page, `/admin/proposals` review page) **— next.**
+> - **Phase 2b UX** (`/my-proposals` creator dashboard with generic
+>   submit dialog, `/admin/proposals` review page with per-entity
+>   tabs + 3-way conflict diff + cascade-aware reject)
+>   **— shipped May 2026.**
+> - **Phase 2c "Propose change" hooks** on the phase-1 editors
+>   (TagsExplorer / SpellRulesEditor / SpellListManager) **— next.**
 > - **Phase 3** (tagging revamp — descriptions, explorer UX, filter
 >   UI) and **Phase 4** (spells in the allowlist) follow.
 
@@ -365,21 +369,34 @@ No updates required in `module/dauligor-pairing/docs/`.
     (admin: GET queue with filters, GET /:id with conflict status,
     POST /:id/approve, POST /:id/reject with bundle cascade).
 
-### Phase 2b — UX (not yet started)
+### Phase 2b — UX (✅ shipped May 2026)
 
-11. **Creator UI** — "Propose change" button on the phase-1 editors
-    ([TagsExplorer](../../src/pages/compendium/TagsExplorer.tsx),
-    [SpellRulesEditor](../../src/pages/compendium/SpellRulesEditor.tsx),
-    [SpellListManager](../../src/pages/compendium/SpellListManager.tsx))
-    visible when `effectiveProfile.permissions['content-creator']` is
-    held. Replaces the Save action for non-admin content-creators.
-12. **`/my-proposals` page** — creator's own queue with status,
-    inline preview, withdraw, edit while pending.
-13. **`/admin/proposals` page** — tab strip + per-tab queue +
-    approve / reject actions + 3-way conflict diff view + bundle
-    expand/collapse + pending-count badge in the admin dropdown.
+11. **`/my-proposals` page**
+    ([src/pages/core/MyProposals.tsx](../../src/pages/core/MyProposals.tsx))
+    — creator dashboard listing own proposals with status filters,
+    preview, withdraw. Includes a generic "New proposal" dialog so
+    the workflow is exercisable before per-editor hooks land. Linked
+    from the navbar dropdown for users holding `content-creator` (and
+    admins).
+12. **`/admin/proposals` page**
+    ([src/pages/admin/AdminProposals.tsx](../../src/pages/admin/AdminProposals.tsx))
+    — per-entity tab strip + queue with pending counts, approve /
+    reject (with reason) inline, 3-way conflict diff modal (snapshot
+    / current / proposed) when approve refuses on drift. Linked from
+    the admin dropdown.
+
+### Phase 2c — Per-editor "Propose change" hooks (next)
+
+13. **TagsExplorer, SpellRulesEditor, SpellListManager** —
+    when `effectiveProfile.permissions['content-creator']` is held
+    (and the user is not admin), the existing Save / Add / Delete
+    affordances swap to "Propose…" variants that round-trip through
+    `POST /api/proposals` with the right `entity_type` / `operation` /
+    `proposed_payload`. Direct writes from these UIs stop hitting D1.
 14. **Revert** — admin-side button on approved revisions, with the
-    drift-check refuse.
+    drift-check refuse. Re-applies `snapshot_at_proposal` and logs a
+    new revision (status `approved`, operation flipped) so the audit
+    trail captures the rollback.
 
 ### Phase 3 — Tagging revamp (not yet started)
 
