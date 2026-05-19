@@ -52,6 +52,8 @@ export type QueuedChange = {
   notes_from_proposer: string | null;
 };
 
+export type FocusMode = 'drafts' | 'browse';
+
 export type ProposalAccumulatorContextValue = {
   /** Current queue of pending writes. */
   queue: QueuedChange[];
@@ -67,6 +69,26 @@ export type ProposalAccumulatorContextValue = {
   resetQueue: () => void;
   /** True while flushToBundle is mid-flight. */
   submitting: boolean;
+  /* ------------------------------------------------------------- */
+  /* Focus mode (multi-work editors only)                             */
+  /* ------------------------------------------------------------- */
+  /**
+   * Whether this wrapper exposes a [ My Drafts | Browse Base ] toggle
+   * at all. Single-work editors (ClassEditor, SubclassEditor) leave
+   * this off — there's no catalog list to filter. Multi-work editors
+   * with large catalogs (Spells, Feats, Items, Option Items) opt in.
+   */
+  focusModeEnabled: boolean;
+  /**
+   * 'drafts' = show only entries the user has staged in the active
+   * block (queue + server-side drafts). 'browse' = show the live
+   * catalog read-only (the editor renders disabled form fields and an
+   * "Edit Base [Name]" button per entry). Defaults to 'drafts' when
+   * `focusModeEnabled` is true; ignored otherwise.
+   */
+  focusMode: FocusMode;
+  /** Caller (the wrapper's segmented toggle) sets the mode. */
+  setFocusMode: (next: FocusMode) => void;
   /* ------------------------------------------------------------- */
   /* Drop Edits (Phase 4.3)                                          */
   /* ------------------------------------------------------------- */
