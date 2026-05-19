@@ -3,13 +3,20 @@
 // =============================================================================
 //
 // Anyone with `effectiveProfile.permissions['content-creator']` (or
-// admin) lands here from the navbar to see what they've submitted,
-// what the admin did with it, and to withdraw anything that's still
-// pending.
+// admin) lands here from the navbar. Three top-level tabs:
 //
-// Phase 2b ships read + withdraw. Inline editing of pending payloads
-// is a follow-up — the API supports PATCH but the UX for editing
-// JSON in place is heavier than the queue benefits from right now.
+//   - Submissions: the user's own proposal queue (status sub-filters
+//     within: All / Pending / Approved / Rejected / Withdrawn). Read +
+//     withdraw. Inline editing of pending payloads is deferred — the
+//     API supports PATCH but the UX is heavier than the queue benefits
+//     from right now.
+//   - New: a launcher card per editor wired through `useEntityWriter`.
+//     Clicking opens the editor; for content-creators its Save / Add
+//     buttons round-trip through `/api/proposals`. Editors not yet
+//     wired show as "coming soon".
+//   - Edit: parallel launcher to surface read pages where the user can
+//     pick an existing entity and open it for editing. Same wiring
+//     status mapping as the New tab.
 // =============================================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -19,7 +26,10 @@ import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { ScrollText, X, Tags as TagsIcon, Sparkles, BookOpen, ArrowRight } from 'lucide-react';
+import {
+  ScrollText, X, Tags as TagsIcon, Sparkles, BookOpen, ArrowRight,
+  Plus, Edit3, Inbox, Swords, Layers,
+} from 'lucide-react';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -29,6 +39,8 @@ type EntityType =
   | 'spell_rule'
   | 'spell_rule_application'
   | 'class_spell_list';
+
+type TopTab = 'submissions' | 'new' | 'edit';
 
 type Proposal = {
   id: string;
@@ -71,6 +83,7 @@ function previewName(p: Proposal): string {
 }
 
 export default function MyProposals({ userProfile }: { userProfile: any }) {
+  const [topTab, setTopTab] = useState<TopTab>('submissions');
   const [filter, setFilter] = useState<Status | 'all'>('all');
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(false);
@@ -108,10 +121,14 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
     }
   }, [filter]);
 
+  // Only fetch when the Submissions tab is active — no point hitting
+  // the API when the user is on New/Edit. Re-fires when the user
+  // switches back to Submissions and when the status filter changes.
   useEffect(() => {
     if (!allowed) return;
+    if (topTab !== 'submissions') return;
     void load();
-  }, [allowed, load]);
+  }, [allowed, topTab, load]);
 
   const handleWithdraw = async (id: string) => {
     if (!confirm('Withdraw this proposal? Pending only; admin will no longer see it.')) return;
@@ -149,31 +166,84 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
     <div className="max-w-4xl mx-auto space-y-6 pb-20">
       <div className="flex items-center gap-3 text-gold mb-2">
         <ScrollText className="w-6 h-6" />
-        <span className="text-sm font-bold uppercase tracking-[0.3em]">Submissions</span>
+        <span className="text-sm font-bold uppercase tracking-[0.3em]">Proposals</span>
       </div>
 
       <div className="space-y-2">
         <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">My Proposals</h1>
         <p className="text-ink/60 font-serif italic">
-          Compendium changes you've submitted for admin review. Pending entries can be
-          withdrawn at any time. Open one of the editors below to draft a new proposal —
-          their Save / Add / Delete affordances route through this queue for content
-          creators automatically.
+          Compendium changes you've submitted for admin review. Use the
+          tabs below to draft something new, edit existing entities, or
+          review the queue of your past submissions.
         </p>
       </div>
 
-      <EditorLauncher />
-
-
+      {/* Top-level tabs: Submissions / New / Edit */}
       <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-2">
+        {([
+          { id: 'submissions', label: 'Submissions', icon: Inbox },
+          { id: 'new', label: 'New', icon: Plus },
+          { id: 'edit', label: 'Edit', icon: Edit3 },
+        ] as const).map(tab => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setTopTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-t-md transition-colors font-bold uppercase tracking-widest text-[10px] ${
+                topTab === tab.id
+                  ? 'bg-gold text-white shadow-sm'
+                  : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {topTab === 'submissions' && (
+        <SubmissionsPanel
+          filter={filter}
+          setFilter={setFilter}
+          proposals={proposals}
+          loading={loading}
+          working={working}
+          onWithdraw={handleWithdraw}
+        />
+      )}
+      {topTab === 'new' && <CreateLauncher />}
+      {topTab === 'edit' && <EditLauncher />}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* SubmissionsPanel — the existing queue view, now scoped to its tab.        */
+/* -------------------------------------------------------------------------- */
+
+function SubmissionsPanel({
+  filter, setFilter, proposals, loading, working, onWithdraw,
+}: {
+  filter: Status | 'all';
+  setFilter: (s: Status | 'all') => void;
+  proposals: Proposal[];
+  loading: boolean;
+  working: string | null;
+  onWithdraw: (id: string) => void;
+}) {
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 border-b border-gold/5 pb-2">
         {STATUS_FILTERS.map((f) => (
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
             className={`px-3 py-1.5 rounded-t-md transition-colors font-bold uppercase tracking-widest text-[10px] ${
               filter === f.id
-                ? 'bg-gold text-white shadow-sm'
-                : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
+                ? 'bg-gold/15 text-gold border border-gold/30'
+                : 'bg-transparent text-ink/50 hover:text-ink hover:bg-gold/5'
             }`}
           >
             {f.label}
@@ -212,7 +282,7 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={() => handleWithdraw(p.id)}
+                        onClick={() => onWithdraw(p.id)}
                         disabled={working === p.id}
                         className="ml-auto gap-1.5 border-ink/20 text-ink/60 hover:bg-ink/5"
                       >
@@ -240,9 +310,197 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Editor launcher cards — shared shape used by both New and Edit tabs.      */
+/* -------------------------------------------------------------------------- */
+
+type LauncherEntry = {
+  title: string;
+  description: string;
+  href: string;
+  icon: any;
+  status: 'ready' | 'coming-soon';
+};
+
+function LauncherGrid({ entries }: { entries: LauncherEntry[] }) {
+  return (
+    <ul className="grid gap-3 md:grid-cols-2">
+      {entries.map((editor) => {
+        const Icon = editor.icon;
+        const ready = editor.status === 'ready';
+        const body = (
+          <div
+            className={`group p-3 border rounded transition-colors h-full ${
+              ready
+                ? 'border-gold/20 hover:border-gold hover:bg-gold/10 cursor-pointer'
+                : 'border-ink/10 bg-card/30 cursor-not-allowed opacity-60'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Icon className="w-5 h-5 text-gold mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-ink flex items-center gap-2">
+                  {editor.title}
+                  {!ready && (
+                    <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/40">
+                      coming soon
+                    </Badge>
+                  )}
+                </p>
+                <p className="text-xs text-ink/60 mt-1 leading-snug">{editor.description}</p>
+              </div>
+              {ready && (
+                <ArrowRight className="w-4 h-4 text-gold/40 group-hover:text-gold shrink-0 mt-0.5" />
+              )}
+            </div>
+          </div>
+        );
+        return (
+          <li key={editor.title}>
+            {ready ? <Link to={editor.href}>{body}</Link> : body}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* CreateLauncher — the New tab.                                              */
+/*                                                                              */
+/* What can the user CREATE? Each entry maps to the editor's own create        */
+/* affordance (the "+ New …" buttons inside TagsExplorer, etc.). Add new        */
+/* rows as Phase 2c-2 / 2c-3 wire SpellRulesEditor and SpellListManager.       */
+/* -------------------------------------------------------------------------- */
+
+const CREATE_ENTRIES: LauncherEntry[] = [
+  {
+    title: 'Tags & Tag Groups',
+    description: 'Add a new tag (or tag group) to the compendium taxonomy.',
+    href: '/compendium/tags',
+    icon: TagsIcon,
+    status: 'ready',
+  },
+  {
+    title: 'Spell Rules',
+    description: 'Define a new rule that filters spells onto class lists by tag, level, school, etc.',
+    href: '/compendium/spell-rules',
+    icon: Sparkles,
+    status: 'coming-soon',
+  },
+  {
+    title: 'Class Spell Lists',
+    description: 'Pin a new spell to a class\'s spell list outside the rule-driven set.',
+    href: '/compendium/spell-lists',
+    icon: BookOpen,
+    status: 'coming-soon',
+  },
+];
+
+function CreateLauncher() {
+  return (
+    <Card className="border-gold/20 bg-gold/5">
+      <CardHeader>
+        <CardTitle className="text-base font-bold uppercase tracking-widest">
+          Create a new proposal
+        </CardTitle>
+        <p className="text-xs text-ink/60 mt-1 leading-snug">
+          Open one of the editors below. Their "+ New …" affordances round-trip
+          through this proposal queue for content creators automatically.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <LauncherGrid entries={CREATE_ENTRIES} />
+      </CardContent>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* EditLauncher — the Edit tab.                                                */
+/*                                                                              */
+/* What can the user EDIT? Same wiring map as New, plus the public read         */
+/* pages where you can browse to an existing spell / class / etc. Editing       */
+/* those entities still resolves to admin-only direct writes until Phase 4      */
+/* extends the proposal allowlist to `spell` / `class`. Until then, the cards   */
+/* surface as "coming soon" — clickable cards still hand you the read page in   */
+/* case you just want to browse.                                                */
+/* -------------------------------------------------------------------------- */
+
+const EDIT_ENTRIES: LauncherEntry[] = [
+  {
+    title: 'Tags & Tag Groups',
+    description: 'Browse the taxonomy and propose renames, slug changes, or deletes on an existing tag.',
+    href: '/compendium/tags',
+    icon: TagsIcon,
+    status: 'ready',
+  },
+  {
+    title: 'Spell Rules',
+    description: 'Edit an existing rule\'s query, name, or manual spell list.',
+    href: '/compendium/spell-rules',
+    icon: Sparkles,
+    status: 'coming-soon',
+  },
+  {
+    title: 'Class Spell Lists',
+    description: 'Add or remove pinned spells from a class\'s spell list.',
+    href: '/compendium/spell-lists',
+    icon: BookOpen,
+    status: 'coming-soon',
+  },
+  {
+    title: 'Spells',
+    description: 'Browse the spell catalogue. Propose-edit support arrives with Phase 4 of content-proposals.',
+    href: '/compendium/spells',
+    icon: Sparkles,
+    status: 'coming-soon',
+  },
+  {
+    title: 'Classes',
+    description: 'Browse classes via the compendium. Propose-edit support arrives in a future phase (out of scope today).',
+    href: '/compendium/classes',
+    icon: Swords,
+    status: 'coming-soon',
+  },
+  {
+    title: 'Modular Options',
+    description: 'Browse the option groups (Maneuvers, Invocations, Infusions, …). Propose-edit support TBD.',
+    href: '/compendium/unique-options',
+    icon: Layers,
+    status: 'coming-soon',
+  },
+];
+
+function EditLauncher() {
+  return (
+    <Card className="border-gold/20 bg-gold/5">
+      <CardHeader>
+        <CardTitle className="text-base font-bold uppercase tracking-widest">
+          Edit an existing entity
+        </CardTitle>
+        <p className="text-xs text-ink/60 mt-1 leading-snug">
+          Pick a system below to browse its catalogue and edit an existing entry.
+          For wired editors, edits round-trip through the proposal queue
+          automatically. Entries marked "coming soon" land you on the read page
+          for now — propose-edit support arrives as later phases extend the
+          allowlist.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <LauncherGrid entries={EDIT_ENTRIES} />
+      </CardContent>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Small badge components                                                       */
+/* -------------------------------------------------------------------------- */
 
 function OperationBadge({ op }: { op: Operation }) {
   const classes: Record<Operation, string> = {
@@ -254,98 +512,6 @@ function OperationBadge({ op }: { op: Operation }) {
     <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${classes[op]}`}>
       {op}
     </span>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* EditorLauncher                                                              */
-/*                                                                              */
-/* Surfaces the editors that have been wired through the proposal              */
-/* queue. Each card opens the existing editor — for content-creators            */
-/* the editor's Save / Add / Delete affordances submit to                       */
-/* `/api/proposals` (via useEntityWriter); for admins they direct-              */
-/* write. The list grows as new editors are wired in Phase 2c-2 / 2c-3.        */
-/* -------------------------------------------------------------------------- */
-
-const PROPOSAL_EDITORS: Array<{
-  title: string;
-  description: string;
-  href: string;
-  icon: any;
-  status: 'ready' | 'coming-soon';
-}> = [
-  {
-    title: 'Tags & Tag Groups',
-    description: 'Add / rename / delete tags and tag groups under the compendium taxonomy.',
-    href: '/compendium/tags',
-    icon: TagsIcon,
-    status: 'ready',
-  },
-  {
-    title: 'Spell Rules',
-    description: 'Define rules that filter spells onto class lists by tag, level, school, etc.',
-    href: '/compendium/spell-rules',
-    icon: Sparkles,
-    status: 'coming-soon',
-  },
-  {
-    title: 'Class Spell Lists',
-    description: 'Pin specific spells to a class\'s spell list outside the rule-driven set.',
-    href: '/compendium/spell-lists',
-    icon: BookOpen,
-    status: 'coming-soon',
-  },
-];
-
-function EditorLauncher() {
-  return (
-    <Card className="border-gold/20 bg-gold/5">
-      <CardHeader>
-        <CardTitle className="text-base font-bold uppercase tracking-widest">
-          Start a new proposal
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="grid gap-3 md:grid-cols-2">
-          {PROPOSAL_EDITORS.map((editor) => {
-            const Icon = editor.icon;
-            const ready = editor.status === 'ready';
-            const body = (
-              <div
-                className={`group p-3 border rounded transition-colors h-full ${
-                  ready
-                    ? 'border-gold/20 hover:border-gold hover:bg-gold/10 cursor-pointer'
-                    : 'border-ink/10 bg-card/30 cursor-not-allowed opacity-60'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <Icon className="w-5 h-5 text-gold mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-ink flex items-center gap-2">
-                      {editor.title}
-                      {!ready && (
-                        <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/40">
-                          coming soon
-                        </Badge>
-                      )}
-                    </p>
-                    <p className="text-xs text-ink/60 mt-1 leading-snug">{editor.description}</p>
-                  </div>
-                  {ready && (
-                    <ArrowRight className="w-4 h-4 text-gold/40 group-hover:text-gold shrink-0 mt-0.5" />
-                  )}
-                </div>
-              </div>
-            );
-            return (
-              <li key={editor.title}>
-                {ready ? <Link to={editor.href}>{body}</Link> : body}
-              </li>
-            );
-          })}
-        </ul>
-      </CardContent>
-    </Card>
   );
 }
 
