@@ -228,6 +228,55 @@ The Phase-2c editors (Tags / Spell Rules / Spell Lists) are all
   computes its own `editorPrefix` via `useLocation()` because
   it's defined at file scope.
 
+#### Editor design pattern: multi-work vs single-work
+
+Before wiring an editor, classify it. This drives both the URL
+shape and how drafts are surfaced inside the editor.
+
+- **Multi-work catalog editor** — one shared editor for all
+  entities of a type. Examples: TagsExplorer (tags + tag_groups),
+  SpellRulesEditor, SpellListManager, SpellsEditor, FeatsEditor,
+  ItemsEditor. URL: `/proposals/edit/<plural>` with NO id segment.
+  Create + edit happen in the same view. "Continue Editing" from
+  the Block tab returns to this single URL; the editor's main list
+  view merges live entries with the user's drafts. Drafts of type
+  `create` appear as new entries; drafts of type `update` overlay
+  the matching live row; drafts of type `delete` strike-through
+  the live row.
+- **Single-work entity editor** — one route per entity instance.
+  Examples: ClassEditor (`/proposals/edit/classes/edit/:id`,
+  `/proposals/edit/classes/new`), SubclassEditor. The entity *is*
+  the editor's subject — each one gets its own page. Continue
+  Editing from the Block tab routes to that specific entity's
+  page, drafts overlay the form.
+
+#### Focus mode + browse base (multi-work editors only)
+
+Approved UX for high-volume multi-work editors (Spells, Feats,
+Items, Option Items):
+
+- **Default focus**: when the user lands on the editor, default to
+  "My Drafts" — only entries that have queued changes or pending
+  drafts in the active block. A creator making 2 new spells doesn't
+  stare at 500 existing ones.
+- **Toggle to Browse Base**: segmented control in the editor's
+  header (`[ My Drafts | Browse Base ]`). Selecting Browse Base
+  reveals live catalog entries **read-only**: all form fields
+  disabled, no Save button, banner at the top of each entry —
+  *"Base [entity] — viewing only. Click 'Edit Base [Name]' to
+  propose changes."*
+- **Edit Base [Name] button**: at the top of each base entry,
+  alongside the banner. Click → that one entry flips to editable
+  for the rest of the session; its form inputs wake up, the
+  accumulator's `update` queues a draft on save. Other base entries
+  stay read-only. The flipped entry stays flipped through Submit
+  Changes (no manual re-lock).
+- **High-volume vs low-volume**: high-volume editors load Browse
+  Base on-demand (search → match → expand inline read-only).
+  Low-volume (Tags, Spell Rules, Spell Lists today) can render the
+  whole live catalog in the read-only mode when toggled — the
+  catalog is small enough.
+
 #### Remaining editor wiring (4.5d–f)
 
 The three heavy editors are bigger lifts than 4.5a–c because they
@@ -243,35 +292,44 @@ don't use `useEntityWriter` today — they call `queryD1` /
    `created_at` / `updated_at` are server-managed, don't include).
    **Do NOT pre-stringify JSON columns** — the writer's
    `sanitizePayload` stringifies them.
-3. Add `/proposals/edit/<entity>` route in App.tsx.
+3. Add `/proposals/edit/<entity>` route in App.tsx (or
+   `<entity>/edit/:id` + `<entity>/new` for single-work).
 4. Add sidebar sub-item.
 5. Audit cross-editor `<Link>` paths and `navigate()` calls — make
    them prefix-aware if any link to another editor.
+6. Apply the right pattern from the design notes above (multi-work
+   gets focus-mode toggle; single-work gets per-entity route).
 
 Per-editor notes:
 
 - **4.5d · [SpellsEditor](../src/pages/compendium/SpellsEditor.tsx)** —
-  ~1500 lines, single-spell form. Has multiple `isAdmin` gates
-  (lines 238, 381, 490, 1016 at last grep). Doesn't use
-  `upsertDocument` directly — writes go through internal helpers
-  that ultimately hit `queryD1`. Find the save sites and route them
-  through the writer. Skip Bulk Import / Backfill (admin-only).
+  *multi-work*. ~1500 lines, single-spell form within a list view.
+  Has multiple `isAdmin` gates (lines 238, 381, 490, 1016 at last
+  grep). Doesn't use `upsertDocument` directly — writes go through
+  internal helpers that ultimately hit `queryD1`. Find the save
+  sites and route them through the writer. Skip Bulk Import /
+  Backfill (admin-only). **Add focus-mode + Browse Base** per the
+  design above — spells are a high-volume catalog, so Browse Base
+  should be search-to-reveal.
 - **4.5e · [UniqueOptionGroupEditor](../src/pages/compendium/UniqueOptionGroupEditor.tsx)** —
-  ~978 lines. Edits one group plus N items. Use TWO writers:
-  `useProposalAccumulator('unique_option_group', userProfile)`
-  for group saves and `useProposalAccumulator('unique_option_item',
-  userProfile)` for item saves. Each item save adds a separate
-  queued change, so a single "save all items" click can end up
-  with 10+ queued revisions — make sure that doesn't push the
-  queue past the server's 50-revision limit per POST in
-  `postQueuedChanges`.
+  *hybrid*. Each group (Maneuvers / Invocations / Infusions) is
+  single-work — `/proposals/edit/option-groups/:groupId`. The
+  items inside the group are multi-work + need focus-mode.
+  Use TWO writers: `useProposalAccumulator('unique_option_group',
+  userProfile)` for group saves and `useProposalAccumulator
+  ('unique_option_item', userProfile)` for item saves. Each item
+  save adds a separate queued change, so a single "save all items"
+  click can end up with 10+ queued revisions — watch the
+  50-revision-per-POST limit in `postQueuedChanges`.
 - **4.5f · [ClassEditor](../src/pages/compendium/ClassEditor.tsx)** —
-  ~1900 lines, 13 JSON columns. Subclasses, features, activities,
-  items, feats remain **off** the proposal allowlist — the
-  ENTITY_CONFIGS in `api/_lib/proposals.ts` accepts `class` but
-  not those nested entities. Class-editor Drop Edits should
-  suppress section affordances for tabs that mutate those tables
-  (or disable with a tooltip). Multi-row paths (advancement
+  *single-work*. ~1900 lines, 13 JSON columns. Routes:
+  `/proposals/edit/classes/new` and `/proposals/edit/classes/edit/:id`.
+  Drafts overlay the form, no list-merging needed. Subclasses,
+  features, activities, items, feats remain **off** the proposal
+  allowlist — the ENTITY_CONFIGS in `api/_lib/proposals.ts` accepts
+  `class` but not those nested entities. Class-editor Drop Edits
+  should suppress section affordances for tabs that mutate those
+  tables (or disable with a tooltip). Multi-row paths (advancement
   generators, etc.) stay admin-only.
 
 ### 4.6 · Block menu rolled-up view
