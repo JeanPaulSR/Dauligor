@@ -53,7 +53,8 @@ import {
   type SpellRule,
   type SpellRuleApplication,
 } from '../../lib/spellRules';
-import { useEntityWriter, actionLabel } from '../../lib/proposalAware';
+import { actionLabel } from '../../lib/proposalAware';
+import { useProposalAccumulator } from '../../lib/proposalAccumulator';
 
 const LEVEL_VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const CONSUMER_LABELS: Record<ConsumerType, string> = {
@@ -93,8 +94,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const isContentCreator = !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
   const canManageRules = isAdmin || isContentCreator;
-  const ruleWriter = useEntityWriter('spell_rule', userProfile);
-  const ruleAppWriter = useEntityWriter('spell_rule_application', userProfile);
+  // Inside <ProposalEditorWrapper> these queue locally and flush on
+  // Submit Changes; outside the wrapper they pass through to
+  // useEntityWriter unchanged (admin direct write on /compendium/...).
+  const ruleWriter = useProposalAccumulator('spell_rule', userProfile);
+  const ruleAppWriter = useProposalAccumulator('spell_rule_application', userProfile);
   // `block` mode also routes through the writer (which posts drafts
   // with the active bundle_id) — without including it here, block-
   // mode mutations would fall through to direct queryD1 calls and
