@@ -52,6 +52,7 @@ import {
   type SpellRule,
   type SpellRuleApplication,
 } from '../../lib/spellRules';
+import { useEntityWriter, actionLabel } from '../../lib/proposalAware';
 
 const LEVEL_VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const CONSUMER_LABELS: Record<ConsumerType, string> = {
@@ -82,7 +83,18 @@ type TagGroupRow = { id: string; name: string };
  * model. Class-side consumption lives in `/compendium/spell-lists`.
  */
 export default function SpellRulesEditor({ userProfile }: { userProfile: any }) {
+  // Admins write rules + apply them to classes directly; content-
+  // creators route through the proposal queue. The auto-rebuild +
+  // stale-class detection on save stays admin-only — it touches
+  // class_spell_lists and only makes sense once the rule actually
+  // lives in D1.
   const isAdmin = userProfile?.role === 'admin';
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManageRules = isAdmin || isContentCreator;
+  const ruleWriter = useEntityWriter('spell_rule', userProfile);
+  const ruleAppWriter = useEntityWriter('spell_rule_application', userProfile);
+  const isProposalMode = ruleWriter.mode === 'proposal';
   const [searchParams, setSearchParams] = useSearchParams();
   const initialRuleId = searchParams.get('rule') || '';
 
@@ -115,10 +127,10 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   // global footer and strips <main>'s container padding so the
   // working area uses the full viewport.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageRules) return;
     document.body.classList.add('spell-list-fullscreen');
     return () => document.body.classList.remove('spell-list-fullscreen');
-  }, [isAdmin]);
+  }, [canManageRules]);
 
   // Viewport-derived pane height. Chrome above the working grid:
   // navbar (~56) + toolbar (~50) + maybe "How rules work" strip
@@ -137,7 +149,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
 
   // Initial load
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManageRules) return;
     let active = true;
     (async () => {
       try {
@@ -174,7 +186,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       }
     })();
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [canManageRules]);
 
   // Keep ?rule=<id> in the URL in sync with selection so the page is link-shareable.
   useEffect(() => {
@@ -322,8 +334,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       .slice(0, 12);
   }, [manualSpellsSearch, spells, draft?.manualSpells]);
 
-  if (!isAdmin) {
-    return <div className="text-center py-20 text-ink/70">Access Denied. Admins only.</div>;
+  if (!canManageRules) {
+    return <div className="text-center py-20 text-ink/70">Access Denied.</div>;
   }
 
   // ------- Handlers -------
@@ -493,6 +505,32 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     setSaving(true);
     try {
       const wasEdit = !!draft.id;
+
+      // Content-creators don't write to spell_rules directly — the
+      // rule goes into the proposal queue and an admin re-applies it
+      // on approve. We skip the auto-rebuild + stale-class detection
+      // path entirely; the row isn't in D1 yet, so nothing to rebuild
+      // against. The editor re-renders with the same data afterwards.
+      if (isProposalMode) {
+        const payload = {
+          name: draft.name.trim(),
+          description: draft.description ?? '',
+          // useEntityWriter's sanitizePayload stringifies these on
+          // the way out (spell_rules.query + .manual_spells are
+          // declared json columns in api/_lib/proposals.ts).
+          query: draft.query,
+          manual_spells: draft.manualSpells,
+        };
+        if (wasEdit && draft.id) {
+          await ruleWriter.update(draft.id, payload);
+        } else {
+          await ruleWriter.create(payload);
+        }
+        setDraftDirty(false);
+        toast.success(actionLabel(ruleWriter.mode, wasEdit ? 'updated' : 'created'));
+        return;
+      }
+
       const id = await saveRule({
         id: draft.id || null,
         name: draft.name.trim(),
@@ -643,6 +681,11 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     if (!draft || !draft.id) return;
     setDeleteDialogOpen(false);
     try {
+      if (isProposalMode) {
+        await ruleWriter.remove(draft.id);
+        toast.success(actionLabel(ruleWriter.mode, 'deleted'));
+        return;
+      }
       await deleteRule(draft.id);
       const refreshed = await fetchAllRules();
       const counts = await fetchApplicationCounts();
@@ -660,6 +703,21 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const handleApplyToConsumer = async (type: ConsumerType, id: string) => {
     if (!draft?.id) return;
     try {
+      if (isProposalMode) {
+        // Proposers can only apply rules that already exist in D1.
+        // The `draft?.id` guard above covers brand-new-but-unsaved
+        // rules; here the rule has an id, so the application
+        // proposal can target it. The proposed row carries the
+        // composite uniqueness fields the spell_rule_applications
+        // table needs (rule_id + applies_to_type + applies_to_id).
+        await ruleAppWriter.create({
+          rule_id: draft.id,
+          applies_to_type: type,
+          applies_to_id: id,
+        });
+        toast.success(actionLabel(ruleAppWriter.mode, 'applied'));
+        return;
+      }
       await applyRule(draft.id, type, id);
       const apps = await fetchRuleApplications(draft.id);
       setDraftApplications(apps);
@@ -675,6 +733,15 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const handleUnapply = async (app: SpellRuleApplication) => {
     if (!draft?.id) return;
     try {
+      if (isProposalMode) {
+        // Delete by application-row id (writer requires entity_id).
+        // The live `unapplyRule` deletes by composite key; the
+        // proposal endpoint deletes by primary key on approve. Same
+        // end state.
+        await ruleAppWriter.remove(app.id);
+        toast.success(actionLabel(ruleAppWriter.mode, 'removed'));
+        return;
+      }
       await unapplyRule(draft.id, app.appliesToType, app.appliesToId);
       setDraftApplications(prev => prev.filter(a => a.id !== app.id));
       setAppCounts(await fetchApplicationCounts());
@@ -1279,10 +1346,12 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                     <div className="flex items-center gap-2">
                       {/* Rebuild-all CTA — runs the rebuild for every
                           CLASS this rule is applied to in one click.
-                          Skips other consumer types (no rebuild
-                          semantics there yet). Visible only when at
-                          least one class app exists. */}
-                      {draftApplications.some(a => a.appliesToType === 'class') ? (
+                          Admin-only: the rebuild writes
+                          class_spell_lists rows, which is outside the
+                          proposal allowlist. Content-creators see no
+                          rebuild button; their approved proposals
+                          trigger the rebuild as part of admin review. */}
+                      {isAdmin && draftApplications.some(a => a.appliesToType === 'class') ? (
                         <Button
                           type="button"
                           size="sm"
