@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Plus, Search, BookOpen, ChevronRight } from 'lucide-react';
 import { Input } from '../../components/ui/input';
@@ -11,6 +11,21 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
   const [loading, setLoading] = useState(true);
 
   const isAdmin = userProfile?.role === 'admin' || userProfile?.role === 'co-dm';
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManage = isAdmin || isContentCreator;
+  // Route-aware: on /proposals/edit/option-groups, links target the
+  // proposal-editor route; on the admin /compendium/unique-options
+  // list, links keep their existing /compendium/* targets.
+  const location = useLocation();
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const newGroupHref = isProposalRoute
+    ? '/proposals/edit/option-groups/new'
+    : '/compendium/unique-options/new';
+  const detailHref = (groupId: string) =>
+    isProposalRoute
+      ? `/proposals/edit/option-groups/edit/${groupId}`
+      : `/compendium/unique-options/${groupId}`;
 
   useEffect(() => {
     fetchCollection('uniqueOptionGroups', { orderBy: 'name ASC' })
@@ -35,8 +50,8 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
           <BookOpen className="w-6 h-6 text-gold" />
           <h1 className="text-2xl font-serif font-bold text-ink uppercase tracking-tight">Unique Option Groups</h1>
         </div>
-        {isAdmin && (
-          <Link to="/compendium/unique-options/new">
+        {canManage && (
+          <Link to={newGroupHref}>
             <Button size="sm" className="btn-gold-solid gap-2">
               <Plus className="w-4 h-4" /> New Group
             </Button>
@@ -58,7 +73,7 @@ export default function UniqueOptionGroupList({ userProfile }: { userProfile: an
         {filteredGroups.map(group => (
           <Link
             key={group.id}
-            to={`/compendium/unique-options/${group.id}`}
+            to={detailHref(group.id)}
             className="group p-4 border border-gold/20 bg-card/50 hover:bg-gold/5 transition-all space-y-2"
           >
             <div className="flex items-center justify-between">

@@ -220,6 +220,7 @@ export default function Sidebar({
           { label: 'Spell Rules', path: '/proposals/edit/spell-rules' },
           { label: 'Spell Lists', path: '/proposals/edit/spell-lists' },
           { label: 'Spells', path: '/proposals/edit/spells' },
+          { label: 'Option Groups', path: '/proposals/edit/option-groups' },
         ],
       }] : []),
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },

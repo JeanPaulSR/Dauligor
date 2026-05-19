@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent } from '../../components/ui/dialog';
@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
+import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { actionLabel } from '../../lib/proposalAware';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
 import { ImageUpload } from '../../components/ui/ImageUpload';
@@ -33,6 +36,17 @@ import {
 export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Route-aware basePath — admin route writes through upsertDocument
+  // directly; proposal route wraps with ProposalEditorWrapper and the
+  // accumulators below queue into the active block.
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const basePath = isProposalRoute ? '/proposals/edit/option-groups' : '/compendium/unique-options';
+  const groupWriter = useProposalAccumulator('unique_option_group', userProfile);
+  const itemWriter = useProposalAccumulator('unique_option_item', userProfile);
+  const isProposalMode = groupWriter.mode === 'proposal' || groupWriter.mode === 'block';
+  const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false);
+  const [pendingItemDeleteId, setPendingItemDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState<any[]>([]);
 
@@ -239,13 +253,28 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       };
 
       const targetId = id || crypto.randomUUID();
-      await upsertDocument('uniqueOptionGroups', targetId, d1Data);
-
-      if (id) {
-        toast.success('Group saved successfully');
+      if (isProposalMode) {
+        if (id) {
+          await groupWriter.update(targetId, d1Data);
+        } else {
+          await groupWriter.create({ ...d1Data, id: targetId });
+        }
+        toast.success(actionLabel(groupWriter.mode, id ? 'updated' : 'created'));
+        if (!id) {
+          // Even in proposal mode, navigate to the edit URL so the
+          // user can keep iterating on the same draft. The accumulator's
+          // dedup logic (Phase 4.5d step 3) PATCHes the existing
+          // CREATE draft instead of queueing a new revision.
+          navigate(`${basePath}/edit/${targetId}`);
+        }
       } else {
-        toast.success('Group created successfully');
-        navigate(`/compendium/unique-options/edit/${targetId}`);
+        await upsertDocument('uniqueOptionGroups', targetId, d1Data);
+        if (id) {
+          toast.success('Group saved successfully');
+        } else {
+          toast.success('Group created successfully');
+          navigate(`${basePath}/edit/${targetId}`);
+        }
       }
     } catch (error) {
       console.error("Error saving group:", error);
@@ -255,23 +284,39 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     }
   };
 
-  const handleDeleteGroup = async () => {
+  const handleDeleteGroup = () => {
     if (!id) return;
-    if (window.confirm('Delete this entire group and all its options?')) {
-      try {
-        setLoading(true);
+    setDeleteGroupConfirmOpen(true);
+  };
+
+  const performDeleteGroup = async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      if (isProposalMode) {
+        // Queue a DELETE revision for the group and one per item.
+        // The accumulator's 50-revision cap protects against runaway
+        // bundles; admin still has to approve each row, but at least
+        // the intent is captured.
+        for (const item of items) {
+          await itemWriter.remove(item.id);
+        }
+        await groupWriter.remove(id);
+        toast.success(actionLabel(groupWriter.mode, 'deleted'));
+      } else {
         for (const item of items) {
           await deleteDocument('uniqueOptionItems', item.id);
         }
         await deleteDocument('uniqueOptionGroups', id);
         toast.success('Option group deleted');
-        navigate('/compendium/unique-options');
-      } catch (error) {
-        console.error("Error deleting group:", error);
-        toast.error('Failed to delete option group');
-      } finally {
-        setLoading(false);
       }
+      navigate(basePath);
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      toast.error('Failed to delete option group');
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -347,7 +392,15 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       };
 
       const targetId = editingItem?.id || crypto.randomUUID();
-      await upsertDocument('uniqueOptionItems', targetId, d1Data);
+      if (isProposalMode) {
+        if (editingItem?.id) {
+          await itemWriter.update(targetId, d1Data);
+        } else {
+          await itemWriter.create({ ...d1Data, id: targetId });
+        }
+      } else {
+        await upsertDocument('uniqueOptionItems', targetId, d1Data);
+      }
 
       // Spread `editingItem` first so its camelCase aliases (iconUrl,
       // imageUrl, classIds, requirementsTree, etc.) survive into the
@@ -381,30 +434,45 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       }));
       setEditingItem(null);
       setIsItemModalOpen(false);
-      toast.success('Option saved successfully');
+      toast.success(
+        isProposalMode
+          ? actionLabel(itemWriter.mode, editingItem?.id ? 'updated' : 'created')
+          : 'Option saved successfully',
+      );
     } catch (error) {
       console.error("Error saving item:", error);
       toast.error('Failed to save option');
     }
   };
 
-  const handleDeleteItem = async (itemId: string) => {
-    if (window.confirm('Delete this option?')) {
-      try {
+  const handleDeleteItem = (itemId: string) => {
+    setPendingItemDeleteId(itemId);
+  };
+
+  const performDeleteItem = async () => {
+    if (!pendingItemDeleteId) return;
+    const itemId = pendingItemDeleteId;
+    try {
+      if (isProposalMode) {
+        await itemWriter.remove(itemId);
+      } else {
         await deleteDocument('uniqueOptionItems', itemId);
-        setItems(prev => prev.filter(it => it.id !== itemId));
-        // Mirror the deletion into allOptionGroups so any requirement
-        // tree referencing this item from elsewhere in the same
-        // session immediately drops the stale entry from its picker.
-        setAllOptionGroups(prev => prev.map(g => g.id !== id ? g : {
-          ...g,
-          items: (g.items ?? []).filter(it => it.id !== itemId),
-        }));
-        toast.success('Option deleted');
-      } catch (error) {
-        console.error("Error deleting item:", error);
-        toast.error('Failed to delete option');
       }
+      setItems(prev => prev.filter(it => it.id !== itemId));
+      // Mirror the deletion into allOptionGroups so any requirement
+      // tree referencing this item from elsewhere in the same
+      // session immediately drops the stale entry from its picker.
+      setAllOptionGroups(prev => prev.map(g => g.id !== id ? g : {
+        ...g,
+        items: (g.items ?? []).filter(it => it.id !== itemId),
+      }));
+      toast.success(
+        isProposalMode ? actionLabel(itemWriter.mode, 'deleted') : 'Option deleted',
+      );
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      toast.error('Failed to delete option');
+      throw error;
     }
   };
 
@@ -430,7 +498,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       <div className="section-header">
         <div className="flex items-center gap-4">
-          <Link to="/compendium/unique-options">
+          <Link to={isProposalRoute ? '/my-proposals' : '/compendium/unique-options'}>
             <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
               <ChevronLeft className="w-4 h-4" /> Back
             </Button>
@@ -956,6 +1024,34 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           )}
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={deleteGroupConfirmOpen}
+        onOpenChange={setDeleteGroupConfirmOpen}
+        title={`Delete ${name ? `"${name}"` : 'this group'} and all its options?`}
+        description={
+          isProposalMode
+            ? `Queues a DELETE proposal for the group and one for each of its ${items.length} option${items.length === 1 ? '' : 's'}. The live group stays in place until an admin approves.`
+            : `Permanently deletes the group and ${items.length} option${items.length === 1 ? '' : 's'} from the live catalog.`
+        }
+        confirmLabel="Delete group"
+        destructive
+        onConfirm={performDeleteGroup}
+      />
+      <ConfirmDialog
+        open={!!pendingItemDeleteId}
+        onOpenChange={(open) => {
+          if (!open) setPendingItemDeleteId(null);
+        }}
+        title="Delete this option?"
+        description={
+          isProposalMode
+            ? 'Queues a DELETE proposal for this option. The live row stays in place until an admin approves.'
+            : 'Permanently removes this option from the live catalog.'
+        }
+        confirmLabel="Delete option"
+        destructive
+        onConfirm={performDeleteItem}
+      />
     </div>
   );
 }

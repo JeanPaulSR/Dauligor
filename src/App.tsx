@@ -302,6 +302,22 @@ export default function App() {
                       <SpellsEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  {/* Option Groups — hybrid: list (no wrapper, just
+                      navigation) → per-group editor (wrapped, takes
+                      both entity types for the queue). */}
+                  <Route path="/proposals/edit/option-groups" element={
+                    <UniqueOptionGroupList userProfile={effectiveProfile} />
+                  } />
+                  <Route path="/proposals/edit/option-groups/new" element={
+                    <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']}>
+                      <UniqueOptionGroupEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
+                  <Route path="/proposals/edit/option-groups/edit/:id" element={
+                    <ProposalEditorWrapper entityType={['unique_option_group', 'unique_option_item']}>
+                      <UniqueOptionGroupEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
                   {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
