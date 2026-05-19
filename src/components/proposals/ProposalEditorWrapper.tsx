@@ -43,6 +43,8 @@ import { PickOrCreateBlockDialog } from './PickOrCreateBlockDialog';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import type { ProposalEntityType } from '../../lib/proposalAware';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
+import type { FocusMode } from '../../lib/proposalAccumulator';
+import { cn } from '../../lib/utils';
 
 const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   tag: 'Tags',
@@ -64,11 +66,21 @@ export type ProposalEditorWrapperProps = {
    * surfaces drafts the editor below can act on.
    */
   entityType: ProposalEntityType | ProposalEntityType[];
+  /**
+   * Multi-work editors with large catalogs (Spells, Feats, Items)
+   * opt in to a `[ My Drafts | Browse Base ]` segmented toggle at the
+   * top of the wrapper. Single-work editors (Classes, Subclasses)
+   * leave this off — the toggle has no list to filter. Defaults to
+   * `false`; current Tags / Spell Rules / Spell Lists wiring (4.5a–c)
+   * stays in the simple mode.
+   */
+  enableFocusMode?: boolean;
   children: ReactNode;
 };
 
 export function ProposalEditorWrapper({
   entityType,
+  enableFocusMode = false,
   children,
 }: ProposalEditorWrapperProps) {
   const entityTypes = useMemo<ProposalEntityType[]>(
@@ -76,6 +88,7 @@ export function ProposalEditorWrapper({
     [entityType],
   );
   const primaryEntityType = entityTypes[0];
+  const [focusMode, setFocusMode] = useState<FocusMode>('drafts');
   const {
     activeBundleId,
     activeBundle,
@@ -236,6 +249,9 @@ export function ProposalEditorWrapper({
       dropEntity,
       dropField,
       dropFields,
+      focusModeEnabled: enableFocusMode,
+      focusMode,
+      setFocusMode,
     }),
     [
       queue,
@@ -248,6 +264,8 @@ export function ProposalEditorWrapper({
       dropEntity,
       dropField,
       dropFields,
+      enableFocusMode,
+      focusMode,
     ],
   );
 
@@ -361,6 +379,9 @@ export function ProposalEditorWrapper({
           submitting={submitting}
           disabled={submitting || queue.length === 0}
           onSubmit={handleSubmit}
+          focusModeEnabled={enableFocusMode}
+          focusMode={focusMode}
+          onFocusModeChange={setFocusMode}
         />
         {drafts.length > 0 && (
           <PendingDraftsPanel
@@ -492,6 +513,9 @@ type HeaderProps = {
   submitting: boolean;
   disabled: boolean;
   onSubmit: () => void;
+  focusModeEnabled: boolean;
+  focusMode: FocusMode;
+  onFocusModeChange: (next: FocusMode) => void;
 };
 
 function ProposalEditorHeader({
@@ -503,6 +527,9 @@ function ProposalEditorHeader({
   submitting,
   disabled,
   onSubmit,
+  focusModeEnabled,
+  focusMode,
+  onFocusModeChange,
 }: HeaderProps) {
   return (
     <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-blood/10 border-b border-blood/30 backdrop-blur supports-backdrop-filter:bg-blood/5">
@@ -542,15 +569,72 @@ function ProposalEditorHeader({
             </p>
           )}
         </div>
-        <Button
-          onClick={onSubmit}
-          disabled={disabled}
-          className="gap-1.5 bg-gold text-white flex-shrink-0"
-        >
-          <Send className="w-3.5 h-3.5" />
-          {submitLabel}
-        </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {focusModeEnabled && (
+            <FocusModeToggle value={focusMode} onChange={onFocusModeChange} />
+          )}
+          <Button
+            onClick={onSubmit}
+            disabled={disabled}
+            className="gap-1.5 bg-gold text-white"
+          >
+            <Send className="w-3.5 h-3.5" />
+            {submitLabel}
+          </Button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* FocusModeToggle — segmented control for multi-work editors.                 */
+/*                                                                              */
+/* Drafts mode = show only entries the user has staged. Browse Base mode =     */
+/* render the live catalog read-only with an "Edit Base [Name]" per entry      */
+/* (editor decides how to implement the visual; the wrapper just owns the     */
+/* mode flag in context).                                                     */
+/* -------------------------------------------------------------------------- */
+
+function FocusModeToggle({
+  value,
+  onChange,
+}: {
+  value: FocusMode;
+  onChange: (next: FocusMode) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Focus mode"
+      className="inline-flex rounded-md border border-foreground/15 p-0.5 bg-background/30"
+    >
+      <button
+        type="button"
+        onClick={() => onChange('drafts')}
+        className={cn(
+          'px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
+          value === 'drafts'
+            ? 'bg-gold/15 text-gold font-bold'
+            : 'text-ink/60 hover:text-ink',
+        )}
+        aria-pressed={value === 'drafts'}
+      >
+        My Drafts
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('browse')}
+        className={cn(
+          'px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
+          value === 'browse'
+            ? 'bg-gold/15 text-gold font-bold'
+            : 'text-ink/60 hover:text-ink',
+        )}
+        aria-pressed={value === 'browse'}
+      >
+        Browse Base
+      </button>
     </div>
   );
 }
