@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { fetchCollection, fetchDocument, deleteDocument } from '../../lib/d1';
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from '../../lib/spellcasting';
 import { Card, CardContent } from '../../components/ui/card';
@@ -109,6 +109,23 @@ export function ClassList({
   const [selectedPreviewFeatureId, setSelectedPreviewFeatureId] = useState<string | null>(null);
 
   const isAdmin = userProfile?.role === 'admin' && !selectionMode;
+  const isContentCreator =
+    !selectionMode &&
+    !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManage = isAdmin || isContentCreator;
+  // Route-aware: on /proposals/edit/classes the New / Edit buttons
+  // target the proposal-mode editor; on /compendium/classes they
+  // keep their admin-direct targets.
+  const location = useLocation();
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const newClassHref = isProposalRoute
+    ? '/proposals/edit/classes/new'
+    : '/compendium/classes/new';
+  const editClassHref = (classId: string) =>
+    isProposalRoute
+      ? `/proposals/edit/classes/edit/${classId}`
+      : `/compendium/classes/edit/${classId}`;
   const isLoading = loadingStates.classes || loadingStates.foundation;
 
   useEffect(() => {
@@ -718,28 +735,30 @@ export function ClassList({
           )}
           {isAdmin && (
             <>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                accept=".json" 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".json"
+                className="hidden"
               />
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleImportClick}
                 disabled={isImporting}
                 className="border-gold/20 text-gold gap-2 hover:bg-gold/10"
               >
                 <Upload className="w-4 h-4" /> Import Class
               </Button>
-              <Link to="/compendium/classes/new">
-                <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/20">
-                  <Plus className="w-4 h-4" /> New Class
-                </Button>
-              </Link>
             </>
+          )}
+          {canManage && (
+            <Link to={newClassHref}>
+              <Button className="btn-gold-solid gap-2 shadow-lg shadow-gold/20">
+                <Plus className="w-4 h-4" /> New Class
+              </Button>
+            </Link>
           )}
         </div>
       </div>
@@ -894,8 +913,8 @@ export function ClassList({
                               View Page
                             </Button>
                           </Link>
-                          {isAdmin && (
-                            <Link to={`/compendium/classes/edit/${selectedClass.id}`}>
+                          {canManage && (
+                            <Link to={editClassHref(selectedClass.id)}>
                               <Button size="sm" variant="outline" className="border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8">
                                 <Edit className="w-3.5 h-3.5 mr-1" /> Edit
                               </Button>

@@ -318,6 +318,23 @@ export default function App() {
                       <UniqueOptionGroupEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  {/* Classes — single-work: one route per class instance.
+                      Nested entity edits (features, scaling columns,
+                      subclasses) remain admin-only inside the editor —
+                      those tables aren't in the proposal allowlist. */}
+                  <Route path="/proposals/edit/classes" element={
+                    <ClassList userProfile={effectiveProfile} />
+                  } />
+                  <Route path="/proposals/edit/classes/new" element={
+                    <ProposalEditorWrapper entityType="class">
+                      <ClassEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
+                  <Route path="/proposals/edit/classes/edit/:id" element={
+                    <ProposalEditorWrapper entityType="class">
+                      <ClassEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
                   {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />

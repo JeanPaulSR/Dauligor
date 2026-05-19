@@ -553,7 +553,7 @@ const EDIT_ENTRIES: LauncherEntry[] = [
   },
   {
     title: 'Classes',
-    description: 'Browse classes via the compendium. Propose-edit support arrives in Phase 4.5f.',
+    description: 'Browse the class catalog and pick one to edit. Top-level fields (name, description, proficiencies, advancements) propose through; nested feature / scaling / subclass edits remain admin-only.',
     href: '/proposals/edit/classes',
     icon: Swords,
     status: 'ready',

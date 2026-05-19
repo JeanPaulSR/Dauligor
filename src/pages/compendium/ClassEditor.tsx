@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
@@ -30,6 +30,9 @@ import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } fr
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
+import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { actionLabel } from '../../lib/proposalAware';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { queueRebake } from '../../lib/moduleExport';
 import { BakeNowButton } from '../../components/compendium/BakeNowButton';
 
@@ -403,6 +406,17 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
 export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isAdmin = userProfile?.role === 'admin';
+  // Route-aware basePath — admin route writes directly via upsertDocument;
+  // proposal route wraps + the accumulator queues into the active block.
+  // Nested entity writes (features, scaling columns, subclasses) stay
+  // admin-only — those tables aren't in the proposal allowlist yet.
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const basePath = isProposalRoute ? '/proposals/edit/classes' : '/compendium/classes';
+  const classWriter = useProposalAccumulator('class', userProfile);
+  const isProposalMode = classWriter.mode === 'proposal' || classWriter.mode === 'block';
+  const [deleteClassConfirmOpen, setDeleteClassConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(!!id);
   const [sources, setSources] = useState<any[]>([]);
@@ -1145,18 +1159,32 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         updated_at: classData.updatedAt
       };
 
-      await upsertDocument('classes', saveId, d1Data);
-      // Schedule a debounced R2 rebake for this class. Consecutive saves
-      // reset the 1h clock; manual "Bake Now" bypasses the wait.
-      queueRebake('class', saveId);
+      if (isProposalMode) {
+        // Proposal route — drop server-managed columns the proposal
+        // endpoint also strips, queue via the writer. Rebake is
+        // skipped (the live class hasn't changed yet); it'll fire on
+        // admin approval through the existing direct-write path.
+        const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Data;
+        if (id) {
+          await classWriter.update(saveId, proposalPayload);
+        } else {
+          await classWriter.create({ ...proposalPayload, id: saveId });
+        }
+        toast.success(actionLabel(classWriter.mode, id ? 'updated' : 'created'));
+      } else {
+        await upsertDocument('classes', saveId, d1Data);
+        // Schedule a debounced R2 rebake for this class. Consecutive
+        // saves reset the 1h clock; manual "Bake Now" bypasses the wait.
+        queueRebake('class', saveId);
+        toast.success('Class saved successfully!');
+      }
 
       if (!id) {
-        navigate(`/compendium/classes/edit/${saveId}`);
+        navigate(`${basePath}/edit/${saveId}`);
       }
       setProficiencies(normalizedProficiencies);
       setMulticlassProficiencies(normalizedMulticlassProficiencies);
       setAdvancements(normalizedSyncedAdvancements);
-      toast.success('Class saved successfully!');
       setLastSavedTick(Date.now());
     } catch (error) {
       console.error("Error saving class:", error);
@@ -1261,8 +1289,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     return (
       <div className="max-w-6xl mx-auto py-20 text-center space-y-4">
         <div className="font-serif italic text-gold animate-pulse">Consulting the archives...</div>
-        <Button variant="ghost" size="sm" onClick={() => navigate('/compendium/classes')} className="text-ink/40">
-          <ChevronLeft className="w-4 h-4 mr-2" /> Return to Compendium
+        <Button variant="ghost" size="sm" onClick={() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes')} className="text-ink/40">
+          <ChevronLeft className="w-4 h-4 mr-2" /> {isProposalRoute ? 'Back to My Proposals' : 'Return to Compendium'}
         </Button>
       </div>
     );
@@ -3858,18 +3886,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     variant="ghost"
                     size="sm"
                     className="w-full text-blood hover:text-white hover:bg-blood border border-blood/20 gap-2 text-[10px] font-black uppercase tracking-widest transition-all"
-                    onClick={async () => {
-                      if (id && confirm('Are you sure you want to delete this class? This cannot be undone.')) {
-                        try {
-                          await deleteDocument('classes', id);
-                          toast.success('Class deleted');
-                          setInitialDataHash(getCurrentStateHash()); // Prevent dirty check
-                          setTimeout(() => navigate('/compendium/classes'), 0);
-                        } catch (error) {
-                          toast.error('Failed to delete class');
-                        }
-                      }
-                    }}
+                    onClick={() => id && setDeleteClassConfirmOpen(true)}
                   >
                     Delete Class
                   </Button>
@@ -4454,6 +4471,35 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={deleteClassConfirmOpen}
+        onOpenChange={setDeleteClassConfirmOpen}
+        title={`Delete ${name ? `"${name}"` : 'this class'}?`}
+        description={
+          isProposalMode
+            ? 'Queues a DELETE proposal for this class. The live class stays in place until an admin approves. Subclasses, features, and other linked rows are NOT included — those need admin cleanup separately.'
+            : 'Permanently deletes this class from the live catalog. Subclasses, features, and other linked rows are not cascaded — clean those up separately if needed.'
+        }
+        confirmLabel="Delete class"
+        destructive
+        onConfirm={async () => {
+          if (!id) return;
+          try {
+            if (isProposalMode) {
+              await classWriter.remove(id);
+              toast.success(actionLabel(classWriter.mode, 'deleted'));
+            } else {
+              await deleteDocument('classes', id);
+              toast.success('Class deleted');
+            }
+            setInitialDataHash(getCurrentStateHash()); // Prevent dirty check
+            setTimeout(() => navigate(isProposalRoute ? '/my-proposals' : '/compendium/classes'), 0);
+          } catch (error) {
+            toast.error('Failed to delete class');
+            throw error; // keep dialog open
+          }
+        }}
+      />
     </div>
   );
 }
