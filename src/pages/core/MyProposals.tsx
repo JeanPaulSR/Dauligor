@@ -560,7 +560,7 @@ const EDIT_ENTRIES: LauncherEntry[] = [
   },
   {
     title: 'Modular Options',
-    description: 'Browse the option groups (Maneuvers, Invocations, Infusions, …). Propose-edit support arrives in Phase 4.5e.',
+    description: 'Browse the option groups (Maneuvers, Invocations, Infusions, …) and pick one to edit.',
     href: '/proposals/edit/option-groups',
     icon: Layers,
     status: 'ready',
