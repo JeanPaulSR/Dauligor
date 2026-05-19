@@ -16,14 +16,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { auth } from '../../lib/firebase';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
-} from '../../components/ui/dialog';
-import { ScrollText, X, Plus } from 'lucide-react';
+import { ScrollText, X } from 'lucide-react';
 
 type Status = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 type Operation = 'create' | 'update' | 'delete';
@@ -156,14 +151,15 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
         <span className="text-sm font-bold uppercase tracking-[0.3em]">Submissions</span>
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">My Proposals</h1>
-          <p className="text-ink/60 font-serif italic">
-            Compendium changes you've submitted for admin review. Pending entries can be withdrawn at any time.
-          </p>
-        </div>
-        <NewProposalDialog onSubmitted={() => void load()} />
+      <div className="space-y-2">
+        <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">My Proposals</h1>
+        <p className="text-ink/60 font-serif italic">
+          Compendium changes you've submitted for admin review. Pending entries can be
+          withdrawn at any time. To submit a new proposal, open the relevant editor
+          (e.g. <a href="/compendium/tags" className="text-gold underline">/compendium/tags</a> for
+          tag changes) — the editor's existing affordances now route through this
+          queue for content creators.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-2">
@@ -255,177 +251,6 @@ function OperationBadge({ op }: { op: Operation }) {
     <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${classes[op]}`}>
       {op}
     </span>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* NewProposalDialog                                                            */
-/*                                                                              */
-/* Generic submit-a-proposal UI. Phase 2b ships this so content creators       */
-/* can exercise the workflow before the per-editor "Propose change" hooks      */
-/* (TagsExplorer / SpellRulesEditor / SpellListManager) land. JSON-payload     */
-/* style — a power-user surface; the editors will provide friendlier UX for    */
-/* their specific entity shapes when those hooks ship.                          */
-/* -------------------------------------------------------------------------- */
-
-const ENTITY_OPTIONS: Array<{ id: EntityType; label: string }> = [
-  { id: 'tag', label: 'Tag' },
-  { id: 'tag_group', label: 'Tag Group' },
-  { id: 'spell_rule', label: 'Spell Rule' },
-  { id: 'spell_rule_application', label: 'Rule Application' },
-  { id: 'class_spell_list', label: 'Class Spell List' },
-];
-
-function NewProposalDialog({ onSubmitted }: { onSubmitted: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [entityType, setEntityType] = useState<EntityType>('tag');
-  const [operation, setOperation] = useState<Operation>('create');
-  const [entityId, setEntityId] = useState('');
-  const [payloadText, setPayloadText] = useState('{\n  "name": "",\n  "slug": "",\n  "group_id": ""\n}');
-  const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async () => {
-    setError('');
-    if (operation !== 'create' && !entityId.trim()) {
-      setError('`entity_id` is required for update / delete operations.');
-      return;
-    }
-    let payload: any = null;
-    if (operation !== 'delete') {
-      try {
-        payload = JSON.parse(payloadText);
-      } catch (err: any) {
-        setError(`Proposed payload is not valid JSON: ${err?.message || err}`);
-        return;
-      }
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        setError('Proposed payload must be a JSON object.');
-        return;
-      }
-    }
-    setSubmitting(true);
-    try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/proposals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({
-          revisions: [
-            {
-              entity_type: entityType,
-              entity_id: entityId.trim() || null,
-              operation,
-              proposed_payload: operation === 'delete' ? null : payload,
-              notes_from_proposer: notes.trim() || null,
-            },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Submit failed (HTTP ${res.status})`);
-      }
-      toast.success('Proposal submitted for review.');
-      setOpen(false);
-      setEntityId('');
-      setNotes('');
-      onSubmitted();
-    } catch (err: any) {
-      setError(err?.message || 'Submit failed.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={
-        <Button className="gap-2 bg-gold text-white">
-          <Plus className="w-4 h-4" /> New proposal
-        </Button>
-      } />
-      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Submit a proposal</DialogTitle>
-          <DialogDescription>
-            Generic form for the proposal workflow. Per-editor "Propose change" hooks
-            will replace this for typical flows; this form stays as a fallback for
-            unusual cases (delete an orphaned row, bulk JSON edits, etc.).
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Entity</label>
-              <select
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                value={entityType}
-                onChange={(e) => setEntityType(e.target.value as EntityType)}
-              >
-                {ENTITY_OPTIONS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Operation</label>
-              <select
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                value={operation}
-                onChange={(e) => setOperation(e.target.value as Operation)}
-              >
-                <option value="create">Create</option>
-                <option value="update">Update</option>
-                <option value="delete">Delete</option>
-              </select>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">
-              Entity ID {operation === 'create' && <span className="text-ink/40">(optional — server generates one)</span>}
-            </label>
-            <Input
-              value={entityId}
-              onChange={(e) => setEntityId(e.target.value)}
-              placeholder={operation === 'create' ? 'leave blank to auto-generate' : 'required for update/delete'}
-              className="font-mono text-xs"
-            />
-          </div>
-          {operation !== 'delete' && (
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Proposed payload (JSON)</label>
-              <Textarea
-                value={payloadText}
-                onChange={(e) => setPayloadText(e.target.value)}
-                rows={8}
-                className="font-mono text-xs"
-              />
-            </div>
-          )}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Notes to reviewer <span className="text-ink/40">(optional)</span></label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Context the admin should know before approving."
-            />
-          </div>
-          {error && <p className="text-sm text-blood">{error}</p>}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={submitting}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={submitting} className="bg-gold text-white">
-            {submitting ? 'Submitting…' : 'Submit'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
