@@ -26,6 +26,7 @@ import {
   SHAPE_ORDER,
   deriveSpellFilterFacets,
   getClauses,
+  getRootExcludeTagIds,
   type ActivationBucket,
   type DurationBucket,
   type PropertyFilter,
@@ -382,16 +383,35 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const safeActiveIndex = Math.min(activeClauseIndex, Math.max(0, clauses.length - 1));
   const activeClause: RuleQuery = clauses[safeActiveIndex] || {};
 
+  /** Current root-level hard-exclude tag list (separate axis from the
+   *  per-clause tagStates tri-state). Lives at the wrapper for multi-
+   *  clause shapes and on the flat root otherwise. */
+  const rootExcludeTagIds = useMemo(
+    () => (draft ? getRootExcludeTagIds(draft.query) : []),
+    [draft],
+  );
+
   /**
    * Serialize an updated clauses array back into a RuleClauseRoot.
    * Single-clause arrays round-trip to the legacy flat shape so
    * the stored JSON stays minimal; multi-clause arrays go to
-   * `{ clauses: [...] }`.
+   * `{ clauses: [...] }`. The root-level `excludeTagIds` list is
+   * always preserved across shape transitions — flat-shape stores
+   * it on the single clause's root, multi-clause stores it on the
+   * wrapper.
    */
-  const clausesToRoot = (next: RuleQuery[]): RuleClauseRoot => {
-    if (next.length === 0) return {};
-    if (next.length === 1) return next[0];
-    return { clauses: next };
+  const clausesToRoot = (next: RuleQuery[], excludeIds: string[] = rootExcludeTagIds): RuleClauseRoot => {
+    const hasExcludes = excludeIds.length > 0;
+    if (next.length === 0) {
+      return hasExcludes ? { excludeTagIds: [...excludeIds] } : {};
+    }
+    if (next.length === 1) {
+      const single = next[0];
+      return hasExcludes ? { ...single, excludeTagIds: [...excludeIds] } : single;
+    }
+    return hasExcludes
+      ? { clauses: next, excludeTagIds: [...excludeIds] }
+      : { clauses: next };
   };
 
   const updateActiveClause = (patch: Partial<RuleQuery>) => {
@@ -404,7 +424,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   };
 
   /** Reset the active clause to an empty `RuleQuery` (clears every
-   *  chip in this clause). Other clauses are untouched. */
+   *  chip in this clause). Other clauses are untouched. Root-level
+   *  excludeTagIds is preserved. */
   const clearActiveClause = () => {
     if (!draft) return;
     const next = clauses.map((c, i) => (i === safeActiveIndex ? {} : c));
@@ -436,6 +457,29 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     if (nextActive >= next.length) nextActive = next.length - 1;
     setDraft({ ...draft, query: clausesToRoot(next) });
     setActiveClauseIndex(Math.max(0, nextActive));
+    setDraftDirty(true);
+  };
+
+  /**
+   * Toggle a tag in / out of the root-level hard-exclude list.
+   * Independent of the per-clause tri-state chips — these tags are
+   * applied as a post-match reject inside `matchAnyClause`. Stored
+   * at the rule's root (wrapper for multi-clause, flat root for
+   * single-clause).
+   */
+  const toggleExcludeTag = (tagId: string) => {
+    if (!draft) return;
+    const has = rootExcludeTagIds.includes(tagId);
+    const nextIds = has
+      ? rootExcludeTagIds.filter((id) => id !== tagId)
+      : [...rootExcludeTagIds, tagId];
+    setDraft({ ...draft, query: clausesToRoot(clauses, nextIds) });
+    setDraftDirty(true);
+  };
+
+  const clearExcludeTags = () => {
+    if (!draft) return;
+    setDraft({ ...draft, query: clausesToRoot(clauses, []) });
     setDraftDirty(true);
   };
 
@@ -1263,6 +1307,80 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                                 }}
                               />
                             ))}
+                          </div>
+                        </details>
+                        {/* Root-level hard exclude. Independent of the per-
+                            clause tri-state chips above. Any spell carrying
+                            ANY of these tags is rejected from this rule's
+                            result, AFTER all clauses match — see
+                            `matchAnyClause` in lib/spellFilters.ts. One list
+                            per rule, even when the rule has multiple
+                            clauses. */}
+                        <details className="group">
+                          <summary className="cursor-pointer list-none flex items-center justify-between border border-blood/20 rounded-md px-4 py-2 hover:border-blood/40 transition-colors">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em] text-blood/80">
+                              Hard Exclude Tags
+                              {rootExcludeTagIds.length > 0 && (
+                                <span className="ml-2 text-blood/60">
+                                  ({rootExcludeTagIds.length} excluded)
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
+                          </summary>
+                          <div className="mt-4 space-y-3 pl-1">
+                            <p className="text-[10px] text-ink/40 leading-relaxed">
+                              Any spell carrying one of these tags is dropped from this rule's result
+                              <em> after </em> the clauses above run — regardless of which clause matched it
+                              or what include/exclude chips a tag has inside a clause. Use this for
+                              one-off blacklists that would be awkward to express through per-clause
+                              tri-state (e.g. "match all level-1 evocation, but never the
+                              <code>spell:cantrip</code> tagged spells").
+                            </p>
+                            {rootExcludeTagIds.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={clearExcludeTags}
+                                className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-blood/30 text-blood hover:bg-blood/10"
+                              >
+                                Clear ({rootExcludeTagIds.length})
+                              </Button>
+                            )}
+                            <div className="space-y-3">
+                              {tagGroups.map(group => {
+                                const groupTags = (tagsByGroup[group.id] || []) as TagRow[];
+                                if (groupTags.length === 0) return null;
+                                return (
+                                  <div key={group.id} className="space-y-1.5">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/50">
+                                      {group.name}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {groupTags.map(tag => {
+                                        const excluded = rootExcludeTagIds.includes(tag.id);
+                                        return (
+                                          <button
+                                            key={tag.id}
+                                            type="button"
+                                            onClick={() => toggleExcludeTag(tag.id)}
+                                            className={cn(
+                                              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.14em] border transition-colors',
+                                              excluded
+                                                ? 'bg-blood/15 border-blood/40 text-blood hover:bg-blood/20'
+                                                : 'bg-transparent border-ink/15 text-ink/60 hover:border-blood/30 hover:text-blood/80',
+                                            )}
+                                          >
+                                            {excluded && <X className="w-3 h-3" />}
+                                            {tagPickerLabel(tag)}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         </details>
                   </div>
