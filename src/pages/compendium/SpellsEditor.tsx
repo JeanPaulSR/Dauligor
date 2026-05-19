@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Edit3, Plus, Save, Search, Trash2, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
@@ -25,7 +25,10 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
-import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells } from '../../lib/compendium';
+import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite } from '../../lib/compendium';
+import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { actionLabel } from '../../lib/proposalAware';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { orderTagsAsTree, normalizeTagRow } from '../../lib/tagHierarchy';
@@ -236,8 +239,18 @@ function mergeSpellComponents(
 
 export default function SpellsEditor({ userProfile }: { userProfile: any }) {
   const isAdmin = userProfile?.role === 'admin';
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManage = isAdmin || isContentCreator;
   const [backfilling, setBackfilling] = useState(false);
   const [purging, setPurging] = useState(false);
+  // Back link target depends on which route this editor is mounted
+  // under. Admin route → public spell browse. Proposal route → the
+  // proposals dashboard.
+  const location = useLocation();
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const backPath = isProposalRoute ? '/my-proposals' : '/compendium/spells';
+  const backLabel = isProposalRoute ? 'Back to My Proposals' : 'Back To Spells';
 
   // Fullscreen-page opt-in — hides the global footer and strips
   // <main>'s container padding so the editor (and the Foundry
@@ -311,19 +324,24 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
           so the editor content below doesn't get pushed off-screen.
           Previously these were spread across three separate rows. */}
       <div className="shrink-0 flex items-center gap-2 bg-card p-2 rounded-lg border border-gold/10 shadow-sm flex-wrap">
-        <Link to="/compendium/spells">
+        <Link to={backPath}>
           <Button variant="ghost" size="sm" className="h-8 text-gold gap-2 hover:bg-gold/5">
             <ChevronLeft className="w-4 h-4" />
-            Back To Spells
+            {backLabel}
           </Button>
         </Link>
         <TabsList variant="line" className="gap-1 bg-transparent p-0">
-          <TabsTrigger
-            value="foundry-import"
-            className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
-          >
-            Foundry Import
-          </TabsTrigger>
+          {/* Foundry Import is admin-only — bulk import doesn't fit the
+              single-revision proposal shape, so content-creators on the
+              proposal route only see the Manual Editor tab. */}
+          {isAdmin && (
+            <TabsTrigger
+              value="foundry-import"
+              className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+            >
+              Foundry Import
+            </TabsTrigger>
+          )}
           <TabsTrigger
             value="manual-editor"
             className="h-8 rounded-md border border-gold/15 bg-background/30 px-3 py-1 text-xs uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
@@ -366,9 +384,11 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
       {/* flex-1 min-h-0 = "fill the rest of the viewport but allow my
           children to clip when they overflow". Without this, long
           editor content would force the page to scroll. */}
-      <TabsContent value="foundry-import" className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-        <SpellImportWorkbench userProfile={userProfile} />
-      </TabsContent>
+      {isAdmin && (
+        <TabsContent value="foundry-import" className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+          <SpellImportWorkbench userProfile={userProfile} />
+        </TabsContent>
+      )}
 
       <TabsContent value="manual-editor" className="flex-1 min-h-0">
         <SpellManualEditor userProfile={userProfile} />
@@ -379,6 +399,18 @@ export default function SpellsEditor({ userProfile }: { userProfile: any }) {
 
 function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const isAdmin = userProfile?.role === 'admin';
+  const isContentCreator = !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManage = isAdmin || isContentCreator;
+  // Inside <ProposalEditorWrapper> on /proposals/edit/spells this
+  // queues locally and flushes on Submit Changes; on the admin
+  // /compendium/spells/manage route the wrapper isn't mounted so the
+  // hook passes through to useEntityWriter (which we DON'T use for
+  // direct writes — handleSave below still calls upsertSpell to
+  // preserve the rule-recompute + bucket-compute hooks).
+  const spellWriter = useProposalAccumulator('spell', userProfile);
+  const isProposalMode = spellWriter.mode === 'proposal' || spellWriter.mode === 'block';
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [entries, setEntries] = useState<any[]>([]);
   const [spellDetailsById, setSpellDetailsById] = useState<Record<string, any>>({});
   const [sources, setSources] = useState<any[]>([]);
@@ -487,7 +519,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   };
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManage) return;
 
     const loadEntries = async () => {
       try {
@@ -531,7 +563,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     };
 
     loadTagFoundation();
-  }, [isAdmin]);
+  }, [canManage]);
 
   useEffect(() => {
     if (editingId) return;
@@ -939,36 +971,64 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       const wasCreate = !editingIdAtStart;
       const savedId = editingIdAtStart || crypto.randomUUID();
 
-      await upsertSpell(savedId, {
+      const payloadWithCreatedAt = {
         ...payload,
         createdAt: editingIdAtStart
           ? (formData.createdAt || new Date().toISOString())
           : new Date().toISOString(),
-      });
-      toast.success(wasCreate ? 'Spell created' : 'Spell updated');
+      };
 
-      // Refresh entries list so the left column reflects the new
-      // name / level / source / etc. without a full page reload.
-      const updatedData = await fetchSpellSummaries('name ASC');
-      setEntries(updatedData.map(mapSpellRow));
-
-      // Refresh the just-saved spell's cache. Two reasons:
-      //   1. If the user clicks away and back, they see fresh data
-      //      instead of the pre-save snapshot we had cached when
-      //      they first selected it.
-      //   2. Server normalization (slugified identifier, timestamp,
-      //      etc.) only shows up in the next read, so the in-memory
-      //      cache would diverge from D1 otherwise.
-      try {
-        const refreshed = await fetchSpell(savedId);
-        if (refreshed) {
-          setSpellDetailsById(prev => ({ ...prev, [savedId]: refreshed }));
+      if (isProposalMode) {
+        // Proposal route: normalize editor-side (since the API
+        // boundary's sanitizePayload would silently drop any
+        // camelCase keys) and route through the accumulator. No
+        // upsertSpell call — the live row + rule-recompute hook
+        // fire server-side on approval (see Phase 4.5d step 6).
+        const prepared = prepareSpellPayloadForWrite(payloadWithCreatedAt);
+        // Strip server-managed columns the proposal endpoint also
+        // ignores — keeps the proposed_payload tidy in the admin
+        // queue diff.
+        delete (prepared as any).created_at;
+        delete (prepared as any).updated_at;
+        if (wasCreate) {
+          await spellWriter.create({ ...prepared, id: savedId });
+        } else {
+          await spellWriter.update(savedId, prepared);
         }
-      } catch (err) {
-        // Refresh is best-effort — the save itself already
-        // succeeded. Don't surface to the user.
-        // eslint-disable-next-line no-console
-        console.warn('[SpellsEditor] post-save refresh failed:', err);
+        toast.success(actionLabel(spellWriter.mode, wasCreate ? 'created' : 'updated'));
+        // Server-side draft has nothing to refetch — skip the live-
+        // row refresh that admin mode does. The wrapper's pending-
+        // drafts panel will reflect the new entry after refreshBlock
+        // fires inside the accumulator's submit path.
+      } else {
+        // Admin direct route: upsertSpell normalizes + writes + fires
+        // recomputeAppliedRulesForSpell. Same as before this wiring.
+        await upsertSpell(savedId, payloadWithCreatedAt);
+        toast.success(wasCreate ? 'Spell created' : 'Spell updated');
+
+        // Refresh entries list so the left column reflects the new
+        // name / level / source / etc. without a full page reload.
+        const updatedData = await fetchSpellSummaries('name ASC');
+        setEntries(updatedData.map(mapSpellRow));
+
+        // Refresh the just-saved spell's cache. Two reasons:
+        //   1. If the user clicks away and back, they see fresh data
+        //      instead of the pre-save snapshot we had cached when
+        //      they first selected it.
+        //   2. Server normalization (slugified identifier, timestamp,
+        //      etc.) only shows up in the next read, so the in-memory
+        //      cache would diverge from D1 otherwise.
+        try {
+          const refreshed = await fetchSpell(savedId);
+          if (refreshed) {
+            setSpellDetailsById(prev => ({ ...prev, [savedId]: refreshed }));
+          }
+        } catch (err) {
+          // Refresh is best-effort — the save itself already
+          // succeeded. Don't surface to the user.
+          // eslint-disable-next-line no-console
+          console.warn('[SpellsEditor] post-save refresh failed:', err);
+        }
       }
 
       // If the user is still on the spell they were saving (or just
@@ -979,7 +1039,9 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       //     the just-created spell" so subsequent edits route to
       //     the same row instead of creating duplicates.
       // If the user navigated away during the save, leave their
-      // current selection alone — don't yank them back.
+      // current selection alone — don't yank them back. Same logic
+      // in both modes — proposal-mode users want this too so they
+      // can keep editing what they just created.
       if (editingIdRef.current === editingIdAtStart) {
         setEditingId(savedId);
       }
@@ -992,29 +1054,40 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!editingId) return;
-    if (!window.confirm('Delete this spell?')) return;
+    setDeleteConfirmOpen(true);
+  };
 
+  const performDelete = async () => {
+    if (!editingId) return;
     try {
-      await deleteSpell(editingId);
-      toast.success('Spell deleted');
-      
-      // Refresh entries list
-      const updatedData = await fetchSpellSummaries('name ASC');
-      setEntries(updatedData.map(mapSpellRow));
+      if (isProposalMode) {
+        await spellWriter.remove(editingId);
+        toast.success(actionLabel(spellWriter.mode, 'deleted'));
+        // No live refresh needed — wrapper's pending-drafts panel
+        // shows the DELETE entry; the live spell is unchanged until
+        // admin approves.
+      } else {
+        await deleteSpell(editingId);
+        toast.success('Spell deleted');
 
+        // Refresh entries list
+        const updatedData = await fetchSpellSummaries('name ASC');
+        setEntries(updatedData.map(mapSpellRow));
+      }
       resetForm();
     } catch (error) {
       console.error('Error deleting spell:', error);
       toast.error('Failed to delete spell');
       reportClientError(error, OperationType.DELETE, `spells/${editingId}`);
+      throw error; // keep the ConfirmDialog open on failure
     }
   };
 
 
-  if (!isAdmin) {
-    return <div className="text-center py-20">Access Denied. Admins only.</div>;
+  if (!canManage) {
+    return <div className="text-center py-20">Access Denied. Admins or content-creators only.</div>;
   }
 
   // Inner-list height for the left column's VirtualizedList. Pane
@@ -1026,6 +1099,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     // remaining viewport. Mirrors src/pages/compendium/SpellList.tsx
     // so editor + browser share the same rhythm. No outer padding
     // because the parent Tabs root (in SpellsEditor) already pads.
+    <>
     <div className="h-full flex flex-col gap-2">
       {/* Toolbar — uses the shared FilterBar component for search +
           Filters modal + inline Reset. trailingActions slot carries
@@ -2051,6 +2125,20 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         </Card>
       </div>
     </div>
+    <ConfirmDialog
+      open={deleteConfirmOpen}
+      onOpenChange={setDeleteConfirmOpen}
+      title={`Delete ${formData.name ? `"${formData.name}"` : 'this spell'}?`}
+      description={
+        isProposalMode
+          ? 'A DELETE proposal will be queued in your block. The live spell is not removed until an admin approves.'
+          : 'This permanently deletes the spell from the live catalog.'
+      }
+      confirmLabel="Delete"
+      destructive
+      onConfirm={performDelete}
+    />
+    </>
   );
 }
 
