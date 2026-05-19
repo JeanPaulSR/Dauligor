@@ -11,7 +11,6 @@ import { ImageUpload } from '../../components/ui/ImageUpload';
 import { ChevronLeft, Save, Trash2, Image as ImageIcon, Link as LinkIcon, Book } from 'lucide-react';
 import { Checkbox } from '../../components/ui/checkbox';
 import { fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
-import { Database, CloudOff } from 'lucide-react';
 
 const AVAILABLE_TAGS = ["Bestiary", "Classes", "Items", "Spells", "Feats"];
 
@@ -32,7 +31,6 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
     imageUrl: '',
     tags: [] as string[]
   });
-  const [isUsingD1, setIsUsingD1] = useState(false);
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
 
@@ -49,7 +47,6 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
           const data = await fetchDocument<any>('sources', id);
 
           if (data) {
-            setIsUsingD1(true);
             setFormData({
               name: data.name || '',
               abbreviation: data.abbreviation || '',
@@ -157,19 +154,6 @@ export default function SourceEditor({ userProfile }: { userProfile: any }) {
           <h1 className="text-3xl font-serif font-bold text-ink">
             {id ? 'Edit Source' : 'New Source'}
           </h1>
-          {id && (
-            isUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3 h-3 text-emerald-500" />
-                <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-tighter">D1 Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3 h-3 text-amber-500" />
-                <span className="text-[9px] font-bold text-amber-500 uppercase tracking-tighter">Legacy Firebase</span>
-              </div>
-            )
-          )}
         </div>
       </div>
 

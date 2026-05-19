@@ -416,7 +416,6 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   // appropriately (or leave their nav alone).
   const editingIdRef = useRef<string | null>(null);
   useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   // Viewport-derived pane height. The chrome we subtract for: navbar
   // (~56) + outer page toolbar with Back / tab switcher / Backfill /
@@ -508,10 +507,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       try {
         const data = await fetchCollection('sources', { orderBy: 'name ASC' });
         setSources(data);
-        if (data.length > 0) setIsFoundationUsingD1(true);
       } catch (err) {
         console.error("[SpellsEditor] Error loading sources:", err);
-        setIsFoundationUsingD1(false);
       }
     };
 

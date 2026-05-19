@@ -370,13 +370,6 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   const [tagStates, setTagStates] = useState<Record<string, number>>({});
   const [groupCombineModes, setGroupCombineModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
   const [groupExclusionModes, setGroupExclusionModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
-  // `isFoundationUsingD1` used to drive a "Foundation Linked" badge in
-  // the page header. The header is gone in the fullscreen layout, so
-  // the state is unused — but the load path below still sets it as a
-  // load-success signal that the foundation tables are reachable, so
-  // we keep the no-op setters to preserve that diagnostic write path.
-  // Suppress the "unused" warning by destructuring the setter only.
-  const [, setIsFoundationUsingD1] = useState(false);
 
   useEffect(() => {
     const loadSpells = async () => {
@@ -441,11 +434,8 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         // lookup is undefined for every row and no tag filter chips
         // render at all.
         setAllTags(tagsData.map((t: any) => ({ ...t, ...normalizeTagRow(t) })));
-
-        if (sourcesData.length > 0) setIsFoundationUsingD1(true);
       } catch (err) {
         console.error("[SpellList] Error loading foundation data:", err);
-        setIsFoundationUsingD1(false);
       }
     };
 

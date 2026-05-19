@@ -32,7 +32,6 @@ import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
 import { queueRebake } from '../../lib/moduleExport';
 import { BakeNowButton } from '../../components/compendium/BakeNowButton';
-import { Database, CloudOff } from 'lucide-react';
 
 const FEATURE_TYPES = [
   { id: 'background', name: 'Background Feature' },
@@ -516,7 +515,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const [allTags, setAllTags] = useState<any[]>([]);
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
   const [advancements, setAdvancements] = useState<Advancement[]>([]);
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   const normalizeEditorAdvancements = useCallback((list: any[] = [], defaultLevel = 1, dieOverride?: number) => (
     normalizeAdvancementListForEditor(list, {
@@ -693,14 +691,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           classifications: typeof tg.classifications === 'string' ? JSON.parse(tg.classifications) : (tg.classifications || [])
         })));
         setAllTags(allTagsData.map(t => denormalizeCompendiumData(t)));
-
-        // Simple check to set D1 status based on first collection
-        if (sourcesData.length > 0) {
-          setIsFoundationUsingD1(true);
-        }
       } catch (err) {
         console.error("[ClassEditor] Error loading foundation data:", err);
-        setIsFoundationUsingD1(false);
       }
     };
 
@@ -1289,17 +1281,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             <h1 className="h1-title text-ink">
               {id ? `Edit ${name || 'Class'}` : 'New Class'}
             </h1>
-            {isFoundationUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-              </div>
-            )}
           </div>
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">

@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Plus, BookOpen, MapPin, History, Users, Sparkles, Trash2, Shield, Package, Library, Building, Flag, Sword, Zap, Mountain, Dna, Ship, Home, Biohazard, Swords, Scroll, Footprints, Languages, Coins, Layers, Flame, Scale, ListChecks, Hammer, Quote, Crown, Wand2, FlaskConical, Heart, LayoutGrid, List, Folder, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Database, CloudOff } from 'lucide-react';
 
 export default function Wiki({ userProfile }: { userProfile: any }) {
   const navigate = useNavigate();
@@ -45,8 +44,6 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
 
   const isStaff = userProfile?.role === 'admin' || userProfile?.role === 'co-dm' || userProfile?.role === 'lore-writer';
 
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
-
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -62,10 +59,8 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = await res.json();
         setPages(Array.isArray(body?.articles) ? body.articles : []);
-        setIsFoundationUsingD1(true);
       } catch (error) {
         console.error("Failed to load Wiki articles:", error);
-        setIsFoundationUsingD1(false);
       }
     };
     loadData();
@@ -262,21 +257,6 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
               />
             </div>
           </div>
-        </div>
-
-        {/* D1 Connection Status Indicator */}
-        <div className="flex justify-end">
-          {isFoundationUsingD1 ? (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-              <Database className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-              <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-            </div>
-          )}
         </div>
 
         {viewMode === 'grid' ? (

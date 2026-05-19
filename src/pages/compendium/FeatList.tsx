@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Scroll, Lock, CloudOff, Database } from 'lucide-react';
+import { Scroll, Lock } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -73,7 +73,6 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   // combineMode, exclusionMode } keyed by axis name.
   type AxisState = { states: Record<string, number>; combineMode?: 'AND' | 'OR' | 'XOR'; exclusionMode?: 'AND' | 'OR' | 'XOR' };
   const [axisFilters, setAxisFilters] = useState<Record<string, AxisState>>({});
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   useEffect(() => {
     const loadFeats = async () => {
@@ -107,10 +106,8 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       try {
         const sourcesData = await fetchCollection<any>('sources', { orderBy: 'name ASC' });
         setSources(sourcesData);
-        if (sourcesData.length > 0) setIsFoundationUsingD1(true);
       } catch (err) {
         console.error('[FeatList] failed to load foundation data:', err);
-        setIsFoundationUsingD1(false);
       }
     };
 
@@ -240,17 +237,6 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
           </div>
           <div className="flex items-center gap-4">
             <h1 className="h1-title">Feat List</h1>
-            {isFoundationUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-              </div>
-            )}
           </div>
         </div>
 

@@ -21,8 +21,6 @@ import {
   Check,
   Trash2,
   AlertTriangle,
-  Database,
-  CloudOff,
   Upload,
   Edit
 } from 'lucide-react';
@@ -75,7 +73,6 @@ export function ClassList({
   const [allAttributes, setAllAttributes] = useState<any[]>([]);
   const [spellcastingTypes, setSpellcastingTypes] = useState<any[]>([]);
   const [masterMulticlassChart, setMasterMulticlassChart] = useState<any | null>(null);
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
   const [loadingStates, setLoadingStates] = useState({
     classes: true,
     foundation: true
@@ -220,11 +217,9 @@ export function ClassList({
         setMasterMulticlassChart(chart);
         
         setLoadingStates(prev => ({ ...prev, foundation: false }));
-        setIsFoundationUsingD1(true);
       } catch (err) {
         console.error("Error loading foundation data for ClassList:", err);
         setLoadingStates(prev => ({ ...prev, foundation: false }));
-        setIsFoundationUsingD1(false);
       }
     };
       loadFoundation();
@@ -710,17 +705,6 @@ export function ClassList({
           </div>
           <div className="flex items-center gap-4">
             <h1 className="h2-title uppercase">{selectionMode ? 'Select a Class' : 'Classes'}</h1>
-            {isFoundationUsingD1 ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                <Database className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-              </div>
-            )}
           </div>
         </div>
 

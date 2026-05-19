@@ -4,13 +4,11 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Card, CardContent } from '../../components/ui/card';
 import { slugify } from '../../lib/utils';
-import { 
-  Plus, 
-  Trash2, 
-  Edit, 
-  ShieldCheck,
-  Database,
-  CloudOff
+import {
+  Plus,
+  Trash2,
+  Edit,
+  ShieldCheck
 } from 'lucide-react';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
@@ -20,8 +18,7 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
   const [categories, setCategories] = useState<any[]>([]);
   const [attributes, setAttributes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isUsingD1, setIsUsingD1] = useState(false);
-  
+
   // Form State
   const [editingArmor, setEditingArmor] = useState<any>(null);
   const [name, setName] = useState('');
@@ -52,7 +49,6 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
         }
         setArmorItems(armorData);
         setAttributes(attrsData);
-        setIsUsingD1(armorData.length > 0);
       } catch (err) {
         console.error("Error loading armor data:", err);
       } finally {
@@ -144,17 +140,6 @@ export default function ArmorEditor({ userProfile, hideHeader }: { userProfile: 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">Armor Manager</h1>
-              {isUsingD1 ? (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                  <Database className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">D1 Linked</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                  <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Firebase</span>
-                </div>
-              )}
             </div>
             <p className="text-ink/60 font-serif italic">Define the armor available in your game system.</p>
           </div>

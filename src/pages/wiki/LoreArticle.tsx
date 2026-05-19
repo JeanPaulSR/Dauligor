@@ -85,7 +85,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [hoveredArticleData, setHoveredArticleData] = useState<any>(null);
   const [wikiSettings, setWikiSettings] = useState<{ defaultBackgroundImageUrl?: string }>({});
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
   const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -199,7 +198,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
         setCampaigns(campaignsData);
         setAllCampaigns(campaignsData);
         setEras(erasData);
-        setIsFoundationUsingD1(true);
 
         if (!isStaff && userProfile?.active_campaign_id) {
           const active = campaignsData.find((c: any) => c.id === userProfile.active_campaign_id);
@@ -208,7 +206,6 @@ export default function LoreArticle({ userProfile }: { userProfile: any }) {
 
       } catch (err) {
         console.error("Error loading lore article data:", err);
-        setIsFoundationUsingD1(false);
       } finally {
         setLoading(false);
       }

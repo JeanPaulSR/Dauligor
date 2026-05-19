@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CloudOff,
-  Database,
   Edit3,
   Lock,
   Plus,
@@ -225,7 +223,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FeatFormData>(makeInitialFeatForm());
-  const [isFoundationUsingD1, setIsFoundationUsingD1] = useState(false);
 
   // Lookups consumed by <RequirementsEditor>. Same shape + load order as
   // UniqueOptionGroupEditor — every leaf-picker the tree might render
@@ -306,7 +303,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         });
         setEntries(mapped);
         setSources(sourceRows);
-        if (sourceRows.length > 0) setIsFoundationUsingD1(true);
         setClasses(classRows);
         setSubclasses(subclassRows);
         setSpellRules(spellRuleRows);
@@ -347,7 +343,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       } catch (err) {
         console.error('Error loading feats:', err);
         if (!cancelled) {
-          setIsFoundationUsingD1(false);
           setLoading(false);
         }
       }
@@ -625,11 +620,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
 
       <Card className="border-gold/20 bg-card/50 overflow-hidden">
         <CardContent className="p-0">
-          {/* Header — same gradient stripe + Foundation pill the spell
-              manager uses. The pill flips between Linked (D1 sources
-              fetched) and Legacy (fetch failed / empty) so admins can
-              tell at a glance whether they're authoring against a real
-              D1 backend. */}
+          {/* Header — same gradient stripe the spell manager uses. */}
           <div className="border-b border-gold/10 bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%),linear-gradient(180deg,rgba(12,16,24,0.75),rgba(12,16,24,0.98))] p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-3">
@@ -640,17 +631,6 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                 <div className="space-y-2">
                   <div className="flex items-center gap-4">
                     <h2 className="text-3xl font-serif font-bold uppercase tracking-tight text-ink">Feat Manager</h2>
-                    {isFoundationUsingD1 ? (
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                        <Database className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Foundation Linked</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                        <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Legacy Foundation</span>
-                      </div>
-                    )}
                   </div>
                   <p className="max-w-3xl font-serif italic text-ink/60">
                     Draft and refine feat records using the same master-detail rhythm as the spell manager. Identity and structured requirements live at the root; mechanics ride on activities + effects.
