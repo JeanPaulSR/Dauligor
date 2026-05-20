@@ -27,7 +27,8 @@ import {
   type ClassMembership,
 } from '../../lib/classSpellLists';
 import { actionLabel } from '../../lib/proposalAware';
-import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useBlock } from '../../lib/proposalBlock';
 import {
   fetchAppliedRulesFor,
   rebuildClassSpellListFromAppliedRules,
@@ -267,6 +268,64 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   // by composite key and doesn't need the lookup.
   const [classMembershipIds, setClassMembershipIds] = useState<Map<string, string>>(new Map());
   const [classListLoading, setClassListLoading] = useState(false);
+
+  // Spell ids the user has staged in the active block for the
+  // currently-selected class. Drives the row-highlight in the spell
+  // list. Three sources of "staged":
+  //   1. Queue entries with op='create' + payload.class_id matching
+  //      the selected class → spell_id is staged for ADD.
+  //   2. Queue entries with op='delete' + entity_id matching a row in
+  //      classMembershipIds → reverse-lookup gives spell_id (a stage
+  //      for REMOVAL of an existing pin).
+  //   3. Same as (1) + (2) for server-side draft revisions in the
+  //      active bundle.
+  // Empty set outside a <ProposalEditorWrapper>.
+  const proposalContext = useProposalContextOptional();
+  const { drafts: allDrafts, activeBundleId } = useBlock();
+  const stagedSpellIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!selectedClassId) return ids;
+    // Build reverse map: membership row id → spell id (so we can
+    // resolve delete drafts whose entity_id is the row id).
+    const rowIdToSpellId = new Map<string, string>();
+    for (const [spellId, rowId] of classMembershipIds.entries()) {
+      rowIdToSpellId.set(rowId, spellId);
+    }
+    const consider = (
+      entityType: string,
+      operation: string,
+      entityId: string | null,
+      payload: any,
+    ) => {
+      if (entityType !== 'class_spell_list') return;
+      if (operation === 'create') {
+        if (!payload || payload.class_id !== selectedClassId) return;
+        if (typeof payload.spell_id === 'string') ids.add(payload.spell_id);
+      } else if (operation === 'delete') {
+        if (!entityId) return;
+        const spellId = rowIdToSpellId.get(entityId);
+        if (spellId) ids.add(spellId);
+      }
+    };
+    if (proposalContext) {
+      for (const q of proposalContext.queue) {
+        consider(q.entity_type, q.operation, q.entity_id, q.proposed_payload);
+      }
+    }
+    if (activeBundleId) {
+      for (const d of allDrafts) {
+        if (d.bundle_id !== activeBundleId) continue;
+        consider(d.entity_type, d.operation, d.entity_id, d.proposed_payload);
+      }
+    }
+    return ids;
+  }, [
+    proposalContext,
+    allDrafts,
+    activeBundleId,
+    selectedClassId,
+    classMembershipIds,
+  ]);
 
   // Map<spellId, ClassMembership[]> — every class that has each spell on its list.
   // Loaded once after spells, then mutated locally on add/remove to stay accurate.
@@ -1545,6 +1604,12 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                     const isPending = pendingSpellIds.has(spell.id);
                     const isSelected = selectedSpellIds.has(spell.id);
                     const isPreviewing = previewSpellId === spell.id;
+                    // Spell has staged add/remove against this class
+                    // list in the active block. Highlights ADDs (queued
+                    // creates for a new pin) AND REMOVEs (queued deletes
+                    // of an existing pin). Either way it's "something
+                    // staged for this spell on this class list".
+                    const stagedForClass = stagedSpellIds.has(spell.id);
                     const sourceRecord = sourceById[spell.source_id || ''];
                     const sourceLabel = sourceRecord?.abbreviation || sourceRecord?.shortName || '—';
                     const otherClasses = (spellMembershipsBySpellId.get(spell.id) || [])
@@ -1576,12 +1641,21 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
                       <div
                         key={spell.id}
                         onClick={() => setPreviewSpellId(spell.id)}
-                        title={rowTitle}
+                        title={
+                          stagedForClass
+                            ? `${spell.name} — staged in this block · ${rowTitle}`
+                            : rowTitle
+                        }
                         className={cn(
-                          'grid w-full grid-cols-[32px_28px_minmax(0,1fr)_40px_64px_56px_88px] gap-2 items-center px-3 transition-colors cursor-pointer border-b border-gold/5',
+                          'grid w-full grid-cols-[32px_28px_minmax(0,1fr)_40px_64px_56px_88px] gap-2 items-center px-3 transition-colors cursor-pointer border-b border-gold/5 border-l-2',
                           onList ? 'bg-gold/[0.04]' : '',
                           isSelected ? 'ring-1 ring-inset ring-gold/30' : '',
-                          isPreviewing ? 'bg-gold/15' : 'hover:bg-gold/[0.06]',
+                          isPreviewing
+                            ? 'bg-gold/15'
+                            : stagedForClass
+                              ? 'bg-archive-blue/5 hover:bg-archive-blue/10'
+                              : 'hover:bg-gold/[0.06]',
+                          stagedForClass ? 'border-l-archive-blue/60' : 'border-l-transparent',
                         )}
                         style={{ height: ROW_HEIGHT }}
                       >

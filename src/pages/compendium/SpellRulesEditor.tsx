@@ -54,7 +54,8 @@ import {
   type SpellRuleApplication,
 } from '../../lib/spellRules';
 import { actionLabel } from '../../lib/proposalAware';
-import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useBlock } from '../../lib/proposalBlock';
 
 const LEVEL_VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const CONSUMER_LABELS: Record<ConsumerType, string> = {
@@ -112,6 +113,32 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   // mode mutations would fall through to direct queryD1 calls and
   // 403 at the proxy. See SpellListManager for the same fix.
   const isProposalMode = ruleWriter.mode === 'proposal' || ruleWriter.mode === 'block';
+
+  // Spell-rule ids the user has staged in the active block. Same
+  // pattern as SpellsEditor's row-highlight — empty Set outside a
+  // <ProposalEditorWrapper>.
+  const proposalContext = useProposalContextOptional();
+  const { drafts: allDrafts, activeBundleId } = useBlock();
+  const draftedRuleIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (proposalContext) {
+      for (const q of proposalContext.queue) {
+        if (q.entity_type === 'spell_rule' && q.entity_id) ids.add(q.entity_id);
+      }
+    }
+    if (activeBundleId) {
+      for (const d of allDrafts) {
+        if (
+          d.entity_type === 'spell_rule' &&
+          d.entity_id &&
+          d.bundle_id === activeBundleId
+        ) {
+          ids.add(d.entity_id);
+        }
+      }
+    }
+    return ids;
+  }, [proposalContext, allDrafts, activeBundleId]);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialRuleId = searchParams.get('rule') || '';
 
@@ -942,17 +969,30 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                 {rules.map(rule => {
                   const isSelected = rule.id === selectedRuleId;
                   const apps = appCounts[rule.id] || 0;
+                  // Rule has staged work in the active block — same
+                  // archive-blue accent as the other wrapped editors.
+                  const drafted = draftedRuleIds.has(rule.id);
                   return (
                     <button
                       key={rule.id}
                       type="button"
                       onClick={() => setSelectedRuleId(rule.id)}
+                      title={drafted ? `${rule.name} — staged in this block` : undefined}
                       className={cn(
-                        'w-full text-left px-4 py-2.5 transition-colors',
-                        isSelected ? 'bg-gold/15' : 'hover:bg-gold/5',
+                        'w-full text-left px-4 py-2.5 transition-colors border-l-2',
+                        isSelected
+                          ? 'bg-gold/15 border-l-gold'
+                          : drafted
+                            ? 'bg-archive-blue/5 hover:bg-archive-blue/10 border-l-archive-blue/60'
+                            : 'hover:bg-gold/5 border-l-transparent',
                       )}
                     >
-                      <div className="text-sm text-ink font-bold truncate">{rule.name}</div>
+                      <div className={cn(
+                        "text-sm font-bold truncate",
+                        drafted && !isSelected ? 'text-archive-blue' : 'text-ink',
+                      )}>
+                        {rule.name}
+                      </div>
                       <div className="text-[10px] text-ink/50">
                         {apps === 0 ? <span className="italic">unapplied</span> : `applied to ${apps}`}
                       </div>

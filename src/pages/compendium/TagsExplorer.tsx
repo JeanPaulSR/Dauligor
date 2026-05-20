@@ -41,7 +41,8 @@ import { mergeTagInto } from '../../lib/tagMerge';
 import { moveTagToParent } from '../../lib/tagMove';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
 import { actionLabel, type WriterApi } from '../../lib/proposalAware';
-import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useBlock } from '../../lib/proposalBlock';
 
 const SYSTEM_CLASSIFICATIONS = [
   'class', 'subclass', 'race', 'subrace', 'feat', 'background',
@@ -389,6 +390,34 @@ function TagTreePane({
   // mode-appropriate toast copy ("Added" / "Add submitted for
   // review" / "Add added to block").
   const isProposalMode = tagWriter.mode === 'proposal' || tagWriter.mode === 'block';
+
+  // Tag ids the user has staged in the active block — queue entries
+  // (unsubmitted) + same-bundle draft revisions (already submitted).
+  // Drives the row-highlight in the tree below. Empty unless the
+  // editor is mounted inside a <ProposalEditorWrapper>.
+  const proposalContext = useProposalContextOptional();
+  const { drafts: allDrafts, activeBundleId } = useBlock();
+  const draftedTagIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (proposalContext) {
+      for (const q of proposalContext.queue) {
+        if (q.entity_type === 'tag' && q.entity_id) ids.add(q.entity_id);
+      }
+    }
+    if (activeBundleId) {
+      for (const d of allDrafts) {
+        if (
+          d.entity_type === 'tag' &&
+          d.entity_id &&
+          d.bundle_id === activeBundleId
+        ) {
+          ids.add(d.entity_id);
+        }
+      }
+    }
+    return ids;
+  }, [proposalContext, allDrafts, activeBundleId]);
+
   // Per-group editing state — resets on group switch via key prop.
   const [newTagName, setNewTagName] = useState('');
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
@@ -563,18 +592,25 @@ function TagTreePane({
     const isCollapsed = isRoot && !isFiltering && collapsedRoots.has(tag.id);
     const hasSubtags = isRoot && subtagCount > 0;
     const isSelected = tag.id === selectedTagId;
+    // Tag has staged work in the active block — queue entry or
+    // server-side draft revision. Same archive-blue visual language as
+    // SpellsEditor / FeatsEditor row highlight.
+    const drafted = draftedTagIds.has(tag.id);
     const breakdown = tagUsage?.get(tag.id);
     const total = breakdown?.total ?? 0;
 
     return (
       <div
         key={tag.id}
+        title={drafted ? `${tag.name} — staged in this block` : undefined}
         className={cn(
           'flex items-center justify-between group p-1 transition-colors border-l-4',
           isSelected
             ? 'bg-gold/10 border-gold'
-            : 'border-transparent hover:bg-gold/5 hover:border-gold',
-          zebraIdx % 2 === 0 ? 'bg-background/30' : 'bg-transparent',
+            : drafted
+              ? 'bg-archive-blue/5 border-archive-blue/60 hover:bg-archive-blue/10'
+              : 'border-transparent hover:bg-gold/5 hover:border-gold',
+          !drafted && (zebraIdx % 2 === 0 ? 'bg-background/30' : 'bg-transparent'),
         )}
         style={depth === 1 ? { paddingLeft: '24px' } : undefined}
       >
@@ -592,7 +628,10 @@ function TagTreePane({
           </div>
         ) : (
           <>
-            <span className="font-bold text-ink pl-1 truncate flex items-center gap-1.5 min-w-0">
+            <span className={cn(
+              "font-bold pl-1 truncate flex items-center gap-1.5 min-w-0",
+              drafted && !isSelected ? "text-archive-blue" : "text-ink",
+            )}>
               {isRoot ? (
                 hasSubtags ? (
                   <button
