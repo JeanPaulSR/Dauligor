@@ -35,6 +35,7 @@ export type EntityType =
   | "class_spell_list"
   | "spell"
   | "class"
+  | "subclass"
   | "unique_option_group"
   | "unique_option_item";
 
@@ -46,6 +47,7 @@ export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "class_spell_list",
   "spell",
   "class",
+  "subclass",
   "unique_option_group",
   "unique_option_item",
 ];
@@ -169,6 +171,23 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
       "multiclassing", "primary_ability_choice", "spellcasting", "advancements",
       "subclass_feature_levels", "multiclass_proficiencies",
       "excluded_option_ids", "asi_levels", "unique_option_mappings",
+    ]),
+  },
+  subclass: {
+    tableName: "subclasses",
+    pkColumn: "id",
+    writableColumns: new Set([
+      "id", "class_id", "name", "identifier", "class_identifier", "source_id",
+      "description", "lore",
+      "image_url", "image_display", "card_image_url", "card_display",
+      "preview_image_url", "preview_display",
+      "spellcasting", "advancements",
+      "tag_ids", "excluded_option_ids", "unique_option_group_ids",
+    ]),
+    jsonColumns: new Set([
+      "image_display", "card_display", "preview_display",
+      "spellcasting", "advancements",
+      "tag_ids", "excluded_option_ids", "unique_option_group_ids",
     ]),
   },
   unique_option_group: {

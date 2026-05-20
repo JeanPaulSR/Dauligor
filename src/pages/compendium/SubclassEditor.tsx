@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { actionLabel } from '../../lib/proposalAware';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
@@ -122,11 +124,21 @@ function normalizeSubclassSpellcastingForSave(spellcasting: any) {
   return normalized;
 }
 
-export default function SubclassEditor() {
+export default function SubclassEditor({ userProfile }: { userProfile?: any } = {}) {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const classId = searchParams.get('classId');
   const navigate = useNavigate();
+  const location = useLocation();
+  // Route-aware basePath — admin direct route writes via upsertDocument;
+  // /proposals/edit/* wraps the editor and queues via subclassWriter.
+  // Nested writes (features, scaling columns) stay direct — those
+  // tables aren't in the proposal allowlist.
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const basePath = isProposalRoute ? '/proposals/edit/subclasses' : '/compendium/subclasses';
+  const subclassWriter = useProposalAccumulator('subclass', userProfile);
+  const proposalContext = useProposalContextOptional();
+  const isProposalMode = subclassWriter.mode === 'proposal' || subclassWriter.mode === 'block';
 
   // Basic Info
   const [name, setName] = useState('');
@@ -407,17 +419,17 @@ export default function SubclassEditor() {
     return () => { cancelled = true; };
   }, [id, loadTick]);
 
-  const handleSave = async () => {
+  const handleSave = async (opts: { silent?: boolean } = {}) => {
     if (!name) {
-      toast.error("Subclass name is required");
+      if (!opts.silent) toast.error("Subclass name is required");
       return;
     }
     if (!sourceId) {
-      toast.error("Source is required");
+      if (!opts.silent) toast.error("Source is required");
       return;
     }
     if (!parentClass && !classId) {
-      toast.error("Parent class is missing");
+      if (!opts.silent) toast.error("Parent class is missing");
       return;
     }
 
@@ -471,20 +483,63 @@ export default function SubclassEditor() {
     };
 
     try {
-      await upsertDocument('subclasses', saveId, d1Data);
-      // Subclass nests inside its parent class's bundle, so the rebake
-      // pipeline rebuilds the parent class's R2 cache (and the source's
-      // catalog, since subclasses[] in catalog entries can change).
-      queueRebake('subclass', saveId);
-      toast.success(id ? "Subclass updated" : "Subclass created");
-      if (!id) {
-        navigate(`/compendium/subclasses/edit/${saveId}`);
+      if (isProposalMode) {
+        // Proposal route — strip server-managed updated_at and route
+        // through the writer. Rebake skipped (the live row hasn't
+        // changed); it'll fire on admin approval via the direct-write
+        // path the same way ClassEditor does.
+        const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Data;
+        if (id) {
+          await subclassWriter.update(saveId, proposalPayload);
+        } else {
+          await subclassWriter.create({ ...proposalPayload, id: saveId });
+        }
+        if (!opts.silent) {
+          toast.success(actionLabel(subclassWriter.mode, id ? 'updated' : 'created'));
+        }
+      } else {
+        await upsertDocument('subclasses', saveId, d1Data);
+        // Subclass nests inside its parent class's bundle, so the rebake
+        // pipeline rebuilds the parent class's R2 cache (and the source's
+        // catalog, since subclasses[] in catalog entries can change).
+        queueRebake('subclass', saveId);
+        if (!opts.silent) toast.success(id ? "Subclass updated" : "Subclass created");
+      }
+      // Skip the post-create navigate when pre-flush is driving us —
+      // navigating during flush would unmount the wrapper mid-drain.
+      if (!id && !opts.silent) {
+        navigate(`${basePath}/edit/${saveId}`);
       }
     } catch (error) {
       console.error("Error saving subclass:", error);
-      toast.error("Failed to save subclass");
+      if (!opts.silent) toast.error("Failed to save subclass");
+      else throw error;
     }
   };
+
+  // Pre-flush: in proposal mode the wrapper's Submit Changes replaces
+  // the per-editor Save Subclass button. Register a callback that
+  // captures the form state via handleSave(silent) at flush time so the
+  // user doesn't have to click Save + Submit separately. Brand-new
+  // subclasses keep their explicit Create button — they need the
+  // navigate-on-create UX.
+  const handleSaveRef = useRef(handleSave);
+  useEffect(() => {
+    handleSaveRef.current = handleSave;
+  });
+  useEffect(() => {
+    if (!isProposalMode) return;
+    if (!proposalContext) return;
+    if (!id) return;
+    return proposalContext.registerPreFlush(async () => {
+      try {
+        await handleSaveRef.current({ silent: true });
+      } catch {
+        // Validation toast (if any) already fired from handleSave's
+        // early returns; the wrapper surfaces a generic error.
+      }
+    });
+  }, [isProposalMode, proposalContext, id]);
 
   useKeyboardSave(() => { handleSave(); });
 
@@ -596,7 +651,11 @@ export default function SubclassEditor() {
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link to={parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes'}>
+          <Link to={
+            isProposalRoute
+              ? (parentClass ? `/proposals/edit/classes/edit/${parentClass.id}` : '/proposals/edit/classes')
+              : (parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes')
+          }>
             <Button variant="ghost" size="sm" className="text-gold hover:bg-gold/10">
               <ChevronLeft className="w-4 h-4 mr-1" /> Back to {parentClass?.name || 'Class'}
             </Button>
@@ -614,16 +673,20 @@ export default function SubclassEditor() {
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex items-center gap-2">
-            <Button onClick={handleSave} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
-              <Save className="w-4 h-4" /> Save Subclass
-            </Button>
-            <BakeNowButton
-              kind="subclass"
-              id={id}
-              onSaveFirst={handleSave}
-              size="sm"
-              className="gap-2"
-            />
+            {(!isProposalMode || !id) && (
+              <Button onClick={() => handleSave()} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
+                <Save className="w-4 h-4" /> {id ? 'Save Subclass' : 'Create Subclass'}
+              </Button>
+            )}
+            {!isProposalMode && (
+              <BakeNowButton
+                kind="subclass"
+                id={id}
+                onSaveFirst={() => handleSave()}
+                size="sm"
+                className="gap-2"
+              />
+            )}
           </div>
           <ReferenceSheetDialog
             title="Subclass Reference Sheet"
@@ -645,7 +708,9 @@ export default function SubclassEditor() {
                 <TabsTrigger value="spellcasting">Spellcasting</TabsTrigger>
                 <TabsTrigger value="progression">Progression</TabsTrigger>
                 <TabsTrigger value="tags">Tags</TabsTrigger>
-                <TabsTrigger value="danger" disabled={!id}>Danger Zone</TabsTrigger>
+                {!isProposalMode && (
+                  <TabsTrigger value="danger" disabled={!id}>Danger Zone</TabsTrigger>
+                )}
               </div>
             </TabsList>
 
@@ -1177,29 +1242,31 @@ export default function SubclassEditor() {
 
           </TabsContent>
 
-          <TabsContent value="danger" className="space-y-6 mt-0">
-          <div className="p-4 border border-blood/20 bg-blood/5 space-y-4">
-            <h2 className="label-text text-blood border-b border-blood/10 pb-2">Danger Zone</h2>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="w-full btn-danger border border-blood/20 gap-2 text-xs uppercase"
-              onClick={async () => {
-                if (id && confirm('Are you sure you want to delete this subclass? This cannot be undone.')) {
-                  try {
-                    await deleteDocument('subclasses', id);
-                    toast.success('Subclass deleted');
-                    navigate(parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes');
-                  } catch (error) {
-                    toast.error('Failed to delete subclass');
+          {!isProposalMode && (
+            <TabsContent value="danger" className="space-y-6 mt-0">
+            <div className="p-4 border border-blood/20 bg-blood/5 space-y-4">
+              <h2 className="label-text text-blood border-b border-blood/10 pb-2">Danger Zone</h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full btn-danger border border-blood/20 gap-2 text-xs uppercase"
+                onClick={async () => {
+                  if (id && confirm('Are you sure you want to delete this subclass? This cannot be undone.')) {
+                    try {
+                      await deleteDocument('subclasses', id);
+                      toast.success('Subclass deleted');
+                      navigate(parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes');
+                    } catch (error) {
+                      toast.error('Failed to delete subclass');
+                    }
                   }
-                }
-              }}
-            >
-              <Trash2 className="w-3 h-3" /> Delete Subclass
-            </Button>
-          </div>
-          </TabsContent>
+                }}
+              >
+                <Trash2 className="w-3 h-3" /> Delete Subclass
+              </Button>
+            </div>
+            </TabsContent>
+          )}
           </Tabs>
         </div>
 

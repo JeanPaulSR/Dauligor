@@ -29,6 +29,7 @@ export type ProposalEntityType =
   | 'class_spell_list'
   | 'spell'
   | 'class'
+  | 'subclass'
   | 'unique_option_group'
   | 'unique_option_item';
 
@@ -42,6 +43,7 @@ const ENTITY_TO_COLLECTION: Record<ProposalEntityType, string> = {
   class_spell_list: 'classSpellLists',
   spell: 'spells',
   class: 'classes',
+  subclass: 'subclasses',
   unique_option_group: 'uniqueOptionGroups',
   unique_option_item: 'uniqueOptionItems',
 };

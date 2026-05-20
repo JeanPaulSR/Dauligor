@@ -54,6 +54,7 @@ const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   class_spell_list: 'Class Spell Lists',
   spell: 'Spells',
   class: 'Classes',
+  subclass: 'Subclasses',
   unique_option_group: 'Option Groups',
   unique_option_item: 'Option Items',
 };
