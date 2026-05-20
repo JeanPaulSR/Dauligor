@@ -1598,7 +1598,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 <div className="p-4 border border-gold/20 bg-card/50 space-y-4">
                   <div className="section-header">
                     <h2 className="label-text text-gold">Subclasses</h2>
-                    <Link to={`/compendium/subclasses/new?classId=${id}`}>
+                    <Link to={
+                      isProposalRoute
+                        ? `/proposals/edit/subclasses/new?classId=${id}`
+                        : `/compendium/subclasses/new?classId=${id}`
+                    }>
                       <Button
                         size="sm"
                         className="h-6 gap-1 btn-gold"
@@ -1650,7 +1654,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           </span>
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Link to={`/compendium/subclasses/edit/${sub.id}`}>
+                          <Link to={
+                            isProposalRoute
+                              ? `/proposals/edit/subclasses/edit/${sub.id}`
+                              : `/compendium/subclasses/edit/${sub.id}`
+                          }>
                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-gold">
                               <Edit className="w-3 h-3" />
                             </Button>

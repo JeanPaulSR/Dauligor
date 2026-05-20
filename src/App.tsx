@@ -245,8 +245,8 @@ export default function App() {
                   <Route path="/compendium/classes/view/:id" element={<ClassView userProfile={effectiveProfile} />} />
                   <Route path="/compendium/classes/new" element={<ClassEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/classes/edit/:id" element={<ClassEditor userProfile={effectiveProfile} />} />
-                  <Route path="/compendium/subclasses/new" element={<SubclassEditor />} />
-                  <Route path="/compendium/subclasses/edit/:id" element={<SubclassEditor />} />
+                  <Route path="/compendium/subclasses/new" element={<SubclassEditor userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/subclasses/edit/:id" element={<SubclassEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells" element={<SpellList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spells/manage" element={<SpellsEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/spell-lists" element={<AdminOnly userProfile={effectiveProfile}><SpellListManager userProfile={effectiveProfile} /></AdminOnly>} />
@@ -333,6 +333,20 @@ export default function App() {
                   <Route path="/proposals/edit/classes/edit/:id" element={
                     <ProposalEditorWrapper entityType="class">
                       <ClassEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
+                  {/* Subclasses — same single-work pattern as Classes.
+                      Reachable via the parent ClassEditor's Subclasses
+                      tab (which routes here when the user is editing
+                      a class through /proposals/edit/*). */}
+                  <Route path="/proposals/edit/subclasses/new" element={
+                    <ProposalEditorWrapper entityType="subclass">
+                      <SubclassEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
+                  <Route path="/proposals/edit/subclasses/edit/:id" element={
+                    <ProposalEditorWrapper entityType="subclass">
+                      <SubclassEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   {/* Catch-all placeholder for editors not yet wired. */}
