@@ -1124,6 +1124,14 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         if (!opts.silent) {
           toast.success(actionLabel(spellWriter.mode, wasCreate ? 'created' : 'updated'));
         }
+        // Sync the dirty baseline to the just-sent form so a
+        // follow-up Submit Changes (or switch) doesn't re-queue the
+        // same payload. Critical for CREATE: after the create lands,
+        // the form's content IS the snapshot, but lastLoadedFormRef
+        // still points at the empty initial state — without this,
+        // pre-flush would fire an UPDATE for a spell that doesn't
+        // have a live row yet.
+        lastLoadedFormRef.current = JSON.stringify(formDataRef.current ?? formData);
         // Server-side draft has nothing to refetch — skip the live-
         // row refresh that admin mode does. The wrapper's pending-
         // drafts panel will reflect the new entry after refreshBlock

@@ -36,6 +36,7 @@ export type EntityType =
   | "spell"
   | "class"
   | "subclass"
+  | "feat"
   | "unique_option_group"
   | "unique_option_item";
 
@@ -48,6 +49,7 @@ export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "spell",
   "class",
   "subclass",
+  "feat",
   "unique_option_group",
   "unique_option_item",
 ];
@@ -188,6 +190,20 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
       "image_display", "card_display", "preview_display",
       "spellcasting", "advancements",
       "tag_ids", "excluded_option_ids", "unique_option_group_ids",
+    ]),
+  },
+  feat: {
+    tableName: "feats",
+    pkColumn: "id",
+    writableColumns: new Set([
+      "id", "name", "identifier", "feat_type", "feat_subtype", "source_type",
+      "requirements", "repeatable", "uses_max", "uses_spent", "uses_recovery",
+      "description", "image_url",
+      "activities", "effects",
+      "source_id", "page", "tags", "requirements_tree",
+    ]),
+    jsonColumns: new Set([
+      "uses_recovery", "activities", "effects", "tags", "requirements_tree",
     ]),
   },
   unique_option_group: {
