@@ -35,6 +35,13 @@ import { useBlock } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
 import { PickOrCreateBlockDialog } from '../../components/proposals/PickOrCreateBlockDialog';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 import { useNavigate } from 'react-router-dom';
 
@@ -47,7 +54,7 @@ type EntityType =
   | 'spell_rule_application'
   | 'class_spell_list';
 
-type TopTab = 'submissions' | 'new' | 'edit' | 'block';
+type TopTab = 'submissions' | 'block';
 
 type Proposal = {
   id: string;
@@ -92,9 +99,13 @@ function previewName(p: Proposal): string {
 export default function MyProposals({ userProfile }: { userProfile: any }) {
   const [topTab, setTopTab] = useState<TopTab>(() => {
     // Allow deep-linking with ?tab=block (navbar Block pill uses this).
+    // Legacy ?tab=new and ?tab=edit (from older bookmarks / docs) fall
+    // through to the Block tab — that's where the New / Edit launchers
+    // live now.
     if (typeof window === 'undefined') return 'submissions';
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'block' || t === 'new' || t === 'edit' || t === 'submissions') return t;
+    if (t === 'block' || t === 'new' || t === 'edit') return 'block';
+    if (t === 'submissions') return 'submissions';
     return 'submissions';
   });
   const [filter, setFilter] = useState<Status | 'all'>('all');
@@ -211,8 +222,6 @@ export default function MyProposals({ userProfile }: { userProfile: any }) {
           onWithdraw={handleWithdraw}
         />
       )}
-      {topTab === 'new' && <CreateLauncher />}
-      {topTab === 'edit' && <EditLauncher />}
       {topTab === 'block' && <BlockPanel />}
     </div>
   );
@@ -235,8 +244,6 @@ function BlockTabBar({
       {([
         { id: 'submissions', label: 'Submissions', icon: Inbox },
         { id: 'block', label: 'Block', icon: Package },
-        { id: 'new', label: 'New', icon: Plus },
-        { id: 'edit', label: 'Edit', icon: Edit3 },
       ] as const).map(tab => {
         const Icon = tab.icon;
         const showBadge = tab.id === 'block' && activeBundleId && drafts.length > 0;
@@ -366,12 +373,24 @@ type LauncherEntry = {
   status: 'ready' | 'coming-soon';
 };
 
-function LauncherGrid({ entries }: { entries: LauncherEntry[] }) {
+function LauncherGrid({
+  entries,
+  skipBlockPicker = false,
+  onNavigated,
+}: {
+  entries: LauncherEntry[];
+  /**
+   * When true, clicking a launcher navigates immediately without the
+   * PickOrCreateBlockDialog gate. Use when the caller already knows
+   * the active block is set (e.g. the in-block New/Edit popups).
+   */
+  skipBlockPicker?: boolean;
+  /** Called after a successful navigation so a parent dialog can close. */
+  onNavigated?: () => void;
+}) {
   // Clicking a launcher opens the block picker BEFORE navigating to
-  // the editor. The picker resolves "which block does this work
-  // belong to?" — without it, the user lands in the editor not
-  // knowing which block their next save will hit. Cancelling the
-  // picker means cancelling the navigation entirely.
+  // the editor — except when skipBlockPicker is true (in-block popup
+  // mode, where the active block is already resolved).
   const [pendingEntry, setPendingEntry] = useState<LauncherEntry | null>(null);
   const { openBlocks, setActiveBlock, startBlock } = useBlock();
   const navigate = useNavigate();
@@ -379,6 +398,16 @@ function LauncherGrid({ entries }: { entries: LauncherEntry[] }) {
   const closeAndNavigate = (href: string) => {
     setPendingEntry(null);
     navigate(href);
+    onNavigated?.();
+  };
+
+  const handleClick = (editor: LauncherEntry) => {
+    if (skipBlockPicker) {
+      navigate(editor.href);
+      onNavigated?.();
+      return;
+    }
+    setPendingEntry(editor);
   };
 
   const handlePick = (bundleId: string) => {
@@ -434,7 +463,7 @@ function LauncherGrid({ entries }: { entries: LauncherEntry[] }) {
               {ready ? (
                 <button
                   type="button"
-                  onClick={() => setPendingEntry(editor)}
+                  onClick={() => handleClick(editor)}
                   className="w-full text-left"
                 >
                   {body}
@@ -458,6 +487,44 @@ function LauncherGrid({ entries }: { entries: LauncherEntry[] }) {
         description="Your edits in this editor will be saved to the block you pick. Choose an existing block or create a new one."
       />
     </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* LauncherDialog — popup variant of CreateLauncher / EditLauncher rendered    */
+/* from inside ActiveBlockCard's New / Edit buttons. The active block is      */
+/* known (we're inside its card), so the launcher skips the block-picker      */
+/* hop and navigates straight to the chosen editor.                            */
+/* -------------------------------------------------------------------------- */
+
+function LauncherDialog({
+  open,
+  onOpenChange,
+  mode,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  mode: 'new' | 'edit';
+}) {
+  const entries = mode === 'new' ? CREATE_ENTRIES : EDIT_ENTRIES;
+  const title = mode === 'new' ? 'Create new content' : 'Edit existing content';
+  const description = mode === 'new'
+    ? 'Open one of the editors below. Saves will land in your active block as drafts until you submit it.'
+    : 'Pick a system below to browse its catalogue and edit an existing entry. Edits round-trip through your active block.';
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <LauncherGrid
+          entries={entries}
+          skipBlockPicker
+          onNavigated={() => onOpenChange(false)}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -528,34 +595,10 @@ const CREATE_ENTRIES: LauncherEntry[] = [
   },
 ];
 
-function CreateLauncher() {
-  return (
-    <Card className="border-gold/20 bg-gold/5">
-      <CardHeader>
-        <CardTitle className="text-base font-bold uppercase tracking-widest">
-          Create a new proposal
-        </CardTitle>
-        <p className="text-xs text-ink/60 mt-1 leading-snug">
-          Open one of the editors below. Their "+ New …" affordances round-trip
-          through this proposal queue for content creators automatically.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <LauncherGrid entries={CREATE_ENTRIES} />
-      </CardContent>
-    </Card>
-  );
-}
-
 /* -------------------------------------------------------------------------- */
-/* EditLauncher — the Edit tab.                                                */
-/*                                                                              */
-/* What can the user EDIT? Same wiring map as New, plus the public read         */
-/* pages where you can browse to an existing spell / class / etc. Editing       */
-/* those entities still resolves to admin-only direct writes until Phase 4      */
-/* extends the proposal allowlist to `spell` / `class`. Until then, the cards   */
-/* surface as "coming soon" — clickable cards still hand you the read page in   */
-/* case you just want to browse.                                                */
+/* EDIT_ENTRIES — what the user can EDIT. Same wiring map as the CREATE set,   */
+/* plus read pages where the user can browse to an existing entity and open it */
+/* for editing. Surfaced via the in-block Edit popup (LauncherDialog).         */
 /* -------------------------------------------------------------------------- */
 
 const EDIT_ENTRIES: LauncherEntry[] = [
@@ -617,28 +660,6 @@ const EDIT_ENTRIES: LauncherEntry[] = [
   },
 ];
 
-function EditLauncher() {
-  return (
-    <Card className="border-gold/20 bg-gold/5">
-      <CardHeader>
-        <CardTitle className="text-base font-bold uppercase tracking-widest">
-          Edit an existing entity
-        </CardTitle>
-        <p className="text-xs text-ink/60 mt-1 leading-snug">
-          Pick a system below to browse its catalogue and edit an existing entry.
-          For wired editors, edits round-trip through the proposal queue
-          automatically. Entries marked "coming soon" land you on the read page
-          for now — propose-edit support arrives as later phases extend the
-          allowlist.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <LauncherGrid entries={EDIT_ENTRIES} />
-      </CardContent>
-    </Card>
-  );
-}
-
 /* -------------------------------------------------------------------------- */
 /* BlockPanel — the active Submission Block view.                            */
 /*                                                                            */
@@ -664,19 +685,21 @@ function BlockPanel() {
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
 
   const handleCreate = async (name: string, description: string | null) => {
     await startBlock(name, description);
     toast.success('Block started. Edits made now will be staged until you submit.');
   };
 
-  const handleSubmit = async () => {
+  const performSubmit = async () => {
     setWorking('submit');
     try {
       const { submitted } = await submitBlock();
       toast.success(`Block submitted (${submitted} revision${submitted === 1 ? '' : 's'} sent for review).`);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to submit block.');
+      throw err; // keep the ConfirmDialog open on failure
     } finally {
       setWorking(null);
     }
@@ -713,9 +736,9 @@ function BlockPanel() {
             Your Blocks
           </h3>
           <p className="text-xs text-ink/55 leading-relaxed">
-            Stage edits across multiple editors in a single proposal. Click a block to
-            make it active; subsequent saves in any wired editor land in it as drafts
-            until you click Submit Block.
+            A block is a grouping of content that is submitted for review. To create or
+            edit content for a review block, click New and Edit respectively to open up
+            editor windows.
           </p>
         </div>
         <Button
@@ -753,7 +776,7 @@ function BlockPanel() {
                     working={working}
                     onRename={() => setRenameOpen(true)}
                     onDiscard={() => setDiscardConfirmOpen(true)}
-                    onSubmit={handleSubmit}
+                    onSubmit={() => setSubmitConfirmOpen(true)}
                   />
                 ) : (
                   <InactiveBlockCard
@@ -787,6 +810,18 @@ function BlockPanel() {
         destructive
         onConfirm={performDiscard}
       />
+      <ConfirmDialog
+        open={submitConfirmOpen}
+        onOpenChange={setSubmitConfirmOpen}
+        title={`Submit ${activeBundle?.name ? `"${activeBundle.name}"` : 'this block'} for review?`}
+        description={
+          drafts.length > 0
+            ? `This sends ${drafts.length} staged change${drafts.length === 1 ? '' : 's'} to an admin for review. You won't be able to add more edits to this block once it's submitted.`
+            : 'There are no staged changes in this block — submitting now will send an empty proposal.'
+        }
+        confirmLabel="Submit block"
+        onConfirm={performSubmit}
+      />
     </>
   );
 }
@@ -812,6 +847,13 @@ function ActiveBlockCard({
   onDiscard: () => void;
   onSubmit: () => void;
 }) {
+  // In-block launcher popups. New = create content; Edit = pick from
+  // the existing catalog. Both navigate into the wired editor with
+  // the active block already set, so the editor's wrapper queues
+  // saves into this block as drafts.
+  const [newLauncherOpen, setNewLauncherOpen] = useState(false);
+  const [editLauncherOpen, setEditLauncherOpen] = useState(false);
+
   return (
     <Card className="border-blood/30 bg-blood/5 ring-2 ring-blood/20">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -830,7 +872,21 @@ function ActiveBlockCard({
             <p className="text-xs text-ink/70 leading-relaxed">{block.description}</p>
           )}
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 flex-wrap">
+          <Button
+            onClick={() => setNewLauncherOpen(true)}
+            disabled={working !== null}
+            className="gap-1.5 bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25"
+          >
+            <Plus className="w-3.5 h-3.5" /> New
+          </Button>
+          <Button
+            onClick={() => setEditLauncherOpen(true)}
+            disabled={working !== null}
+            className="gap-1.5 bg-gold/15 border border-gold/30 text-gold hover:bg-gold/25"
+          >
+            <Edit3 className="w-3.5 h-3.5" /> Edit
+          </Button>
           <Button
             variant="outline"
             onClick={onRename}
@@ -855,6 +911,16 @@ function ActiveBlockCard({
             <Send className="w-3.5 h-3.5" /> Submit Block
           </Button>
         </div>
+        <LauncherDialog
+          open={newLauncherOpen}
+          onOpenChange={setNewLauncherOpen}
+          mode="new"
+        />
+        <LauncherDialog
+          open={editLauncherOpen}
+          onOpenChange={setEditLauncherOpen}
+          mode="edit"
+        />
       </CardHeader>
       <CardContent>
         {loading && drafts.length === 0 ? (
@@ -885,11 +951,36 @@ function ActiveBlockCard({
 /* (proposed_at ASC from the block API).                                      */
 /* -------------------------------------------------------------------------- */
 
+// Maps entity_type → the route that lets the user "continue editing".
+// Multi-work editors return a single list-editor route (the user picks
+// the entity from inside it). Single-work editors return a function
+// that builds a per-instance route from the draft (since each draft is
+// its own page).
+const CONTINUE_ROUTE: Record<string, string | ((d: import('../../lib/proposalBlock').DraftRevision) => string)> = {
+  tag: '/proposals/edit/tags',
+  tag_group: '/proposals/edit/tags',
+  spell_rule: '/proposals/edit/spell-rules',
+  spell_rule_application: '/proposals/edit/spell-rules',
+  class_spell_list: '/proposals/edit/spell-lists',
+  spell: '/proposals/edit/spells',
+  feat: '/proposals/edit/feats',
+  item: '/proposals/edit/items',
+  unique_option_group: '/proposals/edit/option-groups',
+  unique_option_item: '/proposals/edit/option-groups',
+  // Single-work: per-instance routes. `entity_id` is the live row id
+  // for updates and the pre-minted UUID for creates.
+  class: (d) => `/proposals/edit/classes/edit/${d.entity_id}`,
+  subclass: (d) => `/proposals/edit/subclasses/edit/${d.entity_id}`,
+};
+
+const SINGLE_WORK_ENTITY_TYPES = new Set(['class', 'subclass']);
+
 function DraftGroups({
   drafts,
 }: {
   drafts: import('../../lib/proposalBlock').DraftRevision[];
 }) {
+  const navigate = useNavigate();
   // Insertion-ordered Map preserves "first seen" position so the
   // grouped list stays stable as the user adds drafts. Within each
   // group, drafts come in the same order the API returned them.
@@ -913,6 +1004,9 @@ function DraftGroups({
           else if (d.operation === 'delete') deletes++;
         }
         const label = ENTITY_LABEL[entityType as EntityType] || entityType;
+        const isSingleWork = SINGLE_WORK_ENTITY_TYPES.has(entityType);
+        const continueRoute = CONTINUE_ROUTE[entityType];
+        const sectionHref = typeof continueRoute === 'string' ? continueRoute : null;
         return (
           <section key={entityType} className="space-y-1">
             <header className="flex items-center gap-2 flex-wrap text-[11px] uppercase tracking-widest text-ink/70 font-bold border-b border-blood/15 pb-1">
@@ -925,24 +1019,55 @@ function DraftGroups({
                 {updates > 0 && <span className="text-archive-blue">{updates} update{updates === 1 ? '' : 's'}</span>}
                 {deletes > 0 && <span className="text-blood">{deletes} delete{deletes === 1 ? '' : 's'}</span>}
               </span>
+              {/* Multi-work types get ONE Continue button at the
+                  section level — the editor list-pane is where the
+                  user resumes editing any of the staged entries. */}
+              {!isSingleWork && sectionHref && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(sectionHref)}
+                  className="ml-auto h-6 text-[10px] gap-1 border-gold/30 text-gold hover:bg-gold/10"
+                >
+                  Continue
+                  <ArrowRight className="w-3 h-3" />
+                </Button>
+              )}
             </header>
-            <ul className="divide-y divide-blood/10">
-              {group.map((d) => (
-                <li key={d.id} className="py-2 flex items-center gap-3">
-                  <OperationBadge op={d.operation} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {(d.proposed_payload && (d.proposed_payload as any).name)
-                        || d.entity_id
-                        || '(no preview)'}
-                    </p>
-                    <p className="text-[11px] text-ink/50">
-                      {formatSqliteLocal(d.proposed_at)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            {isSingleWork ? (
+              // Single-work types (class, subclass): one Continue
+              // button per draft since each opens its own editor.
+              <ul className="divide-y divide-blood/10">
+                {group.map((d) => {
+                  const name = (d.proposed_payload && (d.proposed_payload as any).name)
+                    || d.entity_id
+                    || '(no preview)';
+                  const href = typeof continueRoute === 'function' ? continueRoute(d) : null;
+                  return (
+                    <li key={d.id} className="py-2 flex items-center gap-3">
+                      <OperationBadge op={d.operation} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{name}</p>
+                        <p className="text-[11px] text-ink/50">
+                          {formatSqliteLocal(d.proposed_at)}
+                        </p>
+                      </div>
+                      {href && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(href)}
+                          className="h-7 gap-1 border-gold/30 text-gold hover:bg-gold/10 flex-shrink-0"
+                        >
+                          Continue
+                          <ArrowRight className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
           </section>
         );
       })}

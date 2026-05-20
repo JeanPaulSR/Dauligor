@@ -27,6 +27,7 @@ import {
 import { Textarea } from '../../components/ui/textarea';
 import { Inbox, Check, X, AlertTriangle, Undo2, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen } from 'lucide-react';
 import { recomputeAppliedRulesForSpell } from '../../lib/spellRules';
+import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 
 type EntityType =
   | 'tag'
@@ -534,7 +535,7 @@ function ProposalRow({
           <p className="font-medium text-sm truncate">{describePayloadSummary(proposal)}</p>
           <p className="text-[11px] text-ink/50">
             by {proposal.proposer_display_name || proposal.proposer_username || proposal.proposed_by_user_id} ·{' '}
-            {new Date(proposal.proposed_at).toLocaleString()}
+            {formatSqliteLocal(proposal.proposed_at)}
             {proposal.bundle_id && (
               <> · <span className="font-mono text-ink/40">{proposal.bundle_id.slice(0, 12)}</span></>
             )}
@@ -624,9 +625,9 @@ function ProposalDetailDialog({
             <span className="font-medium text-ink/70">
               {proposal.proposer_display_name || proposal.proposer_username || proposal.proposed_by_user_id}
             </span>
-            {' '}on {new Date(proposal.proposed_at).toLocaleString()}.
+            {' '}on {formatSqliteLocal(proposal.proposed_at)}.
             {proposal.reviewed_at && (
-              <> Reviewed {new Date(proposal.reviewed_at).toLocaleString()}.</>
+              <> Reviewed {formatSqliteLocal(proposal.reviewed_at)}.</>
             )}
           </DialogDescription>
         </DialogHeader>
