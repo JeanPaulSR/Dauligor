@@ -4,7 +4,7 @@
     {
       "name": "Express + Vite (dev)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "dev:nowatch"],
       "port": 3000
     },
     {
