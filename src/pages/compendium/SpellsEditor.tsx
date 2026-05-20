@@ -520,6 +520,20 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const editingIdRef = useRef<string | null>(null);
   useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
 
+  // Baseline form snapshot for dirty detection in proposal mode. Set
+  // by the load effect whenever the form is repopulated from a freshly-
+  // selected spell (or by resetForm when going back to "New Spell").
+  // The auto-stage logic in startEditing compares the live formData to
+  // this baseline so an unchanged switch doesn't queue a redundant
+  // draft.
+  const lastLoadedFormRef = useRef<string>('');
+  // Live mirror of formData + handleSave so async callbacks (pre-flush,
+  // switch auto-stage) always see the latest values regardless of the
+  // closure they were registered in. handleSave is re-created every
+  // render and the registered callback closes over the snapshot, so we
+  // need a ref to always reach the current one.
+  const formDataRef = useRef<SpellFormData | null>(null);
+
   // Viewport-derived pane height. The chrome we subtract for: navbar
   // (~56) + outer page toolbar with Back / tab switcher / Backfill /
   // Purge (~50) + this manual editor's search toolbar (~50) + page
@@ -734,8 +748,10 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   }, [entries, search, sourceNameById, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId, focusModeEnabled, focusMode, draftedSpellIds]);
 
   const resetForm = () => {
+    const initial = makeInitialSpellForm(sources);
     setEditingId(null);
-    setFormData(makeInitialSpellForm(sources));
+    setFormData(initial);
+    lastLoadedFormRef.current = JSON.stringify(initial);
   };
 
   // ============================================================
@@ -857,7 +873,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       const entry = spellDetailsById[editingId];
       const system = parseFoundrySystemForEditor(entry.foundry_data ?? entry.foundryData);
       const defaults = makeInitialSpellForm(sources);
-      setFormData({
+      const loaded: SpellFormData = {
         ...defaults,
         ...entry,
         id: entry.id,
@@ -928,7 +944,12 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         tags: parseStringArray(entry.tags ?? entry.tagIds),
         requiredTags: parseStringArray(entry.requiredTags ?? entry.required_tags),
         prerequisiteText: String(entry.prerequisiteText ?? entry.prerequisite_text ?? ''),
-      });
+      };
+      setFormData(loaded);
+      // Snapshot for dirty detection. The auto-stage-on-switch logic
+      // compares the live formData to this baseline so a clean switch
+      // doesn't queue a redundant draft.
+      lastLoadedFormRef.current = JSON.stringify(loaded);
       return;
     }
 
@@ -955,22 +976,47 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     };
   }, [editingId, sources, spellDetailsById]);
 
-  const startEditing = (entry: SpellSummaryRecord) => {
+  // Proposal mode: clicking a different spell auto-stages the
+  // currently-edited one into the active block before swapping the
+  // form to the new spell. This is what the "Submit Changes replaces
+  // Save Spell" pattern needs — without it, the user's in-flight edits
+  // would be lost the instant they click another row. Dirty detection
+  // via lastLoadedFormRef avoids queuing redundant drafts when the
+  // user just clicks around without editing.
+  const startEditing = async (entry: SpellSummaryRecord) => {
+    if (
+      isProposalMode &&
+      editingIdRef.current &&
+      entry.id !== editingIdRef.current
+    ) {
+      const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
+      if (currentSerialized !== lastLoadedFormRef.current) {
+        try {
+          await handleSaveRef.current(undefined, { silent: true });
+        } catch (err) {
+          // Don't block the switch on a stage failure; surface a
+          // generic warning so the user knows the previous spell's
+          // edits didn't make it into the block.
+          console.error('[SpellsEditor] auto-stage failed:', err);
+          toast.error('Could not stage previous spell — switching anyway.');
+        }
+      }
+    }
     setEditingId(entry.id);
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
+    if (e) e.preventDefault();
     if (!formData.name.trim()) {
-      toast.error('Spell name is required');
+      if (!opts.silent) toast.error('Spell name is required');
       return;
     }
     if (!formData.sourceId) {
-      toast.error('Source is required');
+      if (!opts.silent) toast.error('Source is required');
       return;
     }
 
-    setSaving(true);
+    if (!opts.silent) setSaving(true);
     try {
       // Merge new casting/range/duration/target/uses values into the
       // existing foundry_data system object so we don't clobber other
@@ -1075,7 +1121,9 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         } else {
           await spellWriter.update(savedId, prepared);
         }
-        toast.success(actionLabel(spellWriter.mode, wasCreate ? 'created' : 'updated'));
+        if (!opts.silent) {
+          toast.success(actionLabel(spellWriter.mode, wasCreate ? 'created' : 'updated'));
+        }
         // Server-side draft has nothing to refetch — skip the live-
         // row refresh that admin mode does. The wrapper's pending-
         // drafts panel will reflect the new entry after refreshBlock
@@ -1122,17 +1170,49 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       // current selection alone — don't yank them back. Same logic
       // in both modes — proposal-mode users want this too so they
       // can keep editing what they just created.
-      if (editingIdRef.current === editingIdAtStart) {
+      // Skip the post-save editingId hop when we're running silently
+      // (pre-flush or auto-stage-on-switch). The caller controls
+      // editingId directly and an extra setState here would race them.
+      if (!opts.silent && editingIdRef.current === editingIdAtStart) {
         setEditingId(savedId);
       }
     } catch (error) {
       console.error('Error saving spell:', error);
-      toast.error('Failed to save spell');
+      if (!opts.silent) toast.error('Failed to save spell');
       reportClientError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, `spells/${editingId || '(new)'}`);
+      if (opts.silent) throw error;
     } finally {
-      setSaving(false);
+      if (!opts.silent) setSaving(false);
     }
   };
+
+  // Ref-mirrors so async callbacks registered with the wrapper (pre-
+  // flush) or with the switch-handler always call the current
+  // handleSave + read the current formData. Both are re-created on
+  // every render — without this, the callback would close over a stale
+  // snapshot from registration time.
+  const handleSaveRef = useRef(handleSave);
+  useEffect(() => { handleSaveRef.current = handleSave; });
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+
+  // Pre-flush: in proposal mode, the wrapper's Submit Changes replaces
+  // the per-spell Save Spell button. The callback stages the currently-
+  // edited spell into the block right before the wrapper drains the
+  // queue. Dirty check matches the auto-stage logic so an idle Submit
+  // (queue empty + no edits) doesn't accidentally queue a no-op draft.
+  useEffect(() => {
+    if (!isProposalMode || !proposalContext) return;
+    return proposalContext.registerPreFlush(async () => {
+      if (!editingIdRef.current) return;
+      const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
+      if (currentSerialized === lastLoadedFormRef.current) return;
+      try {
+        await handleSaveRef.current(undefined, { silent: true });
+      } catch (err) {
+        console.error('[SpellsEditor] pre-flush stage failed:', err);
+      }
+    });
+  }, [isProposalMode, proposalContext]);
 
   const handleDelete = () => {
     if (!editingId) return;
@@ -1494,7 +1574,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                         </Button>
                       ) : (
                         <>
-                          {editingId ? (
+                          {editingId && !isProposalMode ? (
                             <Button
                               type="button"
                               variant="outline"
@@ -1514,15 +1594,23 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                             <Edit3 className="h-4 w-4" />
                             Reset
                           </Button>
-                          <Button
-                            type="submit"
-                            form="spell-manual-editor-form"
-                            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                            disabled={saving}
-                          >
-                            <Save className="h-4 w-4" />
-                            {saving ? 'Saving...' : editingId ? 'Update Spell' : 'Save Spell'}
-                          </Button>
+                          {/* In proposal mode the wrapper's Submit Changes
+                              captures the current spell via pre-flush, so the
+                              per-spell Save Spell button is redundant for
+                              existing entries. New spells keep their explicit
+                              Save (the user expects a one-shot create + the
+                              post-save editingId hop). */}
+                          {(!isProposalMode || !editingId) && (
+                            <Button
+                              type="submit"
+                              form="spell-manual-editor-form"
+                              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              disabled={saving}
+                            >
+                              <Save className="h-4 w-4" />
+                              {saving ? 'Saving...' : editingId ? 'Update Spell' : 'Save Spell'}
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>
