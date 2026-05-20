@@ -21,3 +21,9 @@ binding = "DB"
 database_name = "dauligor-db"
 database_id = "25a9d61a-29ec-42c7-9dae-8cde8d88913d"
 migrations_dir = "migrations"
+
+# Daily cron sweep that prunes resolved (approved/rejected/withdrawn)
+# pending_revisions older than 30 days. Admin pins (`pinned_at IS NOT
+# NULL`) survive. Runs at 03:30 UTC — off-peak across the user base.
+[triggers]
+crons = ["30 3 * * *"]

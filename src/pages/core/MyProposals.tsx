@@ -68,6 +68,7 @@ type Proposal = {
   snapshot_at_proposal: Record<string, any> | null;
   reviewed_at: string | null;
   rejection_reason: string | null;
+  pinned_at: string | null;
   notes_from_proposer: string | null;
 };
 
@@ -325,6 +326,15 @@ function SubmissionsPanel({
                       {ENTITY_LABEL[p.entity_type]}
                     </Badge>
                     <StatusBadge status={p.status} />
+                    {p.pinned_at && (
+                      <Badge
+                        variant="outline"
+                        className="text-[9px] border-gold/40 text-gold"
+                        title="Admin pinned this proposal — it's exempt from the 30-day retention sweep."
+                      >
+                        Pinned
+                      </Badge>
+                    )}
                     {p.status === 'pending' && (
                       <Button
                         size="xs"

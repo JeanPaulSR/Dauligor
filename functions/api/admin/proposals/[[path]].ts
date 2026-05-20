@@ -285,6 +285,34 @@ async function handleReject(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Pin / unpin (admin-only exempt-from-retention marker)                       */
+/*                                                                              */
+/* Resolved revisions (approved / rejected / withdrawn) get pruned by a daily   */
+/* cron sweep after 30 days. Pinning a row sets `pinned_at` so it survives the  */
+/* sweep — useful for substantial changes the audit trail should keep longer.  */
+/* -------------------------------------------------------------------------- */
+
+async function handlePin(
+  revisionId: string,
+  pinned: boolean,
+): Promise<Response> {
+  const row = await loadRow(revisionId);
+  if (row.status === "draft" || row.status === "pending") {
+    throw new HttpError(
+      400,
+      `Cannot pin a ${row.status} proposal — pinning is for resolved (approved/rejected/withdrawn) rows only.`,
+    );
+  }
+  await executeD1QueryInternal({
+    sql: `UPDATE pending_revisions
+              SET pinned_at = ?
+            WHERE id = ?`,
+    params: [pinned ? new Date().toISOString() : null, revisionId],
+  });
+  return Response.json({ ok: true, id: revisionId, pinned });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Revert (admin-side rollback of an already-approved revision)                */
 /* -------------------------------------------------------------------------- */
 
@@ -458,6 +486,8 @@ export const onRequest = async (context: any): Promise<Response> => {
       if (action === "reject")
         return await handleReject(request, revisionId, reviewerUid);
       if (action === "revert") return await handleRevert(revisionId, reviewerUid);
+      if (action === "pin") return await handlePin(revisionId, true);
+      if (action === "unpin") return await handlePin(revisionId, false);
       return Response.json(
         { error: `Unknown action: ${action}` },
         { status: 404 },

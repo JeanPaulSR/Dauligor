@@ -6,7 +6,31 @@ export default {
       return jsonResponse({ error: err?.message ?? 'Internal server error' }, 500);
     }
   },
+  async scheduled(event, env, ctx) {
+    // Daily retention sweep — drops resolved pending_revisions
+    // older than 30 days unless an admin pinned the row. See
+    // wrangler.toml's [triggers] for the cron schedule and
+    // migrations/20260520-1000_pending_revisions_pinned.sql for
+    // the column.
+    ctx.waitUntil(runRetentionSweep(env));
+  },
 };
+
+async function runRetentionSweep(env) {
+  try {
+    const result = await env.DB.prepare(
+      `DELETE FROM pending_revisions
+       WHERE status IN ('approved', 'rejected', 'withdrawn')
+         AND pinned_at IS NULL
+         AND reviewed_at IS NOT NULL
+         AND reviewed_at < datetime('now', '-30 days')`,
+    ).run();
+    const pruned = result?.meta?.changes ?? 0;
+    console.log(`[scheduled] retention sweep removed ${pruned} resolved revisions`);
+  } catch (err) {
+    console.error('[scheduled] retention sweep failed:', err);
+  }
+}
 
 async function handleRequest(request, env) {
   if (request.method === 'OPTIONS') {
