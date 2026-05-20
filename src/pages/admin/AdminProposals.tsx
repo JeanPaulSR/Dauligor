@@ -63,6 +63,7 @@ type Proposal = {
   reviewed_by_user_id: string | null;
   reviewed_at: string | null;
   rejection_reason: string | null;
+  pinned_at: string | null;
   notes_from_proposer: string | null;
   cascade_parent_revision_id: string | null;
 };
@@ -290,6 +291,29 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     }
   };
 
+  const handleTogglePin = async (proposal: Proposal) => {
+    const action = proposal.pinned_at ? 'unpin' : 'pin';
+    try {
+      const res = await authedFetch(
+        `/api/admin/proposals/${encodeURIComponent(proposal.id)}/${action}`,
+        { method: 'POST' },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to ${action} (HTTP ${res.status})`);
+      }
+      toast.success(
+        proposal.pinned_at
+          ? 'Unpinned — this proposal will follow the standard 30-day retention.'
+          : 'Pinned — this proposal is exempt from the 30-day retention sweep.',
+      );
+      void load();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || `Failed to ${action} proposal.`);
+    }
+  };
+
   const handleRevert = async (proposal: Proposal) => {
     if (!confirm(`Revert this approved ${ENTITY_LABEL[proposal.entity_type].toLowerCase()} change? The live row will roll back to its pre-approval state and a new "approved revert" revision will be logged.`)) return;
     setRevertingId(proposal.id);
@@ -417,6 +441,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
                   onApprove={() => handleApprove(p)}
                   onReject={() => setRejectDialog({ proposal: p, reason: '' })}
                   onRevert={() => handleRevert(p)}
+                  onTogglePin={() => handleTogglePin(p)}
                   reverting={revertingId === p.id}
                 />
               ))}
@@ -512,17 +537,20 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
 }
 
 function ProposalRow({
-  proposal, onSelect, onApprove, onReject, onRevert, reverting,
+  proposal, onSelect, onApprove, onReject, onRevert, onTogglePin, reverting,
 }: {
   proposal: Proposal;
   onSelect: () => void;
   onApprove: () => void;
   onReject: () => void;
   onRevert: () => void;
+  onTogglePin: () => void;
   reverting: boolean;
 }) {
   const isPending = proposal.status === 'pending';
   const isApproved = proposal.status === 'approved';
+  const isResolved = !isPending; // approved / rejected / withdrawn
+  const isPinned = !!proposal.pinned_at;
   return (
     <li className="py-3 flex items-center gap-3 hover:bg-gold/5 px-2 -mx-2 rounded transition-colors">
       <button
@@ -532,7 +560,14 @@ function ProposalRow({
       >
         <OperationBadge operation={proposal.operation} />
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">{describePayloadSummary(proposal)}</p>
+          <p className="font-medium text-sm truncate flex items-center gap-2">
+            {describePayloadSummary(proposal)}
+            {isPinned && (
+              <Badge variant="outline" className="text-[9px] border-gold/40 text-gold">
+                Pinned
+              </Badge>
+            )}
+          </p>
           <p className="text-[11px] text-ink/50">
             by {proposal.proposer_display_name || proposal.proposer_username || proposal.proposed_by_user_id} ·{' '}
             {formatSqliteLocal(proposal.proposed_at)}
@@ -543,18 +578,31 @@ function ProposalRow({
         </div>
         <StatusBadge status={proposal.status} />
       </button>
-      {isApproved && (
+      {isResolved && (
         <div className="flex gap-2 shrink-0">
           <Button
             size="xs"
             variant="outline"
-            onClick={onRevert}
-            disabled={reverting}
-            className="gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
-            title="Roll the live row back to its pre-approval state. Refuses if the row has drifted since approval."
+            onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
+            className={`gap-1.5 ${isPinned ? 'border-gold/60 text-gold bg-gold/10' : 'border-ink/20 text-ink/60 hover:bg-gold/5'}`}
+            title={isPinned
+              ? 'Unpin — this proposal will follow the standard 30-day retention.'
+              : 'Pin — exempt this proposal from the 30-day retention sweep.'}
           >
-            <Undo2 className="w-3.5 h-3.5" /> {reverting ? 'Reverting…' : 'Revert'}
+            {isPinned ? 'Unpin' : 'Pin'}
           </Button>
+          {isApproved && (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={onRevert}
+              disabled={reverting}
+              className="gap-1.5 border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+              title="Roll the live row back to its pre-approval state. Refuses if the row has drifted since approval."
+            >
+              <Undo2 className="w-3.5 h-3.5" /> {reverting ? 'Reverting…' : 'Revert'}
+            </Button>
+          )}
         </div>
       )}
       {isPending && (
