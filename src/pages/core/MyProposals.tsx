@@ -863,7 +863,7 @@ function ActiveBlockCard({
           <div className="text-center py-8 text-ink/60 text-sm">
             <p>
               No drafts yet — open one of the editors (Tags, Spell Rules, Spell Lists,
-              Spells) and make a change.
+              Spells, Classes, Subclasses, Feats, Items, Option Groups) and make a change.
             </p>
             <p className="text-[11px] text-ink/40 mt-2">
               Each Save / Add / Delete you do while this block is active lands here
@@ -871,29 +871,82 @@ function ActiveBlockCard({
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-blood/10">
-            {drafts.map((d) => (
-              <li key={d.id} className="py-3 flex items-center gap-3">
-                <OperationBadge op={d.operation} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {(d.proposed_payload && (d.proposed_payload as any).name)
-                      || d.entity_id
-                      || '(no preview)'}
-                  </p>
-                  <p className="text-[11px] text-ink/50">
-                    <Badge variant="outline" className="text-[9px] border-ink/20 text-ink/50 mr-1">
-                      {ENTITY_LABEL[d.entity_type as EntityType] || d.entity_type}
-                    </Badge>
-                    {formatSqliteLocal(d.proposed_at)}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <DraftGroups drafts={drafts} />
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* DraftGroups — group an active block's drafts by entity_type so a mixed     */
+/* block reads as "5 spells, 2 feats, 1 item" instead of one flat 8-row list. */
+/* Groups appear in the order each entity_type's first draft was created     */
+/* (proposed_at ASC from the block API).                                      */
+/* -------------------------------------------------------------------------- */
+
+function DraftGroups({
+  drafts,
+}: {
+  drafts: import('../../lib/proposalBlock').DraftRevision[];
+}) {
+  // Insertion-ordered Map preserves "first seen" position so the
+  // grouped list stays stable as the user adds drafts. Within each
+  // group, drafts come in the same order the API returned them.
+  const groups = new Map<string, import('../../lib/proposalBlock').DraftRevision[]>();
+  for (const d of drafts) {
+    const key = d.entity_type;
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(d);
+    else groups.set(key, [d]);
+  }
+
+  return (
+    <div className="space-y-4">
+      {Array.from(groups.entries()).map(([entityType, group]) => {
+        // Op counts for the section header. Mirrors the "create / update
+        // / delete" mini-summary the old PendingDraftsPanel had.
+        let creates = 0, updates = 0, deletes = 0;
+        for (const d of group) {
+          if (d.operation === 'create') creates++;
+          else if (d.operation === 'update') updates++;
+          else if (d.operation === 'delete') deletes++;
+        }
+        const label = ENTITY_LABEL[entityType as EntityType] || entityType;
+        return (
+          <section key={entityType} className="space-y-1">
+            <header className="flex items-center gap-2 flex-wrap text-[11px] uppercase tracking-widest text-ink/70 font-bold border-b border-blood/15 pb-1">
+              <span>{label}</span>
+              <Badge variant="outline" className="text-[9px] border-blood/20 text-blood">
+                {group.length}
+              </Badge>
+              <span className="flex items-center gap-2 text-[10px] font-normal normal-case tracking-normal text-ink/50">
+                {creates > 0 && <span className="text-emerald-700">{creates} create{creates === 1 ? '' : 's'}</span>}
+                {updates > 0 && <span className="text-archive-blue">{updates} update{updates === 1 ? '' : 's'}</span>}
+                {deletes > 0 && <span className="text-blood">{deletes} delete{deletes === 1 ? '' : 's'}</span>}
+              </span>
+            </header>
+            <ul className="divide-y divide-blood/10">
+              {group.map((d) => (
+                <li key={d.id} className="py-2 flex items-center gap-3">
+                  <OperationBadge op={d.operation} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {(d.proposed_payload && (d.proposed_payload as any).name)
+                        || d.entity_id
+                        || '(no preview)'}
+                    </p>
+                    <p className="text-[11px] text-ink/50">
+                      {formatSqliteLocal(d.proposed_at)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
