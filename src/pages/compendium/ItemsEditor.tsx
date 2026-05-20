@@ -22,11 +22,12 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
     <DevelopmentCompendiumManager
       userProfile={userProfile}
       collectionName="items"
+      entityType="item"
       title="Item Manager"
       singularLabel="Item"
       icon={Hammer}
       backPath="/compendium"
-      description="Admin-only drafting surface for non-spell items. This is aimed at the Foundry item shell first: structured item metadata at the root, with activities and effects handling runtime use."
+      description="Drafting surface for non-spell items. Aimed at the Foundry item shell first: structured item metadata at the root, with activities and effects handling runtime use."
       defaultData={{
         name: '',
         identifier: '',
