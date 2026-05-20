@@ -73,6 +73,62 @@ function DialogContent({
   )
 }
 
+/**
+ * `DialogContentLarge` — desktop-default sized dialog body.
+ *
+ * The base `DialogContent` caps at `sm:max-w-sm` (~24rem / 384px),
+ * which was originally tuned for short confirm/picker dialogs. On
+ * larger screens that reads as a cramped mobile widget — fine for
+ * yes/no prompts, painful for content like the New / Edit launchers
+ * or any multi-column form.
+ *
+ * `DialogContentLarge` raises the desktop cap to a generous PC-
+ * friendly width (4xl ≈ 56rem / 896px) while preserving the mobile
+ * 95vw fallback. Same `className` override hook, same `showCloseButton`
+ * default. Scrolls internally when the body overflows the viewport.
+ *
+ * Use this for any dialog that mixes prose + grids + media on
+ * desktop. The legacy `DialogContent` stays the right pick for
+ * compact confirms (ConfirmDialog uses it).
+ */
+function DialogContentLarge({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: DialogPrimitive.Popup.Props & {
+  showCloseButton?: boolean
+}) {
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Popup
+        data-slot="dialog-content-large"
+        className={cn(
+          // Same positioning + chrome as the base variant. The width
+          // tier is what differs: 95vw on mobile, 4xl on lg+ — wide
+          // enough for 2-column launcher grids and most desktop forms
+          // without monopolising the screen.
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[95vw] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none lg:max-w-4xl max-h-[85vh] overflow-y-auto data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            className="absolute top-3 right-3 z-50 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary"
+          >
+            <XIcon className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  )
+}
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -143,6 +199,7 @@ export {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogContentLarge,
   DialogDescription,
   DialogFooter,
   DialogHeader,
