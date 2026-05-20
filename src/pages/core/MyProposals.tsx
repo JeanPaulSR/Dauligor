@@ -438,7 +438,14 @@ function LauncherGrid({
 
   return (
     <>
-      <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      {/* `auto-rows-fr` forces every row to share the tallest card's
+          height, so the launcher reads as a clean grid rather than a
+          ragged-bottom mosaic. Cards stretch via `h-full` on the
+          inner body div — content stays at the top via items-start.
+          The button wrapping each ready entry needs `h-full` too so
+          the body can stretch INTO it (otherwise the body's h-full
+          resolves to the button's content height). */}
+      <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 auto-rows-fr">
         {entries.map((editor) => {
           const Icon = editor.icon;
           const ready = editor.status === 'ready';
@@ -470,12 +477,12 @@ function LauncherGrid({
             </div>
           );
           return (
-            <li key={editor.title}>
+            <li key={editor.title} className="h-full">
               {ready ? (
                 <button
                   type="button"
                   onClick={() => handleClick(editor)}
-                  className="w-full text-left"
+                  className="w-full h-full text-left"
                 >
                   {body}
                 </button>
