@@ -79,7 +79,10 @@ function normalizeSqlForGate(sql: string): string {
 }
 
 async function readJsonBody(req: any) {
-  if (req.body && typeof req.body === "object") return req.body;
+  // Pages adapter now hands raw bytes for non-JSON content types as a
+  // Uint8Array. Exclude that case here so a misaddressed multipart POST
+  // doesn't get mistaken for an already-parsed JSON object.
+  if (req.body && typeof req.body === "object" && !(req.body instanceof Uint8Array)) return req.body;
 
   const chunks: Buffer[] = [];
   for await (const chunk of req) {

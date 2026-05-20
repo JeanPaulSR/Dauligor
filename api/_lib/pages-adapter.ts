@@ -54,22 +54,30 @@ export async function runVercelHandler(
 
   // Pre-parse the body so the handler's `req.body && typeof req.body
   // === "object"` short-circuit fires immediately. JSON is the common
-  // case; other content types pass through as text and the handler
-  // can decide what to do with it.
+  // case; binary / multipart bodies need to be preserved as bytes (a
+  // UTF-8 round-trip through request.text() mangles them — that's how
+  // r2 uploads previously broke with "No initial boundary string").
   let body: unknown = null;
   if (request.method !== "GET" && request.method !== "HEAD") {
     const contentType = headers["content-type"] ?? "";
-    const raw = await request.text();
-    if (raw.trim().length === 0) {
-      body = null;
-    } else if (contentType.includes("application/json")) {
-      try {
-        body = JSON.parse(raw);
-      } catch {
-        body = raw;
+    if (contentType.includes("application/json")) {
+      const raw = await request.text();
+      if (raw.trim().length === 0) {
+        body = null;
+      } else {
+        try {
+          body = JSON.parse(raw);
+        } catch {
+          body = raw;
+        }
       }
     } else {
-      body = raw;
+      // Binary / multipart / urlencoded / anything-else: keep the bytes.
+      // Handlers that forward the body upstream (e.g. r2 multipart upload)
+      // pass req.body straight to fetch(); a Uint8Array is a valid BodyInit
+      // and preserves the multipart boundary delimiters intact.
+      const buf = await request.arrayBuffer();
+      body = buf.byteLength === 0 ? null : new Uint8Array(buf);
     }
   }
 

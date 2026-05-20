@@ -56,7 +56,10 @@ function getRequestQuery(req: NodeLikeRequest) {
 }
 
 async function readJsonBody(req: NodeLikeRequest) {
-  if (req.body && typeof req.body === "object") return req.body;
+  // Pages adapter now hands raw bytes for non-JSON content types as a
+  // Uint8Array. Exclude that case here so a misaddressed multipart POST
+  // doesn't get mistaken for an already-parsed JSON object.
+  if (req.body && typeof req.body === "object" && !(req.body instanceof Uint8Array)) return req.body;
 
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -168,15 +171,24 @@ export async function handleR2Upload(req: NodeLikeRequest, res: NodeLikeResponse
     await requireImageManagerAccess(req.headers.authorization);
     const { apiSecret } = getWorkerConfig();
     const contentType = req.headers["content-type"];
+    // The Pages adapter pre-reads the body as Uint8Array for non-JSON
+    // content types (multipart uploads land here). The body bytes carry
+    // the multipart boundary delimiters that the storage worker's
+    // `request.formData()` parse step requires; the previous
+    // `body: req` form sent the entire shim object and made the worker
+    // see no boundary string, hence the 500. Pass `req.body` directly.
+    const body = (req as any).body;
+    if (body == null) {
+      return res.status(400).json({ error: "Missing upload body." });
+    }
     const workerResponse = await fetch(buildWorkerUrl("/upload"), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiSecret}`,
         ...(contentType ? { "Content-Type": contentType } : {}),
       },
-      body: req as unknown as BodyInit,
-      duplex: "half",
-    } as RequestInit);
+      body: body as BodyInit,
+    });
     await forwardWorkerResponse(res, workerResponse);
   } catch (error) {
     handleProxyError(res, error);
