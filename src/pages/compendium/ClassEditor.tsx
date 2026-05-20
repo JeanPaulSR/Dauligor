@@ -32,6 +32,8 @@ import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
+import { useProposalReview } from '../../lib/proposalReview';
+import { ReviewBanner } from '../../components/proposals/ReviewBanner';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { queueRebake } from '../../lib/moduleExport';
 import { BakeNowButton } from '../../components/compendium/BakeNowButton';
@@ -417,6 +419,18 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const classWriter = useProposalAccumulator('class', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = classWriter.mode === 'proposal' || classWriter.mode === 'block';
+  // Review mode — the editor is being viewed via `?review=<proposal_id>`
+  // (e.g. the user clicked a past submission in /my-proposals). In
+  // this mode the form is populated from the proposal's payload, all
+  // controls are disabled, and the wrapper's Submit Changes is
+  // suppressed. Rejected proposals stay editable so the user can
+  // resubmit.
+  const reviewMode = useProposalReview();
+  const isReviewingThisClass =
+    !!reviewMode &&
+    reviewMode.entityType === 'class' &&
+    (reviewMode.entityId === id || (reviewMode.operation === 'create' && !id));
+  const reviewIsReadOnly = isReviewingThisClass && reviewMode!.isReadOnly;
   const [deleteClassConfirmOpen, setDeleteClassConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(!!id);
@@ -718,8 +732,13 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         setInitialLoading(true);
         const startTime = performance.now();
         try {
-          // 1. Fetch Class Data
-          const data = await fetchDocument<any>('classes', id);
+          // 1. Fetch Class Data — UNLESS we're in review mode for this
+          //    class. In review mode the form is populated from the
+          //    proposal's submitted payload (snake_case D1 shape), so
+          //    the live row would clobber what the user is reviewing.
+          const data = isReviewingThisClass
+            ? reviewMode!.proposedPayload
+            : await fetchDocument<any>('classes', id);
 
           if (data) {
             console.log(`[ClassEditor] Class data loaded: ${data.name}`);
@@ -1334,14 +1353,23 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     );
   }
 
+  // When the editor is mounted INSIDE a ProposalEditorWrapper, the
+  // wrapper already renders the ReviewBanner + the fieldset-disable
+  // overlay. Avoid double-render by only emitting them here on the
+  // admin direct route (/compendium/classes/edit/:id), where the
+  // wrapper isn't mounted.
+  const showLocalReviewChrome = isReviewingThisClass && !proposalContext;
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-20">
+    <fieldset disabled={showLocalReviewChrome && reviewIsReadOnly} className="max-w-6xl mx-auto space-y-6 pb-20 border-0 p-0 m-0 disabled:opacity-95">
+      {showLocalReviewChrome && <ReviewBanner />}
       <div className="section-header">
         <div className="flex items-center gap-4">
           <Link to={
-            isProposalRoute
-              ? (id ? '/proposals/edit/classes' : '/my-proposals')
-              : (id ? `/compendium/classes/view/${id}` : '/compendium/classes')
+            isReviewingThisClass
+              ? '/my-proposals'
+              : isProposalRoute
+                ? (id ? '/proposals/edit/classes' : '/my-proposals')
+                : (id ? `/compendium/classes/view/${id}` : '/compendium/classes')
           }>
             <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
               <ChevronLeft className="w-4 h-4" /> Back
@@ -1361,7 +1389,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 navigates to /edit/:newId after queueing). For existing
                 classes in proposal mode, the wrapper's Submit Changes
                 captures the form state via pre-flush and replaces this. */}
-            {(!isProposalMode || !id) && (
+            {/* Hide Save Class when reviewing a read-only past
+                submission — the form is for inspection, not editing.
+                Rejected proposals keep the button so the user can
+                resubmit after fixing whatever the admin flagged. */}
+            {(!isProposalMode || !id) && !reviewIsReadOnly && (
               <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
                 <Save className="w-4 h-4" /> {id ? 'Save Class' : 'Create Class'}
               </Button>
@@ -4567,6 +4599,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           }
         }}
       />
-    </div>
+    </fieldset>
   );
 }

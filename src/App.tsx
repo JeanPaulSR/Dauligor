@@ -10,6 +10,7 @@ import { WikiPreviewContext, type WikiPreviewCampaign } from './lib/wikiPreviewC
 import { fetchDocument, upsertDocument, fetchCollection, checkFoundationUpdate, clearCache } from './lib/d1';
 import { setCurrentUserRole } from './lib/currentUser';
 import { BlockProvider } from './lib/proposalBlock';
+import { ProposalReviewProvider } from './lib/proposalReview';
 import Navbar from './components/Navbar';
 
 import Home from './pages/core/Home';
@@ -228,6 +229,7 @@ export default function App() {
         <main className="flex-grow container mx-auto px-4 py-8 relative">
           <ErrorBoundary>
             <div className="animate-in fade-in duration-500">
+              <ProposalReviewProvider>
               <Routes>
                 <Route path="/" element={<Home userProfile={effectiveProfile} />} />
                   <Route path="/auth/redeem" element={<RedeemTokenPage />} />
@@ -395,9 +397,10 @@ export default function App() {
                     }
                   />
                 </Routes>
-              </div>
-            </ErrorBoundary>
-          </main>
+              </ProposalReviewProvider>
+            </div>
+          </ErrorBoundary>
+        </main>
           <footer className="bg-card border-t border-gold/10 text-ink py-8 mt-auto">
               <div className="container mx-auto px-4 text-center opacity-70">
                 <p className="font-serif italic">"This site contains material used under the Open Game License (OGL). All original content is the property of its respective creators. Access to this website is restricted to registered players for use within private tabletop roleplaying sessions."</p>

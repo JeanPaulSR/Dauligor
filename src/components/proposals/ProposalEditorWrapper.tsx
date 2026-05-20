@@ -43,6 +43,8 @@ import { PickOrCreateBlockDialog } from './PickOrCreateBlockDialog';
 import type { ProposalEntityType } from '../../lib/proposalAware';
 import { useUnsavedChangesWarning } from '../../hooks/useUnsavedChangesWarning';
 import type { FocusMode } from '../../lib/proposalAccumulator';
+import { useProposalReview } from '../../lib/proposalReview';
+import { ReviewBanner } from './ReviewBanner';
 import { cn } from '../../lib/utils';
 
 const ENTITY_LABELS: Record<ProposalEntityType, string> = {
@@ -425,6 +427,17 @@ export function ProposalEditorWrapper({
   useUnsavedChangesWarning(queue.length > 0);
 
   const entityLabel = ENTITY_LABELS[primaryEntityType] ?? primaryEntityType;
+  // Hide the wrapper's header chrome (including Submit Changes) when
+  // the editor is in read-only review mode — the user is inspecting a
+  // past submission, not staging new work. Rejected proposals stay
+  // editable, so the header stays visible for them too. We trust the
+  // route navigation: if `?review=<id>` resolved, the user clicked
+  // through from /my-proposals, which means the proposal already
+  // belongs in this editor (hybrid editors like TagsExplorer cover
+  // multiple entity_types, so a per-entity-type filter would
+  // false-negative the tag_group proposals on the tags route).
+  const reviewMode = useProposalReview();
+  const isReadOnlyReview = !!reviewMode && reviewMode.isReadOnly;
   // Submit Changes is enabled when:
   //   - submitting is off AND
   //   - there's something queued, OR an editor has registered a
@@ -441,20 +454,36 @@ export function ProposalEditorWrapper({
   return (
     <ProposalAccumulatorContext.Provider value={contextValue}>
       <div className="space-y-4">
-        <ProposalEditorHeader
-          entityLabel={entityLabel}
-          activeBundleName={activeBundle?.name ?? null}
-          activeBundleDescription={activeBundle?.description ?? null}
-          queueCount={queue.length}
-          submitLabel={submitLabel}
-          submitting={submitting}
-          disabled={submitDisabled}
-          onSubmit={handleSubmit}
-          focusModeEnabled={enableFocusMode}
-          focusMode={focusMode}
-          onFocusModeChange={setFocusMode}
-        />
-        {children}
+        {/* Review banner sits above the header (or alone for read-only
+            reviews). Rejected proposals get BOTH the banner AND the
+            header — the header's Submit Changes is how the user
+            resubmits after editing. */}
+        {reviewMode && <ReviewBanner />}
+        {!isReadOnlyReview && (
+          <ProposalEditorHeader
+            entityLabel={entityLabel}
+            activeBundleName={activeBundle?.name ?? null}
+            activeBundleDescription={activeBundle?.description ?? null}
+            queueCount={queue.length}
+            submitLabel={submitLabel}
+            submitting={submitting}
+            disabled={submitDisabled}
+            onSubmit={handleSubmit}
+            focusModeEnabled={enableFocusMode}
+            focusMode={focusMode}
+            onFocusModeChange={setFocusMode}
+          />
+        )}
+        {isReadOnlyReview ? (
+          // Disable all form controls inside the editor when read-only.
+          // <fieldset disabled> cascades to every nested input/select/
+          // textarea/button — no per-input wiring required.
+          <fieldset disabled className="border-0 p-0 m-0 space-y-4 disabled:opacity-95">
+            {children}
+          </fieldset>
+        ) : (
+          children
+        )}
       </div>
       <PickOrCreateBlockDialog
         open={pickerOpen}

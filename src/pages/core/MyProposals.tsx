@@ -29,7 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import {
   ScrollText, X, Tags as TagsIcon, Sparkles, BookOpen, ArrowRight,
   Plus, Edit3, Inbox, Swords, Layers, Package, Send, Trash2,
-  Scroll, Hammer,
+  Scroll, Hammer, Eye,
 } from 'lucide-react';
 import { useBlock } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
@@ -53,7 +53,14 @@ type EntityType =
   | 'tag_group'
   | 'spell_rule'
   | 'spell_rule_application'
-  | 'class_spell_list';
+  | 'class_spell_list'
+  | 'spell'
+  | 'class'
+  | 'subclass'
+  | 'feat'
+  | 'item'
+  | 'unique_option_group'
+  | 'unique_option_item';
 
 type TopTab = 'submissions' | 'block';
 
@@ -87,6 +94,13 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   spell_rule: 'Spell Rule',
   spell_rule_application: 'Rule Application',
   class_spell_list: 'Class Spell List',
+  spell: 'Spell',
+  class: 'Class',
+  subclass: 'Subclass',
+  feat: 'Feat',
+  item: 'Item',
+  unique_option_group: 'Option Group',
+  unique_option_item: 'Option Item',
 };
 
 function previewName(p: Proposal): string {
@@ -277,6 +291,38 @@ function BlockTabBar({
 /* SubmissionsPanel — the existing queue view, now scoped to its tab.        */
 /* -------------------------------------------------------------------------- */
 
+function buildReviewRoute(p: Proposal): string | null {
+  // Single-work editors live at a per-instance route; the proposal's
+  // entity_id is the live row id (for updates/deletes) or the user-
+  // minted UUID (for creates — the editor renders an empty form by
+  // default but will pull from the proposed_payload via review mode).
+  if (p.entity_type === 'class' && p.entity_id) {
+    return `/proposals/edit/classes/edit/${p.entity_id}?review=${p.id}`;
+  }
+  if (p.entity_type === 'subclass' && p.entity_id) {
+    return `/proposals/edit/subclasses/edit/${p.entity_id}?review=${p.id}`;
+  }
+  // Multi-work editors live at a single list route; the editor reads
+  // ?review from the URL and (eventually) loads the proposed_payload
+  // as the focused entity. Until each multi-work editor wires that,
+  // the user lands in the catalog with the wrapper's header hidden.
+  const multiWorkBase: Record<string, string> = {
+    tag: '/proposals/edit/tags',
+    tag_group: '/proposals/edit/tags',
+    spell_rule: '/proposals/edit/spell-rules',
+    spell_rule_application: '/proposals/edit/spell-rules',
+    class_spell_list: '/proposals/edit/spell-lists',
+    spell: '/proposals/edit/spells',
+    feat: '/proposals/edit/feats',
+    item: '/proposals/edit/items',
+    unique_option_group: '/proposals/edit/option-groups',
+    unique_option_item: '/proposals/edit/option-groups',
+  };
+  const base = multiWorkBase[p.entity_type];
+  if (!base) return null;
+  return `${base}?review=${p.id}`;
+}
+
 function SubmissionsPanel({
   filter, setFilter, proposals, loading, working, onWithdraw,
 }: {
@@ -287,6 +333,7 @@ function SubmissionsPanel({
   working: string | null;
   onWithdraw: (id: string) => void;
 }) {
+  const navigate = useNavigate();
   return (
     <>
       <div className="flex flex-wrap gap-2 border-b border-gold/5 pb-2">
@@ -336,13 +383,35 @@ function SubmissionsPanel({
                         Pinned
                       </Badge>
                     )}
+                    {(() => {
+                      const reviewHref = buildReviewRoute(p);
+                      if (!reviewHref) return null;
+                      const label = p.status === 'rejected' ? 'Edit & resubmit' : 'Review';
+                      return (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => navigate(reviewHref)}
+                          className={`ml-auto gap-1.5 ${
+                            p.status === 'rejected'
+                              ? 'border-blood/30 text-blood hover:bg-blood/10'
+                              : 'border-archive-blue/30 text-archive-blue hover:bg-archive-blue/10'
+                          }`}
+                          title={p.status === 'rejected'
+                            ? 'Open this rejected proposal in the editor — fix and resubmit.'
+                            : 'View this submission read-only in its editor.'}
+                        >
+                          <Eye className="w-3.5 h-3.5" /> {label}
+                        </Button>
+                      );
+                    })()}
                     {p.status === 'pending' && (
                       <Button
                         size="xs"
                         variant="outline"
                         onClick={() => onWithdraw(p.id)}
                         disabled={working === p.id}
-                        className="ml-auto gap-1.5 border-ink/20 text-ink/60 hover:bg-ink/5"
+                        className="gap-1.5 border-ink/20 text-ink/60 hover:bg-ink/5"
                       >
                         <X className="w-3.5 h-3.5" /> Withdraw
                       </Button>
