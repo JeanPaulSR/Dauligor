@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import {
   ScrollText, X, Tags as TagsIcon, Sparkles, BookOpen, ArrowRight,
   Plus, Edit3, Inbox, Swords, Layers, Package, Send, Trash2,
+  Scroll, Hammer,
 } from 'lucide-react';
 import { useBlock } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
@@ -490,6 +491,41 @@ const CREATE_ENTRIES: LauncherEntry[] = [
     icon: BookOpen,
     status: 'ready',
   },
+  {
+    title: 'Spells',
+    description: 'Author a new spell — identity, level, school, components, activation, range, duration, and automation.',
+    href: '/proposals/edit/spells',
+    icon: Sparkles,
+    status: 'ready',
+  },
+  {
+    title: 'Classes',
+    description: 'Draft a new class from scratch — hit die, proficiencies, advancements, spellcasting. Subclasses can be added after the parent class is saved.',
+    href: '/proposals/edit/classes/new',
+    icon: Swords,
+    status: 'ready',
+  },
+  {
+    title: 'Feats',
+    description: 'Author a new feat — feat type, prerequisites, repeatable flag, uses, activities, effects.',
+    href: '/proposals/edit/feats',
+    icon: Scroll,
+    status: 'ready',
+  },
+  {
+    title: 'Items',
+    description: 'Draft a new item — weapon, equipment, consumable, tool, loot, or container. Includes rarity, weight, price, attunement.',
+    href: '/proposals/edit/items',
+    icon: Hammer,
+    status: 'ready',
+  },
+  {
+    title: 'Modular Options',
+    description: 'Start a new option group (Maneuvers, Invocations, Infusions, …) with its initial set of options.',
+    href: '/proposals/edit/option-groups/new',
+    icon: Layers,
+    status: 'ready',
+  },
 ];
 
 function CreateLauncher() {
@@ -546,16 +582,30 @@ const EDIT_ENTRIES: LauncherEntry[] = [
   },
   {
     title: 'Spells',
-    description: 'Browse the spell catalogue. Propose-edit support arrives with Phase 4.5d.',
+    description: 'Browse the spell catalogue and propose edits. Multi-spell workflow: clicking a different spell auto-stages the in-flight edits into your active block.',
     href: '/proposals/edit/spells',
     icon: Sparkles,
     status: 'ready',
   },
   {
     title: 'Classes',
-    description: 'Browse the class catalog and pick one to edit. Top-level fields (name, description, proficiencies, advancements) propose through; nested feature / scaling / subclass edits remain admin-only.',
+    description: 'Browse the class catalog and pick one to edit. Top-level fields propose through; subclass and feature edits route into their own proposal flows.',
     href: '/proposals/edit/classes',
     icon: Swords,
+    status: 'ready',
+  },
+  {
+    title: 'Feats',
+    description: 'Browse the feat catalogue and propose edits to existing feats. Multi-feat workflow mirrors Spells — switch rows freely, edits auto-stage.',
+    href: '/proposals/edit/feats',
+    icon: Scroll,
+    status: 'ready',
+  },
+  {
+    title: 'Items',
+    description: 'Browse the item catalogue and propose edits to weapons, equipment, consumables, tools, loot, or containers.',
+    href: '/proposals/edit/items',
+    icon: Hammer,
     status: 'ready',
   },
   {
