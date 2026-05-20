@@ -1492,6 +1492,10 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                   const selected = entry.id === editingId;
                   const srcAbbrev = String(sourceAbbrevById[entry.sourceId] || entry.sourceId || '—');
                   const lvl = Number(entry.level ?? 0);
+                  // Highlight rows the user has staged in the active
+                  // block (or queued locally). Replaces the wrapper's
+                  // "In this block" panel — see ProposalEditorWrapper.
+                  const drafted = focusModeEnabled && draftedSpellIds.has(String(entry.id));
                   return (
                     <button
                       key={entry.id}
@@ -1499,12 +1503,24 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       onClick={() => startEditing(entry)}
                       className={cn(
                         'grid h-[36px] w-full gap-2 items-center px-3 text-left transition-colors border-b border-gold/5',
-                        selected ? 'bg-gold/10' : 'hover:bg-gold/5',
+                        selected
+                          ? 'bg-gold/10'
+                          : drafted
+                            ? 'bg-archive-blue/5 hover:bg-archive-blue/10'
+                            : 'hover:bg-gold/5',
+                        drafted && 'border-l-2 border-l-archive-blue/60',
                       )}
                       style={{ gridTemplateColumns: 'minmax(0,1fr) 28px 52px' }}
-                      title={entry.name || '(Untitled Spell)'}
+                      title={
+                        drafted
+                          ? `${entry.name || 'Untitled'} — staged in this block`
+                          : (entry.name || '(Untitled Spell)')
+                      }
                     >
-                      <span className="truncate font-serif text-sm text-ink">
+                      <span className={cn(
+                        "truncate font-serif text-sm",
+                        drafted ? 'text-archive-blue font-semibold' : 'text-ink',
+                      )}>
                         {entry.name || <em className="text-ink/40">Untitled</em>}
                       </span>
                       <span className="text-xs text-ink/75 text-center">
