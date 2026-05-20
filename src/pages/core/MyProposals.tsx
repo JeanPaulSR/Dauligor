@@ -38,6 +38,7 @@ import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import {
   Dialog,
   DialogContent,
+  DialogContentLarge,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -437,7 +438,7 @@ function LauncherGrid({
 
   return (
     <>
-      <ul className="grid gap-3 md:grid-cols-2">
+      <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {entries.map((editor) => {
           const Icon = editor.icon;
           const ready = editor.status === 'ready';
@@ -523,7 +524,7 @@ function LauncherDialog({
     : 'Pick a system below to browse its catalogue and edit an existing entry. Edits round-trip through your active block.';
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContentLarge>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -533,7 +534,7 @@ function LauncherDialog({
           skipBlockPicker
           onNavigated={() => onOpenChange(false)}
         />
-      </DialogContent>
+      </DialogContentLarge>
     </Dialog>
   );
 }
