@@ -37,6 +37,7 @@ export type EntityType =
   | "class"
   | "subclass"
   | "feat"
+  | "item"
   | "unique_option_group"
   | "unique_option_item";
 
@@ -50,6 +51,7 @@ export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "class",
   "subclass",
   "feat",
+  "item",
   "unique_option_group",
   "unique_option_item",
 ];
@@ -204,6 +206,22 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     ]),
     jsonColumns: new Set([
       "uses_recovery", "activities", "effects", "tags", "requirements_tree",
+    ]),
+  },
+  item: {
+    tableName: "items",
+    pkColumn: "id",
+    writableColumns: new Set([
+      "id", "name", "identifier", "item_type",
+      "rarity", "quantity", "weight",
+      "price_value", "price_denomination",
+      "attunement", "equipped", "identified", "magical",
+      "description", "image_url",
+      "activities", "effects",
+      "source_id", "page", "tags",
+    ]),
+    jsonColumns: new Set([
+      "activities", "effects", "tags",
     ]),
   },
   unique_option_group: {

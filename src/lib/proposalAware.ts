@@ -31,6 +31,7 @@ export type ProposalEntityType =
   | 'class'
   | 'subclass'
   | 'feat'
+  | 'item'
   | 'unique_option_group'
   | 'unique_option_item';
 
@@ -46,6 +47,7 @@ const ENTITY_TO_COLLECTION: Record<ProposalEntityType, string> = {
   class: 'classes',
   subclass: 'subclasses',
   feat: 'feats',
+  item: 'items',
   unique_option_group: 'uniqueOptionGroups',
   unique_option_item: 'uniqueOptionItems',
 };

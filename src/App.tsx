@@ -356,6 +356,15 @@ export default function App() {
                       <FeatsEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  {/* Items — delegates to DevelopmentCompendiumManager
+                      which detects proposal mode via the wrapper's
+                      context (entityType + focus-mode wiring lives
+                      inside the manager). */}
+                  <Route path="/proposals/edit/items" element={
+                    <ProposalEditorWrapper entityType="item" enableFocusMode>
+                      <ItemsEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
                   {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />

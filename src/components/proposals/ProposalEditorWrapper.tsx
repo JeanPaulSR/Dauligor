@@ -55,6 +55,7 @@ const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   class: 'Classes',
   subclass: 'Subclasses',
   feat: 'Feats',
+  item: 'Items',
   unique_option_group: 'Option Groups',
   unique_option_item: 'Option Items',
 };
