@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { actionLabel } from '../../lib/proposalAware';
+import { useBlock } from '../../lib/proposalBlock';
 import {
   Edit3,
   Lock,
@@ -212,7 +215,24 @@ function makeInitialFeatForm(sources: any[] = []): FeatFormData {
 // ─── Page ───────────────────────────────────────────────────────────────
 
 export default function FeatsEditor({ userProfile }: { userProfile: any }) {
+  const location = useLocation();
   const isAdmin = userProfile?.role === 'admin';
+  const isContentCreator =
+    !!userProfile?.permissions &&
+    Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
+  const canManage = isAdmin || isContentCreator;
+
+  // Proposal-mode plumbing — on /proposals/edit/feats the wrapper
+  // mounts above us and the writer queues writes into the active
+  // block; admin direct route on /compendium/feats/manage flows
+  // through the normal upsertFeat path below.
+  const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  const featWriter = useProposalAccumulator('feat', userProfile);
+  const proposalContext = useProposalContextOptional();
+  const isProposalMode = featWriter.mode === 'proposal' || featWriter.mode === 'block';
+  const { drafts: allDrafts, activeBundleId } = useBlock();
+  const focusMode = proposalContext?.focusMode ?? 'drafts';
+  const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
 
   // Entries + UI state
   const [entries, setEntries] = useState<any[]>([]);
@@ -223,6 +243,19 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FeatFormData>(makeInitialFeatForm());
+
+  // editingId / formData mirrors for async callbacks (auto-stage on
+  // switch, pre-flush). Closures registered with the wrapper capture
+  // a snapshot at registration time; refs let us reach the latest.
+  const editingIdRef = useRef<string | null>(null);
+  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
+  const formDataRef = useRef<FeatFormData | null>(null);
+  // Snapshot of the loaded form for dirty detection — set whenever
+  // the load effect repopulates formData (or resetForm runs). The
+  // startEditing handler compares the live formData to this baseline
+  // to decide whether to queue the outgoing feat as a draft before
+  // swapping in the new selection.
+  const lastLoadedFormRef = useRef<string>('');
 
   // Lookups consumed by <RequirementsEditor>. Same shape + load order as
   // UniqueOptionGroupEditor — every leaf-picker the tree might render
@@ -243,7 +276,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   // Initial load — entries + sources + every RequirementsEditor lookup
   // pool. All in parallel so the page settles in one paint.
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     let cancelled = false;
 
     const loadAll = async () => {
@@ -352,7 +385,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     return () => {
       cancelled = true;
     };
-  }, [isAdmin]);
+  }, [canManage]);
 
   // Pin a default source onto the form once sources have loaded, so a
   // new-feat draft starts with a valid sourceId. SpellsEditor uses the
@@ -374,20 +407,76 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     [sources],
   );
 
+  // Feat ids with staged work in the active block — local queue
+  // entries (unsubmitted) + server-side draft revisions in the
+  // current bundle. Drives My-Drafts focus-mode filtering AND the
+  // row-highlight in Browse mode (same wiring as SpellsEditor).
+  const draftedFeatIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (proposalContext) {
+      for (const q of proposalContext.queue) {
+        if (q.entity_type === 'feat' && q.entity_id) ids.add(q.entity_id);
+      }
+    }
+    if (activeBundleId) {
+      for (const d of allDrafts) {
+        if (
+          d.entity_type === 'feat' &&
+          d.entity_id &&
+          d.bundle_id === activeBundleId
+        ) {
+          ids.add(d.entity_id);
+        }
+      }
+    }
+    return ids;
+  }, [proposalContext, allDrafts, activeBundleId]);
+
+  // Base feats the user has flipped to editable via "Edit Base [Name]"
+  // — unlocks persist for the session. Mirrors SpellsEditor's pattern.
+  const [unlockedBaseIds, setUnlockedBaseIds] = useState<Set<string>>(new Set());
+  const unlockBaseFeat = (id: string) => {
+    setUnlockedBaseIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  // Read-only when the wrapper enables focus-mode AND there's a live
+  // entry selected the user hasn't claimed yet (no draft, not
+  // explicitly unlocked). New feats (editingId === null) are never
+  // read-only — they're the user's own draft from the start.
+  const isReadOnly =
+    focusModeEnabled &&
+    !!editingId &&
+    !unlockedBaseIds.has(editingId) &&
+    !draftedFeatIds.has(editingId);
+
   const filteredEntries = useMemo(() => {
     const lowered = search.trim().toLowerCase();
-    if (!lowered) return entries;
     return entries.filter((entry) => {
-      const sourceLabel = String(sourceNameById[entry.sourceId] || '').toLowerCase();
-      return (
-        String(entry.name || '').toLowerCase().includes(lowered)
-        || String(entry.identifier || '').toLowerCase().includes(lowered)
-        || String(entry.featType || '').toLowerCase().includes(lowered)
-        || String(entry.featSubtype || '').toLowerCase().includes(lowered)
-        || sourceLabel.includes(lowered)
-      );
+      // Search filter first.
+      if (lowered) {
+        const sourceLabel = String(sourceNameById[entry.sourceId] || '').toLowerCase();
+        const matches =
+          String(entry.name || '').toLowerCase().includes(lowered)
+          || String(entry.identifier || '').toLowerCase().includes(lowered)
+          || String(entry.featType || '').toLowerCase().includes(lowered)
+          || String(entry.featSubtype || '').toLowerCase().includes(lowered)
+          || sourceLabel.includes(lowered);
+        if (!matches) return false;
+      }
+      // Focus mode (My Drafts): only feats the user has staged in the
+      // active block. Browse Base mode shows everything. No-op when
+      // the wrapper isn't mounted (admin direct route).
+      if (focusModeEnabled && focusMode === 'drafts') {
+        if (!draftedFeatIds.has(String(entry.id))) return false;
+      }
+      return true;
     });
-  }, [entries, search, sourceNameById]);
+  }, [entries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds]);
 
   // Lookup the RequirementsEditor + the list-row prereq summary share.
   // Built once per dependency change so the renderItem callback below
@@ -410,8 +499,10 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   }), [classes, subclasses, spellRules, allOptionGroups]);
 
   const resetForm = () => {
+    const initial = makeInitialFeatForm(sources);
     setEditingId(null);
-    setFormData(makeInitialFeatForm(sources));
+    setFormData(initial);
+    lastLoadedFormRef.current = JSON.stringify(initial);
   };
 
   // Hydrate the form from the picked entry. Mirrors SpellsEditor's
@@ -429,7 +520,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         ?? cached.usesRecovery
         ?? cached.uses_recovery
         ?? [];
-      setFormData({
+      const loaded: FeatFormData = {
         ...defaults,
         ...cached,
         id: cached.id,
@@ -469,7 +560,10 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         requirementsTree: parseRequirementTree(
           cached.requirementsTree ?? cached.requirements_tree,
         ),
-      });
+      };
+      setFormData(loaded);
+      // Snapshot for dirty detection (auto-stage on switch).
+      lastLoadedFormRef.current = JSON.stringify(loaded);
       return;
     }
 
@@ -489,7 +583,27 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     };
   }, [editingId, sources, featDetailsById]);
 
-  const startEditing = (entry: any) => {
+  // Proposal mode: switching to a different feat auto-stages the
+  // outgoing one into the active block before loading the new
+  // selection. Without this, in-flight edits vanish the instant the
+  // user clicks another row. Dirty detection via lastLoadedFormRef
+  // avoids queueing redundant drafts on clean switches.
+  const startEditing = async (entry: any) => {
+    if (
+      isProposalMode &&
+      editingIdRef.current &&
+      entry.id !== editingIdRef.current
+    ) {
+      const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
+      if (currentSerialized !== lastLoadedFormRef.current) {
+        try {
+          await handleSaveRef.current(undefined, { silent: true });
+        } catch (err) {
+          console.error('[FeatsEditor] auto-stage failed:', err);
+          toast.error('Could not stage previous feat — switching anyway.');
+        }
+      }
+    }
     setEditingId(entry.id);
   };
 
@@ -518,18 +632,18 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
+    if (e) e.preventDefault();
     if (!formData.name.trim()) {
-      toast.error('Feat name is required');
+      if (!opts.silent) toast.error('Feat name is required');
       return;
     }
     if (!formData.sourceId) {
-      toast.error('Source is required');
+      if (!opts.silent) toast.error('Source is required');
       return;
     }
 
-    setSaving(true);
+    if (!opts.silent) setSaving(true);
     try {
       // Payload mirrors what `DevelopmentCompendiumManager` produced for
       // feats today — `automation: { activities, effects }` is the shape
@@ -567,35 +681,105 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         if (payload[key] === undefined) delete payload[key];
       });
 
-      const entryId = editingId || crypto.randomUUID();
-      await upsertFeat(entryId, {
-        ...payload,
-        created_at: formData.createdAt || new Date().toISOString(),
-      });
-      toast.success(`Feat ${editingId ? 'updated' : 'created'}`);
-      await refreshEntries();
-      resetForm();
+      const entryIdAtStart = editingId;
+      const wasCreate = !entryIdAtStart;
+      const entryId = entryIdAtStart || crypto.randomUUID();
+
+      if (isProposalMode) {
+        // Proposal route: route through the writer (queues into the
+        // active block) instead of calling upsertFeat. The live row
+        // is unchanged until admin approval. Strip server-managed
+        // timestamps the proposal endpoint also drops.
+        const { updated_at: _droppedUpdatedAt, ...proposalPayload } = payload;
+        if (wasCreate) {
+          await featWriter.create({ ...proposalPayload, id: entryId });
+        } else {
+          await featWriter.update(entryId, proposalPayload);
+        }
+        if (!opts.silent) {
+          toast.success(actionLabel(featWriter.mode, wasCreate ? 'created' : 'updated'));
+        }
+        // Sync the dirty baseline to the just-saved form so a
+        // follow-up Submit Changes (or switch) doesn't re-queue the
+        // same payload as another draft. Critical for CREATE: after
+        // the create lands, the form's content IS the snapshot,
+        // but lastLoadedFormRef still points at the empty initial
+        // state — without this, pre-flush would fire an UPDATE for
+        // a feat that doesn't have a live row yet.
+        lastLoadedFormRef.current = JSON.stringify(formDataRef.current ?? formData);
+        // No refreshEntries / resetForm — the live row didn't move
+        // and the user is likely still editing this feat (or about
+        // to switch via auto-stage). Adopt the saved id on create
+        // only when the user hasn't navigated away.
+        if (wasCreate && !opts.silent && editingIdRef.current === entryIdAtStart) {
+          setEditingId(entryId);
+        }
+      } else {
+        // Admin direct route — same upsertFeat + refresh + reset
+        // behavior as before this wiring.
+        await upsertFeat(entryId, {
+          ...payload,
+          created_at: formData.createdAt || new Date().toISOString(),
+        });
+        if (!opts.silent) toast.success(`Feat ${entryIdAtStart ? 'updated' : 'created'}`);
+        await refreshEntries();
+        if (!opts.silent) resetForm();
+      }
     } catch (error) {
       console.error('Error saving feat:', error);
-      toast.error('Failed to save feat');
+      if (!opts.silent) toast.error('Failed to save feat');
       reportClientError(
         error,
         editingId ? OperationType.UPDATE : OperationType.CREATE,
         `feats/${editingId || '(new)'}`,
       );
+      if (opts.silent) throw error;
     } finally {
-      setSaving(false);
+      if (!opts.silent) setSaving(false);
     }
   };
+
+  // Ref-mirrors so async callbacks (pre-flush, switch auto-stage)
+  // always read the latest handleSave + formData. Both are recreated
+  // every render and the registered callback closes over the snapshot
+  // from registration time without these refs.
+  const handleSaveRef = useRef(handleSave);
+  useEffect(() => { handleSaveRef.current = handleSave; });
+  useEffect(() => { formDataRef.current = formData; }, [formData]);
+
+  // Pre-flush: when the wrapper drains the queue on Submit Changes,
+  // capture the currently-edited feat first. Dirty-check mirrors the
+  // auto-stage logic so an idle Submit doesn't queue a no-op.
+  useEffect(() => {
+    if (!isProposalMode || !proposalContext) return;
+    return proposalContext.registerPreFlush(async () => {
+      if (!editingIdRef.current) return;
+      const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
+      if (currentSerialized === lastLoadedFormRef.current) return;
+      try {
+        await handleSaveRef.current(undefined, { silent: true });
+      } catch (err) {
+        console.error('[FeatsEditor] pre-flush stage failed:', err);
+      }
+    });
+  }, [isProposalMode, proposalContext]);
 
   const handleDelete = async () => {
     if (!editingId) return;
     if (!window.confirm('Delete this feat?')) return;
     try {
-      await deleteFeat(editingId);
-      toast.success('Feat deleted');
-      await refreshEntries();
-      resetForm();
+      if (isProposalMode) {
+        await featWriter.remove(editingId);
+        toast.success(actionLabel(featWriter.mode, 'deleted'));
+        // No live refresh — wrapper's queue + drafts panel reflect
+        // the DELETE entry; the live feat stays until admin approval.
+        resetForm();
+      } else {
+        await deleteFeat(editingId);
+        toast.success('Feat deleted');
+        await refreshEntries();
+        resetForm();
+      }
     } catch (error) {
       console.error('Error deleting feat:', error);
       toast.error('Failed to delete feat');
@@ -603,8 +787,8 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  if (!isAdmin) {
-    return <div className="text-center py-20">Access Denied. Admins only.</div>;
+  if (!canManage) {
+    return <div className="text-center py-20">Access Denied. Admins or content-creators only.</div>;
   }
 
   return (
@@ -718,22 +902,37 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                           const hasFreeTextPrereq = !!(entry.requirements && String(entry.requirements).trim());
                           const hasTreePrereq = !!entry.requirementsTree;
                           const hasPrereq = hasFreeTextPrereq || hasTreePrereq;
+                          // Highlight rows the user has staged in the active
+                          // block (or queued locally). Same visual language
+                          // as SpellsEditor — archive-blue accents replace
+                          // the "In this block" panel.
+                          const drafted = focusModeEnabled && draftedFeatIds.has(String(entry.id));
                           return (
                             <button
                               type="button"
                               key={entry.id}
                               onClick={() => startEditing(entry)}
+                              title={
+                                drafted
+                                  ? `${entry.name || 'Untitled Feat'} — staged in this block`
+                                  : entry.name || '(Untitled Feat)'
+                              }
                               className={cn(
                                 'h-[94px] w-full rounded-xl border p-3 text-left transition-colors',
                                 selected
                                   ? 'border-gold/50 bg-gold/10 shadow-[0_0_0_1px_rgba(192,160,96,0.2)]'
-                                  : 'border-gold/10 bg-background/30 hover:border-gold/30 hover:bg-background/50',
+                                  : drafted
+                                    ? 'border-archive-blue/40 bg-archive-blue/5 hover:border-archive-blue/60 hover:bg-archive-blue/10'
+                                    : 'border-gold/10 bg-background/30 hover:border-gold/30 hover:bg-background/50',
                               )}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
-                                    <div className="font-serif text-lg text-ink truncate">
+                                    <div className={cn(
+                                      "font-serif text-lg truncate",
+                                      drafted && !selected ? 'text-archive-blue font-semibold' : 'text-ink',
+                                    )}>
                                       {entry.name || '(Untitled Feat)'}
                                     </div>
                                     {hasPrereq && (
@@ -801,35 +1000,56 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {editingId ? (
+                      {isReadOnly ? (
                         <Button
                           type="button"
-                          variant="outline"
-                          className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
-                          onClick={handleDelete}
+                          className="gap-2 bg-gold text-white"
+                          onClick={() => editingId && unlockBaseFeat(editingId)}
                         >
-                          <Trash2 className="h-4 w-4" />
-                          Delete Feat
+                          <Edit3 className="h-4 w-4" />
+                          Edit Base{formData.name ? ` "${formData.name}"` : ' Feat'}
                         </Button>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
-                        onClick={resetForm}
-                      >
-                        <Edit3 className="h-4 w-4" />
-                        Reset
-                      </Button>
-                      <Button
-                        type="submit"
-                        form="feat-manual-editor-form"
-                        className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                        disabled={saving}
-                      >
-                        <Save className="h-4 w-4" />
-                        {saving ? 'Saving...' : editingId ? 'Update Feat' : 'Save Feat'}
-                      </Button>
+                      ) : (
+                        <>
+                          {editingId && !isProposalMode ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="gap-2 border-blood/30 text-blood hover:bg-blood/10"
+                              onClick={handleDelete}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete Feat
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
+                            onClick={resetForm}
+                          >
+                            <Edit3 className="h-4 w-4" />
+                            Reset
+                          </Button>
+                          {/* In proposal mode the wrapper's Submit Changes
+                              captures the current feat via pre-flush, so the
+                              per-feat Save button is redundant for existing
+                              entries. New feats keep their explicit Save (the
+                              user expects one-shot create + post-save
+                              editingId hop). */}
+                          {(!isProposalMode || !editingId) && (
+                            <Button
+                              type="submit"
+                              form="feat-manual-editor-form"
+                              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                              disabled={saving}
+                            >
+                              <Save className="h-4 w-4" />
+                              {saving ? 'Saving...' : editingId ? 'Update Feat' : 'Save Feat'}
+                            </Button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

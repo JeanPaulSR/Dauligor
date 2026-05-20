@@ -37,6 +37,7 @@ type EntityType =
   | 'spell'
   | 'class'
   | 'subclass'
+  | 'feat'
   | 'unique_option_group'
   | 'unique_option_item';
 
@@ -81,6 +82,7 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   spell: 'Spell',
   class: 'Class',
   subclass: 'Subclass',
+  feat: 'Feat',
   unique_option_group: 'Option Group',
   unique_option_item: 'Option Item',
 };
@@ -102,7 +104,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
   const [loading, setLoading] = useState(false);
   const [counts, setCounts] = useState<Record<EntityType, number>>({
     tag: 0, tag_group: 0, spell_rule: 0, spell_rule_application: 0, class_spell_list: 0,
-    spell: 0, class: 0, subclass: 0, unique_option_group: 0, unique_option_item: 0,
+    spell: 0, class: 0, subclass: 0, feat: 0, unique_option_group: 0, unique_option_item: 0,
   });
   const [selected, setSelected] = useState<Proposal | null>(null);
   const [conflictDialog, setConflictDialog] = useState<null | {
@@ -185,7 +187,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
             (acc, [id, count]) => ({ ...acc, [id]: count }),
             {
               tag: 0, tag_group: 0, spell_rule: 0, spell_rule_application: 0,
-              class_spell_list: 0, spell: 0, class: 0, subclass: 0,
+              class_spell_list: 0, spell: 0, class: 0, subclass: 0, feat: 0,
               unique_option_group: 0, unique_option_item: 0,
             },
           ),

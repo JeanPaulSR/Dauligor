@@ -349,6 +349,13 @@ export default function App() {
                       <SubclassEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  {/* Feats — multi-work editor (catalog + inline form),
+                      same focus-mode + auto-stage pattern as Spells. */}
+                  <Route path="/proposals/edit/feats" element={
+                    <ProposalEditorWrapper entityType="feat" enableFocusMode>
+                      <FeatsEditor userProfile={effectiveProfile} />
+                    </ProposalEditorWrapper>
+                  } />
                   {/* Catch-all placeholder for editors not yet wired. */}
                   <Route path="/proposals/edit/*" element={<ProposalEditorComingSoon />} />
                   <Route path="/admin/campaigns" element={<AdminCampaigns userProfile={effectiveProfile} />} />
