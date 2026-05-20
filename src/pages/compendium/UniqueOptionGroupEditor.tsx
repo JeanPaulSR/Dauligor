@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
-import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import MarkdownEditor from '@/components/MarkdownEditor';
@@ -44,6 +44,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const basePath = isProposalRoute ? '/proposals/edit/option-groups' : '/compendium/unique-options';
   const groupWriter = useProposalAccumulator('unique_option_group', userProfile);
   const itemWriter = useProposalAccumulator('unique_option_item', userProfile);
+  const proposalContext = useProposalContextOptional();
   const isProposalMode = groupWriter.mode === 'proposal' || groupWriter.mode === 'block';
   const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false);
   const [pendingItemDeleteId, setPendingItemDeleteId] = useState<string | null>(null);
@@ -239,9 +240,9 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     loadAll();
   }, [id]);
 
-  const handleSaveGroup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const handleSaveGroup = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
+    if (e) e.preventDefault();
+    if (!opts.silent) setLoading(true);
 
     try {
       const d1Data = {
@@ -259,30 +260,52 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         } else {
           await groupWriter.create({ ...d1Data, id: targetId });
         }
-        toast.success(actionLabel(groupWriter.mode, id ? 'updated' : 'created'));
-        if (!id) {
-          // Even in proposal mode, navigate to the edit URL so the
-          // user can keep iterating on the same draft. The accumulator's
-          // dedup logic (Phase 4.5d step 3) PATCHes the existing
-          // CREATE draft instead of queueing a new revision.
+        if (!opts.silent) {
+          toast.success(actionLabel(groupWriter.mode, id ? 'updated' : 'created'));
+        }
+        // Skip post-create navigate when called via pre-flush — navigating
+        // during the wrapper's flush would unmount the wrapper mid-drain.
+        if (!id && !opts.silent) {
           navigate(`${basePath}/edit/${targetId}`);
         }
       } else {
         await upsertDocument('uniqueOptionGroups', targetId, d1Data);
         if (id) {
-          toast.success('Group saved successfully');
+          if (!opts.silent) toast.success('Group saved successfully');
         } else {
-          toast.success('Group created successfully');
-          navigate(`${basePath}/edit/${targetId}`);
+          if (!opts.silent) toast.success('Group created successfully');
+          if (!opts.silent) navigate(`${basePath}/edit/${targetId}`);
         }
       }
     } catch (error) {
       console.error("Error saving group:", error);
-      toast.error('Failed to save group');
+      if (!opts.silent) toast.error('Failed to save group');
+      else throw error;
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   };
+
+  // Pre-flush registration: when wrapped in proposal mode for an
+  // EXISTING group, Submit Changes calls handleSaveGroup silently to
+  // capture the current form state. Same dance as ClassEditor; see
+  // its comment for the rationale.
+  const handleSaveGroupRef = useRef(handleSaveGroup);
+  useEffect(() => {
+    handleSaveGroupRef.current = handleSaveGroup;
+  });
+  useEffect(() => {
+    if (!isProposalMode) return;
+    if (!proposalContext) return;
+    if (!id) return; // create flow keeps its own button + navigate
+    return proposalContext.registerPreFlush(async () => {
+      try {
+        await handleSaveGroupRef.current(undefined, { silent: true });
+      } catch {
+        /* swallow — wrapper surfaces a generic error toast */
+      }
+    });
+  }, [isProposalMode, proposalContext, id]);
 
   const handleDeleteGroup = () => {
     if (!id) return;
@@ -508,14 +531,24 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          {id && (
+          {/* Delete Group is admin-only — cascading deletes through
+              option items + cross-references in requirement trees
+              aren't part of the single-revision proposal shape. */}
+          {id && !isProposalMode && (
             <Button onClick={handleDeleteGroup} disabled={loading} size="sm" variant="outline" className="border-blood/30 btn-danger gap-2">
               <Trash2 className="w-4 h-4" /> Delete Group
             </Button>
           )}
-          <Button onClick={handleSaveGroup} disabled={loading} size="sm" className="btn-gold-solid gap-2">
-            <Save className="w-4 h-4" /> {id ? 'Save Changes' : 'Create Group'}
-          </Button>
+          {/* Save / Create button: hidden in proposal mode for
+              existing groups (the wrapper's Submit Changes captures
+              the form via pre-flush). Kept for new groups so the
+              user gets a one-shot create flow with navigation to
+              /edit/:newId. */}
+          {(!isProposalMode || !id) && (
+            <Button onClick={(e) => handleSaveGroup(e as any)} disabled={loading} size="sm" className="btn-gold-solid gap-2">
+              <Save className="w-4 h-4" /> {id ? 'Save Changes' : 'Create Group'}
+            </Button>
+          )}
         </div>
       </div>
 

@@ -23,6 +23,7 @@
 import {
   useCallback,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -32,7 +33,6 @@ import { auth } from '../../lib/firebase';
 import {
   ProposalAccumulatorContext,
   postQueuedChanges,
-  useQueueOperations,
   type ProposalAccumulatorContextValue,
   type QueuedChange,
 } from '../../lib/proposalAccumulator';
@@ -114,8 +114,60 @@ export function ProposalEditorWrapper({
   const [queue, setQueue] = useState<QueuedChange[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Ref-mirror of `queue` for synchronous access inside flushToBundle.
+  // React state updates from `queueChange` (called inside pre-flush
+  // callbacks) are batched and won't be visible to the SAME flush
+  // invocation otherwise — the closure-captured `queue` array would
+  // still be the pre-flush snapshot. The ref always points at the
+  // latest list so the drain sees pre-flush additions immediately.
+  const queueRef = useRef<QueuedChange[]>([]);
+  // Pre-flush callbacks registered by child editors. Each is called
+  // before the queue is drained; they typically call queueChange to
+  // capture the current form state (replacing per-editor Save buttons).
+  const preFlushCallbacks = useRef<Set<() => Promise<void> | void>>(
+    new Set(),
+  );
+  const registerPreFlush = useCallback(
+    (callback: () => Promise<void> | void) => {
+      preFlushCallbacks.current.add(callback);
+      return () => {
+        preFlushCallbacks.current.delete(callback);
+      };
+    },
+    [],
+  );
 
-  const { queueChange, resetQueue } = useQueueOperations(setQueue);
+  // Replacement for useQueueOperations that keeps `queueRef` in
+  // lockstep with `queue` state. The helper hook only sets state;
+  // we need both for the pre-flush-then-drain dance.
+  const queueChange = useCallback(
+    (change: Omit<QueuedChange, 'queue_id'>) => {
+      const queue_id = `q-${crypto.randomUUID()}`;
+      const entry: QueuedChange = { ...change, queue_id };
+      queueRef.current = [...queueRef.current, entry];
+      setQueue(queueRef.current);
+      return queue_id;
+    },
+    [],
+  );
+  const resetQueue = useCallback(() => {
+    queueRef.current = [];
+    setQueue([]);
+  }, []);
+  // Wrapped setQueue so callers (dropFields, dropField, dropEntity)
+  // that previously mutated `queue` via setQueue keep working —
+  // their updates need to mirror into queueRef too. Replace
+  // useQueueOperations's exposure of raw setQueue.
+  const setQueueMirrored = useCallback(
+    (next: QueuedChange[] | ((prev: QueuedChange[]) => QueuedChange[])) => {
+      setQueue((prev) => {
+        const resolved = typeof next === 'function' ? next(prev) : next;
+        queueRef.current = resolved;
+        return resolved;
+      });
+    },
+    [],
+  );
 
   // Drain the queue against a known bundleId. Caller is responsible
   // for ensuring the bundle exists (via setActiveBlock or startBlock)
@@ -128,9 +180,23 @@ export function ProposalEditorWrapper({
   // in the same bundle).
   const flushToBundle = useCallback(
     async (bundleId: string) => {
-      if (queue.length === 0) return { submitted: 0 };
       setSubmitting(true);
       try {
+        // Run pre-flush callbacks first. Editors register these to
+        // capture their current form state via `queueChange` —
+        // populating the queue at flush time, which is what makes the
+        // wrapper's Submit Changes button stand in for per-editor
+        // Save buttons. Sequential await so editors don't race each
+        // other.
+        for (const cb of preFlushCallbacks.current) {
+          await cb();
+        }
+
+        // After pre-flush, `queueRef.current` is the authoritative
+        // list (the React `queue` state lags by one render).
+        const currentQueue = queueRef.current;
+        if (currentQueue.length === 0) return { submitted: 0 };
+
         // Only drafts in THIS bundle are dedup-eligible — a draft from
         // a different bundle (impossible today since only one is
         // active, but defensive) shouldn't get patched here.
@@ -138,11 +204,11 @@ export function ProposalEditorWrapper({
           (d) => d.bundle_id === bundleId,
         );
         const result = await postQueuedChanges(
-          queue,
+          currentQueue,
           bundleId,
           sameBundleDrafts,
         );
-        setQueue([]);
+        resetQueue();
         // Refresh the BlockProvider's local cache so the navbar
         // pill + Block tab show the new draft count immediately.
         void refreshBlock();
@@ -151,7 +217,7 @@ export function ProposalEditorWrapper({
         setSubmitting(false);
       }
     },
-    [queue, drafts, refreshBlock],
+    [drafts, refreshBlock, resetQueue],
   );
 
   /* --------------------------------------------------------------- */
@@ -177,7 +243,7 @@ export function ProposalEditorWrapper({
   const dropFields = useCallback(
     (entityId: string, fieldNames: string[]) => {
       if (fieldNames.length === 0) return;
-      setQueue((q) =>
+      setQueueMirrored((q) =>
         q
           .map((entry) => {
             if (entry.entity_id !== entityId) return entry;
@@ -217,7 +283,7 @@ export function ProposalEditorWrapper({
   const dropEntity = useCallback(
     async (entityId: string) => {
       // 1. Clear from local queue.
-      setQueue((q) => q.filter((entry) => entry.entity_id !== entityId));
+      setQueueMirrored((q) => q.filter((entry) => entry.entity_id !== entityId));
       // 2. Delete any matching server-side drafts in the active block.
       //    Drafts only exist if a block is active and the user has
       //    previously submitted at least once.
@@ -268,6 +334,7 @@ export function ProposalEditorWrapper({
       focusModeEnabled: enableFocusMode,
       focusMode,
       setFocusMode,
+      registerPreFlush,
     }),
     [
       queue,
@@ -282,12 +349,18 @@ export function ProposalEditorWrapper({
       dropFields,
       enableFocusMode,
       focusMode,
+      registerPreFlush,
     ],
   );
 
   // Submit Changes button handler.
   const handleSubmit = useCallback(async () => {
-    if (queue.length === 0) {
+    // Pre-flush registered → editor will capture form state at flush
+    // time, so an empty queue here is normal. Skip the "nothing to
+    // submit" short-circuit and let flushToBundle decide (it returns
+    // `{ submitted: 0 }` if pre-flush ends up not queuing anything).
+    const canFlush = queue.length > 0 || preFlushCallbacks.current.size > 0;
+    if (!canFlush) {
       toast.message('No queued changes to submit.');
       return;
     }
@@ -299,6 +372,10 @@ export function ProposalEditorWrapper({
     }
     try {
       const { submitted } = await flushToBundle(activeBundleId);
+      if (submitted === 0) {
+        toast.message('No changes to submit.');
+        return;
+      }
       toast.success(
         `Added ${submitted} change${submitted === 1 ? '' : 's'} to the block.`,
       );
@@ -346,6 +423,13 @@ export function ProposalEditorWrapper({
   useUnsavedChangesWarning(queue.length > 0);
 
   const entityLabel = ENTITY_LABELS[primaryEntityType] ?? primaryEntityType;
+  // Submit Changes is enabled when:
+  //   - submitting is off AND
+  //   - there's something queued, OR an editor has registered a
+  //     pre-flush callback (the editor will capture form state at
+  //     click time, replacing per-editor Save buttons).
+  const hasPreFlush = preFlushCallbacks.current.size > 0;
+  const submitDisabled = submitting || (queue.length === 0 && !hasPreFlush);
   const submitLabel = submitting
     ? 'Submitting…'
     : queue.length === 0
@@ -393,7 +477,7 @@ export function ProposalEditorWrapper({
           queueCount={queue.length}
           submitLabel={submitLabel}
           submitting={submitting}
-          disabled={submitting || queue.length === 0}
+          disabled={submitDisabled}
           onSubmit={handleSubmit}
           focusModeEnabled={enableFocusMode}
           focusMode={focusMode}

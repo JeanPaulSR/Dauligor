@@ -908,14 +908,20 @@ export function ClassList({
                         </div>
                       ) : (
                         <div className="flex gap-2">
-                          <Link to={`/compendium/classes/view/${selectedClass.id}`}>
-                            <Button size="sm" className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
-                              View Page
-                            </Button>
-                          </Link>
+                          {/* View Page goes to the admin /compendium/classes/view/:id
+                              route — only useful on the admin list. On the proposal
+                              route, hide it so a content-creator's back-button flow
+                              stays inside /proposals/edit/* end-to-end. */}
+                          {!isProposalRoute && (
+                            <Link to={`/compendium/classes/view/${selectedClass.id}`}>
+                              <Button size="sm" className="btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8">
+                                View Page
+                              </Button>
+                            </Link>
+                          )}
                           {canManage && (
                             <Link to={editClassHref(selectedClass.id)}>
-                              <Button size="sm" variant="outline" className="border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8">
+                              <Button size="sm" variant={isProposalRoute ? undefined : "outline"} className={isProposalRoute ? "btn-gold-solid shadow-lg shadow-gold/20 uppercase tracking-widest text-[10px] h-8" : "border-gold/20 text-gold uppercase tracking-widest text-[10px] h-8"}>
                                 <Edit className="w-3.5 h-3.5 mr-1" /> Edit
                               </Button>
                             </Link>

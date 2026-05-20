@@ -120,6 +120,19 @@ export type ProposalAccumulatorContextValue = {
    * as `dropField` per key.
    */
   dropFields: (entityId: string, fieldNames: string[]) => void;
+  /**
+   * Register a callback that runs JUST BEFORE the wrapper flushes the
+   * queue to drafts. The callback can call `queueChange` to add
+   * entries that reflect the editor's current form state — this is
+   * how Submit Changes replaces per-editor Save buttons. Returns a
+   * deregistration function the caller uses in its useEffect
+   * cleanup.
+   *
+   * Multiple editors can register at once (the wrapper invokes them
+   * in registration order). Each callback may be sync or async; the
+   * wrapper awaits the entire sequence before draining.
+   */
+  registerPreFlush: (callback: () => Promise<void> | void) => () => void;
 };
 
 /**

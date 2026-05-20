@@ -30,7 +30,7 @@ import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } fr
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
-import { useProposalAccumulator } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { queueRebake } from '../../lib/moduleExport';
@@ -415,6 +415,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
   const basePath = isProposalRoute ? '/proposals/edit/classes' : '/compendium/classes';
   const classWriter = useProposalAccumulator('class', userProfile);
+  const proposalContext = useProposalContextOptional();
   const isProposalMode = classWriter.mode === 'proposal' || classWriter.mode === 'block';
   const [deleteClassConfirmOpen, setDeleteClassConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1060,11 +1061,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  const handleSave = async (e?: React.FormEvent) => {
+  const handleSave = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
     if (e) {
       e.preventDefault();
     }
-    setLoading(true);
+    if (!opts.silent) setLoading(true);
 
     try {
       const normalizedProficiencies = sanitizeProficiencyCollection({
@@ -1170,16 +1171,22 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         } else {
           await classWriter.create({ ...proposalPayload, id: saveId });
         }
-        toast.success(actionLabel(classWriter.mode, id ? 'updated' : 'created'));
+        if (!opts.silent) {
+          toast.success(actionLabel(classWriter.mode, id ? 'updated' : 'created'));
+        }
       } else {
         await upsertDocument('classes', saveId, d1Data);
         // Schedule a debounced R2 rebake for this class. Consecutive
         // saves reset the 1h clock; manual "Bake Now" bypasses the wait.
         queueRebake('class', saveId);
-        toast.success('Class saved successfully!');
+        if (!opts.silent) toast.success('Class saved successfully!');
       }
 
-      if (!id) {
+      // Skip the post-create navigate when the wrapper invoked us
+      // through pre-flush — navigating during flush would unmount the
+      // wrapper mid-drain. The explicit Save Class button keeps its
+      // existing navigate behavior.
+      if (!id && !opts.silent) {
         navigate(`${basePath}/edit/${saveId}`);
       }
       setProficiencies(normalizedProficiencies);
@@ -1188,11 +1195,42 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       setLastSavedTick(Date.now());
     } catch (error) {
       console.error("Error saving class:", error);
-      toast.error('Failed to save class.');
+      if (!opts.silent) toast.error('Failed to save class.');
+      else throw error;
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   };
+
+  // In proposal mode the per-editor "Save Class" button is hidden
+  // for existing classes — Submit Changes (from the wrapper) replaces
+  // it. We register a pre-flush callback that captures the current
+  // form state and queues it just before the wrapper drains. For
+  // brand-new classes (id === null) the explicit "Create Class"
+  // button stays visible because the user expects a one-shot create
+  // that navigates them into the edit form.
+  //
+  // Ref-mirror is used inside the callback so its closure always
+  // reads the latest handleSave (which itself reads the latest form
+  // state via React closures).
+  const handleSaveRef = useRef(handleSave);
+  useEffect(() => {
+    handleSaveRef.current = handleSave;
+  });
+  useEffect(() => {
+    if (!isProposalMode) return;
+    if (!proposalContext) return;
+    if (!id) return; // create flow keeps its own button + navigate
+    return proposalContext.registerPreFlush(async () => {
+      try {
+        await handleSaveRef.current(undefined, { silent: true });
+      } catch {
+        // Validation or queue failure — wrapper toast will surface a
+        // generic error. Per-field validation toasts already fired
+        // from handleSave's early returns.
+      }
+    });
+  }, [isProposalMode, proposalContext, id]);
 
   const handleInitializeBaseAdvancements = () => {
     const normalizedProficiencies = sanitizeProficiencyCollection(proficiencies);
@@ -1300,7 +1338,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     <div className="max-w-6xl mx-auto space-y-6 pb-20">
       <div className="section-header">
         <div className="flex items-center gap-4">
-          <Link to={id ? `/compendium/classes/view/${id}` : '/compendium/classes'}>
+          <Link to={
+            isProposalRoute
+              ? (id ? '/proposals/edit/classes' : '/my-proposals')
+              : (id ? `/compendium/classes/view/${id}` : '/compendium/classes')
+          }>
             <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
               <ChevronLeft className="w-4 h-4" /> Back
             </Button>
@@ -1313,17 +1355,29 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex items-center gap-2">
-            <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
-              <Save className="w-4 h-4" /> Save Class
-            </Button>
-            <BakeNowButton
-              kind="class"
-              id={id}
-              isDirty={isDirty}
-              onSaveFirst={handleSave}
-              size="sm"
-              className="gap-2"
-            />
+            {/* Save Class is only shown when there's no global Submit
+                Changes covering it: admin direct route always, AND the
+                proposal route's create flow (where the explicit click
+                navigates to /edit/:newId after queueing). For existing
+                classes in proposal mode, the wrapper's Submit Changes
+                captures the form state via pre-flush and replaces this. */}
+            {(!isProposalMode || !id) && (
+              <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
+                <Save className="w-4 h-4" /> {id ? 'Save Class' : 'Create Class'}
+              </Button>
+            )}
+            {/* BakeNow is admin-only — it fires the R2 bundle bake which
+                requires direct write access. */}
+            {!isProposalMode && (
+              <BakeNowButton
+                kind="class"
+                id={id}
+                isDirty={isDirty}
+                onSaveFirst={handleSave}
+                size="sm"
+                className="gap-2"
+              />
+            )}
           </div>
           <ReferenceSheetDialog
             title="Class Reference Sheet"
@@ -1352,7 +1406,9 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 <TabsTrigger value="multiclass-proficiencies">Multiclass Profs</TabsTrigger>
                 <TabsTrigger value="tags">Tags</TabsTrigger>
                 <TabsTrigger value="progression">Progression</TabsTrigger>
-                <TabsTrigger value="danger" disabled={!id}>Danger Zone</TabsTrigger>
+                {!isProposalMode && (
+                  <TabsTrigger value="danger" disabled={!id}>Danger Zone</TabsTrigger>
+                )}
               </div>
             </TabsList>
 
@@ -3874,8 +3930,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
             </TabsContent>
 
-            {/* Danger Zone */}
-            {id && (
+            {/* Danger Zone — admin only. Deleting a class cascades
+                through subclasses / features / scaling columns / etc.,
+                which aren't on the proposal allowlist. Content-creators
+                who want a class removed need to ask an admin. */}
+            {id && !isProposalMode && (
               <TabsContent value="danger" className="space-y-6 mt-0">
                 <div className="p-4 border border-blood/20 bg-blood/5 space-y-4 rounded-xl">
                   <h2 className="label-text text-blood border-b border-blood/10 pb-2 flex items-center gap-2 uppercase tracking-tighter">
