@@ -206,22 +206,30 @@ export default function Sidebar({
           ] : []),
         ]
       },
-      // Proposals — visible to admins (opt-in batching) and to anyone
-      // holding the `content-creator` permission (their only path to
-      // the editors post-Phase-4). Sub-items grow per-entity as Phase
-      // 4.5 wires each editor onto `/proposals/edit/*`.
+      // Proposals — visible to admins (so they can see their own
+      // /my-proposals view if they ever submitted via the block flow)
+      // and to anyone holding the `content-creator` permission (their
+      // only path to the editors post-Phase-4).
+      //
+      // Per-entity proposal-edit sub-items are content-creator-only;
+      // admins get direct-write access via Compendium → Spell Manager
+      // / Tags / etc. and would otherwise accidentally land in
+      // proposal-editor chrome when clicking these links, expecting
+      // the admin editor (2026-05-21 prod feedback).
       ...(canSeeProposals ? [{
         label: 'Proposals',
         icon: Inbox,
         path: '/my-proposals',
         subItems: [
           { label: 'My Proposals', path: '/my-proposals' },
-          { label: 'Tags', path: '/proposals/edit/tags' },
-          { label: 'Spell Rules', path: '/proposals/edit/spell-rules' },
-          { label: 'Spell Lists', path: '/proposals/edit/spell-lists' },
-          { label: 'Spells', path: '/proposals/edit/spells' },
-          { label: 'Option Groups', path: '/proposals/edit/option-groups' },
-          { label: 'Classes', path: '/proposals/edit/classes' },
+          ...(isContentCreator && !isAdmin ? [
+            { label: 'Tags', path: '/proposals/edit/tags' },
+            { label: 'Spell Rules', path: '/proposals/edit/spell-rules' },
+            { label: 'Spell Lists', path: '/proposals/edit/spell-lists' },
+            { label: 'Spells', path: '/proposals/edit/spells' },
+            { label: 'Option Groups', path: '/proposals/edit/option-groups' },
+            { label: 'Classes', path: '/proposals/edit/classes' },
+          ] : []),
         ],
       }] : []),
       { label: 'Rules', icon: Scroll, path: '/wiki?category=law' },

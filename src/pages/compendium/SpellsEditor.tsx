@@ -1933,23 +1933,20 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                             <Edit3 className="h-4 w-4" />
                             Reset
                           </Button>
-                          {/* In proposal mode the wrapper's Submit Changes
-                              captures the current spell via pre-flush, so the
-                              per-spell Save Spell button is redundant for
-                              existing entries. New spells keep their explicit
-                              Save (the user expects a one-shot create + the
-                              post-save editingId hop). */}
-                          {(!isProposalMode || !editingId) && (
-                            <Button
-                              type="submit"
-                              form="spell-manual-editor-form"
-                              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-                              disabled={saving}
-                            >
-                              <Save className="h-4 w-4" />
-                              {saving ? 'Saving...' : editingId ? 'Update Spell' : 'Save Spell'}
-                            </Button>
-                          )}
+                          {/* Save is always visible — Ctrl+S is additive,
+                              not a replacement, per the 2026-05-21 prod
+                              feedback. In proposal mode this still routes
+                              through applyProposalWrite which auto-flushes
+                              the queue (so one click = full persist). */}
+                          <Button
+                            type="submit"
+                            form="spell-manual-editor-form"
+                            className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                            disabled={saving}
+                          >
+                            <Save className="h-4 w-4" />
+                            {saving ? 'Saving...' : editingId ? 'Update Spell' : 'Save Spell'}
+                          </Button>
                         </>
                       )}
                     </div>
