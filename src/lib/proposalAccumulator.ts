@@ -485,11 +485,23 @@ export async function postQueuedChanges(
       // the draft (un-propose). UPDATE → drop the UPDATE draft AND
       // POST a fresh DELETE (the user wants to remove the live row,
       // not just abandon their changes to it).
-      const existingDelete = existingDrafts.find(
-        (d) =>
-          d.entity_type === q.entity_type &&
-          d.entity_id === q.entity_id,
-      );
+      //
+      // CREATE drafts carry `entity_id: null` server-side (the
+      // proposal endpoint nulls it — there's no live row yet). So a
+      // bare `d.entity_id === q.entity_id` lookup MISSES the CREATE
+      // case, even though the client-minted UUID is sitting right
+      // there in `proposed_payload.id`. Fall back to that, same as
+      // `getDraftedEntities` does — otherwise deleting a tag/spell/
+      // feat you just created in this block POSTs a doomed DELETE,
+      // 404s, and the queue gets stuck at "N queued" forever.
+      const existingDelete = existingDrafts.find((d) => {
+        if (d.entity_type !== q.entity_type) return false;
+        if (d.entity_id === q.entity_id) return true;
+        if (d.entity_id == null && typeof d.proposed_payload?.id === 'string') {
+          return d.proposed_payload.id === q.entity_id;
+        }
+        return false;
+      });
       if (existingDelete?.operation === 'create') {
         draftDrops.push(existingDelete.id);
         continue;
@@ -501,12 +513,19 @@ export async function postQueuedChanges(
       newRevisions.push(q);
       continue;
     }
-    const existing = existingDrafts.find(
-      (d) =>
-        d.entity_type === q.entity_type &&
-        d.entity_id === q.entity_id &&
-        (d.operation === 'create' || d.operation === 'update'),
-    );
+    // Same entity-id fallback for the UPDATE/CREATE-patch path:
+    // patching an existing CREATE draft also needs the
+    // proposed_payload.id fallback because the server-side draft's
+    // entity_id is null.
+    const existing = existingDrafts.find((d) => {
+      if (d.entity_type !== q.entity_type) return false;
+      if (d.operation !== 'create' && d.operation !== 'update') return false;
+      if (d.entity_id === q.entity_id) return true;
+      if (d.entity_id == null && typeof d.proposed_payload?.id === 'string') {
+        return d.proposed_payload.id === q.entity_id;
+      }
+      return false;
+    });
     if (existing && q.proposed_payload) {
       draftPatches.push({
         draftId: existing.id,
