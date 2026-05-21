@@ -16,10 +16,11 @@ import ActivityEditor from './ActivityEditor';
 import {
   useProposalAccumulator,
   useProposalContextOptional,
-  getDraftedEntities,
 } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel, type ProposalEntityType } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
+import { TombstoneRow } from '../proposals/TombstoneRow';
 import { useBlock } from '../../lib/proposalBlock';
 
 type DevelopmentFormData = {
@@ -269,13 +270,9 @@ export default function DevelopmentCompendiumManager({
 
   // Queued + drafted entity payloads for this entityType. Used to
   // surface in-progress items in the catalog before flush + approval.
-  const draftedEntities = useMemo(
-    () =>
-      entityType
-        ? getDraftedEntities(entityType, proposalContext, allDrafts, activeBundleId)
-        : { byId: new Map(), createdIds: new Set(), deletedIds: new Set() },
-    [entityType, proposalContext, allDrafts, activeBundleId],
-  );
+  // useProposalEntityDrafts handles the null-entityType case for
+  // generic-manager callers that don't pass one.
+  const draftedEntities = useProposalEntityDrafts(entityType ?? null);
 
   // Merge queued/drafted payloads into the live catalog so a newly-
   // created item is visible + selectable for further editing without
@@ -687,6 +684,25 @@ export default function DevelopmentCompendiumManager({
               ) : (
                 <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
                   {filteredEntries.map(entry => {
+                    // Tombstone branch — render queued/drafted DELETEs
+                    // with strike + Undo. Item delete is rare today
+                    // (the Delete button is admin-only) but the path
+                    // is here for consistency once propose-delete is
+                    // wired into the manager.
+                    if ((entry as any).__pendingDelete) {
+                      return (
+                        <TombstoneRow
+                          key={entry.id}
+                          size="md"
+                          name={entry.name || `Untitled ${singularLabel}`}
+                          onUndo={async () => {
+                            if (proposalContext) await proposalContext.dropEntity(String(entry.id));
+                          }}
+                        >
+                          {sourceNameById[entry.sourceId] || entry.sourceId || ''}
+                        </TombstoneRow>
+                      );
+                    }
                     const sourceLabel = sourceNameById[entry.sourceId] || entry.sourceId || 'Unknown source';
                     // Highlight rows the user has staged in the active
                     // block — same archive-blue accents as SpellsEditor

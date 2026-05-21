@@ -41,7 +41,8 @@ import { mergeTagInto } from '../../lib/tagMerge';
 import { moveTagToParent } from '../../lib/tagMove';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
 import { actionLabel, type WriterApi } from '../../lib/proposalAware';
-import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
 import { TombstoneRow, DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
@@ -206,21 +207,14 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
   // Proposal-mode awareness — surfaced earlier so derived data can
   // overlay queued + drafted entities onto the live DB lists.
   const proposalContextEarly = useProposalContextOptional();
-  const { drafts: allDraftsEarly, activeBundleId: activeBundleIdEarly } = useBlock();
 
   // ── Derived data ─────────────────────────────────────────────────────
   // Merge queued + active-block draft revisions into the displayed
   // tag-group list. Without this, a newly-created group sits invisible
   // in the queue until Submit + approval. The user expects to see
   // their own work-in-progress while building a block.
-  const draftedGroups = useMemo(
-    () => getDraftedEntities('tag_group', proposalContextEarly, allDraftsEarly, activeBundleIdEarly),
-    [proposalContextEarly, allDraftsEarly, activeBundleIdEarly],
-  );
-  const draftedTags = useMemo(
-    () => getDraftedEntities('tag', proposalContextEarly, allDraftsEarly, activeBundleIdEarly),
-    [proposalContextEarly, allDraftsEarly, activeBundleIdEarly],
-  );
+  const draftedGroups = useProposalEntityDrafts('tag_group');
+  const draftedTags = useProposalEntityDrafts('tag');
   // Convenience id sets for the row-highlight decoration in the rail
   // + right pane. byId already includes both queue and active-block
   // drafts (with the entity_id=null fallback), so the same set drives
@@ -277,6 +271,13 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
       if (merged.some((g) => g.id === draftId)) continue;
       merged.push({ ...payload, id: draftId });
     }
+    // Tombstones for group deletions that target ids not in the live
+    // list (CREATE drafts the user un-proposed in the same block).
+    // See the deletedSources comment in displayedAllTags.
+    for (const [deletedId, payload] of draftedGroups.deletedSources.entries()) {
+      if (merged.some((g) => g.id === deletedId)) continue;
+      merged.push({ ...payload, id: deletedId, __pendingDelete: true });
+    }
     return merged;
   }, [tagGroups, draftedGroups]);
 
@@ -305,6 +306,19 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
     for (const [draftId, payload] of draftedTags.byId.entries()) {
       if (merged.some((t) => t.id === draftId)) continue;
       merged.push({ ...normalizeTagRow({ ...payload, id: draftId }), id: draftId });
+    }
+    // Tombstones for deletions of entities that aren't in `allTags`
+    // (CREATE drafts the user is un-proposing in the same block). The
+    // deletedSources map captures the payload from before the queue
+    // DELETE wiped the entry from byId — render it as a tombstone row
+    // so the user can see what they deleted and Undo.
+    for (const [deletedId, payload] of draftedTags.deletedSources.entries()) {
+      if (merged.some((t) => t.id === deletedId)) continue;
+      merged.push({
+        ...normalizeTagRow({ ...payload, id: deletedId }),
+        id: deletedId,
+        __pendingDelete: true,
+      });
     }
     return merged;
   }, [allTags, draftedTags]);

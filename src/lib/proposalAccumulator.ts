@@ -268,7 +268,16 @@ export function useProposalContextOptional(): ProposalAccumulatorContextValue | 
  *   - `createdIds`: ids the user is CREATING (no live row yet).
  *     Editors merge these as virtual catalog rows.
  *   - `deletedIds`: ids the user has marked for deletion. Editors
- *     should hide the live row from their list.
+ *     should render these as tombstones (red strikethrough + undo)
+ *     rather than hiding them.
+ *   - `deletedSources`: payload snapshot for each deleted id, so the
+ *     tombstone row can render a meaningful label even when the entity
+ *     never had a live D1 row (e.g. user proposed a CREATE in this
+ *     block and then changed their mind and queued a DELETE before
+ *     submitting). Without this map, editors couldn't display the
+ *     name of a deleted-in-block CREATE because `allTags` /
+ *     `entries` / etc. don't contain the live row yet, and the
+ *     queue's DELETE doesn't carry a payload.
  *
  * **Important**: pass the active-block context (drafts + activeBundleId)
  * from `useBlock()` — the function can't reach into proposalBlock.tsx
@@ -293,10 +302,17 @@ export function getDraftedEntities(
   byId: Map<string, Record<string, any>>;
   createdIds: Set<string>;
   deletedIds: Set<string>;
+  deletedSources: Map<string, Record<string, any>>;
 } {
   const byId = new Map<string, Record<string, any>>();
   const createdIds = new Set<string>();
   const deletedIds = new Set<string>();
+  // Snapshot of the payload at the moment of deletion. Populated when
+  // the prior draft/queue layers had a payload for an id that a later
+  // DELETE then removed from `byId`. The display layer reads this so
+  // tombstones can show a name/source even for entities that never
+  // had a live D1 row.
+  const deletedSources = new Map<string, Record<string, any>>();
 
   // Pull server-side drafts in the active block first — they're the
   // older layer that the queue may then overlay on.
@@ -321,6 +337,10 @@ export function getDraftedEntities(
       if (!effectiveId) continue;
       if (d.operation === 'delete') {
         deletedIds.add(effectiveId);
+        // Capture the prior overlay (if any) before wiping it, so
+        // editors can still render the deleted entity's name etc.
+        const prior = byId.get(effectiveId);
+        if (prior) deletedSources.set(effectiveId, prior);
         byId.delete(effectiveId);
         continue;
       }
@@ -339,6 +359,13 @@ export function getDraftedEntities(
       if (!q.entity_id) continue;
       if (q.operation === 'delete') {
         deletedIds.add(q.entity_id);
+        // Capture the in-flight payload before wiping. This is what
+        // populates the tombstone row when the user creates an entity
+        // and then deletes it in the same block — the entity never
+        // had a live row, so without this snapshot the row would
+        // vanish from the editor with no Undo handle.
+        const prior = byId.get(q.entity_id);
+        if (prior) deletedSources.set(q.entity_id, prior);
         byId.delete(q.entity_id);
         createdIds.delete(q.entity_id);
         continue;
@@ -357,11 +384,12 @@ export function getDraftedEntities(
           if (q.operation === 'create') createdIds.add(q.entity_id);
         }
         deletedIds.delete(q.entity_id);
+        deletedSources.delete(q.entity_id);
       }
     }
   }
 
-  return { byId, createdIds, deletedIds };
+  return { byId, createdIds, deletedIds, deletedSources };
 }
 
 /** Subset of `DraftRevision` (from proposalBlock) that we need to

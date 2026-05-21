@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
-import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
-import { useBlock } from '../../lib/proposalBlock';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
+import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
+import { useTombstoneBanner } from '../../hooks/useTombstoneBanner';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
@@ -150,11 +152,10 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   // Queued + drafted subclass payloads keyed by entity_id. Falls back
   // to the queue when the live row doesn't exist yet (post-Create
   // navigate without flush) so the form doesn't blank out.
-  const { drafts: allSubclassDrafts, activeBundleId: subclassActiveBundleId } = useBlock();
-  const subclassDrafts = useMemo(
-    () => getDraftedEntities('subclass', proposalContext, allSubclassDrafts, subclassActiveBundleId),
-    [proposalContext, allSubclassDrafts, subclassActiveBundleId],
-  );
+  const subclassDrafts = useProposalEntityDrafts('subclass');
+  // Tombstone banner state (queued / drafted DELETE in active block).
+  const { isPendingDelete: isSubclassPendingDelete, undoDelete: undoSubclassDelete } =
+    useTombstoneBanner('subclass', id);
   // Same pattern as ClassEditor — after Create we stay on /new and
   // remember the minted id so subsequent saves route through UPDATE.
   const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
@@ -695,7 +696,17 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   if (loading) return <div className="p-8 text-center text-gold animate-pulse">Loading Subclass Editor...</div>;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
+    <fieldset
+      disabled={isSubclassPendingDelete}
+      className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 pb-24 border-0 m-0 disabled:opacity-95"
+    >
+      {isSubclassPendingDelete && (
+        <DeletedEntityBanner
+          entityLabel="Subclass"
+          name={name || 'this subclass'}
+          onUndo={undoSubclassDelete}
+        />
+      )}
       {/* In proposal mode the wrapper already labels the page
           ("PROPOSAL EDITOR | Subclass") + provides Submit Changes.
           Slim the header so the form starts tight under the wrapper
@@ -1824,6 +1835,6 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </fieldset>
   );
 }

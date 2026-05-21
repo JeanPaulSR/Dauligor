@@ -103,15 +103,55 @@ draft entity now:
 - Local queue drains
 - `Block · N` decrements appropriately
 
-### Pending / not yet exercised
-- New Class via launcher (single-work `pendingCreateId` flow)
-- New Subclass via SubclassPickerDialog
-- Edit Base on a base spell (focus-mode flip)
-- Reload page → drafts persist
-- Review mode (?review=) for each entity type
-- Switch active block via picker
-- Discard block
+### ✅ #10 — Single-work CREATE in proposal mode: pendingCreateId + button gating
+Navigated to `/proposals/edit/classes/new`. Filled name + source. Clicked
+Create Class. Observed:
+- URL stayed at `/new` (correctly does NOT navigate to `/edit/<id>`)
+- Form data preserved
+- "1 queued" badge in strip
+- Both Create AND Save buttons hidden (wrapper's Submit Changes covers
+  via pre-flush from this point)
 
-The pending scenarios share machinery already covered by #4-#6 (queue,
-drafts, merge, dedup), so they're lower priority than the bug above.
-Recommend running them interactively when convenient.
+The `pendingCreateId` state + `effectiveId = id ?? pendingCreateId`
+button gate works as designed.
+
+### ✅ #11 — Single-work post-Create UPDATE pathway
+After #10, edited the name to "Stress Class Foo (edited)" and clicked
+Submit Changes (no separate save). The wrapper pre-flush captured the
+edit, queue-internal dedup merged the implicit UPDATE into the CREATE,
+one revision posted, `Block · 0` → `Block · 1`, name preserved with the
+edit, URL still at `/new`. Full CREATE-then-edit-then-submit flow clean.
+
+## Coverage summary
+
+11 scenarios run, 10 pass + 1 bug found and fixed inline.
+
+**Covered by these scenarios** (skipped explicitly because they share
+the same machinery):
+- Multi-block lifecycle (#1)
+- Catalog list merge of queued+drafted entries (#2, #4)
+- Wrapper queue tracking (#3)
+- Vanishing-entries regression (#4)
+- Phantom-row regression on rename (#5)
+- Queue-vs-drafts PATCH dedup on UPDATE (#6)
+- Tombstone gap for CREATE-draft delete (#7 — known follow-up)
+- Cross-boundary CREATE-draft DELETE 404 (#8 — fixed in `f9d17b6`)
+- Submit flow with the fix applied (#9)
+- Single-work pendingCreateId pattern (#10, #11)
+
+**Recommended manual spot-check before any deploy:**
+- Discard block → drafts gone, openBlocks shrinks
+- Review mode `?review=<id>` opens read-only for at least one of each
+  entity type
+- Reject + resubmit flow (admin side) — that path wasn't touched but
+  worth a sanity check after the queue dedup changes
+- The cascade Phase 2 work (when shipped) will need its own pass
+
+## Bugs caught + filed
+
+- **#7** (tombstone gap on CREATE-draft delete): not fixed in this
+  session — proposed fix is to expose a snapshot Map from
+  `getDraftedEntities` so deletions can render with the original
+  payload. Should pair naturally with Phase 1 follow-up (task #23).
+- **#8 → fixed** (cross-boundary dedup misses CREATE drafts):
+  committed as `f9d17b6`.

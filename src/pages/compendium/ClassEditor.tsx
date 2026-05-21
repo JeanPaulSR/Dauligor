@@ -30,12 +30,13 @@ import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } fr
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
-import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
-import { useBlock } from '../../lib/proposalBlock';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalReview, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { ReviewBanner } from '../../components/proposals/ReviewBanner';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
+import { useTombstoneBanner } from '../../hooks/useTombstoneBanner';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { queueRebake } from '../../lib/moduleExport';
 import { BakeNowButton } from '../../components/compendium/BakeNowButton';
@@ -426,15 +427,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // proposal route: the live row doesn't exist yet, so fetching from
   // D1 would blank the form. Falling back to the queued payload keeps
   // their work visible until Submit Changes lands the draft.
-  const { drafts: allDraftRevisions, activeBundleId } = useBlock();
-  const classDrafts = useMemo(
-    () => getDraftedEntities('class', proposalContext, allDraftRevisions, activeBundleId),
-    [proposalContext, allDraftRevisions, activeBundleId],
-  );
+  const classDrafts = useProposalEntityDrafts('class');
   // Tombstone state — true when this class has a queued/drafted
   // DELETE in the active block. Shown via DeletedEntityBanner above
   // the form + wraps the rest of the form in fieldset disabled.
-  const isClassPendingDelete = !!id && classDrafts.deletedIds.has(id);
+  const { isPendingDelete: isClassPendingDelete, undoDelete: undoClassDelete } = useTombstoneBanner('class', id);
   // After a proposal-mode CREATE we stay on the /new route (navigating
   // to /edit/<id> would unmount the wrapper and destroy the queue).
   // We bind the minted id here so subsequent saves on this page take
@@ -1436,10 +1433,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         <DeletedEntityBanner
           entityLabel="Class"
           name={name || 'this class'}
-          onUndo={async () => {
-            if (!id || !proposalContext) return;
-            await proposalContext.dropEntity(id);
-          }}
+          onUndo={undoClassDelete}
         />
       )}
       {/* In proposal mode the wrapper already labels the page

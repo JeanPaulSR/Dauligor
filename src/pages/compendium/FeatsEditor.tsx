@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
+import { TombstoneRow } from '../../components/proposals/TombstoneRow';
 import { useBlock } from '../../lib/proposalBlock';
 import {
   Edit3,
@@ -442,10 +444,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   // Full payloads for queued/drafted feats, used to merge them into
   // the displayed catalog so newly-created feats are visible + editable
   // before they're approved.
-  const draftedFeatEntities = useMemo(
-    () => getDraftedEntities('feat', proposalContext, allDrafts, activeBundleId),
-    [proposalContext, allDrafts, activeBundleId],
-  );
+  const draftedFeatEntities = useProposalEntityDrafts('feat');
 
   // Base feats the user has flipped to editable via "Edit Base [Name]"
   // — unlocks persist for the session. Mirrors SpellsEditor's pattern.
@@ -968,6 +967,22 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                         className="custom-scrollbar overflow-y-auto"
                         innerClassName="space-y-2"
                         renderItem={(entry: any) => {
+                          // Tombstone branch — render queued/drafted
+                          // DELETEs as strike-through with Undo.
+                          if (entry.__pendingDelete) {
+                            return (
+                              <TombstoneRow
+                                key={entry.id}
+                                size="sm"
+                                name={entry.name || 'Untitled Feat'}
+                                onUndo={async () => {
+                                  if (proposalContext) await proposalContext.dropEntity(String(entry.id));
+                                }}
+                              >
+                                {entry.featType || 'Feat'}
+                              </TombstoneRow>
+                            );
+                          }
                           const selected = entry.id === editingId;
                           const sourceLabel = String(
                             sourceNameById[entry.sourceId] || entry.sourceId || 'Unknown Source',

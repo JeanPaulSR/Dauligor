@@ -14,10 +14,12 @@ import {
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
-import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
-import { useBlock } from '../../lib/proposalBlock';
+import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
+import { useTombstoneBanner } from '../../hooks/useTombstoneBanner';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
@@ -55,11 +57,10 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const isReviewingThis = !!reviewMode && !!reviewPayload;
   // Same queue/draft lookup pattern as ClassEditor — supports loading
   // a queued-but-not-yet-flushed group when the live row doesn't exist.
-  const { drafts: allGroupDrafts, activeBundleId: groupActiveBundleId } = useBlock();
-  const groupDrafts = useMemo(
-    () => getDraftedEntities('unique_option_group', proposalContext, allGroupDrafts, groupActiveBundleId),
-    [proposalContext, allGroupDrafts, groupActiveBundleId],
-  );
+  const groupDrafts = useProposalEntityDrafts('unique_option_group');
+  // Tombstone banner state (queued / drafted DELETE in active block).
+  const { isPendingDelete: isGroupPendingDelete, undoDelete: undoGroupDelete } =
+    useTombstoneBanner('unique_option_group', id);
   const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
   const effectiveId = id ?? pendingCreateId;
   const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false);
@@ -562,7 +563,17 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   // the inline group name. Save/Create + Delete buttons stay
   // because they're still relevant inside the form.
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20">
+    <fieldset
+      disabled={isGroupPendingDelete}
+      className="max-w-5xl mx-auto space-y-6 pb-20 border-0 m-0 disabled:opacity-95"
+    >
+      {isGroupPendingDelete && (
+        <DeletedEntityBanner
+          entityLabel="Modular Option Group"
+          name={name || 'this group'}
+          onUndo={undoGroupDelete}
+        />
+      )}
       <div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'section-header'}>
         <div className="flex items-center gap-3 min-w-0">
           <Link to={isProposalRoute ? '/my-proposals' : '/compendium/unique-options'}>
@@ -1134,6 +1145,6 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         destructive
         onConfirm={performDeleteItem}
       />
-    </div>
+    </fieldset>
   );
 }

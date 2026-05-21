@@ -26,9 +26,11 @@ import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite, denormalizeCompendiumData } from '../../lib/compendium';
-import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
+import { TombstoneRow } from '../../components/proposals/TombstoneRow';
 import { useBlock } from '../../lib/proposalBlock';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { Lock, Pencil } from 'lucide-react';
@@ -483,10 +485,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   // newly-created spells appear in the catalog before they're approved
   // (otherwise the user would only see a hidden "Submit 1 Change"
   // indicator with no way to keep editing the spell).
-  const draftedSpellEntities = useMemo(
-    () => getDraftedEntities('spell', proposalContext, allDrafts, activeBundleId),
-    [proposalContext, allDrafts, activeBundleId],
-  );
+  const draftedSpellEntities = useProposalEntityDrafts('spell');
 
   const [entries, setEntries] = useState<any[]>([]);
   const [spellDetailsById, setSpellDetailsById] = useState<Record<string, any>>({});
@@ -1614,7 +1613,25 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                 height={listInnerHeight}
                 itemHeight={36}
                 className="custom-scrollbar overflow-y-auto"
-                renderItem={(entry: SpellSummaryRecord) => {
+                renderItem={(entry: SpellSummaryRecord & { __pendingDelete?: boolean }) => {
+                  // Tombstone branch — render the row as a red strike
+                  // with Undo when the user has queued/drafted a DELETE
+                  // for it in the active block. Undo drops both queue
+                  // entries and any server-side draft for the id.
+                  if (entry.__pendingDelete) {
+                    return (
+                      <TombstoneRow
+                        key={entry.id}
+                        size="sm"
+                        name={entry.name || 'Untitled Spell'}
+                        onUndo={async () => {
+                          if (proposalContext) await proposalContext.dropEntity(String(entry.id));
+                        }}
+                      >
+                        {Number(entry.level ?? 0) === 0 ? 'Cantrip' : `Level ${entry.level ?? 0}`}
+                      </TombstoneRow>
+                    );
+                  }
                   const selected = entry.id === editingId;
                   const srcAbbrev = String(sourceAbbrevById[entry.sourceId] || entry.sourceId || '—');
                   const lvl = Number(entry.level ?? 0);
