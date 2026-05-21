@@ -14,7 +14,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 | Database schema change | [database/](database/) — read README first |
 | Adding a new D1 query path | [platform/d1-architecture.md](platform/d1-architecture.md) |
 | Adding an R2-stored asset type | [platform/r2-storage.md](platform/r2-storage.md) |
-| Adding a Vercel function or Express route | [platform/runtime.md](platform/runtime.md) |
+| Adding a Pages Function or Express route | [platform/runtime.md](platform/runtime.md) |
 | Permissions / RBAC change | [architecture/permissions-rbac.md](architecture/permissions-rbac.md) |
 | Adding a new sensitive table or per-route endpoint | [platform/security-gates.md](platform/security-gates.md) |
 | BBCode tag / TipTap extension | [ui/bbcode.md](ui/bbcode.md) |
@@ -28,7 +28,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 ### [platform/](platform/) — runtime infrastructure
 *Where things run, how they connect, and what env vars they need.*
 
-- [runtime.md](platform/runtime.md) — the four runtimes (browser, Worker, Vercel functions, Express dev) and how requests flow between them
+- [runtime.md](platform/runtime.md) — the runtimes (browser, Cloudflare Pages Functions, Cloudflare Worker, Express dev) and how requests flow between them
 - [d1-architecture.md](platform/d1-architecture.md) — D1 client API, cache layers, foundation heartbeat, JSON columns
 - [r2-storage.md](platform/r2-storage.md) — bucket layout, image types, WebP conversion, image-metadata table
 - [auth-firebase.md](platform/auth-firebase.md) — what stays from Firebase (Auth only), JWT flow, RBAC server-side helpers
@@ -89,7 +89,7 @@ Topic-segmented documentation. If you're working on one area, you should not nee
 *Setup, deployment, and what to do when things break.*
 
 - [local-dev.md](operations/local-dev.md) — two-terminal setup, env vars, common gotchas
-- [deployment.md](operations/deployment.md) — Vercel deploy flow, Worker deploy, D1 schema migrations
+- [deployment.md](operations/deployment.md) — Cloudflare Pages deploy flow, Worker deploy, D1 schema migrations
 - [backup-restore.md](operations/backup-restore.md) — D1 backups, Time Travel recovery, restore workflows
 - [troubleshooting.md](operations/troubleshooting.md) — D1 errors, cache resets, JWT issues, permission failures
 

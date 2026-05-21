@@ -7,7 +7,7 @@ For the **client API** (how to read/write D1 from app code), see [../platform/d1
 ## Architecture at a glance
 
 ```
-Browser → /api/d1/query (Vercel/Express) → Cloudflare Worker (env.DB) → D1 (dauligor-db)
+Browser → /api/d1/query (Cloudflare Pages Function in prod / Express in local dev) → Cloudflare Worker (env.DB) → D1 (dauligor-db)
 ```
 
 - One Worker (`dauligor-storage`) serves both D1 (`/query`) and R2 (`/upload`, `/list`, …).
@@ -50,7 +50,7 @@ Decisions kept consistent across all tables:
 3. Apply locally: `cd worker && npx wrangler d1 execute dauligor-db --local --file=migrations/00NN_*.sql`.
 4. Run the app locally; validate the new column round-trips through every read and write path that touches it.
 5. Apply remotely: same command with `--remote` instead of `--local`.
-6. Commit. (Vercel auto-deploys; the worker code only needs `wrangler deploy` if its schema awareness changed.)
+6. Commit. (Cloudflare Pages auto-deploys on push to main; the worker code only needs `wrangler deploy` if its schema awareness changed.)
 
 ## Resetting local dev
 

@@ -90,7 +90,7 @@ The merge is intentionally asymmetric: it never **removes** a favourite from one
 
 ## API endpoint
 
-`api/spell-favorites.ts` — Vercel serverless function. Auth via `requireAuthenticatedUser` (any signed-in user, not just staff). User id is always derived from the verified Firebase ID token, never from the request body — the client cannot ask about another user's favourites.
+`api/spell-favorites.ts` — shared handler served by a Cloudflare Pages Function in prod and by Express in local dev. Auth via `requireAuthenticatedUser` (any signed-in user, not just staff). User id is always derived from the verified Firebase ID token, never from the request body — the client cannot ask about another user's favourites.
 
 ### GET
 

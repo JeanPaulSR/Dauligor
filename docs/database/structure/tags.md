@@ -46,7 +46,7 @@ Tag matching in spell-rule queries and spell-list filters is **subtag-aware**: a
 
 The expansion is **spell-side**, not query-side — the matcher reads `expandTagsWithAncestors(spell.tags, parentByTagId)` into a Set and checks each query tag for set membership. Equivalent semantically to expanding the query, cheaper because we walk ancestors per spell instead of descendants per query tag.
 
-`expandTagsWithAncestors` and `buildTagParentMap` live in [`src/lib/tagHierarchy.ts`](../../../src/lib/tagHierarchy.ts). The same algorithm is inlined into [`api/_lib/_spellFilters.ts`](../../../api/_lib/_spellFilters.ts) because Vercel bundling can't reliably traverse cross-folder imports — drift contract: keep both copies in sync.
+`expandTagsWithAncestors` and `buildTagParentMap` live in [`src/lib/tagHierarchy.ts`](../../../src/lib/tagHierarchy.ts). The same algorithm is inlined into [`api/_lib/_spellFilters.ts`](../../../api/_lib/_spellFilters.ts) — originally because Vercel's bundler couldn't reliably traverse cross-folder imports; Pages Functions don't have that limitation, but the drift contract still applies: keep both copies in sync.
 
 Call sites that pass `parentByTagId` to the matcher today:
   - `src/lib/spellFilters.ts` (`matchSpellAgainstRule`) — central matcher

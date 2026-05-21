@@ -33,7 +33,7 @@ historical record + remaining-work tracker.
 | M3 — `system_metadata` writes not column-scoped | ✅ Closed | Proxy now refuses any `system_metadata` write except the foundation-bump fingerprint (`UPDATE system_metadata SET value = CURRENT_TIMESTAMP WHERE key = 'last_foundation_update'`). Legitimate writes go through `PUT /api/lore/system-metadata/wiki-settings` (admin only, folded into `api/lore.ts`). New writable singleton keys, if any, get their own dedicated routes — never a generic `/system-metadata/[key]` that could be abused. |
 | M4 — class_spell_lists rebuild from client | Deferred | `recomputeAppliedRulesForSpell` still fires from the client during `upsertSpell` (in `src/lib/compendium.ts`). Risk is staff-only DoS — repeatedly saving a spell flogs the recompute path. No privacy leak. Closing requires moving the recompute server-side, which needs a new `POST /api/spells` endpoint family that doesn't exist yet (or a folded `POST /api/spell-rules/recompute` action). Disproportionate scope for the value; revisit when a spell endpoint family is needed for other reasons. Tracked also in [../architecture/compendium-editor-patterns.md](../architecture/compendium-editor-patterns.md) Priority 7. |
 | L1 — `eras` writes through staff gate | ✅ Closed | `eras` added to `PROTECTED_WRITE_TABLES` in d1-proxy + AdminCampaigns hides era CRUD UI for non-admin |
-| #9 — eras per-route | ✅ Closed | `POST /api/admin/eras`, `PATCH /api/admin/eras/[id]`, `DELETE /api/admin/eras/[id]` folded into api/campaigns.ts (the dispatcher sniffs `/api/admin/eras` prefix and routes to era handlers; admin-only via per-handler `requireAdminAccess`). vercel.json rewrite added. Reads stay on the proxy — eras are a public-among-signed-in taxonomy. PROTECTED_WRITE_TABLES still includes `eras` as defense in depth so any escaped direct write gets admin-gated. AdminCampaigns.tsx's 3 era write call sites migrated; `upsertDocument` / `deleteDocument` imports dropped from that file. |
+| #9 — eras per-route | ✅ Closed | `POST /api/admin/eras`, `PATCH /api/admin/eras/[id]`, `DELETE /api/admin/eras/[id]` folded into api/campaigns.ts (the dispatcher sniffs `/api/admin/eras` prefix and routes to era handlers; admin-only via per-handler `requireAdminAccess`). Originally wired via vercel.json rewrite; now via the matching Pages Function catch-all under `functions/api/`. Reads stay on the proxy — eras are a public-among-signed-in taxonomy. PROTECTED_WRITE_TABLES still includes `eras` as defense in depth so any escaped direct write gets admin-gated. AdminCampaigns.tsx's 3 era write call sites migrated; `upsertDocument` / `deleteDocument` imports dropped from that file. |
 | L2 — image scan returns `users` rows | ✅ Closed | `scanForReferences` migrated to `POST /api/r2/scan-references`; the SCAN_TARGETS list moved server-side (api/_lib/r2-proxy.ts) so the scan reaches `users`/`characters` via `executeD1QueryInternal` past the new read gate. Folded into the existing `/api/r2/[action]` dispatcher — no function slot consumed. |
 | L3 — image rename `updateDocument` against any column | ✅ Closed | Same migration — `updateImageReferences` → `POST /api/r2/rewrite-references`. The `(table, column)` allow-list is pinned server-side; a compromised client can no longer ship UPDATE against arbitrary columns. |
 | L4 — `checkFoundationUpdate` polling raw SELECT | ✅ Closed | `GET /api/me/foundation-update` folded into api/me.ts — every signed-in tab's 30-second poll now goes through the per-route endpoint (returns `{ timestamp }` with `Cache-Control: no-store`) instead of raw `SELECT value FROM system_metadata` via /api/d1/query. No new function slot. |
@@ -736,7 +736,7 @@ so it can be checked off concretely. Leaks first, convenience second.
       and is now sealed.
 
     Migrating every compendium read to per-route endpoints would burn
-    significant Vercel function budget for no real privacy gain.
+    significant Pages Function and handler-maintenance budget for no real privacy gain.
     Re-evaluate if a new table joins the privacy-contract category
     (extend `PROTECTED_READ_TABLES`), not because the catalog tables
     should be hidden.
@@ -765,7 +765,7 @@ filed somewhere:
   `CharacterBuilder.tsx` save paths come from non-staff users. Either those
   writes are silently failing for non-staff users in production (in which case
   there's a bug to file), or the proxy is admitting them (in which case the
-  doc is wrong). Worth a 10-minute spot check in Vercel logs.
+  doc is wrong). Worth a 10-minute spot check in Cloudflare Pages Functions logs.
 - **`src/App.tsx:142,146,154,176`** auto-promotes the username `admin` / `gm`
   / the owner email to `role: 'admin'` from the client. This works because
   the proxy's mutation gate currently sees a fresh-signed-in user without a

@@ -52,7 +52,7 @@ By inputting this terminology in the "Mechanics" or "Automation" tabs of our fea
 
 ## 6. How the Pipeline is Wired Today
 
-The Foundry pairing flow is served by `api/module.ts` (Vercel) and mirrored by `server.ts` (local Express). For the per-endpoint wire format, payload kinds, cache behavior, and migration history see [foundry-export.md](../features/foundry-export.md#dynamic-catalog-api). The headline routes:
+The Foundry pairing flow is served by `api/module.ts` (via Cloudflare Pages Function entry under `functions/api/module/`) and mirrored by `server.ts` (local Express). For the per-endpoint wire format, payload kinds, cache behavior, and migration history see [foundry-export.md](../features/foundry-export.md#dynamic-catalog-api). The headline routes:
 
 | Endpoint | Returns | Built by |
 |---|---|---|
@@ -71,7 +71,7 @@ The Foundry pairing flow is served by `api/module.ts` (Vercel) and mirrored by `
 
 ### Why two copies — drift contract
 
-Vercel's serverless bundler does not reliably traverse cross-folder imports from `api/` into `src/lib/` for this project. Two attempts at `import { exportClassSemantic } from "../src/lib/classExport.js"` from `api/module.ts` crashed the function on load with `FUNCTION_INVOCATION_FAILED`. The workaround is to keep a server-only sibling under `api/_lib/` (`_classExport.ts`, `_referenceSyntax.ts`, `_classProgression.ts`) and consume it from `api/module.ts` directly. The drift-warning header at the top of `_classExport.ts` says the same.
+The original justification was that Vercel's serverless bundler did not reliably traverse cross-folder imports from `api/` into `src/lib/` for this project — two attempts at `import { exportClassSemantic } from "../src/lib/classExport.js"` from `api/module.ts` crashed the function on load with `FUNCTION_INVOCATION_FAILED`. The workaround is to keep server-only siblings under `api/_lib/` (`_classExport.ts`, `_referenceSyntax.ts`, `_classProgression.ts`) and consume them from `api/module.ts` directly. Cloudflare Pages Functions don't have the same bundler limitation, but keeping the sibling pairs scopes the bundle cleanly and the drift contract still applies. The drift-warning header at the top of `_classExport.ts` says the same.
 
 **The maintenance contract:** any change to the bundle shape — `denormalize*` helpers, `normalizeAdvancementForExport`, the `exportClassSemantic` body, the `ExportFetchers` interface — must land in **both** files. The client downloader and the server endpoint must produce byte-identical bundles for the same input. Forgetting either side will silently desync the Foundry module's import flow.
 

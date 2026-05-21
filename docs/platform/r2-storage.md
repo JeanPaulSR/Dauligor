@@ -1,6 +1,6 @@
 # R2 Storage
 
-Cloudflare R2 holds all binary media — class artwork, character portraits, lore article banners, icons, tokens. The browser never talks directly to R2 in production; uploads go through the Vercel/Express proxy, which forwards to the project Worker, which writes to the bucket.
+Cloudflare R2 holds all binary media — class artwork, character portraits, lore article banners, icons, tokens. The browser never talks directly to R2 in production; uploads go through the Cloudflare Pages Function (`/api/r2/[action]`), which forwards to the project Worker (which holds the bucket binding) and the Worker writes the object.
 
 Image *metadata* (creator, license, tags, etc.) lives in the D1 `image_metadata` table — see [../database/structure/](../database/structure/) once that doc is in place.
 
@@ -27,9 +27,9 @@ All require `Authorization: Bearer <R2_API_SECRET>`.
 
 Source: [worker/index.js](../../worker/index.js).
 
-## Vercel / Express proxy routes
+## Proxy routes (Cloudflare Pages Function in prod, Express in dev)
 
-The browser calls these. They verify the user's Firebase JWT (`requireImageManagerAccess`), then forward to the Worker with the shared `R2_API_SECRET`.
+The browser calls these. They verify the user's Firebase JWT (`requireImageManagerAccess`), then forward to the Worker with the shared `R2_API_SECRET`. Production routing is via [functions/api/r2/[action].ts](../../functions/api/r2/%5Baction%5D.ts) (single Pages Function dispatcher); local dev uses the Express handler in [server.ts](../../server.ts) backed by the same [api/_lib/r2-proxy.ts](../../api/_lib/r2-proxy.ts) helpers.
 
 | Method | Path | Calls Worker |
 |---|---|---|

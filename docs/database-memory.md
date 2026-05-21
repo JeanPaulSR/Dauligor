@@ -8,14 +8,14 @@ The Firestore→D1 migration is **complete and live**. As of 2026-05-08:
 
 - All app reads and writes go through Cloudflare D1 via the project Worker. `firebase/firestore` imports are forbidden anywhere in the codebase (guardrail comment in [src/lib/firebase.ts](../src/lib/firebase.ts)).
 - Image storage is on Cloudflare R2 (`https://images.dauligor.com`); image upload, list, rename, delete, and metadata all flow through `worker/index.js`.
-- The deployed app at [www.dauligor.com](https://www.dauligor.com) (Vercel) and the Foundry pairing module both consume the same `/api/module/sources` API which talks to remote D1 via the Cloudflare Worker.
+- The deployed app at [www.dauligor.com](https://www.dauligor.com) (Cloudflare Pages) and the Foundry pairing module both consume the same `/api/module/sources` API. On production the Pages Function reads D1 directly via its binding; in local dev the Express proxy forwards through the Cloudflare Worker on `:8787`.
 - Local dev uses `wrangler dev` (port 8787) for D1 + R2 simulation and Express + Vite (port 3000) for the app. See [docs/operations/local-dev.md](operations/local-dev.md).
 - Firebase Authentication is the JWT layer and is staying. The Firebase Admin SDK is still used server-side in 5 places to verify those JWTs — exit plan in `~/.claude/projects/E--DnD-Professional-Dev-Dauligor/memory/project_firebase_auth_exit_plan.md`.
 
 The migration was completed via:
 1. Schema applied to remote D1 (`0001_phase1_foundation.sql` through `0017_map_markers.sql`, plus the cleanup migration).
 2. Local sqlite dump exported with `wrangler d1 export … --no-schema` and replayed against remote.
-3. `worker/wrangler.toml` bindings updated; deployed worker URL set as `R2_WORKER_URL` in Vercel env.
+3. `worker/wrangler.toml` bindings updated; deployed worker URL set as `R2_WORKER_URL` in the Cloudflare Pages project env (also in `.env` for local dev).
 4. Per-class Foundry endpoint shipped (server-side `exportClassSemantic` in `api/_lib/_classExport.ts` — see [DIRECTORY_MAP §3](../DIRECTORY_MAP.md#3-server--proxy--worker)).
 
 ## Master Table Registry

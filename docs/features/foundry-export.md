@@ -121,7 +121,7 @@ The spell list is now served on its own endpoint with **live read-through** from
 
 **Size impact:** A typical Wizard pool of 37 spells dropped from ~141 KB (full Foundry-ready items, inline `system.description.value` + `system.activities` etc.) to ~26 KB (~80% reduction). Larger pools save proportionally more. The trade is one extra fetch per *picked* spell at embed time (typically 2-6 per level-1 import), but only the spells the user actually selects pay the cost.
 
-**Cache strategy:** `Cache-Control: public, max-age=60` (no `s-maxage`, no R2 layer). Each request runs two D1 queries — one for the `class_spell_lists` membership rows, one for the matching `spells` rows. For typical pools (20-100 spells) the response builds in tens of milliseconds. Vercel function cold-start dominates; warm latency is negligible.
+**Cache strategy:** `Cache-Control: public, max-age=60` (no `s-maxage`, no R2 layer). Each request runs two D1 queries — one for the `class_spell_lists` membership rows, one for the matching `spells` rows. For typical pools (20-100 spells) the response builds in tens of milliseconds. Pages Function cold-start dominates; warm latency is negligible.
 
 **Per-spell full item endpoint:** When the picker needs the description (row click in the detail panel) or the embed phase commits a pick to the actor, it fetches `/api/module/spells/<dbId>.json`:
 

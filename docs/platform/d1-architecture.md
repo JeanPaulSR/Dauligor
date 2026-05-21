@@ -7,7 +7,7 @@ The data layer that replaces Firestore. This doc covers the D1 client API, the t
 | Piece | Path | Role |
 |---|---|---|
 | Client lib | [src/lib/d1.ts](../../src/lib/d1.ts) | All D1 reads and writes from the browser |
-| Express/Vercel proxy | [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) | Verifies Firebase JWT, forwards to Worker |
+| Express dev / Pages Function proxy | [api/_lib/d1-proxy.ts](../../api/_lib/d1-proxy.ts) | Verifies Firebase JWT, forwards to Worker |
 | Worker endpoint | [worker/index.js](../../worker/index.js) (`/query`) | `env.DB.prepare(sql).bind(...).all()` |
 | Schema migrations | [worker/migrations/](../../worker/migrations/) | `0001_phase1_foundation.sql` … `0011_system_metadata.sql` |
 | Historical migration scripts | [scripts/_archive/](../../scripts/_archive/) | Firestore→D1 utilities + codemods from the May 2026 cut. Reference only — not part of any current loop. |
@@ -231,7 +231,7 @@ await batchQueryD1(ops);
 
 ## Per-route endpoints — the preferred shape for new work
 
-The generic `/api/d1/query` proxy still handles compendium reads (skills, tools, weapons, armor, spells, feats, items, classes, subclasses, tags, tag_groups, attributes, scaling_columns, etc.) but every new endpoint that touches sensitive data should be modeled on the per-route pattern: one Vercel function per resource (e.g. `api/me.ts`, `api/lore.ts`, `api/campaigns.ts`, `api/characters/[id].ts`, `api/profiles/[username].ts`), each with its own role gate and its own SQL kept inside the handler. The reference example is [api/spell-favorites.ts](../../api/spell-favorites.ts) — explicit auth scope, user id derived from the verified token, table-specific SQL, ownership checks before writes.
+The generic `/api/d1/query` proxy still handles compendium reads (skills, tools, weapons, armor, spells, feats, items, classes, subclasses, tags, tag_groups, attributes, scaling_columns, etc.) but every new endpoint that touches sensitive data should be modeled on the per-route pattern: one Pages Function + Express handler pair per resource (e.g. `api/me.ts`, `api/lore.ts`, `api/campaigns.ts`, `api/characters/[id].ts`, `api/profiles/[username].ts`), each with its own role gate and its own SQL kept inside the handler. The reference example is [api/spell-favorites.ts](../../api/spell-favorites.ts) — explicit auth scope, user id derived from the verified token, table-specific SQL, ownership checks before writes.
 
 The proxy gate is **layered** with these per-route endpoints. The generic proxy refuses any SELECT against `users` / `lore_secrets` / `characters` / `character_*` (`PROTECTED_READ_TABLES`) and any write to `users` / `eras` / `lore_*` (`PROTECTED_WRITE_TABLES`, admin-gated) or to `campaigns` / `campaign_members` / `system_metadata` (`CAMPAIGN_WRITE_PATTERN` / `SYSTEM_METADATA_WRITE_PATTERN`, 403'd at the proxy with a pointer at the per-route endpoint). The column-scoping and ownership-check promises in the per-route handlers therefore actually hold from a devtools perspective — a hostile signed-in user cannot route around them by sending raw SQL.
 
@@ -241,7 +241,7 @@ See [api-endpoints.md](api-endpoints.md) for the full surface that exists today,
 
 ### Per-user / per-character tables
 
-Two tables back the [spell-favourites](../features/spell-favorites.md) system. Both go through a dedicated Vercel route ([api/spell-favorites.ts](../../api/spell-favorites.ts)) rather than the generic `/api/d1/query` because they're auth-gated to "any signed-in user" (not staff) — `requireAuthenticatedUser` enforces that the row's `user_id` is always the verified-token uid, never a request-body field.
+Two tables back the [spell-favourites](../features/spell-favorites.md) system. Both go through a dedicated per-route handler ([api/spell-favorites.ts](../../api/spell-favorites.ts)) rather than the generic `/api/d1/query` because they're auth-gated to "any signed-in user" (not staff) — `requireAuthenticatedUser` enforces that the row's `user_id` is always the verified-token uid, never a request-body field.
 
 | Table | Migration | Composite PK | Notes |
 |---|---|---|---|

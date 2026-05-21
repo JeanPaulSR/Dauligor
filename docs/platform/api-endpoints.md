@@ -6,9 +6,9 @@ For the migration plan that produced this surface — including what's still on 
 
 ## Function budget
 
-Vercel Hobby plan caps each deployment at **12 serverless functions**. Several endpoints are consolidated into dispatchers (one file → multiple routes) specifically to fit. The pattern is:
+Several endpoints are consolidated into dispatchers (one file → multiple routes). The pattern dates to the pre-Cloudflare Vercel Hobby 12-function cap, but the consolidation still helps cohesion on Pages (related routes co-located, single auth check) and is the established convention here. The two shapes:
 
-- **Top-level resource file + rewrite** (`api/me.ts` + `vercel.json` rewrite `/api/me/(.*) → /api/me`) — used for catch-all paths because Vercel's pure-functions filesystem routing doesn't support real catch-all syntax. The handler parses the original path out of `req.url`.
+- **Top-level resource file + Pages catch-all** (`api/me.ts` shared handler + `functions/api/me/[[path]].ts` Pages entry) — Cloudflare Pages' `[[path]]` catch-all syntax routes every sub-path into the same handler. The handler parses the original path out of `req.url`. (Pre-cutover this required a `vercel.json` rewrite; Pages does it natively, no rewrite file needed.)
 - **Dynamic action segment** (`api/r2/[action].ts`, `api/admin/users/[id]/[action].ts`) — used where the sub-path has a fixed set of action names.
 
 Current count: **11 / 12** functions.
@@ -86,7 +86,7 @@ The proxy refuses direct writes to `campaigns` and `campaign_members` (`CAMPAIGN
 
 ### Era writes — folded into the same dispatcher
 
-`api/campaigns.ts` also handles `/api/admin/eras/*` (via `vercel.json` rewrite `/api/admin/eras/(.*) → /api/campaigns`). The dispatcher sniffs the `/api/admin/eras` URL prefix and routes to era handlers before the campaign-prefix parse runs. Eras are world-state taxonomy that own campaigns; folding into this file avoided spending a function slot on a dedicated `api/admin/eras.ts`.
+`api/campaigns.ts` also handles `/api/admin/eras/*` — Pages Function `functions/api/admin/eras/[[path]].ts` (or whatever the current Pages routing is for that prefix) wires both prefixes to the same handler, and the dispatcher sniffs the `/api/admin/eras` URL prefix and routes to era handlers before the campaign-prefix parse runs. Eras are world-state taxonomy that own campaigns; folding into this file avoided splitting a tightly-related admin surface across two handlers.
 
 | Method | Path | Gate | Returns |
 |---|---|---|---|
@@ -104,7 +104,7 @@ Era reads (`fetchCollection('eras', …)` from AdminCampaigns, CampaignEditor, L
 
 ### /api/admin/users (dispatcher)
 
-[api/admin/users.ts](../../api/admin/users.ts) — catch-all dispatcher at the resource root, mirroring `api/me.ts` / `api/lore.ts` / `api/campaigns.ts`. `vercel.json` rewrite `/api/admin/users/(.*) → /api/admin/users` routes every sub-path; the handler parses `req.url`. Single function — preserves the 11/12 Hobby plan budget.
+[api/admin/users.ts](../../api/admin/users.ts) — catch-all dispatcher at the resource root, mirroring `api/me.ts` / `api/lore.ts` / `api/campaigns.ts`. Cloudflare Pages `functions/api/admin/users/[[path]].ts` catch-all routes every sub-path into the same handler; the handler parses `req.url`.
 
 | Method | Path | Gate | Returns |
 |---|---|---|---|

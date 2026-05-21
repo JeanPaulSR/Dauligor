@@ -146,7 +146,7 @@ When iterating on schema, it's faster to nuke and re-apply than to write reversa
 
 ## Testing the Foundry pairing module locally
 
-The module's importer can hit either the live Vercel API (`https://www.dauligor.com/api/module/sources`) or the local Express server (`http://localhost:3000/api/module/sources`). Toggle via the **API Endpoint Mode** module setting in Foundry's *Configure Settings → Module Settings → Dauligor Pairing*.
+The module's importer can hit either the live Cloudflare Pages API (`https://www.dauligor.com/api/module/sources`) or the local Express server (`http://localhost:3000/api/module/sources`). Toggle via the **API Endpoint Mode** module setting in Foundry's *Configure Settings → Module Settings → Dauligor Pairing*.
 
 For local testing:
 

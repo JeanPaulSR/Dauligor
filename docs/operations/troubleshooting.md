@@ -14,7 +14,7 @@ The Express dev server can't read `R2_WORKER_URL` or `R2_API_SECRET`.
 ### `401 — Unauthorized` from the Worker
 The shared secret between the proxy and the Worker doesn't match.
 
-- `R2_API_SECRET` in `.env` (or Vercel env) must equal `API_SECRET` in `worker/.dev.vars` (or the Worker's secret store in prod).
+- `R2_API_SECRET` in `.env` (or the Cloudflare Pages project env) must equal `API_SECRET` in `worker/.dev.vars` (or the Worker's secret store in prod).
 - Restart **both** processes after editing.
 
 ### `[D1] Table X is empty.`
@@ -89,8 +89,8 @@ The Express server (`tsx watch server.ts`) reloads on save, but a watcher miss c
 - Stop and restart `npm run dev`.
 - Confirm the route is registered before the Vite middleware in `server.ts` (route order matters).
 
-### Vercel build fails with TypeScript errors locally absent
-Vercel builds with stricter settings than `tsc --noEmit`. Run `npm run lint` (`tsc --noEmit`) to catch them locally.
+### Cloudflare Pages build fails with TypeScript errors locally absent
+The Pages build runs `npm run build` (Vite production build) which is stricter than `tsc --noEmit`. Run `npm run build` locally before pushing to catch them, or at minimum `npm run lint` (`tsc --noEmit`).
 
 ## UI
 
@@ -110,9 +110,9 @@ The `isCollapsed` prop must be wired to a state in `App.tsx`. If toggling isn't 
 
 ## Production-specific
 
-### Vercel deploy succeeded but app shows blank screen
-- Open browser console. Likely an env var is missing — `R2_WORKER_URL` or `FIREBASE_SERVICE_ACCOUNT_JSON` set incorrectly in Vercel project settings.
-- Vercel functions log errors separately from the SPA — check the Vercel logs panel.
+### Cloudflare Pages deploy succeeded but app shows blank screen
+- Open browser console. Likely an env var or binding is missing — `R2_WORKER_URL` or `FIREBASE_SERVICE_ACCOUNT_JSON` set incorrectly in the Cloudflare Pages project settings (or the D1/R2 binding not attached).
+- Pages Functions log errors separately from the SPA — check the Cloudflare Pages Functions logs (dashboard → your project → Functions → Real-time logs).
 
 ### Worker deploy fails: "secret not set"
 Run `npx wrangler secret put API_SECRET` from `worker/`.

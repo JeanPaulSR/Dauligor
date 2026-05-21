@@ -25,7 +25,7 @@ The gates do NOT defend against:
 
 ### Layer 1 — Per-route endpoints (the preferred path)
 
-One Vercel function per resource. Each handler:
+One Pages Function per resource (production) backed by one Express handler per resource (local dev). Each handler:
 
 1. Reads the `Authorization: Bearer <token>` header.
 2. Calls one of the `require*` helpers (`requireAuthenticatedUser`, `requireStaffAccess`, `requireImageManagerAccess`, `requireAdminAccess`, `requireCharacterAccess`).
@@ -151,9 +151,9 @@ The `system_metadata` proxy gate refuses **any** non-bump write. Don't try to re
 
 The pattern (mirrored from `api/me.ts`, `api/lore.ts`, `api/campaigns.ts`):
 
-1. One file at `api/<resource>.ts`.
-2. `vercel.json` rewrite `/api/<resource>/(.*) → /api/<resource>` so sub-paths work despite Vercel pure-functions filesystem routing not supporting real catch-all syntax.
-3. Inside the handler, parse the original path out of `req.url` (the rewrite preserves it).
+1. Shared handler at `api/<resource>.ts` (also imported by `server.ts` for local Express dev).
+2. Pages Function entry at `functions/api/<resource>/[[path]].ts` — Cloudflare Pages' native catch-all syntax routes every sub-path into the same handler. (Pre-Cloudflare-cutover this used a `vercel.json` rewrite; that file no longer exists.)
+3. Inside the handler, parse the original path out of `req.url` (the routing preserves it).
 4. Dispatch on `(req.method, parsed-path)`.
 5. Validate body shape (allow-list of fields; type / length / shape checks).
 6. Hit `executeD1QueryInternal` for the actual queries — bypasses the proxy gate.

@@ -6,9 +6,9 @@ Every env var the app reads, where it's read, what it's for, and a sample value.
 
 | Variable | Where read | Required? | Local default |
 |---|---|---|---|
-| `R2_WORKER_URL` | Express + Vercel proxies | yes | `http://localhost:8787` |
-| `R2_API_SECRET` | Express + Vercel proxies | yes | `dauligor-asset-secret` |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Express + Vercel proxies (Identity Toolkit REST for admin user-management) | required for admin ops; verification works without it | unset |
+| `R2_WORKER_URL` | Express dev + Cloudflare Pages Functions | yes | `http://localhost:8787` |
+| `R2_API_SECRET` | Express dev + Cloudflare Pages Functions | yes | `dauligor-asset-secret` |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Express dev + Cloudflare Pages Functions (Identity Toolkit REST for admin user-management) | required for admin ops; verification works without it | unset |
 | `FIREBASE_PROJECT_ID` | `api/_lib/firebase-admin.ts` (used by JWKS verifier + REST base URL) | optional | `gen-lang-client-0493579997` |
 | `NODE_ENV` | `server.ts` | optional | unset (dev) |
 | `VITE_R2_WORKER_URL` | Browser bundle (legacy direct R2 path) | optional | unset |
@@ -16,9 +16,9 @@ Every env var the app reads, where it's read, what it's for, and a sample value.
 
 Vite-prefixed vars (`VITE_*`) are exposed to the **browser** at build time. Everything else is server-only.
 
-## Server (Express + Vercel proxies)
+## Server (Express dev + Cloudflare Pages Functions)
 
-Read from `.env` in dev (loaded by `dotenv/config` at the top of `server.ts`) and from the Vercel project settings in prod.
+Read from `.env` in dev (loaded by `dotenv/config` at the top of `server.ts`) and from the Cloudflare Pages project settings in prod.
 
 ### `R2_WORKER_URL`
 The base URL the proxy forwards D1 and R2 requests to.
@@ -28,7 +28,7 @@ The base URL the proxy forwards D1 and R2 requests to.
 ### `R2_API_SECRET`
 The shared secret between the proxy and the Worker. The proxy adds `Authorization: Bearer <R2_API_SECRET>` to every Worker request, and the Worker rejects anything without a matching value.
 - **Local dev**: `dauligor-asset-secret` (matches `worker/.dev.vars`).
-- **Production**: a strong secret stored in both the Vercel project env and the Worker secret store.
+- **Production**: a strong secret stored in both the Cloudflare Pages project env and the Worker secret store.
 
 ### `FIREBASE_SERVICE_ACCOUNT_JSON`
 The full service-account JSON document, JSON-stringified (one line, with `\n` literal newlines inside `private_key`). Used to mint OAuth2 access tokens for Firebase Identity Toolkit REST calls (`/accounts`, `/accounts:update`, `/accounts:delete`) and to sign custom tokens for the sign-in-link recovery flow.

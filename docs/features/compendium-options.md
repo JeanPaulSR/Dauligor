@@ -97,7 +97,7 @@ Only `string` (free-text by design) stays manual.
 
 Falls back to the legacy flat-array shape via `treeFromFlatRequiresOptionIds()` when an old bundle ships no tree.
 
-**Drift-managed pair**: `src/lib/requirements.ts` ↔ `api/_lib/_requirements.ts` — same reason as the `_classExport.ts` pair, the Vercel function bundle can't import across the `api/`/`src/` boundary. Keep them in sync.
+**Drift-managed pair**: `src/lib/requirements.ts` ↔ `api/_lib/_requirements.ts` — same reason as the `_classExport.ts` pair: originally Vercel's bundler couldn't reliably traverse the `api/`/`src/` boundary. Pages Functions don't have that limitation, but keeping the sibling pair scopes the bundle cleanly and the drift contract still applies. Keep them in sync.
 
 ### Total character level vs class level
 
