@@ -8,18 +8,19 @@
 // function that, given a delete revision, returns the list of
 // dependent UPDATE/DELETE revisions to add to the bundle.
 //
-// Phase 2 — currently only `tag` is implemented (the highest-impact
-// case and the cleanest reuse of the existing tag-usage scan).
-// `tag_group`, `unique_option_group`, and `class` strategies are
-// scoped out for follow-up sessions; their registry slots return
-// empty arrays so they don't block submit.
+// Phase 2 — `tag` was the first strategy (the highest-impact case and
+// the cleanest reuse of the existing tag-usage scan). `tag_group`,
+// `unique_option_group`, and `class` strategies are now also wired —
+// each delegates to the obvious primary cascade for its parent entity
+// (tags inside the group; items inside the group; subclasses under
+// the class) and where appropriate recursively pulls in the secondary
+// cascade (deleted tags fan out to spells/feats/items via tagStrategy).
 //
 // All other entity types fall through to a no-op — `subclass`,
 // `spell`, `feat`, `item`, `unique_option_item`, `class_spell_list`,
 // `spell_rule`, `spell_rule_application` either have no dependents
 // (standalone), or their cascade is handled by D1's FK ON DELETE
-// CASCADE without needing a proposal revision (subclasses under a
-// class).
+// CASCADE at admin-approval time without needing a proposal revision.
 //
 // See docs/architecture/proposal-editor-pattern.md for the bigger
 // picture (cascade_parent_revision_id, "Handle this dependent" UI,
@@ -162,6 +163,130 @@ const tagStrategy: Strategy = async (tagId) => {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Tag-group strategy                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Deleting a tag_group cascades to every tag in the group AS DELETEs,
+ * AND each of those tag deletes fans out to its consumers via the
+ * existing tagStrategy. So the transitive closure is:
+ *
+ *   tag_group X  →  tags in X (DELETE)  →  spells/feats/items/etc
+ *                                          referencing each tag (UPDATE,
+ *                                          strip the tag id)
+ *
+ * We don't need the cascade-preview endpoint to do recursion — the
+ * strategy computes the full closure itself and returns the flat list.
+ */
+const tagGroupStrategy: Strategy = async (tagGroupId) => {
+  if (!tagGroupId) return [];
+  const dependents: DependentSpec[] = [];
+
+  // Find every tag in the group.
+  const tagsResult = await executeD1QueryInternal({
+    sql: `SELECT id, name FROM tags WHERE group_id = ?`,
+    params: [tagGroupId],
+  });
+  const tags = Array.isArray(tagsResult?.results) ? tagsResult.results : [];
+
+  for (const tag of tags) {
+    const tagId = String(tag.id);
+    const tagName = String(tag.name ?? tagId);
+
+    // Primary: the tag itself is deleted alongside the group.
+    dependents.push({
+      entity_type: "tag",
+      entity_id: tagId,
+      operation: "delete",
+      proposed_payload: null,
+      description: `Deletes tag "${tagName}" along with its parent group.`,
+      current_value: null,
+    });
+
+    // Secondary: every tag-consumer (spell/feat/item/class/subclass/
+    // unique_option_item) needs its tag-array column updated to strip
+    // the id. Reuse tagStrategy to get that fan-out.
+    const tagConsumers = await tagStrategy(tagId);
+    dependents.push(...tagConsumers);
+  }
+
+  return dependents;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Unique-option-group strategy                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Deleting a unique_option_group cascades to every option-item that
+ * belongs to it (group_id FK). The items themselves don't have a
+ * proposable secondary cascade today — classes/subclasses reference
+ * them only via deeply-nested advancements JSON, which isn't a flat
+ * id-array column the cascade engine can patch. Admin cleans those
+ * up manually post-approval if needed.
+ */
+const uniqueOptionGroupStrategy: Strategy = async (groupId) => {
+  if (!groupId) return [];
+  const dependents: DependentSpec[] = [];
+
+  const itemsResult = await executeD1QueryInternal({
+    sql: `SELECT id, name FROM unique_option_items WHERE group_id = ?`,
+    params: [groupId],
+  });
+  const items = Array.isArray(itemsResult?.results) ? itemsResult.results : [];
+
+  for (const item of items) {
+    dependents.push({
+      entity_type: "unique_option_item",
+      entity_id: String(item.id),
+      operation: "delete",
+      proposed_payload: null,
+      description: `Deletes option item "${item.name ?? item.id}" along with its parent group.`,
+      current_value: null,
+    });
+  }
+
+  return dependents;
+};
+
+/* -------------------------------------------------------------------------- */
+/* Class strategy                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Deleting a class cascades to every subclass under it (class_id FK).
+ * Subclasses are proposable entities, so we enroll them as DELETE
+ * dependents. Spells / feats / items don't reference classes by id in
+ * a scannable column (the relationship is via class_spell_lists,
+ * which lives in its own table). class_spell_list rows DO carry a
+ * class_id, but their FK ON DELETE CASCADE cleans them up at the D1
+ * level on admin approval — no proposal-side revision needed.
+ */
+const classStrategy: Strategy = async (classId) => {
+  if (!classId) return [];
+  const dependents: DependentSpec[] = [];
+
+  const subResult = await executeD1QueryInternal({
+    sql: `SELECT id, name FROM subclasses WHERE class_id = ?`,
+    params: [classId],
+  });
+  const subclasses = Array.isArray(subResult?.results) ? subResult.results : [];
+
+  for (const sub of subclasses) {
+    dependents.push({
+      entity_type: "subclass",
+      entity_id: String(sub.id),
+      operation: "delete",
+      proposed_payload: null,
+      description: `Deletes subclass "${sub.name ?? sub.id}" along with its parent class.`,
+      current_value: null,
+    });
+  }
+
+  return dependents;
+};
+
+/* -------------------------------------------------------------------------- */
 /* Registry                                                                    */
 /* -------------------------------------------------------------------------- */
 
@@ -175,10 +300,9 @@ const tagStrategy: Strategy = async (tagId) => {
  */
 const STRATEGIES: Partial<Record<EntityType, Strategy>> = {
   tag: tagStrategy,
-  // Phase 2 follow-up:
-  // tag_group: tagGroupStrategy,   // cascade-delete every tag in the group + tag dependents
-  // unique_option_group: ...,      // scan classes.advancements JSON for optionGroupId refs
-  // class: classStrategy,          // cascade-DELETE every subclass with class_id = ?
+  tag_group: tagGroupStrategy,
+  unique_option_group: uniqueOptionGroupStrategy,
+  class: classStrategy,
 };
 
 /**
