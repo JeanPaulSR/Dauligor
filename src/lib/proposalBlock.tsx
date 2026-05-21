@@ -58,6 +58,14 @@ export type DraftRevision = {
   proposed_payload: Record<string, any> | null;
   notes_from_proposer: string | null;
   proposed_at: string;
+  /**
+   * Set when this draft was auto-enrolled by the cascade engine
+   * (parent-side DELETE triggered this dependent UPDATE/DELETE).
+   * Points at the parent revision's id. Surfaces in the block view
+   * as "this dependent comes from the parent's delete" + drives the
+   * "Handle this dependent" UI.
+   */
+  cascade_parent_revision_id: string | null;
 };
 
 export type ProposalBundle = {
@@ -250,6 +258,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
             proposed_payload: d.proposed_payload ?? null,
             notes_from_proposer: d.notes_from_proposer ?? null,
             proposed_at: d.proposed_at,
+            cascade_parent_revision_id: d.cascade_parent_revision_id ?? null,
           })),
       );
     } catch (err) {

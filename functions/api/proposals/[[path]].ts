@@ -62,6 +62,10 @@ import {
   type Operation,
   type Status,
 } from "../../../api/_lib/proposals.js";
+import {
+  detectCascadeDependents,
+  type DependentSpec,
+} from "../../../api/_lib/cascadeStrategies.js";
 
 const VALID_STATUS_FILTERS = new Set<Status>([
   "draft",
@@ -104,6 +108,14 @@ function normalizeSubmitBody(body: any): {
   // Block UX uses this to stage many edits without spamming the
   // queue mid-authoring.
   const isDraft = body.is_draft === true;
+  // Cascade mode: the submit body includes auto-enrolled dependent
+  // revisions (linked via cascade_parent_revision_id) from the
+  // cascade-preview pre-flush. A tag delete with 200 spell+class+feat
+  // dependents would overflow the standard 50-revision cap; the
+  // hard ceiling (1000) is enforced regardless. The client sets this
+  // flag explicitly so non-cascade callers can't accidentally bypass
+  // the smaller bound.
+  const isCascade = body.is_cascade === true;
 
   let rawRevisions: any[];
   if (Array.isArray(body.revisions)) {
@@ -119,8 +131,14 @@ function normalizeSubmitBody(body: any): {
   if (rawRevisions.length === 0) {
     throw new HttpError(400, "`revisions` must contain at least one entry.");
   }
-  if (rawRevisions.length > 50) {
-    throw new HttpError(400, "Max 50 revisions per bundle.");
+  const cap = isCascade ? CASCADE_HARD_LIMIT : 50;
+  if (rawRevisions.length > cap) {
+    throw new HttpError(
+      400,
+      isCascade
+        ? `Cascade bundle exceeds the ${CASCADE_HARD_LIMIT}-revision ceiling. Split the delete into smaller pieces or ask an admin.`
+        : "Max 50 revisions per bundle.",
+    );
   }
 
   const revisions: IncomingRevision[] = rawRevisions.map((raw, idx) => {
@@ -192,6 +210,94 @@ function normalizeSubmitBody(body: any): {
     notes_from_proposer: bundleNotes,
     is_draft: isDraft,
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Cascade preview                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Returns the dependent revisions a set of DELETE proposals would
+ * trigger, so the client can build the full POST body (parent +
+ * dependents) in one round-trip. Strategy registry lives in
+ * `api/_lib/cascadeStrategies.ts`.
+ *
+ * Body: `{ deletes: [{ entity_type, entity_id }, ...] }`
+ * Returns: `{ dependents: [{ parent_index, ...DependentSpec }, ...], over_limit: boolean }`
+ *
+ * `parent_index` is the array index of the parent delete in the
+ * request body. The client uses it to wire each dependent to the
+ * right `cascade_parent_revision_id` after pre-minting parent revision
+ * ids.
+ *
+ * `over_limit: true` when the combined parent+children count would
+ * exceed 1000 — the bundle-size hard ceiling. The client should
+ * surface a "talk to admin / break this delete into smaller pieces"
+ * error rather than silently truncating.
+ */
+const CASCADE_HARD_LIMIT = 1000;
+
+async function handleCascadePreview(request: Request): Promise<Response> {
+  const body = await request.json().catch(() => ({}));
+  const rawDeletes = Array.isArray(body?.deletes) ? body.deletes : [];
+  if (rawDeletes.length === 0) {
+    return Response.json({ dependents: [], over_limit: false });
+  }
+  if (rawDeletes.length > 50) {
+    throw new HttpError(400, "Cascade preview accepts at most 50 deletes per call.");
+  }
+
+  type ParentRef = { index: number; entity_type: EntityType; entity_id: string };
+  const parents: ParentRef[] = [];
+  for (let i = 0; i < rawDeletes.length; i++) {
+    const d = rawDeletes[i];
+    if (!d || typeof d !== "object") {
+      throw new HttpError(400, `deletes[${i}] must be an object.`);
+    }
+    if (!isProposableEntityType(d.entity_type)) {
+      throw new HttpError(400, `deletes[${i}].entity_type is invalid.`);
+    }
+    if (typeof d.entity_id !== "string" || !d.entity_id) {
+      throw new HttpError(400, `deletes[${i}].entity_id is required.`);
+    }
+    parents.push({ index: i, entity_type: d.entity_type, entity_id: d.entity_id });
+  }
+
+  // Run each strategy in parallel — the worker has the data hot,
+  // wall-clock is one round-trip per consumer table per parent.
+  const enrolled: Array<DependentSpec & { parent_index: number }> = [];
+  await Promise.all(
+    parents.map(async (p) => {
+      const deps = await detectCascadeDependents(p.entity_type, p.entity_id);
+      for (const dep of deps) {
+        enrolled.push({ ...dep, parent_index: p.index });
+      }
+    }),
+  );
+
+  // Dedup: if two parent deletes both cascade to the same child
+  // (e.g. two tags being deleted at once, both referenced by the
+  // same spell), collapse to one dependent. Last parent wins on
+  // ties — the strategy logic naturally orders them deterministically
+  // since we iterate parents in array order. The proposer sees one
+  // "Handle this dependent" row per affected entity instead of two.
+  const seen = new Set<string>();
+  const dedupedDependents: typeof enrolled = [];
+  for (const dep of enrolled) {
+    const key = `${dep.entity_type}:${dep.entity_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    dedupedDependents.push(dep);
+  }
+
+  const total = parents.length + dedupedDependents.length;
+  const over_limit = total > CASCADE_HARD_LIMIT;
+  return Response.json({
+    dependents: dedupedDependents,
+    over_limit,
+    total,
+    hard_limit: CASCADE_HARD_LIMIT,
+  });
 }
 
 async function handleSubmit(request: Request, proposerId: string): Promise<Response> {
@@ -715,6 +821,22 @@ export const onRequest = async (context: any): Promise<Response> => {
         { error: `Method ${request.method} not allowed.` },
         { status: 405 },
       );
+    }
+
+    // /api/proposals/cascade-preview — pre-flush hook used by the
+    // wrapper's Submit Changes flow. Given the set of DELETE
+    // revisions about to be POSTed, return the dependent revisions
+    // each strategy would enroll. The client uses the response to
+    // build the full POST body in one call (parent + dependents
+    // linked via cascade_parent_revision_id).
+    if (path.length === 1 && path[0] === "cascade-preview") {
+      if (request.method !== "POST") {
+        return Response.json(
+          { error: `Method ${request.method} not allowed.` },
+          { status: 405 },
+        );
+      }
+      return await handleCascadePreview(request);
     }
 
     // /api/proposals/bundle — block metadata + lifecycle.

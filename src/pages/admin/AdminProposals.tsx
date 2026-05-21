@@ -363,6 +363,24 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     return proposals.filter((p) => p.entity_type === activeTab);
   }, [proposals, activeTab]);
 
+  // Count cascade dependents per parent revision id. The badge on
+  // each row uses this to surface "+N cascade deps" so the admin
+  // can see at a glance which deletes will fan out on approval.
+  // Counts only pending children — resolved cascades already
+  // happened.
+  const cascadeChildCountByParent = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of proposals) {
+      if (p.status !== 'pending') continue;
+      if (!p.cascade_parent_revision_id) continue;
+      m.set(
+        p.cascade_parent_revision_id,
+        (m.get(p.cascade_parent_revision_id) ?? 0) + 1,
+      );
+    }
+    return m;
+  }, [proposals]);
+
   if (userProfile?.role !== 'admin') {
     return <div className="text-center py-20 font-serif italic">Access Denied. Admins only.</div>;
   }
@@ -443,6 +461,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
                   onRevert={() => handleRevert(p)}
                   onTogglePin={() => handleTogglePin(p)}
                   reverting={revertingId === p.id}
+                  cascadeChildCount={cascadeChildCountByParent.get(p.id)}
                 />
               ))}
             </ul>
@@ -538,6 +557,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
 
 function ProposalRow({
   proposal, onSelect, onApprove, onReject, onRevert, onTogglePin, reverting,
+  cascadeChildCount,
 }: {
   proposal: Proposal;
   onSelect: () => void;
@@ -546,6 +566,11 @@ function ProposalRow({
   onRevert: () => void;
   onTogglePin: () => void;
   reverting: boolean;
+  /** Number of pending cascade children whose `cascade_parent_revision_id`
+   *  points at this proposal. Approval cascades down; rejection
+   *  cascades down. Passed in by the parent component (AdminProposals)
+   *  which has the full proposal list available for the lookup. */
+  cascadeChildCount?: number;
 }) {
   const isPending = proposal.status === 'pending';
   const isApproved = proposal.status === 'approved';
@@ -565,6 +590,21 @@ function ProposalRow({
             {isPinned && (
               <Badge variant="outline" className="text-[9px] border-gold/40 text-gold">
                 Pinned
+              </Badge>
+            )}
+            {/* Cascade badges: parent shows +N children count;
+                children show "cascade child of $parent". Approving the
+                parent fans out to all pending children automatically
+                (see api/admin/proposals handleApprove); rejecting the
+                parent does the same. */}
+            {!!cascadeChildCount && cascadeChildCount > 0 && (
+              <Badge variant="outline" className="text-[9px] border-amber-600/40 text-amber-700">
+                +{cascadeChildCount} cascade dep{cascadeChildCount === 1 ? '' : 's'}
+              </Badge>
+            )}
+            {proposal.cascade_parent_revision_id && (
+              <Badge variant="outline" className="text-[9px] border-amber-600/30 text-amber-700/80">
+                cascade child
               </Badge>
             )}
           </p>

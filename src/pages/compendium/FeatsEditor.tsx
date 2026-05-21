@@ -5,6 +5,9 @@ import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { TombstoneRow } from '../../components/proposals/TombstoneRow';
+import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
+import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
+import { useCascadeDependent } from '../../hooks/useCascadeDependent';
 import { useBlock } from '../../lib/proposalBlock';
 import {
   Edit3,
@@ -252,6 +255,11 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<FeatFormData>(makeInitialFeatForm());
+
+  // Cascade dependent state for tag-delete fanout. Banner appears
+  // above the form when this feat was auto-enrolled as a dependent.
+  const cascadeDep = useCascadeDependent('feat', editingId);
+  const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
 
   // editingId / formData mirrors for async callbacks (auto-stage on
   // switch, pre-flush). Closures registered with the wrapper capture
@@ -1081,7 +1089,16 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                     the left, save/reset/delete on the right. Mirrors
                     SpellsEditor's pattern so the two managers feel
                     identical. */}
-                <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5">
+                <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-4">
+                  {cascadeDep && (
+                    <CascadeDependentBanner
+                      description={cascadeDep.description}
+                      resolved={cascadeDep.resolved}
+                      onAccept={cascadeDep.accept}
+                      onReopen={cascadeDep.reopen}
+                      onReplace={() => setReplaceTagPickerOpen(true)}
+                    />
+                  )}
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
@@ -1546,6 +1563,25 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           </div>
         </CardContent>
       </Card>
+      {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
+        <TagReplacementPicker
+          open={replaceTagPickerOpen}
+          onOpenChange={setReplaceTagPickerOpen}
+          deletedTagId={cascadeDep.parentEntityId}
+          onPicked={async (replacementTagId) => {
+            try {
+              await cascadeDep.replace(
+                cascadeDep.parentEntityId!,
+                replacementTagId,
+                'tags',
+              );
+              toast.success('Replacement saved.');
+            } catch (err: any) {
+              toast.error(err?.message || 'Could not replace tag.');
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

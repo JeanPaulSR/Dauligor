@@ -200,6 +200,62 @@ async function handleApprove(
     );
   }
 
+  // Cascade approval ordering: if this is a DELETE that has pending
+  // cascade children, approve the CHILDREN first (each is an UPDATE
+  // that strips the about-to-be-deleted reference). Otherwise the
+  // parent delete leaves stale ids dangling in dependents' JSON
+  // arrays — not an FK violation (refs live in JSON), but a
+  // correctness gap.
+  //
+  // Children only need approval-cascading when the parent is a DELETE
+  // — UPDATE / CREATE parents shouldn't have cascade children
+  // attached to them (the strategy registry only fires on DELETEs).
+  // Still, guard defensively.
+  const cascadedChildrenIds: string[] = [];
+  if (row.operation === "delete") {
+    const childResult = await executeD1QueryInternal({
+      sql: `SELECT id, entity_type, entity_id, operation, proposed_payload
+              FROM pending_revisions
+              WHERE cascade_parent_revision_id = ? AND status = 'pending'`,
+      params: [revisionId],
+    });
+    const childRows = Array.isArray(childResult?.results) ? childResult.results : [];
+    // Approve UPDATE children first, DELETE children last (the parent
+    // itself is a DELETE — children that are also DELETEs apply after
+    // the strip-references children but before the parent).
+    const updateChildren = childRows.filter((c: any) => c.operation === "update");
+    const deleteChildren = childRows.filter((c: any) => c.operation === "delete");
+    for (const child of [...updateChildren, ...deleteChildren]) {
+      if (!isProposableEntityType(child.entity_type)) continue;
+      try {
+        const { entityId: childEntityId } = await applyApprovedOperation({
+          entityType: child.entity_type as EntityType,
+          operation: child.operation as Operation,
+          entityId: child.entity_id,
+          proposedPayload: child.proposed_payload,
+        });
+        await executeD1QueryInternal({
+          sql: `UPDATE pending_revisions
+                    SET status = 'approved',
+                        reviewed_by_user_id = ?,
+                        reviewed_at = CURRENT_TIMESTAMP,
+                        entity_id = COALESCE(entity_id, ?)
+                  WHERE id = ?`,
+          params: [reviewerUid, childEntityId, String(child.id)],
+        });
+        cascadedChildrenIds.push(String(child.id));
+      } catch (err) {
+        console.error(
+          `[adminProposals] cascade child ${child.id} failed during parent ${revisionId} approval:`,
+          err,
+        );
+        // Don't abort the whole parent approve — admin can manually
+        // resolve the bad child. The parent delete proceeds with the
+        // remaining cleanly-stripped children already applied.
+      }
+    }
+  }
+
   const { entityId } = await applyApprovedOperation({
     entityType: row.entity_type as EntityType,
     operation: row.operation as Operation,
@@ -217,7 +273,12 @@ async function handleApprove(
     params: [reviewerUid, entityId, revisionId],
   });
 
-  return Response.json({ ok: true, id: revisionId, entity_id: entityId });
+  return Response.json({
+    ok: true,
+    id: revisionId,
+    entity_id: entityId,
+    cascaded_children_ids: cascadedChildrenIds,
+  });
 }
 
 /* -------------------------------------------------------------------------- */

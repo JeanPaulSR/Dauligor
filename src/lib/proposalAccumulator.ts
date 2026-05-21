@@ -633,7 +633,60 @@ export async function postQueuedChanges(
   }
 
   if (newRevisions.length > 0) {
-    const res = await fetch('/api/proposals', {
+    // Cascade preview: any DELETE in newRevisions may trigger
+    // dependent updates (e.g. deleting a tag enrolls every spell/
+    // class/feat that references it). Ask the server which
+    // dependents would be enrolled BEFORE posting the parents — so
+    // the proposer can be warned if the radius exceeds the
+    // hard-limit ceiling, and so we can wire the children to their
+    // parents via cascade_parent_revision_id in the follow-up POST.
+    //
+    // Strategies are registered per entity_type in
+    // api/_lib/cascadeStrategies.ts. Currently only `tag` is wired;
+    // every other type returns an empty dependent list and the
+    // submit flow continues unchanged (single POST, no children).
+    const deletes = newRevisions
+      .filter((q) => q.operation === 'delete' && q.entity_id)
+      .map((q) => ({ entity_type: q.entity_type, entity_id: q.entity_id! }));
+
+    let cascadeDependents: Array<{
+      parent_index: number;
+      entity_type: string;
+      entity_id: string;
+      operation: 'update' | 'delete';
+      proposed_payload: Record<string, any> | null;
+      description: string;
+    }> = [];
+
+    if (deletes.length > 0) {
+      const preview = await fetch('/api/proposals/cascade-preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: auth_header,
+        },
+        body: JSON.stringify({ deletes }),
+      });
+      if (!preview.ok) {
+        const body = await preview.json().catch(() => ({}));
+        throw new Error(
+          body?.error || `Cascade preview failed (HTTP ${preview.status})`,
+        );
+      }
+      const previewBody = await preview.json();
+      if (previewBody?.over_limit) {
+        throw new Error(
+          `This delete would affect ${previewBody.total} entities, which exceeds the ${previewBody.hard_limit}-revision cap. Split the delete into smaller pieces, or ask an admin to handle it directly.`,
+        );
+      }
+      cascadeDependents = Array.isArray(previewBody?.dependents)
+        ? previewBody.dependents
+        : [];
+    }
+
+    // Phase 1: POST the parent revisions (newRevisions). Capture
+    // the inserted ids in order so we can wire children to them.
+    const parentRes = await fetch('/api/proposals', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -651,11 +704,59 @@ export async function postQueuedChanges(
         is_draft: true,
       }),
     });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
+    if (!parentRes.ok) {
+      const body = await parentRes.json().catch(() => ({}));
       throw new Error(
-        body?.error || `Failed to submit changes (HTTP ${res.status})`,
+        body?.error || `Failed to submit changes (HTTP ${parentRes.status})`,
       );
+    }
+    const parentBody = await parentRes.json();
+    const parentRevisionIds: string[] = Array.isArray(parentBody?.revision_ids)
+      ? parentBody.revision_ids
+      : [];
+
+    // Phase 2: if cascade enrolled dependents, POST them in a second
+    // request linked to the parent revisions. Build a parent-index →
+    // delete-index-within-newRevisions map so we can resolve
+    // dep.parent_index (which refers to the deletes array we sent to
+    // cascade-preview) into the right revision_id.
+    if (cascadeDependents.length > 0) {
+      const deleteIndices: number[] = [];
+      newRevisions.forEach((q, i) => {
+        if (q.operation === 'delete' && q.entity_id) deleteIndices.push(i);
+      });
+      const childRevisions = cascadeDependents.map((dep) => ({
+        entity_type: dep.entity_type,
+        entity_id: dep.operation === 'delete' ? dep.entity_id : dep.entity_id,
+        operation: dep.operation,
+        proposed_payload: dep.proposed_payload,
+        notes_from_proposer: dep.description,
+        cascade_parent_revision_id: parentRevisionIds[deleteIndices[dep.parent_index]] ?? null,
+      }));
+      const childRes = await fetch('/api/proposals', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: auth_header,
+        },
+        body: JSON.stringify({
+          revisions: childRevisions,
+          bundle_id: bundleId,
+          is_draft: true,
+          is_cascade: true,
+        }),
+      });
+      if (!childRes.ok) {
+        const body = await childRes.json().catch(() => ({}));
+        // If the children fail, the parents are already in. Don't
+        // try to roll back automatically — surface the partial
+        // success so the proposer can decide (most likely they'll
+        // discard the block and retry). The admin queue will show
+        // the parent DELETE without its dependents.
+        throw new Error(
+          body?.error || `Failed to enroll cascade dependents (HTTP ${childRes.status}). Parent revisions were submitted; review your block.`,
+        );
+      }
     }
   }
 

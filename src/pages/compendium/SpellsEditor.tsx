@@ -31,6 +31,9 @@ import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { TombstoneRow } from '../../components/proposals/TombstoneRow';
+import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
+import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
+import { useCascadeDependent } from '../../hooks/useCascadeDependent';
 import { useBlock } from '../../lib/proposalBlock';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { Lock, Pencil } from 'lucide-react';
@@ -431,6 +434,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const reviewMode = useProposalReview();
   const reviewPayload = resolveReviewPayload(reviewMode, 'spell', null);
   const isReviewingSpell = !!reviewMode && !!reviewPayload && reviewMode.entityType === 'spell';
+  // (Cascade dependent state moved below editingId since the hook
+  // depends on it — see definition just after `setFormData`.)
   // Track which BASE spells the user has flipped to editable in the
   // current session via "Edit Base [Name]". Unlocks persist for the
   // session; switching focus modes doesn't lock them again.
@@ -498,6 +503,12 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<SpellFormData>(makeInitialSpellForm());
+
+  // Cascade dependent state — if this spell was auto-enrolled by a
+  // parent tag delete in the active block, the hook returns the
+  // dependent draft + accept/replace orchestration. Null otherwise.
+  const cascadeDep = useCascadeDependent('spell', editingId);
+  const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
 
   // Whether the editor form for `editingId` should render read-only.
   // The lock is about ENTITY OWNERSHIP, not which focus mode is
@@ -1703,6 +1714,15 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                   * so the editor uses ALL available height. */}
                 <Tabs defaultValue="basics" className="flex-1 min-h-0 flex flex-col">
                 <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5 space-y-4">
+                  {cascadeDep && (
+                    <CascadeDependentBanner
+                      description={cascadeDep.description}
+                      resolved={cascadeDep.resolved}
+                      onAccept={cascadeDep.accept}
+                      onReopen={cascadeDep.reopen}
+                      onReplace={() => setReplaceTagPickerOpen(true)}
+                    />
+                  )}
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
@@ -2504,6 +2524,25 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       destructive
       onConfirm={performDelete}
     />
+    {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
+      <TagReplacementPicker
+        open={replaceTagPickerOpen}
+        onOpenChange={setReplaceTagPickerOpen}
+        deletedTagId={cascadeDep.parentEntityId}
+        onPicked={async (replacementTagId) => {
+          try {
+            await cascadeDep.replace(
+              cascadeDep.parentEntityId!,
+              replacementTagId,
+              'tags',
+            );
+            toast.success('Replacement saved.');
+          } catch (err: any) {
+            toast.error(err?.message || 'Could not replace tag.');
+          }
+        }}
+      />
+    )}
     </>
   );
 }

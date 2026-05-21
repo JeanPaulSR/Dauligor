@@ -21,6 +21,9 @@ import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
 import { actionLabel, type ProposalEntityType } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { TombstoneRow } from '../proposals/TombstoneRow';
+import { CascadeDependentBanner } from '../proposals/CascadeDependentBanner';
+import { TagReplacementPicker } from '../proposals/TagReplacementPicker';
+import { useCascadeDependent } from '../../hooks/useCascadeDependent';
 import { useBlock } from '../../lib/proposalBlock';
 
 type DevelopmentFormData = {
@@ -128,6 +131,11 @@ export default function DevelopmentCompendiumManager({
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<DevelopmentFormData>(makeInitialForm(defaultData));
+
+  // Cascade dependent state for tag-delete fanout. Banner shows above
+  // the form when this entity was auto-enrolled as a dependent.
+  const cascadeDep = useCascadeDependent(entityType ?? '', editingId);
+  const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
 
   // editingId mirror + dirty-detection refs for the auto-stage-on-
   // switch flow (same pattern as SpellsEditor + FeatsEditor).
@@ -544,6 +552,16 @@ export default function DevelopmentCompendiumManager({
         <div className="space-y-6 lg:col-span-2">
           <Card className="border-gold/20 bg-card/50">
             <CardContent className="p-6">
+              {cascadeDep && (
+                <CascadeDependentBanner
+                  description={cascadeDep.description}
+                  resolved={cascadeDep.resolved}
+                  onAccept={cascadeDep.accept}
+                  onReopen={cascadeDep.reopen}
+                  onReplace={() => setReplaceTagPickerOpen(true)}
+                  className="mb-4"
+                />
+              )}
               <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-gold border-b border-gold/10 pb-2">
                 {editingId ? `Edit ${singularLabel}` : `New ${singularLabel}`}
               </h2>
@@ -760,6 +778,25 @@ export default function DevelopmentCompendiumManager({
           </Card>
         </div>
       </div>
+      {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
+        <TagReplacementPicker
+          open={replaceTagPickerOpen}
+          onOpenChange={setReplaceTagPickerOpen}
+          deletedTagId={cascadeDep.parentEntityId}
+          onPicked={async (replacementTagId) => {
+            try {
+              await cascadeDep.replace(
+                cascadeDep.parentEntityId!,
+                replacementTagId,
+                'tags',
+              );
+              toast.success('Replacement saved.');
+            } catch (err: any) {
+              toast.error(err?.message || 'Could not replace tag.');
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
