@@ -25,7 +25,7 @@ import {
   Dialog, DialogContent, DialogContentLarge, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
-import { Inbox, Check, X, AlertTriangle, Undo2, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen } from 'lucide-react';
+import { Inbox, Check, X, AlertTriangle, Undo2, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen, Wand2, Shield, Award, Star, Package, Boxes, Repeat } from 'lucide-react';
 import { recomputeAppliedRulesForSpell } from '../../lib/spellRules';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 
@@ -68,12 +68,29 @@ type Proposal = {
   cascade_parent_revision_id: string | null;
 };
 
+// Every proposable entity type needs a tab. The Phase 4 entity types
+// (spell / class / subclass / feat / item / unique_option_group /
+// unique_option_item) were added to the proposal allowlist but the
+// tab strip wasn't updated alongside them. That meant any pending
+// proposal on those types was invisible to admins — no tab to click,
+// no badge to notice. Discovered 2026-05-21 when a content-creator
+// submitted 3 spell proposals in prod and the admin couldn't see them.
+// Keep this list in sync with the `EntityType` union below + the
+// `ENTITY_LABEL` map + the `isProposableEntityType` allowlist in
+// api/_lib/proposals.ts.
 const ENTITY_TABS: Array<{ id: EntityType; label: string; icon: any }> = [
   { id: 'tag', label: 'Tags', icon: TagsIcon },
   { id: 'tag_group', label: 'Tag Groups', icon: Layers },
+  { id: 'spell', label: 'Spells', icon: Wand2 },
   { id: 'spell_rule', label: 'Spell Rules', icon: Sparkles },
   { id: 'spell_rule_application', label: 'Rule Applications', icon: ListChecks },
   { id: 'class_spell_list', label: 'Spell Lists', icon: BookOpen },
+  { id: 'class', label: 'Classes', icon: Shield },
+  { id: 'subclass', label: 'Subclasses', icon: Award },
+  { id: 'feat', label: 'Feats', icon: Star },
+  { id: 'item', label: 'Items', icon: Package },
+  { id: 'unique_option_group', label: 'Option Groups', icon: Boxes },
+  { id: 'unique_option_item', label: 'Option Items', icon: Repeat },
 ];
 
 const ENTITY_LABEL: Record<EntityType, string> = {
@@ -446,9 +463,50 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
           {loading && proposals.length === 0 ? (
             <p className="text-ink/50 italic text-center py-12">Loading…</p>
           ) : filteredProposals.length === 0 ? (
-            <p className="text-ink/50 italic text-center py-12">
-              {showResolved ? 'Nothing to show.' : 'No pending proposals for this entity.'}
-            </p>
+            (() => {
+              // Surface pending proposals on OTHER tabs so the admin
+              // doesn't land here, see "empty", and assume the system is
+              // idle. Particularly important because the default tab is
+              // Tags but most proposal traffic targets Spells / Feats /
+              // Classes / Items.
+              const tabsWithPending = ENTITY_TABS.filter(
+                (t) => t.id !== activeTab && (counts[t.id] ?? 0) > 0,
+              );
+              if (showResolved || tabsWithPending.length === 0) {
+                return (
+                  <p className="text-ink/50 italic text-center py-12">
+                    {showResolved ? 'Nothing to show.' : 'No pending proposals anywhere.'}
+                  </p>
+                );
+              }
+              return (
+                <div className="text-center py-12 space-y-3">
+                  <p className="text-ink/50 italic">
+                    No pending proposals for this entity.
+                  </p>
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-widest text-ink/60 font-bold">
+                      Pending elsewhere:
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {tabsWithPending.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setActiveTab(t.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold/10 hover:bg-gold/20 text-gold text-xs font-semibold transition-colors"
+                        >
+                          {t.label}
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 border-current text-current">
+                            {counts[t.id]}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <ul className="divide-y divide-gold/5">
               {filteredProposals.map((p) => (
