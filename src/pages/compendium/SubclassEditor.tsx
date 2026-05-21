@@ -2,10 +2,16 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { actionLabel } from '../../lib/proposalAware';
+import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
 import { useTombstoneBanner } from '../../hooks/useTombstoneBanner';
+import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
+import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
+import { useCascadeDependent } from '../../hooks/useCascadeDependent';
+import { useProposalSingleWorkId } from '../../hooks/useProposalSingleWorkId';
+import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
+import { ProposalAwareEditorHeader } from '../../components/proposals/ProposalAwareEditorHeader';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
@@ -49,6 +55,7 @@ import { buildCanonicalSubclassProgression } from '../../lib/classProgression';
 import {
   Dialog,
   DialogContent,
+  DialogContentLarge,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -156,10 +163,15 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   // Tombstone banner state (queued / drafted DELETE in active block).
   const { isPendingDelete: isSubclassPendingDelete, undoDelete: undoSubclassDelete } =
     useTombstoneBanner('subclass', id);
+  // Cascade dependent state — true when this subclass was auto-
+  // enrolled by a parent tag delete in the active block. Same
+  // Accept / Replace flow as ClassEditor.
+  const cascadeDep = useCascadeDependent('subclass', id);
+  const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
   // Same pattern as ClassEditor — after Create we stay on /new and
   // remember the minted id so subsequent saves route through UPDATE.
-  const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
-  const effectiveId = id ?? pendingCreateId;
+  // See useProposalSingleWorkId for the convention details.
+  const { effectiveId, pendingCreateId, recordCreate } = useProposalSingleWorkId(id);
 
   // Basic Info
   const [name, setName] = useState('');
@@ -529,15 +541,12 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
         // path the same way ClassEditor does.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Data;
         const isCreate = !effectiveId;
-        if (isCreate) {
-          await subclassWriter.create({ ...proposalPayload, id: saveId });
-          setPendingCreateId(saveId);
-        } else {
-          await subclassWriter.update(saveId, proposalPayload);
-        }
-        if (!opts.silent) {
-          toast.success(actionLabel(subclassWriter.mode, isCreate ? 'created' : 'updated'));
-        }
+        await applyProposalWrite(subclassWriter, proposalPayload, {
+          id: saveId,
+          isCreate,
+          silent: opts.silent,
+        });
+        if (isCreate) recordCreate(saveId);
       } else {
         await upsertDocument('subclasses', saveId, d1Data);
         // Subclass nests inside its parent class's bundle, so the rebake
@@ -561,33 +570,15 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
     }
   };
 
-  // Pre-flush: in proposal mode the wrapper's Submit Changes replaces
-  // the per-editor Save Subclass button. Register a callback that
-  // captures the form state via handleSave(silent) at flush time so the
-  // user doesn't have to click Save + Submit separately. Brand-new
-  // subclasses keep their explicit Create button — they need the
-  // navigate-on-create UX.
-  const handleSaveRef = useRef(handleSave);
-  useEffect(() => {
-    handleSaveRef.current = handleSave;
+  // Pre-flush: stage current form state at Submit Changes time. See
+  // useProposalPreFlushSave for the contract — gated on effectiveId
+  // so post-Create pendingCreateId edits are still re-staged.
+  useProposalPreFlushSave({
+    enabled: isProposalMode,
+    proposalContext,
+    handleSave: (_e, opts) => handleSave({ silent: opts?.silent ?? false }),
+    shouldRun: () => !!effectiveId,
   });
-  useEffect(() => {
-    if (!isProposalMode) return;
-    if (!proposalContext) return;
-    // Register whenever the editor is editing a known entity — either
-    // by route id or by post-Create pendingCreateId. Without the
-    // second case, post-create form edits would be lost on the next
-    // Submit Changes drain.
-    if (!id && !pendingCreateId) return;
-    return proposalContext.registerPreFlush(async () => {
-      try {
-        await handleSaveRef.current({ silent: true });
-      } catch {
-        // Validation toast (if any) already fired from handleSave's
-        // early returns; the wrapper surfaces a generic error.
-      }
-    });
-  }, [isProposalMode, proposalContext, id, pendingCreateId]);
 
   useKeyboardSave(() => { handleSave(); });
 
@@ -707,44 +698,47 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           onUndo={undoSubclassDelete}
         />
       )}
-      {/* In proposal mode the wrapper already labels the page
-          ("PROPOSAL EDITOR | Subclass") + provides Submit Changes.
-          Slim the header so the form starts tight under the wrapper
-          — same treatment as Class / Tags / Option Groups. Admin
-          direct route keeps the full h1 + parent-class subtitle. */}
-      <div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'flex flex-col sm:flex-row sm:items-center justify-between gap-4'}>
-        <div className="flex items-center gap-3 min-w-0">
-          <Link to={
-            isProposalRoute
-              ? (parentClass ? `/proposals/edit/classes/edit/${parentClass.id}` : '/proposals/edit/classes')
-              : (parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes')
-          }>
-            <Button variant="ghost" size="sm" className="text-gold hover:bg-gold/10">
-              <ChevronLeft className="w-4 h-4 mr-1" /> Back to {parentClass?.name || 'Class'}
-            </Button>
-          </Link>
-          {isProposalMode ? (
-            <span className="text-sm font-bold text-ink truncate">
-              {effectiveId ? (name || 'Untitled Subclass') : 'New Subclass'}
+      {cascadeDep && (
+        <CascadeDependentBanner
+          description={cascadeDep.description}
+          resolved={cascadeDep.resolved}
+          onAccept={cascadeDep.accept}
+          onReopen={cascadeDep.reopen}
+          onReplace={() => setReplaceTagPickerOpen(true)}
+        />
+      )}
+      <ProposalAwareEditorHeader
+        isProposalMode={isProposalMode}
+        backHref={
+          isProposalRoute
+            ? (parentClass ? `/proposals/edit/classes/edit/${parentClass.id}` : '/proposals/edit/classes')
+            : (parentClass ? `/compendium/classes/edit/${parentClass.id}` : '/compendium/classes')
+        }
+        backLabel={`Back to ${parentClass?.name || 'Class'}`}
+        proposalTitleNode={
+          <span className="text-sm font-bold text-ink truncate">
+            {effectiveId ? (name || 'Untitled Subclass') : 'New Subclass'}
+            {parentClass && (
+              <span className="ml-2 text-[10px] font-mono uppercase text-ink/40">
+                for {parentClass.name}
+              </span>
+            )}
+          </span>
+        }
+        adminContent={
+          <div className="flex flex-col">
+            <h1 className="h2-title text-gold uppercase tracking-tight">
+              {id ? 'Edit Subclass' : 'New Subclass'}
+            </h1>
+            <div className="flex items-center gap-2">
               {parentClass && (
-                <span className="ml-2 text-[10px] font-mono uppercase text-ink/40">
-                  for {parentClass.name}
-                </span>
+                <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
               )}
-            </span>
-          ) : (
-            <div className="flex flex-col">
-              <h1 className="h2-title text-gold uppercase tracking-tight">
-                {id ? 'Edit Subclass' : 'New Subclass'}
-              </h1>
-              <div className="flex items-center gap-2">
-                {parentClass && (
-                  <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
-                )}
-              </div>
             </div>
-          )}
-        </div>
+          </div>
+        }
+        adminContainerClassName="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex items-center gap-2">
             {/* See ClassEditor for the proposal-mode rationale — show
@@ -773,7 +767,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
             context={subclassReferenceContext}
           />
         </div>
-      </div>
+      </ProposalAwareEditorHeader>
 
       <div className="grid lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
@@ -1758,7 +1752,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           setManagingGroupSearch('');
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-card border-gold/30">
+        <DialogContentLarge className="bg-card border-gold/30">
           <DialogHeader>
             <DialogTitle className="text-gold font-serif uppercase tracking-tight">
               Manage {allOptionGroups.find(g => g.id === managingGroupId)?.name} Options
@@ -1833,8 +1827,27 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
               Done
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </DialogContentLarge>
       </Dialog>
+      {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
+        <TagReplacementPicker
+          open={replaceTagPickerOpen}
+          onOpenChange={setReplaceTagPickerOpen}
+          deletedTagId={cascadeDep.parentEntityId}
+          onPicked={async (replacementTagId) => {
+            try {
+              await cascadeDep.replace(
+                cascadeDep.parentEntityId!,
+                replacementTagId,
+                'tag_ids',
+              );
+              toast.success('Replacement saved.');
+            } catch (err: any) {
+              toast.error(err?.message || 'Could not replace tag.');
+            }
+          }}
+        />
+      )}
     </fieldset>
   );
 }

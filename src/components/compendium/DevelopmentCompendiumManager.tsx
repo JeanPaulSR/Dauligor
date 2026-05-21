@@ -18,7 +18,11 @@ import {
   useProposalContextOptional,
 } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { actionLabel, type ProposalEntityType } from '../../lib/proposalAware';
+import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
+import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
+import { useEditBaseUnlocks } from '../../hooks/useEditBaseUnlocks';
+import { ProposalAwareEditorHeader } from '../proposals/ProposalAwareEditorHeader';
+import { actionLabel, applyProposalWrite, type ProposalEntityType } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { TombstoneRow } from '../proposals/TombstoneRow';
 import { CascadeDependentBanner } from '../proposals/CascadeDependentBanner';
@@ -146,49 +150,24 @@ export default function DevelopmentCompendiumManager({
   const lastLoadedFormRef = useRef<string>('');
 
   // Ids the user has staged in the active block — drives My Drafts
-  // filtering AND the row-highlight in Browse mode.
-  const draftedIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (!entityType) return ids;
-    if (proposalContext) {
-      for (const q of proposalContext.queue) {
-        if (q.entity_type === entityType && q.entity_id) ids.add(q.entity_id);
-      }
-    }
-    if (activeBundleId) {
-      for (const d of allDrafts) {
-        if (
-          d.entity_type === entityType &&
-          d.entity_id &&
-          d.bundle_id === activeBundleId
-        ) {
-          ids.add(d.entity_id);
-        }
-      }
-    }
-    return ids;
-  }, [entityType, proposalContext, allDrafts, activeBundleId]);
+  // filtering AND the row-highlight in Browse mode. Generic over
+  // entityType because DCM is reused for multiple compendium types.
+  const draftedIds = useDraftedEntityIds(entityType ?? null);
 
-  // Base entries the user has flipped to editable via "Edit Base ..."
-  // — unlocks persist for the session, mirroring SpellsEditor.
-  const [unlockedBaseIds, setUnlockedBaseIds] = useState<Set<string>>(new Set());
-  const unlockBaseEntry = (id: string) => {
-    setUnlockedBaseIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  };
-
-  // Read-only when focus mode is on AND the user hasn't claimed the
-  // entry (no draft, not explicitly unlocked). New entries are never
-  // read-only — they're the user's own work from the start.
-  const isReadOnly =
-    focusModeEnabled &&
-    !!editingId &&
-    !unlockedBaseIds.has(editingId) &&
-    !draftedIds.has(editingId);
+  // Edit-base unlocks + isReadOnly. See useEditBaseUnlocks. DCM now
+  // matches SpellsEditor / FeatsEditor by flipping Focus Mode to
+  // drafts on unlock — the audit flagged the previous no-flip behavior
+  // as drift rather than intent.
+  const {
+    unlockedBaseIds,
+    unlock: unlockBaseEntry,
+    isReadOnly,
+  } = useEditBaseUnlocks({
+    focusModeEnabled,
+    editingId,
+    draftedIds,
+    proposalContext,
+  });
 
   const loadEntries = async () => {
     try {
@@ -426,14 +405,11 @@ export default function DevelopmentCompendiumManager({
         // the active block) instead of upsertDocument. Strip server-
         // managed timestamps the proposal endpoint also drops.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Payload;
-        if (wasCreate) {
-          await entityWriter.create({ ...proposalPayload, id: entryId });
-        } else {
-          await entityWriter.update(entryId, proposalPayload);
-        }
-        if (!opts.silent) {
-          toast.success(actionLabel(entityWriter.mode, wasCreate ? 'created' : 'updated'));
-        }
+        await applyProposalWrite(entityWriter, proposalPayload, {
+          id: entryId,
+          isCreate: wasCreate,
+          silent: opts.silent,
+        });
         // Sync the dirty baseline to the just-sent form so a follow-
         // up Submit Changes (or switch) doesn't re-queue the same
         // payload as a no-op UPDATE for a row that may not have a
@@ -486,22 +462,20 @@ export default function DevelopmentCompendiumManager({
   const handleSaveRef = useRef(handleSave);
   useEffect(() => { handleSaveRef.current = handleSave; });
 
-  // Pre-flush: Submit Changes captures the currently-edited entry
-  // before draining the wrapper's queue. Same dirty-check skips an
-  // idle Submit so it doesn't queue a no-op.
-  useEffect(() => {
-    if (!isProposalMode || !proposalContext) return;
-    return proposalContext.registerPreFlush(async () => {
-      if (!editingIdRef.current) return;
+  // Pre-flush: stage current entry before Submit Changes drains.
+  // Dirty check skips no-op queueing. DCM's handleSave is single-arg
+  // (opts only) so we adapt the hook's (e, opts) shape via a wrapper.
+  useProposalPreFlushSave({
+    enabled: isProposalMode,
+    proposalContext,
+    handleSave: (_e, opts) => handleSave(opts ?? {}),
+    shouldRun: () => {
+      if (!editingIdRef.current) return false;
       const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
-      if (currentSerialized === lastLoadedFormRef.current) return;
-      try {
-        await handleSaveRef.current({ silent: true });
-      } catch (err) {
-        console.error('[DevelopmentCompendiumManager] pre-flush stage failed:', err);
-      }
-    });
-  }, [isProposalMode, proposalContext]);
+      return currentSerialized !== lastLoadedFormRef.current;
+    },
+    onError: (err) => console.error('[DevelopmentCompendiumManager] pre-flush stage failed:', err),
+  });
 
   if (!canManage) {
     return <div className="text-center py-20">Access Denied. Admins or content-creators only.</div>;
@@ -514,29 +488,18 @@ export default function DevelopmentCompendiumManager({
         <span className="text-sm font-bold uppercase tracking-[0.3em]">Compendium Development</span>
       </div>
 
-      {/* In proposal mode the wrapper already labels the page
-          ("PROPOSAL EDITOR | <entity>") + provides Submit Changes.
-          Slim the header to just the Back link so the form starts
-          tight under the wrapper — same treatment as the other
-          editors. Admin direct route keeps the full title block. */}
-      {isProposalMode ? (
-        <div className="flex items-center justify-between gap-2 pb-2 border-b border-gold/10">
-          <Link to={backPath}>
-            <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
-              <ChevronLeft className="w-4 h-4" /> Back
-            </Button>
-          </Link>
-        </div>
-      ) : (
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      {/* DCM diverges from the other ProposalAwareEditorHeader callsites:
+          proposal mode renders Back only (no slim title — the wrapper's
+          strip is the page label), admin mode has a vertical title +
+          description + admin-notice stack instead of a horizontal title
+          row. The shared component still locks the proposal-mode container
+          className for us; the admin slot carries the rich content. */}
+      <ProposalAwareEditorHeader
+        isProposalMode={isProposalMode}
+        backHref={backPath}
+        proposalTitleNode={<span className="sr-only">{title}</span>}
+        adminContent={
           <div className="space-y-2">
-            <div className="flex items-center gap-4 mb-2">
-              <Link to={backPath}>
-                <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
-                  <ChevronLeft className="w-4 h-4" /> Back
-                </Button>
-              </Link>
-            </div>
             <div className="flex items-center gap-4">
               <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">{title}</h1>
             </div>
@@ -545,8 +508,10 @@ export default function DevelopmentCompendiumManager({
               Admin development surface. These entries are for schema shaping and Foundry alignment while the workflow is still in progress.
             </p>
           </div>
-        </div>
-      )}
+        }
+        adminContainerClassName="flex flex-col md:flex-row md:items-end justify-between gap-6"
+      />
+
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="space-y-6 lg:col-span-2">

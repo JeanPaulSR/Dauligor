@@ -16,10 +16,13 @@ import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '
 import { denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { actionLabel } from '../../lib/proposalAware';
+import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
 import { useTombstoneBanner } from '../../hooks/useTombstoneBanner';
+import { useProposalSingleWorkId } from '../../hooks/useProposalSingleWorkId';
+import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
+import { ProposalAwareEditorHeader } from '../../components/proposals/ProposalAwareEditorHeader';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
@@ -61,8 +64,8 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   // Tombstone banner state (queued / drafted DELETE in active block).
   const { isPendingDelete: isGroupPendingDelete, undoDelete: undoGroupDelete } =
     useTombstoneBanner('unique_option_group', id);
-  const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
-  const effectiveId = id ?? pendingCreateId;
+  // See useProposalSingleWorkId for the pendingCreateId convention.
+  const { effectiveId, pendingCreateId, recordCreate } = useProposalSingleWorkId(id);
   const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false);
   const [pendingItemDeleteId, setPendingItemDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -290,15 +293,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
       const targetId = effectiveId || crypto.randomUUID();
       if (isProposalMode) {
         const isCreate = !effectiveId;
-        if (isCreate) {
-          await groupWriter.create({ ...d1Data, id: targetId });
-          setPendingCreateId(targetId);
-        } else {
-          await groupWriter.update(targetId, d1Data);
-        }
-        if (!opts.silent) {
-          toast.success(actionLabel(groupWriter.mode, isCreate ? 'created' : 'updated'));
-        }
+        await applyProposalWrite(groupWriter, d1Data, {
+          id: targetId,
+          isCreate,
+          silent: opts.silent,
+        });
+        if (isCreate) recordCreate(targetId);
         // Proposal mode stays on /new after Create — navigating would
         // unmount the wrapper and lose the in-memory queue. The editor
         // uses pendingCreateId to track the minted id for future saves.
@@ -321,30 +321,14 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   };
 
   // Pre-flush registration: when wrapped in proposal mode for an
-  // EXISTING group, Submit Changes calls handleSaveGroup silently to
-  // capture the current form state. Same dance as ClassEditor; see
-  // its comment for the rationale.
-  const handleSaveGroupRef = useRef(handleSaveGroup);
-  useEffect(() => {
-    handleSaveGroupRef.current = handleSaveGroup;
+  // Pre-flush: stage current form state at Submit Changes time. See
+  // useProposalPreFlushSave for the contract.
+  useProposalPreFlushSave({
+    enabled: isProposalMode,
+    proposalContext,
+    handleSave: handleSaveGroup,
+    shouldRun: () => !!effectiveId,
   });
-  useEffect(() => {
-    if (!isProposalMode) return;
-    if (!proposalContext) return;
-    // Register pre-flush whenever the editor is bound to an entity —
-    // either via route param OR a locally-minted pendingCreateId after
-    // a proposal-mode Create. Without the second case, a user who
-    // created + then edited would lose the post-create edits when
-    // Submit Changes drained the queue.
-    if (!id && !pendingCreateId) return;
-    return proposalContext.registerPreFlush(async () => {
-      try {
-        await handleSaveGroupRef.current(undefined, { silent: true });
-      } catch {
-        /* swallow — wrapper surfaces a generic error toast */
-      }
-    });
-  }, [isProposalMode, proposalContext, id, pendingCreateId]);
 
   const handleDeleteGroup = () => {
     if (!id) return;
@@ -574,23 +558,16 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           onUndo={undoGroupDelete}
         />
       )}
-      <div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'section-header'}>
-        <div className="flex items-center gap-3 min-w-0">
-          <Link to={isProposalRoute ? '/my-proposals' : '/compendium/unique-options'}>
-            <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
-              <ChevronLeft className="w-4 h-4" /> Back
-            </Button>
-          </Link>
-          {isProposalMode ? (
-            <span className="text-sm font-bold text-ink truncate">
-              {id ? (name || 'Untitled Group') : 'New Group'}
-            </span>
-          ) : (
-            <h1 className="text-2xl font-serif font-bold text-ink uppercase tracking-tight">
-              {id ? `Edit ${name || 'Group'}` : 'New Unique Option Group'}
-            </h1>
-          )}
-        </div>
+      <ProposalAwareEditorHeader
+        isProposalMode={isProposalMode}
+        backHref={isProposalRoute ? '/my-proposals' : '/compendium/unique-options'}
+        proposalTitle={id ? (name || 'Untitled Group') : 'New Group'}
+        adminContent={
+          <h1 className="text-2xl font-serif font-bold text-ink uppercase tracking-tight">
+            {id ? `Edit ${name || 'Group'}` : 'New Unique Option Group'}
+          </h1>
+        }
+      >
         <div className="flex items-center gap-2">
           {/* Delete Group is admin-only — cascading deletes through
               option items + cross-references in requirement trees
@@ -610,7 +587,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
             </Button>
           )}
         </div>
-      </div>
+      </ProposalAwareEditorHeader>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">

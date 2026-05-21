@@ -22,7 +22,7 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogContentLarge, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
 import { Inbox, Check, X, AlertTriangle, Undo2, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen } from 'lucide-react';
@@ -479,7 +479,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
       />
 
       <Dialog open={!!revertDrift} onOpenChange={(open) => { if (!open) setRevertDrift(null); }}>
-        <DialogContent className="sm:max-w-[720px]">
+        <DialogContentLarge>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-blood">
               <AlertTriangle className="w-5 h-5" />
@@ -501,11 +501,11 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setRevertDrift(null)}>Close</Button>
           </DialogFooter>
-        </DialogContent>
+        </DialogContentLarge>
       </Dialog>
 
       <Dialog open={!!conflictDialog} onOpenChange={(open) => { if (!open) setConflictDialog(null); }}>
-        <DialogContent className="sm:max-w-[720px]">
+        <DialogContentLarge>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-blood">
               <AlertTriangle className="w-5 h-5" />
@@ -528,7 +528,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setConflictDialog(null)}>Close</Button>
           </DialogFooter>
-        </DialogContent>
+        </DialogContentLarge>
       </Dialog>
 
       <Dialog open={!!rejectDialog} onOpenChange={(open) => { if (!open) setRejectDialog(null); }}>
@@ -701,7 +701,7 @@ function ProposalDetailDialog({
   const isApproved = proposal.status === 'approved';
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+      <DialogContentLarge>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 text-base">
             <OperationBadge operation={proposal.operation} />
@@ -763,7 +763,7 @@ function ProposalDetailDialog({
             </Button>
           </DialogFooter>
         )}
-      </DialogContent>
+      </DialogContentLarge>
     </Dialog>
   );
 }

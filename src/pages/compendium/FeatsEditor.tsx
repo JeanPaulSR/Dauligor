@@ -2,12 +2,15 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { actionLabel } from '../../lib/proposalAware';
+import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { TombstoneRow } from '../../components/proposals/TombstoneRow';
 import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
 import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
 import { useCascadeDependent } from '../../hooks/useCascadeDependent';
+import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
+import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
+import { useEditBaseUnlocks } from '../../hooks/useEditBaseUnlocks';
 import { useBlock } from '../../lib/proposalBlock';
 import {
   Edit3,
@@ -424,65 +427,28 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     [sources],
   );
 
-  // Feat ids with staged work in the active block — local queue
-  // entries (unsubmitted) + server-side draft revisions in the
-  // current bundle. Drives My-Drafts focus-mode filtering AND the
-  // row-highlight in Browse mode (same wiring as SpellsEditor).
-  const draftedFeatIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (proposalContext) {
-      for (const q of proposalContext.queue) {
-        if (q.entity_type === 'feat' && q.entity_id) ids.add(q.entity_id);
-      }
-    }
-    if (activeBundleId) {
-      for (const d of allDrafts) {
-        if (
-          d.entity_type === 'feat' &&
-          d.entity_id &&
-          d.bundle_id === activeBundleId
-        ) {
-          ids.add(d.entity_id);
-        }
-      }
-    }
-    return ids;
-  }, [proposalContext, allDrafts, activeBundleId]);
+  // Feat ids with staged work in the active block (CREATE/UPDATE/DELETE).
+  // Drives My-Drafts focus-mode filtering AND the row-highlight in
+  // Browse mode (same wiring as SpellsEditor).
+  const draftedFeatIds = useDraftedEntityIds('feat');
 
   // Full payloads for queued/drafted feats, used to merge them into
   // the displayed catalog so newly-created feats are visible + editable
   // before they're approved.
   const draftedFeatEntities = useProposalEntityDrafts('feat');
 
-  // Base feats the user has flipped to editable via "Edit Base [Name]"
-  // — unlocks persist for the session. Mirrors SpellsEditor's pattern.
-  const [unlockedBaseIds, setUnlockedBaseIds] = useState<Set<string>>(new Set());
-  const unlockBaseFeat = (id: string) => {
-    setUnlockedBaseIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-    // Edit Base = declaring intent to work on this feat. Flip the
-    // wrapper's focus to drafts so the user sees the feat in their
-    // working set (and so the filter below treats unlocked-but-not-
-    // yet-saved entries as drafts). See SpellsEditor for the full
-    // rationale.
-    if (proposalContext?.setFocusMode) {
-      proposalContext.setFocusMode('drafts');
-    }
-  };
-
-  // Read-only when the wrapper enables focus-mode AND there's a live
-  // entry selected the user hasn't claimed yet (no draft, not
-  // explicitly unlocked). New feats (editingId === null) are never
-  // read-only — they're the user's own draft from the start.
-  const isReadOnly =
-    focusModeEnabled &&
-    !!editingId &&
-    !unlockedBaseIds.has(editingId) &&
-    !draftedFeatIds.has(editingId);
+  // Edit-base unlocks + isReadOnly. See useEditBaseUnlocks for the
+  // contract; same wiring as SpellsEditor.
+  const {
+    unlockedBaseIds,
+    unlock: unlockBaseFeat,
+    isReadOnly,
+  } = useEditBaseUnlocks({
+    focusModeEnabled,
+    editingId,
+    draftedIds: draftedFeatIds,
+    proposalContext,
+  });
 
   // Merge queued/drafted feats into the live catalog so the user can
   // see + keep editing their in-progress feats before flush/approval.
@@ -773,14 +739,11 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
         // is unchanged until admin approval. Strip server-managed
         // timestamps the proposal endpoint also drops.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = payload;
-        if (wasCreate) {
-          await featWriter.create({ ...proposalPayload, id: entryId });
-        } else {
-          await featWriter.update(entryId, proposalPayload);
-        }
-        if (!opts.silent) {
-          toast.success(actionLabel(featWriter.mode, wasCreate ? 'created' : 'updated'));
-        }
+        await applyProposalWrite(featWriter, proposalPayload, {
+          id: entryId,
+          isCreate: wasCreate,
+          silent: opts.silent,
+        });
         // Sync the dirty baseline to the just-saved form so a
         // follow-up Submit Changes (or switch) doesn't re-queue the
         // same payload as another draft. Critical for CREATE: after
@@ -829,22 +792,20 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => { handleSaveRef.current = handleSave; });
   useEffect(() => { formDataRef.current = formData; }, [formData]);
 
-  // Pre-flush: when the wrapper drains the queue on Submit Changes,
-  // capture the currently-edited feat first. Dirty-check mirrors the
-  // auto-stage logic so an idle Submit doesn't queue a no-op.
-  useEffect(() => {
-    if (!isProposalMode || !proposalContext) return;
-    return proposalContext.registerPreFlush(async () => {
-      if (!editingIdRef.current) return;
+  // Pre-flush: stage the currently-edited feat into the block right
+  // before the wrapper drains. Dirty check mirrors the switch-auto-
+  // stage so an idle Submit doesn't queue a no-op draft.
+  useProposalPreFlushSave({
+    enabled: isProposalMode,
+    proposalContext,
+    handleSave,
+    shouldRun: () => {
+      if (!editingIdRef.current) return false;
       const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
-      if (currentSerialized === lastLoadedFormRef.current) return;
-      try {
-        await handleSaveRef.current(undefined, { silent: true });
-      } catch (err) {
-        console.error('[FeatsEditor] pre-flush stage failed:', err);
-      }
-    });
-  }, [isProposalMode, proposalContext]);
+      return currentSerialized !== lastLoadedFormRef.current;
+    },
+    onError: (err) => console.error('[FeatsEditor] pre-flush stage failed:', err),
+  });
 
   const handleDelete = async () => {
     if (!editingId) return;

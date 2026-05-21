@@ -17,6 +17,7 @@
 // imports, plus optional `{ notes }` for reviewer context.
 
 import { useMemo } from 'react';
+import { toast } from 'sonner';
 import { auth } from './firebase';
 import { upsertDocument, deleteDocument } from './d1';
 import { useBlock } from './proposalBlock';
@@ -234,4 +235,40 @@ export function actionLabel(
 function capitalize(s: string): string {
   if (!s) return s;
   return s[0].toUpperCase() + s.slice(1);
+}
+
+/**
+ * Narrow helper for the `if (isCreate) writer.create else writer.update` +
+ * actionLabel toast pattern. Every editor's handleSave has the same six
+ * lines. Helper does the queue/upsert call + emits a mode-aware toast
+ * (admin: "X created"; content-creator: "Create submitted for review";
+ * block: "Create added to block").
+ *
+ * The helper does NOT manage the local `pendingCreateId` state — that
+ * belongs at the callsite (it depends on whether the editor is single-
+ * work or catalog). Single-work editors typically do:
+ *
+ *   const isCreate = !effectiveId;
+ *   await applyProposalWrite(writer, payload, { id: saveId, isCreate, silent });
+ *   if (isCreate) recordCreate(saveId);
+ *
+ * Catalog editors do the same minus `recordCreate` (they call
+ * `setEditingId(saveId)` instead).
+ *
+ * Errors propagate; the helper catches nothing. The wrapper's queue
+ * surfaces them via its own toast on Submit Changes failure.
+ */
+export async function applyProposalWrite(
+  writer: WriterApi,
+  payload: Record<string, any>,
+  opts: { id: string; isCreate: boolean; silent?: boolean },
+): Promise<void> {
+  if (opts.isCreate) {
+    await writer.create({ ...payload, id: opts.id });
+  } else {
+    await writer.update(opts.id, payload);
+  }
+  if (!opts.silent) {
+    toast.success(actionLabel(writer.mode, opts.isCreate ? 'created' : 'updated'));
+  }
 }

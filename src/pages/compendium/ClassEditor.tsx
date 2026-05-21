@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { ClassImageEditor, type ImageDisplay, DEFAULT_DISPLAY } from '../../components/compendium/ClassImageEditor';
 import { Sword, Save, Plus, Trash2, ChevronLeft, Shield, Scroll, Wand2, Heart, Hammer, BookOpen, Tag, Edit, Check, Image as ImageIcon, Zap, ListChecks, ChevronDown, ChevronRight, MessageCircle, Sliders } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../../components/ui/dialog';
+import { Dialog, DialogContent, DialogContentLarge, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '../../components/ui/dialog';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -32,11 +32,17 @@ import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { actionLabel } from '../../lib/proposalAware';
+import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { ReviewBanner } from '../../components/proposals/ReviewBanner';
 import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
 import { useTombstoneBanner } from '../../hooks/useTombstoneBanner';
+import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
+import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
+import { useCascadeDependent } from '../../hooks/useCascadeDependent';
+import { useProposalSingleWorkId } from '../../hooks/useProposalSingleWorkId';
+import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
+import { ProposalAwareEditorHeader } from '../../components/proposals/ProposalAwareEditorHeader';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { queueRebake } from '../../lib/moduleExport';
 import { BakeNowButton } from '../../components/compendium/BakeNowButton';
@@ -432,13 +438,16 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // DELETE in the active block. Shown via DeletedEntityBanner above
   // the form + wraps the rest of the form in fieldset disabled.
   const { isPendingDelete: isClassPendingDelete, undoDelete: undoClassDelete } = useTombstoneBanner('class', id);
+  // Cascade dependent state — true when this class was auto-enrolled
+  // by a parent tag delete in the active block (e.g. a deleted tag's
+  // id was stripped from this class's `tag_ids`). The banner offers
+  // Accept (keep the strip) / Replace (substitute another tag).
+  const cascadeDep = useCascadeDependent('class', id);
+  const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
   // After a proposal-mode CREATE we stay on the /new route (navigating
   // to /edit/<id> would unmount the wrapper and destroy the queue).
-  // We bind the minted id here so subsequent saves on this page take
-  // the UPDATE path against the SAME entity instead of minting fresh
-  // creates every time. Reset on prop change (route remount).
-  const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
-  const effectiveId = id ?? pendingCreateId;
+  // See useProposalSingleWorkId for the full pendingCreateId convention.
+  const { effectiveId, pendingCreateId, recordCreate } = useProposalSingleWorkId(id);
   // Review mode — the editor is being viewed via `?review=<proposal_id>`
   // (e.g. the user clicked a past submission in /my-proposals). In
   // this mode the form is populated from the proposal's payload, all
@@ -1234,15 +1243,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         // branch.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Data;
         const isCreate = !effectiveId;
-        if (isCreate) {
-          await classWriter.create({ ...proposalPayload, id: saveId });
-          setPendingCreateId(saveId);
-        } else {
-          await classWriter.update(saveId, proposalPayload);
-        }
-        if (!opts.silent) {
-          toast.success(actionLabel(classWriter.mode, isCreate ? 'created' : 'updated'));
-        }
+        await applyProposalWrite(classWriter, proposalPayload, {
+          id: saveId,
+          isCreate,
+          silent: opts.silent,
+        });
+        if (isCreate) recordCreate(saveId);
       } else {
         await upsertDocument('classes', saveId, d1Data);
         // Schedule a debounced R2 rebake for this class. Consecutive
@@ -1281,39 +1287,15 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  // In proposal mode the per-editor "Save Class" button is hidden
-  // for existing classes — Submit Changes (from the wrapper) replaces
-  // it. We register a pre-flush callback that captures the current
-  // form state and queues it just before the wrapper drains. For
-  // brand-new classes (id === null) the explicit "Create Class"
-  // button stays visible because the user expects a one-shot create
-  // that navigates them into the edit form.
-  //
-  // Ref-mirror is used inside the callback so its closure always
-  // reads the latest handleSave (which itself reads the latest form
-  // state via React closures).
-  const handleSaveRef = useRef(handleSave);
-  useEffect(() => {
-    handleSaveRef.current = handleSave;
+  // Pre-flush: stage the currently-edited class into the queue right
+  // before Submit Changes drains. Single-work gate is `effectiveId`
+  // (an in-progress create OR an existing edit — both need staging).
+  useProposalPreFlushSave({
+    enabled: isProposalMode,
+    proposalContext,
+    handleSave,
+    shouldRun: () => !!effectiveId,
   });
-  useEffect(() => {
-    if (!isProposalMode) return;
-    if (!proposalContext) return;
-    // Register whenever the editor is bound to an entity. Without
-    // pendingCreateId here, post-Create edits to a freshly-queued
-    // class would not be re-staged before flush — the user's tweaks
-    // would silently fall on the floor when Submit Changes ran.
-    if (!id && !pendingCreateId) return;
-    return proposalContext.registerPreFlush(async () => {
-      try {
-        await handleSaveRef.current(undefined, { silent: true });
-      } catch {
-        // Validation or queue failure — wrapper toast will surface a
-        // generic error. Per-field validation toasts already fired
-        // from handleSave's early returns.
-      }
-    });
-  }, [isProposalMode, proposalContext, id, pendingCreateId]);
 
   const handleInitializeBaseAdvancements = () => {
     const normalizedProficiencies = sanitizeProficiencyCollection(proficiencies);
@@ -1436,53 +1418,40 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           onUndo={undoClassDelete}
         />
       )}
-      {/* In proposal mode the wrapper already labels the page
-          ("PROPOSAL EDITOR | Class") + provides Submit Changes.
-          Slim the section-header in that case so the form starts
-          tight under the wrapper — same treatment as TagsExplorer
-          / UniqueOptionGroupEditor. Admin direct route keeps the
-          full h1 since there's no wrapper header above it. */}
-      <div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'section-header'}>
-        <div className="flex items-center gap-3 min-w-0">
-          <Link to={
-            isReviewingThisClass
-              ? '/my-proposals'
-              : isProposalRoute
-                ? (id ? '/proposals/edit/classes' : '/my-proposals')
-                : (id ? `/compendium/classes/view/${id}` : '/compendium/classes')
-          }>
-            <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
-              <ChevronLeft className="w-4 h-4" /> Back
-            </Button>
-          </Link>
-          {isProposalMode ? (
-            <span className="text-sm font-bold text-ink truncate">
-              {effectiveId ? (name || 'Untitled Class') : 'New Class'}
-            </span>
-          ) : (
-            <h1 className="h1-title text-ink">
-              {effectiveId ? `Edit ${name || 'Class'}` : 'New Class'}
-            </h1>
-          )}
-        </div>
+      {cascadeDep && (
+        <CascadeDependentBanner
+          description={cascadeDep.description}
+          resolved={cascadeDep.resolved}
+          onAccept={cascadeDep.accept}
+          onReopen={cascadeDep.reopen}
+          onReplace={() => setReplaceTagPickerOpen(true)}
+        />
+      )}
+      <ProposalAwareEditorHeader
+        isProposalMode={isProposalMode}
+        backHref={
+          isReviewingThisClass
+            ? '/my-proposals'
+            : isProposalRoute
+              ? (id ? '/proposals/edit/classes' : '/my-proposals')
+              : (id ? `/compendium/classes/view/${id}` : '/compendium/classes')
+        }
+        proposalTitle={effectiveId ? (name || 'Untitled Class') : 'New Class'}
+        adminContent={
+          <h1 className="h1-title text-ink">
+            {effectiveId ? `Edit ${name || 'Class'}` : 'New Class'}
+          </h1>
+        }
+      >
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex items-center gap-2">
             {/* Save Class is only shown when there's no global Submit
                 Changes covering it: admin direct route always, AND the
                 proposal route's create flow (where the explicit click
-                navigates to /edit/:newId after queueing). For existing
-                classes in proposal mode, the wrapper's Submit Changes
-                captures the form state via pre-flush and replaces this. */}
-            {/* Hide Save Class when reviewing a read-only past
-                submission — the form is for inspection, not editing.
-                Rejected proposals keep the button so the user can
-                resubmit after fixing whatever the admin flagged. */}
-            {/* Proposal mode: only show Create Class on the very first
-                save when no entity exists yet (no route id AND no
-                locally-minted pendingCreateId). After Create, the
-                pre-flush hook handles subsequent saves through Submit
-                Changes — showing a second Create button would look
-                like an offer to create a SECOND class. */}
+                navigates to /edit/:newId after queueing). Existing
+                classes in proposal mode use the wrapper's Submit Changes
+                via the pre-flush hook. Reviewing a read-only past
+                submission hides this entirely. */}
             {(!isProposalMode || !effectiveId) && !reviewIsReadOnly && (
               <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
                 <Save className="w-4 h-4" /> {effectiveId ? 'Save Class' : 'Create Class'}
@@ -1509,7 +1478,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
             context={classReferenceContext}
           />
         </div>
-      </div>
+      </ProposalAwareEditorHeader>
 
       <div className="grid lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3">
@@ -4588,7 +4557,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           setManagingGroupSearch('');
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-card border-gold/30">
+        <DialogContentLarge className="bg-card border-gold/30">
           <DialogHeader>
             <DialogTitle className="text-gold font-serif uppercase tracking-tight">
               Manage {allOptionGroups.find(g => g.id === managingGroupId)?.name} Options
@@ -4662,7 +4631,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               Done
             </Button>
           </DialogFooter>
-        </DialogContent>
+        </DialogContentLarge>
       </Dialog>
       <ConfirmDialog
         open={deleteClassConfirmOpen}
@@ -4693,6 +4662,25 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           }
         }}
       />
+      {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
+        <TagReplacementPicker
+          open={replaceTagPickerOpen}
+          onOpenChange={setReplaceTagPickerOpen}
+          deletedTagId={cascadeDep.parentEntityId}
+          onPicked={async (replacementTagId) => {
+            try {
+              await cascadeDep.replace(
+                cascadeDep.parentEntityId!,
+                replacementTagId,
+                'tag_ids',
+              );
+              toast.success('Replacement saved.');
+            } catch (err: any) {
+              toast.error(err?.message || 'Could not replace tag.');
+            }
+          }}
+        />
+      )}
     </fieldset>
   );
 }

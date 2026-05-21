@@ -28,12 +28,15 @@ import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite, denormalizeCompendiumData } from '../../lib/compendium';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalEntityDrafts } from '../../hooks/useProposalEntityDrafts';
-import { actionLabel } from '../../lib/proposalAware';
+import { actionLabel, applyProposalWrite } from '../../lib/proposalAware';
 import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { TombstoneRow } from '../../components/proposals/TombstoneRow';
 import { CascadeDependentBanner } from '../../components/proposals/CascadeDependentBanner';
 import { TagReplacementPicker } from '../../components/proposals/TagReplacementPicker';
 import { useCascadeDependent } from '../../hooks/useCascadeDependent';
+import { useProposalPreFlushSave } from '../../hooks/useProposalPreFlushSave';
+import { useDraftedEntityIds } from '../../hooks/useDraftedEntityIds';
+import { useEditBaseUnlocks } from '../../hooks/useEditBaseUnlocks';
 import { useBlock } from '../../lib/proposalBlock';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { Lock, Pencil } from 'lucide-react';
@@ -436,55 +439,17 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const isReviewingSpell = !!reviewMode && !!reviewPayload && reviewMode.entityType === 'spell';
   // (Cascade dependent state moved below editingId since the hook
   // depends on it — see definition just after `setFormData`.)
-  // Track which BASE spells the user has flipped to editable in the
-  // current session via "Edit Base [Name]". Unlocks persist for the
-  // session; switching focus modes doesn't lock them again.
-  const [unlockedBaseIds, setUnlockedBaseIds] = useState<Set<string>>(new Set());
-  const unlockBaseSpell = (id: string) => {
-    setUnlockedBaseIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-    // Clicking "Edit Base" is the user telling us they're starting
-    // work on this spell — surface it in their drafts view so they
-    // can find it again after navigating away. The actual queue
-    // entry only lands when they save a change; unlocking alone
-    // doesn't dirty the row, but the My Drafts filter treats
-    // unlocked + currently-edited spells as "their work in progress"
-    // (see `myDraftsFilterIds` below). Flipping focus mode here means
-    // the catalog list rerenders with this spell visible.
-    if (proposalContext?.setFocusMode) {
-      proposalContext.setFocusMode('drafts');
-    }
-  };
 
   // Spell ids the user has staged changes against — queue entries
   // (not yet submitted) + same-bundle draft revisions (already
   // submitted via Submit Changes). Drives the My Drafts list filter
   // and unlocks the editor form even in Browse mode (a draft IS the
   // user's own work).
-  const draftedSpellIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (proposalContext) {
-      for (const q of proposalContext.queue) {
-        if (q.entity_type === 'spell' && q.entity_id) ids.add(q.entity_id);
-      }
-    }
-    if (activeBundleId) {
-      for (const d of allDrafts) {
-        if (
-          d.entity_type === 'spell' &&
-          d.entity_id &&
-          d.bundle_id === activeBundleId
-        ) {
-          ids.add(d.entity_id);
-        }
-      }
-    }
-    return ids;
-  }, [proposalContext, allDrafts, activeBundleId]);
+  // Union of all entity ids the user has touched (CREATE/UPDATE/DELETE)
+  // on 'spell' in the active block. Drives My Drafts filter, edit-base
+  // unlock gating, and the row-list "queued" badge. Uses the entity_id-
+  // null fallback transparently — see useDraftedEntityIds.
+  const draftedSpellIds = useDraftedEntityIds('spell');
 
   // Full payloads for queued/drafted spells. Drives the list merge so
   // newly-created spells appear in the catalog before they're approved
@@ -510,28 +475,21 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const cascadeDep = useCascadeDependent('spell', editingId);
   const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
 
-  // Whether the editor form for `editingId` should render read-only.
-  // The lock is about ENTITY OWNERSHIP, not which focus mode is
-  // active — a base spell the user hasn't claimed should be
-  // protected whether they got to it via Browse Base or by
-  // selecting it before toggling to My Drafts. Earlier this also
-  // required `focusMode === 'browse'`, which let users bypass the
-  // lock by toggling modes; that gap is closed here.
-  //
-  // Read-only when:
-  //   - The wrapper enables the focus-mode feature (admin direct
-  //     route doesn't — it's full-trust by definition).
-  //   - There's a live entity selected (editingId !== null).
-  //   - The user hasn't explicitly "Edit Base"-d this entity.
-  //   - The user has no queued/drafted change against it (their own
-  //     work is always editable).
-  // A New Spell (editingId === null) is never read-only — that's the
-  // create surface and applies in any focus mode.
-  const isReadOnly =
-    focusModeEnabled &&
-    !!editingId &&
-    !unlockedBaseIds.has(editingId) &&
-    !draftedSpellIds.has(editingId);
+  // Edit-base unlocks + isReadOnly derivation. See useEditBaseUnlocks
+  // for the full contract — a base spell the user hasn't claimed
+  // renders read-only until they click Edit Base; unlocking flips
+  // focus mode to My Drafts so the spell surfaces in their list.
+  // The unlock is session-scoped; switching focus modes doesn't relock.
+  const {
+    unlockedBaseIds,
+    unlock: unlockBaseSpell,
+    isReadOnly,
+  } = useEditBaseUnlocks({
+    focusModeEnabled,
+    editingId,
+    draftedIds: draftedSpellIds,
+    proposalContext,
+  });
   // Filter modal state. Mirrors the AxisFilter shape from
   // src/pages/compendium/SpellList.tsx so the modal layout +
   // chip semantics (3-state include/exclude + per-axis combine
@@ -1220,14 +1178,11 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
         // queue diff.
         delete (prepared as any).created_at;
         delete (prepared as any).updated_at;
-        if (wasCreate) {
-          await spellWriter.create({ ...prepared, id: savedId });
-        } else {
-          await spellWriter.update(savedId, prepared);
-        }
-        if (!opts.silent) {
-          toast.success(actionLabel(spellWriter.mode, wasCreate ? 'created' : 'updated'));
-        }
+        await applyProposalWrite(spellWriter, prepared, {
+          id: savedId,
+          isCreate: wasCreate,
+          silent: opts.silent,
+        });
         // Sync the dirty baseline to the just-sent form so a
         // follow-up Submit Changes (or switch) doesn't re-queue the
         // same payload. Critical for CREATE: after the create lands,
@@ -1298,33 +1253,27 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  // Ref-mirrors so async callbacks registered with the wrapper (pre-
-  // flush) or with the switch-handler always call the current
-  // handleSave + read the current formData. Both are re-created on
-  // every render — without this, the callback would close over a stale
-  // snapshot from registration time.
+  // Ref-mirrors so async callbacks (pre-flush via useProposalPreFlushSave;
+  // switch auto-stage in startEditing below) read the LATEST handleSave +
+  // formData at fire time instead of a stale registration-time capture.
   const handleSaveRef = useRef(handleSave);
   useEffect(() => { handleSaveRef.current = handleSave; });
   useEffect(() => { formDataRef.current = formData; }, [formData]);
 
-  // Pre-flush: in proposal mode, the wrapper's Submit Changes replaces
-  // the per-spell Save Spell button. The callback stages the currently-
-  // edited spell into the block right before the wrapper drains the
-  // queue. Dirty check matches the auto-stage logic so an idle Submit
-  // (queue empty + no edits) doesn't accidentally queue a no-op draft.
-  useEffect(() => {
-    if (!isProposalMode || !proposalContext) return;
-    return proposalContext.registerPreFlush(async () => {
-      if (!editingIdRef.current) return;
+  // Pre-flush: stage the currently-edited spell into the block right
+  // before the wrapper drains. Dirty check skips no-op queueing when
+  // nothing has changed since the form was loaded.
+  useProposalPreFlushSave({
+    enabled: isProposalMode,
+    proposalContext,
+    handleSave,
+    shouldRun: () => {
+      if (!editingIdRef.current) return false;
       const currentSerialized = JSON.stringify(formDataRef.current ?? formData);
-      if (currentSerialized === lastLoadedFormRef.current) return;
-      try {
-        await handleSaveRef.current(undefined, { silent: true });
-      } catch (err) {
-        console.error('[SpellsEditor] pre-flush stage failed:', err);
-      }
-    });
-  }, [isProposalMode, proposalContext]);
+      return currentSerialized !== lastLoadedFormRef.current;
+    },
+    onError: (err) => console.error('[SpellsEditor] pre-flush stage failed:', err),
+  });
 
   const handleDelete = () => {
     if (!editingId) return;
