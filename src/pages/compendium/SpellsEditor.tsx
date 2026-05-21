@@ -25,9 +25,10 @@ import ActivityEditor from '../../components/compendium/ActivityEditor';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { reportClientError, OperationType } from '../../lib/firebase';
-import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite } from '../../lib/compendium';
-import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { upsertSpell, deleteSpell, fetchSpell, purgeAllSpells, prepareSpellPayloadForWrite, denormalizeCompendiumData } from '../../lib/compendium';
+import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
+import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { Lock, Pencil } from 'lucide-react';
@@ -420,6 +421,14 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   const { drafts: allDrafts, activeBundleId } = useBlock();
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  // Review-mode wiring. When the URL carries `?review=<id>` and the
+  // proposal is for a spell, we open that spell's submitted payload
+  // (read-only unless rejected) instead of the live row. resolveReview
+  // Payload returns null when the review is for some other entity
+  // type, so this is a no-op outside review-of-a-spell.
+  const reviewMode = useProposalReview();
+  const reviewPayload = resolveReviewPayload(reviewMode, 'spell', null);
+  const isReviewingSpell = !!reviewMode && !!reviewPayload && reviewMode.entityType === 'spell';
   // Track which BASE spells the user has flipped to editable in the
   // current session via "Edit Base [Name]". Unlocks persist for the
   // session; switching focus modes doesn't lock them again.
@@ -431,6 +440,17 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       next.add(id);
       return next;
     });
+    // Clicking "Edit Base" is the user telling us they're starting
+    // work on this spell — surface it in their drafts view so they
+    // can find it again after navigating away. The actual queue
+    // entry only lands when they save a change; unlocking alone
+    // doesn't dirty the row, but the My Drafts filter treats
+    // unlocked + currently-edited spells as "their work in progress"
+    // (see `myDraftsFilterIds` below). Flipping focus mode here means
+    // the catalog list rerenders with this spell visible.
+    if (proposalContext?.setFocusMode) {
+      proposalContext.setFocusMode('drafts');
+    }
   };
 
   // Spell ids the user has staged changes against — queue entries
@@ -458,6 +478,15 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     }
     return ids;
   }, [proposalContext, allDrafts, activeBundleId]);
+
+  // Full payloads for queued/drafted spells. Drives the list merge so
+  // newly-created spells appear in the catalog before they're approved
+  // (otherwise the user would only see a hidden "Submit 1 Change"
+  // indicator with no way to keep editing the spell).
+  const draftedSpellEntities = useMemo(
+    () => getDraftedEntities('spell', proposalContext, allDrafts, activeBundleId),
+    [proposalContext, allDrafts, activeBundleId],
+  );
 
   const [entries, setEntries] = useState<any[]>([]);
   const [spellDetailsById, setSpellDetailsById] = useState<Record<string, any>>({});
@@ -537,18 +566,26 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
   // Viewport-derived pane height. The chrome we subtract for: navbar
   // (~56) + outer page toolbar with Back / tab switcher / Backfill /
   // Purge (~50) + this manual editor's search toolbar (~50) + page
-  // padding/gaps (~24) = ~180. Slight underestimate is fine.
+  // padding/gaps (~24) = ~180.
+  //
+  // Proposal-mode adds the wrapper's header (block name, queue count,
+  // submit button, focus toggle) above everything — about another
+  // 120px once you include the space-y-4 gap. Without this bump the
+  // 3-column layout extends past the bottom of the viewport and the
+  // virtualized list scrolls off-screen.
   // (Body-class fullscreen toggle moved to the outer SpellsEditor
   // wrapper so it applies regardless of which tab is active.)
+  const inProposalMode = !!proposalContext;
+  const chromeOffset = inProposalMode ? 320 : 200;
   const [paneHeight, setPaneHeight] = useState<number>(() =>
-    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 200),
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - chromeOffset),
   );
   useEffect(() => {
-    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 200));
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - chromeOffset));
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [chromeOffset]);
 
   // Single mapping function so all three spell-load sites (initial,
   // post-save refresh, post-delete refresh) produce identical entry
@@ -692,9 +729,41 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     [sources]
   );
 
+  // Merge queued + drafted spells into the displayed catalog. Without
+  // this, a newly-queued spell would only show in the "1 Change" pill
+  // — the user couldn't keep editing it without flushing and waiting
+  // for an admin to approve. Updates overlay on top of the live row's
+  // summary (preserving derived fields the queued payload doesn't
+  // carry, like the precomputed activation/range buckets), while
+  // creates append as fresh rows mapped through mapSpellRow.
+  //
+  // Deletes are kept in the list with a __pendingDelete marker (Phase
+  // 1 tombstone UX) so the user can undo before submit. The row
+  // renderer below switches to the TombstoneRow component for those.
+  const displayEntries = useMemo(() => {
+    if (
+      draftedSpellEntities.byId.size === 0 &&
+      draftedSpellEntities.deletedIds.size === 0
+    ) {
+      return entries;
+    }
+    const merged = entries.map((e) => {
+      if (draftedSpellEntities.deletedIds.has(String(e.id))) {
+        return { ...e, __pendingDelete: true };
+      }
+      const overlay = draftedSpellEntities.byId.get(String(e.id));
+      return overlay ? { ...e, ...mapSpellRow({ ...e, ...overlay }) } : e;
+    });
+    for (const [draftId, payload] of draftedSpellEntities.byId.entries()) {
+      if (merged.some((e) => String(e.id) === draftId)) continue;
+      merged.push({ ...mapSpellRow({ ...payload, id: draftId }), id: draftId });
+    }
+    return merged;
+  }, [entries, draftedSpellEntities]);
+
   const filteredEntries = useMemo(() => {
     const lowered = search.trim().toLowerCase();
-    return entries.filter((entry) => {
+    return displayEntries.filter((entry) => {
       // Search match — name / identifier / source label substring.
       if (lowered) {
         const sourceLabel = String(sourceNameById[entry.sourceId] || '').toLowerCase();
@@ -735,17 +804,22 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       if (!matchesTagFilters(effectiveTags, tagGroups, tagsByGroup, tagStates, groupCombineModes, groupExclusionModes)) return false;
 
       // Focus mode (Phase 4.5d step 5): in My Drafts mode the list
-      // shrinks to only spells the user has staged in the active
-      // block. In Browse Base mode the full catalog renders (current
-      // behavior). The filter is a no-op when focusModeEnabled is
-      // false (admin direct route).
+      // shrinks to spells the user has staged in the active block
+      // OR has explicitly "Edit Base"-d this session. The unlocked
+      // set isn't a real queue/draft, but it represents "spells the
+      // user has declared they're working on" — folding them in here
+      // means clicking Edit Base on a base spell lands it in the
+      // user's working set so they can find it again after
+      // navigating away. The Browse Base mode is unaffected.
       if (focusModeEnabled && focusMode === 'drafts') {
-        if (!draftedSpellIds.has(String(entry.id))) return false;
+        const id = String(entry.id);
+        const isMyWork = draftedSpellIds.has(id) || unlockedBaseIds.has(id);
+        if (!isMyWork) return false;
       }
 
       return true;
     });
-  }, [entries, search, sourceNameById, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId, focusModeEnabled, focusMode, draftedSpellIds]);
+  }, [displayEntries, search, sourceNameById, axisFilters, tagStates, tagGroups, tagsByGroup, groupCombineModes, groupExclusionModes, parentByTagId, focusModeEnabled, focusMode, draftedSpellIds, unlockedBaseIds]);
 
   const resetForm = () => {
     const initial = makeInitialSpellForm(sources);
@@ -866,6 +940,26 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     () => SPELL_SCHOOLS.map(([value, label]) => ({ value, label })),
     [],
   );
+
+  // Review mode: auto-select the proposal's target spell and seed its
+  // denormalized payload into spellDetailsById so the load effect below
+  // picks it up via its existing cache hit branch — no second fetch
+  // path needed. snake_case → camelCase via denormalizeCompendiumData
+  // matches what fetchSpell returns for live rows.
+  useEffect(() => {
+    if (!isReviewingSpell || !reviewMode?.entityId || !reviewPayload) return;
+    setSpellDetailsById((current) =>
+      current[reviewMode.entityId!]
+        ? current
+        : {
+            ...current,
+            [reviewMode.entityId!]: denormalizeCompendiumData(reviewPayload),
+          },
+    );
+    if (editingId !== reviewMode.entityId) {
+      setEditingId(reviewMode.entityId);
+    }
+  }, [isReviewingSpell, reviewMode?.entityId, reviewPayload, editingId]);
 
   useEffect(() => {
     if (!editingId) return;
@@ -1489,7 +1583,31 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
             {loading ? (
               <div className="px-6 py-12 text-center text-ink/45">Loading…</div>
             ) : filteredEntries.length === 0 ? (
-              <div className="px-6 py-12 text-center text-ink/45">No spells match the current search.</div>
+              // Empty-state copy depends on context. In Block mode
+              // with no work-in-progress is a teaching moment — the
+              // proposer probably just opened the editor and doesn't
+              // know they need to either create or claim a spell to
+              // see anything here. The Full Catalog variant or the
+              // "filter wiped everything" case keeps the terse copy
+              // since the user already knows the catalog is populated.
+              focusModeEnabled && focusMode === 'drafts' ? (
+                <div className="px-6 py-12 text-center text-ink/60 max-w-sm mx-auto space-y-2">
+                  <p className="font-bold text-ink/80">No spells in this block yet.</p>
+                  <p className="text-xs leading-relaxed text-ink/55">
+                    Click <span className="font-bold text-gold">New Spell</span> above to
+                    author one from scratch.
+                  </p>
+                  <p className="text-xs leading-relaxed text-ink/55">
+                    To propose changes to an existing spell, switch to
+                    <span className="font-bold text-gold"> Full Catalog</span> (top right,
+                    next to Submit Changes), open the spell, then click
+                    <span className="font-bold text-gold"> Edit Base</span> — it'll move
+                    into this list automatically.
+                  </p>
+                </div>
+              ) : (
+                <div className="px-6 py-12 text-center text-ink/45">No spells match the current search.</div>
+              )
             ) : (
               <VirtualizedList
                 items={filteredEntries}
@@ -1700,7 +1818,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       />
 
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        <div className="space-y-1">
+                        <ReviewFieldHighlight columnKey="name" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Name</Label>
                           <Input
                             value={formData.name}
@@ -1709,8 +1827,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                             placeholder="e.g. Fireball"
                             required
                           />
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="identifier" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
                           <Input
                             value={formData.identifier}
@@ -1718,8 +1836,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                             className="bg-background/50 border-gold/10 focus:border-gold font-mono"
                             placeholder={slugify(formData.name || 'spell')}
                           />
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</Label>
                           <select
                             value={formData.sourceId}
@@ -1731,8 +1849,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                               <option key={source.id} value={source.id}>{source.name}</option>
                             ))}
                           </select>
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="level" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Level</Label>
                           <Input
                             type="number"
@@ -1742,8 +1860,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                             onChange={e => setFormData(prev => ({ ...prev, level: parseInt(e.target.value || '0', 10) || 0 }))}
                             className="bg-background/50 border-gold/10 focus:border-gold"
                           />
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="school" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">School</Label>
                           <select
                             value={formData.school || 'evo'}
@@ -1754,8 +1872,8 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                               <option key={value} value={value}>{label}</option>
                             ))}
                           </select>
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="preparation_mode" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Preparation Mode</Label>
                           <select
                             value={formData.preparationMode || 'spell'}
@@ -1766,7 +1884,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                               <option key={value} value={value}>{label}</option>
                             ))}
                           </select>
-                        </div>
+                        </ReviewFieldHighlight>
                       </div>
                     </div>
 
@@ -1774,15 +1892,17 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       * enough vertical room and keeping it adjacent to
                       * name/identifier matches how the Foundry sheet's
                       * Description tab is the first thing you see. */}
-                    <MarkdownEditor
-                      key={editingId || 'new-spell'}
-                      value={formData.description}
-                      onChange={value => setFormData(prev => ({ ...prev, description: value }))}
-                      label="Description"
-                      placeholder="Describe the spell in player-facing terms. Activities should carry runtime mechanics."
-                      minHeight="300px"
-                      autoSizeToContent={false}
-                    />
+                    <ReviewFieldHighlight columnKey="description">
+                      <MarkdownEditor
+                        key={editingId || 'new-spell'}
+                        value={formData.description}
+                        onChange={value => setFormData(prev => ({ ...prev, description: value }))}
+                        label="Description"
+                        placeholder="Describe the spell in player-facing terms. Activities should carry runtime mechanics."
+                        minHeight="300px"
+                        autoSizeToContent={false}
+                      />
+                    </ReviewFieldHighlight>
                   </TabsContent>
 
                   <TabsContent value="mechanics" className="mt-0 space-y-4">

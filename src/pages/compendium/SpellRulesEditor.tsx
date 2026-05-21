@@ -56,6 +56,7 @@ import {
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useBlock } from '../../lib/proposalBlock';
+import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 
 const LEVEL_VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const CONSUMER_LABELS: Record<ConsumerType, string> = {
@@ -142,6 +143,15 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   const [searchParams, setSearchParams] = useSearchParams();
   const initialRuleId = searchParams.get('rule') || '';
 
+  // Review mode — when URL has `?review=<proposal_id>` AND the
+  // proposal targets a spell_rule, force the editor's selection to
+  // the proposal's entity_id and feed the draft from the proposal's
+  // payload (or snapshot for delete reviews).
+  const reviewMode = useProposalReview();
+  const reviewPayload = resolveReviewPayload(reviewMode, 'spell_rule', null);
+  const isReviewingRule = !!reviewMode && !!reviewPayload &&
+    reviewMode.entityType === 'spell_rule';
+
   // Foundation
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [sources, setSources] = useState<SourceRow[]>([]);
@@ -181,15 +191,23 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   // (collapsed by default; ~36 when collapsed, ~140 when expanded)
   // + small gaps ≈ 180. Conservative — a small underestimate just
   // leaves a few pixels at the bottom.
+  //
+  // Proposal-mode adds the wrapper's header (block name, queue
+  // count, submit button, focus toggle) above the editor — about
+  // another 120px including the wrapper's space-y-4 gap. Without
+  // this bump the bottom of the rules grid would extend past the
+  // viewport.
+  const inProposalMode = !!proposalContext;
+  const chromeOffset = inProposalMode ? 300 : 180;
   const [paneHeight, setPaneHeight] = useState<number>(() =>
-    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - 180),
+    typeof window === 'undefined' ? 720 : Math.max(420, window.innerHeight - chromeOffset),
   );
   useEffect(() => {
-    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - 180));
+    const onResize = () => setPaneHeight(Math.max(420, window.innerHeight - chromeOffset));
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [chromeOffset]);
 
   // Initial load
   useEffect(() => {
@@ -243,6 +261,16 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     setSearchParams(next, { replace: true });
   }, [selectedRuleId, searchParams, setSearchParams]);
 
+  // Auto-select the proposal's rule on entry to review mode so the
+  // form populates immediately instead of waiting for the user to
+  // click it in the rules list (which wouldn't include create drafts
+  // at all, since they don't have a live row yet).
+  useEffect(() => {
+    if (isReviewingRule && reviewMode?.entityId && selectedRuleId !== reviewMode.entityId) {
+      setSelectedRuleId(reviewMode.entityId);
+    }
+  }, [isReviewingRule, reviewMode?.entityId, selectedRuleId]);
+
   // Selection — load draft + applications for selected rule
   useEffect(() => {
     if (!selectedRuleId) {
@@ -252,7 +280,22 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       setActiveClauseIndex(0);
       return;
     }
-    const rule = rules.find(r => r.id === selectedRuleId) || null;
+    // In review mode, build the draft from the proposal payload
+    // rather than looking up the live row (which won't exist for
+    // create proposals).
+    const rule: SpellRule | null = isReviewingRule && reviewPayload
+      ? {
+          id: selectedRuleId,
+          name: String((reviewPayload as any).name ?? ''),
+          description: String((reviewPayload as any).description ?? ''),
+          query: typeof (reviewPayload as any).query === 'string'
+            ? (() => { try { return JSON.parse((reviewPayload as any).query); } catch { return {}; } })()
+            : ((reviewPayload as any).query ?? {}),
+          manualSpells: typeof (reviewPayload as any).manual_spells === 'string'
+            ? (() => { try { return JSON.parse((reviewPayload as any).manual_spells); } catch { return []; } })()
+            : ((reviewPayload as any).manual_spells ?? (reviewPayload as any).manualSpells ?? []),
+        }
+      : rules.find(r => r.id === selectedRuleId) || null;
     if (rule) {
       // Auto-migrate legacy include-only arrays to the rich AxisFilter
       // shape at load time. The editor only ever writes the rich shape

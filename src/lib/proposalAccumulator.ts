@@ -236,6 +236,117 @@ export function useProposalContextOptional(): ProposalAccumulatorContextValue | 
   return useContext(ProposalAccumulatorContext);
 }
 
+/**
+ * Aggregated view of the user's in-progress proposal state for an
+ * entity type. Merges the live in-memory queue with the active
+ * block's server-side draft revisions so editors can present the
+ * user's own work even before it's been submitted (let alone
+ * approved).
+ *
+ * Returned shape:
+ *   - `byId`: map of `entity_id` → effective `proposed_payload`. The
+ *     queue overrides matching draft entries when both exist (since
+ *     the queue is the most-recent uncommitted edit). For create
+ *     operations the payload includes the local UUID at `payload.id`.
+ *   - `createdIds`: ids the user is CREATING (no live row yet).
+ *     Editors merge these as virtual catalog rows.
+ *   - `deletedIds`: ids the user has marked for deletion. Editors
+ *     should hide the live row from their list.
+ *
+ * **Important**: pass the active-block context (drafts + activeBundleId)
+ * from `useBlock()` — the function can't reach into proposalBlock.tsx
+ * without a circular import. Callers that don't care about server-
+ * side drafts can pass `[]` and `null`.
+ *
+ * Outside a proposal wrapper this returns empty maps so editors can
+ * call it unconditionally.
+ */
+export function getDraftedEntities(
+  entityType: ProposalEntityType,
+  ctx: ProposalAccumulatorContextValue | null,
+  drafts: Array<{
+    bundle_id: string | null;
+    entity_type: string;
+    entity_id: string | null;
+    operation: 'create' | 'update' | 'delete';
+    proposed_payload: Record<string, any> | null;
+  }>,
+  activeBundleId: string | null,
+): {
+  byId: Map<string, Record<string, any>>;
+  createdIds: Set<string>;
+  deletedIds: Set<string>;
+} {
+  const byId = new Map<string, Record<string, any>>();
+  const createdIds = new Set<string>();
+  const deletedIds = new Set<string>();
+
+  // Pull server-side drafts in the active block first — they're the
+  // older layer that the queue may then overlay on.
+  //
+  // CREATE drafts have `entity_id: null` on the server side because
+  // the proposal endpoint forcibly nulls it (the entity doesn't exist
+  // live yet, so there's no D1 row to point at). The actual id the
+  // user minted client-side lives inside `proposed_payload.id`.
+  // Falling back to that here is what makes a freshly-submitted
+  // CREATE draft visible in the editor's list — without it, every
+  // queued-then-flushed CREATE looks like it vanished on Submit
+  // Changes.
+  if (activeBundleId) {
+    for (const d of drafts) {
+      if (d.entity_type !== entityType) continue;
+      if (d.bundle_id !== activeBundleId) continue;
+      const effectiveId =
+        d.entity_id ??
+        (d.proposed_payload && typeof d.proposed_payload.id === 'string'
+          ? d.proposed_payload.id
+          : null);
+      if (!effectiveId) continue;
+      if (d.operation === 'delete') {
+        deletedIds.add(effectiveId);
+        byId.delete(effectiveId);
+        continue;
+      }
+      if (d.proposed_payload) {
+        byId.set(effectiveId, d.proposed_payload);
+        if (d.operation === 'create') createdIds.add(effectiveId);
+      }
+    }
+  }
+
+  // Queue entries override drafts (the user's most-recent uncommitted
+  // edit wins). A queued delete replaces / removes any draft payload.
+  if (ctx) {
+    for (const q of ctx.queue) {
+      if (q.entity_type !== entityType) continue;
+      if (!q.entity_id) continue;
+      if (q.operation === 'delete') {
+        deletedIds.add(q.entity_id);
+        byId.delete(q.entity_id);
+        createdIds.delete(q.entity_id);
+        continue;
+      }
+      if (q.proposed_payload) {
+        // For updates we merge on top of any draft payload — a queued
+        // partial update wouldn't otherwise carry fields the draft
+        // already filled. For creates we replace outright.
+        if (q.operation === 'update' && byId.has(q.entity_id)) {
+          byId.set(q.entity_id, {
+            ...(byId.get(q.entity_id) || {}),
+            ...q.proposed_payload,
+          });
+        } else {
+          byId.set(q.entity_id, q.proposed_payload);
+          if (q.operation === 'create') createdIds.add(q.entity_id);
+        }
+        deletedIds.delete(q.entity_id);
+      }
+    }
+  }
+
+  return { byId, createdIds, deletedIds };
+}
+
 /** Subset of `DraftRevision` (from proposalBlock) that we need to
  *  dedupe queue entries against existing drafts. Kept local so we
  *  don't pull a circular import on the BlockProvider module. */
@@ -281,21 +392,121 @@ export async function postQueuedChanges(
   if (!idToken) throw new Error('Not signed in.');
   const auth_header = `Bearer ${idToken}`;
 
+  // Queue-internal dedup. The wrapper accumulates one QueuedChange
+  // per writer call, so an editor that calls create() and then a
+  // follow-up update() leaves both in the queue. Submitting an
+  // UPDATE on an entity that doesn't exist in the live DB blows up
+  // with a 404 ("Cannot propose update on missing …") — the server
+  // tries to snapshot the live row and finds nothing.
+  //
+  // To collapse those into a single CREATE-with-the-final-payload,
+  // we fold each (entity_type, entity_id) sequence:
+  //   - CREATE + UPDATE…  → single CREATE with merged payload
+  //   - UPDATE + UPDATE…  → single UPDATE with merged payload
+  //   - …+ DELETE         → DELETE wins; drop any preceding entries
+  //                          (CREATE-then-DELETE collapses to nothing)
+  const dedupedQueue: QueuedChange[] = [];
+  {
+    type Key = string;
+    const indexByKey = new Map<Key, number>();
+    const keyOf = (q: QueuedChange) => `${q.entity_type}:${q.entity_id}`;
+    for (const q of queue) {
+      // Entries without an entity_id (legacy create-with-null) can't
+      // be deduped — just pass them through. Real usage always sets
+      // entity_id (creates mint a client-side UUID).
+      if (!q.entity_id) {
+        dedupedQueue.push(q);
+        continue;
+      }
+      const key = keyOf(q);
+      const priorIdx = indexByKey.get(key);
+      if (priorIdx === undefined) {
+        indexByKey.set(key, dedupedQueue.length);
+        dedupedQueue.push(q);
+        continue;
+      }
+      const prior = dedupedQueue[priorIdx];
+      if (q.operation === 'delete') {
+        if (prior.operation === 'create') {
+          // CREATE then DELETE in the same block — drop both. The
+          // entity never existed live; deleting it is a no-op.
+          dedupedQueue.splice(priorIdx, 1);
+          indexByKey.delete(key);
+          // Reindex any deduped entries that shifted left.
+          for (const [k, i] of indexByKey) {
+            if (i > priorIdx) indexByKey.set(k, i - 1);
+          }
+        } else {
+          // UPDATE then DELETE → keep the DELETE, drop the UPDATE.
+          dedupedQueue[priorIdx] = q;
+        }
+        continue;
+      }
+      if (prior.operation === 'delete') {
+        // DELETE then CREATE/UPDATE shouldn't normally happen, but
+        // if it does, the later write wins so the row is recreated
+        // / re-updated. Replace.
+        dedupedQueue[priorIdx] = q;
+        continue;
+      }
+      // Plain merge case: combine payloads, keep the earlier
+      // operation. CREATE+UPDATE stays a CREATE; UPDATE+UPDATE stays
+      // an UPDATE. The merged payload is what gets POSTed.
+      dedupedQueue[priorIdx] = {
+        ...prior,
+        proposed_payload: {
+          ...(prior.proposed_payload || {}),
+          ...(q.proposed_payload || {}),
+        },
+        // Pick the more-recent notes — proposers update their notes
+        // as they refine the change.
+        notes_from_proposer: q.notes_from_proposer ?? prior.notes_from_proposer,
+      };
+    }
+  }
+
   // Partition: queue entries that match an existing draft get PATCHed
   // (merging payloads); the rest get POSTed as new revisions.
+  //
+  // Special case: when the queue carries a DELETE for an entity whose
+  // existing draft is a CREATE in the same block, the user is
+  // un-proposing their own create. The right answer is to DROP the
+  // existing draft entirely — there's no live row to delete, so
+  // POSTing a new DELETE revision would 404 server-side ("Cannot
+  // propose delete on missing $entity"). Track those drafts separately
+  // so we can DELETE /api/proposals/:id for each.
   const draftPatches: { draftId: string; mergedPayload: Record<string, any> }[] = [];
+  const draftDrops: string[] = [];
   const newRevisions: QueuedChange[] = [];
 
-  for (const q of queue) {
-    const existing =
-      q.operation !== 'delete'
-        ? existingDrafts.find(
-            (d) =>
-              d.entity_type === q.entity_type &&
-              d.entity_id === q.entity_id &&
-              (d.operation === 'create' || d.operation === 'update'),
-          )
-        : undefined;
+  for (const q of dedupedQueue) {
+    if (q.operation === 'delete') {
+      // DELETE: look up any existing CREATE/UPDATE draft. CREATE → drop
+      // the draft (un-propose). UPDATE → drop the UPDATE draft AND
+      // POST a fresh DELETE (the user wants to remove the live row,
+      // not just abandon their changes to it).
+      const existingDelete = existingDrafts.find(
+        (d) =>
+          d.entity_type === q.entity_type &&
+          d.entity_id === q.entity_id,
+      );
+      if (existingDelete?.operation === 'create') {
+        draftDrops.push(existingDelete.id);
+        continue;
+      }
+      if (existingDelete?.operation === 'update') {
+        draftDrops.push(existingDelete.id);
+        // fall through to POST the DELETE
+      }
+      newRevisions.push(q);
+      continue;
+    }
+    const existing = existingDrafts.find(
+      (d) =>
+        d.entity_type === q.entity_type &&
+        d.entity_id === q.entity_id &&
+        (d.operation === 'create' || d.operation === 'update'),
+    );
     if (existing && q.proposed_payload) {
       draftPatches.push({
         draftId: existing.id,
@@ -307,6 +518,31 @@ export async function postQueuedChanges(
     } else {
       newRevisions.push(q);
     }
+  }
+
+  // DROP drafts that are being un-proposed by a follow-up queue
+  // DELETE. Done before POST so the draft set is consistent when the
+  // server runs its own validation on the new revisions.
+  if (draftDrops.length > 0) {
+    await Promise.all(
+      draftDrops.map((draftId) =>
+        fetch(`/api/proposals/${encodeURIComponent(draftId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: auth_header },
+        }).then(async (res) => {
+          // 404 is acceptable here — the draft may have been resolved
+          // (approved / rejected) since the client cache was last
+          // refreshed. The user's intent ("undo my proposal") is
+          // still satisfied.
+          if (!res.ok && res.status !== 404) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(
+              body?.error || `Failed to withdraw draft ${draftId} (HTTP ${res.status})`,
+            );
+          }
+        }),
+      ),
+    );
   }
 
   // PATCH existing drafts in parallel.

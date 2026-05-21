@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
-import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
+import { useBlock } from '../../lib/proposalBlock';
 import { actionLabel } from '../../lib/proposalAware';
+import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import ActivityEditor from '../../components/compendium/ActivityEditor';
 import FeatureModalHero from '../../components/compendium/FeatureModalHero';
 import ActiveEffectEditor from '../../components/compendium/ActiveEffectEditor';
@@ -137,8 +139,26 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
   const basePath = isProposalRoute ? '/proposals/edit/subclasses' : '/compendium/subclasses';
   const subclassWriter = useProposalAccumulator('subclass', userProfile);
+  // Review mode — when URL has `?review=<proposal_id>` AND that
+  // proposal targets a subclass, load the form from the proposal's
+  // payload (or snapshot, for delete reviews) instead of the live row.
+  const reviewMode = useProposalReview();
+  const reviewPayload = resolveReviewPayload(reviewMode, 'subclass', id ?? null);
+  const isReviewingThis = !!reviewMode && !!reviewPayload;
   const proposalContext = useProposalContextOptional();
   const isProposalMode = subclassWriter.mode === 'proposal' || subclassWriter.mode === 'block';
+  // Queued + drafted subclass payloads keyed by entity_id. Falls back
+  // to the queue when the live row doesn't exist yet (post-Create
+  // navigate without flush) so the form doesn't blank out.
+  const { drafts: allSubclassDrafts, activeBundleId: subclassActiveBundleId } = useBlock();
+  const subclassDrafts = useMemo(
+    () => getDraftedEntities('subclass', proposalContext, allSubclassDrafts, subclassActiveBundleId),
+    [proposalContext, allSubclassDrafts, subclassActiveBundleId],
+  );
+  // Same pattern as ClassEditor — after Create we stay on /new and
+  // remember the minted id so subsequent saves route through UPDATE.
+  const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
+  const effectiveId = id ?? pendingCreateId;
 
   // Basic Info
   const [name, setName] = useState('');
@@ -269,7 +289,23 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       }
 
       try {
-        const rawSubclassData = await fetchDocument<any>('subclasses', id);
+        // In review mode the form is populated from the proposal's
+        // submitted payload (or snapshot for delete reviews); the
+        // live D1 row would otherwise clobber what the user is
+        // inspecting. Proposal mode also short-circuits to the
+        // queued/drafted payload when the live row hasn't been
+        // written yet (post-Create on /new with no flush).
+        let rawSubclassData: any = null;
+        if (isReviewingThis) {
+          rawSubclassData = reviewPayload;
+        } else if (isProposalMode && subclassDrafts.byId.has(id)) {
+          rawSubclassData = subclassDrafts.byId.get(id) ?? null;
+        } else {
+          rawSubclassData = await fetchDocument<any>('subclasses', id);
+          if (!rawSubclassData && isProposalMode && subclassDrafts.byId.has(id)) {
+            rawSubclassData = subclassDrafts.byId.get(id) ?? null;
+          }
+        }
 
         if (rawSubclassData) {
           const subclassData = denormalizeCompendiumData(rawSubclassData);
@@ -460,7 +496,9 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       updatedAt: new Date().toISOString(),
     };
 
-    const saveId = id || crypto.randomUUID();
+    // effectiveId reuses the locally-minted id from a prior proposal-
+    // mode CREATE so subsequent saves UPDATE the same queue entry.
+    const saveId = effectiveId || crypto.randomUUID();
     const d1Data = {
       name: subclassData.name,
       identifier: subclassData.identifier,
@@ -489,13 +527,15 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
         // changed); it'll fire on admin approval via the direct-write
         // path the same way ClassEditor does.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Data;
-        if (id) {
-          await subclassWriter.update(saveId, proposalPayload);
-        } else {
+        const isCreate = !effectiveId;
+        if (isCreate) {
           await subclassWriter.create({ ...proposalPayload, id: saveId });
+          setPendingCreateId(saveId);
+        } else {
+          await subclassWriter.update(saveId, proposalPayload);
         }
         if (!opts.silent) {
-          toast.success(actionLabel(subclassWriter.mode, id ? 'updated' : 'created'));
+          toast.success(actionLabel(subclassWriter.mode, isCreate ? 'created' : 'updated'));
         }
       } else {
         await upsertDocument('subclasses', saveId, d1Data);
@@ -507,7 +547,10 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
       }
       // Skip the post-create navigate when pre-flush is driving us —
       // navigating during flush would unmount the wrapper mid-drain.
-      if (!id && !opts.silent) {
+      // Proposal mode also stays on /new (route change would destroy
+      // the queue); the editor uses `pendingCreateId` to track the
+      // minted id for subsequent updates.
+      if (!id && !opts.silent && !isProposalMode) {
         navigate(`${basePath}/edit/${saveId}`);
       }
     } catch (error) {
@@ -530,7 +573,11 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   useEffect(() => {
     if (!isProposalMode) return;
     if (!proposalContext) return;
-    if (!id) return;
+    // Register whenever the editor is editing a known entity — either
+    // by route id or by post-Create pendingCreateId. Without the
+    // second case, post-create form edits would be lost on the next
+    // Submit Changes drain.
+    if (!id && !pendingCreateId) return;
     return proposalContext.registerPreFlush(async () => {
       try {
         await handleSaveRef.current({ silent: true });
@@ -539,7 +586,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
         // early returns; the wrapper surfaces a generic error.
       }
     });
-  }, [isProposalMode, proposalContext, id]);
+  }, [isProposalMode, proposalContext, id, pendingCreateId]);
 
   useKeyboardSave(() => { handleSave(); });
 
@@ -649,8 +696,13 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 pb-24">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      {/* In proposal mode the wrapper already labels the page
+          ("PROPOSAL EDITOR | Subclass") + provides Submit Changes.
+          Slim the header so the form starts tight under the wrapper
+          — same treatment as Class / Tags / Option Groups. Admin
+          direct route keeps the full h1 + parent-class subtitle. */}
+      <div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'flex flex-col sm:flex-row sm:items-center justify-between gap-4'}>
+        <div className="flex items-center gap-3 min-w-0">
           <Link to={
             isProposalRoute
               ? (parentClass ? `/proposals/edit/classes/edit/${parentClass.id}` : '/proposals/edit/classes')
@@ -660,22 +712,36 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
               <ChevronLeft className="w-4 h-4 mr-1" /> Back to {parentClass?.name || 'Class'}
             </Button>
           </Link>
-          <div className="flex flex-col">
-            <h1 className="h2-title text-gold uppercase tracking-tight">
-              {id ? 'Edit Subclass' : 'New Subclass'}
-            </h1>
-            <div className="flex items-center gap-2">
+          {isProposalMode ? (
+            <span className="text-sm font-bold text-ink truncate">
+              {effectiveId ? (name || 'Untitled Subclass') : 'New Subclass'}
               {parentClass && (
-                <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
+                <span className="ml-2 text-[10px] font-mono uppercase text-ink/40">
+                  for {parentClass.name}
+                </span>
               )}
+            </span>
+          ) : (
+            <div className="flex flex-col">
+              <h1 className="h2-title text-gold uppercase tracking-tight">
+                {id ? 'Edit Subclass' : 'New Subclass'}
+              </h1>
+              <div className="flex items-center gap-2">
+                {parentClass && (
+                  <p className="text-xs text-ink/40 font-mono uppercase">For {parentClass.name}</p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex items-center gap-2">
-            {(!isProposalMode || !id) && (
+            {/* See ClassEditor for the proposal-mode rationale — show
+                Create only on the very first save; once pendingCreateId
+                is set the pre-flush hook covers further updates. */}
+            {(!isProposalMode || !effectiveId) && (
               <Button onClick={() => handleSave()} className="bg-gold hover:bg-gold/90 text-white gap-2 shadow-lg shadow-gold/20">
-                <Save className="w-4 h-4" /> {id ? 'Save Subclass' : 'Create Subclass'}
+                <Save className="w-4 h-4" /> {effectiveId ? 'Save Subclass' : 'Create Subclass'}
               </Button>
             )}
             {!isProposalMode && (
@@ -781,19 +847,19 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
               </Dialog>
               <div className="flex-1 space-y-4 h-fit">
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
+                  <ReviewFieldHighlight columnKey="name" className="space-y-1">
                     <label className="label-text">Subclass Name</label>
-                    <Input 
-                      value={name} 
-                      onChange={e => setName(e.target.value)} 
-                      placeholder="e.g. Battle Master" 
+                    <Input
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="e.g. Battle Master"
                       className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
                     />
-                  </div>
-                  <div className="space-y-1">
+                  </ReviewFieldHighlight>
+                  <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
                     <label className="label-text">Source</label>
-                    <select 
-                      value={sourceId} 
+                    <select
+                      value={sourceId}
                       onChange={e => setSourceId(e.target.value)}
                       className="w-full h-8 px-2 rounded-md border border-gold/10 bg-background/50 focus:border-gold outline-none text-sm text-ink"
                     >
@@ -802,25 +868,29 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                         <option key={s.id} value={s.id}>{s.name} {s.abbreviation ? `(${s.abbreviation})` : ''}</option>
                       ))}
                     </select>
-                  </div>
+                  </ReviewFieldHighlight>
                 </div>
               </div>
             </div>
             <div className="space-y-4">
-              <MarkdownEditor 
-                value={description} 
-                onChange={setDescription}
-                placeholder="A brief thematic overview for the grid view..."
-                minHeight="80px"
-                label="Description (Short Preview)"
-              />
-              <MarkdownEditor 
-                value={lore} 
-                onChange={setLore}
-                placeholder="Detailed lore and setting info..."
-                minHeight="120px"
-                label="Lore (Setting Details)"
-              />
+              <ReviewFieldHighlight columnKey="description">
+                <MarkdownEditor
+                  value={description}
+                  onChange={setDescription}
+                  placeholder="A brief thematic overview for the grid view..."
+                  minHeight="80px"
+                  label="Description (Short Preview)"
+                />
+              </ReviewFieldHighlight>
+              <ReviewFieldHighlight columnKey="lore">
+                <MarkdownEditor
+                  value={lore}
+                  onChange={setLore}
+                  placeholder="Detailed lore and setting info..."
+                  minHeight="120px"
+                  label="Lore (Setting Details)"
+                />
+              </ReviewFieldHighlight>
             </div>
           </div>
             </TabsContent>

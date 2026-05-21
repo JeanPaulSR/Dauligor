@@ -16,8 +16,10 @@ import ActivityEditor from './ActivityEditor';
 import {
   useProposalAccumulator,
   useProposalContextOptional,
+  getDraftedEntities,
 } from '../../lib/proposalAccumulator';
 import { actionLabel, type ProposalEntityType } from '../../lib/proposalAware';
+import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
 
 type DevelopmentFormData = {
@@ -108,6 +110,16 @@ export default function DevelopmentCompendiumManager({
   const { drafts: allDrafts, activeBundleId } = useBlock();
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  // Review-mode wiring. When this manager owns the entityType being
+  // reviewed (e.g. /proposals/edit/items + a feat proposal is a no-op),
+  // we inject the proposed payload into entries + auto-select it.
+  const reviewMode = useProposalReview();
+  const reviewPayload = entityType
+    ? resolveReviewPayload(reviewMode, entityType, null)
+    : null;
+  const isReviewingThis =
+    !!reviewMode && !!entityType && !!reviewPayload &&
+    reviewMode.entityType === entityType;
 
   const [entries, setEntries] = useState<any[]>([]);
   const [sources, setSources] = useState<any[]>([]);
@@ -209,6 +221,45 @@ export default function DevelopmentCompendiumManager({
     setFormData(prev => ({ ...prev, sourceId: sources[0].id }));
   }, [editingId, formData.sourceId, sources]);
 
+  // Review mode: when sources finish loading and we're reviewing an
+  // entity owned by this manager, inject the denormalized payload into
+  // entries (replace existing row or append for create proposals) and
+  // auto-select it so the right pane hydrates from the proposal.
+  useEffect(() => {
+    if (!isReviewingThis || !reviewPayload || sources.length === 0) return;
+    const denormalized = denormalizeCompendiumData(reviewPayload);
+    const targetId = reviewMode!.entityId ?? denormalized.id;
+    if (!targetId) return;
+    setEntries((prev) => {
+      const exists = prev.some((e) => e.id === targetId);
+      if (exists) {
+        return prev.map((e) => (e.id === targetId ? { ...e, ...denormalized } : e));
+      }
+      return [...prev, { ...denormalized, id: targetId }];
+    });
+    if (editingId !== targetId) {
+      const loaded: DevelopmentFormData = {
+        ...makeInitialForm(defaultData, sources),
+        ...denormalized,
+        id: targetId,
+        sourceId: denormalized.sourceId || sources[0]?.id || '',
+        activities: Array.isArray(denormalized.automation?.activities)
+          ? denormalized.automation.activities
+          : Array.isArray(denormalized.activities)
+            ? denormalized.activities
+            : [],
+        effectsStr: JSON.stringify(
+          denormalized.automation?.effects || denormalized.effects || [],
+          null,
+          2,
+        ),
+      };
+      setEditingId(targetId);
+      setFormData(loaded);
+      lastLoadedFormRef.current = JSON.stringify(loaded);
+    }
+  }, [isReviewingThis, reviewMode?.entityId, reviewPayload, sources, defaultData, editingId]);
+
   const resetForm = () => {
     const initial = makeInitialForm(defaultData, sources);
     setEditingId(null);
@@ -216,12 +267,49 @@ export default function DevelopmentCompendiumManager({
     lastLoadedFormRef.current = JSON.stringify(initial);
   };
 
+  // Queued + drafted entity payloads for this entityType. Used to
+  // surface in-progress items in the catalog before flush + approval.
+  const draftedEntities = useMemo(
+    () =>
+      entityType
+        ? getDraftedEntities(entityType, proposalContext, allDrafts, activeBundleId)
+        : { byId: new Map(), createdIds: new Set(), deletedIds: new Set() },
+    [entityType, proposalContext, allDrafts, activeBundleId],
+  );
+
+  // Merge queued/drafted payloads into the live catalog so a newly-
+  // created item is visible + selectable for further editing without
+  // having to flush first. Updates overlay on the existing row;
+  // creates append as new rows; deletions stay in the list with a
+  // __pendingDelete marker (Phase 1 tombstone UX — row renderer
+  // switches to TombstoneRow for those, with undo).
+  const displayEntries = useMemo(() => {
+    if (
+      draftedEntities.byId.size === 0 &&
+      draftedEntities.deletedIds.size === 0
+    ) {
+      return entries;
+    }
+    const merged = entries.map((e) => {
+      if (draftedEntities.deletedIds.has(String(e.id))) {
+        return { ...e, __pendingDelete: true };
+      }
+      const overlay = draftedEntities.byId.get(String(e.id));
+      return overlay ? { ...e, ...denormalizeCompendiumData(overlay) } : e;
+    });
+    for (const [draftId, payload] of draftedEntities.byId.entries()) {
+      if (merged.some((e) => String(e.id) === draftId)) continue;
+      merged.push({ ...denormalizeCompendiumData(payload), id: draftId });
+    }
+    return merged;
+  }, [entries, draftedEntities]);
+
   // Filter to apply the focus-mode + dirty-aware load. Filters list
   // by drafted ids when focus mode = 'drafts'.
   const filteredEntries = useMemo(() => {
-    if (!focusModeEnabled || focusMode !== 'drafts') return entries;
-    return entries.filter((e) => draftedIds.has(String(e.id)));
-  }, [entries, focusModeEnabled, focusMode, draftedIds]);
+    if (!focusModeEnabled || focusMode !== 'drafts') return displayEntries;
+    return displayEntries.filter((e) => draftedIds.has(String(e.id)));
+  }, [displayEntries, focusModeEnabled, focusMode, draftedIds]);
 
   // Auto-stage on switch: in proposal mode, clicking a different
   // entry queues the outgoing one as a draft before loading the new
@@ -421,26 +509,39 @@ export default function DevelopmentCompendiumManager({
         <span className="text-sm font-bold uppercase tracking-[0.3em]">Compendium Development</span>
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-4 mb-2">
-            <Link to={backPath}>
-              <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
-                <ChevronLeft className="w-4 h-4" /> Back
-              </Button>
-            </Link>
-          </div>
-          <div className="flex items-center gap-4">
-            <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">{title}</h1>
-          </div>
-          <p className="text-ink/60 font-serif italic max-w-3xl">{description}</p>
-          {!isProposalMode && (
+      {/* In proposal mode the wrapper already labels the page
+          ("PROPOSAL EDITOR | <entity>") + provides Submit Changes.
+          Slim the header to just the Back link so the form starts
+          tight under the wrapper — same treatment as the other
+          editors. Admin direct route keeps the full title block. */}
+      {isProposalMode ? (
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-gold/10">
+          <Link to={backPath}>
+            <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
+              <ChevronLeft className="w-4 h-4" /> Back
+            </Button>
+          </Link>
+        </div>
+      ) : (
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-4 mb-2">
+              <Link to={backPath}>
+                <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
+                  <ChevronLeft className="w-4 h-4" /> Back
+                </Button>
+              </Link>
+            </div>
+            <div className="flex items-center gap-4">
+              <h1 className="text-4xl font-serif font-bold text-ink tracking-tight uppercase">{title}</h1>
+            </div>
+            <p className="text-ink/60 font-serif italic max-w-3xl">{description}</p>
             <p className="text-xs text-gold/80 border border-gold/10 bg-gold/5 rounded px-3 py-2 max-w-3xl">
               Admin development surface. These entries are for schema shaping and Foundry alignment while the workflow is still in progress.
             </p>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="space-y-6 lg:col-span-2">
@@ -452,7 +553,7 @@ export default function DevelopmentCompendiumManager({
 
               <form onSubmit={handleSave} className="space-y-6 mt-4">
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
+                  <ReviewFieldHighlight columnKey="name" className="space-y-1">
                     <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Name</Label>
                     <Input
                       value={formData.name}
@@ -461,8 +562,8 @@ export default function DevelopmentCompendiumManager({
                       placeholder={`e.g. ${singularLabel}`}
                       required
                     />
-                  </div>
-                  <div className="space-y-1">
+                  </ReviewFieldHighlight>
+                  <ReviewFieldHighlight columnKey="identifier" className="space-y-1">
                     <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
                     <Input
                       value={formData.identifier}
@@ -470,8 +571,8 @@ export default function DevelopmentCompendiumManager({
                       className="bg-background/50 border-gold/10 focus:border-gold font-mono"
                       placeholder={slugify(formData.name || singularLabel)}
                     />
-                  </div>
-                  <div className="space-y-1">
+                  </ReviewFieldHighlight>
+                  <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
                     <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</Label>
                     <select
                       value={formData.sourceId}
@@ -483,25 +584,27 @@ export default function DevelopmentCompendiumManager({
                         <option key={source.id} value={source.id}>{source.name}</option>
                       ))}
                     </select>
-                  </div>
+                  </ReviewFieldHighlight>
                 </div>
 
-                <div className="space-y-2">
+                <ReviewFieldHighlight columnKey="image_url" className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Image</Label>
                   <ImageUpload
                     currentImageUrl={formData.imageUrl}
                     storagePath={`images/${collectionName}/${editingId || 'draft'}/`}
                     onUpload={(url) => setFormData(prev => ({ ...prev, imageUrl: url }))}
                   />
-                </div>
+                </ReviewFieldHighlight>
 
-                <MarkdownEditor
-                  value={formData.description}
-                  onChange={value => setFormData(prev => ({ ...prev, description: value }))}
-                  label="Description"
-                  placeholder={`Describe the ${singularLabel.toLowerCase()} in game terms and Foundry-facing behavior. Activities should carry runtime mechanics.`}
-                  minHeight="220px"
-                />
+                <ReviewFieldHighlight columnKey="description">
+                  <MarkdownEditor
+                    value={formData.description}
+                    onChange={value => setFormData(prev => ({ ...prev, description: value }))}
+                    label="Description"
+                    placeholder={`Describe the ${singularLabel.toLowerCase()} in game terms and Foundry-facing behavior. Activities should carry runtime mechanics.`}
+                    minHeight="220px"
+                  />
+                </ReviewFieldHighlight>
 
                 {renderSpecificFields(formData, setFormData)}
 
