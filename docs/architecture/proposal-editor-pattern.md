@@ -96,10 +96,8 @@ Spells, Feats, Items, Tags, Tag Groups, Spell Lists. Each renders a list view th
 The pattern (see [`SpellsEditor.tsx`](../../src/pages/compendium/SpellsEditor.tsx) ~700–740 for canonical example):
 
 ```ts
-const draftedEntities = useMemo(
-  () => getDraftedEntities('spell', proposalContext, allDrafts, activeBundleId),
-  [proposalContext, allDrafts, activeBundleId],
-);
+// Use the hook — collapses the useBlock + useMemo(getDraftedEntities) dance.
+const draftedEntities = useProposalEntityDrafts('spell');
 
 const displayEntries = useMemo(() => {
   if (draftedEntities.byId.size === 0 && draftedEntities.deletedIds.size === 0) {
@@ -126,6 +124,14 @@ Notes:
 
 The row renderer then switches on `__pendingDelete` to render [`<TombstoneRow>`](../../src/components/proposals/TombstoneRow.tsx) instead of the normal row, with an Undo that calls `proposalContext.dropEntity(id)`.
 
+### Catalog filter / unlock support hooks
+
+| Hook | Purpose |
+|---|---|
+| [`useDraftedEntityIds(type)`](../../src/hooks/useDraftedEntityIds.ts) | Returns the union `Set<string>` of ids the user has touched (CREATE/UPDATE/DELETE) on `type` in the active block. Drives the My-Drafts filter, the row-list "queued" highlight, and the unlock gate (the user's own work is always editable). |
+| [`useEditBaseUnlocks({...})`](../../src/hooks/useEditBaseUnlocks.ts) | The "Edit Base [Name]" unlock state for catalog editors with `enableFocusMode`. Returns `{unlockedBaseIds, unlock, isReadOnly}`. Unlocking flips focus mode to `'drafts'` so the just-unlocked entity surfaces in My Drafts. |
+| [`useProposalPreFlushSave({...})`](../../src/hooks/useProposalPreFlushSave.ts) | Registers `handleSave` as a pre-flush callback on the wrapper. Catalog editors pass a `shouldRun` closure that reads `editingIdRef.current` + a dirty check against `lastLoadedFormRef`. Single-work editors gate on `effectiveId`. |
+
 ---
 
 ## Single-work editors: the `pendingCreateId` convention
@@ -134,22 +140,17 @@ ClassEditor, SubclassEditor, UniqueOptionGroupEditor. One entity per page. Route
 
 **Problem:** after a CREATE in proposal mode, you can't navigate to `/edit/<newId>` like the admin flow does — the route change unmounts the wrapper and destroys the in-memory queue, the user's work disappears.
 
-**Solution:** stay on `/new` after Create, but track the locally-minted id in component state so subsequent saves UPDATE the same entry instead of minting a new CREATE every click.
+**Solution:** stay on `/new` after Create, but track the locally-minted id in component state so subsequent saves UPDATE the same entry instead of minting a new CREATE every click. Use [`useProposalSingleWorkId(id)`](../../src/hooks/useProposalSingleWorkId.ts):
 
 ```ts
-const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
-const effectiveId = id ?? pendingCreateId;
+const { effectiveId, pendingCreateId, recordCreate } = useProposalSingleWorkId(id);
 
-// In handleSave:
+// In handleSave (via applyProposalWrite — see "Save helpers" below):
 if (isProposalMode) {
   const isCreate = !effectiveId;
   const saveId = effectiveId || crypto.randomUUID();
-  if (isCreate) {
-    await writer.create({ ...payload, id: saveId });
-    setPendingCreateId(saveId);
-  } else {
-    await writer.update(saveId, payload);
-  }
+  await applyProposalWrite(writer, payload, { id: saveId, isCreate, silent: opts.silent });
+  if (isCreate) recordCreate(saveId);
 }
 
 // Skip the post-create navigate in proposal mode:
@@ -163,7 +164,7 @@ Three places use `effectiveId` instead of `id`:
 2. The "Save X" / "Create X" button render (`effectiveId ? 'Save' : 'Create'`)
 3. The form header label (`effectiveId ? \`Edit ${name}\` : 'New X'`)
 
-The pre-flush registration also needs to include `pendingCreateId` in its dependency check — otherwise post-Create edits stop being re-staged when Submit Changes drains.
+The hook resets `pendingCreateId` on route param change, so navigating from `/new` to `/edit/<id>` (or between two `/edit` pages) clears the prior session's state automatically.
 
 When the editor loads with a route param `:id`, it should consult `getDraftedEntities(t).byId.get(id)` BEFORE `fetchDocument` — the live row may not exist yet if the user just created it and the draft hasn't been approved. See [`ClassEditor.tsx`](../../src/pages/compendium/ClassEditor.tsx) ~735 for the canonical load-effect.
 
@@ -173,18 +174,24 @@ When the editor loads with a route param `:id`, it should consult `getDraftedEnt
 
 The wrapper renders its own "PROPOSAL EDITOR | <entity>" header strip with the active block name + Submit Changes button. Editors must NOT also render a duplicate page-title chrome in proposal mode.
 
-The pattern: gate the editor's own header on `!isProposalMode` (or render a slim Back-only version):
+Use [`<ProposalAwareEditorHeader>`](../../src/components/proposals/ProposalAwareEditorHeader.tsx) to render the slim/h1 conditional header. The component locks the proposal-mode container className in one place — every editor needs the exact same `flex items-center justify-between gap-2 pb-2 border-b border-gold/10` and drift between them was a real source of bugs.
 
 ```tsx
-<div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'section-header'}>
-  <Link to={backHref}><Button><ChevronLeft />Back</Button></Link>
-  {isProposalMode ? (
-    <span className="text-sm font-bold text-ink truncate">{name || 'New X'}</span>
-  ) : (
-    <h1 className="h1-title">{effectiveId ? `Edit ${name}` : 'New X'}</h1>
-  )}
-</div>
+<ProposalAwareEditorHeader
+  isProposalMode={isProposalMode}
+  backHref={isProposalRoute ? '/my-proposals' : '/compendium/<thing>'}
+  proposalTitle={effectiveId ? (name || 'Untitled X') : 'New X'}
+  adminContent={
+    <h1 className="h1-title text-ink">
+      {effectiveId ? `Edit ${name || 'X'}` : 'New X'}
+    </h1>
+  }
+>
+  {/* right-side action buttons (Save / Create / Delete / BakeNow / ...) */}
+</ProposalAwareEditorHeader>
 ```
+
+Editors with a richer slim-title (subclass's "for Wizard" pill) pass `proposalTitleNode` instead of `proposalTitle`. Editors with a non-`section-header` admin container (Subclass's two-column layout, DCM's vertical title+description+notice stack) pass `adminContainerClassName`. Right-side action buttons go in `children` — the wrapper component doesn't constrain the layout there.
 
 Applied to: ClassEditor, SubclassEditor, UniqueOptionGroupEditor, DevelopmentCompendiumManager. TagsExplorer suppresses its page-header entirely in proposal mode (it has no useful Back button — the wrapper's strip is the page title).
 
@@ -263,12 +270,12 @@ When the proposal allowlist gains a new entity_type, do the following:
    - Add a per-entity config (writable columns, JSON columns, snapshot loader)
 2. **Add the launcher entry** in [`src/pages/core/MyProposals.tsx`](../../src/pages/core/MyProposals.tsx) `CREATE_ENTRIES` and/or `EDIT_ENTRIES`. Use `picker: 'subclass-create'`-style hook if the entry needs a pre-pick dialog.
 3. **Wire the editor:**
-   - Import `useProposalAccumulator`, `useProposalContextOptional`, `getDraftedEntities`, `useBlock`.
-   - Compute `proposalContext`, `entityDrafts`, `effectiveId` (single-work) or `displayEntries` (catalog).
-   - Branch `handleSave` on `isProposalMode` — call `writer.create({ ...payload, id: saveId })` / `writer.update(saveId, payload)`.
-   - Single-work: track `pendingCreateId`, skip the post-create navigate, include `pendingCreateId` in the pre-flush dep array.
-   - Single-work: render `<DeletedEntityBanner>` when `entityDrafts.deletedIds.has(id)`, wrap form in `<fieldset disabled={isPendingDelete}>`.
-   - Catalog: tag deleted rows with `__pendingDelete: true` in `displayEntries`, render `<TombstoneRow>` for those.
+   - Import `useProposalAccumulator`, `useProposalContextOptional`, `useProposalEntityDrafts`, plus the relevant single-work or catalog hooks (see below).
+   - Branch `handleSave` on `isProposalMode` and call `applyProposalWrite(writer, payload, { id: saveId, isCreate, silent })` to queue + emit the mode-aware toast in one go.
+   - **Single-work:** use `useProposalSingleWorkId(id)` for `effectiveId` + `pendingCreateId` + `recordCreate`. Use `useProposalPreFlushSave({ enabled: isProposalMode, proposalContext, handleSave, shouldRun: () => !!effectiveId })`. Use `useTombstoneBanner(type, id)` for the deletion banner. Render `<DeletedEntityBanner>` when its `isPendingDelete` flag is set, wrap form in `<fieldset disabled={isPendingDelete}>`. Skip the post-create navigate in proposal mode.
+   - **Catalog:** use `useDraftedEntityIds(type)` for the drafts id-set, `useEditBaseUnlocks({...})` for the unlock state + `isReadOnly`, and `useProposalPreFlushSave({...})` with a closure that reads `editingIdRef.current` + dirty-checks against `lastLoadedFormRef`. Tag deleted rows with `__pendingDelete: true` in `displayEntries`, render `<TombstoneRow>` for those.
+   - **Header:** use `<ProposalAwareEditorHeader>` for the slim/h1 conditional render (see [Visual chrome](#visual-chrome-that-diverges-in-proposal-mode)).
+   - **Cascade dependent (optional):** use `useCascadeDependent(type, id)` + `<CascadeDependentBanner>` + an entity-type-specific replacement picker (e.g. `<TagReplacementPicker>` with `arrayColumn='tag_ids'` for class/subclass, `'tags'` for spells/feats/items).
 4. **Wire review mode:**
    - Call `useProposalReview()` + `resolveReviewPayload(reviewMode, '<type>', id)`.
    - Short-circuit the load effect to `reviewPayload` when matched.
@@ -281,10 +288,14 @@ When the proposal allowlist gains a new entity_type, do the following:
 
 ## Open work
 
-Tracked separately:
-- Phase 2 — server-side cascade detection at submit (a deleted tag enrolls its dependent spells/classes/feats as cascade revisions in the same bundle).
-- Phase 3 — "Handle this dependent" UI for cascade revisions (Accept removal vs Replace-with-other picker).
-- Phase 4 — admin-side grouping of cascade children under the parent revision + atomic approve/reject.
-- Tombstone-gap fix: deleting a tag that's a CREATE draft in the same block currently makes the row vanish instead of showing a tombstone. Submit-time dedup still does the right thing, but the mid-edit UX has no Undo handle. Proposed fix is to surface a snapshot Map from `getDraftedEntities` so the display can render a tombstone from the draft payload after the queue's DELETE.
+Cascade Phases 2/3/4 + the tombstone-gap fix shipped in `62dfd60` / `3bdda92`. Strategy registry currently handles `tag` + `tag_group` + `unique_option_group` + `class` parents — see [`api/_lib/cascadeStrategies.ts`](../../api/_lib/cascadeStrategies.ts) to add more.
 
-See the working drafts under `docs/_drafts/dry-audit-2026-05-21.md` and `docs/_drafts/stress-test-2026-05-21.md` for DRY refactor opportunities and the stress-test scenario log.
+Out-of-scope items tracked at the feature level (not in this contract):
+
+- **Self-serve world creation** + per-block world selection.
+- **Per-world content gating** — owner picks allowed base content.
+- **System page type** with referenceable modular components (audit + design).
+
+Future cascade strategies to consider when those entity types start producing meaningful proposal traffic:
+- `subclass`-as-parent (deleting a subclass — features cascade via FK, no proposal-side work needed today; if features become proposable, enroll them).
+- `class_spell_list` cleanup on `class` parent — D1's FK handles it on approval, so no proposal revision is needed unless we want to surface the count in cascade-preview.
