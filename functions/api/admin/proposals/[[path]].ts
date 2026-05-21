@@ -124,6 +124,138 @@ async function handleList(request: Request): Promise<Response> {
 }
 
 /* -------------------------------------------------------------------------- */
+/* List bundles (block-based admin review)                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Admin-side bundle list — surfaces what's pending review as the
+ * coherent "block" units the content creator submitted, rather than
+ * slicing by entity type (the legacy tab-strip approach was orthogonal
+ * to how creators actually package their work).
+ *
+ * For each bundle, returns metadata + per-status revision counts + the
+ * set of entity_types that appear in it. Bundles with at least one
+ * pending revision sort to the top (FIFO by oldest-pending). With
+ * `?status=resolved`, also surfaces bundles whose pending revisions
+ * have all been resolved (approved / rejected / withdrawn).
+ *
+ * Orphan revisions — those with `bundle_id IS NULL` from pre-Phase-4.1
+ * single-revision submits — are returned in a sibling `orphans` field
+ * (NOT folded into a synthetic bundle row, so the client can render
+ * them in a separate "Standalone proposals" section if desired).
+ */
+async function handleListBundles(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const statusParam = url.searchParams.get("status") || "pending";
+  const includeResolved = statusParam === "all" || statusParam === "resolved";
+
+  // Bundle list — left-join pending_revisions and aggregate counts.
+  // The HAVING clause filters to bundles with at least one pending row
+  // (default) or any row at all (when showing resolved).
+  const bundleSql = `
+    SELECT
+      b.id,
+      b.name,
+      b.description,
+      b.created_by_user_id,
+      b.created_at,
+      b.updated_at,
+      b.status AS bundle_status,
+      u.username AS proposer_username,
+      u.display_name AS proposer_display_name,
+      COUNT(pr.id) AS revision_count,
+      SUM(CASE WHEN pr.status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+      SUM(CASE WHEN pr.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+      SUM(CASE WHEN pr.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
+      SUM(CASE WHEN pr.status = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn_count,
+      MIN(pr.proposed_at) AS first_proposed_at,
+      MAX(pr.proposed_at) AS last_proposed_at,
+      GROUP_CONCAT(DISTINCT pr.entity_type) AS entity_types_csv
+    FROM proposal_bundles b
+    LEFT JOIN users u ON u.id = b.created_by_user_id
+    LEFT JOIN pending_revisions pr
+        ON pr.bundle_id = b.id AND pr.status != 'draft'
+    WHERE b.status = 'submitted'
+    GROUP BY b.id
+    ${includeResolved ? "" : "HAVING pending_count > 0"}
+    ORDER BY
+      ${includeResolved
+        ? "MAX(pr.proposed_at) DESC"
+        : "MIN(pr.proposed_at) ASC"}
+    LIMIT 200
+  `;
+  const bundleResult = await executeD1QueryInternal({ sql: bundleSql, params: [] });
+  const bundleRows = Array.isArray(bundleResult?.results)
+    ? bundleResult.results
+    : [];
+
+  const bundles = bundleRows.map((row: any) => ({
+    id: String(row.id),
+    name: row.name ?? "(untitled)",
+    description: row.description ?? null,
+    created_by_user_id: row.created_by_user_id ?? null,
+    created_at: row.created_at ?? null,
+    updated_at: row.updated_at ?? null,
+    bundle_status: row.bundle_status ?? null,
+    proposer_username: row.proposer_username ?? null,
+    proposer_display_name: row.proposer_display_name ?? null,
+    revision_count: Number(row.revision_count ?? 0),
+    pending_count: Number(row.pending_count ?? 0),
+    approved_count: Number(row.approved_count ?? 0),
+    rejected_count: Number(row.rejected_count ?? 0),
+    withdrawn_count: Number(row.withdrawn_count ?? 0),
+    first_proposed_at: row.first_proposed_at ?? null,
+    last_proposed_at: row.last_proposed_at ?? null,
+    entity_types:
+      typeof row.entity_types_csv === "string" && row.entity_types_csv
+        ? String(row.entity_types_csv).split(",").filter(Boolean)
+        : [],
+  }));
+
+  // Orphan revisions — pending_revisions with bundle_id IS NULL OR
+  // with a bundle_id but no matching proposal_bundles row (pre-Phase-
+  // 4.1 bundles created without metadata). Group by proposer so the
+  // client can render a small "Standalone" section per user.
+  const orphanSql = `
+    SELECT
+      pr.id,
+      pr.entity_type,
+      pr.entity_id,
+      pr.operation,
+      pr.status,
+      pr.bundle_id,
+      pr.proposed_by_user_id,
+      pr.proposed_at,
+      u.username AS proposer_username,
+      u.display_name AS proposer_display_name
+    FROM pending_revisions pr
+    LEFT JOIN users u ON u.id = pr.proposed_by_user_id
+    LEFT JOIN proposal_bundles b ON b.id = pr.bundle_id
+    WHERE pr.status ${includeResolved ? "!= 'draft'" : "= 'pending'"}
+      AND (pr.bundle_id IS NULL OR b.id IS NULL)
+    ORDER BY pr.proposed_at ASC
+    LIMIT 200
+  `;
+  const orphanResult = await executeD1QueryInternal({ sql: orphanSql, params: [] });
+  const orphans = Array.isArray(orphanResult?.results)
+    ? orphanResult.results.map((row: any) => ({
+        id: String(row.id),
+        entity_type: row.entity_type,
+        entity_id: row.entity_id ?? null,
+        operation: row.operation,
+        status: row.status,
+        bundle_id: row.bundle_id ?? null,
+        proposed_by_user_id: row.proposed_by_user_id ?? null,
+        proposed_at: row.proposed_at ?? null,
+        proposer_username: row.proposer_username ?? null,
+        proposer_display_name: row.proposer_display_name ?? null,
+      }))
+    : [];
+
+  return Response.json({ bundles, orphans });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Get one with conflict status                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -534,6 +666,10 @@ export const onRequest = async (context: any): Promise<Response> => {
 
     if (path.length === 0 && request.method === "GET") {
       return await handleList(request);
+    }
+
+    if (path.length === 1 && path[0] === "bundles" && request.method === "GET") {
+      return await handleListBundles(request);
     }
 
     if (path.length === 1 && request.method === "GET") {

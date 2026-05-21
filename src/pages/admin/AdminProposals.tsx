@@ -25,7 +25,7 @@ import {
   Dialog, DialogContent, DialogContentLarge, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
-import { Inbox, Check, X, AlertTriangle, Undo2, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen, Wand2, Shield, Award, Star, Package, Boxes, Repeat } from 'lucide-react';
+import { Inbox, Check, X, AlertTriangle, Undo2, ChevronRight, ChevronLeft, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen, Wand2, Shield, Award, Star, Package, Boxes, Repeat } from 'lucide-react';
 import { recomputeAppliedRulesForSpell } from '../../lib/spellRules';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 
@@ -68,30 +68,31 @@ type Proposal = {
   cascade_parent_revision_id: string | null;
 };
 
-// Every proposable entity type needs a tab. The Phase 4 entity types
-// (spell / class / subclass / feat / item / unique_option_group /
-// unique_option_item) were added to the proposal allowlist but the
-// tab strip wasn't updated alongside them. That meant any pending
-// proposal on those types was invisible to admins — no tab to click,
-// no badge to notice. Discovered 2026-05-21 when a content-creator
-// submitted 3 spell proposals in prod and the admin couldn't see them.
-// Keep this list in sync with the `EntityType` union below + the
-// `ENTITY_LABEL` map + the `isProposableEntityType` allowlist in
+// Synthetic bundle id used to represent orphan revisions (those with
+// bundle_id IS NULL or whose bundle has no proposal_bundles metadata
+// row). Lets the UI reuse the same "selected bundle → revisions list"
+// flow without inventing a new view state.
+const ORPHANS_PSEUDO_BUNDLE_ID = '__orphans__';
+
+// Per-entity-type icon registry. The bundle detail view shows an
+// inline icon next to each entity-type chip in the breakdown so the
+// admin can scan the list visually. Keep this in sync with the
+// `EntityType` union + the `isProposableEntityType` allowlist in
 // api/_lib/proposals.ts.
-const ENTITY_TABS: Array<{ id: EntityType; label: string; icon: any }> = [
-  { id: 'tag', label: 'Tags', icon: TagsIcon },
-  { id: 'tag_group', label: 'Tag Groups', icon: Layers },
-  { id: 'spell', label: 'Spells', icon: Wand2 },
-  { id: 'spell_rule', label: 'Spell Rules', icon: Sparkles },
-  { id: 'spell_rule_application', label: 'Rule Applications', icon: ListChecks },
-  { id: 'class_spell_list', label: 'Spell Lists', icon: BookOpen },
-  { id: 'class', label: 'Classes', icon: Shield },
-  { id: 'subclass', label: 'Subclasses', icon: Award },
-  { id: 'feat', label: 'Feats', icon: Star },
-  { id: 'item', label: 'Items', icon: Package },
-  { id: 'unique_option_group', label: 'Option Groups', icon: Boxes },
-  { id: 'unique_option_item', label: 'Option Items', icon: Repeat },
-];
+const ENTITY_ICON: Record<EntityType, any> = {
+  tag: TagsIcon,
+  tag_group: Layers,
+  spell: Wand2,
+  spell_rule: Sparkles,
+  spell_rule_application: ListChecks,
+  class_spell_list: BookOpen,
+  class: Shield,
+  subclass: Award,
+  feat: Star,
+  item: Package,
+  unique_option_group: Boxes,
+  unique_option_item: Repeat,
+};
 
 const ENTITY_LABEL: Record<EntityType, string> = {
   tag: 'Tag',
@@ -118,15 +119,61 @@ function describePayloadSummary(p: Proposal): string {
   return '(no preview)';
 }
 
+// Bundle row returned by GET /api/admin/proposals/bundles. Shape mirrors
+// the SQL aggregation in functions/api/admin/proposals/[[path]].ts.
+type BundleRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_by_user_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  bundle_status: string | null;
+  proposer_username: string | null;
+  proposer_display_name: string | null;
+  revision_count: number;
+  pending_count: number;
+  approved_count: number;
+  rejected_count: number;
+  withdrawn_count: number;
+  first_proposed_at: string | null;
+  last_proposed_at: string | null;
+  entity_types: EntityType[];
+};
+
+// Orphan-revision shape: like Proposal but with denormalized proposer
+// fields, since orphans aren't joined into a bundle metadata row.
+type OrphanRow = {
+  id: string;
+  entity_type: EntityType;
+  entity_id: string | null;
+  operation: 'create' | 'update' | 'delete';
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+  bundle_id: string | null;
+  proposed_by_user_id: string | null;
+  proposed_at: string | null;
+  proposer_username: string | null;
+  proposer_display_name: string | null;
+};
+
 export default function AdminProposals({ userProfile }: { userProfile: any }) {
-  const [activeTab, setActiveTab] = useState<EntityType>('tag');
-  const [showResolved, setShowResolved] = useState(false);
+  // Top-level admin review is now block-based: the list shows pending
+  // bundles (a content creator's coherent change-set), and clicking a
+  // bundle drills into its constituent revisions. The previous entity-
+  // type tab strip slicing didn't match how creators actually package
+  // their work, and missed Phase 4 entity types entirely until the
+  // 2026-05-21 prod incident (see commit history for context).
+  const [bundles, setBundles] = useState<BundleRow[]>([]);
+  const [orphans, setOrphans] = useState<OrphanRow[]>([]);
+  // When set, we're in bundle-detail view. null = list view.
+  const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null);
+  // The revisions for `selectedBundleId` — fetched via the existing
+  // `?bundle_id=` filter on the legacy list endpoint. No need for a
+  // dedicated bundle-detail endpoint; the join already produces the
+  // same row shape the ProposalRow component expects.
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [showResolved, setShowResolved] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [counts, setCounts] = useState<Record<EntityType, number>>({
-    tag: 0, tag_group: 0, spell_rule: 0, spell_rule_application: 0, class_spell_list: 0,
-    spell: 0, class: 0, subclass: 0, feat: 0, item: 0, unique_option_group: 0, unique_option_item: 0,
-  });
   const [selected, setSelected] = useState<Proposal | null>(null);
   const [conflictDialog, setConflictDialog] = useState<null | {
     proposal: Proposal;
@@ -159,73 +206,119 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     });
   }, []);
 
-  const load = useCallback(async () => {
+  // Bundle list loader. Used when the admin first lands on the page
+  // and after any back-to-list action. Pulls bundles + orphans from
+  // /api/admin/proposals/bundles in a single roundtrip.
+  const loadBundles = useCallback(async () => {
     setLoading(true);
     try {
-      // We pull both pending and resolved in parallel for the active
-      // tab. Counts come from a small pending-only sweep across every
-      // entity so the tab labels can show "(3)" badges without making
-      // the queue itself bigger.
-      const status = showResolved ? 'all' : 'pending';
-      const url = new URL('/api/admin/proposals', window.location.origin);
-      url.searchParams.set('entity_type', activeTab);
-      if (!showResolved) url.searchParams.set('status', 'pending');
+      const url = new URL('/api/admin/proposals/bundles', window.location.origin);
+      url.searchParams.set('status', showResolved ? 'all' : 'pending');
       const res = await authedFetch(url.pathname + url.search);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to load proposals (HTTP ${res.status})`);
+        throw new Error(err.error || `Failed to load bundles (HTTP ${res.status})`);
       }
       const body = await res.json();
-      let rows: Proposal[] = Array.isArray(body?.proposals) ? body.proposals : [];
-      if (showResolved) {
-        // The endpoint accepts only one status at a time; for "show
-        // resolved" we surface everything matching the entity_type and
-        // sort pending-first locally.
-        const pendRes = await authedFetch(`/api/admin/proposals?entity_type=${activeTab}&status=pending`);
-        const pendBody = pendRes.ok ? await pendRes.json() : { proposals: [] };
-        const pending: Proposal[] = Array.isArray(pendBody?.proposals) ? pendBody.proposals : [];
-        const ids = new Set(rows.map((r) => r.id));
-        rows = [...pending.filter((r) => !ids.has(r.id)), ...rows];
-      }
-      setProposals(rows);
-      if (status !== 'all') {
-        // Refresh per-entity counts so the tab strip badges stay
-        // current.
-        const countResults = await Promise.all(
-          ENTITY_TABS.map(async ({ id }) => {
-            try {
-              const r = await authedFetch(`/api/admin/proposals?entity_type=${id}&status=pending`);
-              if (!r.ok) return [id, 0] as const;
-              const b = await r.json();
-              return [id, Array.isArray(b?.proposals) ? b.proposals.length : 0] as const;
-            } catch {
-              return [id, 0] as const;
-            }
-          }),
-        );
-        setCounts(
-          countResults.reduce<Record<EntityType, number>>(
-            (acc, [id, count]) => ({ ...acc, [id]: count }),
-            {
-              tag: 0, tag_group: 0, spell_rule: 0, spell_rule_application: 0,
-              class_spell_list: 0, spell: 0, class: 0, subclass: 0, feat: 0, item: 0,
-              unique_option_group: 0, unique_option_item: 0,
-            },
-          ),
-        );
-      }
+      setBundles(Array.isArray(body?.bundles) ? body.bundles : []);
+      setOrphans(Array.isArray(body?.orphans) ? body.orphans : []);
     } catch (err: any) {
-      console.error('Failed to load proposals:', err);
-      toast.error(err?.message || 'Failed to load proposals.');
+      console.error('Failed to load bundles:', err);
+      toast.error(err?.message || 'Failed to load bundles.');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, showResolved, authedFetch]);
+  }, [showResolved, authedFetch]);
+
+  // Bundle-detail loader. Fetches every revision in the bundle (regardless
+  // of status, so resolved ones show up in the same view as still-pending
+  // siblings) via the existing /api/admin/proposals?bundle_id= filter.
+  // Called when the admin clicks into a bundle row.
+  const loadBundleRevisions = useCallback(
+    async (bundleId: string) => {
+      setLoading(true);
+      try {
+        // Pending first (FIFO review order) then resolved.
+        const pendingUrl = `/api/admin/proposals?bundle_id=${encodeURIComponent(bundleId)}&status=pending`;
+        const pendRes = await authedFetch(pendingUrl);
+        const pendBody = pendRes.ok ? await pendRes.json() : { proposals: [] };
+        const pending: Proposal[] = Array.isArray(pendBody?.proposals)
+          ? pendBody.proposals
+          : [];
+        const resolvedRows: Proposal[] = [];
+        if (showResolved) {
+          for (const s of ['approved', 'rejected', 'withdrawn'] as const) {
+            const r = await authedFetch(
+              `/api/admin/proposals?bundle_id=${encodeURIComponent(bundleId)}&status=${s}`,
+            );
+            if (r.ok) {
+              const b = await r.json();
+              if (Array.isArray(b?.proposals)) resolvedRows.push(...b.proposals);
+            }
+          }
+        }
+        setProposals([...pending, ...resolvedRows]);
+      } catch (err: any) {
+        console.error('Failed to load bundle revisions:', err);
+        toast.error(err?.message || 'Failed to load bundle revisions.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authedFetch, showResolved],
+  );
+
+  // Convenience: refresh whichever view is currently active. Called
+  // after approve / reject / revert actions so the row state updates
+  // without a manual refresh.
+  const reloadCurrent = useCallback(async () => {
+    if (selectedBundleId === ORPHANS_PSEUDO_BUNDLE_ID) {
+      await loadBundles();
+      // Re-derive proposals from the freshly-fetched orphans (set in
+      // the useEffect below).
+      return;
+    }
+    if (selectedBundleId) {
+      await Promise.all([loadBundleRevisions(selectedBundleId), loadBundles()]);
+    } else {
+      await loadBundles();
+    }
+  }, [selectedBundleId, loadBundles, loadBundleRevisions]);
 
   useEffect(() => {
     if (userProfile?.role !== 'admin') return;
-    void load();
-  }, [userProfile?.role, load]);
+    if (!selectedBundleId) {
+      void loadBundles();
+    } else if (selectedBundleId === ORPHANS_PSEUDO_BUNDLE_ID) {
+      // Orphans are already loaded as part of loadBundles; mirror them
+      // into the proposals state so the detail view's rendering reuses
+      // the standard ProposalRow component.
+      setProposals(
+        orphans.map((o) => ({
+          id: o.id,
+          entity_type: o.entity_type,
+          entity_id: o.entity_id,
+          operation: o.operation,
+          status: o.status,
+          bundle_id: o.bundle_id,
+          proposed_by_user_id: o.proposed_by_user_id ?? '',
+          proposed_at: o.proposed_at ?? '',
+          proposer_username: o.proposer_username,
+          proposer_display_name: o.proposer_display_name,
+          proposed_payload: null,
+          snapshot_at_proposal: null,
+          notes_from_proposer: null,
+          rejection_reason: null,
+          reviewed_at: null,
+          reviewed_by_user_id: null,
+          cascade_parent_revision_id: null,
+          pinned_at: null,
+        }) as Proposal),
+      );
+    } else {
+      void loadBundleRevisions(selectedBundleId);
+    }
+  }, [userProfile?.role, selectedBundleId, loadBundles, loadBundleRevisions, orphans]);
 
   const handleApprove = async (proposal: Proposal) => {
     try {
@@ -269,7 +362,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         }
       }
       setSelected(null);
-      void load();
+      void reloadCurrent();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Failed to approve.');
@@ -301,7 +394,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
       );
       setRejectDialog(null);
       setSelected(null);
-      void load();
+      void reloadCurrent();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Failed to reject.');
@@ -324,7 +417,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
           ? 'Unpinned — this proposal will follow the standard 30-day retention.'
           : 'Pinned — this proposal is exempt from the 30-day retention sweep.',
       );
-      void load();
+      void reloadCurrent();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || `Failed to ${action} proposal.`);
@@ -367,7 +460,7 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         }
       }
       setSelected(null);
-      void load();
+      void reloadCurrent();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Failed to revert.');
@@ -376,9 +469,16 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
     }
   };
 
-  const filteredProposals = useMemo(() => {
-    return proposals.filter((p) => p.entity_type === activeTab);
-  }, [proposals, activeTab]);
+  // In bundle-detail view we show all revisions in the bundle (filtered
+  // by `proposals` state, not entity_type). The bundle-list view is
+  // populated separately via `bundles` state.
+  const detailProposals = proposals;
+
+  // Bundle currently being viewed (for rendering the detail header).
+  const activeBundle = useMemo<BundleRow | null>(() => {
+    if (!selectedBundleId || selectedBundleId === ORPHANS_PSEUDO_BUNDLE_ID) return null;
+    return bundles.find((b) => b.id === selectedBundleId) ?? null;
+  }, [bundles, selectedBundleId]);
 
   // Count cascade dependents per parent revision id. The badge on
   // each row uses this to surface "+N cascade deps" so the admin
@@ -427,105 +527,195 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-2">
-        {ENTITY_TABS.map((tab) => {
-          const Icon = tab.icon;
-          const count = counts[tab.id] ?? 0;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-t-lg transition-colors font-bold uppercase tracking-widest text-[10px] ${
-                activeTab === tab.id
-                  ? 'bg-gold text-white shadow-sm'
-                  : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
-              }`}
+      {selectedBundleId ? (
+        /* ===========================================================
+         * BUNDLE DETAIL VIEW — list of revisions in the chosen bundle
+         * (or orphan proposals if pseudo-bundle).
+         * =========================================================== */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedBundleId(null)}
+              className="gap-2 text-gold hover:bg-gold/10"
             >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
-              {count > 0 && (
-                <Badge variant="outline" className="ml-1 text-[9px] px-1 py-0 border-current text-current">
-                  {count}
-                </Badge>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <Card className="border-gold/10">
-        <CardHeader>
-          <CardTitle className="text-base">
-            {ENTITY_LABEL[activeTab]} — {filteredProposals.length} {showResolved ? '' : 'pending'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading && proposals.length === 0 ? (
-            <p className="text-ink/50 italic text-center py-12">Loading…</p>
-          ) : filteredProposals.length === 0 ? (
-            (() => {
-              // Surface pending proposals on OTHER tabs so the admin
-              // doesn't land here, see "empty", and assume the system is
-              // idle. Particularly important because the default tab is
-              // Tags but most proposal traffic targets Spells / Feats /
-              // Classes / Items.
-              const tabsWithPending = ENTITY_TABS.filter(
-                (t) => t.id !== activeTab && (counts[t.id] ?? 0) > 0,
-              );
-              if (showResolved || tabsWithPending.length === 0) {
-                return (
+              <ChevronLeft className="w-4 h-4" />
+              Back to blocks
+            </Button>
+          </div>
+          {selectedBundleId === ORPHANS_PSEUDO_BUNDLE_ID ? (
+            <Card className="border-gold/10">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Standalone proposals — {detailProposals.length}
+                </CardTitle>
+                <p className="text-xs text-ink/60 italic">
+                  Revisions with no block (legacy single-revision submits, or
+                  bundles that lost their metadata row).
+                </p>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <p className="text-ink/50 italic text-center py-12">Loading…</p>
+                ) : detailProposals.length === 0 ? (
                   <p className="text-ink/50 italic text-center py-12">
-                    {showResolved ? 'Nothing to show.' : 'No pending proposals anywhere.'}
+                    No standalone proposals.
                   </p>
-                );
-              }
-              return (
-                <div className="text-center py-12 space-y-3">
-                  <p className="text-ink/50 italic">
-                    No pending proposals for this entity.
-                  </p>
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-widest text-ink/60 font-bold">
-                      Pending elsewhere:
+                ) : (
+                  <ul className="divide-y divide-gold/5">
+                    {detailProposals.map((p) => (
+                      <ProposalRow
+                        key={p.id}
+                        proposal={p}
+                        onSelect={() => setSelected(p)}
+                        onApprove={() => handleApprove(p)}
+                        onReject={() => setRejectDialog({ proposal: p, reason: '' })}
+                        onRevert={() => handleRevert(p)}
+                        onTogglePin={() => handleTogglePin(p)}
+                        reverting={revertingId === p.id}
+                        cascadeChildCount={cascadeChildCountByParent.get(p.id)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          ) : activeBundle ? (
+            <Card className="border-gold/10">
+              <CardHeader>
+                <div className="space-y-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    {activeBundle.name}
+                  </CardTitle>
+                  {activeBundle.description && (
+                    <p className="text-sm text-ink/70 leading-relaxed">
+                      {activeBundle.description}
                     </p>
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      {tabsWithPending.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => setActiveTab(t.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold/10 hover:bg-gold/20 text-gold text-xs font-semibold transition-colors"
-                        >
-                          {t.label}
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 border-current text-current">
-                            {counts[t.id]}
-                          </Badge>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  )}
+                  <p className="text-xs text-ink/55">
+                    <span className="font-medium text-ink/75">
+                      {activeBundle.proposer_display_name ||
+                        activeBundle.proposer_username ||
+                        activeBundle.created_by_user_id ||
+                        'unknown'}
+                    </span>
+                    {activeBundle.first_proposed_at && (
+                      <>
+                        {' · submitted '}
+                        {formatSqliteLocal(activeBundle.first_proposed_at)}
+                      </>
+                    )}
+                    {' · '}
+                    <span className="text-gold/80 font-semibold">
+                      {activeBundle.pending_count} pending
+                    </span>
+                    {activeBundle.approved_count > 0 && (
+                      <> · {activeBundle.approved_count} approved</>
+                    )}
+                    {activeBundle.rejected_count > 0 && (
+                      <> · {activeBundle.rejected_count} rejected</>
+                    )}
+                    {activeBundle.withdrawn_count > 0 && (
+                      <> · {activeBundle.withdrawn_count} withdrawn</>
+                    )}
+                  </p>
                 </div>
-              );
-            })()
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <p className="text-ink/50 italic text-center py-12">Loading…</p>
+                ) : detailProposals.length === 0 ? (
+                  <p className="text-ink/50 italic text-center py-12">
+                    No revisions in this block.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gold/5">
+                    {detailProposals.map((p) => (
+                      <ProposalRow
+                        key={p.id}
+                        proposal={p}
+                        onSelect={() => setSelected(p)}
+                        onApprove={() => handleApprove(p)}
+                        onReject={() => setRejectDialog({ proposal: p, reason: '' })}
+                        onRevert={() => handleRevert(p)}
+                        onTogglePin={() => handleTogglePin(p)}
+                        reverting={revertingId === p.id}
+                        cascadeChildCount={cascadeChildCountByParent.get(p.id)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
           ) : (
-            <ul className="divide-y divide-gold/5">
-              {filteredProposals.map((p) => (
-                <ProposalRow
-                  key={p.id}
-                  proposal={p}
-                  onSelect={() => setSelected(p)}
-                  onApprove={() => handleApprove(p)}
-                  onReject={() => setRejectDialog({ proposal: p, reason: '' })}
-                  onRevert={() => handleRevert(p)}
-                  onTogglePin={() => handleTogglePin(p)}
-                  reverting={revertingId === p.id}
-                  cascadeChildCount={cascadeChildCountByParent.get(p.id)}
-                />
-              ))}
-            </ul>
+            <p className="text-ink/50 italic text-center py-12">
+              Block not found.
+            </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      ) : (
+        /* ===========================================================
+         * BUNDLE LIST VIEW — top-level "what's waiting for review"
+         * surface. Each row summarises a block: name + description +
+         * proposer + counts + entity-type chips.
+         * =========================================================== */
+        <Card className="border-gold/10">
+          <CardHeader>
+            <CardTitle className="text-base">
+              {showResolved
+                ? `Blocks — ${bundles.length}`
+                : `Pending blocks — ${bundles.length}`}
+              {orphans.length > 0 && (
+                <> · <span className="text-ink/55">{orphans.length} standalone</span></>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading && bundles.length === 0 && orphans.length === 0 ? (
+              <p className="text-ink/50 italic text-center py-12">Loading…</p>
+            ) : bundles.length === 0 && orphans.length === 0 ? (
+              <p className="text-ink/50 italic text-center py-12">
+                {showResolved ? 'Nothing to show.' : 'No pending proposals.'}
+              </p>
+            ) : (
+              <ul className="divide-y divide-gold/5">
+                {bundles.map((b) => (
+                  <BundleRowDisplay
+                    key={b.id}
+                    bundle={b}
+                    onSelect={() => setSelectedBundleId(b.id)}
+                  />
+                ))}
+                {orphans.length > 0 && (
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBundleId(ORPHANS_PSEUDO_BUNDLE_ID)}
+                      className="w-full flex items-center justify-between gap-3 py-3 hover:bg-gold/5 px-2 -mx-2 rounded transition-colors text-left"
+                    >
+                      <div className="flex flex-col gap-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-ink">
+                            Standalone proposals
+                          </span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {orphans.length}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-ink/55">
+                          Pre-block-system submits and bundle metadata gaps
+                        </span>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-ink/40 flex-shrink-0" />
+                    </button>
+                  </li>
+                )}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <ProposalDetailDialog
         proposal={selected}
@@ -610,6 +800,95 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Bundle list row — surfaces the metadata + per-entity-type breakdown.
+// Counts derive from the SQL aggregation in handleListBundles; the
+// chip group surfaces which entity types appear in the bundle so the
+// admin can scan visually ("a tag-cleanup block" vs "a spell-content
+// block") without needing to drill in.
+function BundleRowDisplay({
+  bundle,
+  onSelect,
+}: {
+  bundle: BundleRow;
+  onSelect: () => void;
+}) {
+  // Build a per-entity-type count using a small SELECT-aside is overkill;
+  // the GROUP_CONCAT'd entity_types are accurate enough for the visual
+  // breakdown. For exact "5 spells, 2 tags" granularity the admin can
+  // click in.
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="w-full flex items-center justify-between gap-3 py-3 hover:bg-gold/5 px-2 -mx-2 rounded transition-colors text-left"
+      >
+        <div className="flex flex-col gap-1 min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-bold text-ink truncate">
+              {bundle.name}
+            </span>
+            {bundle.pending_count > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gold/60 text-gold">
+                {bundle.pending_count} pending
+              </Badge>
+            )}
+            {bundle.approved_count > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-600/40 text-emerald-700">
+                {bundle.approved_count} approved
+              </Badge>
+            )}
+            {bundle.rejected_count > 0 && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blood/40 text-blood">
+                {bundle.rejected_count} rejected
+              </Badge>
+            )}
+          </div>
+          {bundle.description && (
+            <span className="text-xs text-ink/65 line-clamp-2">
+              {bundle.description}
+            </span>
+          )}
+          <div className="flex items-center gap-2 flex-wrap text-[11px] text-ink/55">
+            <span className="font-medium text-ink/70">
+              {bundle.proposer_display_name ||
+                bundle.proposer_username ||
+                bundle.created_by_user_id ||
+                'unknown'}
+            </span>
+            {bundle.first_proposed_at && (
+              <>
+                <span>·</span>
+                <span>{formatSqliteLocal(bundle.first_proposed_at)}</span>
+              </>
+            )}
+            {bundle.entity_types.length > 0 && (
+              <>
+                <span>·</span>
+                <div className="flex items-center gap-1">
+                  {bundle.entity_types.map((et) => {
+                    const Icon = ENTITY_ICON[et];
+                    return (
+                      <span
+                        key={et}
+                        className="inline-flex items-center gap-0.5 text-ink/50"
+                        title={ENTITY_LABEL[et]}
+                      >
+                        {Icon && <Icon className="w-3 h-3" />}
+                      </span>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <ChevronRight className="w-4 h-4 text-ink/40 flex-shrink-0" />
+      </button>
+    </li>
   );
 }
 
