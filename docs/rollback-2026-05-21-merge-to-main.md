@@ -1,5 +1,25 @@
 # Rollback procedure — 2026-05-21 dry-pass merge to main
 
+> **Post-deploy correction (2026-05-21 ~02:10 UTC):** This push was the
+> proposal system's first production deploy. The proposal-system D1
+> migrations had only ever been applied to local dev D1, never to
+> remote prod D1 — which surfaced as `/api/me` 500s with
+> `D1_ERROR: no such table: user_permissions` immediately after the
+> push went live. **Fix applied:** the 9 proposal-system migrations
+> (`20260518-1100_worlds_and_user_permissions.sql` through
+> `20260520-1000_pending_revisions_pinned.sql`) were executed against
+> prod D1 via `npx wrangler d1 execute dauligor-db --remote
+> --file=<migration>` in chronological order. All additive — empty
+> tables + one seeded default world (`dauligor-base`).
+>
+> **Going forward:** any future production deploy that depends on new
+> D1 schema MUST run those migrations against remote D1 *before* the
+> code push. The `d1_migrations` tracking table on remote prod is still
+> empty (we used `d1 execute` directly, not `d1 migrations apply`) —
+> see "D1 migration state debt" below.
+
+---
+
 If stress-testing in production after this merge surfaces a regression
 you can't quickly fix forward, this is the exact recipe to restore both
 **code** and **D1 data** to the pre-merge state.
@@ -123,3 +143,32 @@ base.
 production system is stable.** Until then, keep it discoverable — it's
 the only place that ties the backup file SHA + pre-merge commit SHA +
 restore procedure together.
+
+---
+
+## D1 migration state debt (followup, non-blocking)
+
+Prod D1's `d1_migrations` tracking table is empty. Today's nine
+proposal-system migrations were applied via `d1 execute --file=...`
+which does NOT update `d1_migrations`. That means a future
+`npx wrangler d1 migrations apply dauligor-db --remote` would try to
+re-apply every migration starting from `0001_phase1_foundation.sql`,
+which would conflict with the existing schema.
+
+**Don't run `migrations apply` against prod until this is reconciled.**
+
+The reconciliation work, when ready:
+
+1. Inspect prod schema (`SELECT sql FROM sqlite_master WHERE type='table'`)
+   to derive which migrations are effectively applied.
+2. Backfill `d1_migrations` with INSERT statements naming every applied
+   migration in chronological order, including the nine we ran today.
+3. Then `migrations apply` becomes safe again for future migrations.
+
+Recommended migration commands going forward (until step 3 is done):
+- For each new SQL migration file: `npx wrangler d1 execute dauligor-db
+  --remote --file=migrations/<new-file>.sql`
+- Manually add the file name to `d1_migrations` if you want future
+  `migrations apply` to skip it.
+- OR adopt the convention that all migrations go through `d1 execute`
+  for now until reconciliation is done.
