@@ -1,23 +1,46 @@
 // =============================================================================
-// ProposalEditorWrapper — provides the proposal-accumulator context to
-// editors mounted under /proposals/edit/*.
+// ProposalEditorWrapper
 // =============================================================================
 //
-// The wrapper is the boundary between two parallel route prefixes:
+// Provides the proposal-accumulator context to editors mounted under
+// /proposals/edit/*. Boundary between the two parallel route prefixes:
 //
 //   /compendium/<thing>/manage    →  admin direct write, no wrapper
 //   /proposals/edit/<thing>       →  this wrapper around the SAME editor
 //
-// Inside the wrapper:
-//   - useProposalAccumulator(entityType) returns a queueing writer
-//     instead of firing each mutation immediately.
-//   - Submit Changes drains the queue as one POST against the active
-//     block (or prompts pick/create if no block is open).
-//   - beforeunload guards against accidental navigation away with
-//     unsubmitted edits.
+// See docs/architecture/proposal-editor-pattern.md for the full
+// pattern + the editor-wiring checklist. The wrapper is responsible
+// for:
 //
-// Phase 4.2 (current): scaffolding only. Drop Edits affordances
-// (entity / section / field) land in Phase 4.3.
+//   - Hosting the in-memory queue (useState in this component).
+//     Survives intra-page state changes; resets on route remount
+//     (so navigating between /new and /edit/<id> on the same entity
+//     destroys the queue — that's why single-work editors use the
+//     pendingCreateId convention to stay on /new after a create).
+//   - Mounting body.proposal-editor-active for the lifetime of this
+//     route, so global <main>'s top padding gets stripped (see
+//     src/index.css). Without this, every editor under the wrapper
+//     would render with a ~32px gap above the wrapper header.
+//   - Rendering the sticky "PROPOSAL EDITOR | <entity>" header
+//     strip with active block info + Submit Changes button + (for
+//     multi-work editors) the In Block / Full Catalog focus toggle.
+//     The strip uses `-mx-4 px-4` to bleed past <main>'s padding;
+//     a CSS override under body.spell-list-fullscreen zeroes that
+//     bleed for full-bleed editors so the strip doesn't spill over
+//     the sidebar.
+//   - Pre-flush registration: child editors register callbacks via
+//     proposalContext.registerPreFlush(). At submit time the wrapper
+//     awaits each before draining the queue, so editors can capture
+//     their current form state without firing per-row Save buttons.
+//   - Drop Edits affordances (dropEntity / dropFields / dropField)
+//     for surgical un-proposing of queued / drafted changes.
+//   - beforeunload guard so the user doesn't accidentally lose
+//     unsubmitted edits.
+//   - PickOrCreateBlockDialog when Submit Changes runs with no
+//     active block bound.
+//   - Review-mode chrome (<ReviewBanner /> + <fieldset disabled>)
+//     when the URL carries ?review=<proposalId> for a non-rejected
+//     proposal.
 // =============================================================================
 
 import {

@@ -89,6 +89,11 @@
   [SpellRulesEditor.tsx](../../src/pages/compendium/SpellRulesEditor.tsx),
   and [SpellListManager.tsx](../../src/pages/compendium/SpellListManager.tsx).
 
+> **For editor wiring + state-layer details** see
+> [docs/architecture/proposal-editor-pattern.md](../architecture/proposal-editor-pattern.md).
+> This doc covers feature status + history. That doc covers the live
+> code contract for editors keeping proposal mode in sync.
+
 ## Goal
 
 Let trusted collaborators (a new `content-creator` role) author changes

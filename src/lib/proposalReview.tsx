@@ -1,20 +1,45 @@
 // =============================================================================
-// Proposal-review mode — read-only replay of a past submission.
+// Proposal-review mode
 // =============================================================================
 //
-// When a content-creator visits an editor URL with `?review=<proposal_id>`
-// they enter review mode: the editor renders the proposal's submitted
-// payload instead of the live row, all inputs are disabled, and the
-// fields that changed vs the snapshot at submit time get a highlight.
+// Read-only replay of a past submission. When a content-creator
+// visits an editor URL with `?review=<proposal_id>` they enter review
+// mode: the editor renders the proposal's submitted payload instead
+// of the live row, all inputs are disabled via a top-level
+// <fieldset disabled>, and the fields that changed vs the snapshot
+// at submit time get a gold "Changed" highlight.
+//
+// See docs/architecture/proposal-editor-pattern.md (the "Review mode"
+// section) for the wiring contract editors follow.
 //
 // Two exceptions to the read-only stance:
-//   - Rejected proposals are editable so the proposer can fix the issue
-//     and resubmit.
-//   - The Close-review button (in the banner) exits to the same editor
-//     URL without the param.
+//   - Rejected proposals stay editable so the proposer can fix the
+//     issue and resubmit (status='rejected' -> isReadOnly=false).
+//   - The Close-review button on the banner exits to the same URL
+//     stripped of the ?review= param.
 //
-// The hook returns null when the URL has no `?review` param, so editors
-// can guard their existing behavior with a single check.
+// What this file owns:
+//   - ProposalReviewProvider: mounted at App level inside Routes,
+//     reads ?review=<id>, fetches /api/proposals/:id, exposes the
+//     hydrated ProposalReviewData via context.
+//   - useProposalReview() hook: returns the ProposalReviewData when
+//     active or null when no ?review param is present. Editors check
+//     `null` to skip review-specific behavior.
+//   - resolveReviewPayload(reviewMode, entityType, entityId): the
+//     editor's load effect uses this to swap the live D1 fetch for
+//     the proposal's submitted payload when matched. Returns
+//     `snapshotAtProposal` for delete-operation reviews so the
+//     editor shows what was being removed.
+//   - computeChangedFields(): produces the Set of column keys whose
+//     proposed value differs from the snapshot. The Provider
+//     populates `reviewMode.changedFields` from this on hydration.
+//   - <ReviewFieldHighlight columnKey="X">: wrapper component that
+//     editors drop around any form field whose D1 column key should
+//     pulse if it was modified. Outside review mode (or for
+//     non-changed columns) it's a transparent pass-through.
+//   - useFieldChanged(columnKey): the hook backing
+//     <ReviewFieldHighlight>. Editors can call directly for custom
+//     per-field treatment (e.g. table cells).
 // =============================================================================
 
 import {

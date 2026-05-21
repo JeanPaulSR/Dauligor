@@ -1,28 +1,45 @@
 // =============================================================================
-// Proposal-editor accumulator — queues writes locally inside a
-// <ProposalEditorWrapper> until the user clicks "Submit Changes."
+// Proposal-editor accumulator
 // =============================================================================
 //
-// Phase 4.2 lays the foundation for the parallel `/proposals/edit/*`
-// routes. The contract:
+// Queues entity writes locally inside a <ProposalEditorWrapper> until
+// the user clicks "Submit Changes." Outside a wrapper, the writer
+// pass-through to useEntityWriter so admin direct routes keep their
+// immediate-save behavior.
+//
+// See docs/architecture/proposal-editor-pattern.md for the full
+// lifecycle (queue -> drafts -> pending revisions -> live row) and
+// the editor-side wiring checklist. This file is the queue layer
+// and the merge-overlay helper that editors consume to render their
+// work-in-progress.
+//
+// Contract (inside a wrapper):
 //
 //   const writer = useProposalAccumulator('tag', userProfile);
-//   await writer.create(payload);   // queues locally inside the wrapper
-//   await writer.update(id, patch); // also queues
-//   await writer.remove(id);        // also queues
+//   await writer.create(payload);   // queues, returns the minted id
+//   await writer.update(id, patch); // queues
+//   await writer.remove(id);        // queues a DELETE
 //
-// Outside a wrapper (e.g. the admin `/compendium/*/manage` route), the
-// hook passes through to `useEntityWriter` unchanged — Save fires
-// immediately, no behavior change.
+// What lives here:
+//   - QueuedChange shape + writer hook (useProposalAccumulator)
+//   - ProposalAccumulatorContext (queue + flush + dropEntity + focus)
+//   - getDraftedEntities(): the merge-overlay helper editors call
+//     to combine the in-memory queue + server-side drafts + live
+//     rows into a single rendered view. Includes the entity_id-null
+//     fallback for CREATE drafts (the proposal endpoint stores
+//     entity_id=null server-side; the effective id lives in
+//     proposed_payload.id).
+//   - postQueuedChanges(): drains the queue at submit time. Runs
+//     queue-internal dedup (CREATE+UPDATE -> CREATE, CREATE+DELETE
+//     -> nothing, etc.) then partitions into PATCH-existing-draft
+//     vs POST-new-revision vs DELETE-draft (for queue DELETEs that
+//     match a CREATE draft).
 //
-// The wrapper's "Submit Changes" button calls `flush()` on the
-// context, which drains the queue as one POST to /api/proposals with
-// `is_draft: true` + the active `bundle_id`. If no block is open,
-// the wrapper opens the PickOrCreateBlockDialog first.
-//
-// Drop Edits (Phase 4.3) plugs in here via `dropEntity` / `dropSection`
-// / `dropField` on the context. For now the context exposes only
-// `queueChange` + `flush` + dirty tracking by entity_id.
+// Three callsites need the entity_id-null fallback to match CREATE
+// drafts correctly: getDraftedEntities, postQueuedChanges (both the
+// DELETE-existing-draft and UPDATE-patch branches), and dropEntity
+// in ProposalEditorWrapper. Skipping any one silently breaks the
+// flow — see the doc's "The entity_id-null fallback" section.
 // =============================================================================
 
 import { createContext, useCallback, useContext, useMemo } from 'react';
