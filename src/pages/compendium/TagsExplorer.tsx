@@ -41,8 +41,10 @@ import { mergeTagInto } from '../../lib/tagMerge';
 import { moveTagToParent } from '../../lib/tagMove';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
 import { actionLabel, type WriterApi } from '../../lib/proposalAware';
-import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
+import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
+import { TombstoneRow, DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
 
 const SYSTEM_CLASSIFICATIONS = [
   'class', 'subclass', 'race', 'subrace', 'feat', 'background',
@@ -154,46 +156,207 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
     setSelectedTagId(null);
   }, [selectedGroupId]);
 
+  // Review-mode wiring. When the URL has `?review=<id>` for a tag or
+  // tag_group proposal, inject the proposed payload into local state
+  // and auto-select it. Tags need the containing group selected first
+  // so the middle pane shows the tag tree the right pane is editing.
+  const reviewMode = useProposalReview();
+  const reviewTagPayload = resolveReviewPayload(reviewMode, 'tag', null);
+  const reviewGroupPayload = resolveReviewPayload(reviewMode, 'tag_group', null);
+
+  useEffect(() => {
+    if (!reviewMode) return;
+    if (reviewMode.entityType === 'tag_group' && reviewGroupPayload) {
+      const targetId = reviewMode.entityId ?? reviewGroupPayload.id;
+      if (!targetId) return;
+      setTagGroups((prev) => {
+        const exists = prev.some((g) => g.id === targetId);
+        if (exists) {
+          return prev.map((g) => (g.id === targetId ? { ...g, ...reviewGroupPayload } : g));
+        }
+        return [...prev, { ...reviewGroupPayload, id: targetId }];
+      });
+      if (selectedGroupId !== targetId) {
+        navigate(`${basePath}/${targetId}`, { replace: true });
+      }
+    } else if (reviewMode.entityType === 'tag' && reviewTagPayload) {
+      const targetId = reviewMode.entityId ?? reviewTagPayload.id;
+      if (!targetId) return;
+      const normalized = normalizeTagRow(reviewTagPayload);
+      setAllTags((prev) => {
+        const exists = prev.some((t) => t.id === targetId);
+        if (exists) {
+          return prev.map((t) => (t.id === targetId ? { ...t, ...normalized } : t));
+        }
+        return [...prev, { ...normalized, id: targetId }];
+      });
+      // Drive group selection from the tag's groupId so the middle
+      // pane can render the tree containing it.
+      const targetGroupId = normalized.groupId;
+      if (targetGroupId && selectedGroupId !== targetGroupId) {
+        navigate(`${basePath}/${targetGroupId}`, { replace: true });
+      }
+      if (selectedTagId !== targetId) {
+        setSelectedTagId(targetId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewMode?.entityId, reviewMode?.entityType, reviewTagPayload, reviewGroupPayload]);
+
+  // Proposal-mode awareness — surfaced earlier so derived data can
+  // overlay queued + drafted entities onto the live DB lists.
+  const proposalContextEarly = useProposalContextOptional();
+  const { drafts: allDraftsEarly, activeBundleId: activeBundleIdEarly } = useBlock();
+
   // ── Derived data ─────────────────────────────────────────────────────
+  // Merge queued + active-block draft revisions into the displayed
+  // tag-group list. Without this, a newly-created group sits invisible
+  // in the queue until Submit + approval. The user expects to see
+  // their own work-in-progress while building a block.
+  const draftedGroups = useMemo(
+    () => getDraftedEntities('tag_group', proposalContextEarly, allDraftsEarly, activeBundleIdEarly),
+    [proposalContextEarly, allDraftsEarly, activeBundleIdEarly],
+  );
+  const draftedTags = useMemo(
+    () => getDraftedEntities('tag', proposalContextEarly, allDraftsEarly, activeBundleIdEarly),
+    [proposalContextEarly, allDraftsEarly, activeBundleIdEarly],
+  );
+  // Convenience id sets for the row-highlight decoration in the rail
+  // + right pane. byId already includes both queue and active-block
+  // drafts (with the entity_id=null fallback), so the same set drives
+  // "this group has staged work" for both freshly-queued creates and
+  // already-submitted drafts. deletedIds intentionally NOT included
+  // here — a tombstone shouldn't render as "modified" highlight.
+  const draftedGroupIds = useMemo(() => {
+    const ids = new Set<string>(draftedGroups.byId.keys());
+    // Also count groups whose CHILDREN were modified — the proposer's
+    // mental model is "I touched this group" whether they edited the
+    // group itself OR added/edited/removed tags inside it. Without
+    // this, adding a tag to "Tradition" leaves the Tradition rail
+    // entry looking untouched even though the proposer just changed
+    // its contents.
+    //
+    // We derive the parent group id from each draft/queued tag's
+    // payload first (covers creates + edits that carry group_id) and
+    // fall back to the live tag's groupId for partial UPDATE payloads
+    // that don't restate the group.
+    for (const [tagId, payload] of draftedTags.byId.entries()) {
+      const parentFromPayload =
+        (typeof payload?.group_id === 'string' ? payload.group_id : null) ??
+        (typeof payload?.groupId === 'string' ? payload.groupId : null);
+      const liveTag = allTags.find((t) => t.id === tagId);
+      const parentId = parentFromPayload ?? liveTag?.groupId ?? null;
+      if (parentId) ids.add(parentId);
+    }
+    for (const tagId of draftedTags.deletedIds) {
+      const liveTag = allTags.find((t) => t.id === tagId);
+      if (liveTag?.groupId) ids.add(liveTag.groupId);
+    }
+    return ids;
+  }, [draftedGroups, draftedTags, allTags]);
+
+  const displayedTagGroups = useMemo(() => {
+    if (draftedGroups.byId.size === 0 && draftedGroups.deletedIds.size === 0) {
+      return tagGroups;
+    }
+    // Keep deleted rows visible with a `__pendingDelete` flag — the
+    // user can undo the delete inline (see TombstoneRow). Phase 1
+    // tombstone UX, per the design doc.
+    const merged = tagGroups.map((g) => {
+      if (draftedGroups.deletedIds.has(g.id)) {
+        return { ...g, __pendingDelete: true };
+      }
+      const overlay = draftedGroups.byId.get(g.id);
+      // Pin `id` last so a partial UPDATE payload (which carries
+      // only the changed columns, no `id`) can't accidentally
+      // override the original group id with undefined.
+      return overlay ? { ...g, ...overlay, id: g.id } : g;
+    });
+    // Append create-only entries (ids not in the live list).
+    for (const [draftId, payload] of draftedGroups.byId.entries()) {
+      if (merged.some((g) => g.id === draftId)) continue;
+      merged.push({ ...payload, id: draftId });
+    }
+    return merged;
+  }, [tagGroups, draftedGroups]);
+
+  const displayedAllTags = useMemo(() => {
+    if (draftedTags.byId.size === 0 && draftedTags.deletedIds.size === 0) {
+      return allTags;
+    }
+    const merged = allTags.map((t) => {
+      if (draftedTags.deletedIds.has(t.id)) {
+        return { ...t, __pendingDelete: true };
+      }
+      const overlay = draftedTags.byId.get(t.id);
+      if (!overlay) return t;
+      // The queued UPDATE payload only carries the changed columns
+      // (e.g. {name, slug, updated_at}) — no `id`. normalizeTagRow
+      // would coerce the missing id to "", which the dedup check
+      // below would then miss, leaving the original tag in place
+      // AND appending the "renamed" version as a phantom row. Carry
+      // the live tag's id through the normalize step to keep it
+      // stable.
+      return {
+        ...t,
+        ...normalizeTagRow({ ...overlay, id: t.id }),
+      };
+    });
+    for (const [draftId, payload] of draftedTags.byId.entries()) {
+      if (merged.some((t) => t.id === draftId)) continue;
+      merged.push({ ...normalizeTagRow({ ...payload, id: draftId }), id: draftId });
+    }
+    return merged;
+  }, [allTags, draftedTags]);
+
   const selectedGroup = useMemo(
-    () => tagGroups.find((g) => g.id === selectedGroupId) ?? null,
-    [tagGroups, selectedGroupId],
+    () => displayedTagGroups.find((g) => g.id === selectedGroupId) ?? null,
+    [displayedTagGroups, selectedGroupId],
   );
   const tagsInSelectedGroup = useMemo(
-    () => allTags.filter((t) => t.groupId === selectedGroupId),
-    [allTags, selectedGroupId],
+    () => displayedAllTags.filter((t) => t.groupId === selectedGroupId),
+    [displayedAllTags, selectedGroupId],
   );
   const tagsByGroupId = useMemo(() => {
     const map = new Map<string, any[]>();
-    for (const tag of allTags) {
+    for (const tag of displayedAllTags) {
       if (!tag.groupId) continue;
       if (!map.has(tag.groupId)) map.set(tag.groupId, []);
       map.get(tag.groupId)!.push(tag);
     }
     return map;
-  }, [allTags]);
+  }, [displayedAllTags]);
 
   if (!canManageTags) {
     return <div className="text-center py-20 font-serif text-2xl text-ink/40">Access Denied</div>;
   }
 
+  // Proposal mode mounts a wrapper that already labels the page
+  // ("PROPOSAL EDITOR | Tags") + shows the active block + Submit
+  // Changes button. Rendering our own h1 + description below it
+  // duplicates the title and adds ~80px of vertical chrome between
+  // the wrapper header and the three-pane explorer. Suppress the
+  // local page-header when proposal-wrapped.
+  const isProposalRouteForLayout = location.pathname.startsWith('/proposals/edit/');
   return (
     <div className="max-w-[1600px] mx-auto pb-20 space-y-4">
-      {/* Page header */}
-      <div className="page-header">
-        <div>
-          <h1 className="h1-title text-ink flex items-center gap-3">
-            <TagsIcon className="w-7 h-7 text-gold" />
-            Tag Management
-          </h1>
-          <p className="description-text mt-1 text-ink/60">Organize and curate the compendium taxonomy.</p>
+      {/* Page header — admin-direct route only. */}
+      {!isProposalRouteForLayout && (
+        <div className="page-header">
+          <div>
+            <h1 className="h1-title text-ink flex items-center gap-3">
+              <TagsIcon className="w-7 h-7 text-gold" />
+              Tag Management
+            </h1>
+            <p className="description-text mt-1 text-ink/60">Organize and curate the compendium taxonomy.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Three-pane explorer */}
       <div className="grid gap-4 items-stretch grid-cols-1 lg:[grid-template-columns:240px_minmax(0,1fr)_320px] min-h-[640px]">
         <GroupRail
-          groups={tagGroups}
+          groups={displayedTagGroups}
           tagsByGroupId={tagsByGroupId}
           selectedGroupId={selectedGroupId ?? null}
           loading={loading}
@@ -201,6 +364,12 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
           onSearchChange={setGroupSearch}
           onSelectGroup={(id) => navigate(`${basePath}/${id}`)}
           onOpenCreateGroup={() => setCreateGroupOpen(true)}
+          draftedGroupIds={draftedGroupIds}
+          onUndoDelete={async (id) => {
+            if (!proposalContextEarly) return;
+            await proposalContextEarly.dropEntity(id);
+            await reloadGroups();
+          }}
         />
 
         {selectedGroupId && selectedGroup ? (
@@ -237,6 +406,24 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
           isAdmin={isAdmin}
           tagWriter={tagWriter}
           groupWriter={groupWriter}
+          isGroupDrafted={!!selectedGroup && draftedGroupIds.has(selectedGroup.id)}
+          draftedTagIds={
+            // Pass through so TagDetailPanel can render its own
+            // "modified in this block" treatment when the selected
+            // tag has queued/drafted work against it.
+            new Set(draftedTags.byId.keys())
+          }
+          // Tombstone flags so the panel switches into "pending
+          // delete" mode (banner + disabled form). Computed from the
+          // already-merged display list so the boolean stays in sync
+          // with what the user sees in the rail / tree.
+          isGroupPendingDelete={!!selectedGroup && draftedGroups.deletedIds.has(selectedGroup.id)}
+          deletedTagIds={draftedTags.deletedIds}
+          onUndoDelete={async (id) => {
+            if (!proposalContextEarly) return;
+            await proposalContextEarly.dropEntity(id);
+            await Promise.all([reloadGroups(), reloadTags()]);
+          }}
         />
       </div>
 
@@ -266,6 +453,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
 function GroupRail({
   groups, tagsByGroupId, selectedGroupId, loading,
   searchQuery, onSearchChange, onSelectGroup, onOpenCreateGroup,
+  draftedGroupIds, onUndoDelete,
 }: {
   groups: any[];
   tagsByGroupId: Map<string, any[]>;
@@ -275,6 +463,19 @@ function GroupRail({
   onSearchChange: (s: string) => void;
   onSelectGroup: (id: string) => void;
   onOpenCreateGroup: () => void;
+  /**
+   * Ids of groups with staged work in the active block (queue +
+   * drafts). Rows in this set render with the archive-blue treatment
+   * so the proposer can see at a glance which groups they've touched
+   * since the block opened.
+   */
+  draftedGroupIds: Set<string>;
+  /**
+   * Called when the user clicks Undo on a tombstone row. Drops the
+   * queue + draft entries for the group id so it reverts to its live
+   * state.
+   */
+  onUndoDelete: (id: string) => Promise<void> | void;
 }) {
   const filteredGroups = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -326,19 +527,45 @@ function GroupRail({
           <ul className="divide-y divide-gold/5">
             {filteredGroups.map((group) => {
               const isActive = group.id === selectedGroupId;
+              const drafted = draftedGroupIds.has(group.id);
+              const pendingDelete = group.__pendingDelete === true;
               const groupTags = tagsByGroupId.get(group.id) ?? [];
               const subtagCount = groupTags.filter((t) => t.parentTagId).length;
               const rootCount = groupTags.length - subtagCount;
+              // Tombstone variant: deleted-in-block rows render with
+              // red strikethrough + undo button. Clicking the body
+              // still navigates so the user can inspect what they're
+              // about to lose; the Undo button stops propagation.
+              if (pendingDelete) {
+                return (
+                  <li key={group.id} onClick={() => onSelectGroup(group.id)} className="cursor-pointer">
+                    <TombstoneRow
+                      name={group.name}
+                      size="sm"
+                      onUndo={() => onUndoDelete(group.id)}
+                    >
+                      {rootCount} tag{rootCount === 1 ? '' : 's'}
+                      {subtagCount > 0 && ` + ${subtagCount} sub`}
+                    </TombstoneRow>
+                  </li>
+                );
+              }
               return (
                 <li key={group.id}>
                   <button
                     type="button"
                     onClick={() => onSelectGroup(group.id)}
+                    title={drafted ? `${group.name} — staged in this block` : undefined}
                     className={cn(
-                      'browser-row w-full grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 text-left',
+                      // Border-left mirrors the tag tree's staged
+                      // indicator so a glance at the rail shows
+                      // which groups carry pending work.
+                      'browser-row w-full grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2 text-left border-l-4',
                       isActive
-                        ? 'bg-gold/15 border-r-4 border-r-gold text-gold font-bold'
-                        : 'text-ink/70 hover:bg-gold/5',
+                        ? 'bg-gold/15 border-r-4 border-r-gold border-l-transparent text-gold font-bold'
+                        : drafted
+                          ? 'bg-archive-blue/5 border-l-archive-blue/60 text-archive-blue hover:bg-archive-blue/10'
+                          : 'border-l-transparent text-ink/70 hover:bg-gold/5',
                     )}
                   >
                     <span className="text-sm truncate">{group.name}</span>
@@ -401,18 +628,28 @@ function TagTreePane({
     const ids = new Set<string>();
     if (proposalContext) {
       for (const q of proposalContext.queue) {
-        if (q.entity_type === 'tag' && q.entity_id) ids.add(q.entity_id);
+        if (q.entity_type !== 'tag') continue;
+        // CREATE entries in the queue carry the minted UUID in
+        // entity_id (the writer stores it there for downstream
+        // dedup); UPDATE entries also have it. Either way we want
+        // the row to render highlighted.
+        if (q.entity_id) ids.add(q.entity_id);
       }
     }
     if (activeBundleId) {
       for (const d of allDrafts) {
-        if (
-          d.entity_type === 'tag' &&
-          d.entity_id &&
-          d.bundle_id === activeBundleId
-        ) {
-          ids.add(d.entity_id);
-        }
+        if (d.entity_type !== 'tag') continue;
+        if (d.bundle_id !== activeBundleId) continue;
+        // Server-side CREATE drafts have entity_id=null because the
+        // proposal API forcibly nulls it (no live row to point at
+        // yet). The actual id is inside proposed_payload.id — fall
+        // back to that so freshly-submitted creates stay highlighted.
+        const effectiveId =
+          d.entity_id ??
+          (d.proposed_payload && typeof d.proposed_payload.id === 'string'
+            ? d.proposed_payload.id
+            : null);
+        if (effectiveId) ids.add(effectiveId);
       }
     }
     return ids;
@@ -498,14 +735,11 @@ function TagTreePane({
 
   const handleDeleteTag = async (tagId: string) => {
     const children = tags.filter((t) => t.parentTagId === tagId);
-    // The proposal flow doesn't model multi-row bundles for cascades
-    // yet, so refuse subtree deletes for content-creators. Admins
-    // continue to cascade-delete inline.
-    if (isProposalMode && children.length > 0) {
-      toast.error('Subtree deletes aren’t proposable yet. Ask an admin, or propose deletes for the children first.');
-      return;
-    }
-
+    // Proposal mode also handles subtree deletes — we queue a DELETE
+    // for each child first, then the parent. The wrapper's queue is a
+    // sequence so admin reviewing the block sees the full subtree as a
+    // group. (Cross-entity cascade — e.g. spells losing the tag — is
+    // Phase 2; this is the within-taxonomy cascade only.)
     const idsBeingDeleted = [tagId, ...children.map((c) => c.id)];
     let usageLine = '';
     if (tagUsage) {
@@ -515,12 +749,19 @@ function TagTreePane({
       }
     }
     const baseMsg = children.length > 0
-      ? `Delete this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`
+      ? (isProposalMode
+          ? `Propose deleting this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`
+          : `Delete this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`)
       : (isProposalMode ? 'Propose deleting this tag?' : 'Delete this tag?');
     if (!window.confirm(baseMsg + usageLine)) return;
 
     try {
-      // Children only fire in direct mode (proposal mode is gated above).
+      // Cascade child tags first so the in-block sequence reads as
+      // "leaves first" — matches how a real DB cascade would resolve.
+      // In proposal mode this enqueues N+1 DELETE entries in the
+      // wrapper queue; the block view + admin reviewer can group them
+      // visually later (Phase 4) via the cascade_parent_revision_id
+      // column once we wire the strategy registry.
       for (const c of children) await tagWriter.remove(c.id);
       await tagWriter.remove(tagId);
       if (selectedTagId && idsBeingDeleted.includes(selectedTagId)) onSelectTag(null);
@@ -596,8 +837,30 @@ function TagTreePane({
     // server-side draft revision. Same archive-blue visual language as
     // SpellsEditor / FeatsEditor row highlight.
     const drafted = draftedTagIds.has(tag.id);
+    const pendingDelete = tag.__pendingDelete === true;
     const breakdown = tagUsage?.get(tag.id);
     const total = breakdown?.total ?? 0;
+
+    // Tombstone variant: red strikethrough + undo. Subtags render
+    // indented so the user sees the hierarchy preserved.
+    if (pendingDelete) {
+      return (
+        <div key={tag.id} style={depth === 1 ? { paddingLeft: '24px' } : undefined}>
+          <TombstoneRow
+            name={tag.name}
+            size="sm"
+            onUndo={async () => {
+              if (!proposalContext) return;
+              await proposalContext.dropEntity(tag.id);
+              await onReloadTags();
+            }}
+          >
+            {total > 0 && <>Used by {total}</>}
+            {subtagCount > 0 && <> · {subtagCount} subtag{subtagCount === 1 ? '' : 's'}</>}
+          </TombstoneRow>
+        </div>
+      );
+    }
 
     return (
       <div
@@ -831,7 +1094,8 @@ function TagTreePane({
 function RightPane({
   group, selectedTag, allTagsInGroup, tagUsage,
   onCloseTag, onReloadGroups, onReloadTags, onReloadUsage, onSelectedGroupDeleted,
-  isAdmin, tagWriter, groupWriter,
+  isAdmin, tagWriter, groupWriter, isGroupDrafted, draftedTagIds,
+  isGroupPendingDelete, deletedTagIds, onUndoDelete,
 }: {
   group: any | null;
   selectedTag: any | null;
@@ -845,6 +1109,16 @@ function RightPane({
   isAdmin: boolean;
   tagWriter: WriterApi;
   groupWriter: WriterApi;
+  /** True when the current group has staged work (queue or draft). */
+  isGroupDrafted: boolean;
+  /** Ids of tags with staged work — used to highlight TagDetailPanel. */
+  draftedTagIds: Set<string>;
+  /** Current group has a queued/drafted DELETE — show tombstone banner. */
+  isGroupPendingDelete: boolean;
+  /** Tags with queued/drafted DELETEs — TagDetailPanel uses this. */
+  deletedTagIds: Set<string>;
+  /** Undo handler — drops queue + draft entries for the entity id. */
+  onUndoDelete: (id: string) => Promise<void> | void;
 }) {
   if (!group) {
     return (
@@ -865,6 +1139,9 @@ function RightPane({
         onReloadUsage={onReloadUsage}
         isAdmin={isAdmin}
         tagWriter={tagWriter}
+        isTagDrafted={draftedTagIds.has(selectedTag.id)}
+        isTagPendingDelete={deletedTagIds.has(selectedTag.id)}
+        onUndoDelete={onUndoDelete}
       />
     );
   }
@@ -877,6 +1154,9 @@ function RightPane({
       tagsCount={allTagsInGroup.length}
       isAdmin={isAdmin}
       groupWriter={groupWriter}
+      isGroupDrafted={isGroupDrafted}
+      isGroupPendingDelete={isGroupPendingDelete}
+      onUndoDelete={onUndoDelete}
     />
   );
 }
@@ -885,7 +1165,8 @@ function RightPane({
 
 function TagDetailPanel({
   group, selectedTag, allTagsInGroup, tagUsage,
-  onClose, onReloadTags, onReloadUsage, isAdmin, tagWriter,
+  onClose, onReloadTags, onReloadUsage, isAdmin, tagWriter, isTagDrafted,
+  isTagPendingDelete, onUndoDelete,
 }: {
   group: any;
   selectedTag: any;
@@ -896,6 +1177,12 @@ function TagDetailPanel({
   onReloadUsage: (opts?: { force?: boolean }) => Promise<void>;
   isAdmin: boolean;
   tagWriter: WriterApi;
+  /** Selected tag has queued/drafted work — flip the panel ring. */
+  isTagDrafted: boolean;
+  /** Selected tag has a queued/drafted DELETE — show banner + disable controls. */
+  isTagPendingDelete: boolean;
+  /** Drops the queue + draft entries for the given entity id. */
+  onUndoDelete: (id: string) => Promise<void> | void;
 }) {
   const [mergeOpen, setMergeOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -943,11 +1230,40 @@ function TagDetailPanel({
 
   return (
     <>
-      <Card className="border-gold/20 bg-card flex flex-col min-h-0 overflow-hidden">
-        <div className="p-4 border-b border-gold/10 bg-gold/5">
+      <Card
+        className={cn(
+          'flex flex-col min-h-0 overflow-hidden',
+          // Tombstone ring takes precedence (red) over the archive-
+          // blue "modified" ring — a deleted tag IS still modified,
+          // but the more-destructive state is the one the user
+          // should see at a glance.
+          isTagPendingDelete
+            ? 'border-blood/40 bg-card'
+            : isTagDrafted
+              ? 'border-archive-blue/40 bg-card'
+              : 'border-gold/20 bg-card',
+        )}
+      >
+        <div
+          className={cn(
+            'p-4 border-b',
+            isTagPendingDelete
+              ? 'border-blood/20 bg-blood/5'
+              : isTagDrafted
+                ? 'border-archive-blue/20 bg-archive-blue/5'
+                : 'border-gold/10 bg-gold/5',
+          )}
+        >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <h3 className="h3-title text-gold flex items-center gap-2 truncate">
+              <h3 className={cn(
+                'h3-title flex items-center gap-2 truncate',
+                isTagPendingDelete
+                  ? 'text-blood line-through'
+                  : isTagDrafted
+                    ? 'text-archive-blue'
+                    : 'text-gold',
+              )}>
                 {isSubtag && <CornerDownRight className="w-4 h-4 text-ink/40 shrink-0" />}
                 {selectedTag.name}
               </h3>
@@ -955,12 +1271,26 @@ function TagDetailPanel({
                 {group.name}
                 {parentTag && <> <span className="text-ink/30">›</span> {parentTag.name}</>}
               </p>
+              {!isTagPendingDelete && isTagDrafted && (
+                <span className="inline-block mt-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue rounded">
+                  Modified in block
+                </span>
+              )}
             </div>
             <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 text-ink/40 hover:text-ink shrink-0" title="Close detail">
               <X className="w-4 h-4" />
             </Button>
           </div>
         </div>
+        {isTagPendingDelete && (
+          <div className="p-3 border-b border-blood/20 bg-blood/5">
+            <DeletedEntityBanner
+              entityLabel="Tag"
+              name={selectedTag.name}
+              onUndo={() => onUndoDelete(selectedTag.id)}
+            />
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
           <section className="space-y-1.5">
@@ -1073,7 +1403,8 @@ function TagDetailPanel({
 // ─── Group settings panel ────────────────────────────────────────────
 
 function GroupSettingsPanel({
-  group, onReloadGroups, onReloadTags, onSelectedGroupDeleted, tagsCount, isAdmin, groupWriter,
+  group, onReloadGroups, onReloadTags, onSelectedGroupDeleted, tagsCount, isAdmin, groupWriter, isGroupDrafted,
+  isGroupPendingDelete, onUndoDelete,
 }: {
   group: any;
   onReloadGroups: () => Promise<void>;
@@ -1082,6 +1413,16 @@ function GroupSettingsPanel({
   tagsCount: number;
   isAdmin: boolean;
   groupWriter: WriterApi;
+  /**
+   * Group carries queued + drafted writes in the active block.
+   * Drives the archive-blue header strip so the proposer can see
+   * the section was touched without diffing every field manually.
+   */
+  isGroupDrafted: boolean;
+  /** Group has a queued/drafted DELETE — show banner + disable form. */
+  isGroupPendingDelete: boolean;
+  /** Drops the queue + draft entries for the given entity id. */
+  onUndoDelete: (id: string) => Promise<void> | void;
 }) {
   const initialClassifications = group.classifications ?? (group.category ? [group.category] : []);
   const [groupName, setGroupName] = useState(group.name ?? '');
@@ -1135,18 +1476,41 @@ function GroupSettingsPanel({
   };
 
   const handleDelete = async () => {
-    // Deleting a group cascades all its tags — too many writes to
-    // model as a single proposal revision. Admin-only for now.
-    if (!isAdmin) {
-      toast.error('Deleting a tag group is admin-only (the cascade isn’t proposable yet).');
+    const isProposalMode = groupWriter.mode === 'proposal' || groupWriter.mode === 'block';
+    // Admin direct mode does the full cascade inline (tags first,
+    // then the group). Proposal mode queues only the group DELETE
+    // here — Phase 2's server-side cascade strategy enrolls the
+    // group's tags + downstream tag references as dependent
+    // revisions when the block is submitted. (Until Phase 2 ships,
+    // admins reviewing the proposal will need to manually approve
+    // any child-tag deletes the proposer adds explicitly.)
+    if (!isAdmin && !isProposalMode) {
+      toast.error('Deleting a tag group requires admin or content-creator access.');
       return;
     }
     const tagsLine = tagsCount > 0
-      ? `\n\nThis will also delete the ${tagsCount} tag${tagsCount === 1 ? '' : 's'} in this group.`
+      ? (isProposalMode
+          ? `\n\nThis group has ${tagsCount} tag${tagsCount === 1 ? '' : 's'}. Their dependents will be enrolled in the block when you submit.`
+          : `\n\nThis will also delete the ${tagsCount} tag${tagsCount === 1 ? '' : 's'} in this group.`)
       : '';
-    if (!window.confirm(`Delete the "${group.name}" group?${tagsLine}`)) return;
+    const prompt = isProposalMode
+      ? `Propose deleting the "${group.name}" group?`
+      : `Delete the "${group.name}" group?`;
+    if (!window.confirm(prompt + tagsLine)) return;
     try {
-      // Tags first (cascade isn't on the FK).
+      if (isProposalMode) {
+        // Queue ONE delete revision. The cascade fans out at submit
+        // time on the server (Phase 2) so the in-memory queue stays
+        // bounded. Until Phase 2 ships the admin reviewer will see
+        // an isolated group-delete revision and must reject any
+        // dangling tag references manually.
+        await groupWriter.remove(group.id);
+        toast.success(actionLabel(groupWriter.mode, 'deleted'));
+        onSelectedGroupDeleted();
+        await onReloadGroups();
+        return;
+      }
+      // Admin direct mode — same cascade behavior as before.
       const tagsForGroup = await fetchCollection<any>('tags', { where: 'group_id = ?', params: [group.id], select: 'id' });
       for (const t of tagsForGroup) await deleteDocument('tags', t.id);
       await deleteDocument('tagGroups', group.id);
@@ -1161,13 +1525,65 @@ function GroupSettingsPanel({
   };
 
   return (
-    <Card className="border-gold/20 bg-card flex flex-col min-h-0 overflow-hidden">
-      <div className="p-4 border-b border-gold/10 bg-gold/5">
-        <h3 className="h3-title text-gold">Group Settings</h3>
+    <Card
+      className={cn(
+        'flex flex-col min-h-0 overflow-hidden',
+        // When the group carries queued/drafted work, swap the
+        // gold-trim Card to an archive-blue accent so the proposer
+        // can see at a glance that this section is part of their
+        // block. Tombstone state wins (red) over the blue modified
+        // ring since the destructive state is the more important
+        // one to surface.
+        isGroupPendingDelete
+          ? 'border-blood/40 bg-card'
+          : isGroupDrafted
+            ? 'border-archive-blue/40 bg-card'
+            : 'border-gold/20 bg-card',
+      )}
+    >
+      <div
+        className={cn(
+          'p-4 border-b',
+          isGroupPendingDelete
+            ? 'border-blood/20 bg-blood/5'
+            : isGroupDrafted
+              ? 'border-archive-blue/20 bg-archive-blue/5'
+              : 'border-gold/10 bg-gold/5',
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <h3 className={cn(
+            'h3-title',
+            isGroupPendingDelete
+              ? 'text-blood line-through'
+              : isGroupDrafted
+                ? 'text-archive-blue'
+                : 'text-gold',
+          )}>
+            Group Settings
+          </h3>
+          {!isGroupPendingDelete && isGroupDrafted && (
+            <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue rounded">
+              Modified in block
+            </span>
+          )}
+        </div>
         <p className="text-[11px] text-ink/50 mt-0.5">Click a tag in the middle pane for its detail.</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+      {isGroupPendingDelete && (
+        <div className="p-3 border-b border-blood/20 bg-blood/5">
+          <DeletedEntityBanner
+            entityLabel="Tag group"
+            name={group.name}
+            onUndo={() => onUndoDelete(group.id)}
+          />
+        </div>
+      )}
+
+      <fieldset
+        disabled={isGroupPendingDelete}
+        className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4 border-0 m-0 disabled:opacity-60">
         <div className="space-y-1.5">
           <label className="field-label">Name</label>
           <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="field-input" />
@@ -1222,16 +1638,18 @@ function GroupSettingsPanel({
             <Button type="submit" size="sm" className="h-7 px-2 btn-gold-solid text-[10px]">Add</Button>
           </form>
         </div>
-      </div>
+      </fieldset>
 
-      <div className="p-4 border-t border-gold/10 bg-background/50 flex items-center justify-between gap-2">
-        <Button variant="ghost" size="sm" onClick={handleDelete} className="btn-danger gap-2 text-[11px]">
-          <Trash2 className="w-3.5 h-3.5" /> Delete group
-        </Button>
-        <Button size="sm" onClick={handleSave} disabled={saving} className="btn-gold-solid label-text">
-          {saving ? 'Saving…' : 'Save Changes'}
-        </Button>
-      </div>
+      {!isGroupPendingDelete && (
+        <div className="p-4 border-t border-gold/10 bg-background/50 flex items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" onClick={handleDelete} className="btn-danger gap-2 text-[11px]">
+            <Trash2 className="w-3.5 h-3.5" /> Delete group
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving} className="btn-gold-solid label-text">
+            {saving ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

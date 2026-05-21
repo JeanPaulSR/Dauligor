@@ -28,6 +28,7 @@ import {
 } from '../../lib/classSpellLists';
 import { actionLabel } from '../../lib/proposalAware';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
 import {
   fetchAppliedRulesFor,
@@ -492,6 +493,25 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     else next.delete('class');
     setSearchParams(next, { replace: true });
   }, [selectedClassId, searchParams, setSearchParams]);
+
+  // Review-mode wiring. A class_spell_list proposal targets a single
+  // membership row — its payload carries `class_id` (and `spell_id`
+  // for create ops, while delete ops have the spell id encoded via
+  // the membership row's entity_id). Auto-select the proposal's class
+  // so the manager shows the right list. The submission-history banner
+  // mounted by the wrapper communicates the operation; field-level
+  // spell highlighting is deferred to Phase 3.
+  const reviewMode = useProposalReview();
+  const reviewListPayload = resolveReviewPayload(reviewMode, 'class_spell_list', null);
+  useEffect(() => {
+    if (!reviewMode || reviewMode.entityType !== 'class_spell_list') return;
+    const payload = reviewListPayload ?? reviewMode.snapshotAtProposal;
+    const targetClassId = payload?.class_id;
+    if (!targetClassId) return;
+    if (selectedClassId !== targetClassId) {
+      setSelectedClassId(targetClassId);
+    }
+  }, [reviewMode, reviewListPayload, selectedClassId]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map(s => [s.id, s])) as Record<string, SourceRow>,

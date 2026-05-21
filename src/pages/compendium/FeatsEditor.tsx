@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
+import { useProposalReview, resolveReviewPayload, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
 import {
   Edit3,
@@ -31,7 +32,7 @@ import {
   RECOVERY_TYPE_OPTIONS,
 } from '../../components/compendium/activity/constants';
 import { reportClientError, OperationType } from '../../lib/firebase';
-import { upsertFeat, deleteFeat, fetchFeat } from '../../lib/compendium';
+import { upsertFeat, deleteFeat, fetchFeat, denormalizeCompendiumData } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
 import { slugify, cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
@@ -233,6 +234,12 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   const { drafts: allDrafts, activeBundleId } = useBlock();
   const focusMode = proposalContext?.focusMode ?? 'drafts';
   const focusModeEnabled = proposalContext?.focusModeEnabled ?? false;
+  // Review-mode wiring (see SpellsEditor for the pattern). When the
+  // URL has `?review=<id>` for a feat proposal, we auto-select the
+  // target id and seed its denormalized payload into featDetailsById.
+  const reviewMode = useProposalReview();
+  const reviewPayload = resolveReviewPayload(reviewMode, 'feat', null);
+  const isReviewingFeat = !!reviewMode && !!reviewPayload && reviewMode.entityType === 'feat';
 
   // Entries + UI state
   const [entries, setEntries] = useState<any[]>([]);
@@ -432,6 +439,14 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     return ids;
   }, [proposalContext, allDrafts, activeBundleId]);
 
+  // Full payloads for queued/drafted feats, used to merge them into
+  // the displayed catalog so newly-created feats are visible + editable
+  // before they're approved.
+  const draftedFeatEntities = useMemo(
+    () => getDraftedEntities('feat', proposalContext, allDrafts, activeBundleId),
+    [proposalContext, allDrafts, activeBundleId],
+  );
+
   // Base feats the user has flipped to editable via "Edit Base [Name]"
   // — unlocks persist for the session. Mirrors SpellsEditor's pattern.
   const [unlockedBaseIds, setUnlockedBaseIds] = useState<Set<string>>(new Set());
@@ -442,6 +457,14 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
       next.add(id);
       return next;
     });
+    // Edit Base = declaring intent to work on this feat. Flip the
+    // wrapper's focus to drafts so the user sees the feat in their
+    // working set (and so the filter below treats unlocked-but-not-
+    // yet-saved entries as drafts). See SpellsEditor for the full
+    // rationale.
+    if (proposalContext?.setFocusMode) {
+      proposalContext.setFocusMode('drafts');
+    }
   };
 
   // Read-only when the wrapper enables focus-mode AND there's a live
@@ -454,9 +477,40 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     !unlockedBaseIds.has(editingId) &&
     !draftedFeatIds.has(editingId);
 
+  // Merge queued/drafted feats into the live catalog so the user can
+  // see + keep editing their in-progress feats before flush/approval.
+  // Same overlay model as SpellsEditor: deleted ids tagged with
+  // __pendingDelete (Phase 1 tombstone UX — rendered with red strike
+  // + undo button below), queued updates merged on top, queued
+  // creates appended.
+  const displayEntries = useMemo(() => {
+    if (
+      draftedFeatEntities.byId.size === 0 &&
+      draftedFeatEntities.deletedIds.size === 0
+    ) {
+      return entries;
+    }
+    const merged = entries.map((e) => {
+      if (draftedFeatEntities.deletedIds.has(String(e.id))) {
+        return { ...e, __pendingDelete: true };
+      }
+      const overlay = draftedFeatEntities.byId.get(String(e.id));
+      if (!overlay) return e;
+      // Denormalize the queued snake_case payload to the camelCase
+      // shape the catalog list binds to, preserving the existing
+      // entry's already-denormalized fields under it.
+      return { ...e, ...denormalizeCompendiumData(overlay) };
+    });
+    for (const [draftId, payload] of draftedFeatEntities.byId.entries()) {
+      if (merged.some((e) => String(e.id) === draftId)) continue;
+      merged.push({ ...denormalizeCompendiumData(payload), id: draftId });
+    }
+    return merged;
+  }, [entries, draftedFeatEntities]);
+
   const filteredEntries = useMemo(() => {
     const lowered = search.trim().toLowerCase();
-    return entries.filter((entry) => {
+    return displayEntries.filter((entry) => {
       // Search filter first.
       if (lowered) {
         const sourceLabel = String(sourceNameById[entry.sourceId] || '').toLowerCase();
@@ -468,15 +522,18 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           || sourceLabel.includes(lowered);
         if (!matches) return false;
       }
-      // Focus mode (My Drafts): only feats the user has staged in the
-      // active block. Browse Base mode shows everything. No-op when
-      // the wrapper isn't mounted (admin direct route).
+      // Focus mode (My Drafts): show feats the user has staged in
+      // the active block OR has explicitly Edit-Base-d this session.
+      // Browse Base shows everything. No-op when the wrapper isn't
+      // mounted (admin direct route). Mirrors SpellsEditor.
       if (focusModeEnabled && focusMode === 'drafts') {
-        if (!draftedFeatIds.has(String(entry.id))) return false;
+        const id = String(entry.id);
+        const isMyWork = draftedFeatIds.has(id) || unlockedBaseIds.has(id);
+        if (!isMyWork) return false;
       }
       return true;
     });
-  }, [entries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds]);
+  }, [displayEntries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds, unlockedBaseIds]);
 
   // Lookup the RequirementsEditor + the list-row prereq summary share.
   // Built once per dependency change so the renderItem callback below
@@ -504,6 +561,24 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     setFormData(initial);
     lastLoadedFormRef.current = JSON.stringify(initial);
   };
+
+  // Review mode: auto-select the proposal's target feat and seed its
+  // denormalized payload into featDetailsById so the load effect below
+  // picks it up via cache hit.
+  useEffect(() => {
+    if (!isReviewingFeat || !reviewMode?.entityId || !reviewPayload) return;
+    setFeatDetailsById((current) =>
+      current[reviewMode.entityId!]
+        ? current
+        : {
+            ...current,
+            [reviewMode.entityId!]: denormalizeCompendiumData(reviewPayload),
+          },
+    );
+    if (editingId !== reviewMode.entityId) {
+      setEditingId(reviewMode.entityId);
+    }
+  }, [isReviewingFeat, reviewMode?.entityId, reviewPayload, editingId]);
 
   // Hydrate the form from the picked entry. Mirrors SpellsEditor's
   // approach: kick a detail fetch when we don't already have the full
@@ -865,7 +940,26 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                     {loading ? (
                       <div className="px-3 py-8 text-sm text-ink/40 italic">Loading...</div>
                     ) : filteredEntries.length === 0 ? (
-                      <div className="px-3 py-8 text-sm text-ink/40 italic">No feats match the current search.</div>
+                      // See SpellsEditor for the rationale — In Block
+                      // mode with zero entries is a teaching state.
+                      focusModeEnabled && focusMode === 'drafts' ? (
+                        <div className="px-4 py-8 text-center text-ink/60 max-w-sm mx-auto space-y-2">
+                          <p className="font-bold text-ink/80 text-sm">No feats in this block yet.</p>
+                          <p className="text-xs leading-relaxed text-ink/55">
+                            Click <span className="font-bold text-gold">New Feat</span> above
+                            to author one from scratch.
+                          </p>
+                          <p className="text-xs leading-relaxed text-ink/55">
+                            To edit an existing feat, switch to
+                            <span className="font-bold text-gold"> Full Catalog</span>
+                            (top right, next to Submit Changes), open the feat, then click
+                            <span className="font-bold text-gold"> Edit Base</span> — it'll
+                            move into this list automatically.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="px-3 py-8 text-sm text-ink/40 italic">No feats match the current search.</div>
+                      )
                     ) : (
                       <VirtualizedList
                         items={filteredEntries}
@@ -1070,7 +1164,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                       />
 
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        <div className="space-y-1">
+                        <ReviewFieldHighlight columnKey="name" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Name</Label>
                           <Input
                             value={formData.name}
@@ -1079,8 +1173,8 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                             placeholder="e.g. Great Weapon Master"
                             required
                           />
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="identifier" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Identifier</Label>
                           <Input
                             value={formData.identifier}
@@ -1088,8 +1182,8 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                             className="bg-background/50 border-gold/10 focus:border-gold font-mono"
                             placeholder={slugify(formData.name || 'feat')}
                           />
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source</Label>
                           <select
                             value={formData.sourceId}
@@ -1101,12 +1195,12 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                               <option key={source.id} value={source.id}>{source.name}</option>
                             ))}
                           </select>
-                        </div>
+                        </ReviewFieldHighlight>
                         {/* Foundry's `system.type` is a {value, subtype}
                             pair. Authoring as two cascading fields so
                             the export drops them straight into the same
                             slot without translation. */}
-                        <div className="space-y-1">
+                        <ReviewFieldHighlight columnKey="feat_type" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Feat Type</Label>
                           <select
                             value={formData.featType || 'feat'}
@@ -1125,8 +1219,8 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                               <option key={value} value={value}>{label}</option>
                             ))}
                           </select>
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="feat_subtype" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Subtype</Label>
                           {(() => {
                             const subtypeOptions = FEAT_SUBTYPE_OPTIONS_BY_VALUE[formData.featType] || [];
@@ -1161,8 +1255,8 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                               />
                             );
                           })()}
-                        </div>
-                        <div className="space-y-1">
+                        </ReviewFieldHighlight>
+                        <ReviewFieldHighlight columnKey="source_type" className="space-y-1">
                           <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Source Type</Label>
                           <select
                             value={formData.sourceType || 'feat'}
@@ -1173,19 +1267,21 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
                               <option key={value} value={value}>{label}</option>
                             ))}
                           </select>
-                        </div>
+                        </ReviewFieldHighlight>
                       </div>
                     </div>
 
-                    <MarkdownEditor
-                      key={editingId || 'new-feat'}
-                      value={formData.description}
-                      onChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
-                      label="Description"
-                      placeholder="Describe the feat in player-facing terms. Activities should carry runtime mechanics."
-                      minHeight="300px"
-                      autoSizeToContent={false}
-                    />
+                    <ReviewFieldHighlight columnKey="description">
+                      <MarkdownEditor
+                        key={editingId || 'new-feat'}
+                        value={formData.description}
+                        onChange={(value) => setFormData((prev) => ({ ...prev, description: value }))}
+                        label="Description"
+                        placeholder="Describe the feat in player-facing terms. Activities should carry runtime mechanics."
+                        minHeight="300px"
+                        autoSizeToContent={false}
+                      />
+                    </ReviewFieldHighlight>
 
                     {/* Foundry shell — feat-specific scalar fields that
                         round-trip onto `system.*` of the embedded

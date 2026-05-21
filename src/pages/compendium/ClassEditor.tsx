@@ -30,10 +30,12 @@ import { normalizeAdvancementListForEditor, resolveAdvancementDefaultHitDie } fr
 import { buildCanonicalBaseClassAdvancements } from '../../lib/classProgression';
 import { fetchCollection, fetchDocument, queryD1, upsertDocument, deleteDocument } from '../../lib/d1';
 import { upsertFeature, denormalizeCompendiumData } from '../../lib/compendium';
-import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
+import { useBlock } from '../../lib/proposalBlock';
 import { actionLabel } from '../../lib/proposalAware';
-import { useProposalReview } from '../../lib/proposalReview';
+import { useProposalReview, ReviewFieldHighlight } from '../../lib/proposalReview';
 import { ReviewBanner } from '../../components/proposals/ReviewBanner';
+import { DeletedEntityBanner } from '../../components/proposals/TombstoneRow';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { queueRebake } from '../../lib/moduleExport';
 import { BakeNowButton } from '../../components/compendium/BakeNowButton';
@@ -419,6 +421,27 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   const classWriter = useProposalAccumulator('class', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = classWriter.mode === 'proposal' || classWriter.mode === 'block';
+  // In-progress class state (queued + active-block drafts). Used to
+  // restore the form when the user just created a new class via the
+  // proposal route: the live row doesn't exist yet, so fetching from
+  // D1 would blank the form. Falling back to the queued payload keeps
+  // their work visible until Submit Changes lands the draft.
+  const { drafts: allDraftRevisions, activeBundleId } = useBlock();
+  const classDrafts = useMemo(
+    () => getDraftedEntities('class', proposalContext, allDraftRevisions, activeBundleId),
+    [proposalContext, allDraftRevisions, activeBundleId],
+  );
+  // Tombstone state — true when this class has a queued/drafted
+  // DELETE in the active block. Shown via DeletedEntityBanner above
+  // the form + wraps the rest of the form in fieldset disabled.
+  const isClassPendingDelete = !!id && classDrafts.deletedIds.has(id);
+  // After a proposal-mode CREATE we stay on the /new route (navigating
+  // to /edit/<id> would unmount the wrapper and destroy the queue).
+  // We bind the minted id here so subsequent saves on this page take
+  // the UPDATE path against the SAME entity instead of minting fresh
+  // creates every time. Reset on prop change (route remount).
+  const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
+  const effectiveId = id ?? pendingCreateId;
   // Review mode — the editor is being viewed via `?review=<proposal_id>`
   // (e.g. the user clicked a past submission in /my-proposals). In
   // this mode the form is populated from the proposal's payload, all
@@ -736,9 +759,27 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           //    class. In review mode the form is populated from the
           //    proposal's submitted payload (snake_case D1 shape), so
           //    the live row would clobber what the user is reviewing.
-          const data = isReviewingThisClass
-            ? reviewMode!.proposedPayload
-            : await fetchDocument<any>('classes', id);
+          //
+          //    Proposal mode also short-circuits to the queued/drafted
+          //    payload when the live row hasn't been written yet — this
+          //    is the path that catches "just clicked Create on a new
+          //    class" (the route navigates to /edit/<newId> but the row
+          //    only exists in the in-memory queue).
+          let data: any = null;
+          if (isReviewingThisClass) {
+            data = reviewMode!.proposedPayload;
+          } else if (isProposalMode && classDrafts.byId.has(id)) {
+            data = classDrafts.byId.get(id) ?? null;
+          } else {
+            data = await fetchDocument<any>('classes', id);
+            // If the live row doesn't exist but we DO have a queued or
+            // drafted payload for it, fall back to that. This covers
+            // the case where the route reloaded after a queued create
+            // and the writer hasn't flushed yet.
+            if (!data && isProposalMode && classDrafts.byId.has(id)) {
+              data = classDrafts.byId.get(id) ?? null;
+            }
+          }
 
           if (data) {
             console.log(`[ClassEditor] Class data loaded: ${data.name}`);
@@ -1145,7 +1186,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         updatedAt: new Date().toISOString()
       };
 
-      const saveId = id || crypto.randomUUID();
+      // effectiveId carries forward the locally-minted id from a prior
+      // proposal-mode CREATE so subsequent saves update that same
+      // queued entry rather than minting new ones. Falls back to a
+      // fresh UUID for the first save when no id exists yet.
+      const saveId = effectiveId || crypto.randomUUID();
       const d1Data = {
         name: classData.name,
         identifier: classData.identifier,
@@ -1184,14 +1229,22 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         // endpoint also strips, queue via the writer. Rebake is
         // skipped (the live class hasn't changed yet); it'll fire on
         // admin approval through the existing direct-write path.
+        //
+        // effectiveId picks up `pendingCreateId` after the first save
+        // so a follow-up edit on the same /new page routes through
+        // UPDATE instead of CREATE. Only the initial save (no id from
+        // useParams AND no pendingCreateId yet) takes the create
+        // branch.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Data;
-        if (id) {
-          await classWriter.update(saveId, proposalPayload);
-        } else {
+        const isCreate = !effectiveId;
+        if (isCreate) {
           await classWriter.create({ ...proposalPayload, id: saveId });
+          setPendingCreateId(saveId);
+        } else {
+          await classWriter.update(saveId, proposalPayload);
         }
         if (!opts.silent) {
-          toast.success(actionLabel(classWriter.mode, id ? 'updated' : 'created'));
+          toast.success(actionLabel(classWriter.mode, isCreate ? 'created' : 'updated'));
         }
       } else {
         await upsertDocument('classes', saveId, d1Data);
@@ -1203,9 +1256,19 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
       // Skip the post-create navigate when the wrapper invoked us
       // through pre-flush — navigating during flush would unmount the
-      // wrapper mid-drain. The explicit Save Class button keeps its
-      // existing navigate behavior.
-      if (!id && !opts.silent) {
+      // wrapper mid-drain.
+      //
+      // In proposal mode we also stay on the /new route after the
+      // queued create. Navigating to /edit/<id> would remount the
+      // wrapper, destroying the in-memory queue we just added the
+      // create to — the form would then reload empty from a live row
+      // that doesn't exist yet. Subsequent saves on this page still
+      // recognize the entity as new (no `id` from useParams), so the
+      // pre-flush + auto-stage paths queue an update for `saveId`
+      // through the dedup logic in `postQueuedChanges`. The route
+      // catches up on the next page load via `classDrafts.byId.get(id)`
+      // once the draft persists server-side.
+      if (!id && !opts.silent && !isProposalMode) {
         navigate(`${basePath}/edit/${saveId}`);
       }
       setProficiencies(normalizedProficiencies);
@@ -1239,7 +1302,11 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   useEffect(() => {
     if (!isProposalMode) return;
     if (!proposalContext) return;
-    if (!id) return; // create flow keeps its own button + navigate
+    // Register whenever the editor is bound to an entity. Without
+    // pendingCreateId here, post-Create edits to a freshly-queued
+    // class would not be re-staged before flush — the user's tweaks
+    // would silently fall on the floor when Submit Changes ran.
+    if (!id && !pendingCreateId) return;
     return proposalContext.registerPreFlush(async () => {
       try {
         await handleSaveRef.current(undefined, { silent: true });
@@ -1249,7 +1316,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         // from handleSave's early returns.
       }
     });
-  }, [isProposalMode, proposalContext, id]);
+  }, [isProposalMode, proposalContext, id, pendingCreateId]);
 
   const handleInitializeBaseAdvancements = () => {
     const normalizedProficiencies = sanitizeProficiencyCollection(proficiencies);
@@ -1360,10 +1427,29 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // wrapper isn't mounted.
   const showLocalReviewChrome = isReviewingThisClass && !proposalContext;
   return (
-    <fieldset disabled={showLocalReviewChrome && reviewIsReadOnly} className="max-w-6xl mx-auto space-y-6 pb-20 border-0 p-0 m-0 disabled:opacity-95">
+    <fieldset
+      disabled={(showLocalReviewChrome && reviewIsReadOnly) || isClassPendingDelete}
+      className="max-w-6xl mx-auto space-y-6 pb-20 border-0 p-0 m-0 disabled:opacity-95"
+    >
       {showLocalReviewChrome && <ReviewBanner />}
-      <div className="section-header">
-        <div className="flex items-center gap-4">
+      {isClassPendingDelete && (
+        <DeletedEntityBanner
+          entityLabel="Class"
+          name={name || 'this class'}
+          onUndo={async () => {
+            if (!id || !proposalContext) return;
+            await proposalContext.dropEntity(id);
+          }}
+        />
+      )}
+      {/* In proposal mode the wrapper already labels the page
+          ("PROPOSAL EDITOR | Class") + provides Submit Changes.
+          Slim the section-header in that case so the form starts
+          tight under the wrapper — same treatment as TagsExplorer
+          / UniqueOptionGroupEditor. Admin direct route keeps the
+          full h1 since there's no wrapper header above it. */}
+      <div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'section-header'}>
+        <div className="flex items-center gap-3 min-w-0">
           <Link to={
             isReviewingThisClass
               ? '/my-proposals'
@@ -1375,11 +1461,15 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               <ChevronLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
-          <div className="flex items-center gap-4">
+          {isProposalMode ? (
+            <span className="text-sm font-bold text-ink truncate">
+              {effectiveId ? (name || 'Untitled Class') : 'New Class'}
+            </span>
+          ) : (
             <h1 className="h1-title text-ink">
-              {id ? `Edit ${name || 'Class'}` : 'New Class'}
+              {effectiveId ? `Edit ${name || 'Class'}` : 'New Class'}
             </h1>
-          </div>
+          )}
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:items-end">
           <div className="flex items-center gap-2">
@@ -1393,9 +1483,15 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                 submission — the form is for inspection, not editing.
                 Rejected proposals keep the button so the user can
                 resubmit after fixing whatever the admin flagged. */}
-            {(!isProposalMode || !id) && !reviewIsReadOnly && (
+            {/* Proposal mode: only show Create Class on the very first
+                save when no entity exists yet (no route id AND no
+                locally-minted pendingCreateId). After Create, the
+                pre-flush hook handles subsequent saves through Submit
+                Changes — showing a second Create button would look
+                like an offer to create a SECOND class. */}
+            {(!isProposalMode || !effectiveId) && !reviewIsReadOnly && (
               <Button onClick={handleSave} disabled={loading} size="sm" className="btn-gold-solid gap-2">
-                <Save className="w-4 h-4" /> {id ? 'Save Class' : 'Create Class'}
+                <Save className="w-4 h-4" /> {effectiveId ? 'Save Class' : 'Create Class'}
               </Button>
             )}
             {/* BakeNow is admin-only — it fires the R2 bundle bake which
@@ -1511,7 +1607,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
 
                   {/* Right: fields */}
                   <div className="flex-1 grid sm:grid-cols-2 gap-4 h-fit">
-                    <div className="space-y-1">
+                    <ReviewFieldHighlight columnKey="name" className="space-y-1">
                       <label className="label-text">Class Name</label>
                       <Input
                         value={name}
@@ -1519,8 +1615,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         placeholder="e.g. Fighter"
                         className="h-8 text-sm bg-background/50 border-gold/10 focus:border-gold"
                       />
-                    </div>
-                    <div className="space-y-1">
+                    </ReviewFieldHighlight>
+                    <ReviewFieldHighlight columnKey="source_id" className="space-y-1">
                       <label className="label-text">Source</label>
                       <select
                         value={sourceId}
@@ -1532,8 +1628,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           <option key={s.id} value={s.id}>{s.name} {s.abbreviation ? `(${s.abbreviation})` : ''}</option>
                         ))}
                       </select>
-                    </div>
-                    <div className="space-y-1">
+                    </ReviewFieldHighlight>
+                    <ReviewFieldHighlight columnKey="hit_die" className="space-y-1">
                       <label className="label-text">Hit Die</label>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-mono text-gold">d</span>
@@ -1547,8 +1643,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                           ))}
                         </select>
                       </div>
-                    </div>
-                    <div className="space-y-1">
+                    </ReviewFieldHighlight>
+                    <ReviewFieldHighlight columnKey="category" className="space-y-1">
                       <label className="label-text">Category</label>
                       <select
                         value={category}
@@ -1559,7 +1655,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                         <option value="alternate">Alternate Class</option>
                         <option value="new">New Class</option>
                       </select>
-                    </div>
+                    </ReviewFieldHighlight>
                     <div className="space-y-1">
                       <label className="label-text">ASI Levels (csv)</label>
                       <Input
@@ -1606,20 +1702,24 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       <p className="text-[10px] text-ink/40 leading-tight pt-1">This simulates how the text fits into the class selection cards. If it cuts off with ellipses, shorten it!</p>
                     </div>
                   </div>
-                  <MarkdownEditor
-                    value={description}
-                    onChange={setDescription}
-                    placeholder="A detailed explanation of how the class plays and what it does..."
-                    minHeight="100px"
-                    label="Class Description"
-                  />
-                  <MarkdownEditor
-                    value={lore}
-                    onChange={setLore}
-                    placeholder="How this class fits into the setting's lore..."
-                    minHeight="100px"
-                    label="Class Lore"
-                  />
+                  <ReviewFieldHighlight columnKey="description">
+                    <MarkdownEditor
+                      value={description}
+                      onChange={setDescription}
+                      placeholder="A detailed explanation of how the class plays and what it does..."
+                      minHeight="100px"
+                      label="Class Description"
+                    />
+                  </ReviewFieldHighlight>
+                  <ReviewFieldHighlight columnKey="lore">
+                    <MarkdownEditor
+                      value={lore}
+                      onChange={setLore}
+                      placeholder="How this class fits into the setting's lore..."
+                      minHeight="100px"
+                      label="Class Lore"
+                    />
+                  </ReviewFieldHighlight>
                 </div>
               </div>
 

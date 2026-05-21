@@ -261,7 +261,17 @@ export function BlockProvider({ children }: { children: ReactNode }) {
 
   const startBlock = useCallback(
     async (name: string, description?: string | null): Promise<string> => {
-      if (activeBundleId) return activeBundleId;
+      // The model supports multiple open blocks (one is "active",
+      // the rest live in `openBlocks` until the user switches or
+      // submits them). So an existing active block is NOT a reason
+      // to short-circuit — the user explicitly asked for a new
+      // block. The new block becomes active; the previous one
+      // stays open in the picker.
+      //
+      // Earlier this function refused to create when activeBundleId
+      // was set, which made the "Start a new block" button on
+      // /my-proposals fire its success toast but never actually
+      // create anything — silent failure from the user's POV.
       const trimmed = (name ?? '').trim();
       if (!trimmed) {
         throw new Error('Block name is required.');
@@ -288,7 +298,7 @@ export function BlockProvider({ children }: { children: ReactNode }) {
       void refreshOpenBlocks();
       return created.id;
     },
-    [activeBundleId, persist, refreshOpenBlocks],
+    [persist, refreshOpenBlocks],
   );
 
   const setActiveBlock = useCallback(

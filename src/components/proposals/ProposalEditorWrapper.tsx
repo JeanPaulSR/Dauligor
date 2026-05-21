@@ -22,13 +22,14 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { toast } from 'sonner';
-import { Send } from 'lucide-react';
+import { Send, FilePen, Library } from 'lucide-react';
 import { auth } from '../../lib/firebase';
 import {
   ProposalAccumulatorContext,
@@ -87,6 +88,22 @@ export function ProposalEditorWrapper({
   enableFocusMode = false,
   children,
 }: ProposalEditorWrapperProps) {
+  // Strip the global `<main>` top padding (py-8 = 32px) for the
+  // lifetime of any proposal-edit page. Without this, every editor
+  // that doesn't separately opt into `body.spell-list-fullscreen`
+  // (Tags, Option Groups, etc.) renders with a visible ~32px gap
+  // between the top navbar and the wrapper's "PROPOSAL EDITOR | …"
+  // header strip. The full-bleed spell editors don't suffer from
+  // this because they already strip the same padding via
+  // spell-list-fullscreen. CSS rule lives next to the existing
+  // fullscreen overrides in index.css.
+  useEffect(() => {
+    document.body.classList.add('proposal-editor-active');
+    return () => {
+      document.body.classList.remove('proposal-editor-active');
+    };
+  }, []);
+
   const entityTypes = useMemo<ProposalEntityType[]>(
     () => (Array.isArray(entityType) ? entityType : [entityType]),
     [entityType],
@@ -291,8 +308,20 @@ export function ProposalEditorWrapper({
       // 2. Delete any matching server-side drafts in the active block.
       //    Drafts only exist if a block is active and the user has
       //    previously submitted at least once.
+      //
+      //    CREATE drafts carry `entity_id: null` on the server (the
+      //    proposal endpoint forcibly nulls it — there's no live row
+      //    to point at yet). Their effective id lives at
+      //    `proposed_payload.id`. Match on both columns so undo
+      //    catches both `update-on-live-row` drafts AND
+      //    `create-of-new-row` drafts.
       const matchingDrafts = activeBundleId
-        ? drafts.filter((d) => d.entity_id === entityId)
+        ? drafts.filter((d) =>
+            d.entity_id === entityId ||
+            (d.proposed_payload &&
+              typeof d.proposed_payload.id === 'string' &&
+              d.proposed_payload.id === entityId),
+          )
         : [];
       if (matchingDrafts.length === 0) return;
       try {
@@ -524,7 +553,17 @@ function ProposalEditorHeader({
   onFocusModeChange,
 }: HeaderProps) {
   return (
-    <div className="sticky top-0 z-30 -mx-4 px-4 py-3 bg-blood/10 border-b border-blood/30 backdrop-blur supports-backdrop-filter:bg-blood/5">
+    /*
+      `-mx-4 px-4` is the bleed trick: negative margin pulls the bg
+      back over main's `px-4` so the strip reaches the viewport
+      edges, while the internal px-4 keeps content aligned with the
+      rest of the page. Fullscreen editors (Spells / Spell Rules /
+      Spell Lists) set body.spell-list-fullscreen, which strips
+      main's padding — at that point the -mx-4 has nothing to bleed
+      PAST and instead spills LEFT over the sidebar. CSS rule in
+      index.css zeroes the negative margin under that body class.
+    */
+    <div className="proposal-editor-strip sticky top-0 z-30 -mx-4 px-4 py-3 bg-blood/10 border-b border-blood/30 backdrop-blur supports-backdrop-filter:bg-blood/5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="space-y-1 min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -595,37 +634,47 @@ function FocusModeToggle({
   value: FocusMode;
   onChange: (next: FocusMode) => void;
 }) {
+  // Labels favored clarity over brevity after user feedback:
+  // "My Drafts" / "Browse Base" weren't self-explanatory for new
+  // proposers. "In Block" + the pen icon reads as "what I'm
+  // editing right now"; "Full Catalog" + the library icon reads as
+  // "everything in the compendium". Title tooltips spell out the
+  // exact filter for assistive tech and curious users.
   return (
     <div
       role="group"
-      aria-label="Focus mode"
+      aria-label="What you see in the list"
       className="inline-flex rounded-md border border-foreground/15 p-0.5 bg-background/30"
     >
       <button
         type="button"
         onClick={() => onChange('drafts')}
+        title="Show only entries you've created, edited, or marked Edit Base in this block."
         className={cn(
-          'px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
+          'flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
           value === 'drafts'
             ? 'bg-gold/15 text-gold font-bold'
             : 'text-ink/60 hover:text-ink',
         )}
         aria-pressed={value === 'drafts'}
       >
-        My Drafts
+        <FilePen className="w-3 h-3" />
+        In Block
       </button>
       <button
         type="button"
         onClick={() => onChange('browse')}
+        title="Browse the full compendium catalog. Entries are read-only until you click Edit Base."
         className={cn(
-          'px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
+          'flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-widest rounded transition-colors',
           value === 'browse'
             ? 'bg-gold/15 text-gold font-bold'
             : 'text-ink/60 hover:text-ink',
         )}
         aria-pressed={value === 'browse'}
       >
-        Browse Base
+        <Library className="w-3 h-3" />
+        Full Catalog
       </button>
     </div>
   );

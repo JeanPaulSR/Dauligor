@@ -573,6 +573,33 @@ body.spell-list-fullscreen {
   overflow: hidden;
 }
 
+/* Proposal-edit mode: when ProposalEditorWrapper is mounted (any
+   /proposals/edit/* route) drop the global <main>'s top padding so
+   the wrapper's "PROPOSAL EDITOR | <type>" header strip sits flush
+   against the navbar. Without this, editors that don't separately
+   strip the padding via spell-list-fullscreen (Tags, Option Groups,
+   Class/Subclass) render with a visible ~32px white gap above the
+   wrapper header. The bottom padding stays — most editors still
+   want the standard footer spacing for Save / Submit buttons. */
+body.proposal-editor-active main {
+  padding-top: 0 !important;
+}
+
+/* When BOTH proposal mode AND spell-list-fullscreen are active
+   (Spells / Spell Rules / Class Spell Lists in proposal mode),
+   zero the proposal header's `-mx-4` bleed. The bleed was designed
+   to extend the bg over main's `px-4` to the viewport edges — but
+   fullscreen strips main's padding entirely, so the negative
+   margin then spills LEFT over the sidebar column instead of
+   bleeding past padding that no longer exists. Resetting to mx-0
+   keeps the strip inside main's bounds. The internal `px-4` on
+   the header keeps content alignment consistent with the other
+   editors. */
+body.spell-list-fullscreen .proposal-editor-strip {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
 /* Character-builder wide mode. Three jobs:
    1. Strips the global `<main>` max-width (default Tailwind container
       caps at xl:1280px) so the book-spread sheet + sticky rail can

@@ -113,12 +113,16 @@ export function ClassList({
     !selectionMode &&
     !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
-  const canManage = isAdmin || isContentCreator;
   // Route-aware: on /proposals/edit/classes the New / Edit buttons
   // target the proposal-mode editor; on /compendium/classes they
   // keep their admin-direct targets.
   const location = useLocation();
   const isProposalRoute = location.pathname.startsWith('/proposals/edit/');
+  // Content creators see the create-class affordance ONLY through the
+  // proposal route — direct admin writes are admin-only. On the public
+  // /compendium/classes page a content-creator should browse, then
+  // pivot to /my-proposals to start a class proposal there.
+  const canManage = isAdmin || (isContentCreator && isProposalRoute);
   const newClassHref = isProposalRoute
     ? '/proposals/edit/classes/new'
     : '/compendium/classes/new';

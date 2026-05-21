@@ -14,8 +14,10 @@ import {
 } from 'lucide-react';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
 import { denormalizeCompendiumData } from '../../lib/compendium';
-import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
+import { useProposalAccumulator, useProposalContextOptional, getDraftedEntities } from '../../lib/proposalAccumulator';
 import { actionLabel } from '../../lib/proposalAware';
+import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
+import { useBlock } from '../../lib/proposalBlock';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import BBCodeRenderer from '@/components/BBCodeRenderer';
@@ -46,6 +48,20 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   const itemWriter = useProposalAccumulator('unique_option_item', userProfile);
   const proposalContext = useProposalContextOptional();
   const isProposalMode = groupWriter.mode === 'proposal' || groupWriter.mode === 'block';
+  // Review-mode: load form from the proposal's payload instead of the
+  // live row when the URL has `?review=<id>` for THIS group.
+  const reviewMode = useProposalReview();
+  const reviewPayload = resolveReviewPayload(reviewMode, 'unique_option_group', id ?? null);
+  const isReviewingThis = !!reviewMode && !!reviewPayload;
+  // Same queue/draft lookup pattern as ClassEditor — supports loading
+  // a queued-but-not-yet-flushed group when the live row doesn't exist.
+  const { drafts: allGroupDrafts, activeBundleId: groupActiveBundleId } = useBlock();
+  const groupDrafts = useMemo(
+    () => getDraftedEntities('unique_option_group', proposalContext, allGroupDrafts, groupActiveBundleId),
+    [proposalContext, allGroupDrafts, groupActiveBundleId],
+  );
+  const [pendingCreateId, setPendingCreateId] = useState<string | null>(null);
+  const effectiveId = id ?? pendingCreateId;
   const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false);
   const [pendingItemDeleteId, setPendingItemDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -192,8 +208,22 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         });
 
         if (id) {
-          // 3. Group
-          const groupData = await fetchDocument<any>('uniqueOptionGroups', id);
+          // 3. Group — in review mode pull the proposed payload (or
+          //    snapshot, for delete reviews) so the form mirrors what
+          //    the user submitted rather than the live row. Proposal
+          //    mode also falls back to the queue/drafts when the live
+          //    row doesn't exist (post-Create on /new with no flush).
+          let groupData: any = null;
+          if (isReviewingThis) {
+            groupData = reviewPayload;
+          } else if (isProposalMode && groupDrafts.byId.has(id)) {
+            groupData = groupDrafts.byId.get(id) ?? null;
+          } else {
+            groupData = await fetchDocument<any>('uniqueOptionGroups', id);
+            if (!groupData && isProposalMode && groupDrafts.byId.has(id)) {
+              groupData = groupDrafts.byId.get(id) ?? null;
+            }
+          }
 
           if (groupData) {
             setName(groupData.name || '');
@@ -253,21 +283,24 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         updated_at: new Date().toISOString(),
       };
 
-      const targetId = id || crypto.randomUUID();
+      // effectiveId carries the locally-minted id from a prior
+      // proposal-mode CREATE so follow-up saves UPDATE the same queue
+      // entry instead of minting new groups every click.
+      const targetId = effectiveId || crypto.randomUUID();
       if (isProposalMode) {
-        if (id) {
-          await groupWriter.update(targetId, d1Data);
-        } else {
+        const isCreate = !effectiveId;
+        if (isCreate) {
           await groupWriter.create({ ...d1Data, id: targetId });
+          setPendingCreateId(targetId);
+        } else {
+          await groupWriter.update(targetId, d1Data);
         }
         if (!opts.silent) {
-          toast.success(actionLabel(groupWriter.mode, id ? 'updated' : 'created'));
+          toast.success(actionLabel(groupWriter.mode, isCreate ? 'created' : 'updated'));
         }
-        // Skip post-create navigate when called via pre-flush — navigating
-        // during the wrapper's flush would unmount the wrapper mid-drain.
-        if (!id && !opts.silent) {
-          navigate(`${basePath}/edit/${targetId}`);
-        }
+        // Proposal mode stays on /new after Create — navigating would
+        // unmount the wrapper and lose the in-memory queue. The editor
+        // uses pendingCreateId to track the minted id for future saves.
       } else {
         await upsertDocument('uniqueOptionGroups', targetId, d1Data);
         if (id) {
@@ -297,7 +330,12 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
   useEffect(() => {
     if (!isProposalMode) return;
     if (!proposalContext) return;
-    if (!id) return; // create flow keeps its own button + navigate
+    // Register pre-flush whenever the editor is bound to an entity —
+    // either via route param OR a locally-minted pendingCreateId after
+    // a proposal-mode Create. Without the second case, a user who
+    // created + then edited would lose the post-create edits when
+    // Submit Changes drained the queue.
+    if (!id && !pendingCreateId) return;
     return proposalContext.registerPreFlush(async () => {
       try {
         await handleSaveGroupRef.current(undefined, { silent: true });
@@ -305,7 +343,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
         /* swallow — wrapper surfaces a generic error toast */
       }
     });
-  }, [isProposalMode, proposalContext, id]);
+  }, [isProposalMode, proposalContext, id, pendingCreateId]);
 
   const handleDeleteGroup = () => {
     if (!id) return;
@@ -517,18 +555,30 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
     setIsItemModalOpen(true);
   };
 
+  // In proposal mode the wrapper above already labels the page
+  // ("PROPOSAL EDITOR | Unique Option Group") and provides Submit
+  // Changes. Slim the section-header so we don't duplicate the
+  // title chrome below the wrapper — just keep the Back link +
+  // the inline group name. Save/Create + Delete buttons stay
+  // because they're still relevant inside the form.
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
-      <div className="section-header">
-        <div className="flex items-center gap-4">
+      <div className={isProposalMode ? 'flex items-center justify-between gap-2 pb-2 border-b border-gold/10' : 'section-header'}>
+        <div className="flex items-center gap-3 min-w-0">
           <Link to={isProposalRoute ? '/my-proposals' : '/compendium/unique-options'}>
             <Button variant="ghost" size="sm" className="text-gold gap-2 hover:bg-gold/5">
               <ChevronLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
-          <h1 className="text-2xl font-serif font-bold text-ink uppercase tracking-tight">
-            {id ? `Edit ${name || 'Group'}` : 'New Unique Option Group'}
-          </h1>
+          {isProposalMode ? (
+            <span className="text-sm font-bold text-ink truncate">
+              {id ? (name || 'Untitled Group') : 'New Group'}
+            </span>
+          ) : (
+            <h1 className="text-2xl font-serif font-bold text-ink uppercase tracking-tight">
+              {id ? `Edit ${name || 'Group'}` : 'New Unique Option Group'}
+            </h1>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {/* Delete Group is admin-only — cascading deletes through
@@ -539,14 +589,13 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
               <Trash2 className="w-4 h-4" /> Delete Group
             </Button>
           )}
-          {/* Save / Create button: hidden in proposal mode for
-              existing groups (the wrapper's Submit Changes captures
-              the form via pre-flush). Kept for new groups so the
-              user gets a one-shot create flow with navigation to
-              /edit/:newId. */}
-          {(!isProposalMode || !id) && (
+          {/* Save / Create button: hidden in proposal mode once the
+              entity exists (either by route id OR by a locally-minted
+              pendingCreateId after the first Create). The wrapper's
+              Submit Changes covers subsequent edits via pre-flush. */}
+          {(!isProposalMode || !effectiveId) && (
             <Button onClick={(e) => handleSaveGroup(e as any)} disabled={loading} size="sm" className="btn-gold-solid gap-2">
-              <Save className="w-4 h-4" /> {id ? 'Save Changes' : 'Create Group'}
+              <Save className="w-4 h-4" /> {effectiveId ? 'Save Changes' : 'Create Group'}
             </Button>
           )}
         </div>

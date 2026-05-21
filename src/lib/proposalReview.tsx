@@ -77,6 +77,85 @@ export function useProposalReview(): ProposalReviewData | null {
 }
 
 /**
+ * Helper for editor data-fetch effects. Returns the snake-case D1 row
+ * shape the editor should populate its form from when the proposal
+ * matches the entity being edited. Returns null when:
+ *   - Not in review mode (URL has no `?review` param).
+ *   - The proposal targets a different entity_type than `entityType`.
+ *   - The proposal targets a different entity_id than `entityId`
+ *     (single-work editors).
+ *
+ * Pass `entityId === null` for multi-work editors that want a match
+ * regardless of which row id is on the proposal (the editor will
+ * select the right row itself based on `reviewMode.entityId`).
+ *
+ * Delete proposals don't carry a `proposed_payload` — the user
+ * "proposed to remove" the snapshot. Returns `snapshotAtProposal` for
+ * delete operations so the editor shows what was being removed.
+ */
+export function resolveReviewPayload(
+  reviewMode: ProposalReviewData | null,
+  entityType: string,
+  entityId: string | null,
+): Record<string, any> | null {
+  if (!reviewMode) return null;
+  if (reviewMode.entityType !== entityType) return null;
+  if (entityId !== null && reviewMode.entityId !== entityId) return null;
+  if (reviewMode.operation === 'delete') return reviewMode.snapshotAtProposal;
+  return reviewMode.proposedPayload;
+}
+
+/**
+ * Hook helper for editor fields: returns true when the given column
+ * key (snake_case D1 column name) is in the proposal's changedFields
+ * set, i.e. the proposed value differs from the snapshot.
+ *
+ * Returns false outside review mode so callers can use the boolean
+ * to drive a one-liner highlight without branching on `reviewMode`.
+ *
+ * Editors that store data in camelCase need to translate to snake_case
+ * at the call site (e.g. `useFieldChanged('hit_die')` for `hitDie`).
+ */
+export function useFieldChanged(columnKey: string): boolean {
+  const review = useContext(ProposalReviewContext);
+  if (!review) return false;
+  return review.changedFields.has(columnKey);
+}
+
+/**
+ * Lightweight wrapper that highlights its child container when the
+ * given column key was changed by the proposal. Use to wrap a field
+ * (label + input) so reviewers can spot the diff at a glance.
+ *
+ * Renders nothing extra outside review mode or when the column wasn't
+ * changed — the children pass through inside a plain <div>.
+ */
+export function ReviewFieldHighlight({
+  columnKey,
+  children,
+  className,
+}: {
+  columnKey: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const changed = useFieldChanged(columnKey);
+  const wrapperClass = changed
+    ? `relative pl-3 border-l-2 border-gold/60 bg-gold/5 rounded-r-md py-2 pr-2 ${className ?? ''}`
+    : (className ?? undefined);
+  return (
+    <div className={wrapperClass} data-review-changed={changed || undefined}>
+      {changed && (
+        <span className="inline-block mb-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-gold/20 text-gold rounded">
+          Changed
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/**
  * Provider mounted at App-level so every route can opt-in via the
  * hook. Reads `?review=<id>` from the URL, fetches the proposal once
  * per id change, exposes the hydrated data via context.

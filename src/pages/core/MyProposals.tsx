@@ -34,6 +34,7 @@ import {
 import { useBlock } from '../../lib/proposalBlock';
 import { BlockMetadataDialog } from '../../components/proposals/BlockMetadataDialog';
 import { PickOrCreateBlockDialog } from '../../components/proposals/PickOrCreateBlockDialog';
+import { SubclassPickerDialog } from '../../components/proposals/SubclassPickerDialog';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import {
   Dialog,
@@ -451,6 +452,17 @@ type LauncherEntry = {
   href: string;
   icon: any;
   status: 'ready' | 'coming-soon';
+  /**
+   * Optional click-time picker. When set, clicking the launcher
+   * opens this picker INSTEAD of navigating to `href` directly —
+   * the picker resolves to a final href and then the normal
+   * block-picker + navigation flow runs against that.
+   *
+   * Use case: Subclass entries need a class picked up front (and,
+   * for edit, a subclass within that class) so the editor opens
+   * with the right context.
+   */
+  picker?: 'subclass-create' | 'subclass-edit';
 };
 
 function LauncherGrid({
@@ -472,6 +484,17 @@ function LauncherGrid({
   // the editor — except when skipBlockPicker is true (in-block popup
   // mode, where the active block is already resolved).
   const [pendingEntry, setPendingEntry] = useState<LauncherEntry | null>(null);
+  // Custom picker state — set when the launcher entry has a `picker`
+  // field that needs to resolve before we know the final navigation
+  // href (subclass create/edit need a class chosen first).
+  const [subclassPicker, setSubclassPicker] = useState<{
+    mode: 'create' | 'edit';
+    /** Bound to the launcher entry that triggered the picker, so the
+     *  resolved href can flow through the existing block-picker gate
+     *  (when applicable) without losing track of the launcher's
+     *  block-picker-skip preference. */
+    skipBlockPickerForResolved: boolean;
+  } | null>(null);
   const { openBlocks, setActiveBlock, startBlock } = useBlock();
   const navigate = useNavigate();
 
@@ -482,12 +505,44 @@ function LauncherGrid({
   };
 
   const handleClick = (editor: LauncherEntry) => {
+    // Custom picker case — open the subclass picker first; defer the
+    // block-picker step until AFTER the user resolves an href.
+    if (editor.picker === 'subclass-create') {
+      setSubclassPicker({ mode: 'create', skipBlockPickerForResolved: skipBlockPicker });
+      return;
+    }
+    if (editor.picker === 'subclass-edit') {
+      setSubclassPicker({ mode: 'edit', skipBlockPickerForResolved: skipBlockPicker });
+      return;
+    }
     if (skipBlockPicker) {
       navigate(editor.href);
       onNavigated?.();
       return;
     }
     setPendingEntry(editor);
+  };
+
+  // Called by SubclassPickerDialog once the user has picked everything
+  // it needs — `href` is the fully-resolved /proposals/edit/subclasses/
+  // {new|edit/<id>} url. From here we run the standard block-picker
+  // gate (or skip it if the caller opted in) so the rest of the flow
+  // mirrors a plain href-only launcher click.
+  const handleSubclassPicked = (href: string) => {
+    const skipBP = subclassPicker?.skipBlockPickerForResolved ?? false;
+    setSubclassPicker(null);
+    if (skipBP) {
+      navigate(href);
+      onNavigated?.();
+      return;
+    }
+    setPendingEntry({
+      title: 'Subclass',
+      description: '',
+      href,
+      icon: () => null,
+      status: 'ready',
+    });
   };
 
   const handlePick = (bundleId: string) => {
@@ -572,6 +627,14 @@ function LauncherGrid({
         onCreate={handleCreate}
         title={pendingEntry ? `${pendingEntry.title} — pick a block` : 'Pick a block'}
         description="Your edits in this editor will be saved to the block you pick. Choose an existing block or create a new one."
+      />
+      <SubclassPickerDialog
+        open={!!subclassPicker}
+        onOpenChange={(open) => {
+          if (!open) setSubclassPicker(null);
+        }}
+        mode={subclassPicker?.mode ?? 'create'}
+        onPicked={handleSubclassPicked}
       />
     </>
   );
@@ -660,6 +723,17 @@ const CREATE_ENTRIES: LauncherEntry[] = [
     status: 'ready',
   },
   {
+    title: 'Subclasses',
+    // Subclasses are nested under a parent class. Picker opens first
+    // so the user binds the class up front rather than navigating
+    // into the class editor and finding the subclasses tab.
+    description: 'Draft a new subclass — pick the parent class first, then fill in spellcasting, advancements, lore.',
+    href: '/proposals/edit/subclasses/new',
+    icon: Swords,
+    status: 'ready',
+    picker: 'subclass-create',
+  },
+  {
     title: 'Feats',
     description: 'Author a new feat — feat type, prerequisites, repeatable flag, uses, activities, effects.',
     href: '/proposals/edit/feats',
@@ -723,6 +797,17 @@ const EDIT_ENTRIES: LauncherEntry[] = [
     href: '/proposals/edit/classes',
     icon: Swords,
     status: 'ready',
+  },
+  {
+    title: 'Subclasses',
+    // Two-step picker: choose parent class first, then pick the
+    // subclass within it. Saves a couple of clicks vs. navigating
+    // into ClassEditor's subclasses tab.
+    description: 'Pick a class then the subclass you want to edit. Skips the parent ClassEditor entirely.',
+    href: '/proposals/edit/subclasses',
+    icon: Swords,
+    status: 'ready',
+    picker: 'subclass-edit',
   },
   {
     title: 'Feats',
@@ -876,6 +961,12 @@ function BlockPanel() {
           })}
         </ul>
       )}
+      <BlockMetadataDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        mode="create"
+        onSubmit={handleCreate}
+      />
       <BlockMetadataDialog
         open={renameOpen}
         onOpenChange={setRenameOpen}
