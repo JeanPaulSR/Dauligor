@@ -931,6 +931,33 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
 
   useEffect(() => {
     if (!editingId) return;
+    // Prefer the queued/drafted payload over the live row when the user
+    // has work-in-progress for this entity in the active block. Two
+    // cases this covers:
+    //   1. Brand-new CREATE — the live row doesn't exist yet, only the
+    //      queue/draft does. fetchSpell would return null and leave the
+    //      form whatever it was; the user sees blank fields.
+    //   2. UPDATE — the user has unsaved-to-D1 edits; loading from the
+    //      live row would silently overwrite their work.
+    // Mirrors the single-work editor pattern (ClassEditor lines 775–787).
+    // The cache hit below is consulted FIRST because spellDetailsById
+    // gets pre-seeded after a successful save (see post-save refresh in
+    // handleSave), so a freshly-created spell can be reloaded by clicking
+    // off and back without losing its data.
+    const draftedOverlay = draftedSpellEntities.byId.get(editingId);
+    if (draftedOverlay && !spellDetailsById[editingId]) {
+      // Seed the cache from the queue so the existing cache-hit branch
+      // below picks it up. denormalizeCompendiumData converts the snake_
+      // case D1 shape that lives in the queue to the camelCase the form
+      // expects. (The queue's payload IS already snake_case because
+      // applyProposalWrite stores what was sent to writer.create.)
+      setSpellDetailsById((current) => ({
+        ...current,
+        [editingId]: denormalizeCompendiumData(draftedOverlay),
+      }));
+      // Don't return — fall through so the cache-hit branch runs in
+      // this same effect tick (the setState above is async).
+    }
     if (spellDetailsById[editingId]) {
       const entry = spellDetailsById[editingId];
       const system = parseFoundrySystemForEditor(entry.foundry_data ?? entry.foundryData);
@@ -1036,11 +1063,11 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     return () => {
       active = false;
     };
-  }, [editingId, sources, spellDetailsById]);
+  }, [editingId, sources, spellDetailsById, draftedSpellEntities]);
 
   // Proposal mode: clicking a different spell auto-stages the
   // currently-edited one into the active block before swapping the
-  // form to the new spell. This is what the "Submit Changes replaces
+  // form to the new spell. This is what the "Save Progress replaces
   // Save Spell" pattern needs — without it, the user's in-flight edits
   // would be lost the instant they click another row. Dirty detection
   // via lastLoadedFormRef avoids queuing redundant drafts when the
@@ -1182,6 +1209,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
           id: savedId,
           isCreate: wasCreate,
           silent: opts.silent,
+          submitNow: proposalContext?.submitNow,
         });
         // Sync the dirty baseline to the just-sent form so a
         // follow-up Submit Changes (or switch) doesn't re-queue the
@@ -1280,29 +1308,79 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     setDeleteConfirmOpen(true);
   };
 
+  // Delete a spell by id. Used by both performDelete (editor-toolbar
+  // delete on the currently-selected spell) and performDeleteFromList
+  // (the hover-revealed trash icon on a catalog row, which can target
+  // any spell — including one the user isn't currently editing).
+  const deleteSpellById = async (id: string, name: string) => {
+    if (isProposalMode) {
+      await spellWriter.remove(id);
+      toast.success(actionLabel(spellWriter.mode, 'deleted'));
+      // Auto-flush so the DELETE lands as a draft on the server
+      // immediately (matches the per-entity Save flow — user doesn't
+      // need a separate Save Progress click). The TombstoneRow + Undo
+      // affordance still works because the draft is in the same block.
+      if (proposalContext) {
+        await proposalContext.submitNow({ silent: true });
+      }
+    } else {
+      await deleteSpell(id);
+      toast.success(`Deleted "${name || 'spell'}"`);
+      // Refresh the live list so the row disappears.
+      const updatedData = await fetchSpellSummaries('name ASC');
+      setEntries(updatedData.map(mapSpellRow));
+    }
+  };
+
   const performDelete = async () => {
     if (!editingId) return;
     try {
-      if (isProposalMode) {
-        await spellWriter.remove(editingId);
-        toast.success(actionLabel(spellWriter.mode, 'deleted'));
-        // No live refresh needed — wrapper's pending-drafts panel
-        // shows the DELETE entry; the live spell is unchanged until
-        // admin approves.
-      } else {
-        await deleteSpell(editingId);
-        toast.success('Spell deleted');
-
-        // Refresh entries list
-        const updatedData = await fetchSpellSummaries('name ASC');
-        setEntries(updatedData.map(mapSpellRow));
-      }
+      await deleteSpellById(editingId, formData.name || '');
       resetForm();
     } catch (error) {
       console.error('Error deleting spell:', error);
       toast.error('Failed to delete spell');
       reportClientError(error, OperationType.DELETE, `spells/${editingId}`);
       throw error; // keep the ConfirmDialog open on failure
+    }
+  };
+
+  // Sidebar-row delete (per-row hover trash icon).
+  // - Proposal mode: queues a DELETE + auto-flushes; the row immediately
+  //   re-renders as a TombstoneRow with Undo, so no confirm dialog
+  //   needed (the undo IS the confirm).
+  // - Admin mode: routes through the existing performDelete confirm
+  //   so the destructive action gets an explicit OK click.
+  const [adminListDeleteTarget, setAdminListDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const handleDeleteFromList = async (entry: SpellSummaryRecord) => {
+    const name = String(entry.name || 'Untitled Spell');
+    if (isProposalMode) {
+      try {
+        await deleteSpellById(String(entry.id), name);
+        // If the user happened to have this spell selected in the
+        // editor, clear it so the disabled tombstone-form doesn't
+        // hang around.
+        if (editingId === entry.id) resetForm();
+      } catch (error) {
+        console.error('Error queueing spell delete:', error);
+        toast.error('Failed to queue delete');
+        reportClientError(error, OperationType.DELETE, `spells/${entry.id}`);
+      }
+      return;
+    }
+    setAdminListDeleteTarget({ id: String(entry.id), name });
+  };
+  const performAdminListDelete = async () => {
+    if (!adminListDeleteTarget) return;
+    try {
+      await deleteSpellById(adminListDeleteTarget.id, adminListDeleteTarget.name);
+      if (editingId === adminListDeleteTarget.id) resetForm();
+      setAdminListDeleteTarget(null);
+    } catch (error) {
+      console.error('Error deleting spell from list:', error);
+      toast.error('Failed to delete spell');
+      reportClientError(error, OperationType.DELETE, `spells/${adminListDeleteTarget.id}`);
+      throw error;
     }
   };
 
@@ -1599,13 +1677,24 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                   // block (or queued locally). Replaces the wrapper's
                   // "In this block" panel — see ProposalEditorWrapper.
                   const drafted = focusModeEnabled && draftedSpellIds.has(String(entry.id));
+                  // Row is a div (not a button) so the hover-revealed
+                  // trash icon can sit inside without nesting <button>
+                  // elements (invalid HTML). Keyboard a11y is preserved
+                  // via role/tabIndex/onKeyDown.
                   return (
-                    <button
+                    <div
                       key={entry.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => startEditing(entry)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          startEditing(entry);
+                        }
+                      }}
                       className={cn(
-                        'grid h-[36px] w-full gap-2 items-center px-3 text-left transition-colors border-b border-gold/5',
+                        'group relative grid h-[36px] w-full gap-2 items-center px-3 text-left transition-colors border-b border-gold/5 cursor-pointer focus:outline-none focus:bg-gold/5',
                         selected
                           ? 'bg-gold/10'
                           : drafted
@@ -1632,7 +1721,27 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       <span className="text-[10px] font-bold text-gold/80 text-center truncate">
                         {srcAbbrev}
                       </span>
-                    </button>
+                      {/* Hover-revealed delete affordance. Sits over the
+                          source-abbrev cell on hover (the row is dense;
+                          stealing 52px would shrink the name column).
+                          Proposal mode: one click queues the DELETE +
+                          auto-flushes; the row re-renders as TombstoneRow
+                          with Undo, so no confirm dialog. Admin mode:
+                          opens the explicit confirm dialog defined below
+                          since the delete is permanent. */}
+                      <button
+                        type="button"
+                        aria-label={`Delete ${entry.name || 'spell'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDeleteFromList(entry);
+                        }}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity rounded p-1 text-blood/70 hover:text-blood hover:bg-blood/10 focus:outline-none focus:ring-1 focus:ring-blood/40"
+                        title={isProposalMode ? 'Queue delete (undoable until block submit)' : 'Delete spell'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   );
                 }}
               />
@@ -2472,6 +2581,18 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       confirmLabel="Delete"
       destructive
       onConfirm={performDelete}
+    />
+    {/* Confirm dialog for the sidebar-row hover-trash button (admin
+        mode only — proposal mode queues the delete without confirm
+        because the TombstoneRow Undo serves as the rollback). */}
+    <ConfirmDialog
+      open={!!adminListDeleteTarget}
+      onOpenChange={(open) => { if (!open) setAdminListDeleteTarget(null); }}
+      title={`Delete "${adminListDeleteTarget?.name || 'this spell'}"?`}
+      description="This permanently deletes the spell from the live catalog."
+      confirmLabel="Delete"
+      destructive
+      onConfirm={performAdminListDelete}
     />
     {cascadeDep && cascadeDep.parentEntityType === 'tag' && cascadeDep.parentEntityId && (
       <TagReplacementPicker

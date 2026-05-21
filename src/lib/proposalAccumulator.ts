@@ -141,7 +141,7 @@ export type ProposalAccumulatorContextValue = {
    * Register a callback that runs JUST BEFORE the wrapper flushes the
    * queue to drafts. The callback can call `queueChange` to add
    * entries that reflect the editor's current form state — this is
-   * how Submit Changes replaces per-editor Save buttons. Returns a
+   * how Save Progress replaces per-editor Save buttons. Returns a
    * deregistration function the caller uses in its useEffect
    * cleanup.
    *
@@ -150,6 +150,25 @@ export type ProposalAccumulatorContextValue = {
    * wrapper awaits the entire sequence before draining.
    */
   registerPreFlush: (callback: () => Promise<void> | void) => () => void;
+  /**
+   * Convenience wrapper around the wrapper's Save-Progress handler.
+   * Editors call this from their per-entity Save (in proposal mode,
+   * non-silent) so the user doesn't have to click Save Progress
+   * separately after every edit — the change persists to the block's
+   * pending_revisions draft immediately.
+   *
+   * Behaviour mirrors the Save Progress button:
+   *   - Runs all pre-flush callbacks (so any in-flight form state
+   *     from OTHER editors lands in the same flush).
+   *   - Opens the block picker dialog if there's no active bundle
+   *     (caller doesn't need to handle that case).
+   *   - Posts the resulting queue to /api/proposals, dedupe-aware.
+   *
+   * Pass `silent: true` to skip the success toast — the editor's own
+   * per-entity Save toast already confirms the action, and emitting
+   * a second one ("Saved 1 change to the block") would be redundant.
+   */
+  submitNow: (opts?: { silent?: boolean }) => Promise<void>;
 };
 
 /**

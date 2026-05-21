@@ -375,6 +375,46 @@ export function ProposalEditorWrapper({
     [activeBundleId, drafts, refreshBlock],
   );
 
+  // Save Progress button handler (also called via `submitNow` from
+  // editors' per-entity Save in proposal mode — see context value).
+  // Declared BEFORE contextValue because the context exposes it as
+  // `submitNow`.
+  const handleSubmit = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = !!opts?.silent;
+      // Pre-flush registered → editor will capture form state at flush
+      // time, so an empty queue here is normal. Skip the "nothing to
+      // save" short-circuit and let flushToBundle decide (it returns
+      // `{ submitted: 0 }` if pre-flush ends up not queuing anything).
+      const canFlush = queue.length > 0 || preFlushCallbacks.current.size > 0;
+      if (!canFlush) {
+        if (!silent) toast.message('No queued changes to save.');
+        return;
+      }
+      if (!activeBundleId) {
+        // Refresh the open-blocks list so the picker is up to date.
+        void refreshOpenBlocks();
+        setPickerOpen(true);
+        return;
+      }
+      try {
+        const { submitted } = await flushToBundle(activeBundleId);
+        if (submitted === 0) {
+          if (!silent) toast.message('No changes to save.');
+          return;
+        }
+        if (!silent) {
+          toast.success(
+            `Saved ${submitted} change${submitted === 1 ? '' : 's'} to the block.`,
+          );
+        }
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to save progress.');
+      }
+    },
+    [queue.length, activeBundleId, flushToBundle, refreshOpenBlocks],
+  );
+
   const contextValue: ProposalAccumulatorContextValue = useMemo(
     () => ({
       queue,
@@ -391,6 +431,7 @@ export function ProposalEditorWrapper({
       focusMode,
       setFocusMode,
       registerPreFlush,
+      submitNow: handleSubmit,
     }),
     [
       queue,
@@ -406,39 +447,9 @@ export function ProposalEditorWrapper({
       enableFocusMode,
       focusMode,
       registerPreFlush,
+      handleSubmit,
     ],
   );
-
-  // Submit Changes button handler.
-  const handleSubmit = useCallback(async () => {
-    // Pre-flush registered → editor will capture form state at flush
-    // time, so an empty queue here is normal. Skip the "nothing to
-    // submit" short-circuit and let flushToBundle decide (it returns
-    // `{ submitted: 0 }` if pre-flush ends up not queuing anything).
-    const canFlush = queue.length > 0 || preFlushCallbacks.current.size > 0;
-    if (!canFlush) {
-      toast.message('No queued changes to submit.');
-      return;
-    }
-    if (!activeBundleId) {
-      // Refresh the open-blocks list so the picker is up to date.
-      void refreshOpenBlocks();
-      setPickerOpen(true);
-      return;
-    }
-    try {
-      const { submitted } = await flushToBundle(activeBundleId);
-      if (submitted === 0) {
-        toast.message('No changes to submit.');
-        return;
-      }
-      toast.success(
-        `Added ${submitted} change${submitted === 1 ? '' : 's'} to the block.`,
-      );
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to submit changes.');
-    }
-  }, [queue.length, activeBundleId, flushToBundle, refreshOpenBlocks]);
 
   // PickOrCreateBlockDialog callbacks.
   const handlePickerPick = useCallback(
@@ -447,10 +458,10 @@ export function ProposalEditorWrapper({
       try {
         const { submitted } = await flushToBundle(bundleId);
         toast.success(
-          `Added ${submitted} change${submitted === 1 ? '' : 's'} to the block.`,
+          `Saved ${submitted} change${submitted === 1 ? '' : 's'} to the block.`,
         );
       } catch (err: any) {
-        toast.error(err?.message || 'Failed to submit changes.');
+        toast.error(err?.message || 'Failed to save progress.');
       }
     },
     [setActiveBlock, flushToBundle],
@@ -497,11 +508,18 @@ export function ProposalEditorWrapper({
   //     click time, replacing per-editor Save buttons).
   const hasPreFlush = preFlushCallbacks.current.size > 0;
   const submitDisabled = submitting || (queue.length === 0 && !hasPreFlush);
+  // Button label is "Save Progress" — this stages everything currently
+  // queued (plus anything pre-flush callbacks emit at click time) into
+  // pending_revisions as drafts within the active block. The block
+  // itself is what later gets submitted for admin review; that's a
+  // separate action on the BlockPanel. User feedback (2026-05-21
+  // production test) showed "Submit Changes" was misread as "send to
+  // admin" — "Save Progress" matches the actual semantic.
   const submitLabel = submitting
-    ? 'Submitting…'
+    ? 'Saving…'
     : queue.length === 0
-      ? 'Submit Changes'
-      : `Submit ${queue.length} Change${queue.length === 1 ? '' : 's'}`;
+      ? 'Save Progress'
+      : `Save ${queue.length} Change${queue.length === 1 ? '' : 's'}`;
 
   return (
     <ProposalAccumulatorContext.Provider value={contextValue}>
@@ -619,7 +637,7 @@ function ProposalEditorHeader({
             </p>
           ) : (
             <p className="text-xs text-ink/60 italic">
-              No active block. Submit Changes will prompt to pick or create one.
+              No active block. Save Progress will prompt to pick or create one.
             </p>
           )}
         </div>

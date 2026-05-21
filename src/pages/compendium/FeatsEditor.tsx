@@ -560,6 +560,20 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
   // pulls a full row.
   useEffect(() => {
     if (!editingId) return;
+    // Prefer the queued/drafted payload over the live row when the user
+    // has work-in-progress for this feat in the active block. Covers
+    // brand-new CREATEs (no live row, only queue/draft) AND UPDATEs
+    // (loading the live row would clobber the user's pending edits).
+    // Mirrors the SpellsEditor + ClassEditor pattern.
+    const draftedOverlay = draftedFeatEntities.byId.get(editingId);
+    if (draftedOverlay && !featDetailsById[editingId]) {
+      setFeatDetailsById((current) => ({
+        ...current,
+        [editingId]: denormalizeCompendiumData(draftedOverlay),
+      }));
+      // Fall through so the cache-hit branch picks up the seed in the
+      // same effect tick.
+    }
     const cached = featDetailsById[editingId];
     if (cached) {
       const defaults = makeInitialFeatForm(sources);
@@ -629,7 +643,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
     return () => {
       active = false;
     };
-  }, [editingId, sources, featDetailsById]);
+  }, [editingId, sources, featDetailsById, draftedFeatEntities]);
 
   // Proposal mode: switching to a different feat auto-stages the
   // outgoing one into the active block before loading the new
@@ -743,6 +757,7 @@ export default function FeatsEditor({ userProfile }: { userProfile: any }) {
           id: entryId,
           isCreate: wasCreate,
           silent: opts.silent,
+          submitNow: proposalContext?.submitNow,
         });
         // Sync the dirty baseline to the just-saved form so a
         // follow-up Submit Changes (or switch) doesn't re-queue the

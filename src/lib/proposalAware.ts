@@ -249,19 +249,38 @@ function capitalize(s: string): string {
  * work or catalog). Single-work editors typically do:
  *
  *   const isCreate = !effectiveId;
- *   await applyProposalWrite(writer, payload, { id: saveId, isCreate, silent });
+ *   await applyProposalWrite(writer, payload, {
+ *     id: saveId,
+ *     isCreate,
+ *     silent,
+ *     submitNow: proposalContext?.submitNow,
+ *   });
  *   if (isCreate) recordCreate(saveId);
  *
  * Catalog editors do the same minus `recordCreate` (they call
  * `setEditingId(saveId)` instead).
  *
+ * Auto-flush: pass `proposalContext.submitNow` in `opts.submitNow` and
+ * the helper calls it after queueing (silently — the per-entity toast
+ * is the user-visible confirmation). This collapses "Save Spell" +
+ * "Save Progress" into one click — see the user-feedback note in
+ * docs/handoff-post-dry-pass-2026-05-21.md (Prod #5). When the helper
+ * is called from a silent path (pre-flush, auto-stage-on-switch) the
+ * flush is skipped automatically because the wrapper's own flushToBundle
+ * is what's calling us in the first place.
+ *
  * Errors propagate; the helper catches nothing. The wrapper's queue
- * surfaces them via its own toast on Submit Changes failure.
+ * surfaces submit failures via submitNow's own error toast.
  */
 export async function applyProposalWrite(
   writer: WriterApi,
   payload: Record<string, any>,
-  opts: { id: string; isCreate: boolean; silent?: boolean },
+  opts: {
+    id: string;
+    isCreate: boolean;
+    silent?: boolean;
+    submitNow?: (opts?: { silent?: boolean }) => Promise<void>;
+  },
 ): Promise<void> {
   if (opts.isCreate) {
     await writer.create({ ...payload, id: opts.id });
@@ -270,5 +289,17 @@ export async function applyProposalWrite(
   }
   if (!opts.silent) {
     toast.success(actionLabel(writer.mode, opts.isCreate ? 'created' : 'updated'));
+  }
+  // Auto-flush the wrapper queue to the active block so the change
+  // lands in pending_revisions immediately without the user needing
+  // a second click. Only when:
+  //   - we're not in a silent path (pre-flush would recurse), AND
+  //   - the caller wired the proposal context's submitNow through,
+  //     meaning we're inside a wrapper with the block lifecycle ready.
+  if (!opts.silent && opts.submitNow) {
+    // submitNow handles the "no active bundle" case by opening the
+    // block picker; that path is non-blocking from here (the picker
+    // will resume the flush when the user picks/creates a block).
+    await opts.submitNow({ silent: true });
   }
 }

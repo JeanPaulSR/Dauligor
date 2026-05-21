@@ -297,6 +297,7 @@ export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: 
           id: targetId,
           isCreate,
           silent: opts.silent,
+          submitNow: proposalContext?.submitNow,
         });
         if (isCreate) recordCreate(targetId);
         // Proposal mode stays on /new after Create — navigating would

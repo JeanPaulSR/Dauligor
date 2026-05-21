@@ -1247,6 +1247,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           id: saveId,
           isCreate,
           silent: opts.silent,
+          submitNow: proposalContext?.submitNow,
         });
         if (isCreate) recordCreate(saveId);
       } else {

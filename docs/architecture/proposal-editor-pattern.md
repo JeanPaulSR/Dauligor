@@ -20,7 +20,7 @@ Every wired editor renders for **both** routes:
 | Route | Wrapper | Writer behavior |
 |---|---|---|
 | `/compendium/<thing>/manage` (admin direct) | none | `upsertDocument` fires immediately |
-| `/proposals/edit/<thing>` (content-creator) | [`<ProposalEditorWrapper>`](../../src/components/proposals/ProposalEditorWrapper.tsx) | `writer.create/update/remove` queues locally; `Submit Changes` flushes to `pending_revisions` |
+| `/proposals/edit/<thing>` (content-creator) | [`<ProposalEditorWrapper>`](../../src/components/proposals/ProposalEditorWrapper.tsx) | `writer.create/update/remove` queues locally; `Save Progress` flushes to `pending_revisions` (per-entity Save also auto-flushes — see "Auto-flush on Save" below) |
 
 The editor doesn't branch on route. It branches on the **writer mode** that [`useProposalAccumulator`](../../src/lib/proposalAccumulator.ts) returns:
 
@@ -39,7 +39,7 @@ Three layers of state stack on top of the live D1 row. Each layer can hold a dif
 
 ```
 queue                — in-memory, current session, in <ProposalEditorWrapper> useState
-  ↓ Submit Changes
+  ↓ Save Progress
 drafts               — server-side pending_revisions rows with status='draft', per active block
   ↓ user submits block
 pending revisions    — pending_revisions rows with status='pending', admin queue
@@ -80,7 +80,7 @@ Three callsites all have this fallback (skipping any one will silently break the
 | File | Function | Symptom if missing |
 |---|---|---|
 | [proposalAccumulator.ts](../../src/lib/proposalAccumulator.ts) | `getDraftedEntities` | Freshly-submitted CREATE drafts vanish from editor lists |
-| [proposalAccumulator.ts](../../src/lib/proposalAccumulator.ts) | `postQueuedChanges` (DELETE-of-CREATE-draft path AND UPDATE-patch path) | `Submit Changes` 404s with "Cannot propose delete/update on missing $entity" + queue gets stuck |
+| [proposalAccumulator.ts](../../src/lib/proposalAccumulator.ts) | `postQueuedChanges` (DELETE-of-CREATE-draft path AND UPDATE-patch path) | `Save Progress` 404s with "Cannot propose delete/update on missing $entity" + queue gets stuck |
 | [ProposalEditorWrapper.tsx](../../src/components/proposals/ProposalEditorWrapper.tsx) | `dropEntity` | Tombstone Undo doesn't clear server-side CREATE drafts |
 
 ---
@@ -124,7 +124,34 @@ Notes:
 
 The row renderer then switches on `__pendingDelete` to render [`<TombstoneRow>`](../../src/components/proposals/TombstoneRow.tsx) instead of the normal row, with an Undo that calls `proposalContext.dropEntity(id)`.
 
-### Catalog filter / unlock support hooks
+### Auto-flush on Save (per-entity → queue → server-draft in one click)
+
+User feedback from the 2026-05-21 production test showed that clicking
+"Save Spell" inside the editor and THEN having to click "Save Progress"
+on the wrapper felt redundant — the user's mental model is "I saved
+the spell". To collapse the two clicks into one, [`applyProposalWrite`](../../src/lib/proposalAware.ts)
+takes an optional `submitNow` callback that, when present, runs the
+wrapper's flush automatically after queueing.
+
+```ts
+await applyProposalWrite(spellWriter, prepared, {
+  id: savedId,
+  isCreate: wasCreate,
+  silent: opts.silent,
+  // Wire the wrapper's submitNow so per-entity Save flushes the queue
+  // (silent: pre-flush + auto-stage paths skip the auto-flush because
+  // they're already running inside flushToBundle — see the helper).
+  submitNow: proposalContext?.submitNow,
+});
+```
+
+The wrapper's `Save Progress` button still exists — it covers the
+batch case where the user makes multiple edits (typed-but-not-saved
+auto-stages) and wants to flush them together. After a per-entity
+Save, the wrapper's button gets a "(0 changes)" state because the
+queue is already empty.
+
+## Catalog filter / unlock support hooks
 
 | Hook | Purpose |
 |---|---|
@@ -172,7 +199,7 @@ When the editor loads with a route param `:id`, it should consult `getDraftedEnt
 
 ## Visual chrome that diverges in proposal mode
 
-The wrapper renders its own "PROPOSAL EDITOR | <entity>" header strip with the active block name + Submit Changes button. Editors must NOT also render a duplicate page-title chrome in proposal mode.
+The wrapper renders its own "PROPOSAL EDITOR | <entity>" header strip with the active block name + Save Progress button. Editors must NOT also render a duplicate page-title chrome in proposal mode.
 
 Use [`<ProposalAwareEditorHeader>`](../../src/components/proposals/ProposalAwareEditorHeader.tsx) to render the slim/h1 conditional header. The component locks the proposal-mode container className in one place — every editor needs the exact same `flex items-center justify-between gap-2 pb-2 border-b border-gold/10` and drift between them was a real source of bugs.
 
@@ -216,7 +243,7 @@ If you add a new full-bleed editor, add `spell-list-fullscreen` to its mount eff
 
 | Component | File | Purpose |
 |---|---|---|
-| `<ProposalEditorWrapper>` | [src/components/proposals/ProposalEditorWrapper.tsx](../../src/components/proposals/ProposalEditorWrapper.tsx) | Hosts the queue + provides accumulator context. Renders the header strip + Submit Changes. |
+| `<ProposalEditorWrapper>` | [src/components/proposals/ProposalEditorWrapper.tsx](../../src/components/proposals/ProposalEditorWrapper.tsx) | Hosts the queue + provides accumulator context. Renders the header strip + Save Progress. |
 | `<TombstoneRow>` | [src/components/proposals/TombstoneRow.tsx](../../src/components/proposals/TombstoneRow.tsx) | Red strikethrough row decorator + Undo button for catalog editors |
 | `<DeletedEntityBanner>` | same file | Full banner variant for single-work editors above the disabled form |
 | `<ReviewBanner>` | [src/components/proposals/ReviewBanner.tsx](../../src/components/proposals/ReviewBanner.tsx) | Header shown when the URL has `?review=<id>`, with operation badge + rejection reason |

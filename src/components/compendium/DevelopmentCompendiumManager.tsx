@@ -409,6 +409,7 @@ export default function DevelopmentCompendiumManager({
           id: entryId,
           isCreate: wasCreate,
           silent: opts.silent,
+          submitNow: proposalContext?.submitNow,
         });
         // Sync the dirty baseline to the just-sent form so a follow-
         // up Submit Changes (or switch) doesn't re-queue the same
