@@ -4,6 +4,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Edit3, Plus, Save, Search, Tras
 import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
+import RuleMembershipPanel from '../../components/compendium/RuleMembershipPanel';
 import { FilterBar, AxisFilterSection, TagGroupFilter, matchesTagFilters } from '../../components/compendium/FilterBar';
 import {
   matchesSingleAxisFilter,
@@ -2627,6 +2628,20 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                       <span className="ml-1 text-gold/70">({formData.requiredTags.length})</span>
                     )}
                   </TabsTrigger>
+                  {/* Rule Membership tab — admin-only surface to pin
+                      this spell into / unpin it from spell rules
+                      directly, without bouncing to the rule editor.
+                      Sits on the spell side of the relationship; the
+                      SpellListManager side has the same affordance
+                      per class. Content-creators see the panel but
+                      not the edit affordances (the Add/Remove buttons
+                      are gated by canEdit below). */}
+                  <TabsTrigger
+                    value="rules"
+                    className="h-7 rounded-md border border-gold/15 bg-background/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-ink/65 data-active:border-gold/40 data-active:bg-gold/10 data-active:text-gold"
+                  >
+                    Rules
+                  </TabsTrigger>
                 </TabsList>
               </div>
 
@@ -2662,6 +2677,24 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
                     Free-text fallback for prereqs that can't be expressed as a tag check. Displayed on the spell card; not machine-checked.
                   </p>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="rules" className="mt-0 flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3">
+                {/* Rule Membership panel — admin-only edit affordances.
+                    Content-creators see the read-only listing but
+                    can't Add/Remove (rule edits aren't part of the
+                    content-proposal queue today). */}
+                {editingId ? (
+                  <RuleMembershipPanel
+                    spellId={editingId}
+                    canEdit={isAdmin}
+                  />
+                ) : (
+                  <div className="text-xs text-ink/40 italic">
+                    Save this spell first — rule membership wires up
+                    to the spell's persisted id.
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>
