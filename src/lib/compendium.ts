@@ -512,27 +512,12 @@ export async function upsertSpell(
   // Tag-driven recompute: a spell save can flip which rules now
   // include/exclude this spell (tag change, level change, school
   // change). Walk every class-applied rule and update the matching
-  // `class_spell_lists` rows. With the spell list served live by
-  // `/api/module/<source>/classes/<class>/spells.json` (60s HTTP
-  // cache), this propagates to the Foundry importer on the next
-  // import — no class rebake needed.
-  //
-  // Bulk paths (import workbench, batch upserts) pass
-  // `skipRuleRecompute: true` and trigger a single rebuild after
-  // the loop instead — see `upsertSpellBatch`.
-  if (!options.skipRuleRecompute) {
-    try {
-      const { recomputeAppliedRulesForSpell } = await import('./spellRules');
-      await recomputeAppliedRulesForSpell(id);
-    } catch (err) {
-      // Recompute is best-effort — never block a save on it. The
-      // user can manually rebuild from the SpellListManager if a
-      // stale row sneaks through. Logged so we notice systemic
-      // failures.
-      // eslint-disable-next-line no-console
-      console.warn('[upsertSpell] rule recompute failed (save succeeded)', err);
-    }
-  }
+  // No post-save recompute needed in the resolver world — the next
+  // read of any consumer's spell list goes through
+  // `getCachedOrCompute`, which re-evaluates rule contributions
+  // against the fresh spell row. The `skipRuleRecompute` option on
+  // the input shape is left as a no-op for callers that still pass
+  // it; remove it in a follow-up sweep once nothing references it.
 
   return result;
 }

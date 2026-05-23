@@ -26,7 +26,6 @@ import {
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
 import { Inbox, Check, X, AlertTriangle, Undo2, ChevronRight, ChevronLeft, Tags as TagsIcon, ListChecks, Sparkles, Layers, BookOpen, Wand2, Shield, Award, Star, Package, Boxes, Repeat } from 'lucide-react';
-import { recomputeAppliedRulesForSpell } from '../../lib/spellRules';
 import { formatSqliteLocal } from '../../lib/sqliteTimestamps';
 
 type EntityType =
@@ -347,20 +346,11 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
       // recompute the rule-driven class_spell_lists rows that
       // reference it. Same call admin's direct upsertSpell makes —
       // without it, a tag/level/school change approved via the queue
-      // would leave the class lists stale (the user's stated problem
-      // with "constant battle to update them"). Best-effort: a
-      // failure here logs but doesn't unwind the approval.
-      const touchedSpellId =
-        proposal.entity_type === 'spell'
-          ? (body?.entity_id as string | undefined) || proposal.entity_id || undefined
-          : undefined;
-      if (touchedSpellId) {
-        try {
-          await recomputeAppliedRulesForSpell(touchedSpellId);
-        } catch (err) {
-          console.warn('[AdminProposals] post-approve spell recompute failed:', err);
-        }
-      }
+      // Post-approve recompute (recomputeAppliedRulesForSpell) was
+      // removed in phase 4.4. The resolver path (P4.0-4.3) reads
+      // applied-rule state at request time, so an approved spell
+      // change is visible on the next consumer-list read without
+      // any class_spell_lists refresh step.
       setSelected(null);
       void reloadCurrent();
     } catch (err: any) {
@@ -449,16 +439,8 @@ export default function AdminProposals({ userProfile }: { userProfile: any }) {
         throw new Error(err.error || `Failed to revert (HTTP ${res.status})`);
       }
       toast.success('Proposal reverted; rollback logged as a new approved revision.');
-      // Same post-write recompute as approve — a revert that rolls
-      // back a spell to its pre-approval state can flip which rules
-      // include/exclude it just like the original approval did.
-      if (proposal.entity_type === 'spell' && proposal.entity_id) {
-        try {
-          await recomputeAppliedRulesForSpell(proposal.entity_id);
-        } catch (err) {
-          console.warn('[AdminProposals] post-revert spell recompute failed:', err);
-        }
-      }
+      // Post-revert recompute was removed in phase 4.4 — same
+      // rationale as post-approve above.
       setSelected(null);
       void reloadCurrent();
     } catch (err: any) {
