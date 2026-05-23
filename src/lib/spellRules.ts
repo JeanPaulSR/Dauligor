@@ -69,6 +69,25 @@ export type SpellRule = {
    */
   query: RuleClauseRoot;
   manualSpells: string[];
+  /**
+   * Spell ids that would otherwise be in this rule's contribution
+   * (either matched by query or listed in manualSpells) but should
+   * be subtracted out. Added by migration 20260523-1500. Companion
+   * to manualSpells, inverting its logic — "include despite query
+   * miss" vs "exclude despite query hit (or manual hit)."
+   *
+   * Effective rule contribution:
+   *     contribution = matches(query) ∪ manualSpells − manualExclusions
+   *
+   * Surfaces in the "Rule Membership" panel in SpellsEditor: when an
+   * admin clicks "Remove from rule" on a query-matched row, the spell
+   * id is pushed here rather than the query being edited (which would
+   * affect every matched spell, not just the one).
+   *
+   * Always an array; never null in TypeScript even though the DB
+   * column is nullable for legacy rule rows.
+   */
+  manualExclusions: string[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -87,7 +106,8 @@ export type SpellRuleApplication = {
 
 export async function fetchAllRules(): Promise<SpellRule[]> {
   const rows = await queryD1<any>(
-    `SELECT id, name, description, query, manual_spells, created_at, updated_at
+    `SELECT id, name, description, query, manual_spells, manual_exclusions,
+            created_at, updated_at
      FROM spell_rules
      ORDER BY name COLLATE NOCASE ASC`,
   );
@@ -96,7 +116,8 @@ export async function fetchAllRules(): Promise<SpellRule[]> {
 
 export async function fetchRule(id: string): Promise<SpellRule | null> {
   const rows = await queryD1<any>(
-    `SELECT id, name, description, query, manual_spells, created_at, updated_at
+    `SELECT id, name, description, query, manual_spells, manual_exclusions,
+            created_at, updated_at
      FROM spell_rules WHERE id = ? LIMIT 1`,
     [id],
   );
@@ -113,19 +134,35 @@ export async function saveRule(rule: {
   // can pass the wider shape without casting.
   query: RuleClauseRoot;
   manualSpells: string[];
+  // Optional on the input shape so existing call sites that haven't
+  // adopted the new column compile unchanged. The DB column defaults
+  // to NULL; we serialise an empty array when the caller omits it
+  // so reads always see a well-formed JSON array.
+  manualExclusions?: string[];
 }): Promise<string> {
   const id = rule.id || crypto.randomUUID();
   const now = new Date().toISOString();
   await queryD1(
-    `INSERT INTO spell_rules (id, name, description, query, manual_spells, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO spell_rules (id, name, description, query, manual_spells,
+                               manual_exclusions, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        description = excluded.description,
        query = excluded.query,
        manual_spells = excluded.manual_spells,
+       manual_exclusions = excluded.manual_exclusions,
        updated_at = excluded.updated_at`,
-    [id, rule.name, rule.description || '', JSON.stringify(rule.query), JSON.stringify(rule.manualSpells), now, now],
+    [
+      id,
+      rule.name,
+      rule.description || '',
+      JSON.stringify(rule.query),
+      JSON.stringify(rule.manualSpells),
+      JSON.stringify(rule.manualExclusions ?? []),
+      now,
+      now,
+    ],
   );
   return id;
 }
@@ -157,7 +194,8 @@ export async function fetchAppliedRulesFor(
   consumerId: string,
 ): Promise<SpellRule[]> {
   const rows = await queryD1<any>(
-    `SELECT r.id, r.name, r.description, r.query, r.manual_spells, r.created_at, r.updated_at
+    `SELECT r.id, r.name, r.description, r.query, r.manual_spells,
+            r.manual_exclusions, r.created_at, r.updated_at
      FROM spell_rules r
      JOIN spell_rule_applications a ON a.rule_id = r.id
      WHERE a.applies_to_type = ? AND a.applies_to_id = ?
@@ -638,6 +676,10 @@ function deserializeRule(row: any): SpellRule {
     description: row.description || '',
     query: parseJsonObject(row.query) as RuleClauseRoot,
     manualSpells: parseJsonArray(row.manual_spells).map(String),
+    // manual_exclusions is NULL on legacy rule rows (added by migration
+    // 20260523-1500). parseJsonArray returns [] for null/empty so the
+    // type assertion `string[]` is always honoured at the TS level.
+    manualExclusions: parseJsonArray(row.manual_exclusions).map(String),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -667,4 +709,220 @@ function parseJsonArray(raw: any): any[] {
     try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; }
   }
   return [];
+}
+
+// ---------------------------------------------------------------------------
+// Rule membership from a spell's perspective
+// ---------------------------------------------------------------------------
+//
+// These helpers power the "Rule Membership" panel in SpellsEditor:
+// given a spell, what rules currently include it (and how), what rules
+// could it be added to, and the four CRUD primitives the panel needs to
+// flip a spell's membership in a rule's manual_spells / manual_exclusions
+// arrays.
+//
+// The membership probe (`getRuleMembershipForSpell`) runs the same
+// matcher the resolver uses, so "via: 'query'" and "via: 'manual'" are
+// directly comparable to what the resolver computes when it builds a
+// consumer's spell list. A spell that lives in a rule's
+// `manual_exclusions` is treated as NOT a member of that rule — the
+// exclusion wins regardless of how the spell would otherwise have
+// matched, mirroring `ruleContribution` in spellListResolver.ts.
+// ---------------------------------------------------------------------------
+
+export type RuleMembership = {
+  ruleId: string;
+  ruleName: string;
+  via: 'query' | 'manual';
+  /** Every consumer this rule is currently applied to. */
+  appliedTo: SpellRuleApplication[];
+};
+
+/**
+ * Probe every rule against one spell. Returns the rules that currently
+ * include it in their contribution, with the mechanism (`query` vs
+ * `manual`) and the full list of consumers that have the rule applied.
+ *
+ * Cost: O(rules), plus one all-spells fetch is avoided because we only
+ * need the one spell's facets + tags. Fine for the SpellsEditor panel
+ * (called on spell select, not in a tight loop).
+ */
+export async function getRuleMembershipForSpell(
+  spellId: string,
+): Promise<RuleMembership[]> {
+  const [spellRows, allRules, allApps, tagRows] = await Promise.all([
+    queryD1<any>(
+      `SELECT id, source_id, level, school, tags, foundry_data,
+              concentration, ritual,
+              components_vocal, components_somatic, components_material
+         FROM spells WHERE id = ? LIMIT 1`,
+      [spellId],
+    ),
+    fetchAllRules(),
+    queryD1<any>(
+      `SELECT id, rule_id, applies_to_type, applies_to_id, created_at
+         FROM spell_rule_applications`,
+    ),
+    fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' }),
+  ]);
+  if (spellRows.length === 0) return [];
+  const row = spellRows[0];
+  const facets = deriveSpellFilterFacets(row);
+  const tags = Array.isArray(row.tags)
+    ? row.tags.map((t: any) => String(t))
+    : (typeof row.tags === 'string' ? safeParseTagArray(row.tags) : []);
+  const spellInput: SpellMatchInput & { id: string } = {
+    ...facets,
+    id: String(row.id),
+    level: Number(row.level) || 0,
+    school: String(row.school ?? ''),
+    source_id: row.source_id ?? null,
+    tags,
+  };
+  const tagIndex = buildTagIndex(tagRows);
+
+  // Bucket applications by rule for the O(1) join below.
+  const appsByRuleId = new Map<string, SpellRuleApplication[]>();
+  for (const a of allApps) {
+    const list = appsByRuleId.get(String(a.rule_id)) ?? [];
+    list.push(deserializeApplication(a));
+    appsByRuleId.set(String(a.rule_id), list);
+  }
+
+  const result: RuleMembership[] = [];
+  for (const rule of allRules) {
+    // Exclusion wins — spell is in manual_exclusions → rule does NOT
+    // include it, regardless of query / manualSpells. Surfaces in the
+    // UI separately via getCandidateRulesForSpell (excluded rules are
+    // candidates because adding them via manualSpells un-excludes).
+    if (rule.manualExclusions.includes(spellId)) continue;
+    const inManual = rule.manualSpells.includes(spellId);
+    const queryMatches = !inManual
+      && matchAnyClause(spellInput, rule.query, tagIndex.parentByTagId, tagIndex);
+    if (!inManual && !queryMatches) continue;
+    result.push({
+      ruleId: rule.id,
+      ruleName: rule.name,
+      via: inManual ? 'manual' : 'query',
+      appliedTo: appsByRuleId.get(rule.id) ?? [],
+    });
+  }
+  return result;
+}
+
+/**
+ * Rules where this spell is NOT currently a member. Powers the
+ * "Add this spell to a rule…" picker — picking a candidate calls
+ * `addSpellToRuleManual` to push the spell into that rule's
+ * `manual_spells` array.
+ *
+ * Excluded-rule cases ARE candidates here: adding via the picker pops
+ * the spell out of `manual_exclusions` and pushes it into
+ * `manual_spells`, which is the user-friendly meaning of "include this
+ * spell in this rule."
+ */
+export async function getCandidateRulesForSpell(
+  spellId: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const matched = await getRuleMembershipForSpell(spellId);
+  const matchedIds = new Set(matched.map(m => m.ruleId));
+  const allRules = await fetchAllRules();
+  return allRules
+    .filter(r => !matchedIds.has(r.id))
+    .map(r => ({ id: r.id, name: r.name }));
+}
+
+/**
+ * Push a spell id into a rule's `manual_spells` array. Idempotent.
+ * Also removes the id from `manual_exclusions` if it was excluded,
+ * so the two arrays never carry the same id simultaneously.
+ */
+export async function addSpellToRuleManual(
+  spellId: string,
+  ruleId: string,
+): Promise<void> {
+  const rule = await fetchRule(ruleId);
+  if (!rule) throw new Error(`Rule ${ruleId} not found`);
+  const alreadyIncluded = rule.manualSpells.includes(spellId);
+  const wasExcluded = rule.manualExclusions.includes(spellId);
+  if (alreadyIncluded && !wasExcluded) return;
+  await saveRule({
+    id: rule.id,
+    name: rule.name,
+    description: rule.description,
+    query: rule.query,
+    manualSpells: alreadyIncluded ? rule.manualSpells : [...rule.manualSpells, spellId],
+    manualExclusions: wasExcluded
+      ? rule.manualExclusions.filter(id => id !== spellId)
+      : rule.manualExclusions,
+  });
+}
+
+/** Pop a spell id out of a rule's `manual_spells` array. Idempotent. */
+export async function removeSpellFromRuleManual(
+  spellId: string,
+  ruleId: string,
+): Promise<void> {
+  const rule = await fetchRule(ruleId);
+  if (!rule) throw new Error(`Rule ${ruleId} not found`);
+  if (!rule.manualSpells.includes(spellId)) return;
+  await saveRule({
+    id: rule.id,
+    name: rule.name,
+    description: rule.description,
+    query: rule.query,
+    manualSpells: rule.manualSpells.filter(id => id !== spellId),
+    manualExclusions: rule.manualExclusions,
+  });
+}
+
+/**
+ * Push a spell id into a rule's `manual_exclusions` array. Idempotent.
+ * Also pops the id out of `manual_spells` if it was manually added —
+ * a spell shouldn't appear in both arrays. Used by the "Remove from
+ * rule" button on query-matched rows in the SpellsEditor panel.
+ */
+export async function addRuleManualExclusion(
+  spellId: string,
+  ruleId: string,
+): Promise<void> {
+  const rule = await fetchRule(ruleId);
+  if (!rule) throw new Error(`Rule ${ruleId} not found`);
+  const alreadyExcluded = rule.manualExclusions.includes(spellId);
+  const wasManuallyIncluded = rule.manualSpells.includes(spellId);
+  if (alreadyExcluded && !wasManuallyIncluded) return;
+  await saveRule({
+    id: rule.id,
+    name: rule.name,
+    description: rule.description,
+    query: rule.query,
+    manualSpells: wasManuallyIncluded
+      ? rule.manualSpells.filter(id => id !== spellId)
+      : rule.manualSpells,
+    manualExclusions: alreadyExcluded
+      ? rule.manualExclusions
+      : [...rule.manualExclusions, spellId],
+  });
+}
+
+/**
+ * Pop a spell id out of a rule's `manual_exclusions` array. Idempotent.
+ * Used by the "Restore" / undo button in the SpellListManager
+ * exceptions surface.
+ */
+export async function removeRuleManualExclusion(
+  spellId: string,
+  ruleId: string,
+): Promise<void> {
+  const rule = await fetchRule(ruleId);
+  if (!rule) throw new Error(`Rule ${ruleId} not found`);
+  if (!rule.manualExclusions.includes(spellId)) return;
+  await saveRule({
+    id: rule.id,
+    name: rule.name,
+    description: rule.description,
+    query: rule.query,
+    manualSpells: rule.manualSpells,
+    manualExclusions: rule.manualExclusions.filter(id => id !== spellId),
+  });
 }

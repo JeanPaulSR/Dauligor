@@ -294,6 +294,13 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
           manualSpells: typeof (reviewPayload as any).manual_spells === 'string'
             ? (() => { try { return JSON.parse((reviewPayload as any).manual_spells); } catch { return []; } })()
             : ((reviewPayload as any).manual_spells ?? (reviewPayload as any).manualSpells ?? []),
+          // manual_exclusions joined the SpellRule type in migration
+          // 20260523-1500. Review payloads from older proposals won't
+          // carry the field — fall back to empty so the editor can
+          // render legacy proposals without crashing.
+          manualExclusions: typeof (reviewPayload as any).manual_exclusions === 'string'
+            ? (() => { try { return JSON.parse((reviewPayload as any).manual_exclusions); } catch { return []; } })()
+            : ((reviewPayload as any).manual_exclusions ?? (reviewPayload as any).manualExclusions ?? []),
         }
       : rules.find(r => r.id === selectedRuleId) || null;
     if (rule) {
@@ -434,6 +441,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
       description: '',
       query: {},
       manualSpells: [],
+      manualExclusions: [],
     };
     setSelectedRuleId(null);
     setDraft(fresh);
@@ -1505,6 +1513,19 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                       onChange={e => setManualSpellsSearch(e.target.value)}
                       placeholder="Search spells to add…"
                       className="pl-9 bg-background/40 border-gold/20"
+                      // Suppress the browser's "history" autofill dropdown
+                      // on this filter input — the suggestions list is
+                      // driven by `manualSpellSuggestions` (spell names
+                      // from the catalogue), and Chrome's heuristic
+                      // dropdown showing previously-typed values floats
+                      // ON TOP of ours, hiding the real picks.
+                      // `data-form-type="other"` is the Chrome-specific
+                      // hint that helps when the field isn't inside a
+                      // <form> (Chrome ignores `autoComplete="off"`
+                      // alone in some cases).
+                      autoComplete="off"
+                      data-form-type="other"
+                      name="spell-rule-manual-spell-search"
                     />
                     {manualSpellSuggestions.length > 0 ? (
                       <div className="absolute left-0 right-0 top-full mt-1 z-10 max-h-64 overflow-y-auto bg-card border border-gold/30 rounded-md shadow-lg divide-y divide-gold/10">

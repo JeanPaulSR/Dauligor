@@ -1,5 +1,14 @@
-import { batchQueryD1, queryD1 } from './d1';
-import { deriveSpellFilterFacets, type SpellFilterFacets } from './spellFilters';
+import { batchQueryD1, queryD1, fetchCollection } from './d1';
+import { deriveSpellFilterFacets, matchAnyClause, type SpellFilterFacets } from './spellFilters';
+import { buildTagIndex } from './tagHierarchy';
+import { getCachedOrCompute } from './spellListResolver';
+import { fetchAllRules } from './spellRules';
+
+// D1 caps bound parameters per statement. Stay well under the limit when
+// fanning out IN-clauses across the spell catalogue (which can run to 500+
+// rows). Declared up-front so both `fetchSpellRowsByIds` and
+// `fetchClassesForSpells` reference it as a hoisted constant.
+const D1_PARAM_CHUNK = 90;
 
 /**
  * Layer 1 v1 of the Spellbook Manager project: per-class master spell list.
@@ -40,28 +49,20 @@ export type ClassMembership = {
 };
 
 /**
- * Fetch the spells on a class's spell list, joined with the spells row so the
- * UI can render names / levels / schools without a second round-trip.
+ * Fetch the spells on a class's spell list. Delegates to the query-time
+ * resolver (`getCachedOrCompute`) for the membership set, then fetches
+ * the joined spell-row shape callers need for rendering.
+ *
+ * Known rough edge: `membershipId` / `membershipSource` / `addedAt` are
+ * synthesised because the new model has no per-row membership identity
+ * — proposal-mode delete paths that key off `membershipId` need
+ * reworking (P4.3 / SpellListManager reposition). Reads work today;
+ * writes that need to target a specific membership row don't.
  */
 export async function fetchClassSpellList(classId: string): Promise<ClassSpellListSummary[]> {
-  // Pulls the spell shell fields needed both for display and for client-side
-  // filter bucketing (foundry_data + property columns) so ClassView and the
-  // manager don't need a second per-spell fetch to filter.
-  const sql = `
-    SELECT
-      s.id, s.name, s.identifier, s.level, s.school, s.image_url, s.source_id, s.tags,
-      s.foundry_data, s.concentration, s.ritual,
-      s.components_vocal, s.components_somatic, s.components_material,
-      s.required_tags, s.prerequisite_text,
-      csl.id AS membership_id,
-      csl.source AS membership_source,
-      csl.added_at AS added_at
-    FROM class_spell_lists csl
-    JOIN spells s ON s.id = csl.spell_id
-    WHERE csl.class_id = ?
-    ORDER BY s.level ASC, s.name ASC
-  `;
-  const rows = await queryD1<any>(sql, [classId]);
+  const spellIds = await getCachedOrCompute('class', classId);
+  if (spellIds.length === 0) return [];
+  const rows = await fetchSpellRowsByIds(spellIds);
   return rows.map(r => ({
     id: r.id,
     name: r.name,
@@ -73,11 +74,41 @@ export async function fetchClassSpellList(classId: string): Promise<ClassSpellLi
     tags: typeof r.tags === 'string' ? safeJsonArray(r.tags) : (Array.isArray(r.tags) ? r.tags : []),
     requiredTags: typeof r.required_tags === 'string' ? safeJsonArray(r.required_tags) : (Array.isArray(r.required_tags) ? r.required_tags : []),
     prerequisiteText: r.prerequisite_text || '',
-    membershipId: r.membership_id,
-    membershipSource: r.membership_source,
-    addedAt: r.added_at,
+    membershipId: '',
+    membershipSource: 'resolver',
+    addedAt: '',
     ...deriveSpellFilterFacets(r),
   }));
+}
+
+/**
+ * Bulk fetch the joined-row shape used by `fetchClassSpellList` for a
+ * known spell-id list. Used by the new-resolver branch (where the
+ * resolver hands us ids and we still need the full display row).
+ *
+ * Chunked under D1's bound-parameter limit so a class with hundreds of
+ * spells doesn't blow the IN clause.
+ */
+async function fetchSpellRowsByIds(spellIds: string[]): Promise<any[]> {
+  if (spellIds.length === 0) return [];
+  const out: any[] = [];
+  for (let i = 0; i < spellIds.length; i += D1_PARAM_CHUNK) {
+    const chunk = spellIds.slice(i, i + D1_PARAM_CHUNK);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const sql = `
+      SELECT
+        id, name, identifier, level, school, image_url, source_id, tags,
+        foundry_data, concentration, ritual,
+        components_vocal, components_somatic, components_material,
+        required_tags, prerequisite_text
+      FROM spells
+      WHERE id IN (${placeholders})
+      ORDER BY level ASC, name ASC
+    `;
+    const rows = await queryD1<any>(sql, chunk);
+    out.push(...rows);
+  }
+  return out;
 }
 
 /**
@@ -101,15 +132,13 @@ export async function fetchClassSpellMembershipIds(
 }
 
 /**
- * Fetch the set of spell IDs on a class's list. Cheaper than fetchClassSpellList
- * when the caller only needs membership checks.
+ * Fetch the set of spell IDs on a class's list. Cheaper than
+ * fetchClassSpellList when the caller only needs membership checks.
+ * Delegates to the query-time resolver via `getCachedOrCompute`.
  */
 export async function fetchClassSpellIds(classId: string): Promise<Set<string>> {
-  const rows = await queryD1<{ spell_id: string }>(
-    `SELECT spell_id FROM class_spell_lists WHERE class_id = ?`,
-    [classId],
-  );
-  return new Set(rows.map(r => r.spell_id));
+  const ids = await getCachedOrCompute('class', classId);
+  return new Set(ids);
 }
 
 /** Just the rule-driven slice (source LIKE 'rule:%'). Used by Rebuild preview. */
@@ -252,46 +281,129 @@ export async function fetchStaleClasses(): Promise<Array<{
 /**
  * Reverse lookup: which classes carry this spell on their spell list.
  * Used by the public SpellList detail pane and ClassView's Spell List tab.
+ *
+ * Proposal D rewrite: instead of joining `class_spell_lists` (which the
+ * rule-routed mutation path no longer touches), walks every applied
+ * rule and checks whether the spell satisfies it. Equivalent semantics
+ * to running the resolver against every class and asking "is this
+ * spell in the resolved set?" — but cheaper for the single-spell case
+ * because we evaluate one spell against N rules instead of N classes
+ * each running the full resolver loop.
+ *
+ * Excludes subclasses from the surface — matches the legacy behaviour
+ * (the old SQL joined only `classes`, not `subclasses`).
  */
 export async function fetchClassesForSpell(spellId: string): Promise<ClassMembership[]> {
-  const sql = `
-    SELECT c.id, c.name, c.identifier
-    FROM class_spell_lists csl
-    JOIN classes c ON c.id = csl.class_id
-    WHERE csl.spell_id = ?
-    ORDER BY c.name ASC
-  `;
-  return queryD1<ClassMembership>(sql, [spellId]);
+  const map = await fetchClassesForSpells([spellId]);
+  return map.get(spellId) ?? [];
 }
 
-// D1 caps bound parameters per statement. Stay well under the limit when fanning
-// out IN-clauses across the spell catalogue (which can run to 200+ rows).
-const D1_PARAM_CHUNK = 90;
-
 /**
- * Bulk variant: return a map of spell_id → ClassMembership[]. Chunked under D1's
- * bound-parameter limit so one logical call works regardless of catalogue size.
+ * Bulk variant: return a map of spell_id → ClassMembership[]. Single
+ * walk over (rules × spells × tag index), then maps matching rules to
+ * the classes that have those rules applied via
+ * `spell_rule_applications`.
+ *
+ * Cost: 4 bulk D1 queries upfront (rules / class apps / classes / tags)
+ * + ceil(N / 90) chunked spell-light fetches, then a pure-JS matrix
+ * walk. For a catalogue of ~500 spells × ~30 rules, that's ~15k
+ * matcher evaluations — fast enough to run on every detail-panel mount.
  */
 export async function fetchClassesForSpells(spellIds: string[]): Promise<Map<string, ClassMembership[]>> {
   const result = new Map<string, ClassMembership[]>();
   if (spellIds.length === 0) return result;
+  const requested = new Set(spellIds);
+
+  // Shared bulk fetches.
+  const [allRules, classApps, classRows, tagRows] = await Promise.all([
+    fetchAllRules(),
+    queryD1<{ rule_id: string; applies_to_id: string }>(
+      `SELECT rule_id, applies_to_id FROM spell_rule_applications WHERE applies_to_type = 'class'`,
+    ),
+    queryD1<{ id: string; name: string; identifier: string }>(
+      `SELECT id, name, identifier FROM classes ORDER BY name ASC`,
+    ),
+    fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' }),
+  ]);
+
+  if (allRules.length === 0 || classApps.length === 0) return result;
+
+  // Rule id → list of class ids that have that rule applied.
+  const classIdsByRule = new Map<string, string[]>();
+  for (const a of classApps) {
+    const list = classIdsByRule.get(String(a.rule_id)) ?? [];
+    list.push(String(a.applies_to_id));
+    classIdsByRule.set(String(a.rule_id), list);
+  }
+
+  // Class id → display membership.
+  const classById = new Map<string, ClassMembership>(
+    classRows.map(c => [String(c.id), {
+      id: String(c.id),
+      name: String(c.name),
+      identifier: String(c.identifier),
+    }]),
+  );
+
+  // Bulk-fetch the light spell projection (same shape the resolver uses).
+  const spellRowsAll: any[] = [];
   for (let i = 0; i < spellIds.length; i += D1_PARAM_CHUNK) {
     const chunk = spellIds.slice(i, i + D1_PARAM_CHUNK);
     const placeholders = chunk.map(() => '?').join(', ');
-    const sql = `
-      SELECT csl.spell_id AS spell_id, c.id, c.name, c.identifier
-      FROM class_spell_lists csl
-      JOIN classes c ON c.id = csl.class_id
-      WHERE csl.spell_id IN (${placeholders})
-      ORDER BY c.name ASC
-    `;
-    const rows = await queryD1<any>(sql, chunk);
-    for (const row of rows) {
-      const existing = result.get(row.spell_id) || [];
-      existing.push({ id: row.id, name: row.name, identifier: row.identifier });
-      result.set(row.spell_id, existing);
-    }
+    const rows = await queryD1<any>(
+      `SELECT id, source_id, level, school, tags, foundry_data,
+              concentration, ritual,
+              components_vocal, components_somatic, components_material
+         FROM spells WHERE id IN (${placeholders})`,
+      chunk,
+    );
+    spellRowsAll.push(...rows);
   }
+
+  const tagIndex = buildTagIndex(tagRows);
+
+  for (const spellRow of spellRowsAll) {
+    const spellId = String(spellRow.id);
+    if (!requested.has(spellId)) continue; // defensive
+    const facets = deriveSpellFilterFacets(spellRow);
+    const tags = Array.isArray(spellRow.tags)
+      ? spellRow.tags.map((t: any) => String(t))
+      : (typeof spellRow.tags === 'string' ? safeJsonArray(spellRow.tags) : []);
+    const spellInput = {
+      ...facets,
+      id: spellId,
+      level: Number(spellRow.level) || 0,
+      school: String(spellRow.school ?? ''),
+      source_id: spellRow.source_id ?? null,
+      tags,
+    } as const;
+
+    // Collect every class that has at least one rule contributing
+    // this spell. A rule contributes the spell when:
+    //   - the spell isn't in the rule's manual_exclusions, AND
+    //   - (it's in manual_spells OR matches the query)
+    // Mirrors `ruleContribution` in spellListResolver.ts.
+    const classIds = new Set<string>();
+    for (const rule of allRules) {
+      if (rule.manualExclusions.includes(spellId)) continue;
+      const inManual = rule.manualSpells.includes(spellId);
+      const queryMatches = !inManual
+        && matchAnyClause(spellInput as any, rule.query, tagIndex.parentByTagId, tagIndex);
+      if (!inManual && !queryMatches) continue;
+      const ruleClassIds = classIdsByRule.get(rule.id);
+      if (!ruleClassIds) continue;
+      for (const cid of ruleClassIds) classIds.add(cid);
+    }
+    if (classIds.size === 0) continue;
+    const memberships: ClassMembership[] = [];
+    for (const cid of classIds) {
+      const cm = classById.get(cid);
+      if (cm) memberships.push(cm);
+    }
+    memberships.sort((a, b) => a.name.localeCompare(b.name));
+    result.set(spellId, memberships);
+  }
+
   return result;
 }
 
