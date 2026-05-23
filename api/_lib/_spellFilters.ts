@@ -135,7 +135,91 @@ export type RuleQuery = {
   duration?: AxisFilter<DurationBucket>;
   shape?: AxisFilter<ShapeBucket>;
   property?: AxisFilter<PropertyFilter>;
+  // Hard-exclude list — spells carrying any of these tag ids are
+  // rejected from the rule's result, applied AFTER axis clauses. Lives
+  // on the root for multi-clause shapes; for flat (legacy) rules the
+  // root IS the single clause so the field appears here too.
+  excludeTagIds?: string[];
 };
+
+/**
+ * Multi-clause rule root. Mirror of `src/lib/spellFilters.ts ::
+ * RuleClauseRoot`. Two shapes:
+ *
+ *   - Legacy flat shape: a bare `RuleQuery`. Treated as a single
+ *     clause. Every rule pre-multi-clause support has this shape.
+ *   - Multi-clause shape: `{ clauses: RuleClause[]; excludeTagIds? }`.
+ *     The rule matches a spell if ANY clause matches, then the root-
+ *     level hard-exclude list applies.
+ *
+ * `matchAnyClause` is the dispatch entry point used by the spell-list
+ * resolver path (see `_spellListResolver.ts`). DRIFT CONTRACT: keep in
+ * sync with the source twin in `src/lib/spellFilters.ts`.
+ */
+export type RuleClause = RuleQuery;
+export type RuleClauseRoot = RuleQuery | { clauses: RuleClause[]; excludeTagIds?: string[] };
+
+/** Type guard: does this root use the multi-clause shape? */
+export function isMultiClauseRoot(root: RuleClauseRoot): root is { clauses: RuleClause[] } {
+  return (
+    root !== null
+    && typeof root === 'object'
+    && Array.isArray((root as { clauses?: unknown }).clauses)
+  );
+}
+
+/**
+ * Flatten a clause root to its array of clauses. Always returns at
+ * least one element for flat shapes; multi-clause-but-zero-elements
+ * returns [] (rejects everything) — the editor prevents saving in
+ * that state but the matcher stays robust.
+ */
+export function getClauses(root: RuleClauseRoot): RuleClause[] {
+  if (isMultiClauseRoot(root)) {
+    return root.clauses.length > 0 ? root.clauses : [];
+  }
+  return [root as RuleQuery];
+}
+
+/**
+ * Read the root-level hard-exclude tag list. Lives at the wrapper for
+ * multi-clause shapes; at the root itself for flat-shape rules (where
+ * the root IS the single clause).
+ */
+export function getRootExcludeTagIds(root: RuleClauseRoot): string[] {
+  if (isMultiClauseRoot(root)) {
+    return Array.isArray(root.excludeTagIds) ? root.excludeTagIds : [];
+  }
+  const flat = root as RuleQuery;
+  return Array.isArray(flat.excludeTagIds) ? flat.excludeTagIds : [];
+}
+
+/**
+ * Rule-level OR: a spell matches the rule if ANY of its clauses match,
+ * AND it doesn't carry any root-level hard-exclude tag. Pre-checks the
+ * exclude list before clause evaluation so vetoed spells skip the
+ * per-clause axis loop entirely.
+ */
+export function matchAnyClause(
+  spell: SpellMatchInput,
+  root: RuleClauseRoot,
+  parentByTagId?: Map<string, string | null>,
+  tagIndex?: TagIndex,
+): boolean {
+  const clauses = getClauses(root);
+  if (clauses.length === 0) return false;
+  const excludeTagIds = getRootExcludeTagIds(root);
+  if (excludeTagIds.length > 0 && spell.tags) {
+    const spellTagSet = new Set(spell.tags);
+    for (const tagId of excludeTagIds) {
+      if (spellTagSet.has(tagId)) return false;
+    }
+  }
+  for (const clause of clauses) {
+    if (matchSpellAgainstRule(spell, clause, parentByTagId, tagIndex)) return true;
+  }
+  return false;
+}
 
 export type TagIndex = {
   parentByTagId: Map<string, string | null>;

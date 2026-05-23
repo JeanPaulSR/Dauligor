@@ -16,9 +16,19 @@
 //   - Class rebake is decoupled from spell-list churn — the bundle
 //     stays stable until you actually edit the class itself.
 //   - The endpoint is a thin D1 JOIN, no R2 cache, no warming step.
+//
+// As of phase 4.2b, the membership read goes through the rule
+// resolver (`_spellListResolver.ts :: getConsumerSpellList`) instead
+// of joining `class_spell_lists`. Same semantics — union of every
+// applied rule's contribution, minus exclusions — but read from the
+// authored rule rows rather than the materialised snapshot. This
+// keeps Foundry exports honest after the in-app resolver landed
+// (phases 4.0-4.3) and means the legacy table can be dropped
+// in phase 4.4 without breaking pairing imports.
 
 import type { ExportFetchers } from "./_classExport.js";
 import { getSemanticSourceId } from "./_classExport.js";
+import { getConsumerSpellList } from "./_spellListResolver.js";
 
 const parseJsonField = (val: any, fallback: any) => {
   if (val == null) return fallback;
@@ -134,17 +144,11 @@ export async function buildClassSpellListBundle(
   const classIdentifier = trimString(classRow.identifier) || classRow.id;
   const classSourceId = trimString(classRow.source_id) || null;
 
-  // Membership rows for this class. Both manual + rule-driven entries
-  // ship — the Foundry importer doesn't distinguish source on the
-  // pool side (it's all "available to pick"). The `membership_source`
-  // is included on each item flag for debugging / future filtering.
-  const cslRows = await fetchCollection<any>("classSpellLists", {
-    where: "class_id = ?",
-    params: [classId],
-  });
-  const classSpellIds = [
-    ...new Set(cslRows.map((r: any) => r.spell_id).filter(Boolean)),
-  ] as string[];
+  // Membership ids for this class — resolver-driven (phase 4.2b).
+  // The resolver walks every rule applied to the class, unions their
+  // contributions (matches(query) ∪ manualSpells − manualExclusions),
+  // and hands back the spell id list. No `class_spell_lists` join.
+  const classSpellIds = await getConsumerSpellList("class", classId, fetchers);
 
   if (classSpellIds.length === 0) {
     return {
