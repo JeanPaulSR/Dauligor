@@ -83,6 +83,78 @@ cd ..
 
 `scripts/_archive/migrate.js` is the historical Firestore→D1 importer; it is **not** part of the regular dev loop and should not be run today. Use the remote-snapshot pattern above to refresh local data instead.
 
+## For Claude Code agents
+
+**Don't ask the user to start any local servers.** When you need the app running, spawn both processes yourself via your Bash tool's `run_in_background` flag — they live for the rest of the conversation; the user never has to switch terminals.
+
+The full bring-up sequence — run these only when something below isn't already up:
+
+```bash
+# 1. If worker/.wrangler/state/v3/d1 isn't populated, bootstrap local D1.
+#    Snapshot remote into local (faster + dodges the d1_migrations
+#    tracking gap that breaks `wrangler d1 migrations apply --local`):
+cd worker
+npx wrangler d1 export dauligor-db --remote --output=./remote-snapshot.sql
+npx wrangler d1 execute dauligor-db --local --file=./remote-snapshot.sql
+rm ./remote-snapshot.sql
+
+# 2. Confirm .env points at localhost:
+#       R2_WORKER_URL=http://localhost:8787
+#    (Comment header in the file describes both modes; if it's still on
+#    the deployed worker URL, swap it.) Make sure worker/.dev.vars has
+#    the same API_SECRET value as .env's R2_API_SECRET — wrangler dev
+#    reads .dev.vars; the Express server reads .env; they must agree
+#    or the worker rejects every request with 401.
+
+# 3. Start the worker (background, port 8787, miniflare local D1 binding):
+cd worker && npx wrangler dev    # via run_in_background
+
+# 4. Start the Express dev server (background, port 3000):
+npm run dev                       # via run_in_background
+```
+
+Sanity check the stack with a known D1 query:
+
+```bash
+curl -s -X POST http://localhost:8787/query \
+  -H "Authorization: Bearer <value from worker/.dev.vars API_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"sql":"SELECT COUNT(*) AS n FROM classes;"}'
+```
+
+A response with `"served_by":"miniflare.db"` confirms you're hitting the local sandbox, not prod. (`v3-prod` means a worker config or env var is sending you to remote — fix that before running anything else.)
+
+### Restart-after-env-edit
+
+`dotenv/config` reads `.env` once at process start. If you edit `.env` while `npm run dev` is already running, the cached value stays in memory. To pick up the new value, find the stale Express process and kill its tree, then restart in the background:
+
+```bash
+# Windows (Git Bash):
+netstat -ano | grep ":3000.*LISTEN"
+taskkill //F //T //PID <pid-from-above>
+
+# macOS / Linux:
+lsof -i :3000
+kill -- -<pid>
+```
+
+Same logic for wrangler dev (port 8787) if you edit `worker/.dev.vars`.
+
+### Killing the dev stack at end of session
+
+If you started either server with `run_in_background`, you have a background-task ID — use that. Otherwise repeat the netstat / taskkill dance for both 3000 and 8787.
+
+### Schema migrations during agent work
+
+Apply locally first, **always**:
+
+```bash
+cd worker
+npx wrangler d1 execute dauligor-db --local --file=migrations/<new>.sql
+```
+
+Verify the app boots against the new schema. Only after that do you ask the user "ok to apply to remote?" — the green light has to be in-conversation and migration-specific. Treat `--remote` as a one-way door (see `docs/operations/deployment.md`).
+
 ## Daily run
 
 You need **two terminals**.

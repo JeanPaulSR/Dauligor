@@ -65,7 +65,24 @@ export function SearchInput({
           iconPlacement,
         )}
       />
+      {/*
+        Suppress browser autofill / history dropdown on filter inputs.
+        SearchInput is universally used for "search this list" / "filter
+        this list" affordances — the visible suggestion list (when there
+        is one) comes from the page's own data, never from browser
+        history. Set the attributes BEFORE the spread so a caller that
+        genuinely wants history-style autocomplete can still pass
+        `autoComplete="on"` (or a credential category like "username")
+        and have it win.
+
+        - `autoComplete="off"` is the canonical hint.
+        - `data-form-type="other"` covers Chrome's heuristic autofill
+          which sometimes ignores `autoComplete="off"` when the input
+          isn't inside a <form>.
+      */}
       <Input
+        autoComplete="off"
+        data-form-type="other"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

@@ -107,12 +107,23 @@ export default function EntityPicker({
       <div className="border border-gold/10 rounded-md bg-background/20 overflow-hidden">
         <div className="flex items-center gap-2 px-2 py-1.5 border-b border-gold/10">
           <Search className="w-3 h-3 text-ink/30 shrink-0" />
+          {/*
+            Suppress browser autofill / history dropdown on the picker
+            search. The dropdown below this input is driven by the
+            entity list we render; the browser's heuristic suggestion
+            list would float on top and hide our picks.
+            `data-form-type="other"` is Chrome's hint for inputs that
+            sit outside a <form> element — Chrome ignores
+            `autoComplete="off"` alone in some of those cases.
+          */}
           <input
             type="text"
             placeholder={searchPlaceholder}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="flex-1 bg-transparent text-xs outline-none placeholder:text-ink/30 text-ink"
+            autoComplete="off"
+            data-form-type="other"
           />
           {search ? (
             <button
