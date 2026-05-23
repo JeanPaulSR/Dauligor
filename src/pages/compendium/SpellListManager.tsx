@@ -9,6 +9,7 @@ import VirtualizedList from '../../components/ui/VirtualizedList';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import { FilterBar, TagGroupFilter, AxisFilterSection, matchesTagFilters } from '../../components/compendium/FilterBar';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
+import { StatusEmblem } from '../../components/ui/StatusEmblem';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { expandTagsWithAncestors, normalizeTagRow, orderTagsAsTree, buildTagIndex } from '../../lib/tagHierarchy';
@@ -2313,17 +2314,13 @@ function LinkedRulesPanel({
                       >
                         {rule.name}
                       </Link>
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest',
-                          counts.matches === 0
-                            ? 'border-blood/30 bg-blood/5 text-blood/60'
-                            : 'border-gold/25 bg-gold/5 text-gold/80',
-                        )}
+                      <StatusEmblem
+                        tone={counts.matches === 0 ? 'error' : 'neutral'}
+                        size="md"
                         title={counts.matches === 0 ? 'No spells match this rule yet' : `${counts.matches} matches · ${counts.onList} on this class's list`}
                       >
                         {counts.matches === 0 ? '0 matches' : <>Matches <span className="text-gold font-bold mx-1">{counts.matches}</span> · <span className="text-ink/60 mx-1">{counts.onList}</span> on list</>}
-                      </span>
+                      </StatusEmblem>
                     </div>
                     <div className="text-[10px] text-ink/50 truncate mt-0.5">{summarizeRuleManualAndQuery(rule)}</div>
                   </div>

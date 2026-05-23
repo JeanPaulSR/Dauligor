@@ -13,6 +13,7 @@ import {
 } from '../../lib/spellImport';
 import SpellArtPreview from './SpellArtPreview';
 import { fetchClassesForSpell, type ClassMembership } from '../../lib/classSpellLists';
+import { StatusEmblem } from '../ui/StatusEmblem';
 import { normalizeTagRow } from '../../lib/tagHierarchy';
 import { cn } from '../../lib/utils';
 
@@ -453,12 +454,9 @@ export default function SpellDetailPanel({
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {groupTagList.map(t => (
-                        <span
-                          key={t.id}
-                          className="inline-flex items-center rounded border border-gold/20 bg-gold/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold/80"
-                        >
+                        <StatusEmblem key={t.id} tone="neutral" size="md">
                           {t.name}
-                        </span>
+                        </StatusEmblem>
                       ))}
                     </div>
                   </div>

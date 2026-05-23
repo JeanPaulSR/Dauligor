@@ -108,6 +108,7 @@ import {
   normalizeSpellcastingForExport,
 } from "../../lib/characterLogic";
 import { Button } from "../../components/ui/button";
+import { StatusEmblem } from "../../components/ui/StatusEmblem";
 import {
   Card,
   CardContent,
@@ -7951,15 +7952,15 @@ export default function CharacterBuilder({
                                           info-only levels (nothing to do
                                           here) so the rail stays uncluttered. */}
                                       {levelChoicesStatus.kind !== "info-only" && (
-                                        <div
-                                          className={cn(
-                                            "mt-1 px-1.5 py-0.5 rounded-sm border text-[8px] font-black uppercase tracking-widest text-center",
+                                        <StatusEmblem
+                                          tone={
                                             levelChoicesStatus.kind === "complete"
-                                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+                                              ? "success"
                                               : levelChoicesStatus.kind === "partial"
-                                                ? "border-gold/40 bg-gold/10 text-gold"
-                                                : "border-blood/30 bg-blood/5 text-blood",
-                                          )}
+                                                ? "manual"
+                                                : "error"
+                                          }
+                                          className="mt-1 text-center justify-center"
                                           title={
                                             levelChoicesStatus.kind === "complete"
                                               ? `All ${levelChoicesStatus.needs} choice${levelChoicesStatus.needs === 1 ? "" : "s"} resolved.`
@@ -7973,7 +7974,7 @@ export default function CharacterBuilder({
                                           {levelChoicesStatus.kind === "complete"
                                             ? "Done"
                                             : `${levelChoicesStatus.done}/${levelChoicesStatus.needs}`}
-                                        </div>
+                                        </StatusEmblem>
                                       )}
                                     </div>
                                     <div className="flex-1 space-y-4 justify-center flex flex-col pt-2">
@@ -9333,13 +9334,14 @@ export default function CharacterBuilder({
                             spellManagerTags.find((t: any) => t.id === attr.tagId)?.name ||
                             attr.tagId;
                           return (
-                            <span
+                            <StatusEmblem
                               key={attr.tagId}
+                              tone="manual"
+                              size="md"
                               title={`from ${attr.source}: ${attr.sourceName}`}
-                              className="bg-gold/10 text-gold px-1.5 py-0.5 rounded border border-gold/20 text-[10px] font-bold uppercase tracking-widest"
                             >
                               {tagName}
-                            </span>
+                            </StatusEmblem>
                           );
                         })}
                       </div>
