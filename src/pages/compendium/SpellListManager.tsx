@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams, useLocation } from 'react-router-dom';
-import { ChevronLeft, Wand2, Plus, Check, X, ChevronDown, ChevronRight, ChevronUp, Lock, Scale } from 'lucide-react';
+import { ChevronLeft, Plus, Check, X, ChevronDown, ChevronRight, ChevronUp, Lock, Scale, Tag as TagIcon, AlertTriangle, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -11,33 +11,34 @@ import { FilterBar, TagGroupFilter, AxisFilterSection, matchesTagFilters } from 
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
-import { expandTagsWithAncestors, normalizeTagRow, orderTagsAsTree, tagPickerLabel, buildTagIndex } from '../../lib/tagHierarchy';
+import { expandTagsWithAncestors, normalizeTagRow, orderTagsAsTree, buildTagIndex } from '../../lib/tagHierarchy';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
   fetchClassSpellIds,
   fetchClassSpellMembershipIds,
-  fetchClassRuleSpellIds,
-  fetchLastClassRuleRebuildAt,
-  fetchStaleClasses,
   fetchClassesForSpells,
-  addSpellsToClassList,
-  removeSpellsFromClassList,
-  parseTimestampMs,
   type ClassMembership,
 } from '../../lib/classSpellLists';
-import { actionLabel } from '../../lib/proposalAware';
+import {
+  getConsumerExcludedSpells,
+  invalidateCache,
+  type ExcludedSpell,
+} from '../../lib/spellListResolver';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
 import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
 import {
   fetchAppliedRulesFor,
-  rebuildClassSpellListFromAppliedRules,
   unapplyRule,
   applyRule,
   fetchAllRules,
   spellMatchesRule,
   explainSpellMatch,
+  addSpellToRuleManual,
+  removeSpellFromRuleManual,
+  addRuleManualExclusion,
+  removeRuleManualExclusion,
   type SpellRule,
   type RuleExplanation,
 } from '../../lib/spellRules';
@@ -348,11 +349,8 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const [showOrphansOnly, setShowOrphansOnly] = useState(false);
   const [linkedRules, setLinkedRules] = useState<SpellRule[]>([]);
   const [allRules, setAllRules] = useState<SpellRule[]>([]);
-  const [rebuildPending, setRebuildPending] = useState(false);
   const [linkedRulesExpanded, setLinkedRulesExpanded] = useState(true);
   const [linkRuleDialogOpen, setLinkRuleDialogOpen] = useState(false);
-  const [lastRebuildAt, setLastRebuildAt] = useState<string | null>(null);
-  const [rebuildPreview, setRebuildPreview] = useState<{ toAdd: string[]; toRemove: string[]; staying: string[] } | null>(null);
   const [pendingSpellIds, setPendingSpellIds] = useState<Set<string>>(new Set());
   const [selectedSpellIds, setSelectedSpellIds] = useState<Set<string>>(new Set());
   const [bulkPending, setBulkPending] = useState(false);
@@ -363,17 +361,42 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   // description gets the full reading surface; when opened the trace
   // expands below it.
   const [showRuleMatch, setShowRuleMatch] = useState(false);
-  // Cross-class stale audit. Populated on mount + after any
-  // rebuild / link / unlink so the count stays current. Drives the
-  // toolbar "Rebuild Stale (N)" affordance and the per-row
-  // staleness signal on the class picker dropdown (todo).
-  const [staleClasses, setStaleClasses] = useState<Array<{
-    classId: string;
-    className: string;
-    staleRuleCount: number;
-    lastRebuiltAt: string | null;
+  // Exceptions surface — spells some applied rule would have included
+  // (via query OR manualSpells) but are sitting in manualExclusions.
+  // Drives the prominent "Exceptions" panel and the per-row
+  // exclusion badges.
+  const [exclusions, setExclusions] = useState<ExcludedSpell[]>([]);
+  const [exclusionsLoading, setExclusionsLoading] = useState(false);
+  const [exceptionsExpanded, setExceptionsExpanded] = useState(true);
+  const [tagUsageExpanded, setTagUsageExpanded] = useState(true);
+  // Subclasses of the selected class that have their OWN
+  // spell_rule_applications row (i.e. the subclass deviates from
+  // pure parent inheritance). Pure-inheritance subclasses don't
+  // surface here — they're served by the parent class's resolver
+  // output and would be visual noise on this page.
+  //
+  // Read-only informational rows in P4.3. Editing a subclass's
+  // rules still happens via /compendium/spell-rules — each entry
+  // links there. Forward-looking: a P4.3+ pass can expand each
+  // row into a full inline editor.
+  const [subclassesWithOwnRules, setSubclassesWithOwnRules] = useState<Array<{
+    id: string;
+    name: string;
+    linkedRules: SpellRule[];
   }>>([]);
-  const [rebuildAllStalePending, setRebuildAllStalePending] = useState(false);
+  const [subclassesExpanded, setSubclassesExpanded] = useState(true);
+  // Rule-picker dialog state — opens when an Add or Remove action is
+  // ambiguous (multiple applied rules could host the spell, or
+  // multiple rules contain the spell as manual/excluded). The handler
+  // resolves the picker's choice then fires the appropriate
+  // add/removeSpellToRuleManual / add/removeRuleManualExclusion call.
+  const [rulePicker, setRulePicker] = useState<{
+    spellId: string;
+    spellName: string;
+    action: 'add' | 'remove';
+    /** Rules the user can choose from for this action. */
+    candidates: Array<{ rule: SpellRule; mechanism: 'query' | 'manual' | 'add-manual' }>;
+  } | null>(null);
 
   // Load classes + spells + sources + tags once, then bulk-fetch class memberships.
   useEffect(() => {
@@ -420,14 +443,9 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         } catch (err) {
           console.error('[SpellListManager] Failed to load class memberships:', err);
         }
-        // Cross-class stale audit — populates the toolbar "Rebuild
-        // Stale (N)" affordance.
-        try {
-          const stale = await fetchStaleClasses();
-          if (active) setStaleClasses(stale);
-        } catch (err) {
-          console.error('[SpellListManager] Failed to load stale class audit:', err);
-        }
+        // No more stale audit — Proposal D's runtime resolver has no
+        // "stale" concept. Caches invalidate via fingerprint compare
+        // on every read; admins never see a manual-rebuild affordance.
       } catch (err) {
         console.error('[SpellListManager] Failed to load foundation data:', err);
         toast.error('Failed to load spells or classes.');
@@ -438,17 +456,21 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     return () => { active = false; };
   }, [canManageLists]);
 
-  // Reload the selected class's list (membership + linked rules + last-rebuild ts) when the class changes.
+  // Reload the selected class's list (membership + linked rules +
+  // exclusions) when the class changes. No more last-rebuild
+  // timestamp — Proposal D resolves live.
   useEffect(() => {
     if (!selectedClassId) {
       setClassListIds(new Set());
       setClassMembershipIds(new Map());
       setLinkedRules([]);
-      setLastRebuildAt(null);
+      setExclusions([]);
+      setSubclassesWithOwnRules([]);
       return;
     }
     let active = true;
     setClassListLoading(true);
+    setExclusionsLoading(true);
     fetchClassSpellIds(selectedClassId)
       .then(ids => { if (active) setClassListIds(ids); })
       .catch(err => {
@@ -467,11 +489,66 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     fetchAppliedRulesFor('class', selectedClassId)
       .then(rs => { if (active) setLinkedRules(rs); })
       .catch(err => console.error('[SpellListManager] Failed to load linked rules:', err));
-    fetchLastClassRuleRebuildAt(selectedClassId)
-      .then(ts => { if (active) setLastRebuildAt(ts); })
-      .catch(err => console.error('[SpellListManager] Failed to load last-rebuild timestamp:', err));
+    getConsumerExcludedSpells('class', selectedClassId)
+      .then(ex => { if (active) setExclusions(ex); })
+      .catch(err => console.error('[SpellListManager] Failed to load exclusions:', err))
+      .finally(() => { if (active) setExclusionsLoading(false); });
+    // Conditional subclass surfacing — fetch this class's subclasses,
+    // then for each probe spell_rule_applications. Surface only those
+    // with at least one own rule (pure-inheritance subclasses don't
+    // need a row here).
+    (async () => {
+      try {
+        const subRows = await fetchCollection<any>('subclasses', {
+          where: 'class_id = ?',
+          params: [selectedClassId],
+          orderBy: 'name ASC',
+        });
+        // Parallel probe — small N (typical class has 3-5 subclasses),
+        // each fetch is cheap with the d1 cache.
+        const probes = await Promise.all(
+          subRows.map(async sub => {
+            try {
+              const rules = await fetchAppliedRulesFor('subclass', sub.id);
+              return { id: String(sub.id), name: String(sub.name), linkedRules: rules };
+            } catch (err) {
+              console.error('[SpellListManager] subclass rule probe failed:', sub.id, err);
+              return { id: String(sub.id), name: String(sub.name), linkedRules: [] };
+            }
+          }),
+        );
+        if (!active) return;
+        setSubclassesWithOwnRules(probes.filter(p => p.linkedRules.length > 0));
+      } catch (err) {
+        console.error('[SpellListManager] Failed to load subclasses:', err);
+      }
+    })();
     return () => { active = false; };
   }, [selectedClassId]);
+
+  // Helper used by Add/Remove handlers + Restore action to refresh
+  // the page after a rule mutation. Invalidates the resolver cache
+  // (the fingerprint check would catch this anyway via the rule's
+  // updated_at bump, but explicit invalidation is cheap insurance)
+  // and re-runs the three per-class loads in parallel.
+  const refreshAfterRuleEdit = async () => {
+    if (!selectedClassId) return;
+    try {
+      await invalidateCache('class', selectedClassId);
+    } catch (err) {
+      // Cache invalidation failures aren't fatal — the fingerprint
+      // check will catch the change on next read. Log + continue.
+      console.warn('[SpellListManager] cache invalidate failed:', err);
+    }
+    const [ids, rules, ex] = await Promise.all([
+      fetchClassSpellIds(selectedClassId),
+      fetchAppliedRulesFor('class', selectedClassId),
+      getConsumerExcludedSpells('class', selectedClassId),
+    ]);
+    setClassListIds(ids);
+    setLinkedRules(rules);
+    setExclusions(ex);
+  };
 
   // Load the full rule catalogue once for the "Link Rule" picker. Cheap (rules table
   // is small, and the d1 cache backs it after the first hit).
@@ -521,6 +598,11 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const tagsById = useMemo(
     () => Object.fromEntries(tags.map(t => [t.id, t])) as Record<string, TagRow>,
     [tags]
+  );
+
+  const spellsById = useMemo(
+    () => Object.fromEntries(spells.map(s => [s.id, s])) as Record<string, SpellRow>,
+    [spells]
   );
 
   const tagsByGroup = useMemo(() => {
@@ -708,29 +790,152 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
 
   const selectedClass = classes.find(c => c.id === selectedClassId);
 
-  // Local mutator for spellMembershipsBySpellId so the "Also on" badges stay
-  // accurate without a refetch round-trip after each Add/Remove.
-  const mutateMembership = (spellId: string, classMembership: ClassMembership, mode: 'add' | 'remove') => {
-    setSpellMembershipsBySpellId(prev => {
-      const next = new Map(prev);
-      const current = next.get(spellId) || [];
-      if (mode === 'add') {
-        if (!current.some(c => c.id === classMembership.id)) {
-          next.set(spellId, [...current, classMembership].sort((a, b) => a.name.localeCompare(b.name)));
-        }
-      } else {
-        const filtered = current.filter(c => c.id !== classMembership.id);
-        if (filtered.length === 0) next.delete(spellId);
-        else next.set(spellId, filtered);
-      }
+  // NOTE: spellMembershipsBySpellId is loaded once at mount time via
+  // fetchClassesForSpells, which (since P4.3.G) walks applied rules
+  // and matches against them — same semantics as the resolver. So
+  // initial load is correct. The map is NOT mutated in-flight when
+  // we Add / Remove via rule edits, so the "Also on" hover badge
+  // can lag intra-session. A future pass should refresh the touched
+  // spell's membership entry on every applyRuleEdits — for now the
+  // user sees fresh data on page reload.
+
+  // ---- Add/Remove routing through rule.manual_spells / manual_exclusions ----
+  //
+  // Proposal D doesn't use class_spell_lists as the source of truth; the
+  // resolver reads from spell_rules at request time. To curate a class's
+  // list, the admin manipulates the applied rules' manualSpells +
+  // manualExclusions arrays:
+  //
+  //   - Spell currently OFF the list → push to rule.manualSpells
+  //     (which rule? see resolveAddDecision below)
+  //   - Spell currently ON via manualSpells of rule R → pop from R.manualSpells
+  //   - Spell currently ON via query of rule R → push to R.manualExclusions
+  //
+  // When multiple applied rules could host or contain the spell, we open
+  // the `rulePicker` dialog rather than guessing.
+  //
+  // Each high-level action compiles down to a sequence of `RuleEdit`s
+  // that `applyRuleEdits` dispatches sequentially. Carrying the edits as
+  // an explicit record (rather than re-deriving on the fly) means Undo
+  // can replay the inverse edits without recomputing decisions against
+  // potentially-changed state.
+
+  type RuleEdit = {
+    ruleId: string;
+    spellId: string;
+    op: 'manual-add' | 'manual-remove' | 'exclude-add' | 'exclude-remove';
+  };
+
+  const invertRuleEdit = (edit: RuleEdit): RuleEdit => ({
+    ...edit,
+    op:
+      edit.op === 'manual-add' ? 'manual-remove'
+      : edit.op === 'manual-remove' ? 'manual-add'
+      : edit.op === 'exclude-add' ? 'exclude-remove'
+      : 'exclude-add',
+  });
+
+  const applyRuleEdits = async (
+    edits: RuleEdit[],
+    opts: { silent?: boolean; verb?: string } = {},
+  ) => {
+    if (edits.length === 0) return;
+    const spellIdSet = new Set(edits.map(e => e.spellId));
+    setPendingSpellIds(prev => {
+      const next = new Set(prev);
+      for (const id of spellIdSet) next.add(id);
       return next;
     });
+    try {
+      for (const edit of edits) {
+        switch (edit.op) {
+          case 'manual-add':
+            await addSpellToRuleManual(edit.spellId, edit.ruleId);
+            break;
+          case 'manual-remove':
+            await removeSpellFromRuleManual(edit.spellId, edit.ruleId);
+            break;
+          case 'exclude-add':
+            await addRuleManualExclusion(edit.spellId, edit.ruleId);
+            break;
+          case 'exclude-remove':
+            await removeRuleManualExclusion(edit.spellId, edit.ruleId);
+            break;
+        }
+      }
+      await refreshAfterRuleEdit();
+      if (!opts.silent) {
+        const noun =
+          spellIdSet.size === 1
+            ? (spells.find(s => s.id === [...spellIdSet][0])?.name || '1 spell')
+            : `${spellIdSet.size} spells`;
+        const inverse = edits.map(invertRuleEdit);
+        toast(`${opts.verb ?? 'Updated'} ${noun}.`, {
+          duration: 10_000,
+          action: {
+            label: 'Undo',
+            onClick: () => {
+              void applyRuleEdits(inverse, { silent: true, verb: 'Reverted' });
+            },
+          },
+        });
+      }
+    } catch (err) {
+      console.error('[SpellListManager] applyRuleEdits failed:', err);
+      toast.error('Edit failed — see console.');
+      // No optimistic local mutation — refresh just to make sure
+      // state is consistent.
+      await refreshAfterRuleEdit().catch(() => {});
+    } finally {
+      setPendingSpellIds(prev => {
+        const next = new Set(prev);
+        for (const id of spellIdSet) next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  // Tag index used by:
+  //   - the resolver-equivalent local computation below
+  //     (`computeRemoveCandidates` / picker disambiguation),
+  //   - per-rule live match counts in the LinkedRulesPanel,
+  //   - the rule-match explainer in the right detail pane.
+  // Declared once here so the matcher and the UI share one index;
+  // without it the rich tagStates code path short-circuits to "match"
+  // for any rule that uses tagStates (the defensive fallback in
+  // `lib/spellFilters.ts :: matchSpellAgainstRule`), so live match
+  // counts would say "everything matches" and mislead the user.
+  const tagIndex = useMemo(() => buildTagIndex(tags as any), [tags]);
+
+  /**
+   * Per-spell removal candidates: every rule that currently includes
+   * this spell, with the mechanism that's putting it on the list. Used
+   * by the remove path to decide whether a single-shot edit is enough
+   * or the disambiguation picker needs to open.
+   */
+  const computeRemoveCandidates = (spellId: string) => {
+    const spell = spells.find(s => s.id === spellId);
+    if (!spell) return [];
+    const out: Array<{ rule: SpellRule; mechanism: 'manual' | 'query' }> = [];
+    for (const rule of linkedRules) {
+      if (rule.manualExclusions.includes(spellId)) continue; // already excluded
+      if (rule.manualSpells.includes(spellId)) {
+        out.push({ rule, mechanism: 'manual' });
+      } else if (spellMatchesRule(spell as any, rule, tagIndex)) {
+        out.push({ rule, mechanism: 'query' });
+      }
+    }
+    return out;
   };
 
   /**
-   * Single source of truth for any add/remove action — single toggle, bulk add, bulk remove,
-   * and the undo path all go through here. `silent` skips the success toast (used when an
-   * undo action triggers another applyChange so we don't loop toasts forever).
+   * Single source of truth for any add/remove action — single toggle,
+   * bulk add, bulk remove, and Undo all go through here.
+   *
+   * Proposal mode keeps its existing pathway (writes to class_spell_lists
+   * via the proposal queue) — those revisions are harmless orphans
+   * against the new resolver, and migrating proposal-mode to rule-level
+   * edits is P4.6 work.
    */
   const applyChange = async (
     classId: string,
@@ -744,21 +949,16 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       toast.error('Class not found.');
       return;
     }
-    const classMembership: ClassMembership = { id: cls.id, name: cls.name, identifier: cls.identifier };
 
-    // Mark in-flight (so per-row buttons disable)
-    setPendingSpellIds(prev => {
-      const next = new Set(prev);
-      for (const id of spellIds) next.add(id);
-      return next;
-    });
-
-    // Proposal mode: no optimistic update (the live rows haven't
-    // changed and won't until an admin approves), no membership
-    // map mutation, one revision per spell. Bulk Add / Bulk Remove
-    // become N proposals at once — the admin can approve them
-    // individually or in a batch from /admin/proposals.
+    // Proposal mode: keep existing class_spell_lists proposal queue
+    // path. TODO(P4.6): migrate to spell_rule entity-type edits so
+    // approved proposals actually feed the resolver.
     if (isProposalMode) {
+      setPendingSpellIds(prev => {
+        const next = new Set(prev);
+        for (const id of spellIds) next.add(id);
+        return next;
+      });
       try {
         if (mode === 'add') {
           for (const spellId of spellIds) {
@@ -798,58 +998,100 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       return;
     }
 
-    // Admin direct-write path — optimistic apply + bulk D1 helper.
-    setClassListIds(prev => {
-      const next = new Set(prev);
-      for (const id of spellIds) {
-        if (mode === 'add') next.add(id);
-        else next.delete(id);
-      }
-      return next;
-    });
-    for (const id of spellIds) mutateMembership(id, classMembership, mode);
-
-    try {
-      if (mode === 'add') await addSpellsToClassList(classId, spellIds);
-      else await removeSpellsFromClassList(classId, spellIds);
-
-      if (!opts.silent) {
-        const verb = mode === 'add' ? 'Added' : 'Removed';
-        const prep = mode === 'add' ? 'to' : 'from';
-        const noun = spellIds.length === 1
-          ? (spells.find(s => s.id === spellIds[0])?.name || '1 spell')
-          : `${spellIds.length} spells`;
-        toast(`${verb} ${noun} ${prep} ${cls.name}.`, {
-          duration: 10_000,
-          action: {
-            label: 'Undo',
-            onClick: () => {
-              applyChange(classId, spellIds, mode === 'add' ? 'remove' : 'add', { silent: true })
-                .then(() => toast(`${mode === 'add' ? 'Removed' : 'Re-added'} ${noun}.`));
-            },
-          },
-        });
-      }
-    } catch (err) {
-      console.error('[SpellListManager] applyChange failed:', err);
-      toast.error(mode === 'add' ? 'Failed to add spells.' : 'Failed to remove spells.');
-      // Revert
-      setClassListIds(prev => {
-        const next = new Set(prev);
-        for (const id of spellIds) {
-          if (mode === 'add') next.delete(id);
-          else next.add(id);
-        }
-        return next;
-      });
-      for (const id of spellIds) mutateMembership(id, classMembership, mode === 'add' ? 'remove' : 'add');
-    } finally {
-      setPendingSpellIds(prev => {
-        const next = new Set(prev);
-        for (const id of spellIds) next.delete(id);
-        return next;
-      });
+    // Admin direct-write path — translate to rule edits.
+    if (linkedRules.length === 0) {
+      toast.error(
+        `${cls.name} has no rules linked. Link a rule first using "Link Rule" above.`,
+      );
+      return;
     }
+
+    const edits: RuleEdit[] = [];
+    const ambiguous: string[] = [];
+
+    if (mode === 'add') {
+      // Add → push to manualSpells of an applied rule. If only one
+      // applied rule, that's the target. If multiple, defer to picker
+      // (single-spell case) or pick the first as a sensible default
+      // (bulk case, with a warning toast).
+      if (linkedRules.length === 1) {
+        const target = linkedRules[0];
+        for (const spellId of spellIds) {
+          edits.push({ spellId, ruleId: target.id, op: 'manual-add' });
+        }
+      } else {
+        // Multiple rules. For a single spell, open the picker; for a
+        // bulk add, default to the first rule with a heads-up toast.
+        if (spellIds.length === 1) {
+          const spellId = spellIds[0];
+          const spell = spells.find(s => s.id === spellId);
+          setRulePicker({
+            spellId,
+            spellName: spell?.name || spellId,
+            action: 'add',
+            candidates: linkedRules.map(r => ({ rule: r, mechanism: 'add-manual' })),
+          });
+          return; // wait for picker resolution
+        }
+        const target = linkedRules[0];
+        if (!opts.silent) {
+          toast(`Adding to "${target.name}" — class has ${linkedRules.length} rules. Use single-add to pick a different rule.`);
+        }
+        for (const spellId of spellIds) {
+          edits.push({ spellId, ruleId: target.id, op: 'manual-add' });
+        }
+      }
+    } else {
+      // Remove → invert per-spell. The decision can vary by spell
+      // (one may be manual on rule A, another query-matched by rule B).
+      for (const spellId of spellIds) {
+        const candidates = computeRemoveCandidates(spellId);
+        if (candidates.length === 0) {
+          // Spell isn't actually on the list per the local model.
+          // Defensive: skip rather than fabricate an edit.
+          continue;
+        }
+        if (candidates.length === 1) {
+          const c = candidates[0];
+          edits.push({
+            spellId,
+            ruleId: c.rule.id,
+            op: c.mechanism === 'manual' ? 'manual-remove' : 'exclude-add',
+          });
+        } else {
+          ambiguous.push(spellId);
+        }
+      }
+      if (ambiguous.length === 1 && edits.length === 0) {
+        // Single ambiguous spell → open picker.
+        const spellId = ambiguous[0];
+        const spell = spells.find(s => s.id === spellId);
+        setRulePicker({
+          spellId,
+          spellName: spell?.name || spellId,
+          action: 'remove',
+          candidates: computeRemoveCandidates(spellId).map(c => ({
+            rule: c.rule,
+            mechanism: c.mechanism,
+          })),
+        });
+        return;
+      }
+      if (ambiguous.length > 0 && !opts.silent) {
+        toast(
+          `${ambiguous.length} spell${ambiguous.length === 1 ? '' : 's'} skipped — multiple rules contribute. Use single-row remove to pick.`,
+          { duration: 8_000 },
+        );
+      }
+    }
+
+    if (edits.length === 0) return;
+    await applyRuleEdits(edits, {
+      silent: opts.silent,
+      verb: mode === 'add'
+        ? (spellIds.length === 1 ? 'Added' : `Added ${spellIds.length} spells`)
+        : (spellIds.length === 1 ? 'Removed' : `Removed ${spellIds.length} spells`),
+    });
   };
 
   const handleToggleSpell = (spellId: string) => {
@@ -860,6 +1102,39 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     if (pendingSpellIds.has(spellId)) return;
     const wasOnList = classListIds.has(spellId);
     void applyChange(selectedClassId, [spellId], wasOnList ? 'remove' : 'add');
+  };
+
+  /** Restore an excluded spell — pop from rule.manualExclusions. */
+  const handleRestoreExclusion = (entry: ExcludedSpell) => {
+    void applyRuleEdits(
+      [{ spellId: entry.spellId, ruleId: entry.ruleId, op: 'exclude-remove' }],
+      { verb: 'Restored' },
+    );
+  };
+
+  /** Rule-picker resolution — fires the chosen edit then closes the dialog. */
+  const handleRulePickerSelect = (ruleId: string) => {
+    if (!rulePicker) return;
+    const { spellId, action, candidates } = rulePicker;
+    setRulePicker(null);
+    const candidate = candidates.find(c => c.rule.id === ruleId);
+    if (!candidate) return;
+    if (action === 'add') {
+      void applyRuleEdits(
+        [{ spellId, ruleId, op: 'manual-add' }],
+        { verb: 'Added' },
+      );
+    } else {
+      // remove — manual-remove or exclude-add depending on mechanism
+      void applyRuleEdits(
+        [{
+          spellId,
+          ruleId,
+          op: candidate.mechanism === 'manual' ? 'manual-remove' : 'exclude-add',
+        }],
+        { verb: 'Removed' },
+      );
+    }
   };
 
   const toggleSelected = (spellId: string) => {
@@ -934,18 +1209,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     }
   };
 
-  // ----- Linked Rules (Layer 1 v1.1, restructured) -----
-
-  // Tag-hierarchy index used by every rich-tag rule matcher below.
-  // Without this index, `spellMatchesRule` short-circuits to "match"
-  // for any rule that uses `tagStates` (the defensive fallback in
-  // `matchSpellAgainstRule` in src/lib/spellFilters.ts), so the live
-  // match counts in this page would say "everything matches" and
-  // wildly mislead the user. The server-side rebuild path
-  // (`rebuildClassSpellListFromAppliedRules`) already builds its own
-  // tagIndex, so a real Rebuild produced correct rows even when this
-  // preview lied — fix is purely a UI-correctness one.
-  const tagIndex = useMemo(() => buildTagIndex(tags as any), [tags]);
+  // ----- Linked Rules (resolver-era) -----
 
   // Tag id → human name. Used by the per-spell rule-match explainer
   // below to humanize tag-axis failure reasons ("missing Confuse"
@@ -1006,44 +1270,15 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     return set.size;
   }, [linkedRules, spells, tagIndex]);
 
-  // Per-rule stale detection. A rule is "stale" relative to this
-  // class if it's been edited since the class was last rebuilt
-  // (i.e. `spell_rules.updated_at` > `MAX(class_spell_lists.added_at)`
-  // for the rule:% rows on this class). Also stale if the class has
-  // never been rebuilt but does have rules linked — that's the "linked
-  // but never baked" case.
-  //
-  // BUG FIX: the previous string compare was wrong because the two
-  // DATETIME columns get written by different paths (client ISO vs
-  // SQLite CURRENT_TIMESTAMP) and never share a textual shape. Same
-  // root cause as `fetchStaleClasses` in `lib/classSpellLists.ts` —
-  // see `parseTimestampMs` there for the explanation.
-  const staleRuleIds = useMemo(() => {
-    const out = new Set<string>();
-    const lastRebuildMs = parseTimestampMs(lastRebuildAt);
-    for (const rule of linkedRules) {
-      if (!lastRebuildAt) {
-        // Class never rebuilt — every linked rule needs a bake.
-        out.add(rule.id);
-        continue;
-      }
-      const updatedMs = parseTimestampMs(rule.updatedAt || '');
-      if (updatedMs > lastRebuildMs) out.add(rule.id);
-    }
-    return out;
-  }, [linkedRules, lastRebuildAt]);
+  // No stale-rule detection in the resolver era — the resolver reads
+  // live; a rule edit's effect is visible on the very next read.
 
   const handleLinkRule = async (rule: SpellRule) => {
     if (!selectedClassId) return;
     try {
       await applyRule(rule.id, 'class', selectedClassId);
-      const refreshed = await fetchAppliedRulesFor('class', selectedClassId);
-      setLinkedRules(refreshed);
+      await refreshAfterRuleEdit();
       toast(`Linked "${rule.name}" to this class.`);
-      // Refresh stale audit — linking a rule typically makes the
-      // class stale (rule.updated_at > lastRebuildAt because it's
-      // probably never been rebuilt against THIS rule before).
-      fetchStaleClasses().then(setStaleClasses).catch(() => {});
     } catch (err) {
       console.error('[SpellListManager] Link failed:', err);
       toast.error('Failed to link rule.');
@@ -1054,157 +1289,13 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     if (!selectedClassId) return;
     try {
       await unapplyRule(rule.id, 'class', selectedClassId);
-      setLinkedRules(prev => prev.filter(r => r.id !== rule.id));
+      await refreshAfterRuleEdit();
       toast(`Unlinked "${rule.name}".`);
-      // Refresh stale audit — unlinking leaves orphan rule:% rows
-      // in class_spell_lists until next rebuild, so the class
-      // stays stale until cleaned up.
-      fetchStaleClasses().then(setStaleClasses).catch(() => {});
     } catch (err) {
       console.error('[SpellListManager] Unlink failed:', err);
       toast.error('Failed to unlink rule.');
     }
   };
-
-  // Open preview dialog: compute toAdd / toRemove / staying without mutating anything.
-  const handleOpenRebuildPreview = async () => {
-    if (!selectedClassId || rebuildPending) return;
-    if (linkedRules.length === 0) {
-      toast.error('No rules linked to this class.');
-      return;
-    }
-    try {
-      const currentRuleSet = await fetchClassRuleSpellIds(selectedClassId);
-      const newRuleSet = new Set<string>();
-      for (const rule of linkedRules) {
-        for (const s of spells) if (spellMatchesRule(s, rule, tagIndex)) newRuleSet.add(s.id);
-      }
-      const toAdd: string[] = [];
-      const toRemove: string[] = [];
-      const staying: string[] = [];
-      for (const id of newRuleSet) {
-        if (currentRuleSet.has(id)) staying.push(id);
-        else toAdd.push(id);
-      }
-      for (const id of currentRuleSet) {
-        if (!newRuleSet.has(id)) toRemove.push(id);
-      }
-      setRebuildPreview({ toAdd, toRemove, staying });
-    } catch (err) {
-      console.error('[SpellListManager] Rebuild preview failed:', err);
-      toast.error('Failed to preview rebuild.');
-    }
-  };
-
-  const handleConfirmRebuild = async () => {
-    if (!selectedClassId || rebuildPending) return;
-    setRebuildPreview(null);
-    setRebuildPending(true);
-    try {
-      const inputs = spells.map(s => ({
-        id: s.id,
-        level: s.level,
-        school: s.school,
-        source_id: s.source_id,
-        tags: s.tags,
-        activationBucket: s.activationBucket,
-        rangeBucket: s.rangeBucket,
-        durationBucket: s.durationBucket,
-        shapeBucket: s.shapeBucket,
-        concentration: s.concentration,
-        ritual: s.ritual,
-        vocal: s.vocal,
-        somatic: s.somatic,
-        material: s.material,
-      }));
-      const { added, rules } = await rebuildClassSpellListFromAppliedRules(selectedClassId, inputs);
-      const [ids, memberships, ts] = await Promise.all([
-        fetchClassSpellIds(selectedClassId),
-        fetchClassesForSpells(spells.map(s => s.id)),
-        fetchLastClassRuleRebuildAt(selectedClassId),
-      ]);
-      setClassListIds(ids);
-      setSpellMembershipsBySpellId(memberships);
-      setLastRebuildAt(ts);
-      toast(`Rebuilt: ${added} spell${added === 1 ? '' : 's'} matched across ${rules} linked rule${rules === 1 ? '' : 's'}.`);
-      // Refresh the cross-class stale audit so the toolbar count
-      // drops by 1 (or 0 if this class wasn't stale to begin with).
-      fetchStaleClasses().then(setStaleClasses).catch(() => {});
-    } catch (err) {
-      console.error('[SpellListManager] Rebuild failed:', err);
-      toast.error('Rebuild failed.');
-    } finally {
-      setRebuildPending(false);
-    }
-  };
-
-  /**
-   * Bulk rebuild every class with at least one stale linked rule.
-   * Parallel — each call wipes its own class's rule:% slice then
-   * re-inserts; no cross-class contention. Failures are reported
-   * per-class in the toast but don't abort the others.
-   */
-  const handleRebuildAllStale = async () => {
-    if (rebuildAllStalePending || staleClasses.length === 0) return;
-    setRebuildAllStalePending(true);
-    try {
-      const inputs = spells.map(s => ({
-        id: s.id,
-        level: s.level,
-        school: s.school,
-        source_id: s.source_id,
-        tags: s.tags,
-        activationBucket: s.activationBucket,
-        rangeBucket: s.rangeBucket,
-        durationBucket: s.durationBucket,
-        shapeBucket: s.shapeBucket,
-        concentration: s.concentration,
-        ritual: s.ritual,
-        vocal: s.vocal,
-        somatic: s.somatic,
-        material: s.material,
-      }));
-      const targets = staleClasses.slice();
-      const results = await Promise.allSettled(
-        targets.map(t => rebuildClassSpellListFromAppliedRules(t.classId, inputs)),
-      );
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.length - succeeded;
-      if (failed > 0) {
-        toast.error(`Rebuilt ${succeeded} of ${results.length} stale class${results.length === 1 ? '' : 'es'}. ${failed} failed — see console.`);
-        results.forEach((r, i) => {
-          if (r.status === 'rejected') {
-            // eslint-disable-next-line no-console
-            console.error(`[SpellListManager] rebuild-all-stale: class ${targets[i].classId} failed:`, r.reason);
-          }
-        });
-      } else {
-        toast(`Rebuilt ${succeeded} stale class${succeeded === 1 ? '' : 'es'}.`);
-      }
-      // Refresh the audit. Also refresh the currently-selected
-      // class's data if it was one of the targets.
-      const stale = await fetchStaleClasses();
-      setStaleClasses(stale);
-      if (selectedClassId && targets.some(t => t.classId === selectedClassId)) {
-        const [ids, ts] = await Promise.all([
-          fetchClassSpellIds(selectedClassId),
-          fetchLastClassRuleRebuildAt(selectedClassId),
-        ]);
-        setClassListIds(ids);
-        setLastRebuildAt(ts);
-      }
-    } finally {
-      setRebuildAllStalePending(false);
-    }
-  };
-
-  function toggleFromArray<T extends string>(
-    value: T,
-    list: T[],
-    set: React.Dispatch<React.SetStateAction<T[]>>,
-  ) {
-    set(list.includes(value) ? list.filter(v => v !== value) : [...list, value]);
-  }
 
   if (!canManageLists) {
     return <div className="text-center py-20 text-ink/70">Access Denied.</div>;
@@ -1254,45 +1345,53 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
             ) : null}
           </div>
         ) : null}
-        {/* Spacer pushes the global Rebuild Stale affordance to the
-            right edge of the toolbar. Only renders when there ARE
-            stale classes — silent when everything's in sync. */}
+        {/* No Rebuild Stale button — Proposal D resolves live; there
+            is no stale concept to surface. */}
         <div className="flex-1" />
-        {staleClasses.length > 0 ? (
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleRebuildAllStale}
-            disabled={rebuildAllStalePending}
-            className="h-8 px-3 text-[10px] uppercase tracking-[0.18em] bg-amber-400/15 text-amber-400 border border-amber-400/40 hover:bg-amber-400/25"
-            title={`${staleClasses.length} class${staleClasses.length === 1 ? ' has' : 'es have'} stale spell lists: ${staleClasses.map(c => c.className).join(', ')}`}
-          >
-            {rebuildAllStalePending
-              ? `Rebuilding ${staleClasses.length}…`
-              : `Rebuild Stale (${staleClasses.length})`}
-          </Button>
-        ) : null}
       </div>
 
-      {/* Linked-rules strip — only when a class is selected. The
-          panel itself already has an internal collapse/expand for
-          the rule list, so it shrinks naturally when not in use. */}
+      {/* Linked-rules strip — only when a class is selected. */}
       {selectedClassId ? (
         <div className="shrink-0">
           <LinkedRulesPanel
             linkedRules={linkedRules}
-            rebuildPending={rebuildPending}
             ruleMatchCounts={ruleMatchCounts}
             totalLinkedRuleMatches={totalLinkedRuleMatches}
             expanded={linkedRulesExpanded}
             onToggleExpanded={() => setLinkedRulesExpanded(v => !v)}
             onUnlink={handleUnlinkRule}
             onOpenLinkPicker={() => setLinkRuleDialogOpen(true)}
-            onRebuild={handleOpenRebuildPreview}
-            lastRebuildAt={lastRebuildAt}
-            staleRuleIds={staleRuleIds}
           />
         </div>
+      ) : null}
+
+      {/* Tag Usage + Exceptions surfaces — only when a class is selected. */}
+      {selectedClassId ? (
+        <>
+          <TagUsagePanel
+            linkedRules={linkedRules}
+            tags={tags}
+            tagGroups={tagGroups}
+            expanded={tagUsageExpanded}
+            onToggleExpanded={() => setTagUsageExpanded(v => !v)}
+          />
+          <ExceptionsPanel
+            exclusions={exclusions}
+            loading={exclusionsLoading}
+            spellsById={spellsById}
+            expanded={exceptionsExpanded}
+            onToggleExpanded={() => setExceptionsExpanded(v => !v)}
+            onRestore={handleRestoreExclusion}
+            pendingSpellIds={pendingSpellIds}
+          />
+          {subclassesWithOwnRules.length > 0 ? (
+            <SubclassesPanel
+              subclasses={subclassesWithOwnRules}
+              expanded={subclassesExpanded}
+              onToggleExpanded={() => setSubclassesExpanded(v => !v)}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {/* FilterBar + extras row. The toggle buttons + count live in
@@ -1879,53 +1978,60 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         </Card>
       </div>
 
-      {/* Pre-rebuild preview — show toAdd / toRemove counts before mutating. */}
+      {/* Rule-disambiguation picker — opens when the spell could be
+          added to / removed from multiple applied rules. Renders the
+          candidate rules with the mechanism each one currently
+          contributes via, so the user knows whether picking a rule
+          means "pin manually here" / "unpin from here" / "exclude
+          from this rule's query". */}
       <Dialog
-        open={rebuildPreview !== null}
-        onOpenChange={(open) => { if (!open) setRebuildPreview(null); }}
+        open={rulePicker !== null}
+        onOpenChange={(open) => { if (!open) setRulePicker(null); }}
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Rebuild from {linkedRules.length} linked rule{linkedRules.length === 1 ? '' : 's'}?</DialogTitle>
+            <DialogTitle>
+              {rulePicker?.action === 'add'
+                ? `Add "${rulePicker?.spellName ?? ''}" to which rule?`
+                : `Remove "${rulePicker?.spellName ?? ''}" from which rule?`}
+            </DialogTitle>
             <DialogDescription>
-              Manual entries on the class are untouched. Only rule-driven rows change.
+              {rulePicker?.action === 'add'
+                ? `This class has ${linkedRules.length} applied rules. Pick which rule should host the manual addition.`
+                : `This spell is contributed to the list by more than one rule. Pick the rule to clear it from.`}
             </DialogDescription>
           </DialogHeader>
-          {rebuildPreview ? (
-            <div className="space-y-2 py-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-emerald-500/80 font-bold uppercase tracking-widest text-[10px]">Will add</span>
-                <span className="text-ink"><span className="text-emerald-400 font-bold">{rebuildPreview.toAdd.length}</span> spell{rebuildPreview.toAdd.length === 1 ? '' : 's'}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-blood/80 font-bold uppercase tracking-widest text-[10px]">Will remove</span>
-                <span className="text-ink"><span className="text-blood font-bold">{rebuildPreview.toRemove.length}</span> spell{rebuildPreview.toRemove.length === 1 ? '' : 's'}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-ink/40 font-bold uppercase tracking-widest text-[10px]">Will stay</span>
-                <span className="text-ink/60">{rebuildPreview.staying.length} spell{rebuildPreview.staying.length === 1 ? '' : 's'}</span>
-              </div>
-              {rebuildPreview.toAdd.length === 0 && rebuildPreview.toRemove.length === 0 ? (
-                <p className="text-[10px] text-ink/40 italic pt-1">No changes. Rebuild is a no-op (the timestamp will still update).</p>
-              ) : null}
-            </div>
-          ) : null}
+          <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/10 -mx-4">
+            {(rulePicker?.candidates ?? []).map(c => {
+              const label =
+                c.mechanism === 'manual'
+                  ? 'Currently pinned manually'
+                  : c.mechanism === 'query'
+                    ? 'Currently matched by this rule’s query'
+                    : 'Will be pinned manually';
+              return (
+                <button
+                  key={c.rule.id}
+                  type="button"
+                  onClick={() => handleRulePickerSelect(c.rule.id)}
+                  className="w-full text-left px-4 py-2 text-sm text-ink hover:bg-gold/10 flex items-center justify-between gap-2"
+                >
+                  <div className="min-w-0">
+                    <div className="font-bold truncate">{c.rule.name}</div>
+                    <div className="text-[10px] text-ink/50 truncate">{label}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setRebuildPreview(null)}
+              onClick={() => setRulePicker(null)}
               className="border-gold/20 text-ink/70 hover:bg-gold/5"
             >
               Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleConfirmRebuild}
-              disabled={rebuildPending}
-              className="bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25"
-            >
-              Confirm Rebuild
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1937,8 +2043,10 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
           <DialogHeader>
             <DialogTitle>Link a rule to this class</DialogTitle>
             <DialogDescription>
-              Pick a rule from the catalogue. Linking it adds it to the rebuild — matching spells will be
-              added to {selectedClass?.name || 'this class'}'s list on the next Rebuild.
+              Pick a rule from the catalogue. The class's spell list becomes
+              the union of every applied rule's matches plus its manual
+              additions, minus its exclusions. Changes are live — no rebuild
+              step required.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gold/10 -mx-4">
@@ -2083,41 +2191,28 @@ function summarizeRuleManualAndQuery(rule: SpellRule): string {
 
 function LinkedRulesPanel({
   linkedRules,
-  rebuildPending,
   ruleMatchCounts,
   totalLinkedRuleMatches,
   expanded,
   onToggleExpanded,
   onUnlink,
   onOpenLinkPicker,
-  onRebuild,
-  lastRebuildAt,
-  staleRuleIds,
 }: {
   linkedRules: SpellRule[];
-  rebuildPending: boolean;
   ruleMatchCounts: Record<string, { matches: number; onList: number }>;
   totalLinkedRuleMatches: number;
   expanded: boolean;
   onToggleExpanded: () => void;
   onUnlink: (rule: SpellRule) => void;
   onOpenLinkPicker: () => void;
-  onRebuild: () => void;
-  lastRebuildAt: string | null;
-  staleRuleIds: Set<string>;
 }) {
   const ChevronIcon = expanded ? ChevronDown : ChevronRight;
-  const lastRebuildLabel = lastRebuildAt ? formatRelativeTime(lastRebuildAt) : null;
   // Cross-editor link prefix — keep users on the route they came in
   // on (admin direct vs proposal-wrapped).
   const panelLocation = useLocation();
   const editorPrefix = panelLocation.pathname.startsWith('/proposals/edit/')
     ? '/proposals/edit'
     : '/compendium';
-  // Aggregate stale-state summary. Drives the amber Rebuild-CTA
-  // banner that appears when at least one linked rule is stale.
-  const staleCount = staleRuleIds.size;
-  const isStale = staleCount > 0;
 
   // Collapsed: one-line summary
   if (!expanded) {
@@ -2138,23 +2233,6 @@ function LinkedRulesPanel({
               <span className="text-ink/80 font-bold">{linkedRules.length}</span> rule{linkedRules.length === 1 ? '' : 's'}
               <span className="mx-2 text-ink/20">·</span>
               <span className="text-ink/80 font-bold">{totalLinkedRuleMatches}</span> spell{totalLinkedRuleMatches === 1 ? '' : 's'} matched
-              {lastRebuildLabel ? (
-                <>
-                  <span className="mx-2 text-ink/20">·</span>
-                  <span className="text-ink/60">last rebuilt {lastRebuildLabel}</span>
-                </>
-              ) : null}
-              {isStale ? (
-                <>
-                  <span className="mx-2 text-amber-400/40">·</span>
-                  <span
-                    className="text-amber-400 font-bold uppercase tracking-widest text-[10px]"
-                    title={`${staleCount} of ${linkedRules.length} rule${linkedRules.length === 1 ? '' : 's'} edited since last rebuild — click Rebuild to refresh.`}
-                  >
-                    Stale ({staleCount})
-                  </span>
-                </>
-              ) : null}
             </>
           )}
         </span>
@@ -2168,15 +2246,6 @@ function LinkedRulesPanel({
             className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-gold hover:bg-gold/10"
           >
             <Plus className="w-3 h-3 mr-1" /> Link Rule
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={onRebuild}
-            disabled={linkedRules.length === 0 || rebuildPending}
-            className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25"
-          >
-            {rebuildPending ? 'Rebuilding…' : 'Rebuild'}
           </Button>
         </div>
       </div>
@@ -2207,9 +2276,6 @@ function LinkedRulesPanel({
           </Link>
         </div>
         <div className="flex items-center gap-3">
-          {lastRebuildLabel ? (
-            <span className="text-[10px] uppercase tracking-widest text-ink/40">last rebuilt {lastRebuildLabel}</span>
-          ) : null}
           <Button
             type="button"
             size="sm"
@@ -2218,16 +2284,6 @@ function LinkedRulesPanel({
             className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] border-gold/30 text-gold hover:bg-gold/10"
           >
             <Plus className="w-3 h-3 mr-1" /> Link Rule
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={onRebuild}
-            disabled={linkedRules.length === 0 || rebuildPending}
-            className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] bg-gold/15 text-gold border border-gold/30 hover:bg-gold/25"
-            title={linkedRules.length === 0 ? 'Link at least one rule first' : 'Re-run linked rules and replace rule-driven entries'}
-          >
-            {rebuildPending ? 'Rebuilding…' : 'Rebuild from Rules'}
           </Button>
         </div>
       </div>
@@ -2239,42 +2295,11 @@ function LinkedRulesPanel({
         </p>
       ) : (
         <>
-          {/* Stale banner — appears when at least one linked rule
-              has been edited since the class was last rebuilt
-              (or the class has never been rebuilt). The Rebuild
-              button up in the header is the CTA; this just
-              surfaces the state so admins notice. */}
-          {isStale ? (
-            <div className="flex items-center gap-3 rounded-md border border-amber-400/40 bg-amber-400/[0.06] px-3 py-2">
-              <span className="text-[10px] uppercase tracking-widest text-amber-400 font-bold">
-                {lastRebuildAt ? 'Stale' : 'Never rebuilt'}
-              </span>
-              <span className="text-xs text-ink/70">
-                {lastRebuildAt
-                  ? `${staleCount} of ${linkedRules.length} rule${linkedRules.length === 1 ? '' : 's'} edited since last rebuild.`
-                  : `This class has ${linkedRules.length} rule${linkedRules.length === 1 ? '' : 's'} linked but no rebuild has been run yet — class spell list is empty.`}
-              </span>
-              <div className="flex-1" />
-              <Button
-                type="button"
-                size="sm"
-                onClick={onRebuild}
-                disabled={rebuildPending}
-                className="h-7 px-3 text-[10px] uppercase tracking-[0.18em] bg-amber-400/15 text-amber-400 border border-amber-400/40 hover:bg-amber-400/25"
-              >
-                {rebuildPending ? 'Rebuilding…' : 'Rebuild now'}
-              </Button>
-            </div>
-          ) : null}
           {/* Cap the expanded rules list at ~40% of viewport height and
-              scroll internally. Previously this just expanded unbounded,
-              so a class with 8+ linked rules pushed the spell-list
-              card below the fold — the user couldn't see the spells
-              the rules were actually shaping. */}
+              scroll internally. */}
           <div className="space-y-1 max-h-[40vh] overflow-y-auto custom-scrollbar pr-1">
             {linkedRules.map(rule => {
               const counts = ruleMatchCounts[rule.id] || { matches: 0, onList: 0 };
-              const ruleStale = staleRuleIds.has(rule.id);
               return (
                 <div
                   key={rule.id}
@@ -2288,16 +2313,6 @@ function LinkedRulesPanel({
                       >
                         {rule.name}
                       </Link>
-                      {ruleStale ? (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-amber-400 font-bold"
-                          title={lastRebuildAt
-                            ? `This rule was edited after the last rebuild (${lastRebuildAt}). Rebuild to apply the latest matches.`
-                            : 'This class has never been rebuilt with rules.'}
-                        >
-                          Stale
-                        </span>
-                      ) : null}
                       <span
                         className={cn(
                           'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-widest',
@@ -2329,6 +2344,364 @@ function LinkedRulesPanel({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tag Usage panel — collapse every applied rule's tag references into one
+// per-class summary chip strip.
+// ---------------------------------------------------------------------------
+//
+// For each linked rule we walk its clause(s) and pull out:
+//   - tag ids in the legacy `tagFilterIds` array (flat include-only),
+//   - tag ids with state 1 in the rich `tagStates` map (include),
+//     ignoring state 2 (exclude) since those don't materially shape
+//     the "what does this class's list contain" mental model the
+//     curator is building.
+//
+// The chip strip is grouped by the tag's group (e.g. Domain, School,
+// Element) so it scans the same way the rest of the app's tag UIs
+// do — a curator looking at Wizard sees "Domain · Arcana, Knowledge"
+// not a flat alphabetical jumble of every tag name.
+function TagUsagePanel({
+  linkedRules,
+  tags,
+  tagGroups,
+  expanded,
+  onToggleExpanded,
+}: {
+  linkedRules: SpellRule[];
+  tags: TagRow[];
+  tagGroups: TagGroupRow[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
+}) {
+  // Aggregate: tagId → Array<{ ruleId, ruleName }>
+  // so a chip's tooltip can show "Referenced by: Rule A, Rule B".
+  const usageByTagId = useMemo(() => {
+    const out = new Map<string, Array<{ ruleId: string; ruleName: string }>>();
+    for (const rule of linkedRules) {
+      // Multi-clause aware: pull from every clause.
+      const clauses = getClauses(rule.query);
+      const seen = new Set<string>();
+      for (const clause of clauses) {
+        for (const tagId of clause.tagFilterIds ?? []) {
+          if (seen.has(tagId)) continue;
+          seen.add(tagId);
+          const list = out.get(tagId) ?? [];
+          list.push({ ruleId: rule.id, ruleName: rule.name });
+          out.set(tagId, list);
+        }
+        if (clause.tagStates) {
+          for (const [tagId, state] of Object.entries(clause.tagStates)) {
+            // State 1 = include. State 2 = exclude — we skip those
+            // because they shrink the contribution rather than
+            // shaping it; surfacing them here would mislead.
+            if (state !== 1) continue;
+            if (seen.has(tagId)) continue;
+            seen.add(tagId);
+            const list = out.get(tagId) ?? [];
+            list.push({ ruleId: rule.id, ruleName: rule.name });
+            out.set(tagId, list);
+          }
+        }
+      }
+    }
+    return out;
+  }, [linkedRules]);
+
+  const tagsById = useMemo(
+    () => new Map(tags.map(t => [t.id, t] as const)),
+    [tags],
+  );
+  const groupNameById = useMemo(
+    () => new Map(tagGroups.map(g => [g.id, g.name || 'Tags'] as const)),
+    [tagGroups],
+  );
+
+  // Bucket by group for the render — same grouping rhythm the rest
+  // of the tag UIs use.
+  const grouped = useMemo(() => {
+    const buckets: Array<{
+      groupId: string;
+      groupName: string;
+      tags: Array<{ tag: TagRow; usedBy: Array<{ ruleId: string; ruleName: string }> }>;
+    }> = [];
+    const indexByGroup = new Map<string, number>();
+    for (const [tagId, usedBy] of usageByTagId.entries()) {
+      const tag = tagsById.get(tagId);
+      if (!tag) continue;
+      const groupId = tag.groupId ?? '__ungrouped__';
+      let idx = indexByGroup.get(groupId);
+      if (idx === undefined) {
+        idx = buckets.length;
+        buckets.push({
+          groupId,
+          groupName: groupNameById.get(groupId) ?? 'Tags',
+          tags: [],
+        });
+        indexByGroup.set(groupId, idx);
+      }
+      buckets[idx].tags.push({ tag, usedBy });
+    }
+    for (const b of buckets) {
+      b.tags.sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+    }
+    buckets.sort((a, b) => a.groupName.localeCompare(b.groupName));
+    return buckets;
+  }, [usageByTagId, tagsById, groupNameById]);
+
+  const ChevronIcon = expanded ? ChevronDown : ChevronRight;
+  const totalTags = usageByTagId.size;
+
+  return (
+    <div className="bg-background border border-gold/20 rounded-md">
+      <button
+        type="button"
+        onClick={onToggleExpanded}
+        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/80"
+      >
+        <ChevronIcon className="w-4 h-4" />
+        <TagIcon className="w-3.5 h-3.5" />
+        Tag Usage
+        <span className="text-[10px] text-ink/40 font-normal normal-case tracking-normal">
+          {totalTags === 0
+            ? '— no tag references'
+            : `(${totalTags} tag${totalTags === 1 ? '' : 's'} across ${linkedRules.length} rule${linkedRules.length === 1 ? '' : 's'})`}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="px-4 pb-3 space-y-2">
+          {linkedRules.length === 0 ? (
+            <p className="text-xs text-ink/45 italic">
+              No rules linked to this class — link a rule above to see its tag references here.
+            </p>
+          ) : grouped.length === 0 ? (
+            <p className="text-xs text-ink/45 italic">
+              Applied rules don't reference any tags. Their queries
+              constrain spells by source / level / school / etc. only.
+            </p>
+          ) : (
+            grouped.map(bucket => (
+              <div key={bucket.groupId} className="flex flex-wrap gap-1.5 items-baseline">
+                <span className="text-[10px] uppercase tracking-widest text-ink/45 font-bold pr-1 shrink-0">
+                  {bucket.groupName}
+                </span>
+                {bucket.tags.map(({ tag, usedBy }) => (
+                  <span
+                    key={tag.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-gold/25 bg-gold/5 px-2 py-0.5 text-[11px] text-gold/90"
+                    title={`Referenced by: ${usedBy.map(u => u.ruleName).join(', ')}`}
+                  >
+                    {tag.name}
+                    {usedBy.length > 1 ? (
+                      <span className="text-[9px] text-ink/40 font-bold">×{usedBy.length}</span>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Exceptions panel — surfaces every spell some applied rule excludes.
+// ---------------------------------------------------------------------------
+//
+// Driven by `getConsumerExcludedSpells('class', selectedClassId)`. Each
+// entry is a (spell, rule) pair with the mechanism that WOULD have
+// included the spell if it weren't excluded. Restoring an exception
+// pops the spell id out of `rule.manual_exclusions`.
+function ExceptionsPanel({
+  exclusions,
+  loading,
+  spellsById,
+  expanded,
+  onToggleExpanded,
+  onRestore,
+  pendingSpellIds,
+}: {
+  exclusions: ExcludedSpell[];
+  loading: boolean;
+  spellsById: Record<string, SpellRow>;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onRestore: (entry: ExcludedSpell) => void;
+  pendingSpellIds: Set<string>;
+}) {
+  const ChevronIcon = expanded ? ChevronDown : ChevronRight;
+  // Sort: spell name ASC. Multiple-rule entries get listed once per
+  // rule (the resolver already returns one entry per (spell, rule)
+  // pair) so the user can see exactly which exclusions exist.
+  const sorted = useMemo(() => {
+    return [...exclusions].sort((a, b) => {
+      const an = spellsById[a.spellId]?.name ?? a.spellId;
+      const bn = spellsById[b.spellId]?.name ?? b.spellId;
+      const byName = an.localeCompare(bn);
+      if (byName !== 0) return byName;
+      return a.ruleName.localeCompare(b.ruleName);
+    });
+  }, [exclusions, spellsById]);
+
+  return (
+    <div
+      className={cn(
+        'border rounded-md',
+        sorted.length > 0
+          ? 'bg-amber-400/[0.04] border-amber-400/30'
+          : 'bg-background border-gold/20',
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggleExpanded}
+        className={cn(
+          'w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em]',
+          sorted.length > 0 ? 'text-amber-400 hover:text-amber-300' : 'text-gold hover:text-gold/80',
+        )}
+      >
+        <ChevronIcon className="w-4 h-4" />
+        <AlertTriangle className="w-3.5 h-3.5" />
+        Exceptions
+        <span className={cn(
+          'text-[10px] font-normal normal-case tracking-normal',
+          sorted.length > 0 ? 'text-amber-400/70' : 'text-ink/40',
+        )}>
+          {loading
+            ? '— loading…'
+            : sorted.length === 0
+              ? '— no exclusions'
+              : `(${sorted.length})`}
+        </span>
+      </button>
+      {expanded && !loading && sorted.length > 0 ? (
+        <div className="px-4 pb-3 space-y-1 max-h-[28vh] overflow-y-auto custom-scrollbar">
+          {sorted.map(entry => {
+            const spell = spellsById[entry.spellId];
+            const spellName = spell?.name ?? entry.spellId;
+            const isPending = pendingSpellIds.has(entry.spellId);
+            return (
+              <div
+                key={`${entry.ruleId}|${entry.spellId}`}
+                className="flex items-center gap-3 px-3 py-1.5 rounded border border-amber-400/20 bg-background/30 hover:border-amber-400/40 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-ink font-bold truncate">{spellName}</span>
+                    {spell ? (
+                      <span className="text-[9px] text-ink/40 shrink-0">
+                        {spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="text-[10px] text-ink/50 truncate mt-0.5">
+                    Excluded from <span className="text-ink/80 font-bold">{entry.ruleName}</span>
+                    {' · '}
+                    Would have matched via {entry.wouldHaveBeenMatchedBy === 'manual' ? 'manual pin' : 'query'}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onRestore(entry)}
+                  disabled={isPending}
+                  className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-amber-400/40 text-amber-400 hover:bg-amber-400/15"
+                  title="Pop this spell out of the rule's manual_exclusions so it comes back to the class list."
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  {isPending ? '…' : 'Restore'}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Subclasses panel — informational surface for subclasses that have their
+// OWN rule applications (i.e. they deviate from pure parent inheritance).
+// ---------------------------------------------------------------------------
+//
+// Common case: a class has 3-5 subclasses, all of which inherit the
+// parent's spell list with no additions. Those subclasses don't surface
+// — they'd be noise.
+//
+// Deviation case: a subclass has its own spell_rule_applications row
+// (e.g. Divine Soul Sorcerer grants Cleric's rule on top of Sorcerer's).
+// Those surface here so the curator sees them while editing the parent
+// class. Each row links to the rule editor for direct manipulation —
+// P4.3 keeps this read-only; a future pass can inline-edit the
+// subclass's rules right here.
+function SubclassesPanel({
+  subclasses,
+  expanded,
+  onToggleExpanded,
+}: {
+  subclasses: Array<{ id: string; name: string; linkedRules: SpellRule[] }>;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+}) {
+  const ChevronIcon = expanded ? ChevronDown : ChevronRight;
+  const location = useLocation();
+  const editorPrefix = location.pathname.startsWith('/proposals/edit/')
+    ? '/proposals/edit'
+    : '/compendium';
+  return (
+    <div className="bg-background border border-gold/20 rounded-md">
+      <button
+        type="button"
+        onClick={onToggleExpanded}
+        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-gold hover:text-gold/80"
+      >
+        <ChevronIcon className="w-4 h-4" />
+        Subclasses with Own Rules
+        <span className="text-[10px] text-ink/40 font-normal normal-case tracking-normal">
+          ({subclasses.length} subclass{subclasses.length === 1 ? '' : 'es'} deviate
+          {subclasses.length === 1 ? 's' : ''} from inheritance)
+        </span>
+      </button>
+      {expanded ? (
+        <div className="px-4 pb-3 space-y-1.5">
+          {subclasses.map(sub => (
+            <div
+              key={sub.id}
+              className="flex items-center gap-3 px-3 py-1.5 rounded border border-gold/15 bg-background/30"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-ink font-bold truncate">{sub.name}</div>
+                <div className="text-[10px] text-ink/50 truncate mt-0.5">
+                  Own rules:{' '}
+                  {sub.linkedRules.map((r, i) => (
+                    <React.Fragment key={r.id}>
+                      <Link
+                        to={`${editorPrefix}/spell-rules?rule=${r.id}`}
+                        className="text-gold/80 hover:text-gold hover:underline"
+                      >
+                        {r.name}
+                      </Link>
+                      {i < sub.linkedRules.length - 1 ? <span className="text-ink/30">, </span> : null}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+          <p className="text-[10px] text-ink/35 italic mt-1">
+            Pure-inheritance subclasses don't appear here — they resolve
+            against the parent class's rules only. Click a rule above to
+            edit; in P4.3 subclass rules aren't editable inline yet.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
