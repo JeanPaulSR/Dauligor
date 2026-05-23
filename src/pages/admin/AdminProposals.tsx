@@ -33,7 +33,6 @@ type EntityType =
   | 'tag_group'
   | 'spell_rule'
   | 'spell_rule_application'
-  | 'class_spell_list'
   | 'spell'
   | 'class'
   | 'subclass'
@@ -84,7 +83,6 @@ const ENTITY_ICON: Record<EntityType, any> = {
   spell: Wand2,
   spell_rule: Sparkles,
   spell_rule_application: ListChecks,
-  class_spell_list: BookOpen,
   class: Shield,
   subclass: Award,
   feat: Star,
@@ -98,7 +96,6 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   tag_group: 'Tag Group',
   spell_rule: 'Spell Rule',
   spell_rule_application: 'Rule Application',
-  class_spell_list: 'Class Spell List',
   spell: 'Spell',
   class: 'Class',
   subclass: 'Subclass',

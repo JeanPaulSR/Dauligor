@@ -32,7 +32,6 @@ export type EntityType =
   | "tag_group"
   | "spell_rule"
   | "spell_rule_application"
-  | "class_spell_list"
   | "spell"
   | "class"
   | "subclass"
@@ -46,7 +45,6 @@ export const PROPOSABLE_ENTITY_TYPES: ReadonlyArray<EntityType> = [
   "tag_group",
   "spell_rule",
   "spell_rule_application",
-  "class_spell_list",
   "spell",
   "class",
   "subclass",
@@ -115,8 +113,10 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
   spell_rule: {
     tableName: "spell_rules",
     pkColumn: "id",
-    writableColumns: new Set(["id", "name", "description", "query", "manual_spells"]),
-    jsonColumns: new Set(["query", "manual_spells"]),
+    writableColumns: new Set([
+      "id", "name", "description", "query", "manual_spells", "manual_exclusions",
+    ]),
+    jsonColumns: new Set(["query", "manual_spells", "manual_exclusions"]),
   },
   spell_rule_application: {
     tableName: "spell_rule_applications",
@@ -124,12 +124,11 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     writableColumns: new Set(["id", "rule_id", "applies_to_type", "applies_to_id"]),
     jsonColumns: new Set(),
   },
-  class_spell_list: {
-    tableName: "class_spell_lists",
-    pkColumn: "id",
-    writableColumns: new Set(["id", "class_id", "spell_id", "source"]),
-    jsonColumns: new Set(),
-  },
+  // class_spell_list entity removed in phase 4.6 alongside the
+  // class_spell_lists table drop. Spell-list curation now flows
+  // through spell_rule updates (which mutate manual_spells /
+  // manual_exclusions); the resolver reads applied-rule state at
+  // request time.
   // ── Heavy entities (Phase 4). Allow-list mirrors what the
   // corresponding editor lets an admin write. Server-managed
   // timestamps (created_at / updated_at) are intentionally NOT in

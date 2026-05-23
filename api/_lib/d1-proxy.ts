@@ -176,7 +176,7 @@ export async function handleD1Query(req: NodeLikeRequest, res: NodeLikeResponse)
     //              /api/admin/proposals* (admin). Block direct
     //              proxy access so a non-admin can't peek at or
     //              steamroll another creator's pending rows.
-    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras|lore_\w+|tags|tag_groups|spell_rules|spell_rule_applications|class_spell_lists|pending_revisions)\b/i;
+    const PROTECTED_WRITE_TABLES = /\b(?:INTO|FROM|UPDATE|TABLE)\s+(?:users|eras|lore_\w+|tags|tag_groups|spell_rules|spell_rule_applications|pending_revisions)\b/i;
     // Protected READ tables — tables whose rows carry per-row privacy
     // contracts that the generic proxy cannot enforce. Direct SELECTs
     // against any of these are refused; callers must go through the

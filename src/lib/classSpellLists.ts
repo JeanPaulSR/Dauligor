@@ -1,4 +1,4 @@
-import { batchQueryD1, queryD1, fetchCollection } from './d1';
+import { queryD1, fetchCollection } from './d1';
 import { deriveSpellFilterFacets, matchAnyClause, type SpellFilterFacets } from './spellFilters';
 import { buildTagIndex } from './tagHierarchy';
 import { getCachedOrCompute } from './spellListResolver';
@@ -112,26 +112,6 @@ async function fetchSpellRowsByIds(spellIds: string[]): Promise<any[]> {
 }
 
 /**
- * Fetch membership-row ids keyed by spell id for a class. Lets the
- * proposal-mode flow in SpellListManager submit deletes by row id
- * (the writer needs a single entity_id) without paying for the
- * full join `fetchClassSpellList` does. Admin direct-writes still
- * call `removeSpellsFromClassList` which deletes by composite key
- * and doesn't need this map.
- */
-export async function fetchClassSpellMembershipIds(
-  classId: string,
-): Promise<Map<string, string>> {
-  const rows = await queryD1<{ id: string; spell_id: string }>(
-    `SELECT id, spell_id FROM class_spell_lists WHERE class_id = ?`,
-    [classId],
-  );
-  const map = new Map<string, string>();
-  for (const r of rows) map.set(r.spell_id, r.id);
-  return map;
-}
-
-/**
  * Fetch the set of spell IDs on a class's list. Cheaper than
  * fetchClassSpellList when the caller only needs membership checks.
  * Delegates to the query-time resolver via `getCachedOrCompute`.
@@ -141,12 +121,19 @@ export async function fetchClassSpellIds(classId: string): Promise<Set<string>> 
   return new Set(ids);
 }
 
-// Phase 4.4 removed `fetchClassRuleSpellIds`,
-// `fetchLastClassRuleRebuildAt`, `parseTimestampMs`, and
-// `fetchStaleClasses`. All four were stale-detection helpers for the
-// SpellListManager's old "Rebuild Stale Classes" affordance, which no
-// longer exists — the resolver reads applied-rule state live, so
-// there's no staleness window between a rule edit and the next read.
+// Phase 4.4 + 4.6 removed:
+//   - `fetchClassRuleSpellIds` / `fetchLastClassRuleRebuildAt` /
+//     `parseTimestampMs` / `fetchStaleClasses` — stale-detection
+//     helpers for the old "Rebuild Stale Classes" affordance.
+//   - `addSpellsToClassList` / `removeSpellsFromClassList` /
+//     `fetchClassSpellMembershipIds` — class_spell_lists writers
+//     used by the legacy admin direct-write and proposal-mode
+//     branches. Spell-list curation is now rule-routed (admin
+//     edits `spell_rules.manual_spells` / `manual_exclusions`
+//     directly; proposal-mode submits `spell_rule` updates that
+//     mutate the same arrays).
+// The `class_spell_lists` table itself is dropped by migration
+// 20260523-1530_drop_class_spell_lists.sql.
 
 /**
  * Reverse lookup: which classes carry this spell on their spell list.
@@ -275,42 +262,6 @@ export async function fetchClassesForSpells(spellIds: string[]): Promise<Map<str
   }
 
   return result;
-}
-
-/**
- * Add spells to a class's list. Idempotent on the (class_id, spell_id) pair —
- * existing rows are left alone via ON CONFLICT DO NOTHING. Always writes
- * `source = 'manual'`; rule-driven inserts (v1.1) will use a separate helper.
- */
-export async function addSpellsToClassList(classId: string, spellIds: string[]): Promise<void> {
-  if (spellIds.length === 0) return;
-  const queries = spellIds.map(spellId => ({
-    sql: `
-      INSERT INTO class_spell_lists (id, class_id, spell_id, source)
-      VALUES (?, ?, ?, 'manual')
-      ON CONFLICT(class_id, spell_id) DO NOTHING
-    `,
-    params: [crypto.randomUUID(), classId, spellId],
-  }));
-  await batchQueryD1(queries);
-}
-
-/**
- * Remove spells from a class's list. Removes all rows for the (class_id, spell_id)
- * pairs regardless of source — manual or rule-driven. Chunked the same way as
- * fetchClassesForSpells; the class_id placeholder takes one slot per chunk.
- */
-export async function removeSpellsFromClassList(classId: string, spellIds: string[]): Promise<void> {
-  if (spellIds.length === 0) return;
-  const chunkSize = D1_PARAM_CHUNK - 1;
-  for (let i = 0; i < spellIds.length; i += chunkSize) {
-    const chunk = spellIds.slice(i, i + chunkSize);
-    const placeholders = chunk.map(() => '?').join(', ');
-    await queryD1(
-      `DELETE FROM class_spell_lists WHERE class_id = ? AND spell_id IN (${placeholders})`,
-      [classId, ...chunk],
-    );
-  }
 }
 
 function safeJsonArray(raw: string): string[] {

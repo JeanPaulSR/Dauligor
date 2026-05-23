@@ -17,7 +17,6 @@ import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
   fetchClassSpellIds,
-  fetchClassSpellMembershipIds,
   fetchClassesForSpells,
   type ClassMembership,
 } from '../../lib/classSpellLists';
@@ -27,10 +26,11 @@ import {
   type ExcludedSpell,
 } from '../../lib/spellListResolver';
 import { useProposalAccumulator, useProposalContextOptional } from '../../lib/proposalAccumulator';
-import { useProposalReview, resolveReviewPayload } from '../../lib/proposalReview';
+import { useProposalReview } from '../../lib/proposalReview';
 import { useBlock } from '../../lib/proposalBlock';
 import {
   fetchAppliedRulesFor,
+  fetchRule,
   unapplyRule,
   applyRule,
   fetchAllRules,
@@ -157,7 +157,13 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const canManageLists = isAdmin || isContentCreator;
   // Inside <ProposalEditorWrapper> queues locally; outside the
   // wrapper passes through to useEntityWriter unchanged.
-  const listWriter = useProposalAccumulator('class_spell_list', userProfile);
+  // Phase 4.6: proposal-mode submits spell_rule update proposals
+  // instead of class_spell_list creates/removes. A content-creator
+  // who clicks Add/Remove on a spell row is queuing "modify this
+  // rule's manual_spells / manual_exclusions" rather than "add this
+  // spell to class X's list". Admin approval applies the rule edit;
+  // the resolver picks the new state up on the next read.
+  const ruleWriter = useProposalAccumulator('spell_rule', userProfile);
   // Cross-editor links (to Spell Rules) need to stay on the same
   // route prefix so content-creators on /proposals/edit/spell-lists
   // don't bounce into the AdminOnly-guarded /compendium/spell-rules.
@@ -172,9 +178,9 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   // of the direct-write d1 helpers — the writer's create/update/
   // remove handle the bundle_id + is_draft branching internally.
   // Without the `block` half of this OR, a content-creator in
-  // block mode would fall through to `addSpellsToClassList`, hit
-  // the proxy's admin gate, and 403 with "Admin access required."
-  const isProposalMode = listWriter.mode === 'proposal' || listWriter.mode === 'block';
+  // block mode would fall through to the direct admin write path
+  // and 403 at the proxy's admin gate.
+  const isProposalMode = ruleWriter.mode === 'proposal' || ruleWriter.mode === 'block';
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Fullscreen-page opt-in. Same body class /compendium/spells and
@@ -264,51 +270,62 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const initialClassId = searchParams.get('class') || '';
   const [selectedClassId, setSelectedClassId] = useState<string>(initialClassId);
   const [classListIds, setClassListIds] = useState<Set<string>>(new Set());
-  // Proposal-mode delete proposals need the membership row id, not
-  // just the spell id (the writer requires entity_id). Loaded lazily
-  // alongside `classListIds` when the user holds content-creator but
-  // not admin. Empty in admin mode — the direct-write helper deletes
-  // by composite key and doesn't need the lookup.
-  const [classMembershipIds, setClassMembershipIds] = useState<Map<string, string>>(new Map());
   const [classListLoading, setClassListLoading] = useState(false);
 
-  // Spell ids the user has staged in the active block for the
+  // Hoisted up from the legacy block below the stagedSpellIds memo
+  // because the new spell_rule diff path needs linkedRules in scope
+  // (the memo compares queued/draft rule updates against the current
+  // linked-rule state).
+  const [linkedRules, setLinkedRules] = useState<SpellRule[]>([]);
+
+  // Spell ids the user has staged in the active block/queue for the
   // currently-selected class. Drives the row-highlight in the spell
-  // list. Three sources of "staged":
-  //   1. Queue entries with op='create' + payload.class_id matching
-  //      the selected class → spell_id is staged for ADD.
-  //   2. Queue entries with op='delete' + entity_id matching a row in
-  //      classMembershipIds → reverse-lookup gives spell_id (a stage
-  //      for REMOVAL of an existing pin).
-  //   3. Same as (1) + (2) for server-side draft revisions in the
-  //      active bundle.
-  // Empty set outside a <ProposalEditorWrapper>.
+  // list.
+  //
+  // Phase 4.6 rewrite: with proposal-mode now submitting spell_rule
+  // updates (full-rule payloads), we detect staged spells by
+  // comparing each queued/draft spell_rule update against the rule's
+  // CURRENT D1 state for any rule applied to the selected class. Any
+  // spell id whose membership (manual_spells / manual_exclusions)
+  // differs between the current rule and the proposed payload is
+  // "staged". Empty set outside a <ProposalEditorWrapper>.
   const proposalContext = useProposalContextOptional();
   const { drafts: allDrafts, activeBundleId } = useBlock();
   const stagedSpellIds = useMemo(() => {
     const ids = new Set<string>();
     if (!selectedClassId) return ids;
-    // Build reverse map: membership row id → spell id (so we can
-    // resolve delete drafts whose entity_id is the row id).
-    const rowIdToSpellId = new Map<string, string>();
-    for (const [spellId, rowId] of classMembershipIds.entries()) {
-      rowIdToSpellId.set(rowId, spellId);
-    }
+    const linkedRuleIds = new Set(linkedRules.map(r => r.id));
+    const ruleById = new Map(linkedRules.map(r => [r.id, r] as const));
+    const parseArray = (val: any): string[] => {
+      if (Array.isArray(val)) return val.map(String);
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          return Array.isArray(parsed) ? parsed.map(String) : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    };
     const consider = (
       entityType: string,
       operation: string,
       entityId: string | null,
       payload: any,
     ) => {
-      if (entityType !== 'class_spell_list') return;
-      if (operation === 'create') {
-        if (!payload || payload.class_id !== selectedClassId) return;
-        if (typeof payload.spell_id === 'string') ids.add(payload.spell_id);
-      } else if (operation === 'delete') {
-        if (!entityId) return;
-        const spellId = rowIdToSpellId.get(entityId);
-        if (spellId) ids.add(spellId);
-      }
+      if (entityType !== 'spell_rule' || operation !== 'update') return;
+      if (!entityId || !linkedRuleIds.has(entityId)) return;
+      const rule = ruleById.get(entityId);
+      if (!rule) return;
+      const newManual = new Set(parseArray(payload?.manual_spells));
+      const newExcl = new Set(parseArray(payload?.manual_exclusions));
+      const curManual = new Set(rule.manualSpells);
+      const curExcl = new Set(rule.manualExclusions);
+      for (const spellId of newManual) if (!curManual.has(spellId)) ids.add(spellId);
+      for (const spellId of curManual) if (!newManual.has(spellId)) ids.add(spellId);
+      for (const spellId of newExcl) if (!curExcl.has(spellId)) ids.add(spellId);
+      for (const spellId of curExcl) if (!newExcl.has(spellId)) ids.add(spellId);
     };
     if (proposalContext) {
       for (const q of proposalContext.queue) {
@@ -327,7 +344,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     allDrafts,
     activeBundleId,
     selectedClassId,
-    classMembershipIds,
+    linkedRules,
   ]);
 
   // Map<spellId, ClassMembership[]> — every class that has each spell on its list.
@@ -348,7 +365,6 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   const [groupExclusionModes, setGroupExclusionModes] = useState<Record<string, 'AND' | 'OR' | 'XOR'>>({});
   const [showOnlyInList, setShowOnlyInList] = useState(false);
   const [showOrphansOnly, setShowOrphansOnly] = useState(false);
-  const [linkedRules, setLinkedRules] = useState<SpellRule[]>([]);
   const [allRules, setAllRules] = useState<SpellRule[]>([]);
   const [linkedRulesExpanded, setLinkedRulesExpanded] = useState(true);
   const [linkRuleDialogOpen, setLinkRuleDialogOpen] = useState(false);
@@ -463,7 +479,6 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
   useEffect(() => {
     if (!selectedClassId) {
       setClassListIds(new Set());
-      setClassMembershipIds(new Map());
       setLinkedRules([]);
       setExclusions([]);
       setSubclassesWithOwnRules([]);
@@ -479,14 +494,6 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
         if (active) toast.error("Failed to load this class's spell list.");
       })
       .finally(() => { if (active) setClassListLoading(false); });
-    // Content-creators need the row-id map to submit delete proposals.
-    // Admins skip this round-trip (their delete path uses composite
-    // keys directly).
-    if (isProposalMode) {
-      fetchClassSpellMembershipIds(selectedClassId)
-        .then(m => { if (active) setClassMembershipIds(m); })
-        .catch(err => console.error('[SpellListManager] Failed to load membership ids:', err));
-    }
     fetchAppliedRulesFor('class', selectedClassId)
       .then(rs => { if (active) setLinkedRules(rs); })
       .catch(err => console.error('[SpellListManager] Failed to load linked rules:', err));
@@ -572,24 +579,11 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     setSearchParams(next, { replace: true });
   }, [selectedClassId, searchParams, setSearchParams]);
 
-  // Review-mode wiring. A class_spell_list proposal targets a single
-  // membership row — its payload carries `class_id` (and `spell_id`
-  // for create ops, while delete ops have the spell id encoded via
-  // the membership row's entity_id). Auto-select the proposal's class
-  // so the manager shows the right list. The submission-history banner
-  // mounted by the wrapper communicates the operation; field-level
-  // spell highlighting is deferred to Phase 3.
+  // Review-mode wiring removed in phase 4.6 — the class_spell_list
+  // entity type is gone, so there's no proposal type for this page
+  // to auto-target. spell_rule proposals open in the SpellRulesEditor
+  // review flow instead.
   const reviewMode = useProposalReview();
-  const reviewListPayload = resolveReviewPayload(reviewMode, 'class_spell_list', null);
-  useEffect(() => {
-    if (!reviewMode || reviewMode.entityType !== 'class_spell_list') return;
-    const payload = reviewListPayload ?? reviewMode.snapshotAtProposal;
-    const targetClassId = payload?.class_id;
-    if (!targetClassId) return;
-    if (selectedClassId !== targetClassId) {
-      setSelectedClassId(targetClassId);
-    }
-  }, [reviewMode, reviewListPayload, selectedClassId]);
 
   const sourceById = useMemo(
     () => Object.fromEntries(sources.map(s => [s.id, s])) as Record<string, SourceRow>,
@@ -951,55 +945,10 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
       return;
     }
 
-    // Proposal mode: keep existing class_spell_lists proposal queue
-    // path. TODO(P4.6): migrate to spell_rule entity-type edits so
-    // approved proposals actually feed the resolver.
-    if (isProposalMode) {
-      setPendingSpellIds(prev => {
-        const next = new Set(prev);
-        for (const id of spellIds) next.add(id);
-        return next;
-      });
-      try {
-        if (mode === 'add') {
-          for (const spellId of spellIds) {
-            await listWriter.create({
-              class_id: classId,
-              spell_id: spellId,
-              source: 'manual',
-            });
-          }
-        } else {
-          for (const spellId of spellIds) {
-            const rowId = classMembershipIds.get(spellId);
-            if (!rowId) {
-              console.warn('[SpellListManager] no membership row id for spell', spellId);
-              continue;
-            }
-            await listWriter.remove(rowId);
-          }
-        }
-        if (!opts.silent) {
-          const verb = mode === 'add' ? 'addition' : 'removal';
-          const plural = spellIds.length === 1 ? '' : 's';
-          toast.success(
-            `${spellIds.length} spell ${verb}${plural} submitted for review.`,
-          );
-        }
-      } catch (err) {
-        console.error('[SpellListManager] proposal submit failed:', err);
-        toast.error(`Failed to submit ${mode === 'add' ? 'add' : 'remove'} proposals.`);
-      } finally {
-        setPendingSpellIds(prev => {
-          const next = new Set(prev);
-          for (const id of spellIds) next.delete(id);
-          return next;
-        });
-      }
-      return;
-    }
-
-    // Admin direct-write path — translate to rule edits.
+    // Both admin and proposal mode translate the add/remove into
+    // RuleEdit[] using the same decision logic — the dispatch
+    // (direct write vs proposal submission) happens AFTER edits
+    // are computed.
     if (linkedRules.length === 0) {
       toast.error(
         `${cls.name} has no rules linked. Link a rule first using "Link Rule" above.`,
@@ -1087,12 +1036,109 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     }
 
     if (edits.length === 0) return;
-    await applyRuleEdits(edits, {
-      silent: opts.silent,
-      verb: mode === 'add'
-        ? (spellIds.length === 1 ? 'Added' : `Added ${spellIds.length} spells`)
-        : (spellIds.length === 1 ? 'Removed' : `Removed ${spellIds.length} spells`),
+    const verb = mode === 'add'
+      ? (spellIds.length === 1 ? 'Added' : `Added ${spellIds.length} spells`)
+      : (spellIds.length === 1 ? 'Removed' : `Removed ${spellIds.length} spells`);
+    if (isProposalMode) {
+      await submitRuleEditsAsProposals(edits, { silent: opts.silent, verb });
+    } else {
+      await applyRuleEdits(edits, { silent: opts.silent, verb });
+    }
+  };
+
+  /**
+   * Proposal-mode counterpart to applyRuleEdits: instead of writing
+   * to spell_rules directly, batch the edits per ruleId and submit
+   * one spell_rule update proposal per rule. The admin reviewer
+   * sees one proposal per touched rule, carrying the rule's full
+   * post-edit state.
+   *
+   * Lost-update note: each rule fetch reads the CURRENT D1 state
+   * (the last approved version). If two content-creators have
+   * unapproved proposals against the same rule, the second-approved
+   * one's payload was built atop the pre-first state, so first's
+   * changes get clobbered. Mitigation: low expected concurrency
+   * (manual admin review pace), plus the admin can compare the two
+   * proposals side-by-side before approving and reject the stale
+   * one. Granular per-spell delta proposals would fix this but
+   * require a new entity type — deferred.
+   */
+  const submitRuleEditsAsProposals = async (
+    edits: RuleEdit[],
+    opts: { silent?: boolean; verb?: string } = {},
+  ) => {
+    if (edits.length === 0) return;
+    const spellIdSet = new Set(edits.map(e => e.spellId));
+    setPendingSpellIds(prev => {
+      const next = new Set(prev);
+      for (const id of spellIdSet) next.add(id);
+      return next;
     });
+    // Group by ruleId so we submit one update per rule.
+    const editsByRule = new Map<string, RuleEdit[]>();
+    for (const edit of edits) {
+      const list = editsByRule.get(edit.ruleId) ?? [];
+      list.push(edit);
+      editsByRule.set(edit.ruleId, list);
+    }
+    let submitted = 0;
+    try {
+      for (const [ruleId, ruleEdits] of editsByRule) {
+        const rule = await fetchRule(ruleId);
+        if (!rule) {
+          console.warn('[SpellListManager] proposal target rule missing:', ruleId);
+          continue;
+        }
+        // Apply edits in JS atop the current D1 state.
+        let manualSpells = [...rule.manualSpells];
+        let manualExclusions = [...rule.manualExclusions];
+        for (const edit of ruleEdits) {
+          switch (edit.op) {
+            case 'manual-add':
+              if (!manualSpells.includes(edit.spellId)) manualSpells.push(edit.spellId);
+              manualExclusions = manualExclusions.filter(id => id !== edit.spellId);
+              break;
+            case 'manual-remove':
+              manualSpells = manualSpells.filter(id => id !== edit.spellId);
+              break;
+            case 'exclude-add':
+              if (!manualExclusions.includes(edit.spellId)) manualExclusions.push(edit.spellId);
+              manualSpells = manualSpells.filter(id => id !== edit.spellId);
+              break;
+            case 'exclude-remove':
+              manualExclusions = manualExclusions.filter(id => id !== edit.spellId);
+              break;
+          }
+        }
+        // useEntityWriter's sanitizePayload stringifies JSON
+        // columns (declared in api/_lib/proposals.ts).
+        await ruleWriter.update(ruleId, {
+          name: rule.name,
+          description: rule.description ?? '',
+          query: rule.query,
+          manual_spells: manualSpells,
+          manual_exclusions: manualExclusions,
+        });
+        submitted += 1;
+      }
+      if (!opts.silent) {
+        const noun = spellIdSet.size === 1
+          ? (spells.find(s => s.id === [...spellIdSet][0])?.name || '1 spell')
+          : `${spellIdSet.size} spells`;
+        toast.success(
+          `${opts.verb ?? 'Submitted'} ${noun} for review — ${submitted} rule${submitted === 1 ? '' : 's'} touched.`,
+        );
+      }
+    } catch (err) {
+      console.error('[SpellListManager] proposal submit failed:', err);
+      toast.error('Failed to submit proposal.');
+    } finally {
+      setPendingSpellIds(prev => {
+        const next = new Set(prev);
+        for (const id of spellIdSet) next.delete(id);
+        return next;
+      });
+    }
   };
 
   const handleToggleSpell = (spellId: string) => {

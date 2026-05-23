@@ -296,8 +296,14 @@ export default function App() {
                       <SpellRulesEditor userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
+                  {/* Phase 4.6: the proposal-mode route for the spell-list
+                      manager now wraps in `spell_rule` entity type because
+                      the manager submits rule-level updates (mutating
+                      manualSpells / manualExclusions) instead of class_-
+                      spell_list revisions. The route URL stays the same
+                      so content-creator bookmarks keep working. */}
                   <Route path="/proposals/edit/spell-lists" element={
-                    <ProposalEditorWrapper entityType="class_spell_list">
+                    <ProposalEditorWrapper entityType="spell_rule">
                       <SpellListManager userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />

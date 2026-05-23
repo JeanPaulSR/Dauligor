@@ -54,7 +54,6 @@ type EntityType =
   | 'tag_group'
   | 'spell_rule'
   | 'spell_rule_application'
-  | 'class_spell_list'
   | 'spell'
   | 'class'
   | 'subclass'
@@ -94,7 +93,6 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   tag_group: 'Tag Group',
   spell_rule: 'Spell Rule',
   spell_rule_application: 'Rule Application',
-  class_spell_list: 'Class Spell List',
   spell: 'Spell',
   class: 'Class',
   subclass: 'Subclass',
@@ -312,7 +310,6 @@ function buildReviewRoute(p: Proposal): string | null {
     tag_group: '/proposals/edit/tags',
     spell_rule: '/proposals/edit/spell-rules',
     spell_rule_application: '/proposals/edit/spell-rules',
-    class_spell_list: '/proposals/edit/spell-lists',
     spell: '/proposals/edit/spells',
     feat: '/proposals/edit/feats',
     item: '/proposals/edit/items',
@@ -1139,7 +1136,6 @@ const CONTINUE_ROUTE: Record<string, string | ((d: import('../../lib/proposalBlo
   tag_group: '/proposals/edit/tags',
   spell_rule: '/proposals/edit/spell-rules',
   spell_rule_application: '/proposals/edit/spell-rules',
-  class_spell_list: '/proposals/edit/spell-lists',
   spell: '/proposals/edit/spells',
   feat: '/proposals/edit/feats',
   item: '/proposals/edit/items',

@@ -1,0 +1,33 @@
+-- ============================================================================
+-- Migration: drop the class_spell_lists materialised snapshot table
+-- ============================================================================
+--
+-- Phase 4.6 finishes the spell-list-resolution rework started by
+-- 20260523-1500_spell_list_resolution_v2.sql. With the in-app + Pages
+-- Functions resolver both reading applied-rule state at request time,
+-- the `class_spell_lists` table has nothing left writing to it and
+-- nothing left reading from it:
+--
+--   - SpellListManager admin path mutates rule.manual_spells /
+--     manual_exclusions directly (phase 4.3).
+--   - SpellListManager proposal-mode submits spell_rule update
+--     proposals instead of class_spell_list revisions (phase 4.6.B).
+--   - The api/_lib Foundry export bundle reads via
+--     _spellListResolver.ts (phase 4.2b).
+--   - SpellsEditor RuleMembershipPanel writes to rule.manual_spells /
+--     manual_exclusions (phase 4.3.5).
+--   - All recompute / rebuild helpers in src/lib/spellRules.ts and
+--     src/lib/classSpellLists.ts are deleted (phase 4.4 + 4.6.C).
+--
+-- The table can therefore be dropped outright. Any row data in it is
+-- legacy state — the resolver has been authoritative since phase 4.2
+-- shipped, and dropping the table doesn't lose anything the resolver
+-- can't recompute. The rule rows (spell_rules + spell_rule_applications)
+-- carry the source of truth; class_spell_lists was only ever a
+-- materialised view.
+--
+-- Idempotent: IF EXISTS makes the migration safe to re-run on a DB
+-- where the table is already gone.
+-- ============================================================================
+
+DROP TABLE IF EXISTS class_spell_lists;

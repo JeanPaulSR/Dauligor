@@ -76,7 +76,6 @@ const ENTITY_LABELS: Record<ProposalEntityType, string> = {
   tag_group: 'Tag Groups',
   spell_rule: 'Spell Rules',
   spell_rule_application: 'Spell Rule Applications',
-  class_spell_list: 'Class Spell Lists',
   spell: 'Spells',
   class: 'Classes',
   subclass: 'Subclasses',

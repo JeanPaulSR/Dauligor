@@ -51,7 +51,9 @@ export const D1_TABLE_MAP: Record<string, string> = {
   spellsKnownScalings: 'spellcasting_progressions',
   classes: 'classes',
   subclasses: 'subclasses',
-  classSpellLists: 'class_spell_lists',
+  // classSpellLists table dropped in phase 4.6 — spell-list curation
+  // is rule-routed via spell_rules.manual_spells / manual_exclusions
+  // and resolved at request time by `src/lib/spellListResolver.ts`.
   spellRules: 'spell_rules',
   spellRuleApplications: 'spell_rule_applications',
   characters: 'characters',

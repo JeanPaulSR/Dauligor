@@ -86,10 +86,10 @@ type TagGroupRow = { id: string; name: string };
  */
 export default function SpellRulesEditor({ userProfile }: { userProfile: any }) {
   // Admins write rules + apply them to classes directly; content-
-  // creators route through the proposal queue. The auto-rebuild +
-  // stale-class detection on save stays admin-only — it touches
-  // class_spell_lists and only makes sense once the rule actually
-  // lives in D1.
+  // creators route through the proposal queue. Phase 4.6 dropped
+  // the auto-rebuild / stale-class apparatus — the resolver reads
+  // applied-rule state at request time, so no class-side refresh
+  // step exists.
   const isAdmin = userProfile?.role === 'admin';
   const isContentCreator = !!userProfile?.permissions &&
     Object.prototype.hasOwnProperty.call(userProfile.permissions, 'content-creator');
@@ -651,10 +651,12 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
           name: draft.name.trim(),
           description: draft.description ?? '',
           // useEntityWriter's sanitizePayload stringifies these on
-          // the way out (spell_rules.query + .manual_spells are
-          // declared json columns in api/_lib/proposals.ts).
+          // the way out (spell_rules.query + .manual_spells +
+          // .manual_exclusions are declared json columns in
+          // api/_lib/proposals.ts).
           query: draft.query,
           manual_spells: draft.manualSpells,
+          manual_exclusions: draft.manualExclusions,
         };
         if (wasEdit && draft.id) {
           await ruleWriter.update(draft.id, payload);
@@ -859,8 +861,12 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
           <p>
             <span className="text-gold font-bold">Applying a rule</span> links it to a consumer (class, subclass, feat, item, etc.).
             The same rule can power many consumers — that's the point.
-            For classes, application contributes to <code className="text-gold/80">class_spell_lists</code> at rebuild time;
-            manual class entries are preserved.
+            For classes, application contributes the rule's matches to
+            the resolver-driven spell list on the next read. Manual
+            additions / exclusions live on the rule itself
+            (<code className="text-gold/80">manual_spells</code> /
+            <code className="text-gold/80">manual_exclusions</code>),
+            not on a separate per-class table.
           </p>
         </div>
       ) : null}

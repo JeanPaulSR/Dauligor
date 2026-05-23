@@ -402,70 +402,8 @@ export async function getCachedOrCompute(
   return fresh;
 }
 
-// -----------------------------------------------------------------------------
-// Parity helper — correctness spot-check
-// -----------------------------------------------------------------------------
-
-/**
- * Diff the legacy materialised `class_spell_lists` set against the new
- * resolver's output for one class. The materialised table is still
- * populated (it's what production has been running on); this helper
- * lets us spot-check that the new resolver matches it for any given
- * class before we delete the table in Phase 4.
- *
- * Returns four buckets:
- *   - `legacyOnly`: ids in the materialised table but NOT in the new
- *     resolver. If non-empty, the legacy table has rows the new model
- *     wouldn't produce — most likely orphaned `rule:<deleted_rule>`
- *     rows or manual rows that haven't been migrated into a rule's
- *     manual_spells yet (P4.2.5 / data migration).
- *   - `newOnly`: ids the new resolver returns that the legacy table
- *     doesn't have. Most likely the bulk-import / rule-application
- *     change trigger gaps the v1 system silently skipped — i.e. cases
- *     where the new path is actually MORE correct than the legacy one.
- *   - `both`: ids both paths agree on.
- *   - `summary`: convenience counts.
- *
- * Doesn't write anywhere — pure read + diff. Safe to call from any
- * read-side context. Goes away in Phase 4 alongside the legacy
- * `class_spell_lists` reads.
- */
-export async function compareClassSpellListImpls(classId: string): Promise<{
-  legacyOnly: string[];
-  newOnly: string[];
-  both: string[];
-  summary: { legacy: number; new: number; agree: number; disagree: number };
-}> {
-  const [legacyRows, newIds] = await Promise.all([
-    queryD1<{ spell_id: string }>(
-      `SELECT spell_id FROM class_spell_lists WHERE class_id = ?`,
-      [classId],
-    ),
-    // Skip the cache deliberately — we want a fresh recompute so the
-    // diff reflects current state, not a possibly stale cache row.
-    getConsumerSpellList('class', classId),
-  ]);
-  const legacySet = new Set(legacyRows.map(r => r.spell_id));
-  const newSet = new Set(newIds);
-  const legacyOnly: string[] = [];
-  const newOnly: string[] = [];
-  const both: string[] = [];
-  for (const id of legacySet) {
-    if (newSet.has(id)) both.push(id);
-    else legacyOnly.push(id);
-  }
-  for (const id of newSet) {
-    if (!legacySet.has(id)) newOnly.push(id);
-  }
-  return {
-    legacyOnly,
-    newOnly,
-    both,
-    summary: {
-      legacy: legacySet.size,
-      new: newSet.size,
-      agree: both.length,
-      disagree: legacyOnly.length + newOnly.length,
-    },
-  };
-}
+// compareClassSpellListImpls removed in phase 4.6 alongside the
+// `class_spell_lists` table drop. The parity helper let us
+// spot-check legacy-vs-resolver agreement during the P4.0-4.3
+// transition; with the legacy table gone, there's nothing to
+// compare against.

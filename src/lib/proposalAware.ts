@@ -27,7 +27,6 @@ export type ProposalEntityType =
   | 'tag_group'
   | 'spell_rule'
   | 'spell_rule_application'
-  | 'class_spell_list'
   | 'spell'
   | 'class'
   | 'subclass'
@@ -43,7 +42,6 @@ const ENTITY_TO_COLLECTION: Record<ProposalEntityType, string> = {
   tag_group: 'tagGroups',
   spell_rule: 'spellRules',
   spell_rule_application: 'spellRuleApplications',
-  class_spell_list: 'classSpellLists',
   spell: 'spells',
   class: 'classes',
   subclass: 'subclasses',
