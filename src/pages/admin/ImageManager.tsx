@@ -38,6 +38,7 @@ import {
 } from '../../lib/imageMetadata';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { SearchInput } from '../../components/ui/SearchInput';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
@@ -1631,12 +1632,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               {/* Filter / display / private toolbar */}
               <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
                 <div className="relative flex-1 min-w-0">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
-                  <Input
+                  <SearchInput
                     value={libFilter}
-                    onChange={(e) => setLibFilter(e.target.value)}
+                    onChange={setLibFilter}
                     placeholder={`Filter results in ${currentPath}/…`}
-                    className="pl-8 h-7 text-xs bg-background/50 border-gold/20"
+                    size="sm"
+                    className="bg-background/50 border-gold/20 h-7"
                   />
                   {libFilter && (
                     <button
@@ -2212,12 +2213,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
               {sysSection && (
                 <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
                   <div className="relative flex-1 min-w-0">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
-                    <Input
+                    <SearchInput
                       value={sysFilter}
-                      onChange={(e) => setSysFilter(e.target.value)}
+                      onChange={setSysFilter}
                       placeholder={`Filter ${sysSection.label.toLowerCase()}…`}
-                      className="pl-8 h-7 text-xs bg-background/50 border-gold/20"
+                      size="sm"
+                      className="bg-background/50 border-gold/20 h-7"
                     />
                     {sysFilter && (
                       <button
@@ -2656,12 +2657,12 @@ export default function ImageManager({ userProfile }: { userProfile: any }) {
             {/* Filter / display / private toolbar */}
             <div className="flex items-center gap-2 text-xs border border-gold/10 rounded-lg px-3 py-1.5 bg-card/30">
               <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
-                <Input
+                <SearchInput
                   value={iconFilter}
-                  onChange={(e) => setIconFilter(e.target.value)}
+                  onChange={setIconFilter}
                   placeholder={`Filter results in ${iconBrowsePath}/…`}
-                  className="pl-8 h-7 text-xs bg-background/50 border-gold/20"
+                  size="sm"
+                  className="bg-background/50 border-gold/20 h-7"
                 />
                 {iconFilter && (
                   <button

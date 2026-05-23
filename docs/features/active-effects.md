@@ -110,7 +110,7 @@ The hint badge ("PHB Conditions" / "Spell States" / etc.) renders both in the dr
 
 Schema reference: [`status_conditions`](../database/structure/status_conditions.md).
 
-Admin editing: `/admin/statuses`, a tabbed page with **Conditions** (rich form) + **Condition Categories** (`SimplePropertyEditor`).
+Admin editing: `/admin/statuses`, a tabbed page with **Conditions** (rich form) + **Condition Categories** (`ProficiencyEntityShell` taxonomy mode).
 
 ### Force-fresh fetch
 

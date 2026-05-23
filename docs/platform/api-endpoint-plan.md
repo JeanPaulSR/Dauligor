@@ -146,7 +146,7 @@ inventory short.
 | `src/pages/compendium/ClassEditor.tsx:629-648` | `fetchCollection` × 17 | `sources`, `spellcasting_progressions`, `skills`, `tools`, `tool_categories`, `armor`, `armor_categories`, `weapons`, `weapon_categories`, `languages`, `language_categories`, `attributes`, `unique_option_groups`, `unique_option_items`, `tag_groups`, `tags` | Class editor load | admin (read), public (data) | foundation collections are effectively public; editor itself role-gated |
 | `src/pages/compendium/SubclassEditor.tsx:207-213` | `fetchCollection` | same as ClassEditor subset | Subclass editor | admin | foundation is public |
 | `src/pages/compendium/UniqueOptionGroupEditor.tsx:120-143` | `fetchCollection` × 14 | spellRules + same foundation set | Option-group editor | admin | foundation is public |
-| `src/pages/compendium/ToolsEditor.tsx`, `SkillsEditor.tsx`, `admin/ArmorEditor.tsx`, `admin/WeaponsEditor.tsx`, `admin/SimplePropertyEditor.tsx`, `admin/StatusesEditor.tsx`, `admin/SpellcastingTypeEditor.tsx`, `admin/StandardMulticlassEditor.tsx`, `admin/SpellcastingAdvancementManager.tsx` | mix | foundation tables | Foundation editors | admin | public read / admin write |
+| `src/pages/compendium/ToolsEditor.tsx`, `SkillsEditor.tsx`, `admin/ArmorEditor.tsx`, `admin/WeaponsEditor.tsx`, `components/compendium/ProficiencyEntityShell.tsx`, `admin/StatusesEditor.tsx`, `admin/SpellcastingTypeEditor.tsx`, `admin/StandardMulticlassEditor.tsx`, `admin/SpellcastingAdvancementManager.tsx` | mix | foundation tables | Foundation editors | admin | public read / admin write |
 | `src/pages/compendium/SpellsEditor.tsx:509`, `SpellList.tsx`, `SpellListManager.tsx`, `SpellRulesEditor.tsx` | `fetchCollection`/`queryD1` | `sources`, `spells`, `spell_rules`, `spell_rule_applications`, `class_spell_lists`, `tags`, `tag_groups` | Spell browser & manager | public (read), admin (manage) | no |
 | `src/pages/compendium/FeatsEditor.tsx`, `FeatList.tsx` | `fetchCollection` | `feats`, taxonomy | Feats browser | public | no |
 | `src/pages/compendium/TagsExplorer.tsx:374,419,446,447,998,1022,1023,1158` | `upsertDocument`/`deleteDocument` | `tags`, `tag_groups` | Tag admin | admin | role-gated client only |
@@ -702,7 +702,8 @@ so it can be checked off concretely. Leaks first, convenience second.
     of the `fetchCollection` foundation reads in `ClassEditor.tsx`,
     `SubclassEditor.tsx`, `UniqueOptionGroupEditor.tsx`, `ToolsEditor.tsx`,
     `SkillsEditor.tsx`, `admin/ArmorEditor.tsx`, `admin/WeaponsEditor.tsx`,
-    `admin/SimplePropertyEditor.tsx`, `admin/StatusesEditor.tsx`,
+    `components/compendium/ProficiencyEntityShell.tsx`,
+    `admin/StatusesEditor.tsx`,
     `admin/SpellcastingTypeEditor.tsx`, `admin/StandardMulticlassEditor.tsx`,
     `admin/SpellcastingAdvancementManager.tsx`, scaling editors,
     `TagsExplorer.tsx`, `compendium.ts` items/feats/features helpers.

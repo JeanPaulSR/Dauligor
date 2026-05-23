@@ -290,6 +290,10 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         'optionIds', 'fixedIds', 'categoryIds', 'prerequisites_items',
         'tag_ids', 'tagIds', 'properties', 'advancements', 'uses_recovery',
         'requires_option_ids', 'requiresOptionIds',
+        // weapons.property_ids — JSON array of weaponProperties FK ids.
+        // The WeaponsEditor list-card render iterates this without a
+        // typeof-string guard, so it must arrive pre-parsed.
+        'property_ids', 'propertyIds',
         // requirements_tree was added by migration 20260510-2152 — JSON
         // Requirement | null shape. requires_option_ids stays in the list
         // for back-compat (the migration drops the column but existing

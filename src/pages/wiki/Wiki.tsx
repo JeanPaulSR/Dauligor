@@ -5,11 +5,12 @@ import { auth, OperationType, reportClientError } from '../../lib/firebase';
 import { deleteLoreArticle } from '../../lib/lore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, Plus, BookOpen, MapPin, History, Users, Sparkles, Trash2, Shield, Package, Library, Building, Flag, Sword, Zap, Mountain, Dna, Ship, Home, Biohazard, Swords, Scroll, Footprints, Languages, Coins, Layers, Flame, Scale, ListChecks, Hammer, Quote, Crown, Wand2, FlaskConical, Heart, LayoutGrid, List, Folder, FileText, ChevronRight, ChevronDown } from 'lucide-react';
+import { Plus, BookOpen, MapPin, History, Users, Sparkles, Trash2, Shield, Package, Library, Building, Flag, Sword, Zap, Mountain, Dna, Ship, Home, Biohazard, Swords, Scroll, Footprints, Languages, Coins, Layers, Flame, Scale, ListChecks, Hammer, Quote, Crown, Wand2, FlaskConical, Heart, LayoutGrid, List, Folder, FileText, ChevronRight, ChevronDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 export default function Wiki({ userProfile }: { userProfile: any }) {
@@ -247,15 +248,13 @@ export default function Wiki({ userProfile }: { userProfile: any }) {
                 <List className="w-4 h-4" />
               </Button>
             </div>
-            <div className="relative w-full md:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/30" />
-              <Input 
-                className="pl-10 border-gold/10 focus:border-gold bg-card/50" 
-                placeholder="Search the archive..." 
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search the archive..."
+              wrapperClassName="w-full md:w-72"
+              className="bg-card/50"
+            />
           </div>
         </div>
 

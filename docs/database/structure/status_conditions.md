@@ -44,9 +44,9 @@ Defined originally in migration `0001_phase1_foundation.sql`; seeded with four c
 
 Both tables are edited from `/admin/statuses` ([`StatusesEditor.tsx`](../../../src/pages/admin/StatusesEditor.tsx)) via a two-tab layout:
 - **Conditions** — the rich condition form (icon, markdown description, implied conditions, AE changes, category dropdown, etc.).
-- **Condition Categories** — a `SimplePropertyEditor` against `conditionCategories`.
+- **Condition Categories** — a `ProficiencyEntityShell` (taxonomy mode) against `conditionCategories`.
 
-Previously the `AdminProficiencies` page had a thin `SimplePropertyEditor` tab pointed at `status_conditions`; that was removed in commit `9c99ada` to deduplicate authoring surfaces.
+Previously the `AdminProficiencies` page had a thin per-collection editor tab pointed at `status_conditions`; that was removed in commit `9c99ada` to deduplicate authoring surfaces.
 
 ## Table mapping
 

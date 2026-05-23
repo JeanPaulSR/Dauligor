@@ -31,9 +31,10 @@ import { auth } from '../../lib/firebase';
 import { fetchCollection } from '../../lib/d1';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { SearchInput } from '../../components/ui/SearchInput';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Check, KeyRound, Globe2, LayoutGrid, Clock, Search, X, ShieldPlus, Trash2 } from 'lucide-react';
+import { Check, KeyRound, Globe2, LayoutGrid, Clock, X, ShieldPlus, Trash2 } from 'lucide-react';
 
 type Scope = {
   worlds?: string[];
@@ -264,15 +265,11 @@ export default function PermissionsManager() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 p-4 pt-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/40" />
-            <Input
-              value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
-              placeholder="Search by username or display name"
-              className="pl-9"
-            />
-          </div>
+          <SearchInput
+            value={userSearch}
+            onChange={setUserSearch}
+            placeholder="Search by username or display name"
+          />
           <div className="max-h-[600px] overflow-y-auto space-y-1">
             {filteredUsers.map((u) => {
               const permCount = Array.isArray(u.permission_keys) ? u.permission_keys.length : 0;

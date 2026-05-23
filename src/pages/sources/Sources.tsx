@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { Book, Plus, ExternalLink, Edit, Search, RefreshCw, AlertTriangle, Download, ChevronDown } from 'lucide-react';
+import { Book, Plus, ExternalLink, Edit, RefreshCw, AlertTriangle, Download, ChevronDown } from 'lucide-react';
 import { fetchCollection } from '../../lib/d1';
 import { Input } from '../../components/ui/input';
+import { SearchInput } from '../../components/ui/SearchInput';
 
 // Page reload helper for the "rebuild cache" buttons. Replaces the historical
 // `resetFirestore()` which existed to clear Firestore's IndexedDB cache; with
@@ -115,15 +116,13 @@ export default function Sources({ userProfile }: { userProfile: any }) {
           <h1 className="h1-title">Sources & Documents</h1>
         </div>
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink/40" />
-            <Input 
-              placeholder="Search sources..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-card/50 border-gold/10 w-64"
-            />
-          </div>
+          <SearchInput
+            placeholder="Search sources..."
+            value={searchQuery}
+            onChange={setSearchQuery}
+            wrapperClassName="w-64"
+            className="bg-card/50"
+          />
           {isStaff && (
             <div className="flex items-center gap-3">
               <Button 

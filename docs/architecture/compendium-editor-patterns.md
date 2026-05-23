@@ -47,12 +47,12 @@ Shape: page-level component with hand-rolled form state, manual `useEffect` to l
 Good for: entities that need entity-specific UX (custom field shapes, multi-step flows, non-trivial validation).
 Bad: each editor re-implements the load/save/delete loop. ~12 implementations of the same shape.
 
-### Pattern C — Generic config editor
+### Pattern C — Generic config editor *(folded into ProficiencyEntityShell taxonomy mode, May 2026)*
 
-**File**: [src/pages/admin/SimplePropertyEditor.tsx](../../src/pages/admin/SimplePropertyEditor.tsx)
-**Used by** (via [AdminProficiencies.tsx](../../src/pages/admin/AdminProficiencies.tsx) tabs): `toolCategories`, `weaponCategories`, `weaponProperties`, `armorCategories`, `languageCategories`, `damageTypes`, `conditions`, `attributes`, `languages`
+**File**: [src/components/compendium/ProficiencyEntityShell.tsx](../../src/components/compendium/ProficiencyEntityShell.tsx) (taxonomy-mode invocation: `includeFoundryAlias=false`, `includeSource=false`, `includeBasicRules=false`, `includeOrder=true`)
+**Used by** (via [AdminProficiencies.tsx](../../src/pages/admin/AdminProficiencies.tsx) tabs): `toolCategories`, `weaponCategories`, `weaponProperties`, `armorCategories`, `languageCategories`, `damageTypes`, `attributes`, `languages` — plus `conditionCategories` from [StatusesEditor.tsx](../../src/pages/admin/StatusesEditor.tsx).
 
-Shape: parameterised by `(collectionName, title, descriptionText, icon, optionalCategoryCollectionName)`. Handles the `id, name, identifier, order, description` shape with optional category selector.
+Shape: same `id, name, identifier, order, description` taxonomy shape as before, now driven by the shell's table+modal UX. Optional category selector is configured via the shell's `categoryFreeText` prop (used by `languages` for its free-text category column). The old standalone `SimplePropertyEditor.tsx` file was removed; one shell now covers both Pattern A's full-fat editor and Pattern C's slim taxonomy editor, switched via prop toggles.
 
 Good for: simple taxonomies.
 Same limitations as Pattern A.
@@ -97,7 +97,7 @@ Limitations: the inline tag picker in `SpellsEditor` is still file-local (not ex
 | You're adding… | Use pattern | Copy this file as a starting point |
 |---|---|---|
 | A new flat-table entity (name + JSON columns + source FK) | **A** | [FeatsEditor.tsx](../../src/pages/compendium/FeatsEditor.tsx) |
-| A new simple taxonomy (`id`, `name`, `identifier`, `order`, `description`) | **C** | (just add a tab to `AdminProficiencies` with a new `<SimplePropertyEditor collectionName="...">` invocation) |
+| A new simple taxonomy (`id`, `name`, `identifier`, `order`, `description`) | **C** | (just add a tab to `AdminProficiencies` with a new `<ProficiencyEntityShell table="..." {...TAXONOMY_TAB_BASE} />` invocation) |
 | A new entity with custom UX needs | **B** | [SkillsEditor.tsx](../../src/pages/compendium/SkillsEditor.tsx) |
 | A new entity with multiple FK tables / junctions | **D** | Build a new `src/lib/<entity>.ts`; see [lore.ts](../../src/lib/lore.ts) |
 | A new editor that should feel like its public browser (compact list + tabbed editor + side panel) | **E** | [SpellsEditor.tsx](../../src/pages/compendium/SpellsEditor.tsx) — see also [../features/compendium-spells-editor.md](../features/compendium-spells-editor.md) |
@@ -136,7 +136,7 @@ Estimated total effort: 1 focused week, broken across the priorities below.
 *Estimated: 1-2 days · Goal: one canonical pattern per entity type*
 
 - [ ] Rename `DevelopmentCompendiumManager` → `EntityEditorShell` (the "Development" prefix dates from when it was a temp scaffold).
-- [ ] Decide: does Pattern A (flat-table editor) merge with Pattern C (`SimplePropertyEditor`)? They're nearly the same shape — `SimplePropertyEditor` is just `EntityEditorShell` minus the automation/source FK.
+- [x] Decide: does Pattern A (flat-table editor) merge with Pattern C (`SimplePropertyEditor`)? **Done, May 2026** — both folded into [`ProficiencyEntityShell`](../../src/components/compendium/ProficiencyEntityShell.tsx), with prop toggles (`includeFoundryAlias`, `includeSource`, `includeBasicRules`, `includeOrder`) selecting the right field set. `SimplePropertyEditor.tsx` removed.
 - [ ] Audit each Pattern B editor; for any that fits Pattern A's shape (no relational structure), migrate it. The bespoke ones to keep are the ones with genuinely custom UX (CharacterBuilder, ClassEditor, SubclassEditor).
 - [ ] Update this doc's [Decision tree](#decision-tree) to reflect the consolidated patterns.
 

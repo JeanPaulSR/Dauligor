@@ -5,6 +5,7 @@ import { auth } from '../../lib/firebase';
 import { isAdmin } from '../../lib/currentUser';
 import { Button } from './button';
 import { Input } from './input';
+import { SearchInput } from './SearchInput';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog';
 import {
   Folder, Search, Upload,
@@ -704,12 +705,12 @@ export function IconPickerModal({
         {/* Row 2 — search, display mode, upload */}
         <div className="px-4 py-2 border-b border-gold/10 shrink-0 flex items-center gap-3">
           <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/30 pointer-events-none" />
-            <Input
+            <SearchInput
               value={search}
-              onChange={(e) => handleSearch(e.target.value)}
+              onChange={handleSearch}
               placeholder="Filter results…"
-              className="pl-8 h-8 text-xs bg-background/50 border-gold/20"
+              size="sm"
+              className="bg-background/50 border-gold/20"
             />
             {search && (
               <button

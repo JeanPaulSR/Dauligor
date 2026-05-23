@@ -1,18 +1,49 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Card, CardContent } from '../../components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '../../components/ui/select';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog';
+import {
+  Tabs,
+  TabsContent,
+} from '../../components/ui/tabs';
+import { AccentTabsList } from '../../components/ui/AccentTabsList';
 import { slugify } from '../../lib/utils';
-import { HeartPulse, Plus, Trash2, Download, Upload, X, Zap } from 'lucide-react';
+import {
+  HeartPulse,
+  Plus,
+  Trash2,
+  Download,
+  Upload,
+  X,
+  Zap,
+  Layers,
+} from 'lucide-react';
 import MarkdownEditor from '../../components/MarkdownEditor';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { fetchCollection, upsertDocument, deleteDocument } from '../../lib/d1';
-import { Layers } from 'lucide-react';
-import SimplePropertyEditor from './SimplePropertyEditor';
+import ProficiencyEntityShell from '../../components/compendium/ProficiencyEntityShell';
+import EntityListSection, {
+  type ColumnDef,
+} from '../../components/compendium/EntityListSection';
+import EntityEditModal, {
+  FormSectionHeading,
+} from '../../components/compendium/EntityEditModal';
+
+// Taxonomy-tab config mirrors AdminProficiencies.tsx — no foundry alias,
+// no source dropdown, no basic-rules toggle, with the Order column on.
+// Centralising here in StatusesEditor (rather than importing across
+// pages) keeps each page self-contained.
+const TAXONOMY_TAB_BASE = {
+  includeAbility: false,
+  includeFoundryAlias: false,
+  includeSource: false,
+  includeBasicRules: false,
+  includeOrder: true,
+} as const;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -287,12 +318,103 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
   const [categories, setCategories] = useState<ConditionCategoryRow[]>([]);
 
   // Page tab. "conditions" = the rich condition form + list (the
-  // historical body of this page). "categories" = the SimplePropertyEditor
-  // for `conditionCategories`, moved here from AdminProficiencies so
-  // both halves of the status-condition stack live on /admin/statuses.
+  // historical body of this page). "categories" = the ProficiencyEntityShell
+  // (taxonomy mode) for `conditionCategories`, moved here from
+  // AdminProficiencies so both halves of the status-condition stack
+  // live on /admin/statuses.
   const [activeTab, setActiveTab] = useState<'conditions' | 'categories'>('conditions');
 
+  // Conditions tab — toolbar + table + modal state. Mirrors the
+  // ProficiencyEntityShell pattern so both tabs on this page read the
+  // same way visually.
+  //   • `conditionSearch` filters the table; matches against name,
+  //     identifier, source label, and category name.
+  //   • `conditionSort` drives the sortable headers. Default is by
+  //     `order` ascending, which matches the load-time sort.
+  //   • `conditionModalOpen` controls the edit/create dialog. The
+  //     modal is conditionally rendered (`if (!open) return null` inside
+  //     the dialog component below) for the same reason the shell does
+  //     it — @base-ui keeps the popup mounted across the close
+  //     animation otherwise.
+  //   • `pendingDeleteId` queues a delete confirmation so we can swap
+  //     `window.confirm` for the styled ConfirmDialog.
+  const [conditionSearch, setConditionSearch] = useState('');
+  type ConditionSortKey = 'name' | 'identifier' | 'source' | 'category' | 'order';
+  type SortDir = 'asc' | 'desc';
+  const [conditionSort, setConditionSort] = useState<{ key: ConditionSortKey; dir: SortDir }>({
+    key: 'order',
+    dir: 'asc',
+  });
+  const [conditionModalOpen, setConditionModalOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  // Modal-internal top-level tab. Identity stays above the strip
+  // (always visible — name/identifier/source/category are the basic
+  // facts about a condition). Below the strip, the form splits into:
+  //   • 'details'    — Metadata + Description (the "what is this")
+  //   • 'automation' — Implied Conditions + Effect Changes (the "what
+  //                    does it do when applied")
+  // Defaults to 'details' since most edits start by tweaking the
+  // description text or order. Matches the FeatureModalHero /
+  // ClassEditor pattern using the shared Tabs primitive.
+  type EditTab = 'details' | 'automation';
+  const [editTab, setEditTab] = useState<EditTab>('details');
+
   const isAdmin = userProfile?.role === 'admin';
+
+  // Derived: filtered + sorted view of `items` for the table. Memoised
+  // so the table doesn't re-sort on every unrelated state change (form
+  // edits, tab toggles, etc.).
+  const visibleConditions = useMemo(() => {
+    const q = conditionSearch.trim().toLowerCase();
+    const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
+    const filtered = !q
+      ? items
+      : items.filter((it) => {
+          const cat = it.category_id ? categoryNameById.get(it.category_id) || '' : '';
+          return (
+            it.name.toLowerCase().includes(q) ||
+            (it.identifier || '').toLowerCase().includes(q) ||
+            (it.source || '').toLowerCase().includes(q) ||
+            cat.toLowerCase().includes(q)
+          );
+        });
+
+    const dirMult = conditionSort.dir === 'asc' ? 1 : -1;
+    const sorted = [...filtered].sort((a, b) => {
+      switch (conditionSort.key) {
+        case 'name':
+          return a.name.localeCompare(b.name) * dirMult;
+        case 'identifier':
+          return (a.identifier || '').localeCompare(b.identifier || '') * dirMult;
+        case 'source':
+          return (a.source || '').localeCompare(b.source || '') * dirMult;
+        case 'category': {
+          const ca = a.category_id ? categoryNameById.get(a.category_id) || '' : '';
+          const cb = b.category_id ? categoryNameById.get(b.category_id) || '' : '';
+          return ca.localeCompare(cb) * dirMult;
+        }
+        case 'order':
+        default: {
+          // Treat missing order as +Infinity so blank rows sort last in
+          // ascending order regardless of the direction multiplier.
+          const oa = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+          const ob = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+          if (oa === ob) return a.name.localeCompare(b.name);
+          return (oa - ob) * dirMult;
+        }
+      }
+    });
+    return sorted;
+  }, [items, categories, conditionSearch, conditionSort]);
+
+  // Flip-or-set sort. Clicking the active column toggles direction;
+  // clicking a new column always defaults to ascending.
+  const toggleConditionSort = (key: ConditionSortKey) => {
+    setConditionSort((cur) =>
+      cur.key === key ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
+    );
+  };
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -361,22 +483,39 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
         toast.success('Status condition created');
       }
       resetForm();
+      setConditionModalOpen(false);
     } catch (err) {
       console.error('Error saving status:', err);
       toast.error('Failed to save status condition');
     }
   };
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (!isAdmin || !window.confirm('Delete this status condition?')) return;
+  /**
+   * Two-step delete: callers (the table-row trash button + the modal's
+   * footer Delete) queue the id, and the styled `ConfirmDialog` actually
+   * carries out the destructive call. Mirrors the shell's
+   * `requestDelete` → `confirmDelete` pattern so both editors on this
+   * page surface the same confirmation chrome instead of mixing
+   * `window.confirm` with the dauligor dialog.
+   */
+  const confirmConditionDelete = async () => {
+    if (!isAdmin || !pendingDeleteId) return;
+    const id = pendingDeleteId;
     try {
       await deleteDocument('statuses', id);
       setItems(prev => prev.filter(it => it.id !== id));
       toast.success('Status condition deleted');
+      // If the modal was open on this row, close it; otherwise leave
+      // the modal state alone (delete-from-row case).
+      if (editingItem?.id === id) {
+        resetForm();
+        setConditionModalOpen(false);
+      }
     } catch (err) {
       console.error('Error deleting status:', err);
       toast.error('Failed to delete status condition');
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -519,6 +658,26 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
       source: item.source || 'custom',
       category_id: item.category_id ?? null,
     });
+    setEditTab('details');
+    setConditionModalOpen(true);
+  };
+
+  /** Open the modal in create mode — clears any in-flight edit. */
+  const openCreateCondition = () => {
+    resetForm();
+    setEditTab('details');
+    setConditionModalOpen(true);
+  };
+
+  /**
+   * Modal close handler. Always propagates the requested value (the
+   * Dialog primitive may internally sync `true` for focus/animation
+   * bookkeeping — only responding to `false` would wedge the popup in
+   * a half-closed state, same gotcha the shell documents).
+   */
+  const handleConditionModalOpenChange = (next: boolean) => {
+    setConditionModalOpen(next);
+    if (!next) resetForm();
   };
 
   const addChange = () =>
@@ -586,8 +745,8 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
         </div>
 
         {/* Top-right action buttons only apply to the Conditions tab —
-            the Categories tab's SimplePropertyEditor renders its own
-            Add affordance. */}
+            the Categories tab's ProficiencyEntityShell renders its own
+            Add affordance inside its toolbar. */}
         {activeTab === 'conditions' && (
           <div className="flex gap-2 shrink-0">
             <Button
@@ -609,390 +768,605 @@ export default function StatusesEditor({ userProfile }: { userProfile: any }) {
         )}
       </div>
 
-      {/* Tab strip — mirrors AdminProficiencies' visual style. Lets
-          authors flip between the rich Conditions editor and the
-          Categories SimplePropertyEditor without leaving the page. */}
-      <div className="flex flex-wrap gap-2 border-b border-gold/10 pb-4">
-        {([
-          { id: 'conditions', label: 'Conditions', icon: HeartPulse },
-          { id: 'categories', label: 'Condition Categories', icon: Layers },
-        ] as const).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg transition-colors font-bold uppercase tracking-widest text-[10px] ${
-              activeTab === tab.id
-                ? 'bg-gold text-white shadow-sm'
-                : 'bg-card text-ink/60 hover:text-ink hover:bg-gold/10'
-            }`}
-          >
-            <tab.icon className="w-3.5 h-3.5" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* Page-level tab strip — same chevron-style ChevronTabsList
+          as the modal's Details/Automation strip so the two layers
+          of tabs on this page (page-level + modal-internal) read
+          consistently. Wrapped in a `<Tabs>` so the primitive owns
+          the controlled state and keyboard navigation; we don't
+          render <TabsContent> here because the body sections below
+          are conditionally rendered against the same `activeTab`
+          state for the existing inline structure (kept intact to
+          minimise diff). */}
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as 'conditions' | 'categories')}
+        className="border-b border-gold/10 pb-4"
+      >
+        <AccentTabsList
+          active={activeTab}
+          tabs={[
+            { value: 'conditions', label: 'Conditions', icon: HeartPulse },
+            { value: 'categories', label: 'Condition Categories', icon: Layers },
+          ]}
+        />
+      </Tabs>
 
       {/* ── Conditions tab body ──────────────────────────────── */}
       {activeTab === 'categories' && (
-        <SimplePropertyEditor
+        <ProficiencyEntityShell
           userProfile={userProfile}
-          collectionName="conditionCategories"
-          title="Condition Category"
-          descriptionText="Groupings for status conditions surfaced as the badge next to each condition in the Active Effect picker (PHB Conditions, Combat States, Spell States, System Extras, or your own). Edit the seeded categories or add new ones; status_conditions.category_id references rows here."
+          hideHeader
+          table="conditionCategories"
+          singular="Condition Category"
+          plural="Condition Categories"
           icon={Layers}
+          description="Groupings for status conditions surfaced as the badge next to each condition in the Active Effect picker (PHB Conditions, Combat States, Spell States, System Extras, or your own). Edit the seeded categories or add new ones; status_conditions.category_id references rows here."
+          {...TAXONOMY_TAB_BASE}
         />
       )}
 
-      {activeTab === 'conditions' && (
-      <div className="grid lg:grid-cols-3 gap-8">
-
-        {/* ── Left: Form panel ────────────────────────────────────────────── */}
-        <div className="lg:col-span-1 space-y-6">
-          <h2 className="label-text text-gold">
-            {editingItem ? 'Edit Condition' : 'New Condition'}
-          </h2>
-
-          <form onSubmit={handleSave} className="space-y-4 bg-card/50 p-6 rounded-lg border border-gold/10">
-
-            {/* Icon + Name */}
-            <div className="flex gap-3 items-start">
-              <div className="w-14 h-14 shrink-0">
-                <ImageUpload
-                  compact
-                  imageType="icon"
-                  storagePath="icons/statuses/"
-                  currentImageUrl={form.img || ''}
-                  onUpload={url => setForm(f => ({ ...f, img: url || null }))}
-                  className="w-full h-full"
-                />
+      {/* ── Conditions tab body ──────────────────────────────────────────── */}
+      {/* Driven by the shared EntityListSection. The column definitions
+          carry per-cell render callbacks so condition-specific bits
+          (the icon tile, the colored source chip, the implied/AE-count
+          summary under the name, the delete-on-hover) all live inline
+          with the column they belong to. */}
+      {activeTab === 'conditions' && (() => {
+        const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
+        const cols: ColumnDef<StatusCondition>[] = [
+          {
+            key: 'icon',
+            label: '',
+            width: '40px',
+            minBreakpoint: 'always',
+            render: (item) => (
+              <div className="w-8 h-8 rounded border border-gold/10 bg-background/50 flex items-center justify-center overflow-hidden">
+                {item.image_url ? (
+                  <img
+                    src={item.image_url}
+                    alt=""
+                    className="w-full h-full object-contain p-0.5"
+                  />
+                ) : (
+                  <HeartPulse className="w-3.5 h-3.5 text-gold/40" />
+                )}
               </div>
-              <div className="flex-1 space-y-2">
-                <label className="field-label">Name</label>
-                <Input
-                  value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="h-9 bg-background/50 border-gold/10"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Identifier */}
-            <div className="space-y-2">
-              <label className="field-label">Identifier</label>
-              <Input
-                value={form.identifier}
-                onChange={e => setForm(f => ({ ...f, identifier: e.target.value }))}
-                placeholder={slugify(form.name || 'blinded')}
-                className="h-9 bg-background/50 border-gold/10 font-mono text-xs placeholder:text-ink/20"
-              />
-              <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                Foundry condition key (e.g., blinded)
-              </p>
-            </div>
-
-            {/* Source + Order */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="field-label">Source</label>
-                <Select
-                  value={form.source}
-                  onValueChange={(v: 'dnd5e' | 'custom' | 'imported') =>
-                    setForm(f => ({ ...f, source: v }))
-                  }
-                >
-                  <SelectTrigger className="h-9 bg-background/50 border-gold/10 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dnd5e">D&amp;D 5e</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
-                    <SelectItem value="imported">Imported</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="field-label">Order</label>
-                <Input
-                  type="number"
-                  value={form.order ?? ''}
-                  onChange={e => setForm(f => ({ ...f, order: e.target.value === '' ? null : Number(e.target.value) }))}
-                  className="h-9 bg-background/50 border-gold/10 font-mono"
-                />
-              </div>
-            </div>
-
-            {/* Category — FK to condition_categories. Drives the badge
-                shown next to each condition in the Active Effect editor's
-                Status Conditions picker (PHB Conditions / Combat States
-                / Spell States / System Extras). "Uncategorised" stores
-                null. Categories are seeded by migration 20260511-0043
-                and authored via a future categories admin page if needed. */}
-            <div className="space-y-2">
-              <label className="field-label">Category</label>
-              <Select
-                value={form.category_id ?? '__none__'}
-                onValueChange={(v) =>
-                  setForm(f => ({ ...f, category_id: v === '__none__' ? null : v }))
-                }
-              >
-                <SelectTrigger className="h-9 bg-background/50 border-gold/10 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Uncategorised</SelectItem>
-                  {categories.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                Groups conditions in the Active Effect picker
-              </p>
-            </div>
-
-            {/* Reference */}
-            <div className="space-y-2">
-              <label className="field-label">Reference</label>
-              <Input
-                value={form.reference || ''}
-                onChange={e => setForm(f => ({ ...f, reference: e.target.value }))}
-                placeholder="Compendium.dnd5e.rules...."
-                className="h-9 bg-background/50 border-gold/10 font-mono text-xs placeholder:text-ink/20"
-              />
-              <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                Foundry compendium reference (optional)
-              </p>
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <label className="field-label">Description</label>
-              <MarkdownEditor
-                value={form.description || ''}
-                onChange={v => setForm(f => ({ ...f, description: v }))}
-                placeholder="SRD condition description..."
-              />
-            </div>
-
-            {/* Implied conditions */}
-            {items.length > 0 && (
-              <div className="space-y-2">
-                <label className="field-label">Implies Conditions</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {items
-                    .filter(i => i.id !== editingItem?.id)
-                    .map(i => {
-                      const active = (form.impliedStatuses || []).includes(i.identifier);
-                      return (
-                        <button
-                          key={i.id}
-                          type="button"
-                          onClick={() => toggleImplied(i.identifier)}
-                          className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border transition-colors ${
-                            active
-                              ? 'bg-gold/20 border-gold/40 text-gold'
-                              : 'bg-card border-gold/10 text-ink/40 hover:text-ink/70'
-                          }`}
-                        >
-                          {i.name}
-                        </button>
-                      );
-                    })}
+            ),
+          },
+          {
+            key: 'name',
+            label: 'Name',
+            width: 'minmax(0,1fr)',
+            sortable: true,
+            minBreakpoint: 'always',
+            render: (item) => (
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-ink truncate">
+                  {item.name}
                 </div>
-                <p className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                  Conditions this one implies (e.g., Paralyzed → Incapacitated)
+                {/* Secondary meta line (implied / AE count) lives
+                    under the name when something's there to show.
+                    Defensive Array.isArray guards because cached
+                    payloads can occasionally surface implied_ids /
+                    changes as raw strings if d1.ts's auto-parse list
+                    ever misses the column. */}
+                {((Array.isArray(item.implied_ids) && item.implied_ids.length > 0) ||
+                  (Array.isArray(item.changes) && item.changes.length > 0)) && (
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    {Array.isArray(item.implied_ids) && item.implied_ids.length > 0 && (
+                      <span className="text-[9px] text-ink/40 uppercase tracking-widest font-bold truncate">
+                        → {item.implied_ids.join(', ')}
+                      </span>
+                    )}
+                    {Array.isArray(item.changes) && item.changes.length > 0 && (
+                      <span className="text-[9px] text-ink/40 font-bold uppercase tracking-widest flex items-center gap-0.5">
+                        <Zap className="w-2.5 h-2.5 text-gold/30" />
+                        {item.changes.length} change
+                        {item.changes.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            key: 'identifier',
+            label: 'Identifier',
+            width: '140px',
+            sortable: true,
+            minBreakpoint: 'sm',
+            render: (item) => (
+              <div className="text-[10px] text-ink/50 font-mono truncate">
+                {item.identifier}
+              </div>
+            ),
+          },
+          {
+            key: 'source',
+            label: 'Source',
+            width: '110px',
+            sortable: true,
+            minBreakpoint: 'md',
+            render: (item) => (
+              <span
+                className={`text-[9px] font-bold uppercase tracking-widest border px-1.5 py-0.5 rounded ${
+                  SOURCE_COLORS[item.source] || SOURCE_COLORS.custom
+                }`}
+              >
+                {SOURCE_LABELS[item.source] || item.source}
+              </span>
+            ),
+          },
+          {
+            key: 'category',
+            label: 'Category',
+            width: '130px',
+            sortable: true,
+            minBreakpoint: 'md',
+            render: (item) => (
+              <div className="text-[10px] text-ink/70 truncate">
+                {(item.category_id && categoryNameById.get(item.category_id)) || '—'}
+              </div>
+            ),
+          },
+          {
+            key: 'order',
+            label: 'Order',
+            width: '60px',
+            sortable: true,
+            minBreakpoint: 'sm',
+            render: (item) => (
+              <div className="text-[10px] text-ink/60 font-mono">
+                {typeof item.order === 'number' ? item.order : '—'}
+              </div>
+            ),
+          },
+          {
+            key: 'actions',
+            label: '',
+            width: '48px',
+            minBreakpoint: 'always',
+            render: (item) => (
+              <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPendingDeleteId(item.id!);
+                  }}
+                  className="text-blood p-1 hover:bg-blood/10 rounded"
+                  title="Delete"
+                  type="button"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ),
+          },
+        ];
+
+        return (
+          <EntityListSection
+            search={conditionSearch}
+            onSearchChange={setConditionSearch}
+            searchPlaceholder="Search conditions…"
+            visibleCount={visibleConditions.length}
+            totalCount={items.length}
+            createLabel="New Condition"
+            onCreate={openCreateCondition}
+            columns={cols}
+            rows={visibleConditions}
+            rowKey={(item) => item.id!}
+            rowTitle={(item) => item.description || ''}
+            rowIsActive={(item) => editingItem?.id === item.id}
+            onRowClick={startEdit}
+            sortKey={conditionSort.key}
+            sortDir={conditionSort.dir}
+            onSortChange={(key) => toggleConditionSort(key as ConditionSortKey)}
+            loading={loading}
+            emptyState={
+              <div className="p-12 text-center">
+                <HeartPulse className="w-8 h-8 text-gold/20 mx-auto mb-3" />
+                <p className="text-ink/40 font-serif italic text-sm mb-4">
+                  No status conditions defined yet.
                 </p>
-              </div>
-            )}
-
-            {/* Effect changes */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="field-label">Effect Changes</label>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={addChange}
-                  className="h-6 w-6 p-0 text-gold/60 hover:text-gold"
+                  onClick={handleSeedDefaults}
+                  className="btn-primary gap-2 text-xs"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Download className="w-3.5 h-3.5" /> Seed D&amp;D 5e Defaults
                 </Button>
               </div>
+            }
+            noMatchMessage={`No conditions match “${conditionSearch}”.`}
+          />
+        );
+      })()}
 
-              {(form.changes || []).length === 0 ? (
-                <p className="text-[10px] text-ink/30 italic">No mechanical changes defined.</p>
-              ) : (
-                <div className="space-y-2">
-                  {(form.changes || []).map((change, idx) => (
-                    <div key={idx} className="flex gap-1.5 items-start">
-                      <div className="flex-1 space-y-1">
+      {/* ── Condition edit modal ────────────────────────────────────────────
+          Driven by the shared EntityEditModal: it owns the Dialog
+          primitive, the 10/80/10 viewport-relative sizing, the
+          minimal title bar (label + close), the scrollable body
+          (custom-scrollbar + dialog-body padding/spacing), and the
+          standard Delete/Cancel/Save footer. The form sections
+          rendered as children stay condition-specific (icon upload,
+          source enum, implied chips, effect changes, Details vs
+          Automation sub-tabs). */}
+      <EntityEditModal
+        open={conditionModalOpen}
+        onOpenChange={handleConditionModalOpenChange}
+        onSubmit={handleSave}
+        headerLabel={editingItem ? 'Editing Condition' : 'New Condition'}
+        srTitle={
+          editingItem
+            ? `Editing ${form.name || 'condition'}`
+            : 'New condition'
+        }
+        srDescription={
+          editingItem
+            ? 'Edit the status condition details below.'
+            : 'Create a new status condition.'
+        }
+        isEditing={!!editingItem}
+        saveLabel={editingItem ? 'Save Changes' : 'Create Condition'}
+        saveDisabled={!form.name}
+        onDelete={
+          editingItem ? () => setPendingDeleteId(editingItem.id!) : undefined
+        }
+      >
+        {/* The shared EntityEditModal owns the dialog-body wrapper
+            (with custom-scrollbar + the dialog-body class's built-in
+            space-y-5 between sections), so the children below are
+            just the form sections. */}
+                {/* Identity — now the merged "what is this condition"
+                    block: image upload on the left (taller, so it
+                    visually anchors the two rows of fields next to
+                    it), and a 2x2 grid on the right holding Name +
+                    Identifier on row 1 and Source + Category on row
+                    2. Categorization no longer needs its own section
+                    — at four fields it fits comfortably inside the
+                    same grid, and keeping it next to Name avoids the
+                    user having to bounce between sections to set the
+                    basic attributes of a condition. */}
+                <section className="space-y-3">
+                  <FormSectionHeading>Identity</FormSectionHeading>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start">
+                    {/* Image tile — fixed-size square matching the
+                        128×128 native size status-condition icons are
+                        stored at. The previous attempt to stretch the
+                        tile to match the 2x2 field grid's height via
+                        `aspect-square + h-auto + w-auto` collapsed:
+                        with no intrinsic dimension to derive from
+                        (the ImageUpload child uses w-full h-full, so
+                        it doesn't push out the parent), the box had
+                        no size to enforce a square aspect on. A flat
+                        fixed size renders predictably and happens to
+                        align with the 2-row field grid since each
+                        field row is ~58px tall (label + h-10 input)
+                        and 2 rows + gap-3 ≈ 128px. */}
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 shrink-0">
+                      <ImageUpload
+                        compact
+                        imageType="icon"
+                        storagePath="icons/statuses/"
+                        currentImageUrl={form.img || ''}
+                        onUpload={(url) => setForm((f) => ({ ...f, img: url || null }))}
+                        className="w-full h-full"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="field-label">Name</label>
                         <Input
-                          value={change.key}
-                          onChange={e => updateChange(idx, { key: e.target.value })}
-                          placeholder="system.attributes.movement.walk"
-                          className="h-7 bg-background/50 border-gold/10 font-mono text-[10px] placeholder:text-ink/20"
+                          value={form.name}
+                          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                          className="field-input h-10 text-sm"
+                          required
+                          autoFocus
+                          placeholder="e.g. Blinded"
                         />
-                        <div className="flex gap-1">
-                          <Select
-                            value={String(change.mode)}
-                            onValueChange={v => updateChange(idx, { mode: Number(v) })}
-                          >
-                            <SelectTrigger className="h-7 bg-background/50 border-gold/10 text-[10px] flex-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {CHANGE_MODES.map(m => (
-                                <SelectItem key={m.value} value={String(m.value)}>
-                                  {m.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Input
-                            value={change.value}
-                            onChange={e => updateChange(idx, { value: e.target.value })}
-                            placeholder="value"
-                            className="h-7 bg-background/50 border-gold/10 font-mono text-[10px] flex-1 placeholder:text-ink/20"
-                          />
-                        </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeChange(idx)}
-                        className="h-7 w-6 p-0 text-red-400/60 hover:text-red-400 shrink-0"
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-2 pt-2">
-              <Button type="submit" className="flex-1 btn-primary" disabled={!form.name}>
-                {editingItem ? 'Save Changes' : 'Create'}
-              </Button>
-              {editingItem && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetForm}
-                  className="border-gold/20 text-gold/60 hover:text-gold hover:bg-gold/10"
-                >
-                  Cancel
-                </Button>
-              )}
-            </div>
-          </form>
-        </div>
-
-        {/* ── Right: Cards grid ────────────────────────────────────────────── */}
-        <div className="lg:col-span-2">
-          {loading ? (
-            <div className="text-center py-10 opacity-50 font-serif italic text-sm">
-              Loading…
-            </div>
-          ) : items.length === 0 ? (
-            <div className="p-12 border border-dashed border-gold/20 rounded-xl text-center">
-              <HeartPulse className="w-8 h-8 text-gold/20 mx-auto mb-3" />
-              <p className="text-ink/40 font-serif italic text-sm mb-4">
-                No status conditions defined yet.
-              </p>
-              <Button
-                type="button"
-                onClick={handleSeedDefaults}
-                className="btn-primary gap-2 text-xs"
-              >
-                <Download className="w-3.5 h-3.5" /> Seed D&amp;D 5e Defaults
-              </Button>
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 gap-4">
-              {items.map(item => (
-                <Card
-                  key={item.id}
-                  className={`border-gold/10 bg-card/40 hover:bg-card/60 transition-colors cursor-pointer ${
-                    editingItem?.id === item.id ? 'ring-1 ring-gold shadow-sm' : ''
-                  }`}
-                  onClick={() => startEdit(item)}
-                >
-                  <CardContent className="p-4 flex items-start gap-3">
-
-                    {/* Icon */}
-                    <div className="w-10 h-10 rounded border border-gold/10 bg-background/50 flex items-center justify-center shrink-0 overflow-hidden">
-                      {item.image_url ? (
-                        <img
-                          src={item.image_url}
-                          alt={item.name}
-                          className="w-full h-full object-contain p-1"
+                      <div className="space-y-1">
+                        <label className="field-label">Identifier</label>
+                        <Input
+                          value={form.identifier}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, identifier: e.target.value }))
+                          }
+                          placeholder={slugify(form.name || 'blinded')}
+                          className="field-input h-10 text-xs font-mono"
                         />
-                      ) : (
-                        <HeartPulse className="w-4 h-4 text-gold/40" />
-                      )}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="field-label">Source</label>
+                        <Select
+                          value={form.source}
+                          onValueChange={(v: 'dnd5e' | 'custom' | 'imported') =>
+                            setForm((f) => ({ ...f, source: v }))
+                          }
+                        >
+                          <SelectTrigger className="field-input h-10 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="dnd5e">D&amp;D 5e</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
+                            <SelectItem value="imported">Imported</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="field-label">Category</label>
+                        <Select
+                          value={form.category_id ?? '__none__'}
+                          onValueChange={(v) =>
+                            setForm((f) => ({
+                              ...f,
+                              category_id: v === '__none__' ? null : v,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="field-input h-10 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Uncategorised</SelectItem>
+                            {categories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
+                  </div>
+                </section>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="h3-title text-ink font-bold truncate">{item.name}</h3>
-                          <div className="text-[10px] font-mono text-gold/50 font-black uppercase tracking-widest mt-0.5">
-                            {item.identifier}
+                {/* Top-level tab strip — Details vs Automation.
+                    Mirrors the FeatureModalHero / ClassEditor tab
+                    pattern using the shared Tabs primitive
+                    (src/components/ui/tabs.tsx) so the underline-
+                    active styling, focus ring, and ARIA wiring all
+                    come for free. Identity stays above this strip
+                    (always visible — basic facts about the
+                    condition); the strip toggles between:
+                      • Details — Metadata + Description (the "what
+                        is this condition")
+                      • Automation — Implied Conditions + Effect
+                        Changes (the "what does it do when applied")
+                    The Automation tab shows a small gold dot when
+                    either child has populated state, so users can
+                    tell at a glance that the tab carries content
+                    without having to switch in to check. */}
+                {(() => {
+                  const impliedCount = (form.impliedStatuses || []).length;
+                  const changesCount = (form.changes || []).length;
+                  const hasAutomation = impliedCount > 0 || changesCount > 0;
+                  return (
+                    <Tabs
+                      value={editTab}
+                      onValueChange={(v) => setEditTab(v as EditTab)}
+                      className="w-full"
+                    >
+                      {/* Modal sub-tab strip — driven by the shared
+                          ChevronTabsList. The Automation tab carries
+                          a dot indicator when either implied or
+                          effects are populated, so the user sees at
+                          a glance whether the hidden tab holds
+                          state. */}
+                      <AccentTabsList
+                        active={editTab}
+                        tabs={[
+                          { value: 'details', label: 'Details' },
+                          {
+                            value: 'automation',
+                            label: 'Automation',
+                            showDot: hasAutomation,
+                            dotTitle: `${impliedCount} implied · ${changesCount} effect change${changesCount !== 1 ? 's' : ''}`,
+                          },
+                        ]}
+                      />
+
+                      {/* Details tab — Metadata first (small structural
+                          fields up top where they're easy to reach),
+                          then the Description markdown editor. */}
+                      <TabsContent value="details" className="mt-6 space-y-6">
+                        <section className="space-y-3">
+                          <FormSectionHeading>Metadata</FormSectionHeading>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="field-label">Order</label>
+                              <Input
+                                type="number"
+                                value={form.order ?? ''}
+                                onChange={(e) =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    order:
+                                      e.target.value === '' ? null : Number(e.target.value),
+                                  }))
+                                }
+                                className="field-input h-10 text-sm font-mono"
+                              />
+                              <p className="field-hint">Lower numbers appear first.</p>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="field-label">Reference</label>
+                              <Input
+                                value={form.reference || ''}
+                                onChange={(e) =>
+                                  setForm((f) => ({ ...f, reference: e.target.value }))
+                                }
+                                placeholder="Compendium.dnd5e.rules…"
+                                className="field-input h-10 text-xs font-mono"
+                              />
+                              <p className="field-hint">
+                                Foundry compendium reference (optional).
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span
-                            className={`text-[9px] font-bold uppercase tracking-widest border px-1.5 py-0.5 rounded ${
-                              SOURCE_COLORS[item.source] || SOURCE_COLORS.custom
-                            }`}
-                          >
-                            {SOURCE_LABELS[item.source] || item.source}
-                          </span>
-                          {isAdmin && (
+                        </section>
+
+                        <section className="space-y-3">
+                          <FormSectionHeading>Description</FormSectionHeading>
+                          <MarkdownEditor
+                            value={form.description || ''}
+                            onChange={(v) => setForm((f) => ({ ...f, description: v }))}
+                            placeholder="SRD condition description..."
+                          />
+                        </section>
+                      </TabsContent>
+
+                      {/* Automation tab — Implied Conditions (chip
+                          picker) above Effect Changes (key/mode/value
+                          editor). Both stacked since they're related
+                          in purpose: how this condition behaves once
+                          applied to a creature. */}
+                      <TabsContent value="automation" className="mt-6 space-y-6">
+                        <section className="space-y-3">
+                          <FormSectionHeading>Implied Conditions</FormSectionHeading>
+                          <p className="field-hint">
+                            Conditions this one implies (e.g., Paralyzed → Incapacitated).
+                          </p>
+                          {items.filter((i) => i.id !== editingItem?.id).length === 0 ? (
+                            <p className="text-[11px] text-ink/30 italic">
+                              No other conditions to choose from yet.
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {items
+                                .filter((i) => i.id !== editingItem?.id)
+                                .map((i) => {
+                                  const active = (form.impliedStatuses || []).includes(
+                                    i.identifier,
+                                  );
+                                  return (
+                                    <button
+                                      key={i.id}
+                                      type="button"
+                                      onClick={() => toggleImplied(i.identifier)}
+                                      className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border transition-colors ${
+                                        active
+                                          ? 'bg-gold/20 border-gold/40 text-gold'
+                                          : 'bg-card border-gold/10 text-ink/40 hover:text-ink/70'
+                                      }`}
+                                    >
+                                      {i.name}
+                                    </button>
+                                  );
+                                })}
+                            </div>
+                          )}
+                        </section>
+
+                        <section className="space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <FormSectionHeading>Effect Changes</FormSectionHeading>
                             <Button
+                              type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={e => handleDelete(e, item.id!)}
-                              className="h-6 w-6 p-0 text-red-400/40 hover:text-red-400 transition-colors"
+                              onClick={addChange}
+                              className="h-7 px-2 text-gold/70 hover:text-gold text-xs"
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Plus className="w-3.5 h-3.5 mr-1" /> Add change
                             </Button>
+                          </div>
+                          <p className="field-hint">
+                            Active Effect changes applied when this condition is set.
+                          </p>
+                          {(form.changes || []).length === 0 ? (
+                            <p className="text-[11px] text-ink/30 italic">
+                              No mechanical changes defined.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {(form.changes || []).map((change, idx) => (
+                                <div key={idx} className="flex gap-1.5 items-start">
+                                  <div className="flex-1 space-y-1">
+                                    <Input
+                                      value={change.key}
+                                      onChange={(e) =>
+                                        updateChange(idx, { key: e.target.value })
+                                      }
+                                      placeholder="system.attributes.movement.walk"
+                                      className="h-8 bg-background/50 border-gold/10 font-mono text-xs placeholder:text-ink/20"
+                                    />
+                                    <div className="flex gap-1">
+                                      <Select
+                                        value={String(change.mode)}
+                                        onValueChange={(v) =>
+                                          updateChange(idx, { mode: Number(v) })
+                                        }
+                                      >
+                                        <SelectTrigger className="h-8 bg-background/50 border-gold/10 text-xs flex-1">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {CHANGE_MODES.map((m) => (
+                                            <SelectItem key={m.value} value={String(m.value)}>
+                                              {m.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Input
+                                        value={change.value}
+                                        onChange={(e) =>
+                                          updateChange(idx, { value: e.target.value })
+                                        }
+                                        placeholder="value"
+                                        className="h-8 bg-background/50 border-gold/10 font-mono text-xs flex-1 placeholder:text-ink/20"
+                                      />
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeChange(idx)}
+                                    className="h-8 w-7 p-0 text-red-400/60 hover:text-red-400 shrink-0"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
                           )}
-                        </div>
-                      </div>
+                        </section>
+                      </TabsContent>
+                    </Tabs>
+                  );
+                })()}
+      </EntityEditModal>
 
-                      {/* Meta row. Defensive guards: d1.ts auto-parses
-                          implied_ids / changes JSON, but older cached
-                          payloads or stale Service Worker results can
-                          surface either as a raw string — wrap in
-                          Array.isArray rather than trust the type. */}
-                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        {Array.isArray(item.implied_ids) && item.implied_ids.length > 0 && (
-                          <span className="text-[9px] text-ink/40 uppercase tracking-widest font-bold">
-                            → {item.implied_ids.join(', ')}
-                          </span>
-                        )}
-                        {Array.isArray(item.changes) && item.changes.length > 0 && (
-                          <span className="text-[9px] text-ink/40 font-bold uppercase tracking-widest flex items-center gap-0.5">
-                            <Zap className="w-2.5 h-2.5 text-gold/30" />
-                            {item.changes.length} change{item.changes.length !== 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      )}
+      {/* Destructive-action confirmation — styled with the dauligor
+          ConfirmDialog rather than window.confirm, matching the
+          categories tab and the shell's behaviour. */}
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(next) => {
+          if (!next) setPendingDeleteId(null);
+        }}
+        title="Delete this status condition?"
+        description={(() => {
+          const target = items.find((i) => i.id === pendingDeleteId);
+          return target?.name ? (
+            <>
+              You're about to remove{' '}
+              <strong className="text-ink">{target.name}</strong>. This
+              can't be undone.
+            </>
+          ) : (
+            'This action cannot be undone.'
+          );
+        })()}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmConditionDelete}
+      />
 
       {/* ── Import JSON modal ───────────────────────────────────────────────── */}
       {showImport && (

@@ -90,16 +90,7 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     if (normalized.prerequisites.level !== undefined) normalized.prerequisites_level = normalized.prerequisites.level;
     if (normalized.prerequisites.items !== undefined) normalized.prerequisites_items = normalized.prerequisites.items;
     if (normalized.prerequisites.repeatable !== undefined) normalized.repeatable = normalized.prerequisites.repeatable;
-    
-    delete normalized.prerequisites;
-  }
 
-  // 5. Map prerequisites object if it exists (for Features)
-  if (normalized.prerequisites && typeof normalized.prerequisites === 'object') {
-    if (normalized.prerequisites.level !== undefined) normalized.prerequisites_level = normalized.prerequisites.level;
-    if (normalized.prerequisites.items !== undefined) normalized.prerequisites_items = normalized.prerequisites.items;
-    if (normalized.prerequisites.repeatable !== undefined) normalized.repeatable = normalized.prerequisites.repeatable;
-    
     delete normalized.prerequisites;
   }
 

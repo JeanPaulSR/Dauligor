@@ -52,20 +52,36 @@ interface MarkdownEditorProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement>;
   stickyOffset?: string;
   label?: string;
+  /**
+   * Hide the formatting toolbar entirely. Useful for short-form
+   * fields (proficiency description, etc.) where the toolbar would
+   * be visual noise and the user is unlikely to need bold/italic/
+   * tables/etc. The editor still renders BBCode correctly — only
+   * the toolbar chrome is suppressed.
+   *
+   * When the toolbar is hidden the Visual/Source toggle is also
+   * unreachable, so the user is stuck in whichever mode the editor
+   * defaulted to (Visual, currently). That's deliberate: the
+   * intent is "plain prose, with BBCode if the author hand-types
+   * it." If a caller needs Source mode without the toolbar, expose
+   * a separate prop.
+   */
+  hideToolbar?: boolean;
 }
 
-export default function MarkdownEditor({ 
-  value, 
-  onChange, 
-  placeholder, 
-  className = "", 
+export default function MarkdownEditor({
+  value,
+  onChange,
+  placeholder,
+  className = "",
   minHeight = "350px",
   maxHeight = "70vh",
   autoSizeToContent = true,
   onKeyDown,
   textareaRef: externalRef,
   stickyOffset,
-  label
+  label,
+  hideToolbar = false,
 }: MarkdownEditorProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [isWYSIWYG, setIsWYSIWYG] = useState(true);
@@ -319,15 +335,17 @@ export default function MarkdownEditor({
 
   return (
     <div className={`relative border border-gold/10 rounded-md focus-within:border-gold transition-colors bg-card/50 flex flex-col overflow-hidden ${className}`}>
-      <MarkdownToolbar 
-        textareaRef={textareaRef} 
-        onUpdate={onChange} 
-        isWYSIWYG={isWYSIWYG}
-        onToggleWYSIWYG={() => setIsWYSIWYG(!isWYSIWYG)}
-        editor={editor}
-        stickyOffset={stickyOffset}
-        label={label}
-      />
+      {!hideToolbar && (
+        <MarkdownToolbar
+          textareaRef={textareaRef}
+          onUpdate={onChange}
+          isWYSIWYG={isWYSIWYG}
+          onToggleWYSIWYG={() => setIsWYSIWYG(!isWYSIWYG)}
+          editor={editor}
+          stickyOffset={stickyOffset}
+          label={label}
+        />
+      )}
       
       <div 
         ref={resizableRef}

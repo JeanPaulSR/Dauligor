@@ -1,9 +1,10 @@
 import React from 'react';
-import { Search, Filter, X, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { Filter, X, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Card } from '../ui/card';
+import { SearchInput } from '../ui/SearchInput';
 import { cn } from '../../lib/utils';
 import type { ReactNode } from 'react';
 
@@ -195,15 +196,12 @@ export function FilterBar({
             {leadingActions}
           </div>
         )}
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
-          <Input
-            placeholder={searchPlaceholder}
-            className="field-input pl-8 h-8 focus:border-gold"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          placeholder={searchPlaceholder}
+          value={search}
+          onChange={setSearch}
+          wrapperClassName="flex-1 w-full"
+        />
         <Button
           variant={isFilterOpen ? "default" : "outline"}
           size="sm"
@@ -289,12 +287,12 @@ export function FilterBar({
                     FilterBarContext to apply the bulk command. */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative flex-1 min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/30" />
-                    <Input
+                    <SearchInput
                       placeholder="Filter chip labels…"
-                      className="h-7 text-xs pl-8 bg-background/40 border-gold/15 focus:border-gold"
                       value={chipSearch}
-                      onChange={(e) => setChipSearch(e.target.value)}
+                      onChange={setChipSearch}
+                      size="sm"
+                      className="h-7 bg-background/40 border-gold/15"
                     />
                     {chipSearch && (
                       <button

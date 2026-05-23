@@ -25,6 +25,14 @@
   --color-archive-blue: #3b82f6;
 }
 
+/* Global layout tokens. Any component that needs to position itself
+   relative to the navbar should pull from `--navbar-height` instead
+   of hardcoding the offset — keeps modals, sticky bars, and full-
+   viewport pages in lockstep if the navbar ever changes size. */
+:root {
+  --navbar-height: 4rem;
+}
+
 /* shadcn/ui token bridge — maps CSS variables to Tailwind color utilities */
 @theme inline {
   --font-heading: var(--font-sans);
@@ -571,6 +579,65 @@ body.spell-list-fullscreen footer {
 }
 body.spell-list-fullscreen {
   overflow: hidden;
+}
+
+/* Admin Proficiencies fullscreen — strips the global <main>'s padding
+   and hides the footer at every viewport (mobile included — the page
+   has its own internal chrome and the OGL footer is not relevant on
+   admin pages). The body scroll lock is the only part scoped to
+   `lg+`: at narrow widths the page collapses to a master-detail flow
+   and the document must scroll normally for narrow screens to be
+   usable.
+   If we ever want this for other admin pages, rename to
+   admin-page-fullscreen. */
+body.admin-page-fullscreen main {
+  padding: 0 !important;
+  max-width: none !important;
+}
+body.admin-page-fullscreen footer {
+  display: none !important;
+}
+@media (min-width: 1024px) {
+  body.admin-page-fullscreen {
+    overflow: hidden;
+  }
+}
+
+/* Match the document-level scrollbar to the site's `.custom-scrollbar`
+   styling when admin-page-fullscreen is mounted. The class
+   is also applied to <html> by the page's mount effect so this rule
+   targets whichever element actually owns the page scroll (Firefox
+   uses html; Chrome/Safari accept either). Only matters at narrow
+   widths — lg+ locks body overflow entirely, so no document scrollbar
+   appears. */
+html.admin-page-fullscreen,
+body.admin-page-fullscreen {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) transparent;
+}
+html.admin-page-fullscreen::-webkit-scrollbar,
+body.admin-page-fullscreen::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+html.admin-page-fullscreen::-webkit-scrollbar-track,
+body.admin-page-fullscreen::-webkit-scrollbar-track {
+  background: transparent;
+}
+html.admin-page-fullscreen::-webkit-scrollbar-thumb,
+body.admin-page-fullscreen::-webkit-scrollbar-thumb {
+  background-color: var(--gold);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 10px;
+  opacity: 0.5;
+}
+html.admin-page-fullscreen::-webkit-scrollbar-thumb:hover,
+body.admin-page-fullscreen::-webkit-scrollbar-thumb:hover {
+  background-color: var(--gold);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  opacity: 0.8;
 }
 
 /* Proposal-edit mode: when ProposalEditorWrapper is mounted (any
