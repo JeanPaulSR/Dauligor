@@ -667,6 +667,16 @@ body.spell-list-fullscreen .proposal-editor-strip {
   margin-right: 0 !important;
 }
 
+/* Same bleed-zero treatment when admin-page-fullscreen is mounted on
+   a proposal route (currently /proposals/edit/tags — the wrapper is
+   opted into `fullscreen` mode there). admin-page-fullscreen strips
+   <main>'s padding too, so the strip's `-mx-4` would spill into the
+   sidebar without this. */
+body.admin-page-fullscreen .proposal-editor-strip {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
 /* Character-builder wide mode. Three jobs:
    1. Strips the global `<main>` max-width (default Tailwind container
       caps at xl:1280px) so the book-spread sheet + sticky rail can

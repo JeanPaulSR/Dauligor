@@ -103,12 +103,29 @@ export type ProposalEditorWrapperProps = {
    * stays in the simple mode.
    */
   enableFocusMode?: boolean;
+  /**
+   * Opt-in flag for editors whose admin-direct route uses the
+   * `admin-page-fullscreen` / `h-[calc(100vh-4rem)]` shell and want
+   * the same behaviour on `/proposals/edit/*`. When set, the wrapper
+   * swaps its `space-y-4` outer for `flex flex-col h-full gap-4` and
+   * wraps the children slot in `flex-1 min-h-0 flex flex-col`, so a
+   * child using `h-full` (or `flex-1`) actually fills the available
+   * height instead of collapsing to its content. The child is still
+   * responsible for mounting the body class — the wrapper only
+   * provides the parent flex shell.
+   *
+   * Defaults to `false` so editors that rely on natural document
+   * scroll (Spell Rules, Spell Lists, Classes, Subclasses, etc.)
+   * keep their existing layout untouched.
+   */
+  fullscreen?: boolean;
   children: ReactNode;
 };
 
 export function ProposalEditorWrapper({
   entityType,
   enableFocusMode = false,
+  fullscreen = false,
   children,
 }: ProposalEditorWrapperProps) {
   // Strip the global `<main>` top padding (py-8 = 32px) for the
@@ -523,7 +540,22 @@ export function ProposalEditorWrapper({
 
   return (
     <ProposalAccumulatorContext.Provider value={contextValue}>
-      <div className="space-y-4">
+      <div
+        className={
+          fullscreen
+            // Explicit viewport-bound height (4rem = --navbar-height)
+            // because App.tsx wraps every route in an `animate-in
+            // fade-in` div with no flex/height behaviour — that broken
+            // intermediate link means `h-full` here would resolve
+            // against a content-sized parent (circular) and collapse
+            // the whole stack to content height. The fullscreen body
+            // class (mounted by the child editor) hides the global
+            // footer + locks body overflow at lg+, so the explicit
+            // 100vh-4rem matches the visible content area exactly.
+            ? 'flex flex-col h-[calc(100vh-4rem)] gap-4'
+            : 'space-y-4'
+        }
+      >
         {/* Review banner sits above the header (or alone for read-only
             reviews). Rejected proposals get BOTH the banner AND the
             header — the header's Submit Changes is how the user
@@ -548,10 +580,22 @@ export function ProposalEditorWrapper({
           // Disable all form controls inside the editor when read-only.
           // <fieldset disabled> cascades to every nested input/select/
           // textarea/button — no per-input wiring required.
-          <fieldset disabled className="border-0 p-0 m-0 space-y-4 disabled:opacity-95">
+          <fieldset
+            disabled
+            className={cn(
+              'border-0 p-0 m-0 disabled:opacity-95',
+              fullscreen ? 'flex-1 min-h-0 flex flex-col' : 'space-y-4',
+            )}
+          >
             {children}
           </fieldset>
         ) : (
+          // In fullscreen mode the child editor is expected to apply
+          // `flex-1 min-h-0 flex flex-col` to its outer container so it
+          // grows into the flex-column slot we set up above. No extra
+          // wrapping div needed; an intermediate `h-full` indirection
+          // was unreliable across browsers (height:100% inside a
+          // flex-1 parent doesn't always resolve to a definite size).
           children
         )}
       </div>

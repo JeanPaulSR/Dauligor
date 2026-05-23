@@ -12,27 +12,54 @@
 //   │           │                      │ group settings       │
 //   │           │                      │ (when no tag picked) │
 //   └───────────┴──────────────────────┴──────────────────────┘
-//      ~240px      flex-1                 ~320px
+//      ~240px      flex-1                ~320/360px
+//
+// Responsive shell — flex layout, mirrors /admin/proficiencies (see
+// docs/ui/components.md → "Fullscreen master-detail page"). Three
+// tiers:
+//   • xl+    — 3 panes side-by-side (rail | tree | detail).
+//   • lg–xl  — 2 panes: rail + body slot that toggles tree↔detail
+//              based on `activeView`. Detail collapses first because
+//              the tree is where users spend most of their time.
+//   • < lg   — single pane drilldown (rail → tree → detail) with
+//              sticky back-nav rows.
+//
+// Page height is locked to viewport-minus-navbar at every width so
+// the columns reach the bottom of the screen on phones and tablets
+// too (`h-[calc(100vh-4rem)]`). The `admin-page-fullscreen` body
+// class strips main's padding + hides the global footer; columns
+// scroll internally via `flex-1 min-h-0` + per-Card `overflow-y-auto`.
 //
 // URL strategy: `/compendium/tags` shows the empty-middle state;
 // `/compendium/tags/:id` selects a group. Tag selection lives in
 // component state (not URL) — admins bounce between tags rapidly and
-// don't need deep links to a single tag.
+// don't need deep links to a single tag. Detail is ~360px wide on
+// the direct route, ~320px on the proposal route (slightly narrower
+// to leave breathing room next to the ProposalEditorWrapper strip).
+//
+// Proposal route (`/proposals/edit/tags`) reuses the same component
+// wrapped in ProposalEditorWrapper(fullscreen). The wrapper provides
+// its own viewport-bound flex column; TagsExplorer's outer flips from
+// `h-[calc(100vh-4rem)]` (direct) to `flex-1 min-h-0` (proposal) so
+// it grows into the wrapper's flex slot.
 //
 // Merge / move pickers stay as Dialogs (search input + list need more
 // room than the right pane affords). Everything else is in-page.
 // =============================================================================
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
+import MarkdownEditor from '../../components/MarkdownEditor';
+import { SearchInput } from '../../components/ui/SearchInput';
 import { toast } from 'sonner';
 import {
-  Tags as TagsIcon, Plus, X, Trash2, Edit2, Check,
-  CornerDownRight, Search, ChevronDown, ChevronRight, ArrowRightLeft, Move, CornerLeftUp,
+  Tags as TagsIcon, Plus, X, Trash2, Check,
+  CornerDownRight, ChevronDown, ChevronRight, CornerLeftUp,
+  Settings2, BookOpen,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { fetchCollection, fetchDocument, upsertDocument, deleteDocument } from '../../lib/d1';
@@ -106,6 +133,28 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
 
   // Group rail state
   const [groupSearch, setGroupSearch] = useState('');
+
+  // Master-detail view state for narrow viewports. Three tiers:
+  //   • xl+         — all three panes render side-by-side; this is ignored.
+  //   • lg → xl     — rail is always visible; the body slot (right of
+  //                   the rail) toggles between tree and detail based
+  //                   on activeView. Detail collapses first as the
+  //                   viewport narrows because the tree is where users
+  //                   spend the most time and benefits most from room.
+  //   • < lg        — exactly one pane is visible at a time; back-nav
+  //                   rows on tree + detail walk back up the chain.
+  // Mirrors the AdminProficiencies two-pane pattern, generalised to
+  // three panes with a staggered collapse.
+  //
+  // Initial value derives from URL: a deep link like
+  // `/compendium/tags/:id` should mount straight into the tree at lg
+  // and lg-xl widths (rail+tree), not the rail-only state. We don't
+  // peek at selectedTagId because it's local state — anything that
+  // wants `detail` on first load needs to setActiveView itself.
+  type ActiveView = 'rail' | 'tree' | 'detail';
+  const [activeView, setActiveView] = useState<ActiveView>(() =>
+    selectedGroupId ? 'tree' : 'rail',
+  );
 
   // Group form (used by both Create dialog and right-pane edit)
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
@@ -352,11 +401,57 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
   // the wrapper header and the three-pane explorer. Suppress the
   // local page-header when proposal-wrapped.
   const isProposalRouteForLayout = location.pathname.startsWith('/proposals/edit/');
+
+  // Mount the shared `admin-page-fullscreen` body class so the page
+  // fills the viewport (minus navbar) and only the three panes
+  // scroll internally — matches /admin/proficiencies. We mount on
+  // BOTH routes now: the proposal route opts ProposalEditorWrapper
+  // into its `fullscreen` shell (see App.tsx), and that shell
+  // depends on main being viewport-tall (which admin-page-fullscreen
+  // provides by stripping main's padding + locking body overflow).
+  // We tag both <html> and <body> so the page-scroll scrollbar
+  // styling lands consistently across browsers (Firefox uses html;
+  // Chromium/Safari accept either).
+  useEffect(() => {
+    document.documentElement.classList.add('admin-page-fullscreen');
+    document.body.classList.add('admin-page-fullscreen');
+    return () => {
+      document.documentElement.classList.remove('admin-page-fullscreen');
+      document.body.classList.remove('admin-page-fullscreen');
+    };
+  }, []);
+
   return (
-    <div className="max-w-[1600px] mx-auto pb-20 space-y-4">
-      {/* Page header — admin-direct route only. */}
+    <div
+      // Fullscreen-flex layout. The two routes get their viewport-
+      // bounded height in different ways:
+      //  • Direct route — explicit `h-[calc(100vh-4rem)]` (navbar 4rem).
+      //  • Proposal route — `flex-1 min-h-0` inside ProposalEditorWrapper's
+      //    `flex flex-col h-full` shell (passed via `fullscreen`). flex-1
+      //    is more reliable here than `h-full`, which doesn't always
+      //    resolve to a definite size when its parent is itself a
+      //    flex-1 child.
+      className={
+        isProposalRouteForLayout
+          ? 'flex-1 min-h-0 flex flex-col gap-2 lg:gap-4 max-w-[1600px] mx-auto w-full px-3 sm:px-4 py-2 lg:py-4'
+          : 'h-[calc(100vh-4rem)] flex flex-col gap-2 lg:gap-4 max-w-[1600px] mx-auto w-full px-3 sm:px-4 py-2 lg:py-4'
+      }
+    >
+      {/* Page header — admin-direct route only. Visible at lg+ always;
+          below lg only on the rail view (the tree and detail panes
+          carry their own back-nav row and need every pixel for the
+          explorer). Mirrors the AdminProficiencies header pattern.
+          `lg:flex` (NOT `lg:block`) because `.page-header` is defined
+          as `@apply flex items-center justify-between …` — switching
+          its display to `block` at lg+ would kill `items-center` /
+          `justify-between` and ruin the title row. */}
       {!isProposalRouteForLayout && (
-        <div className="page-header">
+        <div
+          className={cn(
+            'page-header shrink-0 lg:flex',
+            activeView === 'rail' ? '' : 'hidden',
+          )}
+        >
           <div>
             <h1 className="h1-title text-ink flex items-center gap-3">
               <TagsIcon className="w-7 h-7 text-gold" />
@@ -367,52 +462,180 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
         </div>
       )}
 
-      {/* Three-pane explorer */}
-      <div className="grid gap-4 items-stretch grid-cols-1 lg:[grid-template-columns:240px_minmax(0,1fr)_320px] min-h-[640px]">
-        <GroupRail
-          groups={displayedTagGroups}
-          tagsByGroupId={tagsByGroupId}
-          selectedGroupId={selectedGroupId ?? null}
-          loading={loading}
-          searchQuery={groupSearch}
-          onSearchChange={setGroupSearch}
-          onSelectGroup={(id) => navigate(`${basePath}/${id}`)}
-          onOpenCreateGroup={() => setCreateGroupOpen(true)}
-          draftedGroupIds={draftedGroupIds}
-          onUndoDelete={async (id) => {
-            if (!proposalContextEarly) return;
-            await proposalContextEarly.dropEntity(id);
-            await reloadGroups();
-          }}
-        />
-
-        {selectedGroupId && selectedGroup ? (
-          <TagTreePane
-            key={selectedGroupId}
-            group={selectedGroup}
-            tags={tagsInSelectedGroup}
-            tagUsage={tagUsage}
-            selectedTagId={selectedTagId}
-            onSelectTag={setSelectedTagId}
-            onReloadTags={reloadTags}
-            onReloadUsage={reloadUsage}
-            isAdmin={isAdmin}
-            tagWriter={tagWriter}
+      {/* Three-pane explorer — flex layout, mirrors AdminProficiencies'
+          rail+body shell (just generalised from two panes to three).
+          Flex row + default align-items: stretch makes every visible
+          pane the same height for free, no grid template tricks
+          needed. Staggered collapse:
+            • xl+      — Rail (240) | Tree (flex-1) | Detail (320/360 fixed)
+            • lg–xl    — Rail (240) | Body (flex-1, toggles tree↔detail)
+            • < lg     — only the activeView pane renders.
+          Each pane sets its own scroll; the outer container pins to
+          the viewport via `lg:min-h-0 flex-1` in the non-proposal
+          case (proposal-wrapped use stays bounded by the proposal
+          shell). */}
+      <div
+        // Same flex shell on both routes now. The parent provides the
+        // bounded height (either via `h-[calc(100vh-4rem)]` on the
+        // direct route or via the proposal wrapper's flex-1 slot
+        // under `h-full`), so the explorer just absorbs whatever
+        // remains with `flex-1 min-h-0`.
+        className="flex flex-col lg:flex-row gap-4 min-h-0 flex-1"
+      >
+        {/* Rail — always visible at lg+ (`lg:flex` overrides the
+            `hidden` swap); below lg only when activeView==='rail'.
+            • At < lg the outer container is flex-col and the rail is
+              the only visible child, so it needs `flex-1` to grow
+              and fill the page height (otherwise it sizes to content,
+              same shrink-0 trap as before).
+            • At lg+ the outer flips to flex-row, so `lg:flex-none`
+              switches off the grow and `lg:w-[240px]` pins the
+              column width while align-items: stretch handles height. */}
+        <div
+          className={cn(
+            'flex-col flex-1 min-h-0 lg:flex-none lg:w-[240px]',
+            activeView === 'rail' ? 'flex' : 'hidden',
+            'lg:flex',
+          )}
+        >
+          <GroupRail
+            groups={displayedTagGroups}
+            tagsByGroupId={tagsByGroupId}
+            selectedGroupId={selectedGroupId ?? null}
+            loading={loading}
+            searchQuery={groupSearch}
+            onSearchChange={setGroupSearch}
+            onSelectGroup={(id) => {
+              navigate(`${basePath}/${id}`);
+              // Drill the user into the tree:
+              //   < lg     — swaps the single visible pane from rail → tree
+              //   lg–xl    — populates the body slot with the tree
+              //   xl+      — no-op visually (all panes already on-screen)
+              setActiveView('tree');
+            }}
+            onOpenCreateGroup={() => setCreateGroupOpen(true)}
+            draftedGroupIds={draftedGroupIds}
+            onUndoDelete={async (id) => {
+              if (!proposalContextEarly) return;
+              await proposalContextEarly.dropEntity(id);
+              await reloadGroups();
+            }}
           />
-        ) : (
-          <Card className="border-gold/10 bg-card/40 flex flex-col items-center justify-center text-center p-10">
-            <TagsIcon className="w-10 h-10 text-gold/30 mb-3" />
-            <p className="description-text text-ink/60">Select a tag group from the rail</p>
-            <p className="text-[11px] text-ink/40 mt-1">or use <span className="text-gold/80">+ New Group</span> to create one.</p>
-          </Card>
-        )}
+        </div>
 
-        <RightPane
+        {/* Tree (middle) — visible at xl+ always; at lg–xl shares the
+            body slot with detail and shows only when
+            activeView==='tree'; below lg only when activeView==='tree'.
+            `flex-1` makes it absorb remaining horizontal space in the
+            flex row whenever it's visible. */}
+        <div
+          className={cn(
+            'flex-col flex-1 lg:min-h-0',
+            activeView === 'tree' ? 'flex' : 'hidden',
+            'xl:flex',
+          )}
+        >
+          {/* Back-nav (narrow only) — return to the rail. Sticky just
+              below the fixed navbar so it survives scroll. */}
+          <div className="lg:hidden sticky top-[var(--navbar-height)] z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 bg-background/95 backdrop-blur-sm border-b border-gold/15 shadow-sm flex items-center gap-2 h-12 mb-2">
+            <Button
+              onClick={() => setActiveView('rail')}
+              variant="ghost"
+              size="sm"
+              className="text-gold gap-2 hover:bg-gold/5 px-2"
+            >
+              <CornerLeftUp className="w-4 h-4 rotate-90" /> Groups
+            </Button>
+            {selectedGroup && (
+              <>
+                <span className="text-ink/30">/</span>
+                <span className="text-xs uppercase tracking-widest font-bold text-ink truncate">
+                  {selectedGroup.name}
+                </span>
+              </>
+            )}
+          </div>
+          {selectedGroupId && selectedGroup ? (
+            <TagTreePane
+              key={selectedGroupId}
+              group={selectedGroup}
+              tags={tagsInSelectedGroup}
+              tagUsage={tagUsage}
+              selectedTagId={selectedTagId}
+              onSelectTag={(id) => {
+                setSelectedTagId(id);
+                if (id) setActiveView('detail');
+              }}
+              onReloadTags={reloadTags}
+              onReloadUsage={reloadUsage}
+              isAdmin={isAdmin}
+              tagWriter={tagWriter}
+            />
+          ) : (
+            // `flex-1` so the empty-state card fills the tree column's
+            // full height (matches the surrounding rail / detail
+            // cards). Without it the placeholder is "shorter than its
+            // neighbours" when no group is selected.
+            <Card className="border-gold/10 bg-card/40 flex flex-col flex-1 items-center justify-center text-center p-10">
+              <TagsIcon className="w-10 h-10 text-gold/30 mb-3" />
+              <p className="description-text text-ink/60">Select a tag group from the rail</p>
+              <p className="text-[11px] text-ink/40 mt-1">or use <span className="text-gold/80">+ New Group</span> to create one.</p>
+            </Card>
+          )}
+        </div>
+
+        {/* Detail (right) — visible at xl+ always; at lg–xl shares the
+            body slot with tree (takes the full body width via flex-1
+            since tree is hidden); below lg only when
+            activeView==='detail'. At xl+, swaps to a fixed column
+            (`xl:flex-none xl:shrink-0 xl:w-[…px]`) so it doesn't
+            steal width from the tree. Proposal-wrapped flow uses a
+            slightly narrower 320px to match the original layout. */}
+        <div
+          className={cn(
+            'flex-col flex-1 lg:min-h-0',
+            'xl:flex-none xl:shrink-0',
+            isProposalRouteForLayout ? 'xl:w-[320px]' : 'xl:w-[360px]',
+            activeView === 'detail' ? 'flex' : 'hidden',
+            'xl:flex',
+          )}
+        >
+          {/* Back-nav (narrow + medium) — return to the tree. Visible
+              up through lg–xl because at that breakpoint the tree is
+              hidden behind the detail; only at xl+ (where tree is
+              always on-screen) do we drop this row. */}
+          <div className="xl:hidden sticky top-[var(--navbar-height)] z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-2 bg-background/95 backdrop-blur-sm border-b border-gold/15 shadow-sm flex items-center gap-2 h-12 mb-2">
+            <Button
+              onClick={() => setActiveView('tree')}
+              variant="ghost"
+              size="sm"
+              className="text-gold gap-2 hover:bg-gold/5 px-2"
+            >
+              <CornerLeftUp className="w-4 h-4 rotate-90" />
+              {selectedGroup?.name ?? 'Back'}
+            </Button>
+            {selectedTagId && (
+              <>
+                <span className="text-ink/30">/</span>
+                <span className="text-xs uppercase tracking-widest font-bold text-ink truncate">
+                  {tagsInSelectedGroup.find((t) => t.id === selectedTagId)?.name ?? 'Tag'}
+                </span>
+              </>
+            )}
+          </div>
+          <RightPane
           group={selectedGroup}
           selectedTag={selectedTagId ? tagsInSelectedGroup.find(t => t.id === selectedTagId) ?? null : null}
           allTagsInGroup={tagsInSelectedGroup}
           tagUsage={tagUsage}
-          onCloseTag={() => setSelectedTagId(null)}
+          onCloseTag={() => {
+            setSelectedTagId(null);
+            // Step back from detail → tree. At lg–xl this swaps the
+            // body slot from detail to tree; at < lg it pops one
+            // level up the drill-down. At xl+ both panes are always
+            // visible, so the activeView change is a no-op visually.
+            setActiveView('tree');
+          }}
           onReloadGroups={reloadGroups}
           onReloadTags={reloadTags}
           onReloadUsage={reloadUsage}
@@ -439,6 +662,7 @@ export default function TagsExplorer({ userProfile }: { userProfile: any }) {
             await Promise.all([reloadGroups(), reloadTags()]);
           }}
         />
+        </div>
       </div>
 
       <CreateGroupDialog
@@ -503,7 +727,10 @@ function GroupRail({
   }, [groups, searchQuery]);
 
   return (
-    <Card className="border-gold/20 bg-card/50 flex flex-col min-h-0 overflow-hidden">
+    // `flex-1` so the rail stretches to the grid row's full height —
+    // matches the tree + detail columns and prevents the visual
+    // "shorter than its neighbours" look when the group list is small.
+    <Card className="border-gold/20 bg-card/50 flex flex-col flex-1 min-h-0 overflow-hidden">
       <div className="p-3 border-b border-gold/10 bg-gold/5 space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="label-text text-gold">Groups</h3>
@@ -511,25 +738,14 @@ function GroupRail({
             <Plus className="w-3 h-3" /> New
           </Button>
         </div>
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-ink/40" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Filter…"
-            className="h-7 pl-7 pr-6 text-xs field-input"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => onSearchChange('')}
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-ink/40 hover:text-ink"
-              title="Clear filter"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+        {/* Canonical site search affordance — same component used by
+            AdminProficiencies' rail and FilterBar across the app. */}
+        <SearchInput
+          value={searchQuery}
+          onChange={onSearchChange}
+          placeholder="Filter…"
+          size="sm"
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -670,9 +886,14 @@ function TagTreePane({
   }, [proposalContext, allDrafts, activeBundleId]);
 
   // Per-group editing state — resets on group switch via key prop.
+  //
+  // The previous middle-pane inline rename (`editingTagId` /
+  // `editingTagName`) and the per-row delete button moved to the
+  // right pane's TagDetailPanel in the P1 redesign. The middle pane
+  // now only has two pieces of write state: the "new tag" name in
+  // the toolbar, and the inline subtag form when an admin clicks
+  // "+ Subtag" on a root row.
   const [newTagName, setNewTagName] = useState('');
-  const [editingTagId, setEditingTagId] = useState<string | null>(null);
-  const [editingTagName, setEditingTagName] = useState('');
   const [addingSubtagOfId, setAddingSubtagOfId] = useState<string | null>(null);
   const [newSubtagName, setNewSubtagName] = useState('');
   const [tagFilter, setTagFilter] = useState('');
@@ -724,76 +945,10 @@ function TagTreePane({
     }
   };
 
-  const handleUpdateTag = async (tagId: string) => {
-    const trimmedName = editingTagName.trim();
-    if (!trimmedName) return;
-    try {
-      const tag = tags.find((t) => t.id === tagId);
-      const d1Data: Record<string, any> = {
-        group_id: group.id,
-        name: trimmedName,
-        slug: trimmedName.toLowerCase().replace(/\s+/g, '-'),
-        updated_at: new Date().toISOString(),
-      };
-      if (tag?.parentTagId) d1Data.parent_tag_id = tag.parentTagId;
-      await tagWriter.update(tagId, d1Data);
-      setEditingTagId(null);
-      setEditingTagName('');
-      await onReloadTags();
-      toast.success(actionLabel(tagWriter.mode, 'updated'));
-    } catch (err) {
-      console.error(err);
-      toast.error(isUniqueConstraintError(err) ? `A tag named "${trimmedName}" already exists here.` : 'Failed to update tag');
-    }
-  };
-
-  const handleDeleteTag = async (tagId: string) => {
-    const children = tags.filter((t) => t.parentTagId === tagId);
-    // Proposal mode also handles subtree deletes — we queue a DELETE
-    // for each child first, then the parent. The wrapper's queue is a
-    // sequence so admin reviewing the block sees the full subtree as a
-    // group. (Cross-entity cascade — e.g. spells losing the tag — is
-    // Phase 2; this is the within-taxonomy cascade only.)
-    const idsBeingDeleted = [tagId, ...children.map((c) => c.id)];
-    let usageLine = '';
-    if (tagUsage) {
-      const total = idsBeingDeleted.reduce((acc, id) => acc + (tagUsage.get(id)?.total ?? 0), 0);
-      if (total > 0) {
-        usageLine = `\n\nThis will affect ${total} reference${total === 1 ? '' : 's'} across the compendium.`;
-      }
-    }
-    const baseMsg = children.length > 0
-      ? (isProposalMode
-          ? `Propose deleting this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`
-          : `Delete this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`)
-      : (isProposalMode ? 'Propose deleting this tag?' : 'Delete this tag?');
-    if (!window.confirm(baseMsg + usageLine)) return;
-
-    try {
-      // Cascade child tags first so the in-block sequence reads as
-      // "leaves first" — matches how a real DB cascade would resolve.
-      // In proposal mode this enqueues N+1 DELETE entries in the
-      // wrapper queue; the block view + admin reviewer can group them
-      // visually later (Phase 4) via the cascade_parent_revision_id
-      // column once we wire the strategy registry.
-      for (const c of children) await tagWriter.remove(c.id);
-      await tagWriter.remove(tagId);
-      if (selectedTagId && idsBeingDeleted.includes(selectedTagId)) onSelectTag(null);
-      invalidateTagUsageCache();
-      await onReloadTags();
-      await onReloadUsage();
-      toast.success(
-        isProposalMode
-          ? actionLabel(tagWriter.mode, 'deleted')
-          : children.length > 0
-            ? `Deleted tag and ${children.length} subtag${children.length === 1 ? '' : 's'}`
-            : 'Tag deleted',
-      );
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to delete tag');
-    }
-  };
+  // NOTE: handleUpdateTag (rename) and handleDeleteTag (delete with
+  // child cascade) moved to TagDetailPanel in the P1 redesign so
+  // those actions live in the right pane alongside Move / Merge.
+  // The middle pane only writes via handleAddTag and handleAddSubtag.
 
   const toggleRootCollapsed = (rootId: string) => {
     setCollapsedRoots((prev) => {
@@ -842,7 +997,6 @@ function TagTreePane({
   }, [tags]);
 
   const renderRow = (tag: any, depth: 0 | 1, zebraIdx: number, subtagCount = 0) => {
-    const isEditing = editingTagId === tag.id;
     const isRoot = depth === 0;
     const isCollapsed = isRoot && !isFiltering && collapsedRoots.has(tag.id);
     const hasSubtags = isRoot && subtagCount > 0;
@@ -869,19 +1023,41 @@ function TagTreePane({
               await onReloadTags();
             }}
           >
-            {total > 0 && <>Used by {total}</>}
+            {total > 0 && <>{total}</>}
             {subtagCount > 0 && <> · {subtagCount} subtag{subtagCount === 1 ? '' : 's'}</>}
           </TombstoneRow>
         </div>
       );
     }
 
+    // The whole row is the click target now (was previously: only
+    // the name button + the usage pill triggered selection — the
+    // dead zones between them did nothing). role/tabIndex/keyboard
+    // wiring keeps it accessible. Inner controls (chevron toggle
+    // + Subtag button) stop propagation so they don't also select
+    // the tag.
+    //
+    // Grid layout fixes the column-misalignment problem visible at
+    // narrow widths: name = 1fr (shrinks to truncate cleanly),
+    // usage = fixed 3.5rem (so pills line up), hover slot = fixed
+    // 2rem on lg+ (reserved space prevents layout shift on hover;
+    // hidden below lg so the name keeps its room on small screens).
     return (
       <div
         key={tag.id}
-        title={drafted ? `${tag.name} — staged in this block` : undefined}
+        role="button"
+        tabIndex={0}
+        onClick={() => onSelectTag(tag.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectTag(tag.id);
+          }
+        }}
+        title={drafted ? `${tag.name} — staged in this block` : tag.description ?? undefined}
         className={cn(
-          'flex items-center justify-between group p-1 transition-colors border-l-4',
+          'group grid items-center gap-2 p-1 cursor-pointer transition-colors border-l-4',
+          'grid-cols-[minmax(0,1fr)_3.5rem] lg:grid-cols-[minmax(0,1fr)_3.5rem_2rem]',
           isSelected
             ? 'bg-gold/10 border-gold'
             : drafted
@@ -891,90 +1067,90 @@ function TagTreePane({
         )}
         style={depth === 1 ? { paddingLeft: '24px' } : undefined}
       >
-        {isEditing ? (
-          <div className="flex-1 flex gap-2 items-center pl-2">
-            <Input
-              value={editingTagName}
-              onChange={(e) => setEditingTagName(e.target.value)}
-              autoFocus
-              className="h-7 text-sm font-bold w-full bg-background border-gold/30"
-              onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateTag(tag.id); if (e.key === 'Escape') setEditingTagId(null); }}
-            />
-            <Button size="sm" onClick={() => handleUpdateTag(tag.id)} className="h-7 w-7 p-0 btn-gold-solid shrink-0"><Check className="w-4 h-4" /></Button>
-            <Button variant="ghost" size="sm" onClick={() => setEditingTagId(null)} className="h-7 w-7 p-0 text-ink/40 shrink-0"><X className="w-4 h-4" /></Button>
-          </div>
-        ) : (
-          <>
-            <span className={cn(
-              "font-bold pl-1 truncate flex items-center gap-1.5 min-w-0",
-              drafted && !isSelected ? "text-archive-blue" : "text-ink",
-            )}>
-              {isRoot ? (
-                hasSubtags ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleRootCollapsed(tag.id)}
-                    className="w-3.5 h-3.5 flex items-center justify-center text-ink/50 hover:text-gold shrink-0"
-                    title={isCollapsed ? 'Expand subtags' : 'Collapse subtags'}
-                  >
-                    {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </button>
-                ) : (
-                  <span className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                )
-              ) : (
-                <CornerDownRight className="w-3.5 h-3.5 text-ink/30 shrink-0" />
-              )}
+        {/* Name column — chevron / corner-arrow + truncated name +
+            optional subtag-count badge. `min-w-0` is critical to
+            let truncate work inside a grid 1fr track. */}
+        <div
+          className={cn(
+            'font-bold pl-1 flex items-center gap-1.5 min-w-0',
+            drafted && !isSelected ? 'text-archive-blue' : 'text-ink',
+          )}
+        >
+          {isRoot ? (
+            hasSubtags ? (
               <button
                 type="button"
-                onClick={() => onSelectTag(tag.id)}
-                className="truncate text-left hover:text-gold cursor-pointer"
-                title="Open detail"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleRootCollapsed(tag.id);
+                }}
+                className="w-3.5 h-3.5 flex items-center justify-center text-ink/50 hover:text-gold shrink-0"
+                title={isCollapsed ? 'Expand subtags' : 'Collapse subtags'}
               >
-                {tag.name}
+                {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
-              {hasSubtags && (
-                <span
-                  className={cn(
-                    'text-[9px] font-bold uppercase tracking-widest px-1 py-0.5 border shrink-0',
-                    isCollapsed
-                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
-                      : 'bg-gold/10 border-gold/20 text-gold/80',
-                  )}
-                  title={`${subtagCount} subtag${subtagCount === 1 ? '' : 's'}`}
-                >
-                  ↳ {subtagCount}
-                </span>
+            ) : (
+              <span className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            )
+          ) : (
+            <CornerDownRight className="w-3.5 h-3.5 text-ink/30 shrink-0" />
+          )}
+          <span className="truncate min-w-0">{tag.name}</span>
+          {hasSubtags && (
+            <span
+              className={cn(
+                'text-[9px] font-bold uppercase tracking-widest px-1 py-0.5 border shrink-0',
+                isCollapsed
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                  : 'bg-gold/10 border-gold/20 text-gold/80',
               )}
+              title={`${subtagCount} subtag${subtagCount === 1 ? '' : 's'}`}
+            >
+              ↳ {subtagCount}
             </span>
-            <div className="flex items-center gap-2 shrink-0">
-              {tagUsage && (
-                <button
-                  type="button"
-                  onClick={() => onSelectTag(tag.id)}
-                  className={cn(
-                    'text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 border whitespace-nowrap cursor-pointer transition-colors',
-                    total > 0
-                      ? 'bg-gold/10 border-gold/20 text-gold/80 hover:bg-gold/20 hover:text-gold'
-                      : 'bg-background/30 border-ink/10 text-ink/30 italic hover:text-ink/60 hover:border-ink/20',
-                  )}
-                  title={summarizeBreakdown(breakdown) + ' · click for details'}
-                >
-                  {total > 0 ? `Used by ${total}` : 'Unused'}
-                </button>
-              )}
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {isRoot && (
-                  <Button variant="ghost" size="sm" onClick={() => { setAddingSubtagOfId(tag.id); setNewSubtagName(''); }} className="h-7 px-2 text-[10px] text-ink/40 hover:text-gold" title="Add a subtag">
-                    <Plus className="w-3 h-3 mr-1" /> Subtag
-                  </Button>
-                )}
-                <Button variant="ghost" size="sm" onClick={() => { setEditingTagId(tag.id); setEditingTagName(tag.name); }} className="h-7 w-7 p-0 text-ink/40 hover:text-gold" title="Rename"><Edit2 className="w-3.5 h-3.5" /></Button>
-                <Button variant="ghost" size="sm" onClick={() => handleDeleteTag(tag.id)} className="h-7 w-7 p-0 btn-danger" title="Delete"><Trash2 className="w-3.5 h-3.5" /></Button>
-              </div>
-            </div>
-          </>
+          )}
+        </div>
+
+        {/* Usage column — fixed-width so pills align across rows.
+            No onClick: the outer row already selects on click. The
+            pill is visual + tooltip only. */}
+        {tagUsage && (
+          <span
+            className={cn(
+              'text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 border whitespace-nowrap text-center transition-colors',
+              total > 0
+                ? 'bg-gold/10 border-gold/20 text-gold/80 group-hover:bg-gold/20 group-hover:text-gold'
+                : 'bg-background/30 border-ink/10 text-ink/30 italic',
+            )}
+            title={summarizeBreakdown(breakdown)}
+          >
+            {total > 0 ? total : 'Unused'}
+          </span>
         )}
+
+        {/* Hover slot — fixed-width column on lg+ so layout doesn't
+            shift on hover. Hidden below lg so the name keeps the
+            full row width on narrow viewports (the New Tag button
+            in the toolbar covers the same affordance there). The
+            +Subtag button stops propagation so it doesn't double-
+            trigger the row's selection click. */}
+        <div className="hidden lg:flex justify-end">
+          {isRoot && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAddingSubtagOfId(tag.id);
+                setNewSubtagName('');
+              }}
+              className="h-7 w-7 p-0 text-ink/40 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Add a subtag"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
     );
   };
@@ -1022,34 +1198,57 @@ function TagTreePane({
   const filterEmptyState = rows.length === 0 && isFiltering;
 
   return (
-    <Card className="border-gold/20 bg-card flex flex-col min-h-0 overflow-hidden">
-      <div className="p-4 border-b border-gold/10 bg-gold/5 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="h3-title text-gold truncate flex items-center gap-2">
-            <TagsIcon className="w-5 h-5" />
-            {group.name}
-            <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 shrink-0">{tags.length}</span>
-          </h2>
-          {(group.description || (group.classifications?.length ?? 0) > 0) && (
-            <p className="text-[11px] text-ink/50 mt-0.5 truncate">
-              {(group.classifications ?? (group.category ? [group.category] : [])).join(' · ')}
-              {group.description ? <> — {group.description}</> : null}
-            </p>
-          )}
+    <Card className="border-gold/20 bg-card flex flex-col flex-1 min-h-0 overflow-hidden">
+      {/* Toolbar — group header (top), then the New Tag form +
+          filter on a second row. The previous bottom-of-pane Add
+          form moved up here because the long scroll past the tree
+          to reach it was the main "awkward" complaint in the
+          redesign pass. */}
+      <div className="p-4 border-b border-gold/10 bg-gold/5 space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="h3-title text-gold truncate flex items-center gap-2">
+              <TagsIcon className="w-5 h-5" />
+              {group.name}
+              <span className="text-xs bg-gold/20 text-gold px-2 py-0.5 shrink-0">{tags.length}</span>
+            </h2>
+            {(group.description || (group.classifications?.length ?? 0) > 0) && (
+              <p className="text-[11px] text-ink/50 mt-0.5 truncate">
+                {(group.classifications ?? (group.category ? [group.category] : [])).join(' · ')}
+                {group.description ? <> — {group.description}</> : null}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
-          <Input
+        <div className="flex items-center gap-2">
+          {/* Add tag form — primary affordance for the toolbar. */}
+          <form onSubmit={handleAddTag} className="flex items-center gap-1.5 flex-1 min-w-0">
+            <Input
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              placeholder="New tag name…"
+              className="h-7 text-xs field-input flex-1 min-w-0"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!newTagName.trim()}
+              className="h-7 px-2 btn-gold-solid text-[10px] gap-1 shrink-0"
+            >
+              <Plus className="w-3 h-3" /> Add tag
+            </Button>
+          </form>
+          {/* Filter input — secondary; lives next to the Add form
+              so authoring + scanning sit in the same band. Shared
+              SearchInput keeps the chrome consistent with the rail
+              and every other filter in the app. */}
+          <SearchInput
             value={tagFilter}
-            onChange={(e) => setTagFilter(e.target.value)}
+            onChange={setTagFilter}
             placeholder="Filter…"
-            className="h-7 pl-8 pr-7 text-xs field-input"
+            size="sm"
+            wrapperClassName="w-44 shrink-0"
           />
-          {tagFilter && (
-            <button type="button" onClick={() => setTagFilter('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-ink/40 hover:text-ink" title="Clear filter">
-              <X className="w-3 h-3" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -1073,29 +1272,20 @@ function TagTreePane({
               );
             })()
           ) : (
-            <span className="label-text text-ink/40 text-right pr-2">Actions</span>
+            <span className="label-text text-ink/40 text-right pr-2">Usage</span>
           )}
         </div>
         {tags.length === 0 ? (
           <div className="empty-state">
             <TagsIcon className="w-8 h-8 text-gold/20 mb-3" />
             <p className="description-text">No tags in this group yet.</p>
-            <p className="label-text text-gold/40 mt-1">Add the first one below</p>
+            <p className="label-text text-gold/40 mt-1">Use the form above to add the first one</p>
           </div>
         ) : filterEmptyState ? (
           <div className="text-center py-8 text-ink/40 italic text-sm">No tags match "{tagFilter}".</div>
         ) : (
           rows
         )}
-      </div>
-
-      <div className="p-4 border-t border-gold/10 bg-background/50">
-        <form onSubmit={handleAddTag} className="flex gap-2">
-          <Input value={newTagName} onChange={(e) => setNewTagName(e.target.value)} placeholder="New tag name..." className="flex-1 bg-card border-gold/20 focus:border-gold" />
-          <Button type="submit" disabled={!newTagName.trim()} className="btn-gold-solid gap-2">
-            <Plus className="w-4 h-4" /> Add Tag
-          </Button>
-        </form>
       </div>
     </Card>
   );
@@ -1136,7 +1326,11 @@ function RightPane({
 }) {
   if (!group) {
     return (
-      <Card className="border-gold/10 bg-card/30 hidden lg:flex items-center justify-center text-center p-6">
+      // `flex-1` (with the `hidden lg:flex` swap for display) lets the
+      // empty card stretch to the right pane's full height so the
+      // explorer column doesn't look truncated when nothing is
+      // selected — same fill behaviour as TagDetailPanel + GroupSettingsPanel.
+      <Card className="border-gold/10 bg-card/30 hidden lg:flex flex-1 items-center justify-center text-center p-6">
         <p className="text-[11px] text-ink/30 italic">Select a group to see options.</p>
       </Card>
     );
@@ -1177,6 +1371,27 @@ function RightPane({
 
 // ─── Tag detail panel ────────────────────────────────────────────────
 
+/**
+ * Per-consumer kinds rendered in the References table. Order +
+ * colour stays in lockstep with the proportional bar at the top of
+ * the section so each row reads as a row-of-the-bar. Keys match
+ * `TagUsageBreakdown` from tagUsage.ts.
+ */
+const REFERENCE_KINDS: ReadonlyArray<{
+  key: keyof TagUsageBreakdown;
+  label: string;
+  color: string;
+}> = [
+  { key: 'spells', label: 'Spells', color: 'bg-violet-500/80' },
+  { key: 'feats', label: 'Feats', color: 'bg-amber-500/80' },
+  { key: 'features', label: 'Features', color: 'bg-sky-500/80' },
+  { key: 'items', label: 'Items', color: 'bg-emerald-500/80' },
+  { key: 'classes', label: 'Classes', color: 'bg-rose-500/80' },
+  { key: 'subclasses', label: 'Subclasses', color: 'bg-fuchsia-500/80' },
+  { key: 'options', label: 'Class Options', color: 'bg-teal-500/80' },
+  { key: 'lore', label: 'Lore Articles', color: 'bg-indigo-500/80' },
+];
+
 function TagDetailPanel({
   group, selectedTag, allTagsInGroup, tagUsage,
   onClose, onReloadTags, onReloadUsage, isAdmin, tagWriter, isTagDrafted,
@@ -1202,12 +1417,249 @@ function TagDetailPanel({
   const [moveOpen, setMoveOpen] = useState(false);
   const [actionInFlight, setActionInFlight] = useState(false);
 
+  // Name draft — the header Input is always editable (matches
+  // GroupSettingsPanel's always-on Name field), and Save/Revert
+  // surface only when the draft differs from the saved value, same
+  // pattern as the description editor below. Reset draftName when
+  // the selected tag changes so a fresh selection always shows the
+  // saved name in the field.
+  const savedName = selectedTag.name ?? '';
+  const [draftName, setDraftName] = useState<string>(savedName);
+  const [savingName, setSavingName] = useState(false);
+  useEffect(() => {
+    setDraftName(selectedTag.name ?? '');
+  }, [selectedTag.id, selectedTag.name]);
+  const nameDirty = draftName.trim() !== savedName.trim() && draftName.trim().length > 0;
+
+  // Description draft (Phase 2). The MarkdownEditor is the source of
+  // truth while editing; the explicit Save button writes through
+  // `tagWriter.update`. We surface a "dirty" diff so the Save button
+  // only appears when there's actually a pending change.
+  const savedDescription = selectedTag.description ?? '';
+  const [draftDescription, setDraftDescription] = useState<string>(savedDescription);
+  const [savingDescription, setSavingDescription] = useState(false);
+  useEffect(() => {
+    setDraftDescription(selectedTag.description ?? '');
+  }, [selectedTag.id, selectedTag.description]);
+  const descriptionDirty = draftDescription.trim() !== savedDescription.trim();
+
+  // Linked-article state. The picker writes on selection (no Save
+  // button), so we only track the in-flight flag for the UI lock.
+  const [linkArticleOpen, setLinkArticleOpen] = useState(false);
+  const [linkArticleSearch, setLinkArticleSearch] = useState('');
+  const [linkArticleOptions, setLinkArticleOptions] = useState<
+    { id: string; title: string }[] | null
+  >(null);
+  const [savingLinkedArticle, setSavingLinkedArticle] = useState(false);
+  // Selected article — derived from the tag itself + the lazy-loaded
+  // options list (so we can show the title even before the dropdown
+  // is opened). When the picker is closed and we have an id but no
+  // option list yet, the chip shows "Linked article" as a fallback
+  // until the lazy load resolves.
+  const linkedArticleId: string | null = selectedTag.linkedArticleId ?? null;
+  const linkedArticleTitle = useMemo(() => {
+    if (!linkedArticleId) return null;
+    return (
+      linkArticleOptions?.find((a) => a.id === linkedArticleId)?.title ?? null
+    );
+  }, [linkedArticleId, linkArticleOptions]);
+
+  // Lazy-load lore articles once when the picker opens OR when we
+  // need the title for a chip. Cached for the lifetime of the panel
+  // — admin sessions don't outlive a handful of edits, and articles
+  // don't change often.
+  useEffect(() => {
+    if (linkArticleOptions !== null) return;
+    if (!linkArticleOpen && !linkedArticleId) return;
+    let active = true;
+    fetchCollection<{ id: string; title: string }>('loreArticles', {
+      select: 'id, title',
+      orderBy: 'title ASC',
+    })
+      .then((rows) => {
+        if (active) setLinkArticleOptions(rows);
+      })
+      .catch((err) => {
+        console.error('[TagDetailPanel] lore article load failed:', err);
+        if (active) setLinkArticleOptions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [linkArticleOpen, linkedArticleId, linkArticleOptions]);
+
+  // Close the dropdown on outside-click.
+  const linkArticleWrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!linkArticleOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!linkArticleWrapRef.current) return;
+      if (!linkArticleWrapRef.current.contains(e.target as Node)) {
+        setLinkArticleOpen(false);
+        setLinkArticleSearch('');
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [linkArticleOpen]);
+
   const parentTagId = selectedTag.parentTagId ?? null;
   const parentTag = parentTagId ? allTagsInGroup.find((t) => t.id === parentTagId) : null;
   const isSubtag = !!parentTagId;
   const childCount = allTagsInGroup.filter((t) => t.parentTagId === selectedTag.id).length;
   const breakdown = tagUsage?.get(selectedTag.id);
   const total = breakdown?.total ?? 0;
+
+  const handleRename = async () => {
+    const trimmed = draftName.trim();
+    // Empty input → revert silently. The user can clear the field
+    // accidentally and we'd rather restore than write an empty name.
+    if (!trimmed) {
+      setDraftName(savedName);
+      return;
+    }
+    // No-op when the draft matches saved; harmless but avoids a
+    // redundant write + reload.
+    if (trimmed === savedName) return;
+    setSavingName(true);
+    try {
+      const d1Data: Record<string, any> = {
+        group_id: group.id,
+        name: trimmed,
+        slug: trimmed.toLowerCase().replace(/\s+/g, '-'),
+        updated_at: new Date().toISOString(),
+      };
+      // Preserve parent linkage; same shape as the old middle-pane
+      // handleUpdateTag so we don't accidentally drop subtag→root.
+      if (selectedTag.parentTagId) d1Data.parent_tag_id = selectedTag.parentTagId;
+      await tagWriter.update(selectedTag.id, d1Data);
+      await onReloadTags();
+      toast.success(actionLabel(tagWriter.mode, 'updated'));
+    } catch (err) {
+      console.error(err);
+      toast.error(
+        isUniqueConstraintError(err)
+          ? `A tag named "${trimmed}" already exists here.`
+          : 'Failed to rename tag',
+      );
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  /**
+   * Helper that builds the base d1 payload preserving the tag's
+   * required-by-the-unique-index fields (group_id, name, slug,
+   * parent_tag_id). Description + linked_article_id are spread onto
+   * this; the writer treats the resulting object as the full row
+   * update.
+   */
+  const buildBasePayload = (): Record<string, any> => {
+    const base: Record<string, any> = {
+      group_id: group.id,
+      name: selectedTag.name,
+      slug: String(selectedTag.name)
+        .toLowerCase()
+        .replace(/\s+/g, '-'),
+      updated_at: new Date().toISOString(),
+    };
+    if (selectedTag.parentTagId) base.parent_tag_id = selectedTag.parentTagId;
+    return base;
+  };
+
+  const handleSaveDescription = async () => {
+    if (!descriptionDirty || savingDescription) return;
+    setSavingDescription(true);
+    try {
+      const payload = buildBasePayload();
+      payload.description = draftDescription.trim() || null;
+      // Preserve linked article when writing description so the
+      // writer doesn't accidentally null out the other field.
+      if (linkedArticleId) payload.linked_article_id = linkedArticleId;
+      await tagWriter.update(selectedTag.id, payload);
+      await onReloadTags();
+      toast.success(actionLabel(tagWriter.mode, 'updated'));
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to save description');
+    } finally {
+      setSavingDescription(false);
+    }
+  };
+
+  const handleSetLinkedArticle = async (nextId: string | null) => {
+    if (savingLinkedArticle) return;
+    if (nextId === linkedArticleId) {
+      setLinkArticleOpen(false);
+      return;
+    }
+    setSavingLinkedArticle(true);
+    try {
+      const payload = buildBasePayload();
+      payload.linked_article_id = nextId;
+      // Preserve description on the same write.
+      if (savedDescription) payload.description = savedDescription;
+      await tagWriter.update(selectedTag.id, payload);
+      await onReloadTags();
+      setLinkArticleOpen(false);
+      setLinkArticleSearch('');
+      toast.success(
+        nextId
+          ? actionLabel(tagWriter.mode, 'updated')
+          : 'Linked article cleared',
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update linked article');
+    } finally {
+      setSavingLinkedArticle(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const children = allTagsInGroup.filter((t) => t.parentTagId === selectedTag.id);
+    const isProposalMode = tagWriter.mode === 'proposal' || tagWriter.mode === 'block';
+    const idsBeingDeleted = [selectedTag.id, ...children.map((c) => c.id)];
+    let usageLine = '';
+    if (tagUsage) {
+      const totalRefs = idsBeingDeleted.reduce(
+        (acc, id) => acc + (tagUsage.get(id)?.total ?? 0),
+        0,
+      );
+      if (totalRefs > 0) {
+        usageLine = `\n\nThis will affect ${totalRefs} reference${totalRefs === 1 ? '' : 's'} across the compendium.`;
+      }
+    }
+    const baseMsg =
+      children.length > 0
+        ? isProposalMode
+          ? `Propose deleting this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`
+          : `Delete this tag and its ${children.length} subtag${children.length === 1 ? '' : 's'}?`
+        : isProposalMode
+          ? 'Propose deleting this tag?'
+          : 'Delete this tag?';
+    if (!window.confirm(baseMsg + usageLine)) return;
+    setActionInFlight(true);
+    try {
+      for (const c of children) await tagWriter.remove(c.id);
+      await tagWriter.remove(selectedTag.id);
+      invalidateTagUsageCache();
+      await onReloadTags();
+      await onReloadUsage();
+      toast.success(
+        isProposalMode
+          ? actionLabel(tagWriter.mode, 'deleted')
+          : children.length > 0
+            ? `Deleted tag and ${children.length} subtag${children.length === 1 ? '' : 's'}`
+            : 'Tag deleted',
+      );
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete tag');
+      setActionInFlight(false);
+    }
+  };
 
   const handleMerge = async (targetId: string) => {
     if (actionInFlight) return;
@@ -1246,7 +1698,10 @@ function TagDetailPanel({
     <>
       <Card
         className={cn(
-          'flex flex-col min-h-0 overflow-hidden',
+          // `flex-1` makes the Card stretch to the grid row's full
+          // height. Without it, the Card sizes to its content and
+          // the right pane looks short when References is sparse.
+          'flex flex-col flex-1 min-h-0 overflow-hidden',
           // Tombstone ring takes precedence (red) over the archive-
           // blue "modified" ring — a deleted tag IS still modified,
           // but the more-destructive state is the one the user
@@ -1258,6 +1713,14 @@ function TagDetailPanel({
               : 'border-gold/20 bg-card',
         )}
       >
+        {/* ── HEADER — always-editable name input ──────────────
+            Previously the header showed a heading + hover-only
+            pencil, which hid the rename affordance on touch and
+            was easy to miss on desktop. It now mirrors
+            GroupSettingsPanel: the Name is rendered as a visible
+            field with Save/Revert appearing only when the draft
+            differs from the saved value (same UX as the
+            description editor below). */}
         <div
           className={cn(
             'p-4 border-b',
@@ -1269,29 +1732,67 @@ function TagDetailPanel({
           )}
         >
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <h3 className={cn(
-                'h3-title flex items-center gap-2 truncate',
-                isTagPendingDelete
-                  ? 'text-blood line-through'
-                  : isTagDrafted
-                    ? 'text-archive-blue'
-                    : 'text-gold',
-              )}>
-                {isSubtag && <CornerDownRight className="w-4 h-4 text-ink/40 shrink-0" />}
-                {selectedTag.name}
-              </h3>
-              <p className="text-[11px] text-ink/50 mt-0.5 truncate">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                {isSubtag && (
+                  <CornerDownRight className="w-4 h-4 text-ink/40 shrink-0" />
+                )}
+                <Input
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  disabled={isTagPendingDelete || savingName}
+                  className={cn(
+                    'h-8 text-sm font-bold field-input flex-1 min-w-0',
+                    isTagPendingDelete && 'line-through text-blood',
+                    !isTagPendingDelete && isTagDrafted && 'text-archive-blue',
+                  )}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRename();
+                    if (e.key === 'Escape') setDraftName(savedName);
+                  }}
+                  title="Tag name"
+                />
+                {nameDirty && !isTagPendingDelete && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDraftName(savedName)}
+                      disabled={savingName}
+                      className="h-7 w-7 p-0 text-ink/40"
+                      title="Revert"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleRename}
+                      disabled={savingName}
+                      className="h-7 w-7 p-0 btn-gold-solid"
+                      title="Save name"
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-ink/50 truncate">
                 {group.name}
                 {parentTag && <> <span className="text-ink/30">›</span> {parentTag.name}</>}
               </p>
               {!isTagPendingDelete && isTagDrafted && (
-                <span className="inline-block mt-1 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue rounded">
+                <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue rounded">
                   Modified in block
                 </span>
               )}
             </div>
-            <Button variant="ghost" size="sm" onClick={onClose} className="h-7 w-7 p-0 text-ink/40 hover:text-ink shrink-0" title="Close detail">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-7 w-7 p-0 text-ink/40 hover:text-ink shrink-0"
+              title="Close detail"
+            >
               <X className="w-4 h-4" />
             </Button>
           </div>
@@ -1306,91 +1807,372 @@ function TagDetailPanel({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+        {/* ── BODY ───────────────────────────────────────────────
+            Section order (redesign Phase 1):
+              1. Description — Phase 2 stub (needs tags.description col)
+              2. Linked Article — Phase 2 stub (needs tags.linked_article_id col)
+              3. Hierarchy
+              4. Actions
+              5. References
+            Actions sit ABOVE References intentionally — what an
+            admin came here to do (rename / move / merge / delete)
+            shouldn't sit behind 8 rows of reference counts. */}
+        <fieldset
+          disabled={isTagPendingDelete}
+          className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-5 border-0 m-0 disabled:opacity-60"
+        >
+          {/* Description — MarkdownEditor with hideToolbar so it
+              reads as a tall textarea but supports the same shorthand
+              the rest of the app uses. Save button only appears
+              when the draft differs from the saved value. */}
           <section className="space-y-1.5">
-            <h4 className="label-text text-gold">Usage</h4>
-            {tagUsage ? (
-              total > 0 ? (
-                <div>
-                  <p className="text-sm text-ink">
-                    <span className="font-bold text-gold">{total}</span> reference{total === 1 ? '' : 's'} across the compendium.
-                  </p>
-                  <p className="field-hint mt-1">{summarizeBreakdown(breakdown)}</p>
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="label-text text-gold">Description</h4>
+              {descriptionDirty && (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setDraftDescription(savedDescription)}
+                    disabled={savingDescription}
+                    className="h-6 text-[10px] text-ink/40 hover:text-ink"
+                  >
+                    Revert
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveDescription}
+                    disabled={savingDescription}
+                    className="h-6 px-2 btn-gold-solid text-[10px] gap-1"
+                  >
+                    <Check className="w-3 h-3" />
+                    {savingDescription ? 'Saving…' : 'Save'}
+                  </Button>
                 </div>
-              ) : (
-                <p className="text-sm text-ink/50 italic">Not used anywhere yet — safe to delete or repurpose.</p>
-              )
+              )}
+            </div>
+            <p className="field-hint">
+              Surfaces as a tooltip on the tag in the tree and as context inside tag pickers.
+            </p>
+            <MarkdownEditor
+              value={draftDescription}
+              onChange={setDraftDescription}
+              placeholder="Explain what this tag captures…"
+              hideToolbar
+              minHeight="100px"
+            />
+          </section>
+
+          {/* Linked Article — searchable lore-article picker. On
+              select, writes immediately (no explicit Save). When a
+              link exists, the chip surfaces the title + an "open"
+              icon-link to /wiki/article/:id + a Clear button. */}
+          <section className="space-y-1.5" ref={linkArticleWrapRef}>
+            <h4 className="label-text text-gold">Linked Article</h4>
+            <p className="field-hint">
+              Optional. Common on doctrinal tags (branches of magic, schools, factions, etc.).
+            </p>
+            {linkedArticleId ? (
+              <div className="flex items-center justify-between gap-2 p-2 rounded border border-gold/20 bg-gold/5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Link
+                    to={`/wiki/article/${linkedArticleId}`}
+                    className="flex items-center gap-2 min-w-0 hover:text-gold text-ink/80"
+                    title="Open the linked article"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-gold shrink-0" />
+                    <span className="text-sm truncate">
+                      {linkedArticleTitle ?? 'Linked article'}
+                    </span>
+                  </Link>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setLinkArticleOpen((p) => !p)}
+                    disabled={savingLinkedArticle}
+                    className="h-6 text-[10px] text-gold/70 hover:text-gold"
+                  >
+                    Change
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleSetLinkedArticle(null)}
+                    disabled={savingLinkedArticle}
+                    className="h-6 text-[10px] text-ink/40 hover:text-blood gap-1"
+                    title="Clear linked article"
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
             ) : (
-              <p className="text-sm text-ink/40 italic">Counting…</p>
+              <button
+                type="button"
+                onClick={() => setLinkArticleOpen((p) => !p)}
+                disabled={savingLinkedArticle}
+                className="w-full text-left p-2 rounded border border-dashed border-gold/20 hover:border-gold/40 hover:bg-gold/5 transition-colors text-xs text-ink/50 italic flex items-center gap-2"
+              >
+                <Plus className="w-3 h-3 text-gold/60" />
+                Link a lore article…
+              </button>
+            )}
+
+            {linkArticleOpen && (
+              <div className="relative">
+                <div className="absolute z-10 left-0 right-0 bg-card border border-gold/30 rounded shadow-lg max-h-64 overflow-y-auto custom-scrollbar">
+                  <div className="p-2 border-b border-gold/10">
+                    <SearchInput
+                      autoFocus
+                      value={linkArticleSearch}
+                      onChange={setLinkArticleSearch}
+                      placeholder="Search articles by title…"
+                      size="sm"
+                    />
+                  </div>
+                  {linkArticleOptions === null ? (
+                    <p className="text-[11px] italic text-ink/40 text-center py-3">
+                      Loading…
+                    </p>
+                  ) : (
+                    (() => {
+                      const q = linkArticleSearch.trim().toLowerCase();
+                      const visible = q
+                        ? linkArticleOptions.filter((a) =>
+                            a.title.toLowerCase().includes(q),
+                          )
+                        : linkArticleOptions;
+                      if (visible.length === 0) {
+                        return (
+                          <p className="text-[11px] italic text-ink/40 text-center py-3">
+                            No match.
+                          </p>
+                        );
+                      }
+                      return (
+                        <ul className="py-1">
+                          {visible.slice(0, 50).map((a) => {
+                            const isSelected = a.id === linkedArticleId;
+                            return (
+                              <li key={a.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetLinkedArticle(a.id)}
+                                  disabled={savingLinkedArticle}
+                                  className={cn(
+                                    'w-full flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-gold/5 text-left',
+                                    isSelected && 'bg-gold/10',
+                                  )}
+                                >
+                                  <span className="text-xs text-ink truncate">
+                                    {a.title}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-gold shrink-0">
+                                      ✓
+                                    </span>
+                                  )}
+                                </button>
+                              </li>
+                            );
+                          })}
+                          {visible.length > 50 && (
+                            <li className="px-3 py-1.5 text-[10px] text-ink/40 italic text-center">
+                              + {visible.length - 50} more — narrow your search
+                            </li>
+                          )}
+                        </ul>
+                      );
+                    })()
+                  )}
+                </div>
+              </div>
             )}
           </section>
 
-          {childCount > 0 && (
-            <section className="space-y-1">
-              <h4 className="label-text text-gold">Hierarchy</h4>
+          {/* Hierarchy — at-a-glance parent + subtag count. */}
+          <section className="space-y-1.5">
+            <h4 className="label-text text-gold">Hierarchy</h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 rounded border border-gold/10">
+                <div className="text-[9px] uppercase tracking-widest text-ink/40 mb-0.5">
+                  Parent
+                </div>
+                <div className="text-sm text-ink/80">
+                  {parentTag ? (
+                    parentTag.name
+                  ) : (
+                    <span className="italic text-ink/40">Root tag</span>
+                  )}
+                </div>
+              </div>
+              <div className="p-2 rounded border border-gold/10">
+                <div className="text-[9px] uppercase tracking-widest text-ink/40 mb-0.5">
+                  Subtags
+                </div>
+                <div className="text-sm text-ink/80">
+                  {childCount > 0 ? (
+                    `${childCount} subtag${childCount === 1 ? '' : 's'}`
+                  ) : (
+                    <span className="italic text-ink/40">None</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {childCount > 0 && (
               <p className="field-hint">
-                Has <span className="text-ink font-bold">{childCount}</span> subtag{childCount === 1 ? '' : 's'}.
-                Merge and demote-under-parent are disabled while subtags exist —
-                promote or delete them first.
+                Merge and demote-under-parent are disabled while subtags
+                exist — promote or delete them first.
               </p>
-            </section>
-          )}
+            )}
+          </section>
 
-          {isAdmin && (
+          {/* Actions — admin-only structural / destructive operations.
+              Content-creators see an explanation banner instead. */}
+          {isAdmin ? (
             <section className="space-y-2">
               <h4 className="label-text text-gold">Actions</h4>
-              {/* Merge / Move are admin-only — both do multi-row writes
-                  (rewriting every reference to the merged tag, plus
-                  the delete) that the single-revision proposal shape
-                  can't capture. A future Phase 2c can teach the queue
-                  to bundle them. */}
-              <div className="flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="btn-gold gap-2 justify-start"
-                  disabled={childCount > 0}
-                  title={childCount > 0 ? 'Resolve subtags first' : 'Merge this tag into another'}
-                  onClick={() => setMergeOpen(true)}
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5" /> Merge into…
-                </Button>
+              <div className="grid grid-cols-2 gap-1.5">
+                {/* Action buttons render label-only — narrow column widths
+                    were clipping label + icon side-by-side. Hover titles
+                    still describe what each does for the icon-less user. */}
                 {isSubtag ? (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="btn-gold gap-2 justify-start"
+                    className="btn-gold justify-center h-8 text-xs"
                     disabled={actionInFlight}
                     onClick={() => handleMove(null)}
+                    title="Promote this subtag to a root tag in this group"
                   >
-                    <CornerLeftUp className="w-3.5 h-3.5" /> Promote to root
+                    Promote to root
                   </Button>
                 ) : (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="btn-gold gap-2 justify-start"
+                    className="btn-gold justify-center h-8 text-xs"
                     disabled={childCount > 0}
-                    title={childCount > 0 ? 'Promote subtags first' : 'Make this a subtag of another root'}
+                    title={
+                      childCount > 0
+                        ? 'Promote subtags first'
+                        : 'Make this a subtag of another root tag'
+                    }
                     onClick={() => setMoveOpen(true)}
                   >
-                    <Move className="w-3.5 h-3.5" /> Move under…
+                    Move under…
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="btn-gold justify-center h-8 text-xs"
+                  disabled={childCount > 0}
+                  title={
+                    childCount > 0
+                      ? 'Resolve subtags first'
+                      : 'Merge this tag into another'
+                  }
+                  onClick={() => setMergeOpen(true)}
+                >
+                  Merge into…
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="btn-danger justify-center h-8 text-xs col-span-2"
+                  disabled={actionInFlight}
+                  onClick={handleDelete}
+                  title={
+                    childCount > 0
+                      ? `Delete this tag and its ${childCount} subtag${childCount === 1 ? '' : 's'}`
+                      : 'Delete this tag'
+                  }
+                >
+                  Delete {childCount > 0 ? `tag + ${childCount} subtag${childCount === 1 ? '' : 's'}` : 'tag'}
+                </Button>
               </div>
             </section>
-          )}
-          {!isAdmin && (
+          ) : (
             <section className="space-y-1">
               <h4 className="label-text text-gold">Restricted Actions</h4>
               <p className="field-hint">
-                Merging and moving tags are admin-only for now (they touch many
-                rows at once and don't fit the single-revision proposal shape).
-                Ask an admin if you need either.
+                Renaming, merging, moving, and deleting tags are admin-only
+                in direct mode (they touch many rows at once and don't fit
+                the single-revision proposal shape). Ask an admin if you
+                need any of these.
               </p>
             </section>
           )}
-        </div>
+
+          {/* References — scales to hundreds of entities by NOT
+              inlining the list. Each row shows count + (eventually)
+              a "View all" link to the filtered browser; for Phase 1
+              we land just the count and the colour-coded breakdown,
+              and wire the click-through in a follow-up once each
+              browser's URL filter param is settled. */}
+          <section className="space-y-2">
+            <h4 className="label-text text-gold">
+              References
+              {tagUsage && total > 0 && (
+                <span className="ml-2 text-ink/60 font-normal">
+                  — {total} total
+                </span>
+              )}
+            </h4>
+            {!tagUsage ? (
+              <p className="text-sm text-ink/40 italic">Counting…</p>
+            ) : total === 0 ? (
+              <p className="text-sm text-ink/50 italic">
+                Not used anywhere yet — safe to delete or repurpose.
+              </p>
+            ) : (
+              <>
+                {/* Proportional usage bar — same colour key as the
+                    rows below. */}
+                <div
+                  className="flex w-full overflow-hidden rounded-full bg-ink/10"
+                  style={{ height: '8px' }}
+                  title={summarizeBreakdown(breakdown)}
+                >
+                  {REFERENCE_KINDS.map((k) => {
+                    const n = (breakdown?.[k.key] as number) ?? 0;
+                    if (n === 0) return null;
+                    return (
+                      <div
+                        key={k.key}
+                        className={k.color}
+                        style={{ width: `${(n / total) * 100}%` }}
+                      />
+                    );
+                  })}
+                </div>
+                <ul className="border border-gold/10 rounded divide-y divide-gold/10">
+                  {REFERENCE_KINDS.filter(
+                    (k) => ((breakdown?.[k.key] as number) ?? 0) > 0,
+                  ).map((k) => (
+                    <li
+                      key={k.key}
+                      className="flex items-center justify-between gap-3 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`w-2 h-2 rounded-full ${k.color} shrink-0`}
+                        />
+                        <span className="text-sm text-ink/80">{k.label}</span>
+                      </div>
+                      <span className="text-sm font-mono tabular-nums text-gold">
+                        {(breakdown?.[k.key] as number) ?? 0}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        </fieldset>
       </Card>
 
       <MergeDialog
@@ -1411,6 +2193,255 @@ function TagDetailPanel({
         onConfirm={handleMove}
       />
     </>
+  );
+}
+
+// ─── Group settings sub-components ───────────────────────────────────
+
+/**
+ * EntityPicker-style chip + dropdown for the group's system
+ * classification slots. Selected chips render on top; clicking the
+ * "Add classification…" trigger reveals a searchable list of the
+ * remaining options, each with its own help text so users learn
+ * which editor a slot surfaces in. Closes on outside click.
+ */
+function SystemClassificationsField({
+  selected,
+  onToggle,
+}: {
+  selected: string[];
+  onToggle: (cls: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the dropdown when the user clicks outside the picker.
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return SYSTEM_CLASSIFICATIONS;
+    return SYSTEM_CLASSIFICATIONS.filter((c) => c.toLowerCase().includes(q));
+  }, [search]);
+
+  // Help text per system slot — explains where each one surfaces so
+  // authors don't have to read the source to find out. Order matches
+  // SYSTEM_CLASSIFICATIONS.
+  const HELP: Record<string, string> = {
+    class: 'Class & subclass editors',
+    subclass: 'Subclass tag pickers',
+    race: 'Character creation race step',
+    subrace: 'Race detail editor',
+    feat: 'Feats editor + browser filter',
+    background: 'Backgrounds editor + browser filter',
+    skill: 'Skill editor',
+    tool: 'Tool editor',
+    spell: 'Spell editor + browser filter',
+    item: 'Items editor',
+    lore: 'Lore article tag picker',
+  };
+
+  return (
+    <div className="space-y-1.5" ref={wrapperRef}>
+      <label className="field-label">System Classifications</label>
+      <p className="field-hint">
+        Slots that let standard editors (Class, Spell, …) auto-find this group.
+      </p>
+
+      {/* Selected chips */}
+      {selected.filter((c) => SYSTEM_CLASSIFICATIONS.includes(c)).length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected
+            .filter((c) => SYSTEM_CLASSIFICATIONS.includes(c))
+            .map((c) => (
+              <span
+                key={c}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-gold/15 text-gold border border-gold/30 rounded"
+              >
+                {c}
+                <button
+                  type="button"
+                  onClick={() => onToggle(c)}
+                  className="p-0.5 hover:bg-gold/20 rounded"
+                  title={`Remove ${c}`}
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+        </div>
+      )}
+
+      {/* Picker trigger + dropdown */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen((p) => !p)}
+          className="w-full flex items-center justify-between gap-2 px-3 h-8 text-xs text-ink/60 border border-gold/20 rounded bg-background/40 hover:border-gold/40 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Plus className="w-3 h-3 text-gold/60" />
+            Add classification…
+          </span>
+          <ChevronDown
+            className={cn('w-3 h-3 transition-transform', open && 'rotate-180')}
+          />
+        </button>
+        {open && (
+          <div className="absolute z-10 left-0 right-0 mt-1 bg-card border border-gold/30 rounded shadow-lg max-h-64 overflow-y-auto custom-scrollbar">
+            <div className="p-2 border-b border-gold/10">
+              <SearchInput
+                autoFocus
+                value={search}
+                onChange={setSearch}
+                placeholder="Search classifications…"
+                size="sm"
+              />
+            </div>
+            {visible.length === 0 ? (
+              <p className="text-[11px] italic text-ink/40 text-center py-3">
+                No match.
+              </p>
+            ) : (
+              <ul className="py-1">
+                {visible.map((opt) => {
+                  const isSelected = selectedSet.has(opt);
+                  return (
+                    <li key={opt}>
+                      <button
+                        type="button"
+                        onClick={() => onToggle(opt)}
+                        className={cn(
+                          'w-full flex items-start justify-between gap-2 px-3 py-1.5 hover:bg-gold/5 text-left',
+                          isSelected && 'bg-gold/10',
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-ink uppercase tracking-widest">
+                            {opt}
+                          </div>
+                          <div className="text-[10px] text-ink/50 truncate normal-case">
+                            {HELP[opt] ?? 'Classification slot'}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-gold shrink-0">
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Custom-classifications block. Shows the group's current custom
+ * slots as chips, plus a link to the dedicated management page
+ * (where the universe of custom slots is rename-able / delete-able
+ * across all groups in one move). The inline "Add custom" form
+ * stays for the legacy "type and go" flow but is collapsed under a
+ * disclosure so the management-page link is the primary affordance.
+ */
+function CustomClassificationsField({
+  classifications,
+  onRemove,
+  newClassification,
+  setNewClassification,
+  onAdd,
+}: {
+  classifications: string[];
+  onRemove: (c: string) => void;
+  newClassification: string;
+  setNewClassification: (v: string) => void;
+  onAdd: (e: React.FormEvent) => void;
+}) {
+  const custom = classifications.filter((c) => !SYSTEM_CLASSIFICATIONS.includes(c));
+  const [legacyOpen, setLegacyOpen] = useState(false);
+  return (
+    <div className="space-y-1.5">
+      <label className="field-label">Custom Classifications</label>
+      <p className="field-hint">
+        Project-specific slots. Manage the universe of custom slots on the
+        dedicated page (link below); rename and delete propagate across
+        every group using the slot.
+      </p>
+      {custom.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {custom.map((c) => (
+            <span
+              key={c}
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue border border-archive-blue/30 rounded"
+            >
+              {c}
+              <button
+                type="button"
+                onClick={() => onRemove(c)}
+                className="p-0.5 hover:bg-archive-blue/20 rounded"
+                title={`Remove ${c} from this group`}
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11px] text-ink/40 italic">
+          No custom slots on this group yet.
+        </p>
+      )}
+
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <Link
+          to="/compendium/tags/classifications"
+          className="inline-flex items-center gap-1.5 text-[11px] text-gold/70 hover:text-gold underline-offset-2 hover:underline"
+        >
+          <Settings2 className="w-3 h-3" />
+          Manage classifications…
+        </Link>
+        <button
+          type="button"
+          onClick={() => setLegacyOpen((p) => !p)}
+          className="text-[10px] text-ink/40 hover:text-ink underline-offset-2 hover:underline"
+        >
+          {legacyOpen ? 'Hide' : 'Show'} legacy add
+        </button>
+      </div>
+
+      {legacyOpen && (
+        <form onSubmit={onAdd} className="flex gap-2 pt-1">
+          <Input
+            value={newClassification}
+            onChange={(e) => setNewClassification(e.target.value)}
+            placeholder="add custom (legacy)…"
+            className="h-7 text-xs field-input"
+          />
+          <Button type="submit" size="sm" className="h-7 px-2 btn-gold-solid text-[10px]">
+            Add
+          </Button>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -1541,7 +2572,10 @@ function GroupSettingsPanel({
   return (
     <Card
       className={cn(
-        'flex flex-col min-h-0 overflow-hidden',
+        // `flex-1` so the Card fills the grid row's height even when
+        // the form is short. Matches TagDetailPanel's outer Card so
+        // the right pane keeps the same footprint across selections.
+        'flex flex-col flex-1 min-h-0 overflow-hidden',
         // When the group carries queued/drafted work, swap the
         // gold-trim Card to an archive-blue accent so the proposer
         // can see at a glance that this section is part of their
@@ -1555,6 +2589,14 @@ function GroupSettingsPanel({
             : 'border-gold/20 bg-card',
       )}
     >
+      {/* HEADER — always-editable Name input + breadcrumb. Mirrors
+          TagDetailPanel's header so the right pane reads consistently
+          across "group selected" and "tag selected" states. The name
+          is still saved by the bottom Save Changes bar (batch save)
+          rather than per-field inline like the tag's name, because
+          the group has multiple fields that conceptually save
+          together; switching the whole panel to inline saves is a
+          bigger refactor and not blocking this layout fix. */}
       <div
         className={cn(
           'p-4 border-b',
@@ -1565,24 +2607,32 @@ function GroupSettingsPanel({
               : 'border-gold/10 bg-gold/5',
         )}
       >
-        <div className="flex items-center justify-between gap-2">
-          <h3 className={cn(
-            'h3-title',
-            isGroupPendingDelete
-              ? 'text-blood line-through'
-              : isGroupDrafted
-                ? 'text-archive-blue'
-                : 'text-gold',
-          )}>
-            Group Settings
-          </h3>
-          {!isGroupPendingDelete && isGroupDrafted && (
-            <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue rounded">
-              Modified in block
-            </span>
-          )}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-1">
+            <Input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              disabled={isGroupPendingDelete || saving}
+              className={cn(
+                'h-8 text-sm font-bold field-input',
+                isGroupPendingDelete && 'line-through text-blood',
+                !isGroupPendingDelete && isGroupDrafted && 'text-archive-blue',
+              )}
+              title="Group name"
+            />
+            <p className="text-[11px] text-ink/50 truncate">
+              Tag group
+              {classifications.length > 0 && (
+                <> <span className="text-ink/30">›</span> {classifications.join(' · ')}</>
+              )}
+            </p>
+            {!isGroupPendingDelete && isGroupDrafted && (
+              <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest bg-archive-blue/15 text-archive-blue rounded">
+                Modified in block
+              </span>
+            )}
+          </div>
         </div>
-        <p className="text-[11px] text-ink/50 mt-0.5">Click a tag in the middle pane for its detail.</p>
       </div>
 
       {isGroupPendingDelete && (
@@ -1595,63 +2645,53 @@ function GroupSettingsPanel({
         </div>
       )}
 
+      {/* Body — Name moved up into the header (lives next to the
+          breadcrumb so the right pane mirrors TagDetailPanel). The
+          remaining fields stay in the order they were. */}
       <fieldset
         disabled={isGroupPendingDelete}
         className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4 border-0 m-0 disabled:opacity-60">
-        <div className="space-y-1.5">
-          <label className="field-label">Name</label>
-          <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="field-input" />
-        </div>
-
+        {/* Description — MarkdownEditor with the toolbar hidden so it
+            reads as a compact text area but still supports the same
+            markdown shorthand used everywhere else in the app. The
+            `minHeight` matches the per-tag editor in TagDetailPanel
+            so the right pane looks consistent across selections. */}
         <div className="space-y-1.5">
           <label className="field-label">Description</label>
-          <textarea
+          <MarkdownEditor
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full text-sm p-2 border border-gold/20 bg-background/50 outline-none min-h-[80px]"
-            placeholder="Optional…"
+            onChange={setDescription}
+            placeholder="What does this group capture? Where does it surface?"
+            hideToolbar
+            minHeight="100px"
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label className="field-label">System Classifications</label>
-          <p className="field-hint">Hardcoded slots so standard editors (Class, Spell, …) auto-find this group.</p>
-          <div className="flex flex-wrap gap-1">
-            {SYSTEM_CLASSIFICATIONS.map((cls) => (
-              <button
-                key={cls}
-                type="button"
-                onClick={() => toggleClassification(cls)}
-                className={cn(
-                  'px-2 py-1 text-[10px] font-bold uppercase tracking-widest transition-colors border',
-                  classifications.includes(cls)
-                    ? 'bg-gold text-white border-gold'
-                    : 'bg-background/50 text-ink/60 border-gold/20 hover:border-gold/40',
-                )}
-              >
-                {cls}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* System Classifications — picker chip + dropdown instead of
+            the previous 11-button toggle row. Picker UX matches the
+            shared EntityPicker shape: selected chips on top, an "Add"
+            trigger underneath that opens a searchable dropdown of the
+            unselected options. */}
+        <SystemClassificationsField
+          selected={classifications}
+          onToggle={toggleClassification}
+        />
 
-        <div className="space-y-1.5">
-          <label className="field-label">Custom Classifications</label>
-          <div className="flex flex-wrap gap-1">
-            {classifications.filter((c) => !SYSTEM_CLASSIFICATIONS.includes(c)).map((cls) => (
-              <span key={cls} className="pl-2 pr-1 py-0.5 bg-gold/10 text-gold text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 border border-gold/20">
-                {cls}
-                <button type="button" onClick={() => setClassifications((prev) => prev.filter((c) => c !== cls))} className="p-0.5 hover:bg-gold/20">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <form onSubmit={handleAddClassification} className="flex gap-2">
-            <Input value={newClassification} onChange={(e) => setNewClassification(e.target.value)} placeholder="add custom…" className="h-7 text-xs field-input" />
-            <Button type="submit" size="sm" className="h-7 px-2 btn-gold-solid text-[10px]">Add</Button>
-          </form>
-        </div>
+        {/* Custom Classifications — chips for what's already on this
+            group, plus a link to the dedicated management page where
+            the universe of available custom classifications is
+            CRUD'd. Inline create stays for the legacy flow but is
+            now collapsed under a "Add custom (legacy)" disclosure
+            so the page link is the primary affordance. */}
+        <CustomClassificationsField
+          classifications={classifications}
+          onRemove={(c) =>
+            setClassifications((prev) => prev.filter((x) => x !== c))
+          }
+          newClassification={newClassification}
+          setNewClassification={setNewClassification}
+          onAdd={handleAddClassification}
+        />
       </fieldset>
 
       {!isGroupPendingDelete && (
@@ -1842,10 +2882,11 @@ function MergeDialog({
             Everything currently tagged <span className="text-ink font-bold">{sourceTag.name}</span> will be retagged to the
             tag you pick. <span className="text-ink font-bold">{sourceTag.name}</span> will then be deleted. Not reversible.
           </p>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter tags…" className="h-8 pl-8 field-input" />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Filter tags…"
+          />
           <div className="data-table">
             <div className="data-table-body max-h-72">
               {candidates.length === 0 ? (
@@ -1917,10 +2958,11 @@ function MoveDialog({
             <span className="text-ink font-bold">{sourceTag.name}</span> will become a subtag of the root you pick.
             Its usage counts and id stay the same.
           </p>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink/40" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter root tags…" className="h-8 pl-8 field-input" />
-          </div>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Filter root tags…"
+          />
           <div className="data-table">
             <div className="data-table-body max-h-72">
               {candidates.length === 0 ? (

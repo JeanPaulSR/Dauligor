@@ -45,6 +45,7 @@ import UniqueOptionGroupList from './pages/compendium/UniqueOptionGroupList';
 import UniqueOptionGroupEditor from './pages/compendium/UniqueOptionGroupEditor';
 import UniqueOptionGroupView from './pages/compendium/UniqueOptionGroupView';
 import TagsExplorer from './pages/compendium/TagsExplorer';
+import TagClassifications from './pages/compendium/TagClassifications';
 import SkillsEditor from './pages/compendium/SkillsEditor';
 import SpellList from './pages/compendium/SpellList';
 import ToolsEditor from './pages/compendium/ToolsEditor';
@@ -268,6 +269,7 @@ export default function App() {
                   <Route path="/compendium/unique-options/edit/:id" element={<UniqueOptionGroupEditor userProfile={effectiveProfile} />} />
                   <Route path="/compendium/unique-options/:id" element={<UniqueOptionGroupView userProfile={effectiveProfile} />} />
                   <Route path="/compendium/tags" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />
+                  <Route path="/compendium/tags/classifications" element={<AdminOnly userProfile={effectiveProfile}><TagClassifications userProfile={effectiveProfile} /></AdminOnly>} />
                   <Route path="/compendium/tags/:id" element={<AdminOnly userProfile={effectiveProfile}><TagsExplorer userProfile={effectiveProfile} /></AdminOnly>} />
                   
                   <Route path="/map" element={<Map userProfile={effectiveProfile} />} />
@@ -280,12 +282,12 @@ export default function App() {
                       ProposalEditorWrapper so Save/auto-update accumulates
                       locally and flushes on Submit Changes. */}
                   <Route path="/proposals/edit/tags" element={
-                    <ProposalEditorWrapper entityType="tag">
+                    <ProposalEditorWrapper entityType="tag" fullscreen>
                       <TagsExplorer userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
                   <Route path="/proposals/edit/tags/:id" element={
-                    <ProposalEditorWrapper entityType="tag">
+                    <ProposalEditorWrapper entityType="tag" fullscreen>
                       <TagsExplorer userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />

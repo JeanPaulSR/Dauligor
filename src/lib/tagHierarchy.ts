@@ -21,6 +21,20 @@ export interface TagWithHierarchy {
   groupId: string | null;
   /** Parent tag id when this is a subtag; null for root tags. */
   parentTagId: string | null;
+  /**
+   * Optional free-text markdown describing the tag. Added by
+   * migration 20260522-1100. Surfaces as the row tooltip in the
+   * TagsExplorer tree and as a context block on tag pickers.
+   * Always optional — older rows have no description.
+   */
+  description?: string | null;
+  /**
+   * Optional FK to a lore_articles row for tags that want to point
+   * at a deeper article (branches of magic, factions, etc.). Added
+   * by migration 20260522-1100. Validated app-side, not at the DB
+   * level (SQLite ALTER TABLE can't add FK constraints).
+   */
+  linkedArticleId?: string | null;
 }
 
 /**
@@ -48,6 +62,19 @@ export function normalizeTagRow(row: any): TagWithHierarchy {
     name: String(row?.name ?? ""),
     groupId: row?.group_id ?? row?.groupId ?? null,
     parentTagId: readParentTagId(row),
+    // Phase 2 columns (migration 20260522-1100). Tolerate snake_case
+    // (raw D1 row) AND camelCase (already-normalised state) so the
+    // function is idempotent. Empty strings are coalesced to `null`
+    // so the editor doesn't have to distinguish "" from null when
+    // checking dirtiness.
+    description:
+      typeof row?.description === "string" && row.description
+        ? row.description
+        : null,
+    linkedArticleId:
+      (typeof row?.linked_article_id === "string" && row.linked_article_id) ||
+      (typeof row?.linkedArticleId === "string" && row.linkedArticleId) ||
+      null,
   };
 }
 
