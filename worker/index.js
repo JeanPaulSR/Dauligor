@@ -7,12 +7,27 @@ export default {
     }
   },
   async scheduled(event, env, ctx) {
-    // Daily retention sweep — drops resolved pending_revisions
-    // older than 30 days unless an admin pinned the row. See
-    // wrangler.toml's [triggers] for the cron schedule and
-    // migrations/20260520-1000_pending_revisions_pinned.sql for
-    // the column.
+    // Two background tasks per nightly tick:
+    //
+    //   1. Retention sweep — drops resolved pending_revisions older
+    //      than 30 days unless an admin pinned the row. See
+    //      migrations/20260520-1000_pending_revisions_pinned.sql.
+    //
+    //   2. Spell cache pre-warm — POSTs the Pages Functions endpoint
+    //      that walks every consumer with applied rules and refreshes
+    //      `consumer_spell_list_cache` if the inputs fingerprint went
+    //      stale. Phase 4.5 of the spell-list-resolution rework — keeps
+    //      first-after-edit user reads on the cache-hit path. Cheap on
+    //      a steady-state world (~100 consumers × 4 SELECT MAX each);
+    //      ~100ms recompute on misses.
+    //
+    // wrangler.toml's [triggers] currently runs both on the daily
+    // 03:30 UTC schedule. If pre-warm staleness becomes user-visible
+    // (e.g. catalogue edits during the day still pay the recompute on
+    // first read), split into two cron entries — `event.cron` exposes
+    // which one fired.
     ctx.waitUntil(runRetentionSweep(env));
+    ctx.waitUntil(runSpellCachePrewarm(env));
   },
 };
 
@@ -29,6 +44,44 @@ async function runRetentionSweep(env) {
     console.log(`[scheduled] retention sweep removed ${pruned} resolved revisions`);
   } catch (err) {
     console.error('[scheduled] retention sweep failed:', err);
+  }
+}
+
+// Calls the Pages Functions prewarm endpoint with the shared worker
+// secret. Logged response counts let us watch cache-recompute volume
+// in `wrangler tail` without a separate observability surface. Any
+// failure here is best-effort — the resolver still works correctly
+// on a cold cache, prewarm is purely an optimisation.
+async function runSpellCachePrewarm(env) {
+  const appUrl = env.APP_URL;
+  if (!appUrl || !env.API_SECRET) {
+    console.warn('[scheduled] spell-cache prewarm skipped — APP_URL or API_SECRET unset');
+    return;
+  }
+  const target = new URL('/api/admin/prewarm-spell-cache', appUrl);
+  try {
+    const t0 = Date.now();
+    const res = await fetch(target.toString(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.API_SECRET}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error(`[scheduled] spell-cache prewarm failed ${res.status}: ${text.slice(0, 200)}`);
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    console.log(
+      `[scheduled] spell-cache prewarm ok — scanned=${body.scanned ?? '?'} ` +
+      `recomputed=${body.recomputed ?? '?'} hits=${body.hits ?? '?'} ` +
+      `errors=${body.errors ?? '?'} server=${body.durationMs ?? '?'}ms ` +
+      `total=${Date.now() - t0}ms`,
+    );
+  } catch (err) {
+    console.error('[scheduled] spell-cache prewarm threw:', err);
   }
 }
 

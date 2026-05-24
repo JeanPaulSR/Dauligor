@@ -5,6 +5,12 @@ preview_urls = false
 
 [vars]
 R2_PUBLIC_URL = "https://images.dauligor.com"
+# Pages Functions origin. The scheduled() handler calls
+# `${APP_URL}/api/admin/prewarm-spell-cache` to keep the
+# `consumer_spell_list_cache` warm. Authenticated via the shared
+# `API_SECRET` (same Bearer token used elsewhere in the worker).
+# For local dev, override in `.dev.vars` with the Pages dev URL.
+APP_URL = "https://dauligor.com"
 
 [observability]
 enabled = true

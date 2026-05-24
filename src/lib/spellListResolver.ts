@@ -38,6 +38,7 @@
 // =============================================================================
 
 import { queryD1, fetchCollection } from './d1';
+import { fetchSpellSummaries } from './spellSummary';
 import {
   deriveSpellFilterFacets,
   matchAnyClause,
@@ -69,18 +70,21 @@ function safeParseTagArray(raw: any): string[] {
 }
 
 /**
- * Light projection — only the columns the rule matcher reads. The full
- * spell row carries description / activities / effects / etc. which the
- * resolver doesn't need; trimming the projection keeps the hot
- * fetch-all-spells path cheap.
+ * Light projection — only the columns the rule matcher reads. Shares
+ * its SQL with `fetchSpellSummaries()` (the every-spell-browsing-surface
+ * projection) so the d1.ts query cache deduplicates this resolver call
+ * with whatever the spell-browsing pages already loaded on mount.
+ *
+ * Previously this issued its own bespoke `SELECT … foundry_data …`
+ * which collided cache-key-wise with nothing — every resolver entry
+ * point re-fetched the full 539-spell row set. With the bucket /
+ * component-flag columns now persisted (migrations 20260514-2200 /
+ * -2230 / -2300) `deriveSpellFilterFacets` reads pre-computed values
+ * directly, so the heavy `foundry_data` blob isn't needed for the
+ * matcher path.
  */
 async function fetchSpellsForMatching(): Promise<SpellMatchRow[]> {
-  const rows = await queryD1<any>(
-    `SELECT id, source_id, level, school, tags, foundry_data,
-            concentration, ritual,
-            components_vocal, components_somatic, components_material
-       FROM spells`,
-  );
+  const rows = await fetchSpellSummaries();
   return rows.map((row: any) => {
     const facets = deriveSpellFilterFacets(row);
     return {
@@ -141,7 +145,7 @@ export async function getConsumerSpellList(
   const [appliedRules, spells, tagRows] = await Promise.all([
     fetchAppliedRulesFor(consumerType, consumerId),
     fetchSpellsForMatching(),
-    fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' }),
+    fetchCollection<any>('tags', { orderBy: 'name ASC' }),
   ]);
   if (appliedRules.length === 0) return [];
   const tagIndex = buildTagIndex(tagRows);
@@ -181,7 +185,7 @@ export async function getConsumerSpellListWithProvenance(
   const [appliedRules, spells, tagRows] = await Promise.all([
     fetchAppliedRulesFor(consumerType, consumerId),
     fetchSpellsForMatching(),
-    fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' }),
+    fetchCollection<any>('tags', { orderBy: 'name ASC' }),
   ]);
   if (appliedRules.length === 0) return [];
   const tagIndex = buildTagIndex(tagRows);
@@ -230,7 +234,7 @@ export async function getConsumerExcludedSpells(
   const [appliedRules, spells, tagRows] = await Promise.all([
     fetchAppliedRulesFor(consumerType, consumerId),
     fetchSpellsForMatching(),
-    fetchCollection<any>('tags', { select: 'id, parent_tag_id, group_id' }),
+    fetchCollection<any>('tags', { orderBy: 'name ASC' }),
   ]);
   if (appliedRules.length === 0) return [];
   const tagIndex = buildTagIndex(tagRows);
