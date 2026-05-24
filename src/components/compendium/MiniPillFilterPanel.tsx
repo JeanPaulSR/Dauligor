@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Filter, RotateCcw } from 'lucide-react';
+import { Filter, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import { Tabs, TabsContent } from '../ui/tabs';
 import { AccentTabsList, type AccentTab } from '../ui/AccentTabsList';
 import { SearchInput } from '../ui/SearchInput';
@@ -306,13 +306,15 @@ function MiniPillAxisRow({
   return (
     <div className="rounded border border-gold/10 bg-background/20 p-1.5">
       <div className="flex items-baseline gap-2 mb-1 px-0.5 flex-wrap">
-        {/* Tag-kind axis names get a slightly larger label since
-            they act as the implicit section dividers in the wall
-            (no Filters/Advanced tabs to do the grouping any more). */}
+        {/* Tag-kind axis names render larger than base axes — they
+            act as the implicit section dividers in the wall (no
+            Filters/Advanced tabs grouping them any more). Bump is
+            from text-[9px] to text-sm so the difference reads
+            clearly at a glance, not just in a side-by-side. */}
         <span
           className={cn(
             'uppercase tracking-[0.22em] text-ink/60 font-bold',
-            isTag ? 'text-xs' : 'text-[9px]',
+            isTag ? 'text-sm tracking-[0.18em]' : 'text-[9px]',
           )}
         >
           {axis.name}
@@ -355,66 +357,240 @@ function MiniPillAxisRow({
           />
         </div>
       </div>
-      {/* Pills — hidden when the user collapsed the axis OR when
-          a chip-search is active and the pill's label doesn't
-          match. Non-matching pills are completely removed from
-          the DOM rather than dimmed: the user asked for them to
-          "disappear", which makes the search behave like a
-          progressive filter rather than a faint highlight.
-          Subtags (values with a `parentValue` set) are hidden at
-          rest and revealed by chip-search or active selection —
-          keeps the wall dense while letting power users drill in
-          via type-to-find. */}
+      {/* Pills — flat row of roots; subtags live in collapsible
+          drawers anchored to each parent. Matches the existing
+          TagGroupFilter pattern in FilterBar so the two
+          implementations share a mental model. */}
       {!hidden && (
-        <div className="flex flex-wrap gap-1">
-          {axis.values.map(v => {
-            const state = isTag ? tagStates[v.value] : axisStates![v.value];
-            const isSubtag = !!v.parentValue;
-            const searching = queryLower !== '';
-            const matches = !searching || matchesPillSearch(v.label, axis.name, search);
-            // Hide rules — all gated by "not active" so an active
-            // pill always stays visible. Search overrides the
-            // subtag-hide so users can find subtags by typing.
-            if (!state) {
-              if (!searching && isSubtag) return null;
-              if (searching && !matches) return null;
-            }
-            return (
-              <button
-                key={v.value}
-                type="button"
-                onClick={() => {
-                  if (isTag) cycleTagState(v.value);
-                  else cycleAxisState(axisKey, v.value);
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  if (isTag) cycleTagStateReverse(v.value);
-                  else cycleAxisStateReverse(axisKey, v.value);
-                }}
-                className={cn(
-                  'inline-flex items-center gap-0.5 rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors select-none',
-                  !state && 'border-gold/15 bg-card text-ink/55 hover:border-gold/40 hover:text-ink/90',
-                  state === 1 && 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300',
-                  state === 2 && 'border-blood/50 bg-blood/15 text-blood line-through',
-                )}
-                title={
-                  v.title ??
-                  (!state
-                    ? `"${v.label}"\nLeft click: include\nRight click: exclude`
-                    : state === 1
-                      ? `Including "${v.label}"\nLeft click: exclude\nRight click: clear`
-                      : `Excluding "${v.label}"\nLeft click: clear\nRight click: include`)
-                }
-              >
-                {state === 1 && <span className="text-emerald-400/80">+</span>}
-                {state === 2 && <span className="text-blood/70">−</span>}
-                <span>{v.label}</span>
-              </button>
-            );
-          })}
-        </div>
+        <PillBody
+          axis={axis}
+          isTag={isTag}
+          axisKey={axisKey}
+          axisStates={axisStates}
+          tagStates={tagStates}
+          queryLower={queryLower}
+          search={search}
+          cycleAxisState={cycleAxisState}
+          cycleAxisStateReverse={cycleAxisStateReverse}
+          cycleTagState={cycleTagState}
+          cycleTagStateReverse={cycleTagStateReverse}
+        />
       )}
+    </div>
+  );
+}
+
+/**
+ * Pill-rendering body for a single axis. Split into a sub-component
+ * so the local `expandedParents` state lives at the row level (each
+ * axis tracks its own expansions) without ballooning MiniPillAxisRow.
+ *
+ * Layout:
+ *   - Roots flow horizontally in a wrap-row. Each root with subtags
+ *     gets a small chevron button to the right of its pill that
+ *     toggles a drawer.
+ *   - Drawers render below the roots, indented and prefixed with
+ *     the parent's name. One drawer per expanded parent.
+ *
+ * Auto-expand rules (the user shouldn't have to chase down a
+ * matching subtag manually):
+ *   1. Any parent whose child has a non-neutral state.
+ *   2. Any parent whose child label matches the chip-search.
+ *   3. The parent itself matches the chip-search (so its drawer
+ *      pops open when the user types the parent's name).
+ *
+ * Non-matching pills are removed from the DOM during chip-search
+ * — same disappear-on-search rule as before. Active pills stay
+ * pinned regardless of search.
+ */
+function PillBody({
+  axis,
+  isTag,
+  axisKey,
+  axisStates,
+  tagStates,
+  queryLower,
+  search,
+  cycleAxisState,
+  cycleAxisStateReverse,
+  cycleTagState,
+  cycleTagStateReverse,
+}: {
+  axis: MiniPillAxis;
+  isTag: boolean;
+  axisKey: string;
+  axisStates: Record<string, number> | null;
+  tagStates: Record<string, number>;
+  queryLower: string;
+  search: string;
+  cycleAxisState: (axisKey: string, value: string) => void;
+  cycleAxisStateReverse: (axisKey: string, value: string) => void;
+  cycleTagState: (tagId: string) => void;
+  cycleTagStateReverse: (tagId: string) => void;
+}) {
+  // Per-axis expanded parents. Local + ephemeral (not persisted),
+  // matching TagGroupFilter's UX — opening the modal again starts
+  // every parent collapsed.
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(() => new Set());
+  const toggleExpanded = (parentValue: string) =>
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      if (next.has(parentValue)) next.delete(parentValue);
+      else next.add(parentValue);
+      return next;
+    });
+
+  const stateFor = (value: string): number | undefined =>
+    isTag ? tagStates[value] : axisStates![value];
+  const getCyclers = () =>
+    isTag
+      ? { forward: cycleTagState, reverse: cycleTagStateReverse }
+      : {
+          forward: (v: string) => cycleAxisState(axisKey, v),
+          reverse: (v: string) => cycleAxisStateReverse(axisKey, v),
+        };
+  const cyclers = getCyclers();
+
+  // Partition values into roots + children-by-parent. A value is a
+  // root either because it has no parentValue OR its parentValue
+  // doesn't point to anything in this axis (cross-group orphan).
+  const valueIds = new Set(axis.values.map(v => v.value));
+  const roots = axis.values.filter(v => !v.parentValue || !valueIds.has(v.parentValue));
+  const childrenByParent = new Map<string, typeof axis.values>();
+  for (const v of axis.values) {
+    if (!v.parentValue || !valueIds.has(v.parentValue)) continue;
+    if (!childrenByParent.has(v.parentValue)) childrenByParent.set(v.parentValue, []);
+    childrenByParent.get(v.parentValue)!.push(v);
+  }
+
+  // Auto-expand sets — driven by active state + chip-search.
+  const searching = queryLower !== '';
+  const autoExpanded = new Set<string>();
+  for (const v of axis.values) {
+    if (!v.parentValue || !valueIds.has(v.parentValue)) continue;
+    const state = stateFor(v.value);
+    const matchesSearch = searching && matchesPillSearch(v.label, axis.name, search);
+    if (state || matchesSearch) autoExpanded.add(v.parentValue);
+  }
+  for (const root of roots) {
+    if (!childrenByParent.has(root.value)) continue;
+    if (searching && matchesPillSearch(root.label, axis.name, search)) {
+      autoExpanded.add(root.value);
+    }
+  }
+  const isExpanded = (parentValue: string) =>
+    expandedParents.has(parentValue) || autoExpanded.has(parentValue);
+
+  // Visible roots — under chip-search we keep a root visible if (a) it
+  // matches itself, (b) any of its children matches (autoExpanded),
+  // or (c) it has an active state. Otherwise hide.
+  const visibleRoots = roots.filter(r => {
+    const state = stateFor(r.value);
+    if (state) return true;
+    if (!searching) return true;
+    if (matchesPillSearch(r.label, axis.name, search)) return true;
+    if (autoExpanded.has(r.value)) return true;
+    return false;
+  });
+
+  const renderPill = (
+    v: typeof axis.values[number],
+    opts?: { searchHide?: boolean },
+  ) => {
+    const state = stateFor(v.value);
+    // Search filter for children inside drawers: hide non-matching
+    // unless active. Roots already filtered via visibleRoots above.
+    if (opts?.searchHide && !state) {
+      if (searching && !matchesPillSearch(v.label, axis.name, search)) return null;
+    }
+    return (
+      <button
+        key={v.value}
+        type="button"
+        onClick={() => cyclers.forward(v.value)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          cyclers.reverse(v.value);
+        }}
+        className={cn(
+          'inline-flex items-center gap-0.5 rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors select-none',
+          !state && 'border-gold/15 bg-card text-ink/55 hover:border-gold/40 hover:text-ink/90',
+          state === 1 && 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300',
+          state === 2 && 'border-blood/50 bg-blood/15 text-blood line-through',
+        )}
+        title={
+          v.title ??
+          (!state
+            ? `"${v.label}"\nLeft click: include\nRight click: exclude`
+            : state === 1
+              ? `Including "${v.label}"\nLeft click: exclude\nRight click: clear`
+              : `Excluding "${v.label}"\nLeft click: clear\nRight click: include`)
+        }
+      >
+        {state === 1 && <span className="text-emerald-400/80">+</span>}
+        {state === 2 && <span className="text-blood/70">−</span>}
+        <span>{v.label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1">
+        {visibleRoots.map(root => {
+          const rootPill = renderPill(root);
+          const subtags = childrenByParent.get(root.value) ?? [];
+          const hasSubtags = subtags.length > 0;
+          const expanded = hasSubtags && isExpanded(root.value);
+          return (
+            <span key={root.value} className="inline-flex items-center gap-0.5">
+              {rootPill}
+              {hasSubtags && (
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(root.value)}
+                  className={cn(
+                    'inline-flex items-center justify-center h-[22px] w-[20px] rounded border transition-colors',
+                    expanded
+                      ? 'border-gold/50 bg-gold/15 text-gold'
+                      : 'border-gold/20 bg-card/60 text-ink/55 hover:border-gold/40 hover:text-gold',
+                  )}
+                  title={
+                    expanded
+                      ? `Hide ${root.label} subtags (${subtags.length})`
+                      : `Show ${root.label} subtags (${subtags.length})`
+                  }
+                  aria-expanded={expanded}
+                  aria-label={expanded ? `Collapse ${root.label} subtags` : `Expand ${root.label} subtags`}
+                >
+                  {expanded
+                    ? <ChevronDown className="w-3 h-3" />
+                    : <ChevronRight className="w-3 h-3" />}
+                </button>
+              )}
+            </span>
+          );
+        })}
+      </div>
+      {/* Drawers: one per expanded parent. Indented + with a left
+          gold border so multiple expanded parents don't blur
+          together. Each drawer is prefixed with its parent label
+          so the user knows which children they're looking at. */}
+      {visibleRoots.map(root => {
+        if (!isExpanded(root.value)) return null;
+        const subtags = childrenByParent.get(root.value) ?? [];
+        const pills = subtags.map(v => renderPill(v, { searchHide: true })).filter(Boolean);
+        if (pills.length === 0) return null;
+        return (
+          <div
+            key={`drawer-${root.value}`}
+            className="ml-3 pl-3 border-l border-gold/15 flex flex-wrap items-center gap-1"
+          >
+            <span className="text-[10px] uppercase tracking-widest text-ink/40 mr-1">{root.label}:</span>
+            {pills}
+          </div>
+        );
+      })}
     </div>
   );
 }
