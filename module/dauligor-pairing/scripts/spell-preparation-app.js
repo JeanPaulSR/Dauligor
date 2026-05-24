@@ -1912,6 +1912,38 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     if (target === "pool") this._state.onSheetFilter = false;
   }
 
+  // ── Filter snapshot (Save / Cancel) ────────────────────────────────────
+  //
+  // SectionFilterPanel's footer has Cancel + Save. Save is a no-op (the
+  // tri-state pills auto-apply on every click), but Cancel needs to
+  // restore the filter state to whatever it was when the modal opened.
+  // Snapshot taken when the user clicks Filters in the toolbar;
+  // discarded on Save / × / backdrop click. The snapshot is a deep
+  // structuredClone so the in-modal mutations don't share references
+  // with the frozen copy.
+
+  _snapshotFilterState(target) {
+    const state = this._filterStateFor(target);
+    const snapshot = (typeof structuredClone === "function")
+      ? structuredClone(state)
+      : JSON.parse(JSON.stringify(state));
+    if (target === "favorites") this._state.favFilterSnapshot = snapshot;
+    else this._state.poolFilterSnapshot = snapshot;
+  }
+
+  _restoreFilterSnapshot(target) {
+    const snapshot = target === "favorites"
+      ? this._state.favFilterSnapshot
+      : this._state.poolFilterSnapshot;
+    if (!snapshot) return;
+    this._setFilterStateFor(target, snapshot);
+  }
+
+  _clearFilterSnapshot(target) {
+    if (target === "favorites") this._state.favFilterSnapshot = null;
+    else this._state.poolFilterSnapshot = null;
+  }
+
   // ── Tri-state cyclers (forward / reverse) ────────────────────────────
   //
   // SectionFilterPanel left-clicks call the forward cyclers (off →
@@ -3055,6 +3087,12 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     });
 
     region.querySelector(`[data-action="open-filter"]`)?.addEventListener("click", async () => {
+      // Snapshot the current filter state so Cancel can revert any
+      // in-modal edits. Changes auto-apply as the user clicks pills,
+      // so without a snapshot Cancel would have nothing to roll back
+      // to. The snapshot lives on `_state.poolFilterSnapshot` /
+      // `favFilterSnapshot` and is cleared on Save / × / backdrop.
+      this._snapshotFilterState(target);
       this._state.filterModalOpen = target;
       await this._renderManager();
     });
@@ -3917,7 +3955,9 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     `;
 
     // Backdrop click still closes; the panel's own × button delegates
-    // via the "close" action which we wire below.
+    // via the "close" action which we wire below. Both backdrop + ×
+    // are treated as Save (keep changes) — symmetric with the React
+    // app's filter modal where every "close" path commits in-place.
     this._filterModalRegion.querySelectorAll(`[data-action="close-modal"]`).forEach((el) => {
       el.addEventListener("click", async () => {
         this._state.filterModalOpen = null;
@@ -3925,6 +3965,9 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         // (matches the React panel's intentional non-persisted UX).
         if (target === "favorites") this._state.favFilterUi = createFreshFilterUiState();
         else this._state.poolFilterUi = createFreshFilterUiState();
+        // Drop the snapshot — backdrop/× treats current state as
+        // committed, so there's nothing to roll back to anymore.
+        this._clearFilterSnapshot(target);
         await this._renderManager();
       });
     });
@@ -4093,6 +4136,30 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         await rerender();
       },
       close: async () => {
+        // × button — same semantics as backdrop click: keep changes,
+        // dismiss, drop the snapshot.
+        this._state.filterModalOpen = null;
+        if (target === "favorites") this._state.favFilterUi = createFreshFilterUiState();
+        else this._state.poolFilterUi = createFreshFilterUiState();
+        this._clearFilterSnapshot(target);
+        await rerender();
+      },
+      save: async () => {
+        // Save — no state change (changes auto-applied as the user
+        // clicked pills). Just dismiss and drop the snapshot.
+        this._state.filterModalOpen = null;
+        if (target === "favorites") this._state.favFilterUi = createFreshFilterUiState();
+        else this._state.poolFilterUi = createFreshFilterUiState();
+        this._clearFilterSnapshot(target);
+        await rerender();
+      },
+      cancel: async () => {
+        // Cancel — roll back to the pre-modal snapshot, then dismiss.
+        // The snapshot is a structuredClone taken when the modal
+        // opened; restoring it discards every pill / combinator
+        // change the user made in this session.
+        this._restoreFilterSnapshot(target);
+        this._clearFilterSnapshot(target);
         this._state.filterModalOpen = null;
         if (target === "favorites") this._state.favFilterUi = createFreshFilterUiState();
         else this._state.poolFilterUi = createFreshFilterUiState();

@@ -1148,7 +1148,14 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     `;
 
     this._toolbarRegion.querySelector(`[data-action="filter"]`)?.addEventListener("click", () => {
-      this._state.isFilterOpen = !this._state.isFilterOpen;
+      const wasOpen = this._state.isFilterOpen;
+      this._state.isFilterOpen = !wasOpen;
+      // On open, snapshot the filter state so Cancel can revert any
+      // in-modal edits (pills auto-apply on click). On close via the
+      // toolbar toggle, drop the snapshot — toggling-off behaves like
+      // the × / backdrop: keep changes.
+      if (!wasOpen) this._snapshotFilterState();
+      else this._clearFilterSnapshot();
       this._renderToolbar();
     });
     this._toolbarRegion.querySelector(`[data-action="search"]`)?.addEventListener("input", (event) => {
@@ -1175,6 +1182,9 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
         this._state.isFilterOpen = false;
         // Reset ephemeral UI state on close so reopening starts fresh.
         this._state.filterUi = createFreshFilterUiState();
+        // Backdrop / × → keep changes (changes auto-applied on click);
+        // drop the snapshot since there's nothing to roll back to.
+        this._clearFilterSnapshot();
         this._renderToolbar();
       };
       this._toolbarRegion.querySelector(`[data-action="filter-backdrop"]`)?.addEventListener("click", closeModal);
@@ -1306,6 +1316,22 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
             rerender();
           },
           close: closeModal,
+          save: () => {
+            // Save — no state change (changes auto-apply as the user
+            // clicks pills). Same effect as backdrop / × close.
+            closeModal();
+            this._renderList();
+            this._renderFooter();
+          },
+          cancel: () => {
+            // Cancel — roll back to the pre-modal snapshot, then close.
+            // Restores tagStates + per-group combine + exclude modes
+            // captured when the user opened the modal.
+            this._restoreFilterSnapshot();
+            closeModal();
+            this._renderList();
+            this._renderFooter();
+          },
         });
       }
     }
@@ -1357,6 +1383,38 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
   }
   _clearGroupTagStates(tagIds) {
     for (const id of tagIds) delete this._state.tagStates[id];
+  }
+
+  // ── Filter snapshot (Save / Cancel) ────────────────────────────────
+  //
+  // SectionFilterPanel's footer has Cancel + Save. Save is a no-op
+  // (tri-state pills auto-apply on every click), but Cancel needs to
+  // restore the filter state to whatever it was when the modal opened.
+  // Snapshot covers all three persisted fields: tagStates, group-
+  // CombineModes, groupExclusionModes. Deep-cloned via structuredClone
+  // so in-modal mutations don't share references with the frozen copy.
+
+  _snapshotFilterState() {
+    const cloner = (typeof structuredClone === "function")
+      ? structuredClone
+      : (v) => JSON.parse(JSON.stringify(v));
+    this._state.filterSnapshot = {
+      tagStates: cloner(this._state.tagStates ?? {}),
+      groupCombineModes: cloner(this._state.groupCombineModes ?? {}),
+      groupExclusionModes: cloner(this._state.groupExclusionModes ?? {}),
+    };
+  }
+
+  _restoreFilterSnapshot() {
+    const snap = this._state.filterSnapshot;
+    if (!snap) return;
+    this._state.tagStates = snap.tagStates;
+    this._state.groupCombineModes = snap.groupCombineModes;
+    this._state.groupExclusionModes = snap.groupExclusionModes;
+  }
+
+  _clearFilterSnapshot() {
+    this._state.filterSnapshot = null;
   }
 
   /**

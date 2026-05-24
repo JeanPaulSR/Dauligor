@@ -7086,3 +7086,53 @@ button.dauligor-option-picker__pill:hover {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* Footer — Cancel / Save commit buttons. Save is a no-op for state
+ * (changes auto-apply), but the explicit "I'm done" affordance helps
+ * users feel in control. Cancel restores the filter snapshot the
+ * caller took on modal-open. */
+.dauligor-section-filter__footer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px 12px;
+  border-top: 1px solid var(--dauligor-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dauligor-section-filter__footer-btn {
+  height: 26px;
+  padding: 0 14px;
+  border: 1px solid var(--dauligor-border);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--dauligor-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.dauligor-section-filter__footer-btn:hover {
+  background: rgba(170, 130, 80, 0.14);
+  color: var(--dauligor-accent-strong);
+  border-color: var(--dauligor-accent);
+}
+.dauligor-section-filter__footer-btn--ghost:hover {
+  /* Cancel reads as destructive in intent (discard work) — pick up
+   * the existing danger token on hover for the same visual signal
+   * the in-app filter reset button carries on the React side. */
+  background: rgba(165, 100, 90, 0.18);
+  color: var(--dauligor-danger);
+  border-color: var(--dauligor-danger);
+}
+.dauligor-section-filter__footer-btn--primary {
+  background: rgba(170, 130, 80, 0.18);
+  border-color: var(--dauligor-accent);
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-section-filter__footer-btn--primary:hover {
+  background: rgba(170, 130, 80, 0.32);
+}

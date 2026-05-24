@@ -203,12 +203,25 @@ export function renderSectionFilterPanel({
     ? rowHtmls.join('')
     : `<div class="dauligor-section-filter__empty">No filters match this search.</div>`;
 
+  // Footer with Cancel / Save. Cancel restores the filter snapshot the
+  // caller took on modal-open; Save just closes (changes auto-apply
+  // as the user clicks pills, so Save is purely a "commit my decision"
+  // signal — same effect as the × in the header or a backdrop click).
+  // Footer is hidden in embedded mode (host owns its own chrome).
+  const footerHtml = embedded ? '' : `
+    <footer class="dauligor-section-filter__footer">
+      <button type="button" class="dauligor-section-filter__footer-btn dauligor-section-filter__footer-btn--ghost" data-section-action="cancel" title="Discard changes and close">Cancel</button>
+      <button type="button" class="dauligor-section-filter__footer-btn dauligor-section-filter__footer-btn--primary" data-section-action="save" title="Keep changes and close">Save</button>
+    </footer>
+  `;
+
   return `
     <div class="dauligor-section-filter">
       ${headerHtml}
       <div class="dauligor-section-filter__body">
         ${bodyHtml}
       </div>
+      ${footerHtml}
     </div>
   `;
 }
@@ -523,6 +536,17 @@ export function bindSectionFilterPanelEvents(rootEl, handlers = {}) {
         return;
       case 'close':
         h.close();
+        return;
+      case 'save':
+        // Save is a no-op for state — changes auto-apply as the user
+        // clicks pills. Treated as a clean close: discard the
+        // caller's snapshot and dismiss.
+        h.save();
+        return;
+      case 'cancel':
+        // Cancel reverts to the caller's pre-modal snapshot, then
+        // dismisses. The caller does the actual state restore.
+        h.cancel();
         return;
       default:
         return;
