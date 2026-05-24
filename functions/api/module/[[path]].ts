@@ -299,24 +299,12 @@ export const onRequest = async (context: any): Promise<Response> => {
       // current schema.
       const _sourceSlug = pathParts[0].toLowerCase();
       const classIdentifier = pathParts[2].toLowerCase();
-      try {
-        const result = await buildClassSpellListByIdentifier(
-          classIdentifier,
-          SERVER_EXPORT_FETCHERS,
-        );
-        if (result) return serveLive(result);
-        return serveJson(404, {
-          error: "class-spells-builder-returned-null",
-          classIdentifier,
-        });
-      } catch (err: any) {
-        return serveJson(500, {
-          error: "class-spells-builder-threw",
-          classIdentifier,
-          message: String(err?.message ?? err),
-          stack: String(err?.stack ?? "").slice(0, 1200),
-        });
-      }
+      const result = await buildClassSpellListByIdentifier(
+        classIdentifier,
+        SERVER_EXPORT_FETCHERS,
+      );
+      if (result) return serveLive(result);
+      // Fall through to 404 if the class identifier didn't match.
     }
 
     // Per-spell full item — live read-through. URL:

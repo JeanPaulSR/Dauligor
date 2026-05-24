@@ -174,15 +174,30 @@ export async function buildClassSpellListBundle(
   // small precomputed scalars kept in sync by `upsertSpell` /
   // `upsertSpellBatch` and give the picker filter parity with the
   // app's `/compendium/spells` browser.
-  const spellRows = await fetchCollection<any>("spells", {
-    where: `id IN (${classSpellIds.map(() => "?").join(",")})`,
-    params: classSpellIds,
-    select:
-      "id, name, identifier, level, school, image_url, source_id, tags, " +
-      "required_tags, prerequisite_text, concentration, ritual, " +
-      "activation_bucket, range_bucket, duration_bucket, shape_bucket, " +
-      "components_vocal, components_somatic, components_material",
-  });
+  //
+  // Chunked IN clause: D1 caps each statement at ~100 SQL variables
+  // (SQLITE_LIMIT_VARIABLE_NUMBER). Wizard's pool is well over 200
+  // spells, so a single `IN (?, ?, ?, ...)` blew past the limit and
+  // the endpoint 404'd for every class with a non-tiny list. We chunk
+  // at 90 to leave headroom for any future bound-param expansion in
+  // the where-clause wrapper. Concatenate the chunks back into one
+  // logical result.
+  const SPELL_IN_CHUNK = 90;
+  const SPELL_SELECT =
+    "id, name, identifier, level, school, image_url, source_id, tags, " +
+    "required_tags, prerequisite_text, concentration, ritual, " +
+    "activation_bucket, range_bucket, duration_bucket, shape_bucket, " +
+    "components_vocal, components_somatic, components_material";
+  const spellRows: any[] = [];
+  for (let i = 0; i < classSpellIds.length; i += SPELL_IN_CHUNK) {
+    const chunk = classSpellIds.slice(i, i + SPELL_IN_CHUNK);
+    const rows = await fetchCollection<any>("spells", {
+      where: `id IN (${chunk.map(() => "?").join(",")})`,
+      params: chunk,
+      select: SPELL_SELECT,
+    });
+    for (const row of rows) spellRows.push(row);
+  }
 
   // Resolve each spell's `source_id` to its public semantic id (e.g.
   // "source-phb-2014") before shipping it as `spellSourceId`. The
