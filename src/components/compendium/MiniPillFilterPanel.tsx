@@ -380,25 +380,30 @@ function MiniPillAxisRow({
 
   return (
     <div className="rounded border border-gold/10 bg-background/20 p-1.5">
-      <div className="flex items-start gap-2 mb-1 px-0.5 flex-wrap">
-        {/* All axis headers render at the same size now — base
-            axes and tag groups share `text-xs` so the wall reads
-            as a single rhythm of consistent section dividers
-            rather than a two-tier hierarchy. */}
-        <span className="text-xs uppercase tracking-[0.22em] text-ink/60 font-bold">
-          {axis.name}
-        </span>
-        {axisActive > 0 && (
-          <span className="text-[9px] text-gold/70 font-bold">· {axisActive} active</span>
-        )}
+      {/* Header — two grid columns. Title flows in the 1fr left
+          column (wraps on narrow widths without dragging the
+          controls with it). Controls anchor to the top-right via
+          their own auto column + `items-start` on the grid, so
+          they always sit at the top of the section regardless of
+          how the title's intrinsic line-height shakes out. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 mb-1 px-0.5">
+        <div className="flex items-baseline gap-2 flex-wrap leading-none pt-0.5">
+          {/* All axis headers render at the same size now — base
+              axes and tag groups share `text-xs` so the wall
+              reads as a single rhythm of consistent section
+              dividers rather than a two-tier hierarchy. */}
+          <span className="text-xs uppercase tracking-[0.22em] text-ink/60 font-bold">
+            {axis.name}
+          </span>
+          {axisActive > 0 && (
+            <span className="text-[9px] text-gold/70 font-bold">· {axisActive} active</span>
+          )}
+        </div>
         {/* Per-axis controls — only the ones the caller wired show
-            up. Wrapped in `ml-auto` so they all sit at the right
-            edge of the header row, mirroring 5e.tools' layout.
-            Include / exclude combinator buttons carry persistent
-            emerald / blood colour at all times so they're
-            distinguishable from the neutral bulk controls (all /
-            clear / none / default / hide) without needing a hover. */}
-        <div className="ml-auto flex items-center gap-0.5 flex-wrap">
+            up. Sky and blood combinator buttons carry their
+            colour at rest so the include/exclude split reads
+            without a hover. */}
+        <div className="flex items-center gap-0.5 flex-wrap justify-end">
           <AxisControlButton onClick={handleAll} label="all" color="include-hover" title="Include every value in this axis" />
           <AxisControlButton onClick={handleClear} label="clear" title="Remove every entry in this axis" />
           <AxisControlButton onClick={handleNone} label="none" color="exclude-hover" title="Exclude every value in this axis" />
@@ -626,7 +631,7 @@ function PillBody({
         className={cn(
           'inline-flex items-center gap-0.5 rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors select-none',
           !state && 'border-gold/15 bg-card text-ink/55 hover:border-gold/40 hover:text-ink/90',
-          state === 1 && 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300',
+          state === 1 && 'border-sky-500/50 bg-sky-500/15 text-sky-300',
           state === 2 && 'border-blood/50 bg-blood/15 text-blood line-through',
         )}
         title={
@@ -638,8 +643,9 @@ function PillBody({
               : `Excluding "${renderedLabel}"\nLeft click: clear\nRight click: include`)
         }
       >
-        {state === 1 && <span className="text-emerald-400/80">+</span>}
-        {state === 2 && <span className="text-blood/70">−</span>}
+        {/* +/− glyphs dropped — the pill's border + fill colour
+            (sky blue for include, blood red strikethrough for
+            exclude) is sufficient to communicate state. */}
         <span>{renderedLabel}</span>
       </button>
     );
@@ -683,10 +689,11 @@ function PillBody({
           );
         })}
       </div>
-      {/* Drawers: one per expanded parent. Indented + with a left
-          gold border so multiple expanded parents don't blur
-          together. Each drawer is prefixed with its parent label
-          so the user knows which children they're looking at. */}
+      {/* Drawers: one per expanded parent. Two-column grid so the
+          parent label sits in its own auto-width column and the
+          children flow within a separate 1fr column. Without
+          this they'd share a single wrap-flex and the label could
+          end up jammed mid-row when a wide tag pushed it down. */}
       {visibleRoots.map(root => {
         if (!isExpanded(root.value)) return null;
         const subtags = childrenByParent.get(root.value) ?? [];
@@ -695,10 +702,10 @@ function PillBody({
         return (
           <div
             key={`drawer-${root.value}`}
-            className="ml-3 pl-3 border-l border-gold/15 flex flex-wrap items-center gap-1"
+            className="ml-3 pl-3 border-l border-gold/15 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1"
           >
-            <span className="text-[10px] uppercase tracking-widest text-ink/40 mr-1">{root.label}:</span>
-            {pills}
+            <span className="text-[10px] uppercase tracking-widest text-ink/40 pt-1">{root.label}:</span>
+            <div className="flex flex-wrap gap-1">{pills}</div>
           </div>
         );
       })}
@@ -721,14 +728,14 @@ function PillBody({
  *   undefined / 'neutral'  — gold-leaning, hover gold. For
  *                            mode-neutral actions (clear / default /
  *                            hide / show).
- *   'include-hover'        — gold at rest, emerald on hover. For
+ *   'include-hover'        — gold at rest, sky on hover. For
  *                            "this adds include filters" actions
  *                            (all). Same energy as the include
  *                            pill colour, but only on commit.
  *   'exclude-hover'        — gold at rest, blood on hover. Mirror
  *                            of include-hover for "this adds
  *                            exclude filters" (none).
- *   'include' / 'exclude'  — emerald / blood at all times.
+ *   'include' / 'exclude'  — sky / blood at all times.
  *                            For mode-pinned controls that always
  *                            signal their semantic (the OR/AND/XOR
  *                            combinator cyclers). Reading the row
@@ -770,9 +777,9 @@ function AxisControlButton({
         (!color || color === 'neutral' || color === 'include-hover' || color === 'exclude-hover') &&
           'border-gold/25 bg-card/60 text-ink/70',
         (!color || color === 'neutral') && 'hover:bg-gold/15 hover:border-gold/50 hover:text-gold',
-        color === 'include-hover' && 'hover:bg-emerald-500/15 hover:border-emerald-500/50 hover:text-emerald-300',
+        color === 'include-hover' && 'hover:bg-sky-500/15 hover:border-sky-500/50 hover:text-sky-300',
         color === 'exclude-hover' && 'hover:bg-blood/15 hover:border-blood/50 hover:text-blood',
-        color === 'include' && 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-500/70',
+        color === 'include' && 'border-sky-500/50 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 hover:border-sky-500/70',
         color === 'exclude' && 'border-blood/50 bg-blood/15 text-blood hover:bg-blood/25 hover:border-blood/70',
       )}
     >

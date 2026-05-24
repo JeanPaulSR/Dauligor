@@ -301,7 +301,7 @@ export function FilterBar({
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative flex-1 min-w-[200px]">
                     <SearchInput
-                      placeholder="Filter chip labels…"
+                      placeholder="Filter tags…"
                       value={chipSearch}
                       onChange={setChipSearch}
                       size="sm"
@@ -340,7 +340,7 @@ export function FilterBar({
                     size="sm"
                     variant="outline"
                     onClick={resetFilters}
-                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-blood/30 text-blood/80 hover:bg-blood/10 hover:border-blood/50 hover:text-blood"
+                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-gold/20 text-ink/70 hover:bg-gold/5"
                     title="Clear every filter"
                   >
                     {resetLabel}
