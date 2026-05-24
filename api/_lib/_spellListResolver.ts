@@ -9,19 +9,25 @@
 // here AND in `src/lib/spellListResolver.ts`.
 //
 // Differences vs. the source twin (intentional):
-//   - No cache layer. The opportunistic `consumer_spell_list_cache`
-//     table that the in-app resolver uses for read-after-write hot
-//     paths is skipped here — Pages Functions are stateless and the
-//     Foundry export endpoint runs infrequently enough that the
-//     per-call recompute cost (~100ms) is dwarfed by the request
-//     round-trip. Skipping cache also keeps this file simpler.
+//   - No cache on the read path. `getConsumerSpellList` here is a pure
+//     runtime query — Pages Functions are stateless and the Foundry
+//     export endpoint runs infrequently enough that the per-call
+//     recompute cost (~100ms) is dwarfed by the request round-trip.
+//     The CACHE IS WRITTEN by the prewarm helpers in the second half
+//     of this file (`prewarmConsumer` / `prewarmAllConsumers`), called
+//     by the nightly cron via `/api/admin/prewarm-spell-cache`. The
+//     in-app resolver reads those cache rows on its read path —
+//     `getCachedOrCompute` in `src/lib/spellListResolver.ts`.
 //   - Provenance / exclusion / parity helpers omitted. The Foundry
 //     export pipeline only needs the bare spell-id set; the source
 //     twin's `getConsumerSpellListWithProvenance` /
 //     `getConsumerExcludedSpells` are app-UI surfaces only.
 //
-// Used by `_classSpellList.ts` to produce the spell-id pool for a
-// class's Foundry export bundle.
+// Used by:
+//   - `_classSpellList.ts` — produces the spell-id pool for a class's
+//     Foundry export bundle (read path).
+//   - `functions/api/admin/prewarm-spell-cache.ts` — drives the nightly
+//     cache refresh (write path).
 // =============================================================================
 
 import type { ExportFetchers } from "./_classExport.js";
@@ -225,11 +231,16 @@ export async function getConsumerSpellList(
 //
 // Why it lives in this file: the resolver compute path is already here
 // (one source of truth on the server side), and the prewarm reuses it
-// directly via `getConsumerSpellList`. The cache I/O helpers below
-// mirror the source twin's (`src/lib/spellListResolver.ts`) shape but
-// take a `D1Writer` shim instead of `queryD1` — Pages Functions can't
-// import the in-app d1.ts module, and `executeD1QueryInternal` is
-// already the canonical write path on the server side.
+// directly via `getConsumerSpellList`. The three cache I/O helpers
+// below (`computeInputsFingerprint`, `readCache`, `writeCache`) are
+// drift twins of the same-named helpers in
+// `src/lib/spellListResolver.ts` — the SQL shape and fingerprint
+// composition MUST stay byte-identical across both files so a row
+// written here can be matched by the in-app read path and vice versa.
+// They take a `D1Writer` shim instead of `queryD1` because Pages
+// Functions can't import the in-app d1.ts module;
+// `executeD1QueryInternal` is the canonical write path on the server
+// side, and the endpoint wraps it as a `D1Writer`.
 //
 // This entire block is a no-op until the worker scheduled handler
 // (P4.5.C) calls `/api/admin/prewarm-spell-cache`. Calling
@@ -247,7 +258,10 @@ export async function getConsumerSpellList(
 export type D1Writer = (sql: string, params?: any[]) => Promise<void>;
 
 /**
- * Same composition as the source twin's `computeInputsFingerprint`:
+ * Inputs fingerprint — composition kept identical to the source
+ * twin's `computeInputsFingerprint` in `src/lib/spellListResolver.ts`
+ * so a row written here can be matched by the in-app read path and
+ * vice versa:
  *
  *   c:<type>/<id> | r:<sorted rule_ids joined by ','> | s:<max spells.updated_at>
  *                 | t:<max tags.updated_at> | R:<max spell_rules.updated_at>
@@ -257,8 +271,12 @@ export type D1Writer = (sql: string, params?: any[]) => Promise<void>;
  * and thus the fingerprint. The fingerprint check is the entire
  * staleness signal for the cache — there's no TTL or invalidation
  * dance beyond it.
+ *
+ * DRIFT NOTE: must produce byte-identical output to the source twin
+ * for the same inputs. If you change the composition order, separator,
+ * or null placeholder, change BOTH files in one commit.
  */
-async function computePrewarmFingerprint(
+async function computeInputsFingerprint(
   consumerType: ConsumerType,
   consumerId: string,
   fetchers: ExportFetchers,
@@ -290,7 +308,10 @@ type CacheRow = {
   spellIds: string[];
 };
 
-async function readPrewarmCacheRow(
+// Parallels `readCache` in src/lib/spellListResolver.ts — same row
+// shape, same parse-or-treat-as-miss behaviour for corrupt JSON,
+// different fetch surface (server fetchers vs the in-app queryD1).
+async function readCache(
   consumerType: ConsumerType,
   consumerId: string,
   fetchers: ExportFetchers,
@@ -315,7 +336,11 @@ async function readPrewarmCacheRow(
   return { fingerprint: row.inputs_fingerprint, spellIds };
 }
 
-async function writePrewarmCacheRow(
+// Parallels `writeCache` in src/lib/spellListResolver.ts — same
+// upsert SQL, same column ordering. The in-app read path reads rows
+// written here without any conversion, so the SQL shape MUST match
+// across both twins.
+async function writeCache(
   consumerType: ConsumerType,
   consumerId: string,
   fingerprint: string,
@@ -363,14 +388,14 @@ export async function prewarmConsumer(
   writer: D1Writer,
 ): Promise<PrewarmConsumerResult> {
   try {
-    const fingerprint = await computePrewarmFingerprint(consumerType, consumerId, fetchers);
-    const cached = await readPrewarmCacheRow(consumerType, consumerId, fetchers);
+    const fingerprint = await computeInputsFingerprint(consumerType, consumerId, fetchers);
+    const cached = await readCache(consumerType, consumerId, fetchers);
     if (cached && cached.fingerprint === fingerprint) {
       return { consumerType, consumerId, status: "hit" };
     }
     const t0 = Date.now();
     const fresh = await getConsumerSpellList(consumerType, consumerId, fetchers);
-    await writePrewarmCacheRow(consumerType, consumerId, fingerprint, fresh, writer);
+    await writeCache(consumerType, consumerId, fingerprint, fresh, writer);
     return { consumerType, consumerId, status: "recomputed", durationMs: Date.now() - t0 };
   } catch (err: any) {
     return {
