@@ -5,7 +5,8 @@ import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
-import { FilterBar, AxisFilterSection } from '../../components/compendium/FilterBar';
+import { FilterBar } from '../../components/compendium/FilterBar';
+import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
 import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
 import FeatDetailPanel from '../../components/compendium/FeatDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
@@ -168,12 +169,25 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     + Object.keys(axisFilters.property?.states ?? {}).length;
 
   // Per-axis updaters — same generic pattern every list page uses.
+  // Forward cyclers serve left-click; reverse cyclers power
+  // MiniPillFilterPanel's right-click affordance on pills + combinators.
   const cycleAxisState = (axisKey: string, value: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
       const states: Record<string, number> = { ...cur.states };
       const s = states[value] || 0;
       const nextState = s === 0 ? 1 : s === 1 ? 2 : 0;
+      if (nextState === 0) delete states[value];
+      else states[value] = nextState;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const cycleAxisStateReverse = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      const s = states[value] || 0;
+      const nextState = s === 0 ? 2 : s === 2 ? 1 : 0;
       if (nextState === 0) delete states[value];
       else states[value] = nextState;
       return { ...prev, [axisKey]: { ...cur, states } };
@@ -187,11 +201,27 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
       return { ...prev, [axisKey]: { ...cur, combineMode: next } };
     });
   };
+  const cycleAxisCombineModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
   const cycleAxisExclusionMode = (axisKey: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
       const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
       const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const cycleAxisExclusionModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
       return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
     });
   };
@@ -226,6 +256,29 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
   const resetFilters = () => {
     setAxisFilters({});
   };
+
+  // Axis descriptors for MiniPillFilterPanel. Three axes — Sources,
+  // Feat Type, Properties — no tag groups (feats aren't tagged in
+  // this catalogue). Sources is the only one with a meaningful
+  // default (clear is fine for feats since we don't pre-select).
+  const miniPillAxes = useMemo<MiniPillAxis[]>(() => ([
+    {
+      key: 'source', name: 'Sources', kind: 'axis',
+      values: sources.map(s => ({
+        value: s.id,
+        label: String(s.abbreviation || s.shortName || s.name || s.id),
+        labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
+      })),
+    },
+    {
+      key: 'type', name: 'Feat Type', kind: 'axis',
+      values: FEAT_TYPE_ORDER.map(value => ({ value, label: FEAT_TYPE_LABELS[value] })),
+    },
+    {
+      key: 'property', name: 'Properties', kind: 'axis',
+      values: FEAT_PROPERTY_ORDER.map(value => ({ value, label: FEAT_PROPERTY_LABELS[value] })),
+    },
+  ]), [sources]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 pb-20">
@@ -263,47 +316,27 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
           filterTitle="Advanced Filters"
           resetLabel="Reset Filters"
           renderFilters={
-            <>
-              <AxisFilterSection
-                title="Sources"
-                values={sources.map((source) => ({ value: source.id, label: String(source.abbreviation || source.shortName || source.name || source.id) }))}
-                states={axisFilters.source?.states || {}}
-                cycleState={(v) => cycleAxisState('source', v)}
-                combineMode={axisFilters.source?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('source')}
-                exclusionMode={axisFilters.source?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('source')}
-                includeAll={() => axisIncludeAll('source', sources.map(s => s.id))}
-                excludeAll={() => axisExcludeAll('source', sources.map(s => s.id))}
-                clearAll={() => axisClear('source')}
-              />
-              <AxisFilterSection
-                title="Feat Type"
-                values={FEAT_TYPE_ORDER.map((value) => ({ value, label: FEAT_TYPE_LABELS[value] }))}
-                states={axisFilters.type?.states || {}}
-                cycleState={(v) => cycleAxisState('type', v)}
-                combineMode={axisFilters.type?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('type')}
-                exclusionMode={axisFilters.type?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('type')}
-                includeAll={() => axisIncludeAll('type', FEAT_TYPE_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('type', FEAT_TYPE_ORDER as readonly string[])}
-                clearAll={() => axisClear('type')}
-              />
-              <AxisFilterSection
-                title="Properties"
-                values={FEAT_PROPERTY_ORDER.map((value) => ({ value, label: FEAT_PROPERTY_LABELS[value] }))}
-                states={axisFilters.property?.states || {}}
-                cycleState={(v) => cycleAxisState('property', v)}
-                combineMode={axisFilters.property?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('property')}
-                exclusionMode={axisFilters.property?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('property')}
-                includeAll={() => axisIncludeAll('property', FEAT_PROPERTY_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('property', FEAT_PROPERTY_ORDER as readonly string[])}
-                clearAll={() => axisClear('property')}
-              />
-            </>
+            <MiniPillFilterPanel
+              axes={miniPillAxes}
+              axisFilters={axisFilters}
+              tagStates={{}}
+              cycleAxisState={cycleAxisState}
+              cycleAxisStateReverse={cycleAxisStateReverse}
+              cycleTagState={() => {}}
+              cycleTagStateReverse={() => {}}
+              cycleAxisCombineMode={cycleAxisCombineMode}
+              cycleAxisCombineModeReverse={cycleAxisCombineModeReverse}
+              cycleAxisExclusionMode={cycleAxisExclusionMode}
+              cycleAxisExclusionModeReverse={cycleAxisExclusionModeReverse}
+              axisIncludeAll={axisIncludeAll}
+              axisExcludeAll={axisExcludeAll}
+              axisClear={axisClear}
+              search={search}
+              setSearch={setSearch}
+              activeFilterCount={activeFilterCount}
+              resetAll={resetFilters}
+              embedded
+            />
           }
         />
 
