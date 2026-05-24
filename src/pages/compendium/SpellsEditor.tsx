@@ -5,7 +5,8 @@ import { useKeyboardSave } from '../../hooks/useKeyboardSave';
 import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
 import RuleMembershipPanel from '../../components/compendium/RuleMembershipPanel';
-import { FilterBar, AxisFilterSection, TagGroupFilter, matchesTagFilters } from '../../components/compendium/FilterBar';
+import { FilterBar, matchesTagFilters } from '../../components/compendium/FilterBar';
+import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
 import {
   matchesSingleAxisFilter,
   matchesMultiAxisFilter,
@@ -688,6 +689,75 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     }
     return out;
   }, [tags]);
+
+  // Axis descriptors for MiniPillFilterPanel — same shape as
+  // SpellListManager / SpellFilterShell. See those files for the
+  // contract docs; this is just the SpellsEditor-flavoured wiring.
+  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
+    const axes: MiniPillAxis[] = [
+      {
+        key: 'source', name: 'Sources', kind: 'axis', hasDefault: true,
+        values: sources.map(s => ({
+          value: s.id,
+          label: String(s.abbreviation || s.shortName || s.name || s.id),
+          labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
+        })),
+      },
+      {
+        key: 'level', name: 'Spell Level', kind: 'axis',
+        values: Array.from({ length: 10 }, (_, i) => ({ value: String(i), label: i === 0 ? 'Cantrip' : `Level ${i}` })),
+      },
+      {
+        key: 'school', name: 'School', kind: 'axis',
+        values: Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label })),
+      },
+      {
+        key: 'activation', name: 'Casting Time', kind: 'axis',
+        values: ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] })),
+      },
+      {
+        key: 'range', name: 'Range', kind: 'axis',
+        values: RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] })),
+      },
+      {
+        key: 'duration', name: 'Duration', kind: 'axis',
+        values: DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] })),
+      },
+      {
+        key: 'shape', name: 'Shape', kind: 'axis',
+        values: SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] })),
+      },
+      {
+        key: 'property', name: 'Properties', kind: 'axis',
+        values: PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] })),
+      },
+    ];
+    for (const group of tagGroups) {
+      const groupTags = tagsByGroup[group.id] || [];
+      if (groupTags.length === 0) continue;
+      const idSet = new Set(groupTags.map((t: any) => t.id));
+      axes.push({
+        key: `tag-group:${group.id}`,
+        name: String((group as any).name ?? 'Tags'),
+        kind: 'tag',
+        groupId: group.id,
+        values: groupTags.map((t: any) => {
+          const parent = t.parentTagId ?? t.parent_tag_id ?? null;
+          return {
+            value: t.id,
+            label: String(t.name ?? t.id),
+            parentValue: parent && idSet.has(parent) ? parent : undefined,
+          };
+        }),
+      });
+    }
+    return axes;
+  }, [sources, tagGroups, tagsByGroup]);
+
+  const axisRestoreDefault = (axisKey: string) => {
+    if (axisKey === 'source') axisIncludeAll('source', sources.map(s => s.id));
+    else axisClear(axisKey);
+  };
   const parentByTagId = useMemo(() => {
     const out = new Map<string, string | null>();
     for (const tag of tags) out.set(String(tag.id), tag.parentTagId ? String(tag.parentTagId) : null);
@@ -824,6 +894,16 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       return { ...prev, [axisKey]: { ...cur, states } };
     });
   };
+  const cycleAxisStateReverse = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const state = cur.states[value] || 0;
+      const next = state === 0 ? 2 : state === 2 ? 1 : 0;
+      const states = { ...cur.states };
+      if (next === 0) delete states[value]; else states[value] = next;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
   const cycleAxisCombineMode = (axisKey: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
@@ -832,11 +912,27 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       return { ...prev, [axisKey]: { ...cur, combineMode: next } };
     });
   };
+  const cycleAxisCombineModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = cur.combineMode || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
   const cycleAxisExclusionMode = (axisKey: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
       const m = cur.exclusionMode || 'OR';
       const next: 'AND' | 'OR' | 'XOR' = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const cycleAxisExclusionModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = cur.exclusionMode || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
       return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
     });
   };
@@ -894,6 +990,15 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       return out;
     });
   };
+  const cycleTagStateReverse = (tagId: string) => {
+    setTagStates(prev => {
+      const cur = prev[tagId] || 0;
+      const next = cur === 0 ? 2 : cur === 2 ? 1 : 0;
+      const out = { ...prev };
+      if (next === 0) delete out[tagId]; else out[tagId] = next;
+      return out;
+    });
+  };
   const cycleGroupMode = (groupId: string) => {
     setGroupCombineModes(prev => {
       const cur = prev[groupId] || 'OR';
@@ -901,10 +1006,24 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
       return { ...prev, [groupId]: next };
     });
   };
+  const cycleGroupModeReverse = (groupId: string) => {
+    setGroupCombineModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
+  };
   const cycleGroupExclusionMode = (groupId: string) => {
     setGroupExclusionModes(prev => {
       const cur = prev[groupId] || 'OR';
       const next: 'AND' | 'OR' | 'XOR' = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
+  };
+  const cycleGroupExclusionModeReverse = (groupId: string) => {
+    setGroupExclusionModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next: 'AND' | 'OR' | 'XOR' = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
       return { ...prev, [groupId]: next };
     });
   };
@@ -1539,151 +1658,35 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
             </>
           }
           renderFilters={
-            <>
-              {/* Source / Level / School filter chips with the same
-                  3-state include/exclude semantics as the public
-                  Spell List browser. */}
-              <AxisFilterSection
-                title="Sources"
-                values={sources.map((source) => ({
-                  value: source.id,
-                  label: String(source.abbreviation || source.shortName || source.name || source.id),
-                }))}
-                states={axisFilters.source?.states || {}}
-                cycleState={(v) => cycleAxisState('source', v)}
-                combineMode={axisFilters.source?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('source')}
-                exclusionMode={axisFilters.source?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('source')}
-                includeAll={() => axisIncludeAll('source', sources.map((s) => s.id))}
-                excludeAll={() => axisExcludeAll('source', sources.map((s) => s.id))}
-                clearAll={() => axisClear('source')}
-              />
-              <AxisFilterSection
-                title="Spell Level"
-                values={LEVEL_FILTER_OPTIONS}
-                states={axisFilters.level?.states || {}}
-                cycleState={(v) => cycleAxisState('level', v)}
-                combineMode={axisFilters.level?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('level')}
-                exclusionMode={axisFilters.level?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('level')}
-                includeAll={() => axisIncludeAll('level', LEVEL_FILTER_OPTIONS.map((o) => o.value))}
-                excludeAll={() => axisExcludeAll('level', LEVEL_FILTER_OPTIONS.map((o) => o.value))}
-                clearAll={() => axisClear('level')}
-              />
-              <AxisFilterSection
-                title="Spell School"
-                values={SCHOOL_FILTER_OPTIONS}
-                states={axisFilters.school?.states || {}}
-                cycleState={(v) => cycleAxisState('school', v)}
-                combineMode={axisFilters.school?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('school')}
-                exclusionMode={axisFilters.school?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('school')}
-                includeAll={() => axisIncludeAll('school', SCHOOL_FILTER_OPTIONS.map((o) => o.value))}
-                excludeAll={() => axisExcludeAll('school', SCHOOL_FILTER_OPTIONS.map((o) => o.value))}
-                clearAll={() => axisClear('school')}
-              />
-              {/* Bucket axes — Casting Time, Range, Duration, Shape.
-                  Same constants the public browser uses so the editor's
-                  filter vocabulary matches `/compendium/spells`. */}
-              <AxisFilterSection
-                title="Casting Time"
-                values={ACTIVATION_ORDER.map((b) => ({ value: b, label: ACTIVATION_LABELS[b] }))}
-                states={axisFilters.activation?.states || {}}
-                cycleState={(v) => cycleAxisState('activation', v)}
-                combineMode={axisFilters.activation?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('activation')}
-                exclusionMode={axisFilters.activation?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('activation')}
-                includeAll={() => axisIncludeAll('activation', ACTIVATION_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('activation', ACTIVATION_ORDER as readonly string[])}
-                clearAll={() => axisClear('activation')}
-              />
-              <AxisFilterSection
-                title="Range"
-                values={RANGE_ORDER.map((b) => ({ value: b, label: RANGE_LABELS[b] }))}
-                states={axisFilters.range?.states || {}}
-                cycleState={(v) => cycleAxisState('range', v)}
-                combineMode={axisFilters.range?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('range')}
-                exclusionMode={axisFilters.range?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('range')}
-                includeAll={() => axisIncludeAll('range', RANGE_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('range', RANGE_ORDER as readonly string[])}
-                clearAll={() => axisClear('range')}
-              />
-              <AxisFilterSection
-                title="Duration"
-                values={DURATION_ORDER.map((b) => ({ value: b, label: DURATION_LABELS[b] }))}
-                states={axisFilters.duration?.states || {}}
-                cycleState={(v) => cycleAxisState('duration', v)}
-                combineMode={axisFilters.duration?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('duration')}
-                exclusionMode={axisFilters.duration?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('duration')}
-                includeAll={() => axisIncludeAll('duration', DURATION_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('duration', DURATION_ORDER as readonly string[])}
-                clearAll={() => axisClear('duration')}
-              />
-              <AxisFilterSection
-                title="Shape"
-                values={SHAPE_ORDER.map((b) => ({ value: b, label: SHAPE_LABELS[b] }))}
-                states={axisFilters.shape?.states || {}}
-                cycleState={(v) => cycleAxisState('shape', v)}
-                combineMode={axisFilters.shape?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('shape')}
-                exclusionMode={axisFilters.shape?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('shape')}
-                includeAll={() => axisIncludeAll('shape', SHAPE_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('shape', SHAPE_ORDER as readonly string[])}
-                clearAll={() => axisClear('shape')}
-              />
-              <AxisFilterSection
-                title="Properties"
-                values={PROPERTY_ORDER.map((b) => ({ value: b, label: PROPERTY_LABELS[b] }))}
-                states={axisFilters.property?.states || {}}
-                cycleState={(v) => cycleAxisState('property', v)}
-                combineMode={axisFilters.property?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('property')}
-                exclusionMode={axisFilters.property?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('property')}
-                includeAll={() => axisIncludeAll('property', PROPERTY_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('property', PROPERTY_ORDER as readonly string[])}
-                clearAll={() => axisClear('property')}
-              />
-              {/* Tag groups — collapsible Advanced Options below the
-                  base axes. Same components SpellList uses, so the
-                  tagging-consistency audit experience matches the
-                  public browser. */}
-              <details className="border border-gold/10 rounded-md bg-background/20">
-                <summary className="px-3 py-2 text-xs uppercase tracking-[0.18em] text-ink/65 cursor-pointer hover:bg-gold/5">
-                  Tag Groups
-                  {Object.values(tagStates).filter(s => s === 1 || s === 2).length > 0 && (
-                    <span className="ml-2 text-gold/70 normal-case tracking-normal">
-                      ({Object.values(tagStates).filter(s => s === 1 || s === 2).length} chips active)
-                    </span>
-                  )}
-                </summary>
-                <div className="px-3 py-3 space-y-3 border-t border-gold/10">
-                  {tagGroups.map(group => (
-                    <TagGroupFilter
-                      key={group.id}
-                      group={group}
-                      tags={tagsByGroup[group.id] || []}
-                      tagStates={tagStates}
-                      setTagStates={setTagStates}
-                      cycleTagState={cycleTagState}
-                      combineMode={groupCombineModes[group.id]}
-                      cycleGroupMode={cycleGroupMode}
-                      exclusionMode={groupExclusionModes[group.id]}
-                      cycleExclusionMode={cycleGroupExclusionMode}
-                    />
-                  ))}
-                </div>
-              </details>
-            </>
+            <MiniPillFilterPanel
+              axes={miniPillAxes}
+              axisFilters={axisFilters}
+              tagStates={tagStates}
+              cycleAxisState={cycleAxisState}
+              cycleAxisStateReverse={cycleAxisStateReverse}
+              cycleTagState={cycleTagState}
+              cycleTagStateReverse={cycleTagStateReverse}
+              cycleAxisCombineMode={cycleAxisCombineMode}
+              cycleAxisCombineModeReverse={cycleAxisCombineModeReverse}
+              cycleAxisExclusionMode={cycleAxisExclusionMode}
+              cycleAxisExclusionModeReverse={cycleAxisExclusionModeReverse}
+              axisIncludeAll={axisIncludeAll}
+              axisExcludeAll={axisExcludeAll}
+              axisClear={axisClear}
+              axisRestoreDefault={axisRestoreDefault}
+              cycleGroupMode={cycleGroupMode}
+              cycleGroupModeReverse={cycleGroupModeReverse}
+              cycleExclusionMode={cycleGroupExclusionMode}
+              cycleExclusionModeReverse={cycleGroupExclusionModeReverse}
+              groupCombineModes={groupCombineModes}
+              groupExclusionModes={groupExclusionModes}
+              setTagStates={setTagStates}
+              search={search}
+              setSearch={setSearch}
+              activeFilterCount={activeFilterCount}
+              resetAll={resetAllFilters}
+              embedded
+            />
           }
         />
       </div>
