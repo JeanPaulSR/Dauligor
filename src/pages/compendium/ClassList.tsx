@@ -41,6 +41,7 @@ import {
 } from "../../components/ui/dialog";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { FilterBar } from '../../components/compendium/FilterBar';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { normalizeTagRow, expandTagsWithAncestors, buildTagParentMap } from '../../lib/tagHierarchy';
 import {
   importClassSemantic
@@ -247,10 +248,26 @@ export function ClassList({
       loadClasses();
     }, []);
 
+  // Tri-state cycle — left-click forward (off → include → exclude → off);
+  // SectionFilterPanel's right-click affordance drives the reverse cycle
+  // (off → exclude → include → off).
   const cycleTagState = (tagId: string) => {
     setTagStates(prev => {
       const current = prev[tagId] || 0;
       const next = (current + 1) % 3;
+      const newState = { ...prev };
+      if (next === 0) {
+        delete newState[tagId];
+      } else {
+        newState[tagId] = next;
+      }
+      return newState;
+    });
+  };
+  const cycleTagStateReverse = (tagId: string) => {
+    setTagStates(prev => {
+      const current = prev[tagId] || 0;
+      const next = current === 0 ? 2 : current === 2 ? 1 : 0;
       const newState = { ...prev };
       if (next === 0) {
         delete newState[tagId];
@@ -271,6 +288,17 @@ export function ClassList({
       };
     });
   };
+  const cycleGroupModeReverse = (groupId: string) => {
+    const modes: ('AND' | 'OR' | 'XOR')[] = ['AND', 'OR', 'XOR'];
+    setGroupCombineModes(prev => {
+      const current = prev[groupId] || 'OR';
+      const idx = modes.indexOf(current);
+      return {
+        ...prev,
+        [groupId]: modes[(idx - 1 + modes.length) % modes.length]
+      };
+    });
+  };
 
   const cycleExclusionMode = (groupId: string) => {
     const modes: ('AND' | 'OR' | 'XOR')[] = ['AND', 'OR', 'XOR'];
@@ -279,6 +307,17 @@ export function ClassList({
       return {
         ...prev,
         [groupId]: modes[(modes.indexOf(current) + 1) % modes.length]
+      };
+    });
+  };
+  const cycleExclusionModeReverse = (groupId: string) => {
+    const modes: ('AND' | 'OR' | 'XOR')[] = ['AND', 'OR', 'XOR'];
+    setGroupExclusionModes(prev => {
+      const current = prev[groupId] || 'OR';
+      const idx = modes.indexOf(current);
+      return {
+        ...prev,
+        [groupId]: modes[(idx - 1 + modes.length) % modes.length]
       };
     });
   };
@@ -299,6 +338,35 @@ export function ClassList({
   // logic in SpellList / SpellListManager. The map is rebuilt only
   // when the tag set itself changes.
   const parentByTagId = React.useMemo(() => buildTagParentMap(allTags), [allTags]);
+
+  // Axis descriptors for SectionFilterPanel. ClassList only has tag
+  // groups (no source/level/etc. axes), so the wall is one row per
+  // tag group. Subtags get `parentValue` wired so the panel's chevron
+  // drawer treats them as hierarchical children of the parent tag —
+  // matches the SpellFilterShell pattern.
+  const miniPillAxes = React.useMemo<FilterSection[]>(() => {
+    const axes: FilterSection[] = [];
+    for (const group of tagGroups) {
+      const groupTags = tagsByGroup[group.id] || [];
+      if (groupTags.length === 0) continue;
+      const idSet = new Set(groupTags.map(t => t.id));
+      axes.push({
+        key: `tag-group:${group.id}`,
+        name: group.name,
+        kind: 'tag',
+        groupId: group.id,
+        values: groupTags.map((t: any) => {
+          const parent = t.parentTagId ?? null;
+          return {
+            value: t.id,
+            label: t.name,
+            parentValue: parent && idSet.has(parent) ? parent : undefined,
+          };
+        }),
+      });
+    }
+    return axes;
+  }, [tagGroups, tagsByGroup]);
 
   const filteredClasses = React.useMemo(() => {
     return classes.filter(c => {
@@ -767,26 +835,44 @@ export function ClassList({
         </div>
       </div>
 
-      <FilterBar 
+      <FilterBar
         search={search}
         setSearch={setSearch}
         isFilterOpen={isFilterOpen}
         setIsFilterOpen={setIsFilterOpen}
         activeFilterCount={activeFilterCount}
-        tagGroups={tagGroups}
-        tagsByGroup={tagsByGroup}
-        tagStates={tagStates}
-        setTagStates={setTagStates}
-        cycleTagState={cycleTagState}
-        groupCombineModes={groupCombineModes}
-        cycleGroupMode={cycleGroupMode}
-        groupExclusionModes={groupExclusionModes}
-        cycleExclusionMode={cycleExclusionMode}
         resetFilters={() => {
           setTagStates({});
           setGroupCombineModes({});
           setGroupExclusionModes({});
         }}
+        renderFilters={
+          <SectionFilterPanel
+            axes={miniPillAxes}
+            axisFilters={{}}
+            tagStates={tagStates}
+            cycleAxisState={() => {}}
+            cycleAxisStateReverse={() => {}}
+            cycleTagState={cycleTagState}
+            cycleTagStateReverse={cycleTagStateReverse}
+            cycleGroupMode={cycleGroupMode}
+            cycleGroupModeReverse={cycleGroupModeReverse}
+            cycleExclusionMode={cycleExclusionMode}
+            cycleExclusionModeReverse={cycleExclusionModeReverse}
+            groupCombineModes={groupCombineModes}
+            groupExclusionModes={groupExclusionModes}
+            setTagStates={setTagStates}
+            search={search}
+            setSearch={setSearch}
+            activeFilterCount={activeFilterCount}
+            resetAll={() => {
+              setTagStates({});
+              setGroupCombineModes({});
+              setGroupExclusionModes({});
+            }}
+            embedded
+          />
+        }
       />
 
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
