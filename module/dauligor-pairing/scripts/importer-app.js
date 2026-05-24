@@ -19,6 +19,32 @@ import {
   formatMissingLeaves,
   treeFromFlatRequiresOptionIds
 } from "./requirements-walker.js";
+import {
+  renderSectionFilterPanel,
+  bindSectionFilterPanelEvents,
+  matchesTagGroupsTriState,
+  nextStateForward,
+  nextStateReverse,
+  nextCombineMode,
+  nextCombineModeReverse,
+  SECTION_FILTER_STATE,
+} from "./section-filter-panel.js";
+
+/**
+ * Fresh ephemeral UI state for SectionFilterPanel. Re-created on modal
+ * close so reopening starts with every section expanded and no chip-
+ * search active — matches the React panel's intentional non-persisted
+ * UX.
+ */
+function createFreshFilterUiState() {
+  return {
+    hiddenAxes: new Set(),
+    expandedParents: new Map(),
+    allSubtagAxes: new Set(),
+    altLabelAxes: new Set(),
+    chipSearch: "",
+  };
+}
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -892,9 +918,20 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       // Tri-state per-tag filter mirroring `src/components/compendium/
       // FilterBar.tsx`'s `tagStates`: 0 = inactive, 1 = include, 2 =
       // exclude. Tags not present in the map are treated as inactive.
-      // Cycle order on click is 0 → 1 → 2 → 0, just like the React
-      // chip's `cycleTagState`.
+      // Left-click cycles forward (off → include → exclude → off);
+      // right-click cycles in reverse (off → exclude → include → off).
       tagStates: {},
+      // Per-group combine + exclusion modes (OR / AND / XOR). The
+      // SectionFilterPanel surfaces these as per-axis combinator
+      // buttons on every tag-group axis. Defaulting to OR — same
+      // behaviour the flat single-state filter had.
+      groupCombineModes: {},
+      groupExclusionModes: {},
+      // Ephemeral SectionFilterPanel UI state — hidden sections,
+      // expanded parent drawers, abbr toggles, chip-label search.
+      // Reset on modal close so reopening starts fresh (mirrors the
+      // React panel's intentional ephemeral UX).
+      filterUi: createFreshFilterUiState(),
       // Is the filter modal open. Local-only UI state; persisted only
       // for the lifetime of this browser instance.
       isFilterOpen: false,
@@ -920,6 +957,63 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     // bundles just to render a class card grid that already has every
     // field it needs from the catalog metadata.
     this._payloadCache = new Map();
+
+    // Tag catalog (groups + parent-tag hierarchy) — fetched lazily from
+    // `/api/module/tags/catalog.json` so the section-filter panel can
+    // render tags as one axis per tag group with subtag drawers. Falls
+    // back to a single flat "Tags" axis if the fetch fails or hasn't
+    // landed yet. Shape: { tagsById, tagGroups, tagsByGroup }.
+    this._tagCatalog = null;
+    this._tagCatalogInFlight = false;
+  }
+
+  // -----------------------------------------------------------------------
+  // Foundation: tag catalog (mirrors `_ensureTagCatalog` in
+  // spell-preparation-app.js). Public endpoint, no auth needed; one
+  // fetch per browser instance. Triggers a render once the catalog
+  // lands so the filter modal can pick up the richer axis shape.
+  // -----------------------------------------------------------------------
+  _ensureTagCatalog() {
+    if (this._tagCatalog || this._tagCatalogInFlight) return;
+    this._tagCatalogInFlight = true;
+    (async () => {
+      try {
+        const response = await fetch("https://www.dauligor.com/api/module/tags/catalog.json", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (payload?.kind !== "dauligor.tag-catalog.v1") {
+          throw new Error(`Unexpected tag-catalog kind: ${payload?.kind ?? "(missing)"}`);
+        }
+        const tagsById = new Map();
+        const tagsByGroup = new Map();
+        for (const tag of (payload.tags ?? [])) {
+          if (!tag?.id) continue;
+          tagsById.set(String(tag.id), {
+            id: String(tag.id),
+            name: String(tag.name ?? ""),
+            groupId: String(tag.groupId ?? ""),
+            parentTagId: tag.parentTagId ? String(tag.parentTagId) : null
+          });
+          const gid = String(tag.groupId ?? "");
+          if (!gid) continue;
+          if (!tagsByGroup.has(gid)) tagsByGroup.set(gid, []);
+          tagsByGroup.get(gid).push(tagsById.get(String(tag.id)));
+        }
+        const tagGroups = (payload.tagGroups ?? []).map((g) => ({
+          id: String(g.id),
+          name: String(g.name ?? "")
+        }));
+        this._tagCatalog = { tagsById, tagGroups, tagsByGroup };
+        // Only re-render the toolbar (which contains the filter modal)
+        // if it's open — otherwise we'd flash the UI for nothing.
+        if (this._state.isFilterOpen) this._renderToolbar();
+      } catch (err) {
+        log("warn", "tag catalog fetch failed", err);
+        this._tagCatalog = { tagsById: new Map(), tagGroups: [], tagsByGroup: new Map() };
+      } finally {
+        this._tagCatalogInFlight = false;
+      }
+    })();
   }
 
   _configureRenderParts() {
@@ -1068,6 +1162,8 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     this._toolbarRegion.querySelector(`[data-action="reset"]`)?.addEventListener("click", () => {
       this._state.search = "";
       this._state.tagStates = {};
+      this._state.groupCombineModes = {};
+      this._state.groupExclusionModes = {};
       this._renderToolbar();
       this._renderList();
       this._renderFooter();
@@ -1075,30 +1171,143 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
 
     // Filter modal listeners — only present when isFilterOpen.
     if (this._state.isFilterOpen) {
-      this._toolbarRegion.querySelector(`[data-action="filter-backdrop"]`)?.addEventListener("click", () => {
+      const closeModal = () => {
         this._state.isFilterOpen = false;
+        // Reset ephemeral UI state on close so reopening starts fresh.
+        this._state.filterUi = createFreshFilterUiState();
         this._renderToolbar();
-      });
-      this._toolbarRegion.querySelector(`[data-action="filter-close"]`)?.addEventListener("click", () => {
-        this._state.isFilterOpen = false;
-        this._renderToolbar();
-      });
-      this._toolbarRegion.querySelector(`[data-action="filter-reset"]`)?.addEventListener("click", () => {
-        this._state.tagStates = {};
-        this._renderToolbar();
-        this._renderList();
-        this._renderFooter();
-      });
-      this._toolbarRegion.querySelectorAll(`[data-action="filter-chip"]`).forEach((chip) => {
-        chip.addEventListener("click", () => {
-          const tagId = chip.dataset.tagId;
-          if (!tagId) return;
-          this._cycleTagState(tagId);
+      };
+      this._toolbarRegion.querySelector(`[data-action="filter-backdrop"]`)?.addEventListener("click", closeModal);
+
+      const root = this._toolbarRegion.querySelector(".dauligor-section-filter");
+      if (root) {
+        const rerender = () => {
           this._renderToolbar();
           this._renderList();
           this._renderFooter();
+        };
+        // Pool of tag ids available for bulk include/exclude — only
+        // tags actually present in the active class catalog. Computed
+        // once per render so each handler reuses the same set.
+        const availableTags = new Set((this._availableTags ?? []).map(String));
+        const tagsForAxis = (axisKey) => {
+          if (axisKey === "tag:__flat__") {
+            return [...availableTags];
+          }
+          if (axisKey === "tag:__orphan__") {
+            const accounted = new Set();
+            if (this._tagCatalog) {
+              for (const group of this._tagCatalog.tagGroups) {
+                for (const t of (this._tagCatalog.tagsByGroup.get(group.id) ?? [])) {
+                  accounted.add(String(t.id));
+                }
+              }
+            }
+            return [...availableTags].filter((id) => !accounted.has(id));
+          }
+          if (axisKey.startsWith("tag:") && this._tagCatalog) {
+            const gid = axisKey.slice(4);
+            return (this._tagCatalog.tagsByGroup.get(gid) ?? [])
+              .map((t) => String(t.id))
+              .filter((id) => availableTags.has(id));
+          }
+          return [];
+        };
+
+        bindSectionFilterPanelEvents(root, {
+          // Tag-pill clicks — same data model (flat tagStates) but the
+          // panel routes via the cycleTagState handler. Forward/reverse
+          // dispatched off left/right click respectively.
+          cycleTagState: (tagId) => {
+            this._cycleTagState(tagId);
+            rerender();
+          },
+          cycleTagStateReverse: (tagId) => {
+            this._cycleTagStateReverse(tagId);
+            rerender();
+          },
+          // Per-axis combine/exclude — for tag-kind axes the panel
+          // routes to the group-mode handlers (axisKey carries the
+          // owning groupId via the data attribute).
+          cycleGroupCombineMode: (groupId) => {
+            this._cycleGroupCombineMode(groupId, false);
+            rerender();
+          },
+          cycleGroupCombineModeReverse: (groupId) => {
+            this._cycleGroupCombineMode(groupId, true);
+            rerender();
+          },
+          cycleGroupExclusionMode: (groupId) => {
+            this._cycleGroupExclusionMode(groupId, false);
+            rerender();
+          },
+          cycleGroupExclusionModeReverse: (groupId) => {
+            this._cycleGroupExclusionMode(groupId, true);
+            rerender();
+          },
+          // Per-axis All / Clear / None. The class browser only has
+          // tag-kind axes, so the panel calls the group* variants;
+          // axisKey arrives so we can derive the value list.
+          groupIncludeAll: (axisKey) => {
+            this._setGroupTagStatesBulk(tagsForAxis(axisKey), SECTION_FILTER_STATE.INCLUDE);
+            rerender();
+          },
+          groupExcludeAll: (axisKey) => {
+            this._setGroupTagStatesBulk(tagsForAxis(axisKey), SECTION_FILTER_STATE.EXCLUDE);
+            rerender();
+          },
+          groupClear: (axisKey) => {
+            this._clearGroupTagStates(tagsForAxis(axisKey));
+            rerender();
+          },
+          toggleAxisHidden: (axisKey) => {
+            const ui = this._state.filterUi;
+            if (ui.hiddenAxes.has(axisKey)) ui.hiddenAxes.delete(axisKey);
+            else ui.hiddenAxes.add(axisKey);
+            this._renderToolbar();
+          },
+          toggleParentDrawer: (axisKey, parentValue) => {
+            const ui = this._state.filterUi;
+            if (!ui.expandedParents.has(axisKey)) ui.expandedParents.set(axisKey, new Set());
+            const set = ui.expandedParents.get(axisKey);
+            if (set.has(parentValue)) set.delete(parentValue);
+            else set.add(parentValue);
+            this._renderToolbar();
+          },
+          toggleAllSubtags: (axisKey) => {
+            const ui = this._state.filterUi;
+            if (ui.allSubtagAxes.has(axisKey)) ui.allSubtagAxes.delete(axisKey);
+            else ui.allSubtagAxes.add(axisKey);
+            this._renderToolbar();
+          },
+          toggleAltLabel: (axisKey) => {
+            const ui = this._state.filterUi;
+            if (ui.altLabelAxes.has(axisKey)) ui.altLabelAxes.delete(axisKey);
+            else ui.altLabelAxes.add(axisKey);
+            this._renderToolbar();
+          },
+          setChipSearch: (value) => {
+            this._state.filterUi.chipSearch = String(value ?? "");
+            this._renderToolbar();
+          },
+          showAllSections: () => {
+            this._state.filterUi.hiddenAxes.clear();
+            this._renderToolbar();
+          },
+          hideAllSections: () => {
+            const axes = this._buildFilterAxes();
+            this._state.filterUi.hiddenAxes = new Set(axes.map((a) => a.key));
+            this._renderToolbar();
+          },
+          resetAll: () => {
+            this._state.tagStates = {};
+            this._state.groupCombineModes = {};
+            this._state.groupExclusionModes = {};
+            rerender();
+          },
+          close: closeModal,
         });
-      });
+      }
     }
   }
 
@@ -1109,78 +1318,160 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
    */
   _cycleTagState(tagId) {
     const cur = this._state.tagStates[tagId] || 0;
-    const next = (cur + 1) % 3;
-    if (next === 0) delete this._state.tagStates[tagId];
+    const next = nextStateForward(cur);
+    if (next === SECTION_FILTER_STATE.OFF) delete this._state.tagStates[tagId];
     else this._state.tagStates[tagId] = next;
   }
 
+  /** Reverse-direction cycle for right-click on a tag pill:
+   *  inactive → exclude → include → inactive. */
+  _cycleTagStateReverse(tagId) {
+    const cur = this._state.tagStates[tagId] || 0;
+    const next = nextStateReverse(cur);
+    if (next === SECTION_FILTER_STATE.OFF) delete this._state.tagStates[tagId];
+    else this._state.tagStates[tagId] = next;
+  }
+
+  _cycleGroupCombineMode(groupId, reverse = false) {
+    const cur = this._state.groupCombineModes[groupId] || "OR";
+    this._state.groupCombineModes[groupId] = reverse
+      ? nextCombineModeReverse(cur)
+      : nextCombineMode(cur);
+  }
+  _cycleGroupExclusionMode(groupId, reverse = false) {
+    const cur = this._state.groupExclusionModes[groupId] || "OR";
+    this._state.groupExclusionModes[groupId] = reverse
+      ? nextCombineModeReverse(cur)
+      : nextCombineMode(cur);
+  }
+
+  // Bulk include / exclude / clear for a tag-group axis. Operates on
+  // the flat `tagStates` record so each group's All/Clear/None can run
+  // independently. Pool-visible tag ids only — the panel passes them
+  // in so a bulk-include doesn't reach for tags the user can't see.
+  _setGroupTagStatesBulk(tagIds, mode) {
+    for (const id of tagIds) {
+      if (mode === SECTION_FILTER_STATE.OFF) delete this._state.tagStates[id];
+      else this._state.tagStates[id] = mode;
+    }
+  }
+  _clearGroupTagStates(tagIds) {
+    for (const id of tagIds) delete this._state.tagStates[id];
+  }
+
   /**
-   * Render the filter modal — chip grid with tri-state include/exclude,
-   * reset button, close button, backdrop click-to-dismiss. Visually
-   * mirrors `src/components/compendium/FilterBar.tsx` but lives in
-   * the same DOM region as the toolbar (absolute-positioned overlay)
-   * because we can't mount a portal in vanilla DOM the way React does.
+   * Render the class-browser tag filter modal. Same SectionFilterPanel
+   * layout as `/compendium/classes` and the Prepare Spells manager —
+   * tri-state pills, per-section combine + exclude OR/AND/XOR, chip-
+   * label search, subtag drawers for parent → children, soft-blue
+   * include + blood exclude. Modal positioning is the existing
+   * `dauligor-class-browser__filter-overlay` absolute-overlay pattern
+   * so we don't change the toolbar's containment behaviour.
    *
-   * If the catalog ships no tags (current Phase C local catalogs don't
-   * yet), the modal shows an empty-state hint instead of an empty grid.
+   * When the tag catalog has loaded we render one tag-kind axis per
+   * tag group, restricted to tags actually present in the active
+   * class catalog (so the wall isn't cluttered by tags no class in the
+   * current source carries). Before the catalog lands we fall back to
+   * a single flat "Tags" axis using the per-source `_tagIndex`.
    */
   _renderFilterModal() {
-    const tags = this._availableTags ?? [];
-    const states = this._state.tagStates;
-    const tagIndex = this._tagIndex ?? {};
-    // Sort by resolved name so chips read alphabetically by what the
-    // user actually sees. Older catalogs without `tagIndex` fall back
-    // to id-string sort (still deterministic).
-    const sortedTags = [...tags].sort((a, b) => {
-      const nameA = (tagIndex[a] ?? a).toLowerCase();
-      const nameB = (tagIndex[b] ?? b).toLowerCase();
-      return nameA.localeCompare(nameB);
+    const axes = this._buildFilterAxes();
+    const panelHtml = renderSectionFilterPanel({
+      axes,
+      axisFilters: {},                          // class browser uses tagStates only
+      tagStates: this._state.tagStates ?? {},
+      groupCombineModes: this._state.groupCombineModes ?? {},
+      groupExclusionModes: this._state.groupExclusionModes ?? {},
+      uiState: this._state.filterUi,
+      title: "Tag Filters",
+      searchPlaceholder: "Filter pills…",
+      resetLabel: "Reset Filters",
+      showCloseButton: true,
     });
-    const chipsHtml = sortedTags.length
-      ? sortedTags.map((tagId) => {
-          const state = states[tagId] || 0;
-          const stateClass = state === 1
-            ? "dauligor-class-browser__chip--include"
-            : state === 2
-              ? "dauligor-class-browser__chip--exclude"
-              : "";
-          // Display name from catalog's `tagIndex`. Falls back to the
-          // raw id on legacy catalogs that didn't ship the index —
-          // ugly but never broken.
-          const label = tagIndex[tagId] ?? tagId;
-          return `
-            <button
-              type="button"
-              class="dauligor-class-browser__chip ${stateClass}"
-              data-action="filter-chip"
-              data-tag-id="${foundry.utils.escapeHTML(tagId)}"
-              title="Click to ${state === 0 ? "include" : state === 1 ? "exclude" : "clear"}"
-            >${foundry.utils.escapeHTML(label)}</button>
-          `;
-        }).join("")
-      : `<div class="dauligor-class-browser__filter-empty">No tags available in the current catalog.</div>`;
-
     return `
       <div class="dauligor-class-browser__filter-overlay">
         <div class="dauligor-class-browser__filter-backdrop" data-action="filter-backdrop"></div>
-        <div class="dauligor-class-browser__filter-card" role="dialog" aria-label="Class filters">
-          <div class="dauligor-class-browser__filter-head">
-            <div>
-              <div class="dauligor-class-browser__filter-title">Tag Filters</div>
-              <div class="dauligor-class-browser__filter-subtitle">Click a tag once to include, twice to exclude, again to clear.</div>
-            </div>
-            <button type="button" class="dauligor-class-browser__button dauligor-class-browser__button--icon" data-action="filter-close" aria-label="Close filters">
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-          <div class="dauligor-class-browser__filter-body">${chipsHtml}</div>
-          <div class="dauligor-class-browser__filter-footer">
-            <button type="button" class="dauligor-class-browser__button" data-action="filter-reset">Reset All Filters</button>
-            <button type="button" class="dauligor-class-browser__button dauligor-class-browser__button--primary" data-action="filter-close">Apply &amp; Close</button>
-          </div>
+        <div class="dauligor-class-browser__filter-card dauligor-class-browser__filter-card--section-filter" role="dialog" aria-label="Class filters">
+          ${panelHtml}
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Build the FilterSection[] array for the section-filter panel.
+   * Uses the tag catalog when available; falls back to a single flat
+   * tag axis from the per-source `_tagIndex` otherwise.
+   */
+  _buildFilterAxes() {
+    const availableTags = new Set((this._availableTags ?? []).map(String));
+    if (availableTags.size === 0) return [];
+
+    // Catalog path — tags grouped by tag-group with subtag hierarchy.
+    if (this._tagCatalog && this._tagCatalog.tagGroups.length > 0) {
+      const axes = [];
+      for (const group of this._tagCatalog.tagGroups) {
+        const groupTags = (this._tagCatalog.tagsByGroup.get(group.id) ?? [])
+          .filter((t) => availableTags.has(String(t.id)));
+        if (groupTags.length === 0) continue;
+        const idSet = new Set(groupTags.map((t) => String(t.id)));
+        axes.push({
+          key: `tag:${group.id}`,
+          name: group.name,
+          kind: "tag",
+          groupId: group.id,
+          values: groupTags.map((t) => {
+            const parent = t.parentTagId ? String(t.parentTagId) : null;
+            return {
+              value: String(t.id),
+              label: t.name,
+              parentValue: parent && idSet.has(parent) ? parent : undefined,
+            };
+          }),
+        });
+      }
+      // Tags present in the available pool but not in the catalog
+      // (legacy catalogs that predate a tag's introduction). Bucket
+      // them into one "Other" axis so the user can still filter them.
+      const accountedFor = new Set();
+      for (const ax of axes) for (const v of ax.values) accountedFor.add(v.value);
+      const orphanIds = [...availableTags].filter((id) => !accountedFor.has(id));
+      if (orphanIds.length > 0) {
+        const tagIndex = this._tagIndex ?? {};
+        axes.push({
+          key: "tag:__orphan__",
+          name: "Other",
+          kind: "tag",
+          groupId: "__orphan__",
+          values: orphanIds
+            .map((id) => ({ value: id, label: tagIndex[id] ?? id }))
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        });
+      }
+      return axes;
+    }
+
+    // Fallback — flat tag axis from the catalog's `tagIndex`. Same UX
+    // affordances (tri-state pills, chip-search, hide, OR/AND/XOR
+    // combinators) just without subtag drawers.
+    const tagIndex = this._tagIndex ?? {};
+    return [{
+      key: "tag:__flat__",
+      name: "Tags",
+      kind: "tag",
+      groupId: "__flat__",
+      values: [...availableTags]
+        .map((id) => ({ value: id, label: tagIndex[id] ?? id }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    }];
+  }
+
+  // Find which axis owns a tag id (for the SectionFilterPanel's tag-
+  // pill callback that doesn't carry axisKey).
+  _findOwningTagAxisInClassBrowser(rootEl, tagId) {
+    const sel = `.dauligor-section-filter__pill[data-section-value="${CSS.escape(String(tagId))}"]`;
+    const el = rootEl.querySelector(sel);
+    return el?.dataset?.sectionAxis ?? null;
   }
 
   _renderList() {
@@ -1338,6 +1629,10 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     this._state.isLoading = true;
     this._state.status = force ? "Reloading class source data..." : "Loading class source data...";
     this._state.statusLevel = "";
+    // Kick off the public tag catalog fetch in parallel with the
+    // per-source class catalogs so the SectionFilterPanel can pick up
+    // group/parent metadata as soon as the user opens the filter.
+    this._ensureTagCatalog();
     this._renderBrowser();
 
     const catalogs = (await Promise.all(normalizeCatalogUrls(this._state.catalogUrls, this._state.catalogUrl)
@@ -1455,19 +1750,56 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
   _getVisibleClasses() {
     const search = this._state.search.trim().toLowerCase();
     const tagStates = this._state.tagStates ?? {};
-    const includeTags = Object.keys(tagStates).filter((id) => tagStates[id] === 1);
-    const excludeTags = Object.keys(tagStates).filter((id) => tagStates[id] === 2);
+    const groupCombineModes = this._state.groupCombineModes ?? {};
+    const groupExclusionModes = this._state.groupExclusionModes ?? {};
+
+    // Build a `{ groupId: [{ id }] }` map for the matcher. With a
+    // loaded tag catalog we group properly; without one we lump every
+    // tag into a synthetic "__flat__" group so the matcher's OR/AND/
+    // XOR knobs still apply uniformly (matches the renderer's flat
+    // fallback axis key `tag:__flat__`).
+    const tagGroups = [];
+    const tagsByGroup = {};
+    if (this._tagCatalog && this._tagCatalog.tagGroups.length > 0) {
+      for (const group of this._tagCatalog.tagGroups) {
+        tagGroups.push({ id: group.id });
+        tagsByGroup[group.id] = (this._tagCatalog.tagsByGroup.get(group.id) ?? [])
+          .map((t) => ({ id: String(t.id) }));
+      }
+      // Orphan bucket — tags present in the active models but not in
+      // any catalog group. Mirrors the renderer's `tag:__orphan__`
+      // axis so the matcher applies the user's filter to them too.
+      const accounted = new Set();
+      for (const ids of Object.values(tagsByGroup)) for (const t of ids) accounted.add(t.id);
+      const orphanIds = new Set();
+      for (const classModel of this._classModels) {
+        for (const id of (classModel.tags ?? [])) {
+          if (!accounted.has(String(id))) orphanIds.add(String(id));
+        }
+      }
+      if (orphanIds.size > 0) {
+        tagGroups.push({ id: "__orphan__" });
+        tagsByGroup["__orphan__"] = [...orphanIds].map((id) => ({ id }));
+      }
+    } else {
+      tagGroups.push({ id: "__flat__" });
+      const flat = new Set();
+      for (const classModel of this._classModels) {
+        for (const id of (classModel.tags ?? [])) flat.add(String(id));
+      }
+      tagsByGroup["__flat__"] = [...flat].map((id) => ({ id }));
+    }
 
     return this._classModels.filter((classModel) => {
-      const tags = classModel.tags ?? [];
-      // Excludes are AND-NOT — any single match knocks the row out.
-      // Match the React FilterBar's default exclusion semantics; the
-      // group-mode AND/OR/XOR knobs aren't surfaced in this initial
-      // wiring, so the simpler "any included match passes, any
-      // excluded match blocks" rule applies. We can graft on the
-      // group-combine modes once the catalog ships grouped tags.
-      if (excludeTags.some((id) => tags.includes(id))) return false;
-      if (includeTags.length && !includeTags.some((id) => tags.includes(id))) return false;
+      const tags = (classModel.tags ?? []).map(String);
+      if (!matchesTagGroupsTriState({
+        itemTagIds: tags,
+        tagGroups,
+        tagsByGroup,
+        tagStates,
+        groupCombineModes,
+        groupExclusionModes,
+      })) return false;
 
       if (!search) return true;
       const haystack = [

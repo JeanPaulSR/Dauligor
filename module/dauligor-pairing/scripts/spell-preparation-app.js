@@ -1,6 +1,18 @@
 import { MODULE_ID, SPELL_PREPARATION_TEMPLATE } from "./constants.js";
 import { notifyInfo, notifyWarn } from "./utils.js";
 import { fetchFullSpellItem } from "./class-import-service.js";
+import {
+  renderSectionFilterPanel,
+  bindSectionFilterPanelEvents,
+  matchesSingleAxis as sectionMatchesSingleAxis,
+  matchesMultiAxis as sectionMatchesMultiAxis,
+  matchesTagGroupsTriState,
+  nextStateForward,
+  nextStateReverse,
+  nextCombineMode,
+  nextCombineModeReverse,
+  SECTION_FILTER_STATE,
+} from "./section-filter-panel.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -132,6 +144,23 @@ const DEFAULT_SHEET_MODE   = SHEET_MODE_PREPARED;
 // ---------------------------------------------------------------------------
 // Module-local helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Fresh ephemeral UI state for SectionFilterPanel. Each filter target
+ * (pool / favorites) keeps its own copy so a Hide-All in one doesn't
+ * collapse the other. Re-created on modal close so reopening starts
+ * with every section expanded and no chip-search active — matches the
+ * React panel's intentional "ephemeral, not persisted" UX.
+ */
+function createFreshFilterUiState() {
+  return {
+    hiddenAxes: new Set(),
+    expandedParents: new Map(),
+    allSubtagAxes: new Set(),
+    altLabelAxes: new Set(),
+    chipSearch: "",
+  };
+}
 
 function resolveActorDocument(actorLike) {
   if (!actorLike) return null;
@@ -757,12 +786,25 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this._state = {
       // Pool list state (per-class)
       poolSearch: "",
-      poolFilters: { axes: {} },
+      // Tri-state filter shape — `axes[key]` carries
+      //   states: { [value]: 1 (include) | 2 (exclude) }
+      //   combineMode: 'OR' | 'AND' | 'XOR'  (include-side combinator)
+      //   exclusionMode: 'OR' | 'AND' | 'XOR' (exclude-side combinator)
+      // `groupCombineModes` / `groupExclusionModes` carry the same
+      // OR/AND/XOR but keyed by tag-group id (used by `tag:<groupId>`
+      // axes, which read per-group instead of per-axis).
+      poolFilters: { axes: {}, groupCombineModes: {}, groupExclusionModes: {} },
       onSheetFilter: false,
 
       // Favorites list state (independent search + filter)
       favSearch: "",
-      favFilters: { axes: {} },
+      favFilters: { axes: {}, groupCombineModes: {}, groupExclusionModes: {} },
+
+      // SectionFilterPanel UI state — per-target so the favourites
+      // filter modal can have different sections expanded than the
+      // pool one. Reset on modal close so reopening starts fresh.
+      poolFilterUi: createFreshFilterUiState(),
+      favFilterUi: createFreshFilterUiState(),
 
       // Filter modal — null when closed, "pool" or "favorites" when open.
       filterModalOpen: null,
@@ -1865,87 +1907,177 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   _resetFilters(target) {
-    this._setFilterStateFor(target, { axes: {} });
+    this._setFilterStateFor(target, { axes: {}, groupCombineModes: {}, groupExclusionModes: {} });
     this._setSearchFor(target, "");
     if (target === "pool") this._state.onSheetFilter = false;
   }
 
-  /** Toggle a chip on the given axis between selected / unselected. */
-  _toggleChip(target, axis, value) {
+  // ── Tri-state cyclers (forward / reverse) ────────────────────────────
+  //
+  // SectionFilterPanel left-clicks call the forward cyclers (off →
+  // include → exclude → off); right-clicks call the reverse. Each
+  // cycler updates the per-target filter state in place; the caller
+  // re-renders the manager.
+
+  _cycleAxisState(target, axisKey, value) {
+    this._mutateAxisStates(target, axisKey, (states) => {
+      const v = String(value);
+      const next = nextStateForward(states[v] || 0);
+      if (next === SECTION_FILTER_STATE.OFF) delete states[v];
+      else states[v] = next;
+    });
+  }
+
+  _cycleAxisStateReverse(target, axisKey, value) {
+    this._mutateAxisStates(target, axisKey, (states) => {
+      const v = String(value);
+      const next = nextStateReverse(states[v] || 0);
+      if (next === SECTION_FILTER_STATE.OFF) delete states[v];
+      else states[v] = next;
+    });
+  }
+
+  _cycleAxisCombineMode(target, axisKey, reverse = false) {
+    this._mutateAxisField(target, axisKey, (axis) => {
+      axis.combineMode = reverse
+        ? nextCombineModeReverse(axis.combineMode || 'OR')
+        : nextCombineMode(axis.combineMode || 'OR');
+    });
+  }
+
+  _cycleAxisExclusionMode(target, axisKey, reverse = false) {
+    this._mutateAxisField(target, axisKey, (axis) => {
+      axis.exclusionMode = reverse
+        ? nextCombineModeReverse(axis.exclusionMode || 'OR')
+        : nextCombineMode(axis.exclusionMode || 'OR');
+    });
+  }
+
+  _cycleGroupCombineMode(target, groupId, reverse = false) {
+    const state = this._filterStateFor(target);
+    const map = { ...(state.groupCombineModes ?? {}) };
+    map[groupId] = reverse
+      ? nextCombineModeReverse(map[groupId] || 'OR')
+      : nextCombineMode(map[groupId] || 'OR');
+    this._setFilterStateFor(target, { ...state, groupCombineModes: map });
+  }
+
+  _cycleGroupExclusionMode(target, groupId, reverse = false) {
+    const state = this._filterStateFor(target);
+    const map = { ...(state.groupExclusionModes ?? {}) };
+    map[groupId] = reverse
+      ? nextCombineModeReverse(map[groupId] || 'OR')
+      : nextCombineMode(map[groupId] || 'OR');
+    this._setFilterStateFor(target, { ...state, groupExclusionModes: map });
+  }
+
+  // Bulk "All / Clear / None" — operate over a specific value list so
+  // the panel can pass in just the pool-visible values (avoids
+  // including pruned-from-pool values that the user never sees).
+  _setAxisStatesBulk(target, axisKey, values, mode) {
+    this._mutateAxisStates(target, axisKey, (states) => {
+      // Replace, not merge — bulk = nuke previous state for this axis.
+      for (const k of Object.keys(states)) delete states[k];
+      if (mode === SECTION_FILTER_STATE.OFF) return;
+      for (const v of values) states[String(v)] = mode;
+    });
+  }
+
+  _mutateAxisStates(target, axisKey, mutator) {
+    this._mutateAxisField(target, axisKey, (axis) => {
+      const states = { ...(axis.states ?? {}) };
+      mutator(states);
+      axis.states = states;
+    });
+  }
+
+  _mutateAxisField(target, axisKey, mutator) {
     const state = this._filterStateFor(target);
     const axes = { ...(state.axes ?? {}) };
-    const current = axes[axis] ?? { states: {} };
-    const states = { ...(current.states ?? {}) };
-    if (states[String(value)]) delete states[String(value)];
-    else states[String(value)] = 1;
-    axes[axis] = { ...current, states };
+    const axis = { ...(axes[axisKey] ?? { states: {} }) };
+    mutator(axis);
+    axes[axisKey] = axis;
     this._setFilterStateFor(target, { ...state, axes });
   }
 
+  /** Legacy single-state toggle — kept for any code path that still
+   *  expects binary on/off semantics (e.g. one-shot "show on-sheet"
+   *  pseudo-filters). Delegates to the forward tri-state cycler so
+   *  the underlying state model stays consistent. */
+  _toggleChip(target, axisKey, value) {
+    this._cycleAxisState(target, axisKey, value);
+  }
+
   /**
-   * Match an item against a single axis filter. Returns true when the
-   * axis has no chips selected ("match anything") or when the item's
-   * value is among the selected chip set.
+   * Match an item against a single-valued axis filter (level / school
+   * / source / activation / range / duration / shape). Tri-state aware:
+   *   - no chips set → match
+   *   - excluded value → never match
+   *   - some includes set → match iff item's value is in the includes
+   * Single-valued axes can't trip AND/XOR meaningfully (a spell has
+   * exactly one level), so we lean on the shared `matchesSingleAxis`
+   * helper from section-filter-panel.js — same behaviour as the React
+   * app's filter pages.
    */
   _matchesAxis(item, target, axis, valueGetter) {
     const state = this._filterStateFor(target);
-    const axisState = state.axes?.[axis];
-    const selected = axisState?.states ?? {};
-    const keys = Object.keys(selected).filter((k) => selected[k]);
-    if (keys.length === 0) return true;
-    const v = String(valueGetter(item));
-    return keys.includes(v);
-  }
-
-  _matchesProperties(item, target) {
-    const state = this._filterStateFor(target);
-    const axisState = state.axes?.property;
-    const selected = axisState?.states ?? {};
-    const keys = Object.keys(selected).filter((k) => selected[k]);
-    if (keys.length === 0) return true;
-    const flags = poolFlags(item);
-    for (const key of keys) {
-      if (key === "concentration" && !flags.concentration) return false;
-      if (key === "ritual"        && !flags.ritual)        return false;
-      if (key === "vocal"         && !flags.componentsVocal)    return false;
-      if (key === "somatic"       && !flags.componentsSomatic)  return false;
-      if (key === "material"      && !flags.componentsMaterial) return false;
-    }
-    return true;
+    return sectionMatchesSingleAxis(valueGetter(item), state.axes?.[axis]);
   }
 
   /**
-   * Tag-group filter matching. Each tag group is its own filter axis
-   * with axis key `tag:<groupId>`. A spell matches when, for every
-   * group with at least one chip selected, ANY of the spell's tagIds
-   * (with ancestor-expansion via `parentTagId`, mirroring the app's
-   * `expandTagsWithAncestors`) is among the selected chips.
-   *
-   * Matches the public /compendium/spells include-OR semantics (the
-   * app's UI also supports AND / XOR per group via combineMode, but
-   * the manager keeps the simpler OR-within-axis model from the rest
-   * of its filters for consistency).
+   * Multi-valued Properties axis. Each spell carries a SET of
+   * properties (concentration, ritual, V/S/M); applies include +
+   * exclude with the configured combine + exclusion modes.
+   */
+  _matchesProperties(item, target) {
+    const state = this._filterStateFor(target);
+    const axisState = state.axes?.property;
+    if (!axisState) return true;
+    const flags = poolFlags(item);
+    const have = new Set();
+    if (flags.concentration) have.add('concentration');
+    if (flags.ritual) have.add('ritual');
+    if (flags.componentsVocal) have.add('vocal');
+    if (flags.componentsSomatic) have.add('somatic');
+    if (flags.componentsMaterial) have.add('material');
+    return sectionMatchesMultiAxis(have, axisState);
+  }
+
+  /**
+   * Tag-group filter matching with tri-state + per-group combinators.
+   * `tagStates` is built from every `tag:<groupId>` axis on the active
+   * filter state, flattened into the shape `matchesTagGroupsTriState`
+   * expects (id → 1|2 across all groups). Group combine/exclude modes
+   * come from the same per-target maps.
    */
   _matchesTagGroups(item, target) {
     if (!this._tagCatalog) return true;
     const state = this._filterStateFor(target);
-    const itemTagIds = Array.isArray(poolFlags(item).tagIds) ? poolFlags(item).tagIds : [];
-    if (itemTagIds.length === 0) {
-      // Spell has no tags — fails any group that has chips selected.
-      for (const group of this._tagCatalog.tagGroups) {
-        const axisKey = `tag:${group.id}`;
-        const axisState = state.axes?.[axisKey];
-        const selected = axisState?.states ?? {};
-        if (Object.keys(selected).some((k) => selected[k])) return false;
-      }
-      return true;
-    }
+    const groupCombineModes = state.groupCombineModes ?? {};
+    const groupExclusionModes = state.groupExclusionModes ?? {};
 
-    // Ancestor-expand the spell's tagIds so a parent-tag chip matches
-    // a spell carrying any subtag of it.
-    const expanded = new Set(itemTagIds.map(String));
+    // Build the flat tagStates from per-axis storage. We keep axes
+    // keyed by `tag:<groupId>` so each group's modal section can clear
+    // independently; the matcher just needs the merged record.
+    const tagStates = {};
+    for (const group of this._tagCatalog.tagGroups) {
+      const axisKey = `tag:${group.id}`;
+      const axisStates = state.axes?.[axisKey]?.states ?? {};
+      for (const [tagId, st] of Object.entries(axisStates)) {
+        if (st === SECTION_FILTER_STATE.INCLUDE || st === SECTION_FILTER_STATE.EXCLUDE) {
+          tagStates[tagId] = st;
+        }
+      }
+    }
+    if (Object.keys(tagStates).length === 0) return true;
+
+    // Ancestor-expand the spell's tagIds so a parent-tag include
+    // matches subtag-tagged spells (same behaviour as the in-app
+    // resolver and the public /compendium/spells filter).
+    const rawIds = Array.isArray(poolFlags(item).tagIds) ? poolFlags(item).tagIds : [];
+    const expanded = new Set(rawIds.map(String));
     const tagsById = this._tagCatalog.tagsById;
-    for (const id of itemTagIds) {
+    for (const id of rawIds) {
       let cursor = tagsById.get(String(id));
       while (cursor?.parentTagId) {
         if (expanded.has(cursor.parentTagId)) break;
@@ -1954,15 +2086,20 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       }
     }
 
+    // tagsByGroup expected by the matcher: { [groupId]: [{ id }] }.
+    const tagsByGroup = {};
     for (const group of this._tagCatalog.tagGroups) {
-      const axisKey = `tag:${group.id}`;
-      const axisState = state.axes?.[axisKey];
-      const selected = axisState?.states ?? {};
-      const selectedKeys = Object.keys(selected).filter((k) => selected[k]);
-      if (selectedKeys.length === 0) continue;
-      if (!selectedKeys.some((tid) => expanded.has(String(tid)))) return false;
+      tagsByGroup[group.id] = (this._tagCatalog.tagsByGroup.get(group.id) ?? [])
+        .map(t => ({ id: String(t.id) }));
     }
-    return true;
+    return matchesTagGroupsTriState({
+      itemTagIds: expanded,
+      tagGroups: this._tagCatalog.tagGroups,
+      tagsByGroup,
+      tagStates,
+      groupCombineModes,
+      groupExclusionModes,
+    });
   }
 
   /**
@@ -3719,6 +3856,13 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   }
 
   // ---- Filter modal (shared, opens for pool or favorites) --------------
+  //
+  // Tri-state pill panel — same UX as dauligor.com's /compendium/spells
+  // filter modal. Each axis carries its own All / Clear / None / OR-AND-
+  // XOR combine + exclude / Subtags / Abbr / Hide buttons; the modal
+  // header carries a chip-label search + Show/Hide-All + Reset. Subtag
+  // drawers handle hierarchical tag groups (parent → children). All
+  // visual + interaction parity with the React SectionFilterPanel.
 
   _renderFilterModal(fullPool, classModels) {
     if (!this._filterModalRegion) return;
@@ -3731,192 +3875,356 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     this._filterModalRegion.hidden = false;
 
     // Aggregate source/school ids visible in the relevant pool so the
-    // chip set isn't cluttered by sources that produce no matches.
+    // pill set isn't cluttered by values that produce no matches.
     const visibleItems = target === "favorites"
       ? this._buildFavoritesPool(classModels)
       : fullPool;
     const sourcesInPool = [...new Set(visibleItems.map(poolSpellSourceId).filter(Boolean))].sort();
     const schoolsInPool = [...new Set(visibleItems.map(poolSchool).filter(Boolean))].sort();
 
-    // (Source labels resolve directly via the catalog now that the
-    // server-side endpoint ships both semantic + legacy ids. No
-    // background pre-warm needed.)
+    // Pool-visible tag ids — drives both the visible-tag filter on each
+    // tag group AND the "All" handler's value list (so bulk-include
+    // only selects tags actually in the user's view).
+    const tagIdsInPool = new Set();
+    for (const item of visibleItems) {
+      const ids = poolFlags(item).tagIds;
+      if (Array.isArray(ids)) for (const id of ids) tagIdsInPool.add(String(id));
+    }
 
-    const ax = (axis) => this._filterStateFor(target).axes?.[axis]?.states ?? {};
-    const chipsFor = (axis, options) => options.map((opt) => {
-      const sel = !!ax(axis)[String(opt.v)];
-      return `<button type="button"
-        class="dauligor-spell-manager__modal-chip ${sel ? "dauligor-spell-manager__modal-chip--selected" : ""}"
-        data-action="modal-chip"
-        data-axis="${escapeHtml(axis)}"
-        data-value="${escapeHtml(String(opt.v))}"
-      >${escapeHtml(opt.l)}</button>`;
-    }).join("");
-
-    const section = (title, axis, options) => `
-      <div class="dauligor-spell-manager__modal-section">
-        <div class="dauligor-spell-manager__modal-section-header">
-          <span class="dauligor-spell-manager__modal-section-title">${escapeHtml(title)}</span>
-          <span class="dauligor-spell-manager__modal-section-actions">
-            <button type="button" class="dauligor-spell-manager__modal-shortcut" data-action="modal-all" data-axis="${escapeHtml(axis)}">All</button>
-            <button type="button" class="dauligor-spell-manager__modal-shortcut" data-action="modal-clear" data-axis="${escapeHtml(axis)}">Clear</button>
-          </span>
-        </div>
-        <div class="dauligor-spell-manager__modal-chips">${chipsFor(axis, options)}</div>
-      </div>
-    `;
-
-    const levelOptions = SPELL_LEVELS_ALL.map((n) => ({ v: String(n), l: n === 0 ? "Cantrip" : `Level ${n}` }));
-    const schoolOptions = SCHOOL_ORDER
-      .filter((k) => schoolsInPool.includes(k) || schoolsInPool.length === 0)
-      .map((k) => ({ v: k, l: SCHOOL_LABELS[k] || k }));
-    const activationOptions = ACTIVATION_ORDER.map((b) => ({ v: b, l: ACTIVATION_LABELS[b] }));
-    const rangeOptions      = RANGE_ORDER.map((b) => ({ v: b, l: RANGE_LABELS[b] }));
-    const durationOptions   = DURATION_ORDER.map((b) => ({ v: b, l: DURATION_LABELS[b] }));
-    const shapeOptions      = SHAPE_ORDER.map((b) => ({ v: b, l: SHAPE_LABELS[b] }));
-    const propertyOptions   = PROPERTY_ORDER.map((b) => ({ v: b, l: PROPERTY_LABELS[b] }));
-
-    // Source chips: render one per distinct sourceId in the pool.
-    // Label = catalog shortName when available, else the spell-book
-    // abbreviation from any cached full-spell payload that shares the
-    // sourceId, else a short fallback (first 5 chars of the id). The
-    // chip is still filterable in all three cases — only the label
-    // visibility changes.
-    const sourceOptions = sourcesInPool.map((sid) => {
-      const resolved = this._sourceShortName(sid);
-      const label = resolved || String(sid).slice(0, 5);
-      return { v: sid, l: label };
-    });
-
-    // Tag-group filter sections. Each spell-classified tag group
-    // becomes its own axis (`tag:<groupId>`) with chips for the tags
-    // actually present in the visible pool. Chips OUT of the visible
-    // pool are skipped so the modal doesn't list "Forbidden Tag" for
-    // a Wizard's pool that contains zero such spells. The Tag groups
-    // are only rendered once the tag catalog has loaded — until then
-    // the section is omitted (the catalog usually lands within a few
-    // hundred ms of manager open).
-    const tagGroupSections = (() => {
-      if (!this._tagCatalog || this._tagCatalog.tagGroups.length === 0) return "";
-      const usedTagIds = new Set();
-      for (const item of visibleItems) {
-        const ids = poolFlags(item).tagIds;
-        if (Array.isArray(ids)) for (const id of ids) usedTagIds.add(String(id));
-      }
-      const sections = [];
-      for (const group of this._tagCatalog.tagGroups) {
-        const tagsInGroup = (this._tagCatalog.tagsByGroup.get(group.id) ?? [])
-          .filter((t) => usedTagIds.has(t.id));
-        if (tagsInGroup.length === 0) continue;
-        // Roots first, then subtags sorted by their parent's name —
-        // mirrors the app's tagHierarchy ordering. Within each tier
-        // we sort by name for stability.
-        const roots = tagsInGroup.filter((t) => !t.parentTagId).sort((a, b) => a.name.localeCompare(b.name));
-        const subs = tagsInGroup.filter((t) => t.parentTagId).sort((a, b) => a.name.localeCompare(b.name));
-        const ordered = [...roots, ...subs];
-        const opts = ordered.map((t) => ({ v: t.id, l: t.parentTagId ? `↳ ${t.name}` : t.name }));
-        sections.push(section(group.name, `tag:${group.id}`, opts));
-      }
-      return sections.join("");
-    })();
-
+    const axes = this._buildFilterAxes({ sourcesInPool, schoolsInPool, tagIdsInPool });
+    const filterState = this._filterStateFor(target);
+    const uiState = this._uiStateFor(target);
     const title = target === "favorites" ? "Filter Favourites" : "Filter Spells";
+
+    const panelHtml = renderSectionFilterPanel({
+      axes,
+      axisFilters: filterState.axes ?? {},
+      tagStates: this._flattenTagStates(filterState),
+      groupCombineModes: filterState.groupCombineModes ?? {},
+      groupExclusionModes: filterState.groupExclusionModes ?? {},
+      uiState,
+      title,
+      searchPlaceholder: "Filter pills…",
+      resetLabel: "Reset Filters",
+      showCloseButton: true,
+    });
 
     this._filterModalRegion.innerHTML = `
       <div class="dauligor-spell-manager__modal-backdrop" data-action="close-modal"></div>
-      <div class="dauligor-spell-manager__modal-card" role="dialog" aria-modal="true">
-        <header class="dauligor-spell-manager__modal-header">
-          <h2 class="dauligor-spell-manager__modal-title">${escapeHtml(title)}</h2>
-          <button type="button" class="dauligor-spell-manager__modal-close" data-action="close-modal" title="Close">×</button>
-        </header>
-        <div class="dauligor-spell-manager__modal-body">
-          ${section("Level", "level", levelOptions)}
-          ${section("School", "school", schoolOptions)}
-          ${sourceOptions.length ? section("Source", "source", sourceOptions) : ""}
-          ${section("Casting Time", "activation", activationOptions)}
-          ${section("Range", "range", rangeOptions)}
-          ${section("Duration", "duration", durationOptions)}
-          ${section("Shape", "shape", shapeOptions)}
-          ${section("Properties", "property", propertyOptions)}
-          ${tagGroupSections}
-        </div>
-        <footer class="dauligor-spell-manager__modal-footer">
-          <button type="button" class="dauligor-spell-manager__modal-button dauligor-spell-manager__modal-button--ghost" data-action="modal-reset">Reset</button>
-          <button type="button" class="dauligor-spell-manager__modal-button" data-action="close-modal">Apply &amp; Close</button>
-        </footer>
+      <div class="dauligor-spell-manager__modal-card dauligor-spell-manager__modal-card--section-filter" role="dialog" aria-modal="true">
+        ${panelHtml}
       </div>
     `;
 
-    const close = async () => {
-      this._state.filterModalOpen = null;
-      await this._renderManager();
+    // Backdrop click still closes; the panel's own × button delegates
+    // via the "close" action which we wire below.
+    this._filterModalRegion.querySelectorAll(`[data-action="close-modal"]`).forEach((el) => {
+      el.addEventListener("click", async () => {
+        this._state.filterModalOpen = null;
+        // Reset ephemeral UI state on close so reopening starts fresh
+        // (matches the React panel's intentional non-persisted UX).
+        if (target === "favorites") this._state.favFilterUi = createFreshFilterUiState();
+        else this._state.poolFilterUi = createFreshFilterUiState();
+        await this._renderManager();
+      });
+    });
+
+    const root = this._filterModalRegion.querySelector(".dauligor-section-filter");
+    if (!root) return;
+
+    const rerender = async () => { await this._renderManager(); };
+
+    // Translate "All" / "Clear" / "None" against the right value set —
+    // for axis-kind, use the static or pool-derived value list; for
+    // tag-kind, pull from the pool-visible tag set inside that group.
+    const allValuesForAxis = (axisKey) => {
+      if (axisKey === "level")      return SPELL_LEVELS_ALL.map(String);
+      if (axisKey === "school")     return SCHOOL_ORDER;
+      if (axisKey === "source")     return sourcesInPool;
+      if (axisKey === "activation") return ACTIVATION_ORDER;
+      if (axisKey === "range")      return RANGE_ORDER;
+      if (axisKey === "duration")   return DURATION_ORDER;
+      if (axisKey === "shape")      return SHAPE_ORDER;
+      if (axisKey === "property")   return PROPERTY_ORDER;
+      if (axisKey.startsWith("tag:")) {
+        const gid = axisKey.slice(4);
+        return (this._tagCatalog?.tagsByGroup?.get(gid) ?? [])
+          .filter((t) => tagIdsInPool.has(String(t.id)))
+          .map((t) => String(t.id));
+      }
+      return [];
     };
 
-    this._filterModalRegion.querySelectorAll(`[data-action="close-modal"]`).forEach((el) => {
-      el.addEventListener("click", close);
+    bindSectionFilterPanelEvents(root, {
+      cycleAxisState: async (axisKey, value) => {
+        this._cycleAxisState(target, axisKey, value);
+        await rerender();
+      },
+      cycleAxisStateReverse: async (axisKey, value) => {
+        this._cycleAxisStateReverse(target, axisKey, value);
+        await rerender();
+      },
+      // Tag pills route through the same axis-state path (the modal
+      // stores tag-group state under `tag:<groupId>` axes). Both the
+      // axisKey (used to look up which axis the pill came from) and
+      // the tagId arrive on the click handler — for the tag case the
+      // pill's data-section-action="pill" already dispatched to
+      // cycleTagState, but bindSectionFilterPanelEvents passes only
+      // the value. We re-find the axis by scanning data-section-row.
+      // Workaround: dispatch tag clicks to a per-target helper that
+      // finds the owning axisKey from the rendered DOM.
+      cycleTagState: async (tagId) => {
+        const owningAxis = this._findOwningTagAxis(root, tagId);
+        if (owningAxis) {
+          this._cycleAxisState(target, owningAxis, tagId);
+          await rerender();
+        }
+      },
+      cycleTagStateReverse: async (tagId) => {
+        const owningAxis = this._findOwningTagAxis(root, tagId);
+        if (owningAxis) {
+          this._cycleAxisStateReverse(target, owningAxis, tagId);
+          await rerender();
+        }
+      },
+      cycleAxisCombineMode: async (axisKey) => {
+        this._cycleAxisCombineMode(target, axisKey, false);
+        await rerender();
+      },
+      cycleAxisCombineModeReverse: async (axisKey) => {
+        this._cycleAxisCombineMode(target, axisKey, true);
+        await rerender();
+      },
+      cycleAxisExclusionMode: async (axisKey) => {
+        this._cycleAxisExclusionMode(target, axisKey, false);
+        await rerender();
+      },
+      cycleAxisExclusionModeReverse: async (axisKey) => {
+        this._cycleAxisExclusionMode(target, axisKey, true);
+        await rerender();
+      },
+      cycleGroupCombineMode: async (groupId) => {
+        this._cycleGroupCombineMode(target, groupId, false);
+        await rerender();
+      },
+      cycleGroupCombineModeReverse: async (groupId) => {
+        this._cycleGroupCombineMode(target, groupId, true);
+        await rerender();
+      },
+      cycleGroupExclusionMode: async (groupId) => {
+        this._cycleGroupExclusionMode(target, groupId, false);
+        await rerender();
+      },
+      cycleGroupExclusionModeReverse: async (groupId) => {
+        this._cycleGroupExclusionMode(target, groupId, true);
+        await rerender();
+      },
+      axisIncludeAll: async (axisKey) => {
+        this._setAxisStatesBulk(target, axisKey, allValuesForAxis(axisKey), SECTION_FILTER_STATE.INCLUDE);
+        await rerender();
+      },
+      axisExcludeAll: async (axisKey) => {
+        this._setAxisStatesBulk(target, axisKey, allValuesForAxis(axisKey), SECTION_FILTER_STATE.EXCLUDE);
+        await rerender();
+      },
+      axisClear: async (axisKey) => {
+        this._setAxisStatesBulk(target, axisKey, [], SECTION_FILTER_STATE.OFF);
+        await rerender();
+      },
+      // Tag-kind All/Clear/None — same single-axis storage as
+      // axis-kind (we store tag state under `tag:<groupId>` axes too),
+      // so the handler is identical. The panel passes axisKey + groupId
+      // both; we use axisKey since that's what our state model keys on.
+      groupIncludeAll: async (axisKey) => {
+        this._setAxisStatesBulk(target, axisKey, allValuesForAxis(axisKey), SECTION_FILTER_STATE.INCLUDE);
+        await rerender();
+      },
+      groupExcludeAll: async (axisKey) => {
+        this._setAxisStatesBulk(target, axisKey, allValuesForAxis(axisKey), SECTION_FILTER_STATE.EXCLUDE);
+        await rerender();
+      },
+      groupClear: async (axisKey) => {
+        this._setAxisStatesBulk(target, axisKey, [], SECTION_FILTER_STATE.OFF);
+        await rerender();
+      },
+      toggleAxisHidden: async (axisKey) => {
+        const ui = this._uiStateFor(target);
+        if (ui.hiddenAxes.has(axisKey)) ui.hiddenAxes.delete(axisKey);
+        else ui.hiddenAxes.add(axisKey);
+        await rerender();
+      },
+      toggleParentDrawer: async (axisKey, parentValue) => {
+        const ui = this._uiStateFor(target);
+        if (!ui.expandedParents.has(axisKey)) ui.expandedParents.set(axisKey, new Set());
+        const set = ui.expandedParents.get(axisKey);
+        if (set.has(parentValue)) set.delete(parentValue);
+        else set.add(parentValue);
+        await rerender();
+      },
+      toggleAllSubtags: async (axisKey) => {
+        const ui = this._uiStateFor(target);
+        if (ui.allSubtagAxes.has(axisKey)) ui.allSubtagAxes.delete(axisKey);
+        else ui.allSubtagAxes.add(axisKey);
+        await rerender();
+      },
+      toggleAltLabel: async (axisKey) => {
+        const ui = this._uiStateFor(target);
+        if (ui.altLabelAxes.has(axisKey)) ui.altLabelAxes.delete(axisKey);
+        else ui.altLabelAxes.add(axisKey);
+        await rerender();
+      },
+      setChipSearch: async (value) => {
+        const ui = this._uiStateFor(target);
+        ui.chipSearch = String(value ?? "");
+        await rerender();
+      },
+      showAllSections: async () => {
+        const ui = this._uiStateFor(target);
+        ui.hiddenAxes.clear();
+        await rerender();
+      },
+      hideAllSections: async () => {
+        const ui = this._uiStateFor(target);
+        ui.hiddenAxes = new Set(axes.map(a => a.key));
+        await rerender();
+      },
+      resetAll: async () => {
+        this._resetFilters(target);
+        await rerender();
+      },
+      close: async () => {
+        this._state.filterModalOpen = null;
+        if (target === "favorites") this._state.favFilterUi = createFreshFilterUiState();
+        else this._state.poolFilterUi = createFreshFilterUiState();
+        await rerender();
+      },
     });
-    this._filterModalRegion.querySelectorAll(`[data-action="modal-chip"]`).forEach((chip) => {
-      chip.addEventListener("click", async () => {
-        const axis = chip.dataset.axis;
-        const value = chip.dataset.value;
-        if (!axis || value == null) return;
-        this._toggleChip(target, axis, value);
-        await this._renderManager();
+  }
+
+  // Build the FilterSection[] for the section-filter panel. Same axes
+  // the modal used to render imperatively, now declarative so the
+  // panel can pick up subtag hierarchy + per-axis controls uniformly.
+  _buildFilterAxes({ sourcesInPool, schoolsInPool, tagIdsInPool }) {
+    const axes = [];
+
+    axes.push({
+      key: "level", name: "Level", kind: "axis",
+      values: SPELL_LEVELS_ALL.map((n) => ({
+        value: String(n),
+        label: n === 0 ? "Cantrip" : `Level ${n}`,
+      })),
+    });
+
+    const schoolValues = SCHOOL_ORDER
+      .filter((k) => schoolsInPool.length === 0 || schoolsInPool.includes(k))
+      .map((k) => ({ value: k, label: SCHOOL_LABELS[k] || k }));
+    if (schoolValues.length) {
+      axes.push({ key: "school", name: "School", kind: "axis", values: schoolValues });
+    }
+
+    if (sourcesInPool.length) {
+      // Source values use the per-source short name as the abbreviated
+      // primary label; the catalog-resolved full name (when available)
+      // populates labelAlt so the per-axis "abbr/full" toggle does
+      // something meaningful here. Falls back to the short-name in
+      // both slots when no full name is known.
+      const sourceValues = sourcesInPool.map((sid) => {
+        const short = this._sourceShortName(sid) || String(sid).slice(0, 5);
+        const full = this._sourceFullName(sid) || short;
+        return { value: sid, label: short, labelAlt: full };
       });
+      axes.push({ key: "source", name: "Source", kind: "axis", values: sourceValues });
+    }
+
+    axes.push({
+      key: "activation", name: "Casting Time", kind: "axis",
+      values: ACTIVATION_ORDER.map((b) => ({ value: b, label: ACTIVATION_LABELS[b] })),
     });
-    this._filterModalRegion.querySelectorAll(`[data-action="modal-all"]`).forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const axis = btn.dataset.axis;
-        if (!axis) return;
-        const state = this._filterStateFor(target);
-        const axes = { ...(state.axes ?? {}) };
-        const states = {};
-        const allValues = (() => {
-          if (axis === "level")      return SPELL_LEVELS_ALL.map(String);
-          if (axis === "school")     return SCHOOL_ORDER;
-          if (axis === "activation") return ACTIVATION_ORDER;
-          if (axis === "range")      return RANGE_ORDER;
-          if (axis === "duration")   return DURATION_ORDER;
-          if (axis === "shape")      return SHAPE_ORDER;
-          if (axis === "property")   return PROPERTY_ORDER;
-          if (axis === "source")     return sourcesInPool;
-          // Tag-group axis (`tag:<groupId>`): "All" selects every tag
-          // that's actually present in the visible pool for that
-          // group — same set the chip rendering used.
-          if (axis.startsWith("tag:")) {
-            const gid = axis.slice("tag:".length);
-            const usedTagIds = new Set();
-            for (const item of visibleItems) {
-              const ids = poolFlags(item).tagIds;
-              if (Array.isArray(ids)) for (const id of ids) usedTagIds.add(String(id));
-            }
-            return (this._tagCatalog?.tagsByGroup?.get(gid) ?? [])
-              .filter((t) => usedTagIds.has(t.id))
-              .map((t) => t.id);
-          }
-          return [];
-        })();
-        for (const v of allValues) states[String(v)] = 1;
-        axes[axis] = { ...(axes[axis] ?? {}), states };
-        this._setFilterStateFor(target, { ...state, axes });
-        await this._renderManager();
-      });
+    axes.push({
+      key: "range", name: "Range", kind: "axis",
+      values: RANGE_ORDER.map((b) => ({ value: b, label: RANGE_LABELS[b] })),
     });
-    this._filterModalRegion.querySelectorAll(`[data-action="modal-clear"]`).forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const axis = btn.dataset.axis;
-        if (!axis) return;
-        const state = this._filterStateFor(target);
-        const axes = { ...(state.axes ?? {}) };
-        delete axes[axis];
-        this._setFilterStateFor(target, { ...state, axes });
-        await this._renderManager();
-      });
+    axes.push({
+      key: "duration", name: "Duration", kind: "axis",
+      values: DURATION_ORDER.map((b) => ({ value: b, label: DURATION_LABELS[b] })),
     });
-    this._filterModalRegion.querySelector(`[data-action="modal-reset"]`)?.addEventListener("click", async () => {
-      this._resetFilters(target);
-      await this._renderManager();
+    axes.push({
+      key: "shape", name: "Shape", kind: "axis",
+      values: SHAPE_ORDER.map((b) => ({ value: b, label: SHAPE_LABELS[b] })),
     });
+    axes.push({
+      key: "property", name: "Properties", kind: "axis",
+      values: PROPERTY_ORDER.map((b) => ({ value: b, label: PROPERTY_LABELS[b] })),
+    });
+
+    // Tag groups — only rendered once the tag catalog has loaded.
+    // Subtags get `parentValue` wired so the panel's chevron drawer
+    // treats them as hierarchical children of the parent tag.
+    if (this._tagCatalog && this._tagCatalog.tagGroups.length > 0) {
+      for (const group of this._tagCatalog.tagGroups) {
+        const groupTags = (this._tagCatalog.tagsByGroup.get(group.id) ?? [])
+          .filter((t) => tagIdsInPool.has(String(t.id)));
+        if (groupTags.length === 0) continue;
+        const idSet = new Set(groupTags.map((t) => String(t.id)));
+        axes.push({
+          key: `tag:${group.id}`,
+          name: group.name,
+          kind: "tag",
+          axisKey: `tag:${group.id}`,  // we store tag-state in axisFilters keyed by this
+          groupId: group.id,
+          values: groupTags.map((t) => {
+            const parent = t.parentTagId ? String(t.parentTagId) : null;
+            return {
+              value: String(t.id),
+              label: t.name,
+              parentValue: parent && idSet.has(parent) ? parent : undefined,
+            };
+          }),
+        });
+      }
+    }
+
+    return axes;
+  }
+
+  _uiStateFor(target) {
+    return target === "favorites" ? this._state.favFilterUi : this._state.poolFilterUi;
+  }
+
+  // Tag axes store state under `tag:<groupId>` axisFilter entries.
+  // SectionFilterPanel reads tag pills off the flat `tagStates` record
+  // (so the same panel can render generic tag-kind axes from any
+  // group), so flatten here just before render.
+  _flattenTagStates(filterState) {
+    const out = {};
+    const axes = filterState.axes ?? {};
+    for (const key of Object.keys(axes)) {
+      if (!key.startsWith("tag:")) continue;
+      const states = axes[key].states ?? {};
+      for (const [tagId, st] of Object.entries(states)) {
+        if (st) out[tagId] = st;
+      }
+    }
+    return out;
+  }
+
+  // SectionFilterPanel reports tag-pill clicks via the flat `tagStates`
+  // API, which doesn't carry the owning axisKey. Recover it from the
+  // rendered DOM: the pill's `data-section-axis` carries the axis key
+  // we stored it under.
+  _findOwningTagAxis(rootEl, tagId) {
+    const sel = `.dauligor-section-filter__pill[data-section-value="${CSS.escape(String(tagId))}"]`;
+    const el = rootEl.querySelector(sel);
+    return el?.dataset?.sectionAxis ?? null;
+  }
+
+  // Best-effort full-name lookup for the abbr/full toggle on the
+  // Sources axis. Falls back to the short name when the catalog hasn't
+  // resolved or the source is unknown.
+  _sourceFullName(sourceId) {
+    if (!sourceId) return "";
+    const entry = this._sourcesById?.get(String(sourceId));
+    return entry?.name || "";
   }
 }
 
