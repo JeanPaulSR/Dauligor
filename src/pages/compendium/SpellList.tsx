@@ -843,6 +843,9 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     const axes: MiniPillAxis[] = [
       {
         key: 'source', name: 'Sources', kind: 'axis',
+        hasDefault: true, // sources default to "all included" — every other
+                          // axis's default is identical to clear, so we
+                          // omit the button there.
         values: sources.map(s => ({
           value: s.id,
           // Primary label = abbreviation (compact wall); labelAlt =

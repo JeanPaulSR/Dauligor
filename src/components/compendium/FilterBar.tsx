@@ -273,7 +273,11 @@ export function FilterBar({
             className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setIsFilterOpen(false)}
           />
-          <Card className="relative w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
+          {/* `py-0 gap-0` overrides the Card primitive's default
+              vertical padding + child gap so the modal body sits
+              flush with the header (no dead-space band above
+              "SOURCES" or below the last axis). */}
+          <Card className="relative w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col py-0 gap-0 border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
             <FilterBarContext.Provider value={ctxValue}>
               <div className="flex flex-col gap-3 p-5 border-b border-gold/10 bg-gold/5">
                 <div className="flex items-center justify-between gap-4">
@@ -291,9 +295,9 @@ export function FilterBar({
                 {/* Modal-wide affordances inspired by 5etools' filter
                     header: chip-label search filters which chips render
                     in every section; Show All / Hide All bulk-collapse
-                    every section. Each section keeps its own collapsed
-                    state but listens to the counters from
-                    FilterBarContext to apply the bulk command. */}
+                    every section; Reset clears everything globally
+                    (now lives at the top alongside the other controls
+                    so users don't have to scroll for it). */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="relative flex-1 min-w-[200px]">
                     <SearchInput
@@ -332,25 +336,25 @@ export function FilterBar({
                   >
                     Hide All
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={resetFilters}
+                    className="h-7 px-3 text-[10px] uppercase tracking-widest border-blood/30 text-blood/80 hover:bg-blood/10 hover:border-blood/50 hover:text-blood"
+                    title="Clear every filter"
+                  >
+                    {resetLabel}
+                  </Button>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+              {/* No vertical padding on the body — the axis cards
+                  inside already carry their own bottom-margin /
+                  gap and the user asked for the wrapper itself to
+                  be flush. Kept the horizontal padding so the
+                  scrollbar doesn't sit flush against the wall. */}
+              <div className="flex-1 overflow-y-auto px-5 custom-scrollbar space-y-2">
                 {renderFilters || defaultFilterContent}
-              </div>
-
-              <div className="p-5 border-t border-gold/10 bg-gold/5 flex items-center justify-between">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={resetFilters}
-                  className="label-text text-ink/40 hover:text-blood"
-                >
-                  {resetLabel}
-                </Button>
-                <Button onClick={() => setIsFilterOpen(false)} className="btn-gold-solid px-10 h-10 shadow-lg shadow-gold/20">
-                  {applyLabel}
-                </Button>
               </div>
             </FilterBarContext.Provider>
           </Card>

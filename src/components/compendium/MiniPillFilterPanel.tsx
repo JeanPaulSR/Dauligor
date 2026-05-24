@@ -77,6 +77,15 @@ export type MiniPillAxis = {
   key: string;
   name: string;
   icon?: LucideIcon;
+  /**
+   * Show the per-axis "default" button. Most axes don't have a
+   * meaningful default distinct from clear, so the button is
+   * pure noise — opt in only when the consumer wires an
+   * `axisRestoreDefault` that actually does something different
+   * (e.g. SpellList's Sources axis defaults to "all included"
+   * for its onboarding hint).
+   */
+  hasDefault?: boolean;
   values: Array<{
     value: string;
     label: string;
@@ -371,7 +380,7 @@ function MiniPillAxisRow({
 
   return (
     <div className="rounded border border-gold/10 bg-background/20 p-1.5">
-      <div className="flex items-baseline gap-2 mb-1 px-0.5 flex-wrap">
+      <div className="flex items-start gap-2 mb-1 px-0.5 flex-wrap">
         {/* All axis headers render at the same size now — base
             axes and tag groups share `text-xs` so the wall reads
             as a single rhythm of consistent section dividers
@@ -393,7 +402,12 @@ function MiniPillAxisRow({
           <AxisControlButton onClick={handleAll} label="all" color="include-hover" title="Include every value in this axis" />
           <AxisControlButton onClick={handleClear} label="clear" title="Remove every entry in this axis" />
           <AxisControlButton onClick={handleNone} label="none" color="exclude-hover" title="Exclude every value in this axis" />
-          <AxisControlButton onClick={handleDefault} label="default" title="Reset this axis to its default state" />
+          {/* Default button only when the axis has a meaningful
+              non-clear default — every other axis's "default" is
+              just clear, so showing it is pure noise. */}
+          {axis.hasDefault && (
+            <AxisControlButton onClick={handleDefault} label="default" title="Reset this axis to its default state" />
+          )}
           {handleCombineCycle && (
             <AxisControlButton
               onClick={handleCombineCycle}
@@ -567,14 +581,15 @@ function PillBody({
   const isExpanded = (parentValue: string) =>
     forceExpandAll || expandedParents.has(parentValue) || autoExpanded.has(parentValue);
 
-  // Visible roots — under chip-search we keep a root visible if (a) it
-  // matches itself, (b) any of its children matches (autoExpanded),
-  // or (c) it has an active state. Otherwise hide.
+  // Visible roots — at rest, every root renders. Under chip-search,
+  // a root is visible only if its label (primary or alt) matches the
+  // query or if one of its children matches (so the child's drawer
+  // anchor is still on screen). Active state is intentionally NOT a
+  // pin — search is about content match, not "what's currently set."
   const visibleRoots = roots.filter(r => {
-    const state = stateFor(r.value);
-    if (state) return true;
     if (!searching) return true;
     if (matchesPillSearch(r.label, axis.name, search)) return true;
+    if (r.labelAlt && matchesPillSearch(r.labelAlt, axis.name, search)) return true;
     if (autoExpanded.has(r.value)) return true;
     return false;
   });
@@ -589,12 +604,12 @@ function PillBody({
     // otherwise so axes with only primary labels still render fine.
     const renderedLabel = useAltLabel && v.labelAlt ? v.labelAlt : v.label;
     // Search filter for children inside drawers: hide non-matching
-    // unless active. The match check considers BOTH labels so a
-    // user searching by abbreviation finds the value even when
-    // full-label mode is the active display.
-    if (opts?.searchHide && !state) {
-      if (searching
-          && !matchesPillSearch(v.label, axis.name, search)
+    // regardless of active state. Search is strictly content-match;
+    // active pills don't get pinned by it. The match check considers
+    // BOTH labels so a user searching by abbreviation finds the
+    // value even when full-label mode is the active display.
+    if (opts?.searchHide && searching) {
+      if (!matchesPillSearch(v.label, axis.name, search)
           && (!v.labelAlt || !matchesPillSearch(v.labelAlt, axis.name, search))) {
         return null;
       }
@@ -936,17 +951,17 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
   // sections with relevant content stay.
   const renderAxisRow = (axis: MiniPillAxis): React.ReactNode => {
     if (queryLower !== '') {
-      const states = axis.kind === 'tag'
-        ? tagStates
-        : axisFilters[axis.axisKey ?? axis.key]?.states ?? {};
-      const anyMatchOrActive = axis.values.some(v => {
-        if (states[v.value]) return true; // active pill — always pin section
+      // Search is strictly about content match — active state is
+      // not part of the search, so we don't pin sections / pills
+      // open just because a filter is currently set. Whole axis
+      // disappears when nothing in it matches.
+      const anyMatch = axis.values.some(v => {
         if (matchesPillSearch(v.label, axis.name, effectiveSearch)) return true;
         if (v.labelAlt && matchesPillSearch(v.labelAlt, axis.name, effectiveSearch)) return true;
         if (matchesPillSearch(axis.name, axis.name, effectiveSearch)) return true;
         return false;
       });
-      if (!anyMatchOrActive) return null;
+      if (!anyMatch) return null;
     }
     return (
       <MiniPillAxisRow
