@@ -46,7 +46,11 @@ export type UseSpellFiltersResult = {
    */
   cycleAxisStateReverse: (axisKey: string, value: string) => void;
   cycleAxisCombineMode: (axisKey: string) => void;
+  /** Reverse direction of cycleAxisCombineMode (right-click). */
+  cycleAxisCombineModeReverse: (axisKey: string) => void;
   cycleAxisExclusionMode: (axisKey: string) => void;
+  /** Reverse direction of cycleAxisExclusionMode (right-click). */
+  cycleAxisExclusionModeReverse: (axisKey: string) => void;
   axisIncludeAll: (axisKey: string, values: readonly string[]) => void;
   axisExcludeAll: (axisKey: string, values: readonly string[]) => void;
   axisClear: (axisKey: string) => void;
@@ -64,8 +68,12 @@ export type UseSpellFiltersResult = {
   cycleTagStateReverse: (tagId: string) => void;
   groupCombineModes: Record<string, 'AND' | 'OR' | 'XOR'>;
   cycleGroupMode: (groupId: string) => void;
+  /** Reverse direction of cycleGroupMode (right-click). */
+  cycleGroupModeReverse: (groupId: string) => void;
   groupExclusionModes: Record<string, 'AND' | 'OR' | 'XOR'>;
   cycleExclusionMode: (groupId: string) => void;
+  /** Reverse direction of cycleExclusionMode (right-click). */
+  cycleExclusionModeReverse: (groupId: string) => void;
 
   // Derived
   activeFilterCount: number;
@@ -132,11 +140,31 @@ export function useSpellFilters(): UseSpellFiltersResult {
       return { ...prev, [axisKey]: { ...cur, combineMode: next } };
     });
   }, []);
+  // Reverse-direction cyclers (right-click affordance on combinator
+  // buttons in MiniPillFilterPanel). Same forward chain just walked
+  // in mirror order so a user can jump straight to XOR from OR
+  // without going through AND first.
+  const cycleAxisCombineModeReverse = useCallback((axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  }, []);
   const cycleAxisExclusionMode = useCallback((axisKey: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
       const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
       const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  }, []);
+  const cycleAxisExclusionModeReverse = useCallback((axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
       return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
     });
   }, []);
@@ -199,10 +227,24 @@ export function useSpellFilters(): UseSpellFiltersResult {
       return { ...prev, [groupId]: nextMode };
     });
   }, []);
+  const cycleGroupModeReverse = useCallback((groupId: string) => {
+    setGroupCombineModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const nextMode = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [groupId]: nextMode };
+    });
+  }, []);
   const cycleExclusionMode = useCallback((groupId: string) => {
     setGroupExclusionModes(prev => {
       const cur = prev[groupId] || 'OR';
       const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: nextMode };
+    });
+  }, []);
+  const cycleExclusionModeReverse = useCallback((groupId: string) => {
+    setGroupExclusionModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const nextMode = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
       return { ...prev, [groupId]: nextMode };
     });
   }, []);
@@ -317,7 +359,9 @@ export function useSpellFilters(): UseSpellFiltersResult {
     cycleAxisState,
     cycleAxisStateReverse,
     cycleAxisCombineMode,
+    cycleAxisCombineModeReverse,
     cycleAxisExclusionMode,
+    cycleAxisExclusionModeReverse,
     axisIncludeAll,
     axisExcludeAll,
     axisClear,
@@ -327,8 +371,10 @@ export function useSpellFilters(): UseSpellFiltersResult {
     cycleTagStateReverse,
     groupCombineModes,
     cycleGroupMode,
+    cycleGroupModeReverse,
     groupExclusionModes,
     cycleExclusionMode,
+    cycleExclusionModeReverse,
     activeFilterCount,
     resetAll,
     filter,
