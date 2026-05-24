@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Filter, RotateCcw, EyeOff, Eye } from 'lucide-react';
+import { Filter, RotateCcw } from 'lucide-react';
 import { Tabs, TabsContent } from '../ui/tabs';
 import { AccentTabsList, type AccentTab } from '../ui/AccentTabsList';
 import { SearchInput } from '../ui/SearchInput';
@@ -210,7 +210,6 @@ function MiniPillAxisRow({
   groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   setTagStates?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 }) {
-  const Icon = axis.icon;
   const isTag = axis.kind === 'tag';
   const axisKey = axis.axisKey ?? axis.key;
   const axisStates = isTag ? null : axisFilters[axisKey]?.states ?? {};
@@ -291,39 +290,41 @@ function MiniPillAxisRow({
   return (
     <div className="rounded border border-gold/10 bg-background/20 p-1.5">
       <div className="flex items-baseline gap-2 mb-1 px-0.5 flex-wrap">
-        {Icon ? <Icon className="w-3 h-3 text-ink/40 shrink-0" /> : null}
         <span className="text-[9px] uppercase tracking-[0.22em] text-ink/60 font-bold">{axis.name}</span>
-        <span className="text-[9px] text-ink/30">{axis.values.length}</span>
         {axisActive > 0 && (
           <span className="text-[9px] text-gold/70 font-bold">· {axisActive} active</span>
         )}
         {/* Per-axis controls — only the ones the caller wired show
             up. Wrapped in `ml-auto` so they all sit at the right
-            edge of the header row, mirroring 5e.tools' layout. */}
+            edge of the header row, mirroring 5e.tools' layout.
+            Include / exclude combinator buttons carry persistent
+            emerald / blood colour at all times so they're
+            distinguishable from the neutral bulk controls (all /
+            clear / none / default / hide) without needing a hover. */}
         <div className="ml-auto flex items-center gap-0.5 flex-wrap">
-          <AxisControlButton onClick={handleAll} label="all" hoverColor="emerald" title="Include every value in this axis" />
+          <AxisControlButton onClick={handleAll} label="all" color="include-hover" title="Include every value in this axis" />
           <AxisControlButton onClick={handleClear} label="clear" title="Remove every entry in this axis" />
-          <AxisControlButton onClick={handleNone} label="none" hoverColor="blood" title="Exclude every value in this axis" />
+          <AxisControlButton onClick={handleNone} label="none" color="exclude-hover" title="Exclude every value in this axis" />
           <AxisControlButton onClick={handleDefault} label="default" title="Reset this axis to its default state" />
           {handleCombineCycle && (
             <AxisControlButton
               onClick={handleCombineCycle}
-              label={`+${combineMode}`}
+              label={combineMode}
               title={`Include combinator (${combineMode}) — click to cycle OR / AND / XOR`}
-              hoverColor="emerald"
+              color="include"
             />
           )}
           {handleExclusionCycle && (
             <AxisControlButton
               onClick={handleExclusionCycle}
-              label={`−${exclusionMode}`}
+              label={exclusionMode}
               title={`Exclude combinator (${exclusionMode}) — click to cycle OR / AND / XOR`}
-              hoverColor="blood"
+              color="exclude"
             />
           )}
           <AxisControlButton
             onClick={toggleHidden}
-            icon={hidden ? Eye : EyeOff}
+            label={hidden ? 'show' : 'hide'}
             title={hidden ? 'Show this axis again' : 'Collapse this axis to just the header'}
           />
         </div>
@@ -348,7 +349,7 @@ function MiniPillAxisRow({
                   else cycleAxisStateReverse(axisKey, v.value);
                 }}
                 className={cn(
-                  'inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors select-none',
+                  'inline-flex items-center gap-0.5 rounded border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-colors select-none',
                   !state && 'border-gold/15 bg-card text-ink/55 hover:border-gold/40 hover:text-ink/90',
                   state === 1 && 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300',
                   state === 2 && 'border-blood/50 bg-blood/15 text-blood line-through',
@@ -366,9 +367,6 @@ function MiniPillAxisRow({
                 {state === 1 && <span className="text-emerald-400/80">+</span>}
                 {state === 2 && <span className="text-blood/70">−</span>}
                 <span>{v.label}</span>
-                {v.count !== undefined && !state && (
-                  <span className="text-[8px] text-ink/30 ml-0.5">·{v.count}</span>
-                )}
               </button>
             );
           })}
@@ -388,25 +386,38 @@ function MiniPillAxisRow({
  * Doesn't render at all when `onClick` is undefined — keeps the
  * "only show wired controls" contract simple at the call sites.
  *
- * Visual: looks like a real button at rest (visible border, subtle
- * card-tinted background, gold-leaning text) so the seven controls
- * read as a distinct toolbar cluster rather than a row of bare
- * labels. Hover bumps the border + text into the action's
- * semantic colour (emerald for include-flavour, blood for
- * exclude-flavour, gold for neutral).
+ * Color modes
+ * -----------
+ *   undefined / 'neutral'  — gold-leaning, hover gold. For
+ *                            mode-neutral actions (clear / default /
+ *                            hide / show).
+ *   'include-hover'        — gold at rest, emerald on hover. For
+ *                            "this adds include filters" actions
+ *                            (all). Same energy as the include
+ *                            pill colour, but only on commit.
+ *   'exclude-hover'        — gold at rest, blood on hover. Mirror
+ *                            of include-hover for "this adds
+ *                            exclude filters" (none).
+ *   'include' / 'exclude'  — emerald / blood at all times.
+ *                            For mode-pinned controls that always
+ *                            signal their semantic (the OR/AND/XOR
+ *                            combinator cyclers). Reading the row
+ *                            without hovering still reveals "this
+ *                            one is the include combinator, that
+ *                            one is the exclude combinator."
  */
 function AxisControlButton({
   onClick,
   label,
   icon: Icon,
   title,
-  hoverColor,
+  color,
 }: {
   onClick?: () => void;
   label?: string;
   icon?: LucideIcon;
   title: string;
-  hoverColor?: 'emerald' | 'blood';
+  color?: 'neutral' | 'include' | 'exclude' | 'include-hover' | 'exclude-hover';
 }) {
   if (!onClick) return null;
   return (
@@ -416,14 +427,14 @@ function AxisControlButton({
       title={title}
       className={cn(
         'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] uppercase tracking-widest font-bold transition-colors',
-        // Rest state — visible border + card-tinted background so
-        // each button reads as a real button at a glance. Gold-leaning
-        // text keeps the cluster cohesive against the axis label.
-        'border-gold/25 bg-card/60 text-ink/70',
-        // Hover treatment — semantic colour for the action.
-        !hoverColor && 'hover:bg-gold/15 hover:border-gold/50 hover:text-gold',
-        hoverColor === 'emerald' && 'hover:bg-emerald-500/15 hover:border-emerald-500/50 hover:text-emerald-300',
-        hoverColor === 'blood' && 'hover:bg-blood/15 hover:border-blood/50 hover:text-blood',
+        // Rest + hover styles, picked by color mode.
+        (!color || color === 'neutral' || color === 'include-hover' || color === 'exclude-hover') &&
+          'border-gold/25 bg-card/60 text-ink/70',
+        (!color || color === 'neutral') && 'hover:bg-gold/15 hover:border-gold/50 hover:text-gold',
+        color === 'include-hover' && 'hover:bg-emerald-500/15 hover:border-emerald-500/50 hover:text-emerald-300',
+        color === 'exclude-hover' && 'hover:bg-blood/15 hover:border-blood/50 hover:text-blood',
+        color === 'include' && 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-500/70',
+        color === 'exclude' && 'border-blood/50 bg-blood/15 text-blood hover:bg-blood/25 hover:border-blood/70',
       )}
     >
       {Icon ? <Icon className="w-2.5 h-2.5" /> : null}
@@ -476,11 +487,25 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
       return next;
     });
 
+  // Internal pill-name search — typed inside the embedded modal body
+  // to dim non-matching pills. Separate from the parent's `search`
+  // (which is the page-level spell-name search) because they answer
+  // different questions: parent search = "filter the result list",
+  // internal pillSearch = "find a pill in this modal." Conflating
+  // them was confusing — typing "fire" to find the Fire tag also
+  // searched the spell list, which the user didn't intend.
+  //
+  // In standalone (non-embedded) mode we keep using the parent's
+  // search for both, because there the panel itself owns the
+  // search field — no second one to conflict with.
+  const [pillSearch, setPillSearch] = useState('');
+  const effectiveSearch = embedded ? pillSearch : search;
+
   // Flatten the tabs->axes if tabs provided; the flat list is what
   // the include/exclude count + flat-fallback render path use.
   const flatAxes: MiniPillAxis[] = tabs ? tabs.flatMap(t => t.axes) : (axes ?? []);
 
-  const queryLower = search.trim().toLowerCase();
+  const queryLower = effectiveSearch.trim().toLowerCase();
 
   // Active state counts — across ALL axes, not just the visible tab.
   // Users navigating tabs should see at a glance whether the other
@@ -533,7 +558,9 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
   }, [tabs, axisFilters, tagStates]);
 
   // Row-rendering helper — shared between the flat-axes render path
-  // and the tabbed render path.
+  // and the tabbed render path. `effectiveSearch` is the value the
+  // pill-dim logic consults; in embedded mode that's the internal
+  // pillSearch state, otherwise the parent's `search`.
   const renderAxisRow = (axis: MiniPillAxis) => (
     <MiniPillAxisRow
       key={axis.key}
@@ -543,7 +570,7 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
       hidden={hiddenAxes.has(axis.key)}
       toggleHidden={() => toggleAxisHidden(axis.key)}
       queryLower={queryLower}
-      search={search}
+      search={effectiveSearch}
       cycleAxisState={cycleAxisState}
       cycleAxisStateReverse={cycleAxisStateReverse}
       cycleTagState={cycleTagState}
@@ -609,32 +636,20 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
         </div>
       )}
 
-      {/* Embedded mode emblems strip — counts + Reset live INSIDE the
-          modal body since the host FilterBar doesn't natively show
-          the include/exclude split. */}
-      {embedded && (includeCount > 0 || excludeCount > 0 || activeFilterCount > 0) && (
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          {includeCount > 0 && (
-            <StatusEmblem tone="success" size="sm" title={`${includeCount} include filter${includeCount === 1 ? '' : 's'}`}>
-              +{includeCount}
-            </StatusEmblem>
-          )}
-          {excludeCount > 0 && (
-            <StatusEmblem tone="error" size="sm" title={`${excludeCount} exclude filter${excludeCount === 1 ? '' : 's'}`}>
-              −{excludeCount}
-            </StatusEmblem>
-          )}
-          {activeFilterCount > 0 && (
-            <button
-              type="button"
-              onClick={resetAll}
-              className="ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-ink/55 hover:text-blood px-2 py-1 rounded border border-gold/10 hover:border-blood/40 transition-colors"
-              title={`Clear ${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}`}
-            >
-              <RotateCcw className="w-3 h-3" />
-              Reset
-            </button>
-          )}
+      {/* Embedded mode: a pill-name search above the tabs. Typing
+          "fire" dims every pill whose name doesn't contain "fire"
+          (case-insensitive), across BOTH tabs simultaneously — so
+          you can find a tag in the Advanced tab without opening
+          it first. Independent of the parent page's spell-name
+          search (see `pillSearch` state above for the reasoning). */}
+      {embedded && (
+        <div className="mb-2">
+          <SearchInput
+            value={pillSearch}
+            onChange={setPillSearch}
+            placeholder="Search filter values (tags, sources, schools…)"
+            className="h-8"
+          />
         </div>
       )}
 
