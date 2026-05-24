@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Filter, RotateCcw } from 'lucide-react';
 import { Tabs, TabsContent } from '../ui/tabs';
@@ -7,6 +7,7 @@ import { SearchInput } from '../ui/SearchInput';
 import { StatusEmblem } from '../ui/StatusEmblem';
 import { cn } from '../../lib/utils';
 import type { AxisState } from '../../hooks/useSpellFilters';
+import { useFilterBarContext } from './FilterBar';
 
 /**
  * Persistent mini-pill filter panel — production version of Variant E
@@ -329,12 +330,22 @@ function MiniPillAxisRow({
           />
         </div>
       </div>
-      {/* Pills — hidden when the user collapsed the axis. */}
+      {/* Pills — hidden when the user collapsed the axis OR when
+          a chip-search is active and the pill's label doesn't
+          match. Non-matching pills are completely removed from
+          the DOM rather than dimmed: the user asked for them to
+          "disappear", which makes the search behave like a
+          progressive filter rather than a faint highlight. */}
       {!hidden && (
         <div className="flex flex-wrap gap-1">
           {axis.values.map(v => {
             const state = isTag ? tagStates[v.value] : axisStates![v.value];
-            const dimmed = queryLower !== '' && !matchesPillSearch(v.label, axis.name, search);
+            // Pin active pills regardless of search so the user
+            // doesn't lose sight of what's currently filtering —
+            // typing into the search and then clearing it should
+            // not orphan an include/exclude they can't see.
+            const matches = queryLower === '' || matchesPillSearch(v.label, axis.name, search);
+            if (!matches && !state) return null;
             return (
               <button
                 key={v.value}
@@ -353,7 +364,6 @@ function MiniPillAxisRow({
                   !state && 'border-gold/15 bg-card text-ink/55 hover:border-gold/40 hover:text-ink/90',
                   state === 1 && 'border-emerald-500/50 bg-emerald-500/15 text-emerald-300',
                   state === 2 && 'border-blood/50 bg-blood/15 text-blood line-through',
-                  dimmed && 'opacity-20',
                 )}
                 title={
                   v.title ??
@@ -487,19 +497,34 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
       return next;
     });
 
-  // Internal pill-name search — typed inside the embedded modal body
-  // to dim non-matching pills. Separate from the parent's `search`
-  // (which is the page-level spell-name search) because they answer
-  // different questions: parent search = "filter the result list",
-  // internal pillSearch = "find a pill in this modal." Conflating
-  // them was confusing — typing "fire" to find the Fire tag also
-  // searched the spell list, which the user didn't intend.
-  //
-  // In standalone (non-embedded) mode we keep using the parent's
-  // search for both, because there the panel itself owns the
-  // search field — no second one to conflict with.
-  const [pillSearch, setPillSearch] = useState('');
-  const effectiveSearch = embedded ? pillSearch : search;
+  // Pill-name search — in embedded mode we subscribe to the host
+  // FilterBar's `chipSearch` context value (the "Filter chip
+  // labels…" input already in the modal header) so there's a
+  // single search bar in the UI, not two competing ones. In
+  // standalone mode (no FilterBar wrapping us) the context default
+  // is an empty string and the parent-passed `search` prop drives
+  // dim instead.
+  const filterBarCtx = useFilterBarContext();
+  const effectiveSearch = embedded ? filterBarCtx.chipSearch : search;
+
+  // Hide All / Show All wiring. FilterBar bumps a monotonic counter
+  // every time the user clicks the respective button; we react by
+  // collapsing or expanding every axis. The version-counter dance
+  // (rather than a boolean) matches the same pattern used by
+  // FilterBar's own section components — lets repeated clicks fire
+  // the effect every time even when state would otherwise be
+  // idempotent.
+  useEffect(() => {
+    if (!embedded || filterBarCtx.hideAllVersion === 0) return;
+    const allKeys = (tabs ? tabs.flatMap(t => t.axes) : (axes ?? [])).map(a => a.key);
+    setHiddenAxes(new Set(allKeys));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterBarCtx.hideAllVersion]);
+  useEffect(() => {
+    if (!embedded || filterBarCtx.showAllVersion === 0) return;
+    setHiddenAxes(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterBarCtx.showAllVersion]);
 
   // Flatten the tabs->axes if tabs provided; the flat list is what
   // the include/exclude count + flat-fallback render path use.
@@ -636,22 +661,10 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
         </div>
       )}
 
-      {/* Embedded mode: a pill-name search above the tabs. Typing
-          "fire" dims every pill whose name doesn't contain "fire"
-          (case-insensitive), across BOTH tabs simultaneously — so
-          you can find a tag in the Advanced tab without opening
-          it first. Independent of the parent page's spell-name
-          search (see `pillSearch` state above for the reasoning). */}
-      {embedded && (
-        <div className="mb-2">
-          <SearchInput
-            value={pillSearch}
-            onChange={setPillSearch}
-            placeholder="Search filter values (tags, sources, schools…)"
-            className="h-8"
-          />
-        </div>
-      )}
+      {/* No duplicate search input in embedded mode — the host
+          FilterBar already supplies "Filter chip labels…" in its
+          own modal header, and this panel subscribes to that value
+          via FilterBarContext. */}
 
       {/* Body — tabs OR flat list. */}
       {tabs ? (

@@ -35,7 +35,11 @@ const FilterBarContext = React.createContext<FilterBarContextValue>({
   hideAllVersion: 0,
   showAllVersion: 0,
 });
-function useFilterBarContext() {
+// Exported so sibling components rendered inside FilterBar's
+// `renderFilters` slot (e.g. MiniPillFilterPanel) can subscribe to
+// the chip-label search + bulk Show All / Hide All counters without
+// re-implementing the search input twice.
+export function useFilterBarContext() {
   return React.useContext(FilterBarContext);
 }
 
@@ -259,12 +263,17 @@ export function FilterBar({
       </div>
 
       {isFilterOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10">
+        // Outer container vertically centers the Card. Horizontal
+        // padding remains so the Card doesn't touch screen edges on
+        // narrow widths; vertical padding is dropped so the Card's
+        // explicit h-[90vh] yields the requested 5vh top + 5vh
+        // bottom margins on any viewport size.
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 sm:px-6 md:px-10">
           <div
             className="absolute inset-0 bg-ink/40 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setIsFilterOpen(false)}
           />
-          <Card className="relative w-full max-w-4xl max-h-full overflow-hidden flex flex-col border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
+          <Card className="relative w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col border-gold/20 bg-card shadow-2xl animate-in zoom-in-95 duration-200 pointer-events-auto">
             <FilterBarContext.Provider value={ctxValue}>
               <div className="flex flex-col gap-3 p-5 border-b border-gold/10 bg-gold/5">
                 <div className="flex items-center justify-between gap-4">
