@@ -383,6 +383,18 @@ function MiniPillAxisRow({
  * Doesn't render at all when `onClick` is undefined — keeps the
  * "only show wired controls" contract simple at the call sites.
  */
+/**
+ * Tiny control button used in each axis row's right-edge cluster.
+ * Doesn't render at all when `onClick` is undefined — keeps the
+ * "only show wired controls" contract simple at the call sites.
+ *
+ * Visual: looks like a real button at rest (visible border, subtle
+ * card-tinted background, gold-leaning text) so the seven controls
+ * read as a distinct toolbar cluster rather than a row of bare
+ * labels. Hover bumps the border + text into the action's
+ * semantic colour (emerald for include-flavour, blood for
+ * exclude-flavour, gold for neutral).
+ */
 function AxisControlButton({
   onClick,
   label,
@@ -403,12 +415,15 @@ function AxisControlButton({
       onClick={onClick}
       title={title}
       className={cn(
-        'inline-flex items-center gap-0.5 px-1 py-0.5 rounded border border-transparent text-[9px] uppercase tracking-widest text-ink/45 transition-colors',
-        // Hover tones — gold by default; emerald for include-flavour
-        // controls (All / +OR); blood for exclude-flavour (None / −OR).
-        !hoverColor && 'hover:text-gold hover:border-gold/30',
-        hoverColor === 'emerald' && 'hover:text-emerald-300 hover:border-emerald-500/40',
-        hoverColor === 'blood' && 'hover:text-blood hover:border-blood/40',
+        'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] uppercase tracking-widest font-bold transition-colors',
+        // Rest state — visible border + card-tinted background so
+        // each button reads as a real button at a glance. Gold-leaning
+        // text keeps the cluster cohesive against the axis label.
+        'border-gold/25 bg-card/60 text-ink/70',
+        // Hover treatment — semantic colour for the action.
+        !hoverColor && 'hover:bg-gold/15 hover:border-gold/50 hover:text-gold',
+        hoverColor === 'emerald' && 'hover:bg-emerald-500/15 hover:border-emerald-500/50 hover:text-emerald-300',
+        hoverColor === 'blood' && 'hover:bg-blood/15 hover:border-blood/50 hover:text-blood',
       )}
     >
       {Icon ? <Icon className="w-2.5 h-2.5" /> : null}
