@@ -7,7 +7,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
-import { TagGroupFilter, AxisFilterSection } from '../../components/compendium/FilterBar';
+import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { normalizeTagRow, orderTagsAsTree, tagPickerLabel, buildTagIndex } from '../../lib/tagHierarchy';
@@ -631,6 +631,231 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     updateQuery({ [axisKey]: { ...axis, states: {} }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
 
+  // Reverse-direction cyclers for the right-click affordance in
+  // MiniPillFilterPanel (mirror the forward cycle).
+  const cycleAxisStateReverse = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, value: string) => {
+    if (!draft) return;
+    const axis = (activeClause[axisKey] as any) || {};
+    const states = { ...(axis.states || {}) } as Record<string, number>;
+    const cur = states[value] || 0;
+    const nextState = cur === 0 ? 2 : cur === 2 ? 1 : 0;
+    if (nextState === 0) delete states[value];
+    else states[value] = nextState;
+    updateQuery({ [axisKey]: { ...axis, states }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
+  const cycleAxisCombineModeReverse = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
+    if (!draft) return;
+    const axis = (activeClause[axisKey] as any) || {};
+    const cur = (axis.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+    const next = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
+    updateQuery({ [axisKey]: { ...axis, combineMode: next }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
+  const cycleAxisExclusionModeReverse = (axisKey: AxisFieldName, legacyKey: LegacyFieldName) => {
+    if (!draft) return;
+    const axis = (activeClause[axisKey] as any) || {};
+    const cur = (axis.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+    const next = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
+    updateQuery({ [axisKey]: { ...axis, exclusionMode: next }, [legacyKey]: undefined } as Partial<RuleQuery>);
+  };
+
+  // Axis-key → legacy-field map. MiniPillFilterPanel passes only
+  // axisKey through its callbacks, but our writers need the legacy
+  // field name to clear out the back-compat array on every write
+  // (rule writes always migrate to the rich shape). Look up here.
+  const LEGACY_KEYS: Record<AxisFieldName, LegacyFieldName> = {
+    source: 'sourceFilterIds',
+    level: 'levelFilters',
+    school: 'schoolFilters',
+    activation: 'activationFilters',
+    range: 'rangeFilters',
+    duration: 'durationFilters',
+    shape: 'shapeFilters',
+    property: 'propertyFilters',
+  };
+  // MiniPillFilterPanel-compatible adapters — narrower signatures
+  // that match the panel's prop contract; internally they look up
+  // the legacy field name and dispatch to the full helpers above.
+  const panelCycleAxisState = (axisKey: string, value: string) =>
+    cycleAxisState(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName], value);
+  const panelCycleAxisStateReverse = (axisKey: string, value: string) =>
+    cycleAxisStateReverse(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName], value);
+  const panelCycleAxisCombineMode = (axisKey: string) =>
+    cycleAxisCombineMode(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName]);
+  const panelCycleAxisCombineModeReverse = (axisKey: string) =>
+    cycleAxisCombineModeReverse(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName]);
+  const panelCycleAxisExclusionMode = (axisKey: string) =>
+    cycleAxisExclusionMode(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName]);
+  const panelCycleAxisExclusionModeReverse = (axisKey: string) =>
+    cycleAxisExclusionModeReverse(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName]);
+  const panelAxisIncludeAll = (axisKey: string, values: readonly string[]) =>
+    axisIncludeAll(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName], values);
+  const panelAxisExcludeAll = (axisKey: string, values: readonly string[]) =>
+    axisExcludeAll(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName], values);
+  const panelAxisClear = (axisKey: string) =>
+    axisClear(axisKey as AxisFieldName, LEGACY_KEYS[axisKey as AxisFieldName]);
+
+  // Tag cyclers that operate on activeClause.tagStates via
+  // updateQuery (state lives in the editable rule entity, not in
+  // ephemeral component state). Mirror the pattern from
+  // useSpellFilters.cycleTagState etc.
+  const panelCycleTagState = (tagId: string) => {
+    const cur = (activeClause.tagStates || {})[tagId] || 0;
+    const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
+    const nextStates = { ...(activeClause.tagStates || {}) };
+    if (nextState === 0) delete nextStates[tagId];
+    else nextStates[tagId] = nextState;
+    updateQuery({ tagStates: nextStates, tagFilterIds: undefined });
+  };
+  const panelCycleTagStateReverse = (tagId: string) => {
+    const cur = (activeClause.tagStates || {})[tagId] || 0;
+    const nextState = cur === 0 ? 2 : cur === 2 ? 1 : 0;
+    const nextStates = { ...(activeClause.tagStates || {}) };
+    if (nextState === 0) delete nextStates[tagId];
+    else nextStates[tagId] = nextState;
+    updateQuery({ tagStates: nextStates, tagFilterIds: undefined });
+  };
+  const panelCycleGroupMode = (groupId: string) => {
+    const cur = (activeClause.groupCombineModes || {})[groupId] || 'OR';
+    const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+    updateQuery({ groupCombineModes: { ...(activeClause.groupCombineModes || {}), [groupId]: next } });
+  };
+  const panelCycleGroupModeReverse = (groupId: string) => {
+    const cur = (activeClause.groupCombineModes || {})[groupId] || 'OR';
+    const next = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
+    updateQuery({ groupCombineModes: { ...(activeClause.groupCombineModes || {}), [groupId]: next } });
+  };
+  const panelCycleExclusionMode = (groupId: string) => {
+    const cur = (activeClause.groupExclusionModes || {})[groupId] || 'OR';
+    const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+    updateQuery({ groupExclusionModes: { ...(activeClause.groupExclusionModes || {}), [groupId]: next } });
+  };
+  const panelCycleExclusionModeReverse = (groupId: string) => {
+    const cur = (activeClause.groupExclusionModes || {})[groupId] || 'OR';
+    const next = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
+    updateQuery({ groupExclusionModes: { ...(activeClause.groupExclusionModes || {}), [groupId]: next } });
+  };
+  // setTagStates wrapper — writes through updateQuery so the rule
+  // entity stays the source of truth.
+  const panelSetTagStates: React.Dispatch<React.SetStateAction<Record<string, number>>> = (next) => {
+    const newStates = typeof next === 'function' ? next(activeClause.tagStates || {}) : next;
+    updateQuery({ tagStates: newStates, tagFilterIds: undefined });
+  };
+
+  // Derived axisFilters record for the panel. Each axis state lives
+  // as its own field on activeClause (`source`, `level`, …) but the
+  // panel expects a flat Record<axisKey, AxisState>. Build that
+  // mapping here.
+  const panelAxisFilters = useMemo<Record<string, { states: Record<string, number>; combineMode?: 'AND' | 'OR' | 'XOR'; exclusionMode?: 'AND' | 'OR' | 'XOR' }>>(() => ({
+    source: (activeClause.source as any) ?? { states: {} },
+    level: (activeClause.level as any) ?? { states: {} },
+    school: (activeClause.school as any) ?? { states: {} },
+    activation: (activeClause.activation as any) ?? { states: {} },
+    range: (activeClause.range as any) ?? { states: {} },
+    duration: (activeClause.duration as any) ?? { states: {} },
+    shape: (activeClause.shape as any) ?? { states: {} },
+    property: (activeClause.property as any) ?? { states: {} },
+  }), [activeClause]);
+
+  // Two separate axis lists — one for the "Normal Options"
+  // disclosure (base axes), one for "Advanced Options — Tags"
+  // (per-tag-group rows). Mirrors the original two-disclosure UX.
+  const miniPillBaseAxes = useMemo<MiniPillAxis[]>(() => ([
+    {
+      key: 'source', name: 'Sources', kind: 'axis',
+      values: sources.map(s => ({
+        value: s.id,
+        label: String(s.abbreviation || s.shortName || s.name || s.id),
+        labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
+      })),
+    },
+    {
+      key: 'level', name: 'Spell Level', kind: 'axis',
+      values: Array.from({ length: 10 }, (_, i) => ({ value: String(i), label: i === 0 ? 'Cantrip' : `Level ${i}` })),
+    },
+    {
+      key: 'school', name: 'School', kind: 'axis',
+      values: Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label })),
+    },
+    {
+      key: 'activation', name: 'Casting Time', kind: 'axis',
+      values: ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] })),
+    },
+    {
+      key: 'range', name: 'Range', kind: 'axis',
+      values: RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] })),
+    },
+    {
+      key: 'duration', name: 'Duration', kind: 'axis',
+      values: DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] })),
+    },
+    {
+      key: 'shape', name: 'Shape', kind: 'axis',
+      values: SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] })),
+    },
+    {
+      key: 'property', name: 'Properties', kind: 'axis',
+      values: PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] })),
+    },
+  ]), [sources]);
+
+  const miniPillTagAxes = useMemo<MiniPillAxis[]>(() => {
+    const axes: MiniPillAxis[] = [];
+    for (const group of tagGroups) {
+      const groupTags = (tagsByGroup[group.id] || []) as Array<{ id: string; name?: string; parentTagId?: string | null; parent_tag_id?: string | null }>;
+      if (groupTags.length === 0) continue;
+      const idSet = new Set(groupTags.map(t => t.id));
+      axes.push({
+        key: `tag-group:${group.id}`,
+        name: String((group as any).name ?? 'Tags'),
+        kind: 'tag',
+        groupId: group.id,
+        values: groupTags.map(t => {
+          const parent = t.parentTagId ?? t.parent_tag_id ?? null;
+          return {
+            value: t.id,
+            label: String(t.name ?? t.id),
+            parentValue: parent && idSet.has(parent) ? parent : undefined,
+          };
+        }),
+      });
+    }
+    return axes;
+  }, [tagGroups, tagsByGroup]);
+
+  // Active-filter counts per panel — drives the panel's emblems strip.
+  const baseActiveCount = useMemo(() => {
+    let n = 0;
+    for (const key of Object.keys(panelAxisFilters)) {
+      n += Object.keys(panelAxisFilters[key]?.states ?? {}).length;
+    }
+    return n;
+  }, [panelAxisFilters]);
+  const tagActiveCount = useMemo(() => Object.keys(activeClause.tagStates ?? {}).length, [activeClause.tagStates]);
+
+  // Per-panel local pill-search state (the rule editor isn't wrapped
+  // in FilterBar, so we render non-embedded; each panel owns its
+  // own search input via these states).
+  const [baseAxesSearch, setBaseAxesSearch] = useState('');
+  const [tagAxesSearch, setTagAxesSearch] = useState('');
+
+  // Reset just this clause's base / tag state via updateQuery.
+  const resetBaseAxes = () => {
+    updateQuery({
+      source: undefined, level: undefined, school: undefined,
+      activation: undefined, range: undefined, duration: undefined,
+      shape: undefined, property: undefined,
+      sourceFilterIds: undefined, levelFilters: undefined, schoolFilters: undefined,
+      activationFilters: undefined, rangeFilters: undefined, durationFilters: undefined,
+      shapeFilters: undefined, propertyFilters: undefined,
+    } as Partial<RuleQuery>);
+  };
+  const resetTagAxes = () => {
+    updateQuery({
+      tagStates: undefined, tagFilterIds: undefined,
+      groupCombineModes: undefined, groupExclusionModes: undefined,
+    } as Partial<RuleQuery>);
+  };
+
   const handleSave = async () => {
     if (!draft) return;
     if (!draft.name.trim()) {
@@ -1138,119 +1363,28 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             </span>
                             <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
                           </summary>
-                          <div className="mt-3 space-y-3 pl-1">
-                        <AxisFilterSection
-                          compact
-                          title="Source"
-                          values={sources.map(s => ({ value: s.id, label: String(s.abbreviation || s.shortName || s.name || s.id) }))}
-                          states={activeClause.source?.states || {}}
-                          cycleState={(v) => cycleAxisState('source', 'sourceFilterIds', v)}
-                          combineMode={activeClause.source?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('source', 'sourceFilterIds')}
-                          exclusionMode={activeClause.source?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('source', 'sourceFilterIds')}
-                          includeAll={() => axisIncludeAll('source', 'sourceFilterIds', sources.map(s => s.id))}
-                          excludeAll={() => axisExcludeAll('source', 'sourceFilterIds', sources.map(s => s.id))}
-                          clearAll={() => axisClear('source', 'sourceFilterIds')}
-                        />
-                        <AxisFilterSection
-                          compact
-                          title="Spell Level"
-                          values={LEVEL_VALUES.map(lvl => ({ value: lvl, label: lvl === '0' ? 'Cantrip' : `Level ${lvl}` }))}
-                          states={activeClause.level?.states || {}}
-                          cycleState={(v) => cycleAxisState('level', 'levelFilters', v)}
-                          combineMode={activeClause.level?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('level', 'levelFilters')}
-                          exclusionMode={activeClause.level?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('level', 'levelFilters')}
-                          includeAll={() => axisIncludeAll('level', 'levelFilters', LEVEL_VALUES)}
-                          excludeAll={() => axisExcludeAll('level', 'levelFilters', LEVEL_VALUES)}
-                          clearAll={() => axisClear('level', 'levelFilters')}
-                        />
-                        <AxisFilterSection
-                          compact
-                          title="Spell School"
-                          values={Object.entries(SCHOOL_LABELS).map(([k, label]) => ({ value: k, label }))}
-                          states={activeClause.school?.states || {}}
-                          cycleState={(v) => cycleAxisState('school', 'schoolFilters', v)}
-                          combineMode={activeClause.school?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('school', 'schoolFilters')}
-                          exclusionMode={activeClause.school?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('school', 'schoolFilters')}
-                          includeAll={() => axisIncludeAll('school', 'schoolFilters', Object.keys(SCHOOL_LABELS))}
-                          excludeAll={() => axisExcludeAll('school', 'schoolFilters', Object.keys(SCHOOL_LABELS))}
-                          clearAll={() => axisClear('school', 'schoolFilters')}
-                        />
-                        <AxisFilterSection
-                          compact
-                          title="Casting Time"
-                          values={ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] }))}
-                          states={activeClause.activation?.states || {}}
-                          cycleState={(v) => cycleAxisState('activation', 'activationFilters', v)}
-                          combineMode={activeClause.activation?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('activation', 'activationFilters')}
-                          exclusionMode={activeClause.activation?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('activation', 'activationFilters')}
-                          includeAll={() => axisIncludeAll('activation', 'activationFilters', ACTIVATION_ORDER as readonly string[])}
-                          excludeAll={() => axisExcludeAll('activation', 'activationFilters', ACTIVATION_ORDER as readonly string[])}
-                          clearAll={() => axisClear('activation', 'activationFilters')}
-                        />
-                        <AxisFilterSection
-                          compact
-                          title="Range"
-                          values={RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] }))}
-                          states={activeClause.range?.states || {}}
-                          cycleState={(v) => cycleAxisState('range', 'rangeFilters', v)}
-                          combineMode={activeClause.range?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('range', 'rangeFilters')}
-                          exclusionMode={activeClause.range?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('range', 'rangeFilters')}
-                          includeAll={() => axisIncludeAll('range', 'rangeFilters', RANGE_ORDER as readonly string[])}
-                          excludeAll={() => axisExcludeAll('range', 'rangeFilters', RANGE_ORDER as readonly string[])}
-                          clearAll={() => axisClear('range', 'rangeFilters')}
-                        />
-                        <AxisFilterSection
-                          compact
-                          title="Shape"
-                          values={SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] }))}
-                          states={activeClause.shape?.states || {}}
-                          cycleState={(v) => cycleAxisState('shape', 'shapeFilters', v)}
-                          combineMode={activeClause.shape?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('shape', 'shapeFilters')}
-                          exclusionMode={activeClause.shape?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('shape', 'shapeFilters')}
-                          includeAll={() => axisIncludeAll('shape', 'shapeFilters', SHAPE_ORDER as readonly string[])}
-                          excludeAll={() => axisExcludeAll('shape', 'shapeFilters', SHAPE_ORDER as readonly string[])}
-                          clearAll={() => axisClear('shape', 'shapeFilters')}
-                        />
-                        <AxisFilterSection
-                          compact
-                          title="Duration"
-                          values={DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] }))}
-                          states={activeClause.duration?.states || {}}
-                          cycleState={(v) => cycleAxisState('duration', 'durationFilters', v)}
-                          combineMode={activeClause.duration?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('duration', 'durationFilters')}
-                          exclusionMode={activeClause.duration?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('duration', 'durationFilters')}
-                          includeAll={() => axisIncludeAll('duration', 'durationFilters', DURATION_ORDER as readonly string[])}
-                          excludeAll={() => axisExcludeAll('duration', 'durationFilters', DURATION_ORDER as readonly string[])}
-                          clearAll={() => axisClear('duration', 'durationFilters')}
-                        />
-                        <AxisFilterSection
-                          compact
-                          title="Properties"
-                          values={PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] }))}
-                          states={activeClause.property?.states || {}}
-                          cycleState={(v) => cycleAxisState('property', 'propertyFilters', v)}
-                          combineMode={activeClause.property?.combineMode}
-                          cycleCombineMode={() => cycleAxisCombineMode('property', 'propertyFilters')}
-                          exclusionMode={activeClause.property?.exclusionMode}
-                          cycleExclusionMode={() => cycleAxisExclusionMode('property', 'propertyFilters')}
-                          includeAll={() => axisIncludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
-                          excludeAll={() => axisExcludeAll('property', 'propertyFilters', PROPERTY_ORDER as readonly string[])}
-                          clearAll={() => axisClear('property', 'propertyFilters')}
-                        />
+                          <div className="mt-3 pl-1">
+                            <MiniPillFilterPanel
+                              axes={miniPillBaseAxes}
+                              axisFilters={panelAxisFilters}
+                              tagStates={{}}
+                              cycleAxisState={panelCycleAxisState}
+                              cycleAxisStateReverse={panelCycleAxisStateReverse}
+                              cycleTagState={() => {}}
+                              cycleTagStateReverse={() => {}}
+                              cycleAxisCombineMode={panelCycleAxisCombineMode}
+                              cycleAxisCombineModeReverse={panelCycleAxisCombineModeReverse}
+                              cycleAxisExclusionMode={panelCycleAxisExclusionMode}
+                              cycleAxisExclusionModeReverse={panelCycleAxisExclusionModeReverse}
+                              axisIncludeAll={panelAxisIncludeAll}
+                              axisExcludeAll={panelAxisExcludeAll}
+                              axisClear={panelAxisClear}
+                              search={baseAxesSearch}
+                              setSearch={setBaseAxesSearch}
+                              searchPlaceholder="Filter axes…"
+                              activeFilterCount={baseActiveCount}
+                              resetAll={resetBaseAxes}
+                            />
                           </div>
                         </details>
 
@@ -1268,37 +1402,28 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             </span>
                             <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
                           </summary>
-                          <div className="mt-4 space-y-6 pl-1">
-                            {tagGroups.map(group => (
-                              <TagGroupFilter
-                                compact
-                                key={group.id}
-                                group={group}
-                                tags={(tagsByGroup[group.id] || []) as any}
-                                tagStates={activeClause.tagStates || {}}
-                                setTagStates={(next) => updateQuery({ tagStates: typeof next === 'function' ? next(activeClause.tagStates || {}) : next, tagFilterIds: undefined })}
-                                cycleTagState={(tagId) => {
-                                  const cur = (activeClause.tagStates || {})[tagId] || 0;
-                                  const nextState = cur === 0 ? 1 : cur === 1 ? 2 : 0;
-                                  const nextStates = { ...(activeClause.tagStates || {}) };
-                                  if (nextState === 0) delete nextStates[tagId];
-                                  else nextStates[tagId] = nextState;
-                                  updateQuery({ tagStates: nextStates, tagFilterIds: undefined });
-                                }}
-                                combineMode={(activeClause.groupCombineModes || {})[group.id]}
-                                cycleGroupMode={(groupId) => {
-                                  const cur = (activeClause.groupCombineModes || {})[groupId] || 'OR';
-                                  const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-                                  updateQuery({ groupCombineModes: { ...(activeClause.groupCombineModes || {}), [groupId]: nextMode } });
-                                }}
-                                exclusionMode={(activeClause.groupExclusionModes || {})[group.id]}
-                                cycleExclusionMode={(groupId) => {
-                                  const cur = (activeClause.groupExclusionModes || {})[groupId] || 'OR';
-                                  const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-                                  updateQuery({ groupExclusionModes: { ...(activeClause.groupExclusionModes || {}), [groupId]: nextMode } });
-                                }}
-                              />
-                            ))}
+                          <div className="mt-4 pl-1">
+                            <MiniPillFilterPanel
+                              axes={miniPillTagAxes}
+                              axisFilters={{}}
+                              tagStates={activeClause.tagStates || {}}
+                              cycleAxisState={() => {}}
+                              cycleAxisStateReverse={() => {}}
+                              cycleTagState={panelCycleTagState}
+                              cycleTagStateReverse={panelCycleTagStateReverse}
+                              cycleGroupMode={panelCycleGroupMode}
+                              cycleGroupModeReverse={panelCycleGroupModeReverse}
+                              cycleExclusionMode={panelCycleExclusionMode}
+                              cycleExclusionModeReverse={panelCycleExclusionModeReverse}
+                              groupCombineModes={activeClause.groupCombineModes || {}}
+                              groupExclusionModes={activeClause.groupExclusionModes || {}}
+                              setTagStates={panelSetTagStates}
+                              search={tagAxesSearch}
+                              setSearch={setTagAxesSearch}
+                              searchPlaceholder="Filter tags…"
+                              activeFilterCount={tagActiveCount}
+                              resetAll={resetTagAxes}
+                            />
                           </div>
                         </details>
                         {/* Root-level hard exclude. Independent of the per-
