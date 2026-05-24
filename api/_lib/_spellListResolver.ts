@@ -84,6 +84,18 @@ type ResolvedRule = {
 
 type SpellMatchRow = SpellMatchInput & { id: string };
 
+// Generic string-array column parser. The source twin
+// (`src/lib/spellListResolver.ts`) has a narrowly-named
+// `safeParseTagArray` with a byte-identical body — the names diverge
+// on purpose: the src side only ever uses this for `spells.tags`
+// (rule columns are parsed by `deserializeRule` in `spellRules.ts`,
+// which owns the snake_case → camelCase mapping for rules), but the
+// api side can't import `deserializeRule` across the bundler boundary
+// and so inlines the rule deserialization in `getConsumerSpellList`
+// below. That makes the api-side helper general-purpose (parses
+// `spells.tags`, `spell_rules.manual_spells`,
+// `spell_rules.manual_exclusions`), which the name reflects. Keep
+// both names — they accurately describe each file's scope of use.
 function safeParseStringArray(raw: any): string[] {
   if (Array.isArray(raw)) return raw.map(String);
   if (typeof raw !== "string") return [];
