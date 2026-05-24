@@ -430,6 +430,20 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         ]);
 
         setSources(sourcesData);
+        // Onboarding hint: pre-include every source on first mount
+        // so a user opening the filter modal for the first time sees
+        // the include treatment lit up across all sources — they
+        // learn the affordance ("oh, click to toggle a source off")
+        // before they even realise filtering exists. Only seeds when
+        // the user hasn't already touched sources (e.g. coming back
+        // via a URL with custom state), so we don't clobber their
+        // selections.
+        setAxisFilters(prev => {
+          if (prev.source && Object.keys(prev.source.states ?? {}).length > 0) return prev;
+          const states: Record<string, number> = {};
+          for (const s of sourcesData) states[String(s.id)] = 1;
+          return { ...prev, source: { ...(prev.source ?? {}), states } };
+        });
         setTagGroups(tagGroupsData);
         // Normalize tag rows (snake_case D1 columns -> camelCase the
         // TagGroupFilter / hierarchical layout expects). Same coercion
@@ -668,11 +682,29 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       return { ...prev, [axisKey]: { ...cur, combineMode: next } };
     });
   };
+  // Reverse direction for the right-click affordance on combinator
+  // buttons (same mental model as the pill left/right cycle).
+  const cycleAxisCombineModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
   const cycleAxisExclusionMode = (axisKey: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
       const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
       const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const cycleAxisExclusionModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
       return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
     });
   };
@@ -697,6 +729,21 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       const cur = prev[axisKey] || { states: {} };
       return { ...prev, [axisKey]: { ...cur, states: {} } };
     });
+  };
+  // "default" button per-axis. Sources have a meaningful default
+  // ("all included" — same state we seed on mount); every other
+  // axis falls back to a plain clear since there's no built-in
+  // default for those yet.
+  const axisRestoreDefault = (axisKey: string) => {
+    if (axisKey === 'source') {
+      setAxisFilters(prev => {
+        const states: Record<string, number> = {};
+        for (const s of sources) states[String(s.id)] = 1;
+        return { ...prev, source: { ...(prev.source ?? {}), states } };
+      });
+    } else {
+      axisClear(axisKey);
+    }
   };
 
   // 3-state cycle: 0 (neutral, not in record) -> 1 (include) -> 2 (exclude) -> 0
@@ -731,10 +778,24 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       return { ...prev, [groupId]: next };
     });
   };
+  const cycleGroupModeReverse = (groupId: string) => {
+    setGroupCombineModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
+  };
   const cycleExclusionMode = (groupId: string) => {
     setGroupExclusionModes(prev => {
       const cur = prev[groupId] || 'OR';
       const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
+  };
+  const cycleExclusionModeReverse = (groupId: string) => {
+    setGroupExclusionModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next = cur === 'OR' ? 'XOR' : cur === 'XOR' ? 'AND' : 'OR';
       return { ...prev, [groupId]: next };
     });
   };
@@ -748,7 +809,13 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   };
 
   const resetFilters = () => {
-    setAxisFilters({});
+    // Reset re-applies the onboarding hint for Sources — we WANT the
+    // user to land in the same "everything visible" state they saw
+    // on first open, not a blank wall that hides every spell because
+    // no source is included.
+    const sourceStates: Record<string, number> = {};
+    for (const s of sources) sourceStates[String(s.id)] = 1;
+    setAxisFilters({ source: { states: sourceStates } });
     setTagStates({});
     setGroupCombineModes({});
     setGroupExclusionModes({});
@@ -778,7 +845,12 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         key: 'source', name: 'Sources', kind: 'axis',
         values: sources.map(s => ({
           value: s.id,
+          // Primary label = abbreviation (compact wall); labelAlt =
+          // full name. The panel's per-axis abbr/full toggle button
+          // appears when ANY value carries labelAlt, letting the
+          // user swap representations on demand.
           label: String(s.abbreviation || s.shortName || s.name || s.id),
+          labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
         })),
       },
       {
@@ -980,12 +1052,17 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
               cycleTagState={cycleTagState}
               cycleTagStateReverse={cycleTagStateReverse}
               cycleAxisCombineMode={cycleAxisCombineMode}
+              cycleAxisCombineModeReverse={cycleAxisCombineModeReverse}
               cycleAxisExclusionMode={cycleAxisExclusionMode}
+              cycleAxisExclusionModeReverse={cycleAxisExclusionModeReverse}
               axisIncludeAll={axisIncludeAll}
               axisExcludeAll={axisExcludeAll}
               axisClear={axisClear}
+              axisRestoreDefault={axisRestoreDefault}
               cycleGroupMode={cycleGroupMode}
+              cycleGroupModeReverse={cycleGroupModeReverse}
               cycleExclusionMode={cycleExclusionMode}
+              cycleExclusionModeReverse={cycleExclusionModeReverse}
               groupCombineModes={groupCombineModes}
               groupExclusionModes={groupExclusionModes}
               setTagStates={setTagStates}

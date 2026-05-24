@@ -80,16 +80,25 @@ export type MiniPillAxis = {
   values: Array<{
     value: string;
     label: string;
+    /**
+     * Optional alternate label. When the axis carries values with
+     * `labelAlt` set, a small abbr/full toggle button appears in
+     * the axis header letting the user swap between the primary
+     * label and the alternate. Used for Sources: `label` is the
+     * abbreviation (PHB / XGtE), `labelAlt` is the full name
+     * (Player's Handbook / Xanathar's Guide to Everything).
+     */
+    labelAlt?: string;
     count?: number;
     title?: string;
     /**
      * Optional parent value within the same axis. Used to express
      * a hierarchy among tag-kind values: when set, the panel
-     * treats this value as a subtag and hides it from the wall by
-     * default. Subtags become visible when (a) chip-search has
-     * text matching them, or (b) the user has actively included
-     * or excluded the subtag. Keeps the wall dense while still
-     * letting power-users drill down via search.
+     * treats this value as a subtag and hides it from the flat
+     * wall by default. Each parent with subtags gets a chevron in
+     * the wall (click to open a drawer with its children) and
+     * each tag-kind axis carries a "Subtags" expand-all button
+     * that opens every parent drawer at once.
      */
     parentValue?: string;
   }>;
@@ -134,14 +143,25 @@ export interface MiniPillFilterPanelProps {
   // Per-axis bulk controls — optional. Missing handlers hide the
   // corresponding button.
   cycleAxisCombineMode?: (axisKey: string) => void;
+  /** Reverse direction of cycleAxisCombineMode (right-click). */
+  cycleAxisCombineModeReverse?: (axisKey: string) => void;
   cycleAxisExclusionMode?: (axisKey: string) => void;
+  /** Reverse direction of cycleAxisExclusionMode (right-click). */
+  cycleAxisExclusionModeReverse?: (axisKey: string) => void;
   axisIncludeAll?: (axisKey: string, values: readonly string[]) => void;
   axisExcludeAll?: (axisKey: string, values: readonly string[]) => void;
   axisClear?: (axisKey: string) => void;
+  /**
+   * Restore an axis to its default state. When omitted the
+   * default button on each axis falls back to clearing.
+   */
+  axisRestoreDefault?: (axisKey: string) => void;
 
   // Per-group combinators for tag-kind axes. Same gating as above.
   cycleGroupMode?: (groupId: string) => void;
+  cycleGroupModeReverse?: (groupId: string) => void;
   cycleExclusionMode?: (groupId: string) => void;
+  cycleExclusionModeReverse?: (groupId: string) => void;
   groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   /**
@@ -194,15 +214,26 @@ function MiniPillAxisRow({
   cycleTagStateReverse,
   // bulk controls
   cycleAxisCombineMode,
+  cycleAxisCombineModeReverse,
   cycleAxisExclusionMode,
+  cycleAxisExclusionModeReverse,
   axisIncludeAll,
   axisExcludeAll,
   axisClear,
+  axisRestoreDefault,
   cycleGroupMode,
+  cycleGroupModeReverse,
   cycleExclusionMode,
+  cycleExclusionModeReverse,
   groupCombineModes,
   groupExclusionModes,
   setTagStates,
+  // local toggles, plumbed from the parent so each axis can set
+  // them independently.
+  showAllSubtags,
+  toggleAllSubtags,
+  useAltLabel,
+  toggleUseAltLabel,
 }: {
   axis: MiniPillAxis;
   axisFilters: Record<string, AxisState>;
@@ -216,15 +247,24 @@ function MiniPillAxisRow({
   cycleTagState: (tagId: string) => void;
   cycleTagStateReverse: (tagId: string) => void;
   cycleAxisCombineMode?: (axisKey: string) => void;
+  cycleAxisCombineModeReverse?: (axisKey: string) => void;
   cycleAxisExclusionMode?: (axisKey: string) => void;
+  cycleAxisExclusionModeReverse?: (axisKey: string) => void;
   axisIncludeAll?: (axisKey: string, values: readonly string[]) => void;
   axisExcludeAll?: (axisKey: string, values: readonly string[]) => void;
   axisClear?: (axisKey: string) => void;
+  axisRestoreDefault?: (axisKey: string) => void;
   cycleGroupMode?: (groupId: string) => void;
+  cycleGroupModeReverse?: (groupId: string) => void;
   cycleExclusionMode?: (groupId: string) => void;
+  cycleExclusionModeReverse?: (groupId: string) => void;
   groupCombineModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   groupExclusionModes?: Record<string, 'AND' | 'OR' | 'XOR'>;
   setTagStates?: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  showAllSubtags: boolean;
+  toggleAllSubtags: () => void;
+  useAltLabel: boolean;
+  toggleUseAltLabel: () => void;
 }) {
   const isTag = axis.kind === 'tag';
   const axisKey = axis.axisKey ?? axis.key;
@@ -283,17 +323,25 @@ function MiniPillAxisRow({
     : axisClear
       ? () => axisClear(axisKey)
       : undefined;
-  // Default — for now, no axis carries an explicit default state, so
-  // we alias to Clear. When a caller needs meaningful defaults (e.g.
-  // Sources = PHB pre-selected), add a `defaultStates` field on
-  // MiniPillAxis and dispatch to a per-value setter here.
-  const handleDefault = handleClear;
+  // Default — caller-provided `axisRestoreDefault` handler when set
+  // (e.g. SpellList wires Sources to re-include every source as the
+  // "all included" default). Otherwise alias to Clear.
+  const handleDefault = axisRestoreDefault
+    ? () => axisRestoreDefault(axisKey)
+    : handleClear;
   const handleCombineCycle = isTag
     ? axis.groupId && cycleGroupMode
       ? () => cycleGroupMode(axis.groupId!)
       : undefined
     : cycleAxisCombineMode
       ? () => cycleAxisCombineMode(axisKey)
+      : undefined;
+  const handleCombineCycleReverse = isTag
+    ? axis.groupId && cycleGroupModeReverse
+      ? () => cycleGroupModeReverse(axis.groupId!)
+      : undefined
+    : cycleAxisCombineModeReverse
+      ? () => cycleAxisCombineModeReverse(axisKey)
       : undefined;
   const handleExclusionCycle = isTag
     ? axis.groupId && cycleExclusionMode
@@ -302,21 +350,33 @@ function MiniPillAxisRow({
     : cycleAxisExclusionMode
       ? () => cycleAxisExclusionMode(axisKey)
       : undefined;
+  const handleExclusionCycleReverse = isTag
+    ? axis.groupId && cycleExclusionModeReverse
+      ? () => cycleExclusionModeReverse(axis.groupId!)
+      : undefined
+    : cycleAxisExclusionModeReverse
+      ? () => cycleAxisExclusionModeReverse(axisKey)
+      : undefined;
+
+  // "Subtags" expand-all button — only appears when this axis has at
+  // least one value carrying a parent (i.e. there are subtags to
+  // expand). Flips a parent-level boolean that PillBody reads to
+  // force every drawer open.
+  const hasSubtagsAnywhere = axis.values.some(v => !!v.parentValue);
+
+  // Abbr / full toggle — only appears when the axis values carry
+  // `labelAlt` (currently: Sources). Flips a parent-level boolean
+  // that PillBody reads to swap each pill's rendered label.
+  const hasAltLabel = axis.values.some(v => !!v.labelAlt);
 
   return (
     <div className="rounded border border-gold/10 bg-background/20 p-1.5">
       <div className="flex items-baseline gap-2 mb-1 px-0.5 flex-wrap">
-        {/* Tag-kind axis names render larger than base axes — they
-            act as the implicit section dividers in the wall (no
-            Filters/Advanced tabs grouping them any more). Bump is
-            from text-[9px] to text-sm so the difference reads
-            clearly at a glance, not just in a side-by-side. */}
-        <span
-          className={cn(
-            'uppercase tracking-[0.22em] text-ink/60 font-bold',
-            isTag ? 'text-sm tracking-[0.18em]' : 'text-[9px]',
-          )}
-        >
+        {/* All axis headers render at the same size now — base
+            axes and tag groups share `text-xs` so the wall reads
+            as a single rhythm of consistent section dividers
+            rather than a two-tier hierarchy. */}
+        <span className="text-xs uppercase tracking-[0.22em] text-ink/60 font-bold">
           {axis.name}
         </span>
         {axisActive > 0 && (
@@ -337,17 +397,33 @@ function MiniPillAxisRow({
           {handleCombineCycle && (
             <AxisControlButton
               onClick={handleCombineCycle}
+              onContextMenu={handleCombineCycleReverse}
               label={combineMode}
-              title={`Include combinator (${combineMode}) — click to cycle OR / AND / XOR`}
+              title={`Include combinator (${combineMode}) — left click cycles forward, right click reverses`}
               color="include"
             />
           )}
           {handleExclusionCycle && (
             <AxisControlButton
               onClick={handleExclusionCycle}
+              onContextMenu={handleExclusionCycleReverse}
               label={exclusionMode}
-              title={`Exclude combinator (${exclusionMode}) — click to cycle OR / AND / XOR`}
+              title={`Exclude combinator (${exclusionMode}) — left click cycles forward, right click reverses`}
               color="exclude"
+            />
+          )}
+          {hasSubtagsAnywhere && (
+            <AxisControlButton
+              onClick={toggleAllSubtags}
+              label={showAllSubtags ? 'subtags ▾' : 'subtags ▸'}
+              title={showAllSubtags ? 'Collapse every subtag drawer in this section' : 'Expand every subtag drawer in this section'}
+            />
+          )}
+          {hasAltLabel && (
+            <AxisControlButton
+              onClick={toggleUseAltLabel}
+              label={useAltLabel ? 'abbr' : 'full'}
+              title={useAltLabel ? 'Show abbreviated labels (e.g. PHB)' : 'Show full labels (e.g. Player’s Handbook)'}
             />
           )}
           <AxisControlButton
@@ -370,6 +446,8 @@ function MiniPillAxisRow({
           tagStates={tagStates}
           queryLower={queryLower}
           search={search}
+          forceExpandAll={showAllSubtags}
+          useAltLabel={useAltLabel}
           cycleAxisState={cycleAxisState}
           cycleAxisStateReverse={cycleAxisStateReverse}
           cycleTagState={cycleTagState}
@@ -411,6 +489,8 @@ function PillBody({
   tagStates,
   queryLower,
   search,
+  forceExpandAll,
+  useAltLabel,
   cycleAxisState,
   cycleAxisStateReverse,
   cycleTagState,
@@ -423,6 +503,12 @@ function PillBody({
   tagStates: Record<string, number>;
   queryLower: string;
   search: string;
+  /** When true, every parent drawer renders open regardless of
+   *  the per-parent expandedParents Set. Driven by the axis's
+   *  "Subtags" toggle button in the header. */
+  forceExpandAll: boolean;
+  /** When true, render each value's labelAlt instead of label. */
+  useAltLabel: boolean;
   cycleAxisState: (axisKey: string, value: string) => void;
   cycleAxisStateReverse: (axisKey: string, value: string) => void;
   cycleTagState: (tagId: string) => void;
@@ -479,7 +565,7 @@ function PillBody({
     }
   }
   const isExpanded = (parentValue: string) =>
-    expandedParents.has(parentValue) || autoExpanded.has(parentValue);
+    forceExpandAll || expandedParents.has(parentValue) || autoExpanded.has(parentValue);
 
   // Visible roots — under chip-search we keep a root visible if (a) it
   // matches itself, (b) any of its children matches (autoExpanded),
@@ -498,10 +584,20 @@ function PillBody({
     opts?: { searchHide?: boolean },
   ) => {
     const state = stateFor(v.value);
+    // Rendered label honors the per-axis abbr/full toggle when the
+    // value carries an alt — falls back to the primary label
+    // otherwise so axes with only primary labels still render fine.
+    const renderedLabel = useAltLabel && v.labelAlt ? v.labelAlt : v.label;
     // Search filter for children inside drawers: hide non-matching
-    // unless active. Roots already filtered via visibleRoots above.
+    // unless active. The match check considers BOTH labels so a
+    // user searching by abbreviation finds the value even when
+    // full-label mode is the active display.
     if (opts?.searchHide && !state) {
-      if (searching && !matchesPillSearch(v.label, axis.name, search)) return null;
+      if (searching
+          && !matchesPillSearch(v.label, axis.name, search)
+          && (!v.labelAlt || !matchesPillSearch(v.labelAlt, axis.name, search))) {
+        return null;
+      }
     }
     return (
       <button
@@ -521,15 +617,15 @@ function PillBody({
         title={
           v.title ??
           (!state
-            ? `"${v.label}"\nLeft click: include\nRight click: exclude`
+            ? `"${renderedLabel}"\nLeft click: include\nRight click: exclude`
             : state === 1
-              ? `Including "${v.label}"\nLeft click: exclude\nRight click: clear`
-              : `Excluding "${v.label}"\nLeft click: clear\nRight click: include`)
+              ? `Including "${renderedLabel}"\nLeft click: exclude\nRight click: clear`
+              : `Excluding "${renderedLabel}"\nLeft click: clear\nRight click: include`)
         }
       >
         {state === 1 && <span className="text-emerald-400/80">+</span>}
         {state === 2 && <span className="text-blood/70">−</span>}
-        <span>{v.label}</span>
+        <span>{renderedLabel}</span>
       </button>
     );
   };
@@ -627,12 +723,20 @@ function PillBody({
  */
 function AxisControlButton({
   onClick,
+  onContextMenu,
   label,
   icon: Icon,
   title,
   color,
 }: {
   onClick?: () => void;
+  /**
+   * Optional right-click handler. Used by combinator buttons to
+   * cycle OR / AND / XOR in reverse direction (matches the pill
+   * left/right cycle UX). preventDefault is applied here so callers
+   * don't have to remember.
+   */
+  onContextMenu?: () => void;
   label?: string;
   icon?: LucideIcon;
   title: string;
@@ -643,6 +747,7 @@ function AxisControlButton({
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(); } : undefined}
       title={title}
       className={cn(
         'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] uppercase tracking-widest font-bold transition-colors',
@@ -684,12 +789,17 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
     className,
     // Bulk handler grab-bag — re-passed to MiniPillAxisRow.
     cycleAxisCombineMode,
+    cycleAxisCombineModeReverse,
     cycleAxisExclusionMode,
+    cycleAxisExclusionModeReverse,
     axisIncludeAll,
     axisExcludeAll,
     axisClear,
+    axisRestoreDefault,
     cycleGroupMode,
+    cycleGroupModeReverse,
     cycleExclusionMode,
+    cycleExclusionModeReverse,
     groupCombineModes,
     groupExclusionModes,
     setTagStates,
@@ -700,6 +810,30 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
   const [hiddenAxes, setHiddenAxes] = useState<Set<string>>(() => new Set());
   const toggleAxisHidden = (key: string) =>
     setHiddenAxes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  // Per-axis "expand every subtag drawer" toggle, driven by the
+  // axis-header Subtags button. Same Set-keyed-by-axis.key shape
+  // as hiddenAxes — local, not persisted, axis-scoped.
+  const [allSubtagAxes, setAllSubtagAxes] = useState<Set<string>>(() => new Set());
+  const toggleAllSubtags = (key: string) =>
+    setAllSubtagAxes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  // Per-axis "show alternate (full) labels" toggle, driven by the
+  // abbr/full button. Same Set shape. When the axis is in this set
+  // every value's `labelAlt` is rendered instead of its `label`.
+  const [altLabelAxes, setAltLabelAxes] = useState<Set<string>>(() => new Set());
+  const toggleAltLabel = (key: string) =>
+    setAltLabelAxes(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -793,34 +927,63 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
 
   // Row-rendering helper — shared between the flat-axes render path
   // and the tabbed render path. `effectiveSearch` is the value the
-  // pill-dim logic consults; in embedded mode that's the internal
-  // pillSearch state, otherwise the parent's `search`.
-  const renderAxisRow = (axis: MiniPillAxis) => (
-    <MiniPillAxisRow
-      key={axis.key}
-      axis={axis}
-      axisFilters={axisFilters}
-      tagStates={tagStates}
-      hidden={hiddenAxes.has(axis.key)}
-      toggleHidden={() => toggleAxisHidden(axis.key)}
-      queryLower={queryLower}
-      search={effectiveSearch}
-      cycleAxisState={cycleAxisState}
-      cycleAxisStateReverse={cycleAxisStateReverse}
-      cycleTagState={cycleTagState}
-      cycleTagStateReverse={cycleTagStateReverse}
-      cycleAxisCombineMode={cycleAxisCombineMode}
-      cycleAxisExclusionMode={cycleAxisExclusionMode}
-      axisIncludeAll={axisIncludeAll}
-      axisExcludeAll={axisExcludeAll}
-      axisClear={axisClear}
-      cycleGroupMode={cycleGroupMode}
-      cycleExclusionMode={cycleExclusionMode}
-      groupCombineModes={groupCombineModes}
-      groupExclusionModes={groupExclusionModes}
-      setTagStates={setTagStates}
-    />
-  );
+  // pill-dim logic consults; in embedded mode that's the chipSearch
+  // from FilterBarContext, otherwise the parent's `search`.
+  //
+  // Empty-section hide: when chip-search is active and an axis has
+  // no value matching it AND no actively-filtering pills, the whole
+  // axis row vanishes. Keeps the wall short while typing — only
+  // sections with relevant content stay.
+  const renderAxisRow = (axis: MiniPillAxis): React.ReactNode => {
+    if (queryLower !== '') {
+      const states = axis.kind === 'tag'
+        ? tagStates
+        : axisFilters[axis.axisKey ?? axis.key]?.states ?? {};
+      const anyMatchOrActive = axis.values.some(v => {
+        if (states[v.value]) return true; // active pill — always pin section
+        if (matchesPillSearch(v.label, axis.name, effectiveSearch)) return true;
+        if (v.labelAlt && matchesPillSearch(v.labelAlt, axis.name, effectiveSearch)) return true;
+        if (matchesPillSearch(axis.name, axis.name, effectiveSearch)) return true;
+        return false;
+      });
+      if (!anyMatchOrActive) return null;
+    }
+    return (
+      <MiniPillAxisRow
+        key={axis.key}
+        axis={axis}
+        axisFilters={axisFilters}
+        tagStates={tagStates}
+        hidden={hiddenAxes.has(axis.key)}
+        toggleHidden={() => toggleAxisHidden(axis.key)}
+        queryLower={queryLower}
+        search={effectiveSearch}
+        showAllSubtags={allSubtagAxes.has(axis.key)}
+        toggleAllSubtags={() => toggleAllSubtags(axis.key)}
+        useAltLabel={altLabelAxes.has(axis.key)}
+        toggleUseAltLabel={() => toggleAltLabel(axis.key)}
+        cycleAxisState={cycleAxisState}
+        cycleAxisStateReverse={cycleAxisStateReverse}
+        cycleTagState={cycleTagState}
+        cycleTagStateReverse={cycleTagStateReverse}
+        cycleAxisCombineMode={cycleAxisCombineMode}
+        cycleAxisCombineModeReverse={cycleAxisCombineModeReverse}
+        cycleAxisExclusionMode={cycleAxisExclusionMode}
+        cycleAxisExclusionModeReverse={cycleAxisExclusionModeReverse}
+        axisIncludeAll={axisIncludeAll}
+        axisExcludeAll={axisExcludeAll}
+        axisClear={axisClear}
+        axisRestoreDefault={axisRestoreDefault}
+        cycleGroupMode={cycleGroupMode}
+        cycleGroupModeReverse={cycleGroupModeReverse}
+        cycleExclusionMode={cycleExclusionMode}
+        cycleExclusionModeReverse={cycleExclusionModeReverse}
+        groupCombineModes={groupCombineModes}
+        groupExclusionModes={groupExclusionModes}
+        setTagStates={setTagStates}
+      />
+    );
+  };
 
   // The tabs branch wraps `renderAxisRow` calls inside <Tabs> +
   // AccentTabsList + per-tab <TabsContent>. Default tab is the first.
