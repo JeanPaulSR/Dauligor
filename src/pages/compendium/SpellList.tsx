@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   Lock, Star, ChevronUp, ChevronDown, Settings, X,
   Layers, Hash, GraduationCap, Clock, Target, Hourglass, Box, Settings2,
-  Tag as TagIcon,
+  Filter, Tag as TagIcon,
 } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
@@ -16,7 +16,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { FilterBar, matchesTagFilters } from '../../components/compendium/FilterBar';
-import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
+import { MiniPillFilterPanel, type MiniPillAxis, type MiniPillTab } from '../../components/compendium/MiniPillFilterPanel';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
 import BackButton from '../../components/ui/BackButton';
@@ -656,15 +656,50 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       return { ...prev, [axisKey]: { ...cur, states } };
     });
   };
-  // Per-axis combine-mode cyclers + bulk include/exclude/clear helpers
-  // were removed when this page swapped from the FilterBar modal to
-  // MiniPillFilterPanel. The new UI doesn't surface AND/XOR combinators
-  // (everything defaults to OR) and the pill wall pattern makes bulk
-  // include/exclude unnecessary — users see every value at once and
-  // click the ones they want. If a future Advanced modal needs the
-  // combinator UI, re-add via the useSpellFilters hook (which still
-  // exports cycleAxisCombineMode / cycleAxisExclusionMode for the
-  // pages that use it).
+  // Per-axis bulk + combinator helpers. Live alongside `cycleAxisState`
+  // — all of them feed MiniPillFilterPanel's per-axis control row
+  // (5e.tools-style all / clear / none / default + include + exclude
+  // combinator cycle). Each handler mutates the unified axisFilters
+  // record in one place, so adding a new axis is just a new entry in
+  // miniPillAxes without changing these.
+  const cycleAxisCombineMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
+  const cycleAxisExclusionMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const axisIncludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 1;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisExcludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 2;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisClear = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      return { ...prev, [axisKey]: { ...cur, states: {} } };
+    });
+  };
 
   // 3-state cycle: 0 (neutral, not in record) -> 1 (include) -> 2 (exclude) -> 0
   const cycleTagState = (tagId: string) => {
@@ -689,11 +724,22 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       return next;
     });
   };
-  // Per-group combine + exclusion cyclers also removed alongside the
-  // FilterBar swap. groupCombineModes / groupExclusionModes state is
-  // kept (still consumed by matchesTagFilters) but always empty — the
-  // matcher falls back to OR/OR for every group, which is what the
-  // pill wall implicitly promises.
+  // Per-group combine + exclusion cyclers — wired to
+  // MiniPillFilterPanel's tag-axis combinator buttons (advanced tab).
+  const cycleGroupMode = (groupId: string) => {
+    setGroupCombineModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
+  };
+  const cycleExclusionMode = (groupId: string) => {
+    setGroupExclusionModes(prev => {
+      const cur = prev[groupId] || 'OR';
+      const next = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [groupId]: next };
+    });
+  };
 
   const renderSourceAbbreviation = (spell: SpellRecord) => {
     const sourceRecord = sourceById[String(spell.sourceId ?? '')];
@@ -710,19 +756,22 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     setGroupExclusionModes({});
   };
 
-  // Axis descriptors for MiniPillFilterPanel. One descriptor per
-  // filter axis renders as a labelled pill row; tags additionally
-  // get one row per tag group. Memoised so the descriptor array
-  // only rebuilds when sources / tagGroups / tagsByGroup change —
-  // the labelled value lists are static otherwise.
+  // Axis descriptors for MiniPillFilterPanel, split into two tabs:
   //
-  // Per-axis combine modes (AND/OR/XOR) are NOT surfaced in the
-  // pill wall — each axis defaults to OR for both include and
-  // exclude. If a page needs finer combinators, the old FilterBar
-  // (modal pattern) is still the canonical option until an
-  // Advanced modal slot lands on MiniPillFilterPanel.
-  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
-    const axes: MiniPillAxis[] = [
+  //   Filters  — base axes (source / level / school / casting time /
+  //              range / duration / shape / properties). Most users
+  //              start and stop here.
+  //   Advanced — one row per tag group. Tag combinators (AND/OR/XOR)
+  //              are heavier mental load so they sit behind a tab.
+  //
+  // Each axis's pill row also surfaces the 5e.tools-style controls
+  // (all / clear / none / default / +OR-AND-XOR / −OR-AND-XOR / hide)
+  // — those are handled inside MiniPillFilterPanel itself.
+  //
+  // Memoised so the descriptor only rebuilds when sources / tagGroups
+  // / tagsByGroup change.
+  const filterTabs = useMemo<MiniPillTab[]>(() => {
+    const baseAxes: MiniPillAxis[] = [
       {
         key: 'source', name: 'Sources', icon: Layers, kind: 'axis',
         values: sources.map(s => ({
@@ -759,21 +808,23 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
         values: PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] })),
       },
     ];
-    // One row per tag group — keeps the visual rhythm consistent
-    // with the rest of the wall while preserving the group
-    // organisation users already know.
+    const advancedAxes: MiniPillAxis[] = [];
     for (const group of tagGroups) {
       const tags = (tagsByGroup[group.id] || []) as Array<{ id: string; name?: string }>;
       if (tags.length === 0) continue;
-      axes.push({
+      advancedAxes.push({
         key: `tag-group:${group.id}`,
         name: String((group as any).name ?? 'Tags'),
         icon: TagIcon,
         kind: 'tag',
+        groupId: group.id,
         values: tags.map(t => ({ value: t.id, label: String(t.name ?? t.id) })),
       });
     }
-    return axes;
+    return [
+      { key: 'base', label: 'Filters', icon: Filter, axes: baseAxes },
+      { key: 'advanced', label: 'Advanced', icon: TagIcon, axes: advancedAxes },
+    ];
   }, [sources, tagGroups, tagsByGroup]);
 
   // Settings popover — page-level UI preferences (currently just the
@@ -903,15 +954,29 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             // previous ~200-line AxisFilterSection cascade and the
             // collapsible Tags details block. `embedded` skips the
             // panel's own search/header chrome since FilterBar's
-            // toolbar already owns those.
+            // toolbar already owns those. `tabs` splits the wall
+            // into a Filters tab (base axes) and an Advanced tab
+            // (per-tag-group rows), each with its own 5e.tools-style
+            // per-axis control row (all/clear/none/default/combine/
+            // exclude/hide).
             <MiniPillFilterPanel
-              axes={miniPillAxes}
+              tabs={filterTabs}
               axisFilters={axisFilters}
               tagStates={tagStates}
               cycleAxisState={cycleAxisState}
               cycleAxisStateReverse={cycleAxisStateReverse}
               cycleTagState={cycleTagState}
               cycleTagStateReverse={cycleTagStateReverse}
+              cycleAxisCombineMode={cycleAxisCombineMode}
+              cycleAxisExclusionMode={cycleAxisExclusionMode}
+              axisIncludeAll={axisIncludeAll}
+              axisExcludeAll={axisExcludeAll}
+              axisClear={axisClear}
+              cycleGroupMode={cycleGroupMode}
+              cycleExclusionMode={cycleExclusionMode}
+              groupCombineModes={groupCombineModes}
+              groupExclusionModes={groupExclusionModes}
+              setTagStates={setTagStates}
               search={search}
               setSearch={setSearch}
               activeFilterCount={activeFilterCount}
