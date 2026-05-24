@@ -390,6 +390,11 @@ async function startServer() {
     { mount: "/api/admin/worlds", modulePath: "./functions/api/admin/worlds/[[path]].ts" },
     { mount: "/api/admin/eras", modulePath: "./functions/api/admin/eras/[[path]].ts" },
     { mount: "/api/admin/proposals", modulePath: "./functions/api/admin/proposals/[[path]].ts" },
+    // Single-file Pages Function (not a [[path]] catch-all). The
+    // worker's scheduled() handler POSTs here daily; mirroring it in
+    // the local Express dev server lets us exercise the prewarm
+    // end-to-end without spinning up `wrangler pages dev`.
+    { mount: "/api/admin/prewarm-spell-cache", modulePath: "./functions/api/admin/prewarm-spell-cache.ts" },
     { mount: "/api/proposals", modulePath: "./functions/api/proposals/[[path]].ts" },
     { mount: "/api/lore", modulePath: "./functions/api/lore/[[path]].ts" },
     { mount: "/api/campaigns", modulePath: "./functions/api/campaigns/[[path]].ts" },
