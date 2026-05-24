@@ -52,7 +52,6 @@ import ToolsEditor from './pages/compendium/ToolsEditor';
 import SpellsEditor from './pages/compendium/SpellsEditor';
 import SpellListManager from './pages/compendium/SpellListManager';
 import SpellRulesEditor from './pages/compendium/SpellRulesEditor';
-import FilterModalVariants from './pages/mockups/FilterModalVariants';
 import FeatsEditor from './pages/compendium/FeatsEditor';
 import FeatList from './pages/compendium/FeatList';
 import ItemsEditor from './pages/compendium/ItemsEditor';
@@ -308,9 +307,6 @@ export default function App() {
                       <SpellListManager userProfile={effectiveProfile} />
                     </ProposalEditorWrapper>
                   } />
-                  {/* Temporary mockup — delete with the file once a
-                      filter-modal redesign lands. */}
-                  <Route path="/mockup/filter-modal" element={<FilterModalVariants />} />
                   <Route path="/proposals/edit/spells" element={
                     <ProposalEditorWrapper entityType="spell" enableFocusMode>
                       <SpellsEditor userProfile={effectiveProfile} />
