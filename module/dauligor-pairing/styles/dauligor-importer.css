@@ -1882,6 +1882,15 @@
 }
 
 .dauligor-spell-manager {
+  /* `position: relative` makes this the positioned ancestor for the
+   * filter modal-host (`position: absolute; inset: 0;`). Without it
+   * the host would walk further up the DOM looking for the nearest
+   * positioned element — possibly Foundry's app frame, which depends
+   * on appId-scoped CSS that doesn't cover every app variant
+   * (`.dauligor-importer-app` matches the importer, but not the
+   * standalone spell browser). Anchoring here keeps modal placement
+   * consistent across every spell-manager instance. */
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -6093,12 +6102,30 @@ button.dauligor-option-picker__pill:hover {
 
 /* Section-filter variant: wider modal so the per-axis controls (All /
  * Clear / None / OR-AND-XOR / Subtags / Hide) all fit on one row at
- * typical pill counts, and a 90vh height that matches the public
- * `/compendium/*` filter modals. */
+ * typical pill counts, and a full-height pane that matches the public
+ * `/compendium/*` filter modals.
+ *
+ * Width / height cover essentially the whole `.window-content` —
+ * 96%/96% leaves a thin frame so the user can still see where the
+ * dialog edge is (and click outside to dismiss). The old 960×90vh
+ * cap left the favourites sidebar peeking out on the left side of a
+ * wide spell-browser window, which read as "the modal is stuck
+ * inside the spell pane". Letting the card stretch fixes that
+ * without sacrificing the React panel's spacing — `min(1280px, 96%)`
+ * still keeps it from running absurdly wide on a 4K monitor. */
 .dauligor-spell-manager__modal-card--section-filter {
-  width: min(960px, 95%);
-  max-height: 90vh;
-  height: 90vh;
+  width: min(1280px, 96%);
+  height: 96%;
+  max-height: none;
+}
+
+/* Darker backdrop for the section-filter variant — the panel inside
+ * is wide enough that the dimmed-but-visible columns underneath used
+ * to read as "still part of the layout". Bumping to 0.78 makes the
+ * overlay feel like a true modal at the spell-browser window size. */
+.dauligor-spell-manager__filter-modal-host:has(.dauligor-spell-manager__modal-card--section-filter)
+  .dauligor-spell-manager__modal-backdrop {
+  background: rgba(0, 0, 0, 0.78);
 }
 
 .dauligor-spell-manager__modal-header {
