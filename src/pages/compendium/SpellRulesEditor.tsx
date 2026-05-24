@@ -856,6 +856,75 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     } as Partial<RuleQuery>);
   };
 
+  // ── Hard-exclude tags as a SectionFilterPanel ───────────────────
+  // The hard-exclude tag list is rule-wide (not per-clause) and
+  // single-state (a tag is either in `rootExcludeTagIds` or not).
+  // We map that one-dimensional state onto SectionFilterPanel's
+  // tri-state by:
+  //   - showing every excluded tag as state=2 (panel's "exclude"
+  //     style: blood border + strikethrough)
+  //   - making BOTH cycle directions toggle the tag's membership
+  //   - hiding the include controls entirely (omit axisIncludeAll,
+  //     cycleGroupMode, cycleExclusionMode — the panel hides the
+  //     buttons whose handlers are missing)
+  const excludeTagAxes = useMemo<FilterSection[]>(() => {
+    const axes: FilterSection[] = [];
+    for (const group of tagGroups) {
+      const groupTags = (tagsByGroup[group.id] || []) as TagRow[];
+      if (groupTags.length === 0) continue;
+      const idSet = new Set(groupTags.map(t => t.id));
+      axes.push({
+        key: `hard-exclude:${group.id}`,
+        name: String((group as any).name ?? 'Tags'),
+        kind: 'tag',
+        groupId: group.id,
+        values: groupTags.map(t => {
+          const parent = (t as any).parentTagId ?? (t as any).parent_tag_id ?? null;
+          return {
+            value: t.id,
+            label: tagPickerLabel(t as any),
+            parentValue: parent && idSet.has(parent) ? parent : undefined,
+          };
+        }),
+      });
+    }
+    return axes;
+  }, [tagGroups, tagsByGroup]);
+  // Derived tagStates: every excluded tag at state 2. Include
+  // state (1) is never used here — those pills render as neutral.
+  const excludeTagStates = useMemo<Record<string, number>>(
+    () => Object.fromEntries(rootExcludeTagIds.map(id => [id, 2])),
+    [rootExcludeTagIds],
+  );
+  // Both directions toggle membership — there's no include semantic
+  // in hard-exclude so cycling has only two states: in or out.
+  const excludeToggle = (tagId: string) => toggleExcludeTag(tagId);
+  // Bulk handlers: exclude-all adds every value in the group;
+  // clear removes them. No include-all (no include semantic).
+  const excludeAxisExcludeAll = (axisKey: string, values: readonly string[]) => {
+    if (!draft) return;
+    const merged = Array.from(new Set([...rootExcludeTagIds, ...values]));
+    clausesToRootAndPersist(merged);
+  };
+  const excludeAxisClear = (axisKey: string) => {
+    if (!draft) return;
+    const groupValueSet = new Set<string>();
+    // Find the values for this axis to know what to drop.
+    const axis = excludeTagAxes.find(a => a.key === axisKey);
+    if (!axis) return;
+    for (const v of axis.values) groupValueSet.add(v.value);
+    const next = rootExcludeTagIds.filter(id => !groupValueSet.has(id));
+    clausesToRootAndPersist(next);
+  };
+  // Helper that mirrors `toggleExcludeTag`'s persist path with an
+  // explicit id list — used by the bulk all/clear handlers above.
+  function clausesToRootAndPersist(excludeIds: string[]) {
+    if (!draft) return;
+    setDraft({ ...draft, query: clausesToRoot(clauses, excludeIds) });
+    setDraftDirty(true);
+  }
+  const [excludeTagSearch, setExcludeTagSearch] = useState('');
+
   const handleSave = async () => {
     if (!draft) return;
     if (!draft.name.trim()) {
@@ -1454,50 +1523,31 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                               tri-state (e.g. "match all level-1 evocation, but never the
                               <code>spell:cantrip</code> tagged spells").
                             </p>
-                            {rootExcludeTagIds.length > 0 && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={clearExcludeTags}
-                                className="h-7 px-2 text-[10px] uppercase tracking-[0.18em] border-blood/30 text-blood hover:bg-blood/10"
-                              >
-                                Clear ({rootExcludeTagIds.length})
-                              </Button>
-                            )}
-                            <div className="space-y-3">
-                              {tagGroups.map(group => {
-                                const groupTags = (tagsByGroup[group.id] || []) as TagRow[];
-                                if (groupTags.length === 0) return null;
-                                return (
-                                  <div key={group.id} className="space-y-1.5">
-                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/50">
-                                      {group.name}
-                                    </p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {groupTags.map(tag => {
-                                        const excluded = rootExcludeTagIds.includes(tag.id);
-                                        return (
-                                          <button
-                                            key={tag.id}
-                                            type="button"
-                                            onClick={() => toggleExcludeTag(tag.id)}
-                                            className={cn(
-                                              'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] uppercase tracking-[0.14em] border transition-colors',
-                                              excluded
-                                                ? 'bg-blood/15 border-blood/40 text-blood hover:bg-blood/20'
-                                                : 'bg-transparent border-ink/15 text-ink/60 hover:border-blood/30 hover:text-blood/80',
-                                            )}
-                                          >
-                                            {excluded && <X className="w-3 h-3" />}
-                                            {tagPickerLabel(tag)}
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                            {/* SectionFilterPanel adapted to the hard-exclude
+                                model — single-state pills (in/out of the
+                                blacklist). Both click directions map to
+                                toggleExcludeTag; include controls are
+                                omitted (no axisIncludeAll / cycleGroupMode
+                                / cycleExclusionMode passed) so the panel
+                                hides those buttons. The bulk "none" button
+                                excludes-all in the group; "clear" drops
+                                them. */}
+                            <SectionFilterPanel
+                              axes={excludeTagAxes}
+                              axisFilters={{}}
+                              tagStates={excludeTagStates}
+                              cycleAxisState={() => {}}
+                              cycleAxisStateReverse={() => {}}
+                              cycleTagState={excludeToggle}
+                              cycleTagStateReverse={excludeToggle}
+                              axisExcludeAll={excludeAxisExcludeAll}
+                              axisClear={excludeAxisClear}
+                              search={excludeTagSearch}
+                              setSearch={setExcludeTagSearch}
+                              searchPlaceholder="Filter tags…"
+                              activeFilterCount={rootExcludeTagIds.length}
+                              resetAll={clearExcludeTags}
+                            />
                           </div>
                         </details>
                   </div>
