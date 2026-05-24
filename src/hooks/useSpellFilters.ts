@@ -38,6 +38,13 @@ export type UseSpellFiltersResult = {
   // in this single record.
   axisFilters: Record<string, AxisState>;
   cycleAxisState: (axisKey: string, value: string) => void;
+  /**
+   * Reverse cycle: off → exclude → include → off. Mirror of
+   * `cycleAxisState`; powers the right-click path in surfaces that
+   * surface both directions (e.g. MiniPillFilterPanel). Lets a user
+   * jump straight to "exclude" without first going through "include".
+   */
+  cycleAxisStateReverse: (axisKey: string, value: string) => void;
   cycleAxisCombineMode: (axisKey: string) => void;
   cycleAxisExclusionMode: (axisKey: string) => void;
   axisIncludeAll: (axisKey: string, values: readonly string[]) => void;
@@ -49,6 +56,12 @@ export type UseSpellFiltersResult = {
   tagStates: Record<string, number>;
   setTagStates: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   cycleTagState: (tagId: string) => void;
+  /**
+   * Reverse cycle for tags: off → exclude → include → off. Mirror of
+   * `cycleTagState`; same right-click affordance MiniPillFilterPanel
+   * uses for axis pills.
+   */
+  cycleTagStateReverse: (tagId: string) => void;
   groupCombineModes: Record<string, 'AND' | 'OR' | 'XOR'>;
   cycleGroupMode: (groupId: string) => void;
   groupExclusionModes: Record<string, 'AND' | 'OR' | 'XOR'>;
@@ -94,6 +107,18 @@ export function useSpellFilters(): UseSpellFiltersResult {
       const states: Record<string, number> = { ...cur.states };
       const s = states[value] || 0;
       const nextState = s === 0 ? 1 : s === 1 ? 2 : 0;
+      if (nextState === 0) delete states[value];
+      else states[value] = nextState;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  }, []);
+  const cycleAxisStateReverse = useCallback((axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      const s = states[value] || 0;
+      // Reverse direction: off → exclude(2) → include(1) → off
+      const nextState = s === 0 ? 2 : s === 2 ? 1 : 0;
       if (nextState === 0) delete states[value];
       else states[value] = nextState;
       return { ...prev, [axisKey]: { ...cur, states } };
@@ -152,6 +177,17 @@ export function useSpellFilters(): UseSpellFiltersResult {
       const state = next[tagId] || 0;
       if (state === 0) next[tagId] = 1;
       else if (state === 1) next[tagId] = 2;
+      else delete next[tagId];
+      return next;
+    });
+  }, []);
+  const cycleTagStateReverse = useCallback((tagId: string) => {
+    setTagStates(prev => {
+      const next = { ...prev };
+      const state = next[tagId] || 0;
+      // Reverse: off → exclude(2) → include(1) → off
+      if (state === 0) next[tagId] = 2;
+      else if (state === 2) next[tagId] = 1;
       else delete next[tagId];
       return next;
     });
@@ -279,6 +315,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
     search, setSearch,
     axisFilters,
     cycleAxisState,
+    cycleAxisStateReverse,
     cycleAxisCombineMode,
     cycleAxisExclusionMode,
     axisIncludeAll,
@@ -287,6 +324,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
     removeAxisValue,
     tagStates, setTagStates,
     cycleTagState,
+    cycleTagStateReverse,
     groupCombineModes,
     cycleGroupMode,
     groupExclusionModes,

@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Lock, Star, ChevronUp, ChevronDown, Settings, X } from 'lucide-react';
+import {
+  Lock, Star, ChevronUp, ChevronDown, Settings, X,
+  Layers, Hash, GraduationCap, Clock, Target, Hourglass, Box, Settings2,
+  Tag as TagIcon,
+} from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import { expandTagsWithAncestors, normalizeTagRow } from '../../lib/tagHierarchy';
@@ -11,7 +15,8 @@ import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../li
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
-import { FilterBar, TagGroupFilter, AxisFilterSection, matchesTagFilters } from '../../components/compendium/FilterBar';
+import { matchesTagFilters } from '../../components/compendium/FilterBar';
+import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
 import BackButton from '../../components/ui/BackButton';
@@ -636,44 +641,30 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       return { ...prev, [axisKey]: { ...cur, states } };
     });
   };
-  const cycleAxisCombineMode = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
-      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
-      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
-    });
-  };
-  const cycleAxisExclusionMode = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
-      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
-      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
-    });
-  };
-  const axisIncludeAll = (axisKey: string, values: readonly string[]) => {
+  // Reverse: off → exclude(2) → include(1) → off. Powers right-click
+  // on MiniPillFilterPanel — same transitions as cycleAxisState in
+  // mirror order so a user can jump straight to "exclude" without
+  // first going through "include".
+  const cycleAxisStateReverse = (axisKey: string, value: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
       const states: Record<string, number> = { ...cur.states };
-      for (const v of values) states[v] = 1;
+      const s = states[value] || 0;
+      const nextState = s === 0 ? 2 : s === 2 ? 1 : 0;
+      if (nextState === 0) delete states[value];
+      else states[value] = nextState;
       return { ...prev, [axisKey]: { ...cur, states } };
     });
   };
-  const axisExcludeAll = (axisKey: string, values: readonly string[]) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      const states: Record<string, number> = { ...cur.states };
-      for (const v of values) states[v] = 2;
-      return { ...prev, [axisKey]: { ...cur, states } };
-    });
-  };
-  const axisClear = (axisKey: string) => {
-    setAxisFilters(prev => {
-      const cur = prev[axisKey] || { states: {} };
-      return { ...prev, [axisKey]: { ...cur, states: {} } };
-    });
-  };
+  // Per-axis combine-mode cyclers + bulk include/exclude/clear helpers
+  // were removed when this page swapped from the FilterBar modal to
+  // MiniPillFilterPanel. The new UI doesn't surface AND/XOR combinators
+  // (everything defaults to OR) and the pill wall pattern makes bulk
+  // include/exclude unnecessary — users see every value at once and
+  // click the ones they want. If a future Advanced modal needs the
+  // combinator UI, re-add via the useSpellFilters hook (which still
+  // exports cycleAxisCombineMode / cycleAxisExclusionMode for the
+  // pages that use it).
 
   // 3-state cycle: 0 (neutral, not in record) -> 1 (include) -> 2 (exclude) -> 0
   const cycleTagState = (tagId: string) => {
@@ -686,20 +677,23 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
       return next;
     });
   };
-  const cycleGroupMode = (groupId: string) => {
-    setGroupCombineModes(prev => {
-      const cur = prev[groupId] || 'OR';
-      const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-      return { ...prev, [groupId]: nextMode };
+  // Reverse: off → exclude → include → off. Mirror of cycleTagState
+  // for MiniPillFilterPanel's right-click affordance.
+  const cycleTagStateReverse = (tagId: string) => {
+    setTagStates(prev => {
+      const next = { ...prev };
+      const state = next[tagId] || 0;
+      if (state === 0) next[tagId] = 2;
+      else if (state === 2) next[tagId] = 1;
+      else delete next[tagId];
+      return next;
     });
   };
-  const cycleExclusionMode = (groupId: string) => {
-    setGroupExclusionModes(prev => {
-      const cur = prev[groupId] || 'OR';
-      const nextMode = cur === 'OR' ? 'AND' : cur === 'AND' ? 'XOR' : 'OR';
-      return { ...prev, [groupId]: nextMode };
-    });
-  };
+  // Per-group combine + exclusion cyclers also removed alongside the
+  // FilterBar swap. groupCombineModes / groupExclusionModes state is
+  // kept (still consumed by matchesTagFilters) but always empty — the
+  // matcher falls back to OR/OR for every group, which is what the
+  // pill wall implicitly promises.
 
   const renderSourceAbbreviation = (spell: SpellRecord) => {
     const sourceRecord = sourceById[String(spell.sourceId ?? '')];
@@ -715,6 +709,72 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     setGroupCombineModes({});
     setGroupExclusionModes({});
   };
+
+  // Axis descriptors for MiniPillFilterPanel. One descriptor per
+  // filter axis renders as a labelled pill row; tags additionally
+  // get one row per tag group. Memoised so the descriptor array
+  // only rebuilds when sources / tagGroups / tagsByGroup change —
+  // the labelled value lists are static otherwise.
+  //
+  // Per-axis combine modes (AND/OR/XOR) are NOT surfaced in the
+  // pill wall — each axis defaults to OR for both include and
+  // exclude. If a page needs finer combinators, the old FilterBar
+  // (modal pattern) is still the canonical option until an
+  // Advanced modal slot lands on MiniPillFilterPanel.
+  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
+    const axes: MiniPillAxis[] = [
+      {
+        key: 'source', name: 'Sources', icon: Layers, kind: 'axis',
+        values: sources.map(s => ({
+          value: s.id,
+          label: String(s.abbreviation || s.shortName || s.name || s.id),
+        })),
+      },
+      {
+        key: 'level', name: 'Spell Level', icon: Hash, kind: 'axis',
+        values: LEVEL_OPTIONS.filter(e => e.value !== 'all'),
+      },
+      {
+        key: 'school', name: 'School', icon: GraduationCap, kind: 'axis',
+        values: SCHOOL_OPTIONS.filter(e => e.value !== 'all'),
+      },
+      {
+        key: 'activation', name: 'Casting Time', icon: Clock, kind: 'axis',
+        values: ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] })),
+      },
+      {
+        key: 'range', name: 'Range', icon: Target, kind: 'axis',
+        values: RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] })),
+      },
+      {
+        key: 'duration', name: 'Duration', icon: Hourglass, kind: 'axis',
+        values: DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] })),
+      },
+      {
+        key: 'shape', name: 'Shape', icon: Box, kind: 'axis',
+        values: SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] })),
+      },
+      {
+        key: 'property', name: 'Properties', icon: Settings2, kind: 'axis',
+        values: PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] })),
+      },
+    ];
+    // One row per tag group — keeps the visual rhythm consistent
+    // with the rest of the wall while preserving the group
+    // organisation users already know.
+    for (const group of tagGroups) {
+      const tags = (tagsByGroup[group.id] || []) as Array<{ id: string; name?: string }>;
+      if (tags.length === 0) continue;
+      axes.push({
+        key: `tag-group:${group.id}`,
+        name: String((group as any).name ?? 'Tags'),
+        icon: TagIcon,
+        kind: 'tag',
+        values: tags.map(t => ({ value: t.id, label: String(t.name ?? t.id) })),
+      });
+    }
+    return axes;
+  }, [sources, tagGroups, tagsByGroup]);
 
   // Settings popover — page-level UI preferences (currently just the
   // column-visibility toggles, but designed to host future per-user
@@ -790,16 +850,20 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     // remaining vertical space.
     <div className="h-full flex flex-col gap-2 p-2">
       <div className="shrink-0">
-        <FilterBar
+        <MiniPillFilterPanel
+          axes={miniPillAxes}
+          axisFilters={axisFilters}
+          tagStates={tagStates}
+          cycleAxisState={cycleAxisState}
+          cycleAxisStateReverse={cycleAxisStateReverse}
+          cycleTagState={cycleTagState}
+          cycleTagStateReverse={cycleTagStateReverse}
           search={search}
           setSearch={setSearch}
-          isFilterOpen={filterOpen}
-          setIsFilterOpen={setFilterOpen}
-          activeFilterCount={activeFilterCount}
-          resetFilters={resetFilters}
           searchPlaceholder="Search spell name, source, or identifier"
-          filterTitle="Advanced Filters"
-          resetLabel="Reset Filters"
+          activeFilterCount={activeFilterCount}
+          resetAll={resetFilters}
+          resultCount={resultCount}
           leadingActions={
             classFilter ? (
               <BackButton
@@ -822,7 +886,6 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                   <X className="w-3 h-3" />
                 </button>
               ) : null}
-              {resultCount}
               {settingsPopover}
               {userProfile?.role === 'admin' ? (
                 <Link to="/compendium/spells/manage">
@@ -836,155 +899,6 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                   </Button>
                 </Link>
               ) : null}
-            </>
-          }
-          renderFilters={
-            <>
-              {/* Base filter sections — each gets 3-state include/exclude
-                  chips plus per-section AND/OR/XOR (include combinator)
-                  and Exclusion Logic (exclude combinator). Single-valued
-                  axes (level/school/source/buckets) treat AND/XOR like
-                  OR; multi-valued Properties uses the combinators
-                  faithfully. Tags live in the Advanced Options
-                  disclosure below the base filters. */}
-              <AxisFilterSection
-                title="Sources"
-                values={sources.map((source) => ({ value: source.id, label: String(source.abbreviation || source.shortName || source.name || source.id) }))}
-                states={axisFilters.source?.states || {}}
-                cycleState={(v) => cycleAxisState('source', v)}
-                combineMode={axisFilters.source?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('source')}
-                exclusionMode={axisFilters.source?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('source')}
-                includeAll={() => axisIncludeAll('source', sources.map((source) => source.id))}
-                excludeAll={() => axisExcludeAll('source', sources.map((source) => source.id))}
-                clearAll={() => axisClear('source')}
-              />
-              <AxisFilterSection
-                title="Spell Level"
-                values={LEVEL_OPTIONS.filter((entry) => entry.value !== 'all')}
-                states={axisFilters.level?.states || {}}
-                cycleState={(v) => cycleAxisState('level', v)}
-                combineMode={axisFilters.level?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('level')}
-                exclusionMode={axisFilters.level?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('level')}
-                includeAll={() => axisIncludeAll('level', LEVEL_OPTIONS.filter((entry) => entry.value !== 'all').map((entry) => entry.value))}
-                excludeAll={() => axisExcludeAll('level', LEVEL_OPTIONS.filter((entry) => entry.value !== 'all').map((entry) => entry.value))}
-                clearAll={() => axisClear('level')}
-              />
-              <AxisFilterSection
-                title="Spell School"
-                values={SCHOOL_OPTIONS.filter((entry) => entry.value !== 'all')}
-                states={axisFilters.school?.states || {}}
-                cycleState={(v) => cycleAxisState('school', v)}
-                combineMode={axisFilters.school?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('school')}
-                exclusionMode={axisFilters.school?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('school')}
-                includeAll={() => axisIncludeAll('school', SCHOOL_OPTIONS.filter((entry) => entry.value !== 'all').map((entry) => entry.value))}
-                excludeAll={() => axisExcludeAll('school', SCHOOL_OPTIONS.filter((entry) => entry.value !== 'all').map((entry) => entry.value))}
-                clearAll={() => axisClear('school')}
-              />
-              <AxisFilterSection
-                title="Casting Time"
-                values={ACTIVATION_ORDER.map((b) => ({ value: b, label: ACTIVATION_LABELS[b] }))}
-                states={axisFilters.activation?.states || {}}
-                cycleState={(v) => cycleAxisState('activation', v)}
-                combineMode={axisFilters.activation?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('activation')}
-                exclusionMode={axisFilters.activation?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('activation')}
-                includeAll={() => axisIncludeAll('activation', ACTIVATION_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('activation', ACTIVATION_ORDER as readonly string[])}
-                clearAll={() => axisClear('activation')}
-              />
-              <AxisFilterSection
-                title="Range"
-                values={RANGE_ORDER.map((b) => ({ value: b, label: RANGE_LABELS[b] }))}
-                states={axisFilters.range?.states || {}}
-                cycleState={(v) => cycleAxisState('range', v)}
-                combineMode={axisFilters.range?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('range')}
-                exclusionMode={axisFilters.range?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('range')}
-                includeAll={() => axisIncludeAll('range', RANGE_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('range', RANGE_ORDER as readonly string[])}
-                clearAll={() => axisClear('range')}
-              />
-              <AxisFilterSection
-                title="Shape"
-                values={SHAPE_ORDER.map((b) => ({ value: b, label: SHAPE_LABELS[b] }))}
-                states={axisFilters.shape?.states || {}}
-                cycleState={(v) => cycleAxisState('shape', v)}
-                combineMode={axisFilters.shape?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('shape')}
-                exclusionMode={axisFilters.shape?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('shape')}
-                includeAll={() => axisIncludeAll('shape', SHAPE_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('shape', SHAPE_ORDER as readonly string[])}
-                clearAll={() => axisClear('shape')}
-              />
-              <AxisFilterSection
-                title="Duration"
-                values={DURATION_ORDER.map((b) => ({ value: b, label: DURATION_LABELS[b] }))}
-                states={axisFilters.duration?.states || {}}
-                cycleState={(v) => cycleAxisState('duration', v)}
-                combineMode={axisFilters.duration?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('duration')}
-                exclusionMode={axisFilters.duration?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('duration')}
-                includeAll={() => axisIncludeAll('duration', DURATION_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('duration', DURATION_ORDER as readonly string[])}
-                clearAll={() => axisClear('duration')}
-              />
-              <AxisFilterSection
-                title="Properties"
-                values={PROPERTY_ORDER.map((p) => ({ value: p, label: PROPERTY_LABELS[p] }))}
-                states={axisFilters.property?.states || {}}
-                cycleState={(v) => cycleAxisState('property', v)}
-                combineMode={axisFilters.property?.combineMode}
-                cycleCombineMode={() => cycleAxisCombineMode('property')}
-                exclusionMode={axisFilters.property?.exclusionMode}
-                cycleExclusionMode={() => cycleAxisExclusionMode('property')}
-                includeAll={() => axisIncludeAll('property', PROPERTY_ORDER as readonly string[])}
-                excludeAll={() => axisExcludeAll('property', PROPERTY_ORDER as readonly string[])}
-                clearAll={() => axisClear('property')}
-              />
-
-              {/* Tags + per-group combinators in a collapsible
-                  Advanced Options block. Subtag-aware: each chip
-                  toggle expands the spell's tag set with ancestors
-                  before matching, so a `Conjure` include catches
-                  spells tagged `Conjure.Manifest`. Hierarchical
-                  parent-then-indented-subtag layout inside. */}
-              <details className="group">
-                <summary className="cursor-pointer list-none flex items-center justify-between border border-gold/15 rounded-md px-4 py-2 hover:border-gold/30 transition-colors">
-                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-gold/80">
-                    Advanced Options — Tags
-                    {Object.keys(tagStates).length > 0 && (
-                      <span className="ml-2 text-gold/60">({Object.keys(tagStates).length} selected)</span>
-                    )}
-                  </span>
-                  <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
-                </summary>
-                <div className="mt-4 space-y-6 pl-1">
-                  {tagGroups.map((group) => (
-                    <TagGroupFilter
-                      key={group.id}
-                      group={group}
-                      tags={(tagsByGroup[group.id] || []) as any}
-                      tagStates={tagStates}
-                      setTagStates={setTagStates}
-                      cycleTagState={cycleTagState}
-                      combineMode={groupCombineModes[group.id]}
-                      cycleGroupMode={cycleGroupMode}
-                      exclusionMode={groupExclusionModes[group.id]}
-                      cycleExclusionMode={cycleExclusionMode}
-                    />
-                  ))}
-                </div>
-              </details>
             </>
           }
         />
