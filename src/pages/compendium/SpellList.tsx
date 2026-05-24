@@ -14,7 +14,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { FilterBar, matchesTagFilters } from '../../components/compendium/FilterBar';
-import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
 import BackButton from '../../components/ui/BackButton';
@@ -654,7 +654,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     });
   };
   // Reverse: off → exclude(2) → include(1) → off. Powers right-click
-  // on MiniPillFilterPanel — same transitions as cycleAxisState in
+  // on SectionFilterPanel — same transitions as cycleAxisState in
   // mirror order so a user can jump straight to "exclude" without
   // first going through "include".
   const cycleAxisStateReverse = (axisKey: string, value: string) => {
@@ -669,7 +669,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     });
   };
   // Per-axis bulk + combinator helpers. Live alongside `cycleAxisState`
-  // — all of them feed MiniPillFilterPanel's per-axis control row
+  // — all of them feed SectionFilterPanel's per-axis control row
   // (5e.tools-style all / clear / none / default + include + exclude
   // combinator cycle). Each handler mutates the unified axisFilters
   // record in one place, so adding a new axis is just a new entry in
@@ -758,7 +758,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     });
   };
   // Reverse: off → exclude → include → off. Mirror of cycleTagState
-  // for MiniPillFilterPanel's right-click affordance.
+  // for SectionFilterPanel's right-click affordance.
   const cycleTagStateReverse = (tagId: string) => {
     setTagStates(prev => {
       const next = { ...prev };
@@ -770,7 +770,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     });
   };
   // Per-group combine + exclusion cyclers — wired to
-  // MiniPillFilterPanel's tag-axis combinator buttons (advanced tab).
+  // SectionFilterPanel's tag-axis combinator buttons (advanced tab).
   const cycleGroupMode = (groupId: string) => {
     setGroupCombineModes(prev => {
       const cur = prev[groupId] || 'OR';
@@ -821,7 +821,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     setGroupExclusionModes({});
   };
 
-  // Axis descriptors for MiniPillFilterPanel — flat list (no tabs;
+  // Axis descriptors for SectionFilterPanel — flat list (no tabs;
   // the Filters/Advanced split felt like extra navigation for what's
   // ultimately one scrollable wall). Base axes (source / level /
   // school / casting time / range / duration / shape / properties)
@@ -829,9 +829,9 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   //
   // Each axis's pill row carries the 5e.tools-style controls
   // (all / clear / none / default / OR-AND-XOR / OR-AND-XOR / hide)
-  // — handled inside MiniPillFilterPanel itself.
+  // — handled inside SectionFilterPanel itself.
   //
-  // Tag-kind axes attach `parentValue` per value so MiniPillFilterPanel
+  // Tag-kind axes attach `parentValue` per value so SectionFilterPanel
   // can hide subtags at rest. The matcher uses `expandTagsWithAncestors`
   // anyway, so including a parent already catches every subtag; the
   // collapsed default keeps the wall dense, and chip-search reveals
@@ -839,8 +839,8 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
   //
   // Memoised so the descriptor only rebuilds when sources / tagGroups
   // / tagsByGroup change.
-  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
-    const axes: MiniPillAxis[] = [
+  const miniPillAxes = useMemo<FilterSection[]>(() => {
+    const axes: FilterSection[] = [
       {
         key: 'source', name: 'Sources', kind: 'axis',
         hasDefault: true, // sources default to "all included" — every other
@@ -1046,7 +1046,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             // with each row carrying the 5e.tools-style controls
             // (all / clear / none / default / OR-AND-XOR include /
             // OR-AND-XOR exclude / hide).
-            <MiniPillFilterPanel
+            <SectionFilterPanel
               axes={miniPillAxes}
               axisFilters={axisFilters}
               tagStates={tagStates}

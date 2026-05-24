@@ -41,7 +41,7 @@ export type UseSpellFiltersResult = {
   /**
    * Reverse cycle: off → exclude → include → off. Mirror of
    * `cycleAxisState`; powers the right-click path in surfaces that
-   * surface both directions (e.g. MiniPillFilterPanel). Lets a user
+   * surface both directions (e.g. SectionFilterPanel). Lets a user
    * jump straight to "exclude" without first going through "include".
    */
   cycleAxisStateReverse: (axisKey: string, value: string) => void;
@@ -62,7 +62,7 @@ export type UseSpellFiltersResult = {
   cycleTagState: (tagId: string) => void;
   /**
    * Reverse cycle for tags: off → exclude → include → off. Mirror of
-   * `cycleTagState`; same right-click affordance MiniPillFilterPanel
+   * `cycleTagState`; same right-click affordance SectionFilterPanel
    * uses for axis pills.
    */
   cycleTagStateReverse: (tagId: string) => void;
@@ -141,7 +141,7 @@ export function useSpellFilters(): UseSpellFiltersResult {
     });
   }, []);
   // Reverse-direction cyclers (right-click affordance on combinator
-  // buttons in MiniPillFilterPanel). Same forward chain just walked
+  // buttons in SectionFilterPanel). Same forward chain just walked
   // in mirror order so a user can jump straight to XOR from OR
   // without going through AND first.
   const cycleAxisCombineModeReverse = useCallback((axisKey: string) => {

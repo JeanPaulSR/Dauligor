@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { FilterBar } from './FilterBar';
-import { MiniPillFilterPanel, type MiniPillAxis } from './MiniPillFilterPanel';
+import { SectionFilterPanel, type FilterSection } from './SectionFilterPanel';
 import { cn } from '../../lib/utils';
 import { SCHOOL_LABELS } from '../../lib/spellImport';
 import {
@@ -81,12 +81,12 @@ export default function SpellFilterShell({
     return map;
   }, [tags]);
 
-  // Axis descriptors for MiniPillFilterPanel. Same eight base axes
+  // Axis descriptors for SectionFilterPanel. Same eight base axes
   // SpellList ships with, plus one row per tag group. Subtags get
   // their parentValue wired so the panel's chevron drawer treats
   // them as hierarchical children of the parent tag.
-  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
-    const axes: MiniPillAxis[] = [
+  const miniPillAxes = useMemo<FilterSection[]>(() => {
+    const axes: FilterSection[] = [
       {
         key: 'source', name: 'Sources', kind: 'axis', hasDefault: true,
         values: sources.map(s => ({
@@ -186,7 +186,7 @@ export default function SpellFilterShell({
               // /compendium/spells. `embedded` skips the panel's
               // own search/header chrome since FilterBar's toolbar
               // already owns those.
-              <MiniPillFilterPanel
+              <SectionFilterPanel
                 axes={miniPillAxes}
                 axisFilters={filters.axisFilters}
                 tagStates={filters.tagStates}

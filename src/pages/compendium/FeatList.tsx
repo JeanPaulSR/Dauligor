@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { FilterBar } from '../../components/compendium/FilterBar';
-import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
 import FeatDetailPanel from '../../components/compendium/FeatDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
@@ -170,7 +170,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
 
   // Per-axis updaters — same generic pattern every list page uses.
   // Forward cyclers serve left-click; reverse cyclers power
-  // MiniPillFilterPanel's right-click affordance on pills + combinators.
+  // SectionFilterPanel's right-click affordance on pills + combinators.
   const cycleAxisState = (axisKey: string, value: string) => {
     setAxisFilters(prev => {
       const cur = prev[axisKey] || { states: {} };
@@ -257,11 +257,11 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
     setAxisFilters({});
   };
 
-  // Axis descriptors for MiniPillFilterPanel. Three axes — Sources,
+  // Axis descriptors for SectionFilterPanel. Three axes — Sources,
   // Feat Type, Properties — no tag groups (feats aren't tagged in
   // this catalogue). Sources is the only one with a meaningful
   // default (clear is fine for feats since we don't pre-select).
-  const miniPillAxes = useMemo<MiniPillAxis[]>(() => ([
+  const miniPillAxes = useMemo<FilterSection[]>(() => ([
     {
       key: 'source', name: 'Sources', kind: 'axis',
       values: sources.map(s => ({
@@ -316,7 +316,7 @@ export default function FeatList({ userProfile }: { userProfile: any }) {
           filterTitle="Advanced Filters"
           resetLabel="Reset Filters"
           renderFilters={
-            <MiniPillFilterPanel
+            <SectionFilterPanel
               axes={miniPillAxes}
               axisFilters={axisFilters}
               tagStates={{}}

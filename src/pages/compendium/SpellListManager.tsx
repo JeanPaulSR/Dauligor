@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import VirtualizedList from '../../components/ui/VirtualizedList';
 import SingleSelectSearch from '../../components/ui/SingleSelectSearch';
 import { FilterBar, matchesTagFilters } from '../../components/compendium/FilterBar';
-import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import { StatusEmblem } from '../../components/ui/StatusEmblem';
 import { fetchCollection } from '../../lib/d1';
@@ -618,14 +618,14 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     return map;
   }, [tags]);
 
-  // Axis descriptors for MiniPillFilterPanel — same shape as
+  // Axis descriptors for SectionFilterPanel — same shape as
   // SpellList / SpellFilterShell. Sources carry labelAlt (full name)
   // and hasDefault (so the per-axis "default" button restores them
   // to "all included" via axisRestoreDefault below). Tag values
   // forward their parentTagId as parentValue so the panel's chevron
   // drawer treats them as hierarchical children.
-  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
-    const axes: MiniPillAxis[] = [
+  const miniPillAxes = useMemo<FilterSection[]>(() => {
+    const axes: FilterSection[] = [
       {
         key: 'source', name: 'Sources', kind: 'axis', hasDefault: true,
         values: sources.map(s => ({
@@ -752,7 +752,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
     + Object.keys(axisFilters.property?.states ?? {}).length;
 
   // Per-axis updaters — same generic pattern as SpellList. Forward
-  // cyclers serve left-click in MiniPillFilterPanel; reverse-cyclers
+  // cyclers serve left-click in SectionFilterPanel; reverse-cyclers
   // power the right-click affordance on pills + combinator buttons.
   const cycleAxisState = (axisKey: string, value: string) => {
     setAxisFilters(prev => {
@@ -1581,7 +1581,7 @@ export default function SpellListManager({ userProfile }: { userProfile: any }) 
               searchPlaceholder="Search spells by name or tag..."
               filterTitle="Spell Filters"
               renderFilters={
-                <MiniPillFilterPanel
+                <SectionFilterPanel
                   axes={miniPillAxes}
                   axisFilters={axisFilters}
                   tagStates={tagStates}

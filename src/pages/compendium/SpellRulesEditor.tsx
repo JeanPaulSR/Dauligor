@@ -7,7 +7,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
-import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { fetchCollection } from '../../lib/d1';
 import { fetchSpellSummaries } from '../../lib/spellSummary';
 import { normalizeTagRow, orderTagsAsTree, tagPickerLabel, buildTagIndex } from '../../lib/tagHierarchy';
@@ -632,7 +632,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   };
 
   // Reverse-direction cyclers for the right-click affordance in
-  // MiniPillFilterPanel (mirror the forward cycle).
+  // SectionFilterPanel (mirror the forward cycle).
   const cycleAxisStateReverse = (axisKey: AxisFieldName, legacyKey: LegacyFieldName, value: string) => {
     if (!draft) return;
     const axis = (activeClause[axisKey] as any) || {};
@@ -658,7 +658,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     updateQuery({ [axisKey]: { ...axis, exclusionMode: next }, [legacyKey]: undefined } as Partial<RuleQuery>);
   };
 
-  // Axis-key → legacy-field map. MiniPillFilterPanel passes only
+  // Axis-key → legacy-field map. SectionFilterPanel passes only
   // axisKey through its callbacks, but our writers need the legacy
   // field name to clear out the back-compat array on every write
   // (rule writes always migrate to the rich shape). Look up here.
@@ -672,7 +672,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     shape: 'shapeFilters',
     property: 'propertyFilters',
   };
-  // MiniPillFilterPanel-compatible adapters — narrower signatures
+  // SectionFilterPanel-compatible adapters — narrower signatures
   // that match the panel's prop contract; internally they look up
   // the legacy field name and dispatch to the full helpers above.
   const panelCycleAxisState = (axisKey: string, value: string) =>
@@ -759,7 +759,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
   // Two separate axis lists — one for the "Normal Options"
   // disclosure (base axes), one for "Advanced Options — Tags"
   // (per-tag-group rows). Mirrors the original two-disclosure UX.
-  const miniPillBaseAxes = useMemo<MiniPillAxis[]>(() => ([
+  const miniPillBaseAxes = useMemo<FilterSection[]>(() => ([
     {
       key: 'source', name: 'Sources', kind: 'axis',
       values: sources.map(s => ({
@@ -798,8 +798,8 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
     },
   ]), [sources]);
 
-  const miniPillTagAxes = useMemo<MiniPillAxis[]>(() => {
-    const axes: MiniPillAxis[] = [];
+  const miniPillTagAxes = useMemo<FilterSection[]>(() => {
+    const axes: FilterSection[] = [];
     for (const group of tagGroups) {
       const groupTags = (tagsByGroup[group.id] || []) as Array<{ id: string; name?: string; parentTagId?: string | null; parent_tag_id?: string | null }>;
       if (groupTags.length === 0) continue;
@@ -1364,7 +1364,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
                           </summary>
                           <div className="mt-3 pl-1">
-                            <MiniPillFilterPanel
+                            <SectionFilterPanel
                               axes={miniPillBaseAxes}
                               axisFilters={panelAxisFilters}
                               tagStates={{}}
@@ -1403,7 +1403,7 @@ export default function SpellRulesEditor({ userProfile }: { userProfile: any }) 
                             <span className="text-[10px] text-ink/40 group-open:rotate-90 transition-transform">▶</span>
                           </summary>
                           <div className="mt-4 pl-1">
-                            <MiniPillFilterPanel
+                            <SectionFilterPanel
                               axes={miniPillTagAxes}
                               axisFilters={{}}
                               tagStates={activeClause.tagStates || {}}

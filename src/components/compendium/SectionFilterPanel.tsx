@@ -46,7 +46,7 @@ import { useFilterBarContext } from './FilterBar';
  * - default — alias to clear (no per-axis defaults configured yet;
  *             if a caller needs meaningful defaults later, add a
  *             `defaultStates?: Record<string, 0|1|2>` field on
- *             MiniPillAxis and consult it here)
+ *             FilterSection and consult it here)
  * - combine mode (OR/AND/XOR) — how multiple includes combine
  * - exclude mode (OR/AND/XOR) — how multiple excludes combine
  * - hide — collapse to header only (local state, not persisted)
@@ -70,7 +70,7 @@ import { useFilterBarContext } from './FilterBar';
  * toolbar (FilterBar inside `renderFilters`, etc.).
  */
 
-export type MiniPillAxis = {
+export type FilterSection = {
   /** Unique key. For 'axis' kind this is the axisFilters key
    *  (e.g. 'source'). For 'tag' kind it's a synthetic id used as
    *  the React `key` (e.g. `tag-group:${groupId}`). */
@@ -126,21 +126,21 @@ export type MiniPillAxis = {
   groupId?: string;
 };
 
-export type MiniPillTab = {
+export type FilterSectionTab = {
   key: string;
   label: string;
   icon?: LucideIcon;
   /** If true, the tab strip shows a small "data present" dot. */
   showDot?: boolean;
-  axes: MiniPillAxis[];
+  axes: FilterSection[];
 };
 
-export interface MiniPillFilterPanelProps {
+export interface SectionFilterPanelProps {
   /** Either pass a flat axes list OR pass `tabs` (with axes
    *  inside each tab) — not both. When tabs is present, `axes`
    *  is ignored. */
-  axes?: MiniPillAxis[];
-  tabs?: MiniPillTab[];
+  axes?: FilterSection[];
+  tabs?: FilterSectionTab[];
 
   axisFilters: Record<string, AxisState>;
   tagStates: Record<string, number>;
@@ -208,7 +208,7 @@ function matchesPillSearch(label: string, axisName: string, query: string): bool
  * the wiring is heavily coupled to the parent's prop set and the
  * extraction would just be prop shuffling.
  */
-function MiniPillAxisRow({
+function FilterSectionRow({
   axis,
   axisFilters,
   tagStates,
@@ -244,7 +244,7 @@ function MiniPillAxisRow({
   useAltLabel,
   toggleUseAltLabel,
 }: {
-  axis: MiniPillAxis;
+  axis: FilterSection;
   axisFilters: Record<string, AxisState>;
   tagStates: Record<string, number>;
   hidden: boolean;
@@ -404,14 +404,14 @@ function MiniPillAxisRow({
             colour at rest so the include/exclude split reads
             without a hover. */}
         <div className="flex items-center gap-0.5 flex-wrap justify-end">
-          <AxisControlButton onClick={handleAll} label="all" color="include-hover" title="Include every value in this axis" />
-          <AxisControlButton onClick={handleClear} label="clear" title="Remove every entry in this axis" />
-          <AxisControlButton onClick={handleNone} label="none" color="exclude-hover" title="Exclude every value in this axis" />
+          <AxisControlButton onClick={handleAll} label="all" color="include-hover" title="Include every value in this section" />
+          <AxisControlButton onClick={handleClear} label="clear" title="Remove every entry in this section" />
+          <AxisControlButton onClick={handleNone} label="none" color="exclude-hover" title="Exclude every value in this section" />
           {/* Default button only when the axis has a meaningful
               non-clear default — every other axis's "default" is
               just clear, so showing it is pure noise. */}
           {axis.hasDefault && (
-            <AxisControlButton onClick={handleDefault} label="default" title="Reset this axis to its default state" />
+            <AxisControlButton onClick={handleDefault} label="default" title="Reset this section to its default state" />
           )}
           {handleCombineCycle && (
             <AxisControlButton
@@ -448,7 +448,7 @@ function MiniPillAxisRow({
           <AxisControlButton
             onClick={toggleHidden}
             label={hidden ? 'show' : 'hide'}
-            title={hidden ? 'Show this axis again' : 'Collapse this axis to just the header'}
+            title={hidden ? 'Show this section again' : 'Collapse this section to just the header'}
           />
         </div>
       </div>
@@ -480,7 +480,7 @@ function MiniPillAxisRow({
 /**
  * Pill-rendering body for a single axis. Split into a sub-component
  * so the local `expandedParents` state lives at the row level (each
- * axis tracks its own expansions) without ballooning MiniPillAxisRow.
+ * axis tracks its own expansions) without ballooning FilterSectionRow.
  *
  * Layout:
  *   - Roots flow horizontally in a wrap-row. Each root with subtags
@@ -515,7 +515,7 @@ function PillBody({
   cycleTagState,
   cycleTagStateReverse,
 }: {
-  axis: MiniPillAxis;
+  axis: FilterSection;
   isTag: boolean;
   axisKey: string;
   axisStates: Record<string, number> | null;
@@ -798,7 +798,7 @@ function AxisControlButton({
   );
 }
 
-export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
+export function SectionFilterPanel(props: SectionFilterPanelProps) {
   const {
     axes,
     tabs,
@@ -818,7 +818,7 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
     leadingActions,
     embedded = false,
     className,
-    // Bulk handler grab-bag — re-passed to MiniPillAxisRow.
+    // Bulk handler grab-bag — re-passed to FilterSectionRow.
     cycleAxisCombineMode,
     cycleAxisCombineModeReverse,
     cycleAxisExclusionMode,
@@ -902,7 +902,7 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
 
   // Flatten the tabs->axes if tabs provided; the flat list is what
   // the include/exclude count + flat-fallback render path use.
-  const flatAxes: MiniPillAxis[] = tabs ? tabs.flatMap(t => t.axes) : (axes ?? []);
+  const flatAxes: FilterSection[] = tabs ? tabs.flatMap(t => t.axes) : (axes ?? []);
 
   const queryLower = effectiveSearch.trim().toLowerCase();
 
@@ -965,7 +965,7 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
   // no value matching it AND no actively-filtering pills, the whole
   // axis row vanishes. Keeps the wall short while typing — only
   // sections with relevant content stay.
-  const renderAxisRow = (axis: MiniPillAxis): React.ReactNode => {
+  const renderAxisRow = (axis: FilterSection): React.ReactNode => {
     if (queryLower !== '') {
       // Search is strictly about content match — active state is
       // not part of the search, so we don't pin sections / pills
@@ -980,7 +980,7 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
       if (!anyMatch) return null;
     }
     return (
-      <MiniPillAxisRow
+      <FilterSectionRow
         key={axis.key}
         axis={axis}
         axisFilters={axisFilters}
@@ -1097,4 +1097,4 @@ export function MiniPillFilterPanel(props: MiniPillFilterPanelProps) {
   );
 }
 
-export default MiniPillFilterPanel;
+export default SectionFilterPanel;

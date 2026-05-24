@@ -36,7 +36,7 @@ const FilterBarContext = React.createContext<FilterBarContextValue>({
   showAllVersion: 0,
 });
 // Exported so sibling components rendered inside FilterBar's
-// `renderFilters` slot (e.g. MiniPillFilterPanel) can subscribe to
+// `renderFilters` slot (e.g. SectionFilterPanel) can subscribe to
 // the chip-label search + bulk Show All / Hide All counters without
 // re-implementing the search input twice.
 export function useFilterBarContext() {

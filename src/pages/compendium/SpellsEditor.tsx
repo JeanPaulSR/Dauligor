@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import SpellImportWorkbench from '../../components/compendium/SpellImportWorkbench';
 import RuleMembershipPanel from '../../components/compendium/RuleMembershipPanel';
 import { FilterBar, matchesTagFilters } from '../../components/compendium/FilterBar';
-import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import {
   matchesSingleAxisFilter,
   matchesMultiAxisFilter,
@@ -690,11 +690,11 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
     return out;
   }, [tags]);
 
-  // Axis descriptors for MiniPillFilterPanel — same shape as
+  // Axis descriptors for SectionFilterPanel — same shape as
   // SpellListManager / SpellFilterShell. See those files for the
   // contract docs; this is just the SpellsEditor-flavoured wiring.
-  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
-    const axes: MiniPillAxis[] = [
+  const miniPillAxes = useMemo<FilterSection[]>(() => {
+    const axes: FilterSection[] = [
       {
         key: 'source', name: 'Sources', kind: 'axis', hasDefault: true,
         values: sources.map(s => ({
@@ -1658,7 +1658,7 @@ function SpellManualEditor({ userProfile }: { userProfile: any }) {
             </>
           }
           renderFilters={
-            <MiniPillFilterPanel
+            <SectionFilterPanel
               axes={miniPillAxes}
               axisFilters={axisFilters}
               tagStates={tagStates}
