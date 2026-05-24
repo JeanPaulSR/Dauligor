@@ -689,26 +689,35 @@ function PillBody({
           );
         })}
       </div>
-      {/* Drawers: one per expanded parent. Two-column grid so the
-          parent label sits in its own auto-width column and the
-          children flow within a separate 1fr column. Without
-          this they'd share a single wrap-flex and the label could
-          end up jammed mid-row when a wide tag pushed it down. */}
-      {visibleRoots.map(root => {
-        if (!isExpanded(root.value)) return null;
-        const subtags = childrenByParent.get(root.value) ?? [];
-        const pills = subtags.map(v => renderPill(v, { searchHide: true })).filter(Boolean);
-        if (pills.length === 0) return null;
+      {/* Drawers — ONE grid containing every expanded parent, not
+          one grid per drawer. The single grid means every row
+          shares the same auto column width for the label, so the
+          label column expands to the widest parent name in the
+          section. Each parent contributes a (label, pills) row to
+          the grid via a React.Fragment so the spans + flex
+          containers remain direct grid children. */}
+      {(() => {
+        type DrawerRow = { root: typeof axis.values[number]; pills: React.ReactNode[] };
+        const rows: DrawerRow[] = [];
+        for (const root of visibleRoots) {
+          if (!isExpanded(root.value)) continue;
+          const subtags = childrenByParent.get(root.value) ?? [];
+          const pills = subtags.map(v => renderPill(v, { searchHide: true })).filter(Boolean);
+          if (pills.length === 0) continue;
+          rows.push({ root, pills });
+        }
+        if (rows.length === 0) return null;
         return (
-          <div
-            key={`drawer-${root.value}`}
-            className="ml-3 pl-3 border-l border-gold/15 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1"
-          >
-            <span className="text-[10px] uppercase tracking-widest text-ink/40 pt-1">{root.label}:</span>
-            <div className="flex flex-wrap gap-1">{pills}</div>
+          <div className="ml-3 pl-3 border-l border-gold/15 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+            {rows.map(({ root, pills }) => (
+              <React.Fragment key={`drawer-${root.value}`}>
+                <span className="text-[10px] uppercase tracking-widest text-ink/40 pt-1">{root.label}:</span>
+                <div className="flex flex-wrap gap-1">{pills}</div>
+              </React.Fragment>
+            ))}
           </div>
         );
-      })}
+      })()}
     </div>
   );
 }
