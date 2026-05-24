@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
-import { Filter, X, Search, RotateCcw } from 'lucide-react';
-import { Button } from '../ui/button';
+import { Filter, RotateCcw } from 'lucide-react';
 import { SearchInput } from '../ui/SearchInput';
 import { StatusEmblem } from '../ui/StatusEmblem';
 import { cn } from '../../lib/utils';
@@ -85,6 +84,13 @@ export interface MiniPillFilterPanelProps {
   cycleTagState: (tagId: string) => void;
   cycleTagStateReverse: (tagId: string) => void;
 
+  /**
+   * Pill-name dim search. Empty = nothing dimmed. Owned by the caller
+   * so it can mirror whatever search field the host page already has
+   * (e.g. FilterBar's own search box). Optional — pass empty string +
+   * a no-op setter (or omit `embedded={false}` and let the panel own
+   * the field) when the caller has no upstream search.
+   */
   search: string;
   setSearch: (v: string) => void;
   searchPlaceholder?: string;
@@ -101,10 +107,28 @@ export interface MiniPillFilterPanelProps {
   resultCount?: React.ReactNode;
 
   /** Extra actions on the right side of the header row (Settings,
-   *  per-page toggles, links to other pages, etc.). */
+   *  per-page toggles, links to other pages, etc.). Ignored when
+   *  embedded — the host page's own toolbar owns those slots. */
   trailingActions?: React.ReactNode;
-  /** Extra actions on the left side (BackButton, etc.). */
+  /** Extra actions on the left side (BackButton, etc.). Ignored when
+   *  embedded. */
   leadingActions?: React.ReactNode;
+
+  /**
+   * When true, omit the search / reset / leading+trailing-actions
+   * header row entirely; render only the pill wall plus a compact
+   * active-state strip (include/exclude counts + Reset). Use this
+   * when the panel is slotted INSIDE a host that already owns those
+   * controls — e.g. inside FilterBar's `renderFilters` modal body,
+   * where the FilterBar header already has its own search box and
+   * Filter button.
+   *
+   * When false (default), the panel acts as a fully standalone
+   * filter surface with its own search box on top — useful for
+   * pages that want a persistent panel (no modal trigger) above
+   * the result list.
+   */
+  embedded?: boolean;
 
   /** Optional className on the outer wrapper. */
   className?: string;
@@ -136,6 +160,7 @@ export function MiniPillFilterPanel({
   resultCount,
   trailingActions,
   leadingActions,
+  embedded = false,
   className,
 }: MiniPillFilterPanelProps) {
   // Pre-compute the search-dim flag at the top of render so each pill
@@ -170,44 +195,88 @@ export function MiniPillFilterPanel({
   }, [axes, axisFilters, tagStates]);
 
   return (
-    <div className={cn('rounded-md border border-gold/15 bg-card/40', className)}>
-      {/* Header row — search, counts, leading/trailing actions */}
-      <div className="px-3 py-2 border-b border-gold/10 bg-gold/[0.03] flex items-center gap-2 flex-wrap">
-        {leadingActions}
-        <Filter className="w-3.5 h-3.5 text-gold/80 shrink-0" />
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder={searchPlaceholder}
-          className="h-8 min-w-[220px] flex-1"
-        />
-        {resultCount}
-        {activeFilterCount > 0 && (
-          <button
-            type="button"
-            onClick={resetAll}
-            className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-ink/55 hover:text-blood px-2 py-1 rounded border border-gold/10 hover:border-blood/40 transition-colors"
-            title={`Clear ${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}`}
-          >
-            <RotateCcw className="w-3 h-3" />
-            Reset
-          </button>
-        )}
-        {includeCount > 0 && (
-          <StatusEmblem tone="success" size="sm" title={`${includeCount} include filter${includeCount === 1 ? '' : 's'}`}>
-            +{includeCount}
-          </StatusEmblem>
-        )}
-        {excludeCount > 0 && (
-          <StatusEmblem tone="error" size="sm" title={`${excludeCount} exclude filter${excludeCount === 1 ? '' : 's'}`}>
-            −{excludeCount}
-          </StatusEmblem>
-        )}
-        {trailingActions ? <div className="ml-auto flex items-center gap-2 flex-wrap">{trailingActions}</div> : null}
-      </div>
+    <div
+      className={cn(
+        // Standalone version owns the visible card chrome; the
+        // embedded version slots into a host that already supplies
+        // a card / modal background and so leaves the chrome off.
+        !embedded && 'rounded-md border border-gold/15 bg-card/40',
+        className,
+      )}
+    >
+      {/* Standalone header row — search, counts, leading/trailing
+          actions. Skipped when `embedded` so we don't duplicate
+          chrome already provided by the host page (e.g. FilterBar's
+          own search box + Filter button + trailing actions). */}
+      {!embedded && (
+        <div className="px-3 py-2 border-b border-gold/10 bg-gold/[0.03] flex items-center gap-2 flex-wrap">
+          {leadingActions}
+          <Filter className="w-3.5 h-3.5 text-gold/80 shrink-0" />
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={searchPlaceholder}
+            className="h-8 min-w-[220px] flex-1"
+          />
+          {resultCount}
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={resetAll}
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-ink/55 hover:text-blood px-2 py-1 rounded border border-gold/10 hover:border-blood/40 transition-colors"
+              title={`Clear ${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}`}
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset
+            </button>
+          )}
+          {includeCount > 0 && (
+            <StatusEmblem tone="success" size="sm" title={`${includeCount} include filter${includeCount === 1 ? '' : 's'}`}>
+              +{includeCount}
+            </StatusEmblem>
+          )}
+          {excludeCount > 0 && (
+            <StatusEmblem tone="error" size="sm" title={`${excludeCount} exclude filter${excludeCount === 1 ? '' : 's'}`}>
+              −{excludeCount}
+            </StatusEmblem>
+          )}
+          {trailingActions ? <div className="ml-auto flex items-center gap-2 flex-wrap">{trailingActions}</div> : null}
+        </div>
+      )}
+
+      {/* Embedded mode still surfaces the active-state emblems + a
+          Reset shortcut — useful when the modal body sits behind a
+          FilterBar header that doesn't natively show the +N/−N
+          split. Render them inline above the wall. */}
+      {embedded && (includeCount > 0 || excludeCount > 0 || activeFilterCount > 0) && (
+        <div className="flex items-center gap-2 flex-wrap mb-1.5">
+          {includeCount > 0 && (
+            <StatusEmblem tone="success" size="sm" title={`${includeCount} include filter${includeCount === 1 ? '' : 's'}`}>
+              +{includeCount}
+            </StatusEmblem>
+          )}
+          {excludeCount > 0 && (
+            <StatusEmblem tone="error" size="sm" title={`${excludeCount} exclude filter${excludeCount === 1 ? '' : 's'}`}>
+              −{excludeCount}
+            </StatusEmblem>
+          )}
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={resetAll}
+              className="ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-widest text-ink/55 hover:text-blood px-2 py-1 rounded border border-gold/10 hover:border-blood/40 transition-colors"
+              title={`Clear ${activeFilterCount} active filter${activeFilterCount === 1 ? '' : 's'}`}
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Pill wall — every axis, every value, simultaneously visible */}
-      <div className="p-2 space-y-1.5">
+      <div className={cn('space-y-1.5', !embedded && 'p-2')}>
+
         {axes.map(axis => {
           const Icon = axis.icon;
           const axisStates =

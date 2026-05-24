@@ -15,7 +15,7 @@ import { SCHOOL_LABELS, formatActivationLabel, formatRangeLabel } from '../../li
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
-import { matchesTagFilters } from '../../components/compendium/FilterBar';
+import { FilterBar, matchesTagFilters } from '../../components/compendium/FilterBar';
 import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
@@ -850,20 +850,16 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     // remaining vertical space.
     <div className="h-full flex flex-col gap-2 p-2">
       <div className="shrink-0">
-        <MiniPillFilterPanel
-          axes={miniPillAxes}
-          axisFilters={axisFilters}
-          tagStates={tagStates}
-          cycleAxisState={cycleAxisState}
-          cycleAxisStateReverse={cycleAxisStateReverse}
-          cycleTagState={cycleTagState}
-          cycleTagStateReverse={cycleTagStateReverse}
+        <FilterBar
           search={search}
           setSearch={setSearch}
-          searchPlaceholder="Search spell name, source, or identifier"
+          isFilterOpen={filterOpen}
+          setIsFilterOpen={setFilterOpen}
           activeFilterCount={activeFilterCount}
-          resetAll={resetFilters}
-          resultCount={resultCount}
+          resetFilters={resetFilters}
+          searchPlaceholder="Search spell name, source, or identifier"
+          filterTitle="Filters"
+          resetLabel="Reset Filters"
           leadingActions={
             classFilter ? (
               <BackButton
@@ -886,6 +882,7 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                   <X className="w-3 h-3" />
                 </button>
               ) : null}
+              {resultCount}
               {settingsPopover}
               {userProfile?.role === 'admin' ? (
                 <Link to="/compendium/spells/manage">
@@ -900,6 +897,27 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
                 </Link>
               ) : null}
             </>
+          }
+          renderFilters={
+            // Variant E from /mockup/filter-modal — replaces the
+            // previous ~200-line AxisFilterSection cascade and the
+            // collapsible Tags details block. `embedded` skips the
+            // panel's own search/header chrome since FilterBar's
+            // toolbar already owns those.
+            <MiniPillFilterPanel
+              axes={miniPillAxes}
+              axisFilters={axisFilters}
+              tagStates={tagStates}
+              cycleAxisState={cycleAxisState}
+              cycleAxisStateReverse={cycleAxisStateReverse}
+              cycleTagState={cycleTagState}
+              cycleTagStateReverse={cycleTagStateReverse}
+              search={search}
+              setSearch={setSearch}
+              activeFilterCount={activeFilterCount}
+              resetAll={resetFilters}
+              embedded
+            />
           }
         />
       </div>
