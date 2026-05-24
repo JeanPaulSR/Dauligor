@@ -29,6 +29,7 @@
 import type { ExportFetchers } from "./_classExport.js";
 import { getSemanticSourceId } from "./_classExport.js";
 import { getConsumerSpellList } from "./_spellListResolver.js";
+import { executeD1QueryInternal } from "./d1-internal.js";
 
 const parseJsonField = (val: any, fallback: any) => {
   if (val == null) return fallback;
@@ -287,8 +288,10 @@ export async function buildClassSpellListByIdentifier(
   // We avoid using fetchers.fetchCollection here because the WHERE
   // clause needs LOWER() on both columns and that's awkward to
   // express through the param-shaping helper. Go direct with the
-  // server-side internal query.
-  const { executeD1QueryInternal } = await import("./d1-internal.js");
+  // server-side internal query (static import — Pages Functions
+  // bundling silently dropped the previous `await import("./d1-
+  // internal.js")` form, which is why this endpoint 404'd for the
+  // entire 4.2b → 4.6 window).
   const res = await executeD1QueryInternal({
     sql: "SELECT id FROM classes WHERE LOWER(identifier) = ? OR LOWER(id) = ? LIMIT 1",
     params: [lookup, lookup],
