@@ -77,7 +77,22 @@ export type MiniPillAxis = {
   key: string;
   name: string;
   icon?: LucideIcon;
-  values: Array<{ value: string; label: string; count?: number; title?: string }>;
+  values: Array<{
+    value: string;
+    label: string;
+    count?: number;
+    title?: string;
+    /**
+     * Optional parent value within the same axis. Used to express
+     * a hierarchy among tag-kind values: when set, the panel
+     * treats this value as a subtag and hides it from the wall by
+     * default. Subtags become visible when (a) chip-search has
+     * text matching them, or (b) the user has actively included
+     * or excluded the subtag. Keeps the wall dense while still
+     * letting power-users drill down via search.
+     */
+    parentValue?: string;
+  }>;
   /**
    * Where the per-value state lives in the caller's filter shape:
    *   'axis' — read from `axisFilters[axisKey].states[value]`,
@@ -291,7 +306,17 @@ function MiniPillAxisRow({
   return (
     <div className="rounded border border-gold/10 bg-background/20 p-1.5">
       <div className="flex items-baseline gap-2 mb-1 px-0.5 flex-wrap">
-        <span className="text-[9px] uppercase tracking-[0.22em] text-ink/60 font-bold">{axis.name}</span>
+        {/* Tag-kind axis names get a slightly larger label since
+            they act as the implicit section dividers in the wall
+            (no Filters/Advanced tabs to do the grouping any more). */}
+        <span
+          className={cn(
+            'uppercase tracking-[0.22em] text-ink/60 font-bold',
+            isTag ? 'text-xs' : 'text-[9px]',
+          )}
+        >
+          {axis.name}
+        </span>
         {axisActive > 0 && (
           <span className="text-[9px] text-gold/70 font-bold">· {axisActive} active</span>
         )}
@@ -335,17 +360,25 @@ function MiniPillAxisRow({
           match. Non-matching pills are completely removed from
           the DOM rather than dimmed: the user asked for them to
           "disappear", which makes the search behave like a
-          progressive filter rather than a faint highlight. */}
+          progressive filter rather than a faint highlight.
+          Subtags (values with a `parentValue` set) are hidden at
+          rest and revealed by chip-search or active selection —
+          keeps the wall dense while letting power users drill in
+          via type-to-find. */}
       {!hidden && (
         <div className="flex flex-wrap gap-1">
           {axis.values.map(v => {
             const state = isTag ? tagStates[v.value] : axisStates![v.value];
-            // Pin active pills regardless of search so the user
-            // doesn't lose sight of what's currently filtering —
-            // typing into the search and then clearing it should
-            // not orphan an include/exclude they can't see.
-            const matches = queryLower === '' || matchesPillSearch(v.label, axis.name, search);
-            if (!matches && !state) return null;
+            const isSubtag = !!v.parentValue;
+            const searching = queryLower !== '';
+            const matches = !searching || matchesPillSearch(v.label, axis.name, search);
+            // Hide rules — all gated by "not active" so an active
+            // pill always stays visible. Search overrides the
+            // subtag-hide so users can find subtags by typing.
+            if (!state) {
+              if (!searching && isSubtag) return null;
+              if (searching && !matches) return null;
+            }
             return (
               <button
                 key={v.value}

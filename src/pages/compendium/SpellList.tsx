@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Lock, Star, ChevronUp, ChevronDown, Settings, X,
-  Layers, Hash, GraduationCap, Clock, Target, Hourglass, Box, Settings2,
-  Filter, Tag as TagIcon,
 } from 'lucide-react';
 import { useSpellFavorites } from '../../lib/spellFavorites';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
@@ -16,7 +14,7 @@ import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
 import { FilterBar, matchesTagFilters } from '../../components/compendium/FilterBar';
-import { MiniPillFilterPanel, type MiniPillAxis, type MiniPillTab } from '../../components/compendium/MiniPillFilterPanel';
+import { MiniPillFilterPanel, type MiniPillAxis } from '../../components/compendium/MiniPillFilterPanel';
 import SpellDetailPanel from '../../components/compendium/SpellDetailPanel';
 import VirtualizedList from '../../components/ui/VirtualizedList';
 import BackButton from '../../components/ui/BackButton';
@@ -756,75 +754,90 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
     setGroupExclusionModes({});
   };
 
-  // Axis descriptors for MiniPillFilterPanel, split into two tabs:
+  // Axis descriptors for MiniPillFilterPanel — flat list (no tabs;
+  // the Filters/Advanced split felt like extra navigation for what's
+  // ultimately one scrollable wall). Base axes (source / level /
+  // school / casting time / range / duration / shape / properties)
+  // first, then one row per tag group.
   //
-  //   Filters  — base axes (source / level / school / casting time /
-  //              range / duration / shape / properties). Most users
-  //              start and stop here.
-  //   Advanced — one row per tag group. Tag combinators (AND/OR/XOR)
-  //              are heavier mental load so they sit behind a tab.
+  // Each axis's pill row carries the 5e.tools-style controls
+  // (all / clear / none / default / OR-AND-XOR / OR-AND-XOR / hide)
+  // — handled inside MiniPillFilterPanel itself.
   //
-  // Each axis's pill row also surfaces the 5e.tools-style controls
-  // (all / clear / none / default / +OR-AND-XOR / −OR-AND-XOR / hide)
-  // — those are handled inside MiniPillFilterPanel itself.
+  // Tag-kind axes attach `parentValue` per value so MiniPillFilterPanel
+  // can hide subtags at rest. The matcher uses `expandTagsWithAncestors`
+  // anyway, so including a parent already catches every subtag; the
+  // collapsed default keeps the wall dense, and chip-search reveals
+  // every subtag instantly for the rare narrow-include case.
   //
   // Memoised so the descriptor only rebuilds when sources / tagGroups
   // / tagsByGroup change.
-  const filterTabs = useMemo<MiniPillTab[]>(() => {
-    const baseAxes: MiniPillAxis[] = [
+  const miniPillAxes = useMemo<MiniPillAxis[]>(() => {
+    const axes: MiniPillAxis[] = [
       {
-        key: 'source', name: 'Sources', icon: Layers, kind: 'axis',
+        key: 'source', name: 'Sources', kind: 'axis',
         values: sources.map(s => ({
           value: s.id,
           label: String(s.abbreviation || s.shortName || s.name || s.id),
         })),
       },
       {
-        key: 'level', name: 'Spell Level', icon: Hash, kind: 'axis',
+        key: 'level', name: 'Spell Level', kind: 'axis',
         values: LEVEL_OPTIONS.filter(e => e.value !== 'all'),
       },
       {
-        key: 'school', name: 'School', icon: GraduationCap, kind: 'axis',
+        key: 'school', name: 'School', kind: 'axis',
         values: SCHOOL_OPTIONS.filter(e => e.value !== 'all'),
       },
       {
-        key: 'activation', name: 'Casting Time', icon: Clock, kind: 'axis',
+        key: 'activation', name: 'Casting Time', kind: 'axis',
         values: ACTIVATION_ORDER.map(b => ({ value: b, label: ACTIVATION_LABELS[b] })),
       },
       {
-        key: 'range', name: 'Range', icon: Target, kind: 'axis',
+        key: 'range', name: 'Range', kind: 'axis',
         values: RANGE_ORDER.map(b => ({ value: b, label: RANGE_LABELS[b] })),
       },
       {
-        key: 'duration', name: 'Duration', icon: Hourglass, kind: 'axis',
+        key: 'duration', name: 'Duration', kind: 'axis',
         values: DURATION_ORDER.map(b => ({ value: b, label: DURATION_LABELS[b] })),
       },
       {
-        key: 'shape', name: 'Shape', icon: Box, kind: 'axis',
+        key: 'shape', name: 'Shape', kind: 'axis',
         values: SHAPE_ORDER.map(b => ({ value: b, label: SHAPE_LABELS[b] })),
       },
       {
-        key: 'property', name: 'Properties', icon: Settings2, kind: 'axis',
+        key: 'property', name: 'Properties', kind: 'axis',
         values: PROPERTY_ORDER.map(p => ({ value: p, label: PROPERTY_LABELS[p] })),
       },
     ];
-    const advancedAxes: MiniPillAxis[] = [];
     for (const group of tagGroups) {
-      const tags = (tagsByGroup[group.id] || []) as Array<{ id: string; name?: string }>;
+      const tags = (tagsByGroup[group.id] || []) as Array<{
+        id: string;
+        name?: string;
+        parent_tag_id?: string | null;
+        parentTagId?: string | null;
+      }>;
       if (tags.length === 0) continue;
-      advancedAxes.push({
+      axes.push({
         key: `tag-group:${group.id}`,
         name: String((group as any).name ?? 'Tags'),
-        icon: TagIcon,
         kind: 'tag',
         groupId: group.id,
-        values: tags.map(t => ({ value: t.id, label: String(t.name ?? t.id) })),
+        values: tags.map(t => {
+          const parent = t.parent_tag_id ?? t.parentTagId ?? null;
+          return {
+            value: t.id,
+            label: String(t.name ?? t.id),
+            // Only forward parentValue when the parent is also in
+            // this same group's tag list — keeps the hide-by-default
+            // rule from accidentally hiding a child whose parent
+            // lives somewhere else (rare, but possible).
+            parentValue: parent && tags.some(s => s.id === parent) ? parent : undefined,
+          };
+        }),
       });
     }
-    return [
-      { key: 'base', label: 'Filters', icon: Filter, axes: baseAxes },
-      { key: 'advanced', label: 'Advanced', icon: TagIcon, axes: advancedAxes },
-    ];
+    return axes;
   }, [sources, tagGroups, tagsByGroup]);
 
   // Settings popover — page-level UI preferences (currently just the
@@ -954,13 +967,12 @@ export default function SpellList({ userProfile }: { userProfile: any }) {
             // previous ~200-line AxisFilterSection cascade and the
             // collapsible Tags details block. `embedded` skips the
             // panel's own search/header chrome since FilterBar's
-            // toolbar already owns those. `tabs` splits the wall
-            // into a Filters tab (base axes) and an Advanced tab
-            // (per-tag-group rows), each with its own 5e.tools-style
-            // per-axis control row (all/clear/none/default/combine/
-            // exclude/hide).
+            // toolbar already owns those. Flat axes list (no tabs)
+            // with each row carrying the 5e.tools-style controls
+            // (all / clear / none / default / OR-AND-XOR include /
+            // OR-AND-XOR exclude / hide).
             <MiniPillFilterPanel
-              tabs={filterTabs}
+              axes={miniPillAxes}
               axisFilters={axisFilters}
               tagStates={tagStates}
               cycleAxisState={cycleAxisState}
