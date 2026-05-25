@@ -1790,36 +1790,24 @@
   margin-top: 4px;
 }
 
+/* Sidebar Import buttons — same wrapper class (`header-actions
+ * action-buttons`) Foundry uses for its native sidebar buttons
+ * (Create Actor / Create Folder, etc.). We intentionally do NOT
+ * style the base button here — Foundry's own
+ * `.directory .directory-header .action-buttons button` rule + the
+ * global `button` rule give us the matching native look (the same
+ * look Plutonium's Import button gets for free by also not
+ * overriding it). We only set icon + text layout. */
 .dauligor-directory-tools__button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 0;
-  height: 28px;
-  line-height: 26px;
-  margin: 0;
-  border: 1px solid var(--dauligor-btn-border);
-  border-radius: 4px;
-  background: var(--dauligor-btn-bg);
-  color: var(--dauligor-text);
-  box-shadow: none;
-  padding: 0 8px;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.dauligor-directory-tools__button:hover,
-.dauligor-directory-tools__button:focus {
-  border-color: var(--dauligor-btn-border-hover);
-  background: var(--dauligor-btn-hover-bg);
-}
-
-.dauligor-directory-tools__button--primary {
-  justify-content: center;
-  min-width: 0;
 }
 
 .dauligor-directory-tools__button--icon {
+  /* Square icon-only variant — width matches Foundry's sidebar
+   * action-buttons height so the trio reads as a balanced group. */
   width: 32px;
   padding: 0;
 }
