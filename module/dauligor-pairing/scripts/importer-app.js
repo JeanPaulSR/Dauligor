@@ -6174,21 +6174,30 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
   // Filter state — mirrors the builder's AddSpellsModal:
   //   - search:    fuzzy name match
   //   - filterOpen: whether the chip panel is expanded
-  //   - lvlF / schoolF / sourceBookF / propF: active multi-select chips
+  //   - axisFilters: tri-state per-axis filter for SectionFilterPanel
   let searchTerm = "";
   let filterOpen = false;
-  // Filter axes — kept in sync with the chip set on /compendium/spells
-  // so a picker user sees the same facets they're used to in the app.
-  // Each Set holds the *active* chip values for that axis. AND semantics
-  // across axes, OR within an axis (matches the public spell browser).
-  const lvlF = new Set();         // numbers (0 = cantrip, 1..9 = leveled)
-  const schoolF = new Set();      // school slugs (abj, evo, ...)
-  const sourceBookF = new Set();  // sourceBookId strings
-  const actF = new Set();         // activation buckets (action / bonus / reaction / minute / hour / special)
-  const rangeF = new Set();       // range buckets (self / touch / close / near / far / ranged / special / sight / unlimited)
-  const durationF = new Set();    // duration buckets (instant / round / minute / hour / day / special / permanent)
-  const shapeF = new Set();       // shape buckets (cone / cube / sphere / line / square / cylinder / radius / none)
-  const propF = new Set();        // "ritual" / "concentration" / "vocal" / "somatic" / "material" / "already"
+  // Filter state — tri-state SectionFilterPanel shape, identical to
+  // the spell-preparation manager and the public /compendium/spells
+  // filter modal. Each axis stores: { states: { [value]: 1|2 },
+  // combineMode?, exclusionMode? }. Left-click pills cycle off →
+  // include → exclude → off; right-click reverses. AND across axes;
+  // OR within an axis by default, with per-axis OR/AND/XOR knobs.
+  // Eight axes — level, school, source, activation, range, duration,
+  // shape, prop. `prop` is multi-valued (a spell can be ritual AND
+  // concentration AND vocal); the others are single-valued.
+  const axisFilters = {};
+  // UI state for SectionFilterPanel — hidden axes, expanded subtag
+  // drawers (unused here; no tag axes), abbr toggle (unused; no
+  // labelAlt values), chip-search. Ephemeral; recreated when the
+  // picker re-opens.
+  const filterUi = {
+    hiddenAxes: new Set(),
+    expandedParents: new Map(),
+    allSubtagAxes: new Set(),
+    altLabelAxes: new Set(),
+    chipSearch: "",
+  };
 
   const togglePick = (sourceId, level) => {
     if (alreadyOnActorSourceIds.has(sourceId)) return false; // locked
@@ -6204,9 +6213,41 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     return true;
   };
 
-  const toggleInSet = (set, value) => {
-    if (set.has(value)) set.delete(value);
-    else set.add(value);
+  // Tri-state cyclers for SectionFilterPanel. Forward (left-click)
+  // and reverse (right-click) keep the include/exclude semantics
+  // identical to the spell-preparation manager and the React app.
+  const ensureAxis = (axisKey) => {
+    if (!axisFilters[axisKey]) axisFilters[axisKey] = { states: {} };
+    if (!axisFilters[axisKey].states) axisFilters[axisKey].states = {};
+    return axisFilters[axisKey];
+  };
+  const cyclePillForward = (axisKey, value) => {
+    const axis = ensureAxis(axisKey);
+    const next = nextStateForward(axis.states[value] || 0);
+    if (next === SECTION_FILTER_STATE.OFF) delete axis.states[value];
+    else axis.states[value] = next;
+  };
+  const cyclePillReverse = (axisKey, value) => {
+    const axis = ensureAxis(axisKey);
+    const next = nextStateReverse(axis.states[value] || 0);
+    if (next === SECTION_FILTER_STATE.OFF) delete axis.states[value];
+    else axis.states[value] = next;
+  };
+  const setAxisBulk = (axisKey, values, mode) => {
+    const axis = ensureAxis(axisKey);
+    for (const k of Object.keys(axis.states)) delete axis.states[k];
+    if (mode === SECTION_FILTER_STATE.OFF) return;
+    for (const v of values) axis.states[String(v)] = mode;
+  };
+  const clearAllAxisFilters = () => {
+    for (const k of Object.keys(axisFilters)) delete axisFilters[k];
+  };
+  const countActiveFilters = () => {
+    let n = 0;
+    for (const a of Object.values(axisFilters)) {
+      n += Object.keys(a.states || {}).length;
+    }
+    return n;
   };
 
   // ─── Pre-computed pool metadata ──────────────────────────────────
@@ -6240,34 +6281,34 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     return pool.filter((item) => {
       const f = item?.flags?.[MODULE_ID] ?? {};
       const sourceId = String(f.sourceId ?? "");
-      const lv = Number(f.level ?? 0);
-      const school = String(f.school ?? "");
-      const sourceBookId = String(f.spellSourceId ?? f.sourceBookId ?? "");
-      const activation = String(f.activationBucket ?? "");
-      const range = String(f.rangeBucket ?? "");
-      const duration = String(f.durationBucket ?? "");
-      const shape = String(f.shapeBucket ?? "");
-      const isRitual = Boolean(f.ritual);
-      const isConcentration = Boolean(f.concentration);
-      const isVocal = Boolean(f.componentsVocal);
-      const isSomatic = Boolean(f.componentsSomatic);
-      const isMaterial = Boolean(f.componentsMaterial);
-      const isAlready = alreadyOnActorSourceIds.has(sourceId);
 
       if (q && !String(item.name || "").toLowerCase().includes(q)) return false;
-      if (lvlF.size && !lvlF.has(lv)) return false;
-      if (schoolF.size && !schoolF.has(school)) return false;
-      if (sourceBookF.size && !sourceBookF.has(sourceBookId)) return false;
-      if (actF.size && !actF.has(activation)) return false;
-      if (rangeF.size && !rangeF.has(range)) return false;
-      if (durationF.size && !durationF.has(duration)) return false;
-      if (shapeF.size && !shapeF.has(shape)) return false;
-      if (propF.has("ritual") && !isRitual) return false;
-      if (propF.has("concentration") && !isConcentration) return false;
-      if (propF.has("vocal") && !isVocal) return false;
-      if (propF.has("somatic") && !isSomatic) return false;
-      if (propF.has("material") && !isMaterial) return false;
-      if (propF.has("already") && !isAlready) return false;
+
+      // Single-valued axes — `matchesSingleAxis` handles include +
+      // exclude with the configured OR/AND/XOR combinators. Levels
+      // are stored as numbers in the original API but the panel
+      // tracks string keys; coerce to string before matching.
+      if (!matchesSingleAxis(String(Number(f.level ?? 0)), axisFilters.level)) return false;
+      if (!matchesSingleAxis(String(f.school ?? ""), axisFilters.school)) return false;
+      if (!matchesSingleAxis(String(f.spellSourceId ?? f.sourceBookId ?? ""), axisFilters.source)) return false;
+      if (!matchesSingleAxis(String(f.activationBucket ?? ""), axisFilters.activation)) return false;
+      if (!matchesSingleAxis(String(f.rangeBucket ?? ""), axisFilters.range)) return false;
+      if (!matchesSingleAxis(String(f.durationBucket ?? ""), axisFilters.duration)) return false;
+      if (!matchesSingleAxis(String(f.shapeBucket ?? ""), axisFilters.shape)) return false;
+
+      // Multi-valued Properties axis. Build the spell's property set
+      // (ritual / concentration / V/S/M plus the synthetic "already
+      // on actor" meta-property) and dispatch through
+      // `matchesMultiAxis` for include + exclude + combinator support.
+      const have = new Set();
+      if (f.ritual) have.add("ritual");
+      if (f.concentration) have.add("concentration");
+      if (f.componentsVocal) have.add("vocal");
+      if (f.componentsSomatic) have.add("somatic");
+      if (f.componentsMaterial) have.add("material");
+      if (alreadyOnActorSourceIds.has(sourceId)) have.add("already");
+      if (!matchesMultiAxis(have, axisFilters.prop)) return false;
+
       return true;
     });
   };
@@ -6317,38 +6358,11 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     `;
   };
 
-  // ─── Chip section renderer ───────────────────────────────────────
-  // `kind` matches the data-filter-kind attribute the click handler
-  // dispatches on. `options` is [{ v, l }] just like the builder's
-  // FilterChipSection.
-  const renderChipSection = (title, kind, options, activeSet) => {
-    if (options.length === 0) return "";
-    const chips = options.map(({ v, l }) => {
-      const active = activeSet.has(v);
-      return `
-        <button
-          type="button"
-          class="dauligor-spell-picker__chip ${active ? "is-active" : ""}"
-          data-action="toggle-filter-chip"
-          data-filter-kind="${escapeHtml(kind)}"
-          data-filter-value="${escapeHtml(String(v))}"
-        >${escapeHtml(l)}</button>
-      `;
-    }).join("");
-    return `
-      <div class="dauligor-spell-picker__chip-section">
-        <div class="dauligor-spell-picker__chip-section-header">
-          <span class="dauligor-spell-picker__chip-section-title">${escapeHtml(title)}</span>
-          <div class="dauligor-spell-picker__chip-section-actions">
-            <button type="button" class="dauligor-spell-picker__chip-action" data-action="select-all-filter" data-filter-kind="${escapeHtml(kind)}">Include All</button>
-            <span class="dauligor-spell-picker__chip-section-sep">|</span>
-            <button type="button" class="dauligor-spell-picker__chip-action" data-action="clear-filter-section" data-filter-kind="${escapeHtml(kind)}">Clear</button>
-          </div>
-        </div>
-        <div class="dauligor-spell-picker__chips">${chips}</div>
-      </div>
-    `;
-  };
+  // (Chip section rendering moved to SectionFilterPanel — see the
+  // `renderSectionFilterPanel({ axes, axisFilters, embedded: true })`
+  // call inside renderBody. The panel handles tri-state pills,
+  // per-section combinators, chip-label search, and the rest of the
+  // shared `/compendium/spells` UX.)
 
   // ─── Body renderer ───────────────────────────────────────────────
   const renderBody = () => {
@@ -6359,10 +6373,7 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
       : null;
 
     const filteredPool = computeFilteredPool();
-    const activeFilterCount =
-      lvlF.size + schoolF.size + sourceBookF.size
-      + actF.size + rangeF.size + durationF.size + shapeF.size
-      + propF.size;
+    const activeFilterCount = countActiveFilters();
 
     // LEFT — On Sheet column. Renders the already-on-actor subset of
     // the pool. Empty-state guidance hints at when this column fills.
@@ -6448,17 +6459,11 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
       `;
     };
 
-    // Build the chip option lists from values actually present in the
-    // pool — keeps the chip row tight and prevents "Level 9" chips on
-    // a class that only reaches 5, etc. Same approach as the public
-    // /compendium/spells filter UI.
+    // Build the axes descriptor for SectionFilterPanel. Values come
+    // from what's actually in the pool — keeps the wall tight (no
+    // "Level 9" pill on a class that only reaches 5, etc.). Same
+    // approach the public /compendium/spells filter uses.
     const levelsInPool = [...new Set(pool.map((s) => Number(s?.flags?.[MODULE_ID]?.level ?? 0)))].sort((a, b) => a - b);
-    const levelChipOptions = levelsInPool.map((lv) => ({ v: lv, l: lv === 0 ? "Cantrip" : `Lv ${lv}` }));
-    const schoolChipOptions = schoolsInPool.map((s) => ({ v: s, l: s.toUpperCase() }));
-    const sourceChipOptions = sourceBooksInPool.map((sb) => ({ v: sb, l: sb }));
-    // Bucket label dictionaries — humanise the slug each axis ships in
-    // `flags.dauligor-pairing.{axis}Bucket`. Keep tight labels for the
-    // chip strip; fallback to the slug if a value isn't pre-mapped.
     const activationLabels = {
       action: "Action", bonus: "Bonus", reaction: "Reaction",
       minute: "Minute", hour: "Hour", special: "Special",
@@ -6479,21 +6484,67 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
       radius: "Radius", none: "No Shape",
     };
     const labelFor = (dict, v) => dict[v] || (v ? v.charAt(0).toUpperCase() + v.slice(1) : "");
-    const activationChipOptions = activationsInPool.map((v) => ({ v, l: labelFor(activationLabels, v) }));
-    const rangeChipOptions = rangesInPool.map((v) => ({ v, l: labelFor(rangeLabels, v) }));
-    const durationChipOptions = durationsInPool.map((v) => ({ v, l: labelFor(durationLabels, v) }));
-    const shapeChipOptions = shapesInPool.map((v) => ({ v, l: labelFor(shapeLabels, v) }));
-    // Properties chip set — matches the /compendium/spells filter:
-    // V/S/M components, ritual, concentration. Plus the "already on
-    // actor" convenience chip when relevant (re-import scenarios).
-    const propChipOptions = [
-      { v: "vocal", l: "V (Vocal)" },
-      { v: "somatic", l: "S (Somatic)" },
-      { v: "material", l: "M (Material)" },
-      { v: "ritual", l: "Ritual" },
-      { v: "concentration", l: "Concentration" },
-      ...(alreadyOnActorSourceIds.size > 0 ? [{ v: "already", l: "On Sheet" }] : []),
-    ];
+
+    const pickerAxes = [];
+    if (sourceBooksInPool.length) {
+      pickerAxes.push({
+        key: "source", name: "Source", kind: "axis",
+        values: sourceBooksInPool.map((sb) => ({ value: sb, label: sb })),
+      });
+    }
+    pickerAxes.push({
+      key: "level", name: "Level", kind: "axis",
+      values: levelsInPool.map((lv) => ({
+        value: String(lv),
+        label: lv === 0 ? "Cantrip" : `Lv ${lv}`,
+      })),
+    });
+    if (schoolsInPool.length) {
+      pickerAxes.push({
+        key: "school", name: "School", kind: "axis",
+        values: schoolsInPool.map((s) => ({ value: s, label: s.toUpperCase() })),
+      });
+    }
+    if (activationsInPool.length) {
+      pickerAxes.push({
+        key: "activation", name: "Casting Time", kind: "axis",
+        values: activationsInPool.map((v) => ({ value: v, label: labelFor(activationLabels, v) })),
+      });
+    }
+    if (rangesInPool.length) {
+      pickerAxes.push({
+        key: "range", name: "Range", kind: "axis",
+        values: rangesInPool.map((v) => ({ value: v, label: labelFor(rangeLabels, v) })),
+      });
+    }
+    if (durationsInPool.length) {
+      pickerAxes.push({
+        key: "duration", name: "Duration", kind: "axis",
+        values: durationsInPool.map((v) => ({ value: v, label: labelFor(durationLabels, v) })),
+      });
+    }
+    if (shapesInPool.length) {
+      pickerAxes.push({
+        key: "shape", name: "Shape", kind: "axis",
+        values: shapesInPool.map((v) => ({ value: v, label: labelFor(shapeLabels, v) })),
+      });
+    }
+    // Properties — multi-valued (a spell can carry vocal AND somatic
+    // AND ritual). Plus the synthetic "already on actor" property
+    // when relevant; the matcher treats it like any other value
+    // because computeFilteredPool injects "already" into the spell's
+    // have-set when isAlready.
+    pickerAxes.push({
+      key: "prop", name: "Properties", kind: "axis",
+      values: [
+        { value: "vocal", label: "V (Vocal)" },
+        { value: "somatic", label: "S (Somatic)" },
+        { value: "material", label: "M (Material)" },
+        { value: "ritual", label: "Ritual" },
+        { value: "concentration", label: "Concentration" },
+        ...(alreadyOnActorSourceIds.size > 0 ? [{ value: "already", label: "On Sheet" }] : []),
+      ],
+    });
 
     return `
       <div class="dauligor-spell-picker">
@@ -6553,14 +6604,13 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
             </div>
             ${filterOpen ? `
               <div class="dauligor-spell-picker__filter-panel">
-                ${renderChipSection("Level", "level", levelChipOptions, lvlF)}
-                ${renderChipSection("School", "school", schoolChipOptions, schoolF)}
-                ${renderChipSection("Source", "source", sourceChipOptions, sourceBookF)}
-                ${renderChipSection("Activation", "activation", activationChipOptions, actF)}
-                ${renderChipSection("Range", "range", rangeChipOptions, rangeF)}
-                ${renderChipSection("Duration", "duration", durationChipOptions, durationF)}
-                ${renderChipSection("Shape", "shape", shapeChipOptions, shapeF)}
-                ${renderChipSection("Properties", "prop", propChipOptions, propF)}
+                ${renderSectionFilterPanel({
+                  axes: pickerAxes,
+                  axisFilters,
+                  tagStates: {},
+                  uiState: filterUi,
+                  embedded: true,
+                })}
               </div>
             ` : ""}
             <div class="dauligor-spell-picker__col-body">${renderListRows()}</div>
@@ -6592,75 +6642,88 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
     // refresh. We also re-focus the search input + restore caret
     // position so the user can keep typing through re-renders.
     onRenderBody: (app, region) => {
-      // Click delegation — one handler dispatches on data-action.
-      region.addEventListener("click", (event) => {
-        // Filter chip toggle
-        const chipBtn = event.target.closest?.("[data-action='toggle-filter-chip']");
-        if (chipBtn) {
-          event.stopPropagation();
-          const kind = chipBtn.dataset.filterKind;
-          const valueRaw = chipBtn.dataset.filterValue;
-          // Dispatch the chip onto the right axis Set. All non-level
-          // axes carry string values; level is the only numeric axis.
-          const set = kind === "level" ? lvlF
-            : kind === "school" ? schoolF
-              : kind === "source" ? sourceBookF
-                : kind === "activation" ? actF
-                  : kind === "range" ? rangeF
-                    : kind === "duration" ? durationF
-                      : kind === "shape" ? shapeF
-                        : kind === "prop" ? propF
-                          : null;
-          if (!set) return;
-          const value = kind === "level" ? Number(valueRaw) : String(valueRaw);
-          toggleInSet(set, value);
-          app.rerenderPrompt();
-          return;
-        }
-
-        // "Include All" / "Clear" within a chip section
-        const allBtn = event.target.closest?.("[data-action='select-all-filter']");
-        if (allBtn) {
-          event.stopPropagation();
-          const kind = allBtn.dataset.filterKind;
-          if (kind === "level") {
-            for (const lv of new Set(pool.map((s) => Number(s?.flags?.[MODULE_ID]?.level ?? 0)))) lvlF.add(lv);
-          } else if (kind === "school") {
-            for (const s of schoolsInPool) schoolF.add(s);
-          } else if (kind === "source") {
-            for (const sb of sourceBooksInPool) sourceBookF.add(sb);
-          } else if (kind === "activation") {
-            for (const v of activationsInPool) actF.add(v);
-          } else if (kind === "range") {
-            for (const v of rangesInPool) rangeF.add(v);
-          } else if (kind === "duration") {
-            for (const v of durationsInPool) durationF.add(v);
-          } else if (kind === "shape") {
-            for (const v of shapesInPool) shapeF.add(v);
-          } else if (kind === "prop") {
-            propF.add("vocal"); propF.add("somatic"); propF.add("material");
-            propF.add("ritual"); propF.add("concentration");
-            if (alreadyOnActorSourceIds.size > 0) propF.add("already");
+      // Bind the SectionFilterPanel's pill / per-axis-control events.
+      // The panel is embedded inline (not a modal) so we don't wire
+      // close / save / cancel here — the host's `toggle-filter-panel`
+      // and `reset-filters` buttons (below) drive show/hide + reset.
+      // Each panel action mutates `axisFilters` in place + asks the
+      // prompt to re-render so the pool list updates.
+      const panelRoot = region.querySelector(".dauligor-section-filter");
+      if (panelRoot) {
+        const valuesForAxis = (axisKey) => {
+          if (axisKey === "level") return [...new Set(pool.map((s) => String(Number(s?.flags?.[MODULE_ID]?.level ?? 0))))];
+          if (axisKey === "school") return schoolsInPool.map(String);
+          if (axisKey === "source") return sourceBooksInPool.map(String);
+          if (axisKey === "activation") return activationsInPool.map(String);
+          if (axisKey === "range") return rangesInPool.map(String);
+          if (axisKey === "duration") return durationsInPool.map(String);
+          if (axisKey === "shape") return shapesInPool.map(String);
+          if (axisKey === "prop") {
+            const v = ["vocal", "somatic", "material", "ritual", "concentration"];
+            if (alreadyOnActorSourceIds.size > 0) v.push("already");
+            return v;
           }
-          app.rerenderPrompt();
-          return;
-        }
-        const clearBtn = event.target.closest?.("[data-action='clear-filter-section']");
-        if (clearBtn) {
-          event.stopPropagation();
-          const kind = clearBtn.dataset.filterKind;
-          if (kind === "level") lvlF.clear();
-          else if (kind === "school") schoolF.clear();
-          else if (kind === "source") sourceBookF.clear();
-          else if (kind === "activation") actF.clear();
-          else if (kind === "range") rangeF.clear();
-          else if (kind === "duration") durationF.clear();
-          else if (kind === "shape") shapeF.clear();
-          else if (kind === "prop") propF.clear();
-          app.rerenderPrompt();
-          return;
-        }
+          return [];
+        };
+        bindSectionFilterPanelEvents(panelRoot, {
+          cycleAxisState: (axisKey, value) => { cyclePillForward(axisKey, value); app.rerenderPrompt(); },
+          cycleAxisStateReverse: (axisKey, value) => { cyclePillReverse(axisKey, value); app.rerenderPrompt(); },
+          cycleAxisCombineMode: (axisKey) => {
+            const axis = ensureAxis(axisKey);
+            axis.combineMode = nextCombineMode(axis.combineMode || "OR");
+            app.rerenderPrompt();
+          },
+          cycleAxisCombineModeReverse: (axisKey) => {
+            const axis = ensureAxis(axisKey);
+            axis.combineMode = nextCombineModeReverse(axis.combineMode || "OR");
+            app.rerenderPrompt();
+          },
+          cycleAxisExclusionMode: (axisKey) => {
+            const axis = ensureAxis(axisKey);
+            axis.exclusionMode = nextCombineMode(axis.exclusionMode || "OR");
+            app.rerenderPrompt();
+          },
+          cycleAxisExclusionModeReverse: (axisKey) => {
+            const axis = ensureAxis(axisKey);
+            axis.exclusionMode = nextCombineModeReverse(axis.exclusionMode || "OR");
+            app.rerenderPrompt();
+          },
+          axisIncludeAll: (axisKey) => { setAxisBulk(axisKey, valuesForAxis(axisKey), SECTION_FILTER_STATE.INCLUDE); app.rerenderPrompt(); },
+          axisExcludeAll: (axisKey) => { setAxisBulk(axisKey, valuesForAxis(axisKey), SECTION_FILTER_STATE.EXCLUDE); app.rerenderPrompt(); },
+          axisClear: (axisKey) => { setAxisBulk(axisKey, [], SECTION_FILTER_STATE.OFF); app.rerenderPrompt(); },
+          toggleAxisHidden: (axisKey) => {
+            if (filterUi.hiddenAxes.has(axisKey)) filterUi.hiddenAxes.delete(axisKey);
+            else filterUi.hiddenAxes.add(axisKey);
+            app.rerenderPrompt();
+          },
+          toggleAllSubtags: (axisKey) => {
+            if (filterUi.allSubtagAxes.has(axisKey)) filterUi.allSubtagAxes.delete(axisKey);
+            else filterUi.allSubtagAxes.add(axisKey);
+            app.rerenderPrompt();
+          },
+          toggleAltLabel: (axisKey) => {
+            if (filterUi.altLabelAxes.has(axisKey)) filterUi.altLabelAxes.delete(axisKey);
+            else filterUi.altLabelAxes.add(axisKey);
+            app.rerenderPrompt();
+          },
+          // The picker has no parent/child tag axes today, so the
+          // drawer toggle is technically dead code. Wire it anyway so
+          // future axes with subtags work transparently.
+          toggleParentDrawer: (axisKey, parentValue) => {
+            if (!filterUi.expandedParents.has(axisKey)) filterUi.expandedParents.set(axisKey, new Set());
+            const set = filterUi.expandedParents.get(axisKey);
+            if (set.has(parentValue)) set.delete(parentValue);
+            else set.add(parentValue);
+            app.rerenderPrompt();
+          },
+        });
+      }
 
+      // Click delegation for the host's chrome (filter toggle + reset).
+      // The panel's own events are handled by `bindSectionFilterPanelEvents`
+      // above; the only host-owned buttons left are the Filters toggle
+      // (show/hide the inline panel) and the page-level Reset.
+      region.addEventListener("click", (event) => {
         // Toggle filter panel visibility
         if (event.target.closest?.("[data-action='toggle-filter-panel']")) {
           event.stopPropagation();
@@ -6672,9 +6735,7 @@ async function runSpellSelectionStep({ workflow, sequence, progress, actor, stat
         // Reset all filters
         if (event.target.closest?.("[data-action='reset-filters']")) {
           event.stopPropagation();
-          lvlF.clear(); schoolF.clear(); sourceBookF.clear();
-          actF.clear(); rangeF.clear(); durationF.clear(); shapeF.clear();
-          propF.clear();
+          clearAllAxisFilters();
           app.rerenderPrompt();
           return;
         }
