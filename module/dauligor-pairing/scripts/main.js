@@ -1,6 +1,6 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
 import { registerDauligorCharacterSheet } from "./dauligor-character-sheet.js";
-import { exportApplicationWindow, exportSpellFolder } from "./export-service.js";
+import { exportApplicationWindow, exportFeatFolder, exportSpellFolder } from "./export-service.js";
 import { openFeatureManager, promptLongRestCommit } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
@@ -695,11 +695,19 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = "header-actions action-buttons dauligor-directory-tools";
   wrapper.setAttribute(`data-${MODULE_ID}-sidebar-tools`, "true");
-  const exportSpellButton = directoryType === "Item"
+  // Export buttons only appear on the Item directory — Foundry stores
+  // spell + feat items in the same Item sidebar, just routed by
+  // `item.type`. Keeping them side-by-side mirrors how Plutonium
+  // groups its sidebar tools by directory type.
+  const exportButtons = directoryType === "Item"
     ? `
     <button type="button" class="dauligor-directory-tools__button" data-action="export-spell-folder" title="Export a Foundry spell folder for Dauligor spell import research">
       <i class="fas fa-wand-magic-sparkles"></i>
       <span>Export Spell Folder</span>
+    </button>
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-feat-folder" title="Export a Foundry feat folder for Dauligor feat import research">
+      <i class="fas fa-medal"></i>
+      <span>Export Feat Folder</span>
     </button>
   `
     : "";
@@ -709,7 +717,7 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
       <i class="fas fa-book"></i>
       <span>Dauligor Import</span>
     </button>
-    ${exportSpellButton}
+    ${exportButtons}
     <button type="button" class="dauligor-directory-tools__button dauligor-directory-tools__button--icon" data-action="open-options" title="Open Dauligor Options">
       <i class="fas fa-screwdriver-wrench"></i>
     </button>
@@ -720,6 +728,9 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   });
   wrapper.querySelector(`[data-action="export-spell-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportSpellFolder();
+  });
+  wrapper.querySelector(`[data-action="export-feat-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportFeatFolder();
   });
   wrapper.querySelector(`[data-action="open-options"]`)?.addEventListener("click", async () => {
     await openLauncher();
@@ -828,6 +839,98 @@ async function promptAndExportSpellFolder() {
   }
 
   await exportSpellFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+// Feat folder choices — same shape as the spell variant, just
+// counting `item.type === "feat"` instead. Folders with zero feats
+// are filtered out so the dropdown stays tight.
+function collectFeatFolderChoices() {
+  const folders = Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Item")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Item") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+
+      const featCount = Array.from(game.items ?? []).filter((item) =>
+        item.type === "feat"
+        && descendants.has(item.folder?.id ?? "")
+      ).length;
+
+      return {
+        folder,
+        path: getItemFolderPath(folder),
+        featCount,
+      };
+    })
+    .filter((entry) => entry.featCount > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  return folders;
+}
+
+async function promptAndExportFeatFolder() {
+  const choices = collectFeatFolderChoices();
+  if (!choices.length) {
+    notifyWarn("No Item folders with feat items were found in this world.");
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.featCount} feats)`)}
+    </option>
+  `).join("");
+
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Export Feat Folder" },
+      content: `
+        <div class="form-group">
+          <label>Feat folder</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all native Foundry feat items in the selected Item folder as a Dauligor research/import batch. Feats cover class features, race features, background features, and general feats.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked),
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected feat folder could not be found.");
+    return;
+  }
+
+  await exportFeatFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
 }
 
 function injectSpellTabButton(appLike, root) {

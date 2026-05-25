@@ -362,6 +362,179 @@ export async function exportSpellFolder(folder, { includeSubfolders = true } = {
   if (shouldDownload) downloadJson(payload, `${folder.name}-spells-export`);
 }
 
+// ─── Feat folder export ────────────────────────────────────────────────
+//
+// Mirrors the spell folder export above. Feats are dnd5e v5 items of
+// type "feat" (covers class features, race features, background features,
+// general feats, and Dauligor's class-feature variants). The export
+// payload follows the same envelope shape as
+// `dauligor.foundry-spell-folder-export.v1` so a future app-side batch
+// importer can route on `kind` and reuse the per-folder traversal.
+//
+// Contract: see `module/dauligor-pairing/docs/feat-folder-export-contract.md`.
+
+function summarizeFeatCounts(feats) {
+  const byType = {};
+  const bySubtype = {};
+  const flags = {
+    repeatable: 0,
+    hasUses: 0,
+    hasActivities: 0,
+    hasEffects: 0,
+    hasPrereqs: 0,
+  };
+  let totalActivities = 0;
+  let totalEffects = 0;
+
+  for (const feat of feats) {
+    const source = feat.toObject();
+    const featType = String(source.system?.type?.value ?? "").trim() || "unknown";
+    const featSubtype = String(source.system?.type?.subtype ?? "").trim();
+    const activityCount = Object.keys(source.system?.activities ?? {}).length;
+    const effectCount = Array.isArray(source.effects) ? source.effects.length : 0;
+    const hasUses = !!(source.system?.uses?.max || source.system?.uses?.spent);
+    const hasPrereqs = !!(
+      String(source.system?.requirements ?? "").trim()
+      || Object.keys(source.system?.prerequisites ?? {}).length > 0
+    );
+    const isRepeatable = Array.isArray(source.system?.properties)
+      && source.system.properties.includes("repeatable");
+
+    byType[featType] = (byType[featType] ?? 0) + 1;
+    if (featSubtype) bySubtype[featSubtype] = (bySubtype[featSubtype] ?? 0) + 1;
+    if (isRepeatable) flags.repeatable++;
+    if (hasUses) flags.hasUses++;
+    if (activityCount > 0) flags.hasActivities++;
+    if (effectCount > 0) flags.hasEffects++;
+    if (hasPrereqs) flags.hasPrereqs++;
+    totalActivities += activityCount;
+    totalEffects += effectCount;
+  }
+
+  return {
+    featCount: feats.length,
+    byType,
+    bySubtype,
+    flags,
+    totalActivities,
+    totalEffects,
+  };
+}
+
+function buildFeatExportEntry(feat, rootFolder) {
+  const source = getCleanSource(feat);
+  const folderPath = feat.folder ? getFolderPath(feat.folder) : "";
+  const activityEntries = Object.entries(source.system?.activities ?? {});
+  const properties = Array.from(source.system?.properties ?? []);
+
+  return {
+    id: feat.id,
+    uuid: feat.uuid,
+    name: feat.name,
+    type: feat.type,                                  // always "feat" for this builder
+    folderId: feat.folder?.id ?? null,
+    folderPath,
+    relativeFolderPath: folderPath && rootFolder
+      ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+      : "",
+    source: {
+      book: source.system?.source?.book ?? "",
+      page: source.system?.source?.page ?? null,
+      rules: source.system?.source?.rules ?? "",
+    },
+    featSummary: {
+      // Foundry dnd5e v5 splits feat categorization across type.value
+      // ("feat" / "class" / "race" / "background") and type.subtype
+      // (e.g. "fighting-style", "metamagic"). Preserve both verbatim
+      // so app-side import can route them into the right buckets.
+      featType: source.system?.type?.value ?? "",
+      featSubtype: source.system?.type?.subtype ?? "",
+      identifier: source.system?.identifier ?? "",
+      requirements: String(source.system?.requirements ?? ""),  // human-readable prereq text
+      properties,
+      repeatable: properties.includes("repeatable"),
+      uses: source.system?.uses ?? {},                          // { max, spent, recovery, ... }
+      activation: source.system?.activation ?? {},
+      activityCount: activityEntries.length,
+      effectCount: Array.isArray(source.effects) ? source.effects.length : 0,
+    },
+    sourceDocument: source,
+  };
+}
+
+export function buildFeatFolderExport(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const feats = Array.from(game.items ?? []).filter((item) =>
+    item.type === "feat"
+    && includedFolderIds.has(item.folder?.id ?? "")
+  );
+
+  const folderPath = getFolderPath(folder);
+
+  return {
+    kind: "dauligor.foundry-feat-folder-export.v1",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    game: {
+      worldId: game.world?.id ?? null,
+      worldTitle: game.world?.title ?? null,
+      systemId: game.system?.id ?? null,
+      systemVersion: game.system?.version ?? null,
+      coreVersion: game.release?.version ?? null,
+    },
+    folder: {
+      id: folder.id,
+      uuid: folder.uuid ?? null,
+      name: folder.name,
+      type: folder.type,
+      path: folderPath,
+      includeSubfolders,
+      includedFolderIds: Array.from(includedFolderIds),
+      parentId: folder.folder?.id ?? null,
+    },
+    summary: summarizeFeatCounts(feats),
+    feats: feats
+      .slice()
+      .sort((a, b) => {
+        // Group by feat type first (class features cluster together),
+        // then by name within each type. Mirrors the spell sort's
+        // "level grouping then alphabetical" idea.
+        const aType = String(a.system?.type?.value ?? "");
+        const bType = String(b.system?.type?.value ?? "");
+        if (aType !== bType) return aType.localeCompare(bType);
+        return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      })
+      .map((feat) => buildFeatExportEntry(feat, folder)),
+  };
+}
+
+export async function exportFeatFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") {
+    notifyWarn("Select an Item folder before exporting feats.");
+    return;
+  }
+
+  const payload = buildFeatFolderExport(folder, { includeSubfolders });
+  const featCount = payload?.summary?.featCount ?? 0;
+  if (!featCount) {
+    notifyWarn(`No feat items were found in "${folder.name}".`);
+    return;
+  }
+
+  log("Prepared feat folder export", payload);
+  notifyInfo(`Prepared ${featCount} feats from "${folder.name}". See console for the full object.`);
+
+  const shouldDownload = await chooseDownload({
+    title: "Export Feat Folder",
+    name: `${folder.name} (${featCount} feats)`,
+  });
+
+  if (shouldDownload) downloadJson(payload, `${folder.name}-feats-export`);
+}
+
 function serializeForJson(value, { seen = new WeakSet(), depth = 0, maxDepth = 10 } = {}) {
   if (value == null) return value;
   if (depth > maxDepth) return "[MaxDepth]";
