@@ -252,8 +252,15 @@
 }
 
 .dauligor-wizard__toolbar {
+  /* Search owns the flexible 1fr column; Reload + Reset are content-
+   * sized auto columns on the right. Pre-cleanup the grid was
+   * `auto 1fr auto` to fit a Filter button + search + single trailing
+   * button, but after the dead Filter button was removed the search
+   * slid into the auto column and Reload ate the 1fr. Restored the
+   * intended "search takes leftover width, buttons sized to text"
+   * layout. */
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 4px;
 }
 
