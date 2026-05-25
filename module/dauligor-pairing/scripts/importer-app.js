@@ -656,7 +656,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
         </header>
         <div class="dauligor-wizard__section-body">
             <div class="dauligor-wizard__toolbar">
-              <button type="button" class="dauligor-wizard__toolbar-button" data-action="source-filter">Filter</button>
               <input
                 type="search"
               class="dauligor-wizard__toolbar-search"
@@ -676,9 +675,6 @@ export class DauligorImporterApp extends HandlebarsApplicationMixin(ApplicationV
       </section>
     `;
 
-    this._panelSources.querySelector(`[data-action="source-filter"]`)?.addEventListener("click", () => {
-      notifyWarn("Source filters are not wired up yet.");
-    });
     this._panelSources.querySelector(`[data-action="source-search"]`)?.addEventListener("input", (event) => {
       const value = event.currentTarget.value ?? "";
       this._state.sourceSearch = value;
