@@ -26,6 +26,19 @@
   --dauligor-success: #7ea86f;
   --dauligor-warning: #9e7f49;
   --dauligor-danger: #a5645a;
+  /* Foundry-native button tokens. Pulled into our scope so our buttons
+   * read as dnd5e v5 buttons (gold hover accent, subtle dark bg) even
+   * though our windows aren't tagged `.dnd5e2.application`. Each value
+   * falls back to a hardcoded equivalent when the variable isn't
+   * defined (e.g. world has no dnd5e v5 theme, or button is rendered
+   * outside a sheet context). Reference: dnd5e v5
+   *   --button-border-color       = var(--color-border-light-2)  = #999
+   *   --button-hover-border-color = var(--dnd5e-color-gold)      = #9f9275
+   *   .dnd5e button background    = rgba(0, 0, 0, 0.10) */
+  --dauligor-btn-bg: rgba(0, 0, 0, 0.10);
+  --dauligor-btn-hover-bg: rgba(159, 146, 117, 0.14);
+  --dauligor-btn-border: var(--button-border-color, var(--dauligor-border));
+  --dauligor-btn-border-hover: var(--button-hover-border-color, var(--dnd5e-color-gold, #9f9275));
   color: var(--dauligor-text);
   background: var(--dauligor-panel);
   font-family: var(--font-primary);
@@ -181,9 +194,9 @@
   margin: 0;
   min-height: 28px;
   padding: 5px 8px;
-  border: 1px solid var(--dauligor-border);
+  border: 1px solid var(--dauligor-btn-border);
   border-radius: 0;
-  background: #2a2a2a;
+  background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
   text-align: left;
   cursor: pointer;
@@ -192,8 +205,8 @@
 
 .dauligor-wizard__choice:hover,
 .dauligor-wizard__choice:focus {
-  border-color: #8a877d;
-  background: #313131;
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
 .dauligor-wizard__choice--active {
@@ -266,19 +279,20 @@
 
 .dauligor-wizard__toolbar-button {
   height: 28px;
-  border: 1px solid var(--dauligor-border);
+  border: 1px solid var(--dauligor-btn-border);
   border-radius: 0;
-  background: #2a2a2a;
+  background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
   padding: 0 10px;
   cursor: pointer;
   font-size: 12px;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .dauligor-wizard__toolbar-button:hover,
 .dauligor-wizard__toolbar-button:focus {
-  border-color: #8a877d;
-  background: #313131;
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
 .dauligor-wizard__toolbar-search {
@@ -558,8 +572,8 @@
 .dauligor-class-browser__button {
   height: 34px;
   border-radius: 0;
-  border: 1px solid var(--dauligor-border);
-  background: #252525;
+  border: 1px solid var(--dauligor-btn-border);
+  background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
   padding: 0 14px;
   cursor: pointer;
@@ -572,14 +586,16 @@
 .dauligor-wizard__button:focus,
 .dauligor-class-browser__button:hover,
 .dauligor-class-browser__button:focus {
-  border-color: #8a877d;
-  background: #303030;
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
+/* Primary variant — pre-highlighted with the gold accent border at
+ * rest. Matches dnd5e v5's "you'll want to click this" emphasis. */
 .dauligor-wizard__button--primary,
 .dauligor-class-browser__button--primary {
-  background: #2a2a2a;
-  border-color: #8a877d;
+  background: var(--dauligor-btn-hover-bg);
+  border-color: var(--dauligor-btn-border-hover);
 }
 
 .dauligor-wizard__button[disabled],
@@ -634,8 +650,8 @@
  * label so the user sees how many filters are active without opening
  * the modal. */
 .dauligor-class-browser__button--active {
-  border-color: var(--dauligor-accent);
-  background: rgba(255, 255, 255, 0.18);
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
   color: var(--dauligor-text);
 }
 
@@ -1783,18 +1799,19 @@
   height: 28px;
   line-height: 26px;
   margin: 0;
-  border: 1px solid var(--dauligor-border);
+  border: 1px solid var(--dauligor-btn-border);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
   box-shadow: none;
   padding: 0 8px;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
 .dauligor-directory-tools__button:hover,
 .dauligor-directory-tools__button:focus {
-  border-color: var(--dauligor-accent);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
 .dauligor-directory-tools__button--primary {
@@ -1820,9 +1837,9 @@
   min-height: 32px;
   margin: 0;
   padding: 0 12px;
-  border: 1px solid var(--dauligor-border);
+  border: 1px solid var(--dauligor-btn-border);
   border-radius: 0;
-  background: #2a2a2a;
+  background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
   box-shadow: none;
   cursor: pointer;
@@ -1831,8 +1848,8 @@
 
 .dauligor-spell-tab-tools__button:hover,
 .dauligor-spell-tab-tools__button:focus {
-  border-color: #8a877d;
-  background: #313131;
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
 /* Small Dauligor "open Prepare Spells" button reused in three slots:
@@ -1981,9 +1998,9 @@
 .dauligor-spell-manager__button {
   min-height: 30px;
   margin: 0;
-  border: 1px solid var(--dauligor-border);
+  border: 1px solid var(--dauligor-btn-border);
   border-radius: 0;
-  background: #2a2a2a;
+  background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
   box-shadow: none;
   cursor: pointer;
@@ -1994,8 +2011,8 @@
 .dauligor-spell-manager__class-button:focus,
 .dauligor-spell-manager__button:hover,
 .dauligor-spell-manager__button:focus {
-  border-color: #8a877d;
-  background: #313131;
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
 .dauligor-spell-manager__class-button {
@@ -4632,8 +4649,8 @@ button.dauligor-option-picker__pill:hover {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid var(--dauligor-border);
-  background: #2a2a2a;
+  border: 1px solid var(--dauligor-btn-border);
+  background: var(--dauligor-btn-bg);
   color: var(--dauligor-text);
   font-size: 10px;
   font-weight: 900;
@@ -4646,8 +4663,8 @@ button.dauligor-option-picker__pill:hover {
 
 .dauligor-spell-manager__filter-button:hover,
 .dauligor-spell-manager__reset-button:hover {
-  border-color: #8a877d;
-  background: #313131;
+  border-color: var(--dauligor-btn-border-hover);
+  background: var(--dauligor-btn-hover-bg);
 }
 
 .dauligor-spell-manager__filter-button--active {
@@ -4765,7 +4782,7 @@ button.dauligor-option-picker__pill:hover {
 }
 
 .dauligor-spell-manager__filter-chip:hover {
-  border-color: #8a877d;
+  border-color: var(--dauligor-btn-border-hover);
   color: var(--dauligor-text);
 }
 
