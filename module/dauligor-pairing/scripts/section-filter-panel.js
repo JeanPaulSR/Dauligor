@@ -279,7 +279,7 @@ function renderAxisRow(axis, ctx) {
     ${btn('axis-combine', combineMode, { color: 'include', title: `Include combinator (${combineMode}) — left click cycles forward, right click reverses` })}
     ${btn('axis-exclude', exclusionMode, { color: 'exclude', title: `Exclude combinator (${exclusionMode}) — left click cycles forward, right click reverses` })}
     ${hasSubtagsAnywhere ? btn('axis-subtags', forceExpandAll ? 'subtags ▾' : 'subtags ▸', { title: forceExpandAll ? 'Collapse every subtag drawer in this section' : 'Expand every subtag drawer in this section' }) : ''}
-    ${hasAltLabel ? btn('axis-abbr', useAltLabel ? 'full' : 'abbr', { title: useAltLabel ? 'Show abbreviated labels' : 'Show full labels' }) : ''}
+    ${hasAltLabel ? btn('axis-abbr', 'full', { color: useAltLabel ? 'active' : 'neutral', title: useAltLabel ? 'Showing full labels — click to use abbreviations' : 'Click to show full labels instead of abbreviations' }) : ''}
     ${btn('axis-hide', hidden ? 'show' : 'hide', { title: hidden ? 'Show this section again' : 'Collapse this section to just the header' })}
   `;
 

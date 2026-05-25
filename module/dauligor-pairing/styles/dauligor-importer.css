@@ -6976,6 +6976,19 @@ button.dauligor-option-picker__pill:hover {
   background: rgba(165, 100, 90, 0.28);
   border-color: var(--dauligor-exclude);
 }
+/* "Active" — gold accent at rest, used by the Source axis's Full
+ * toggle to indicate "full labels are currently being shown" without
+ * needing to relabel the button itself. Same visual energy as the
+ * neutral hover state but applied unconditionally. */
+.dauligor-section-filter__axis-btn--active {
+  background: rgba(170, 130, 80, 0.18);
+  border-color: var(--dauligor-accent);
+  color: var(--dauligor-accent-strong);
+}
+.dauligor-section-filter__axis-btn--active:hover {
+  background: rgba(170, 130, 80, 0.30);
+  border-color: var(--dauligor-accent);
+}
 
 /* ---- Pill body --------------------------------------------------------- */
 

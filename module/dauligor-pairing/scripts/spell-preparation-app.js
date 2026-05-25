@@ -3912,6 +3912,15 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
     }
     this._filterModalRegion.hidden = false;
 
+    // Capture the modal body's scrollTop BEFORE wiping innerHTML.
+    // Without this, expanding a subtag drawer (or any chip click that
+    // triggers a re-render) snaps the modal scroll back to the top,
+    // which is jarring on a tall pill wall. Restored after the new
+    // innerHTML lands — DOM updates are synchronous so the restore
+    // takes effect before the user sees the new frame.
+    const savedScrollTop = this._filterModalRegion
+      .querySelector(".dauligor-section-filter__body")?.scrollTop ?? 0;
+
     // Aggregate source/school ids visible in the relevant pool so the
     // pill set isn't cluttered by values that produce no matches.
     const visibleItems = target === "favorites"
@@ -3953,6 +3962,13 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
         ${panelHtml}
       </div>
     `;
+
+    // Restore the body's scrollTop captured before the rerender so the
+    // user stays where they were after a drawer toggle / pill click.
+    if (savedScrollTop > 0) {
+      const newBody = this._filterModalRegion.querySelector(".dauligor-section-filter__body");
+      if (newBody) newBody.scrollTop = savedScrollTop;
+    }
 
     // Backdrop click still closes; the panel's own × button delegates
     // via the "close" action which we wire below. Both backdrop + ×
@@ -4174,6 +4190,23 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
   _buildFilterAxes({ sourcesInPool, schoolsInPool, tagIdsInPool }) {
     const axes = [];
 
+    // Source first — mirrors the public `/compendium/spells` filter
+    // modal's section ordering. Authors who learned the website's
+    // wall see the same axis at the same place in Foundry.
+    if (sourcesInPool.length) {
+      // Source values use the per-source short name as the abbreviated
+      // primary label; the catalog-resolved full name (when available)
+      // populates labelAlt so the per-axis "Full" toggle does
+      // something meaningful here. Falls back to the short-name in
+      // both slots when no full name is known.
+      const sourceValues = sourcesInPool.map((sid) => {
+        const short = this._sourceShortName(sid) || String(sid).slice(0, 5);
+        const full = this._sourceFullName(sid) || short;
+        return { value: sid, label: short, labelAlt: full };
+      });
+      axes.push({ key: "source", name: "Source", kind: "axis", values: sourceValues });
+    }
+
     axes.push({
       key: "level", name: "Level", kind: "axis",
       values: SPELL_LEVELS_ALL.map((n) => ({
@@ -4187,20 +4220,6 @@ export class DauligorSpellPreparationApp extends HandlebarsApplicationMixin(Appl
       .map((k) => ({ value: k, label: SCHOOL_LABELS[k] || k }));
     if (schoolValues.length) {
       axes.push({ key: "school", name: "School", kind: "axis", values: schoolValues });
-    }
-
-    if (sourcesInPool.length) {
-      // Source values use the per-source short name as the abbreviated
-      // primary label; the catalog-resolved full name (when available)
-      // populates labelAlt so the per-axis "abbr/full" toggle does
-      // something meaningful here. Falls back to the short-name in
-      // both slots when no full name is known.
-      const sourceValues = sourcesInPool.map((sid) => {
-        const short = this._sourceShortName(sid) || String(sid).slice(0, 5);
-        const full = this._sourceFullName(sid) || short;
-        return { value: sid, label: short, labelAlt: full };
-      });
-      axes.push({ key: "source", name: "Source", kind: "axis", values: sourceValues });
     }
 
     axes.push({

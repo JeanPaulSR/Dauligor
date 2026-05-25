@@ -1123,6 +1123,12 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
     // and exclude chips count as "active" filters.
     const activeFilterCount = Object.keys(this._state.tagStates).length;
 
+    // Capture the section-filter body's scrollTop BEFORE the toolbar
+    // re-renders. Restored after the new HTML lands so a drawer toggle
+    // or pill click doesn't snap the modal back to the top.
+    const savedFilterScrollTop = this._toolbarRegion
+      .querySelector(".dauligor-section-filter__body")?.scrollTop ?? 0;
+
     this._toolbarRegion.innerHTML = `
       <div class="dauligor-class-browser__toolbar">
         <div class="dauligor-class-browser__toolbar-controls">
@@ -1146,6 +1152,14 @@ class DauligorClassBrowserApp extends HandlebarsApplicationMixin(ApplicationV2) 
       </div>
       ${this._state.isFilterOpen ? this._renderFilterModal() : ""}
     `;
+
+    // Restore the section-filter body's scrollTop captured before the
+    // re-render so drawer toggles / pill clicks don't snap us back to
+    // the top of a tall pill wall.
+    if (savedFilterScrollTop > 0) {
+      const newBody = this._toolbarRegion.querySelector(".dauligor-section-filter__body");
+      if (newBody) newBody.scrollTop = savedFilterScrollTop;
+    }
 
     this._toolbarRegion.querySelector(`[data-action="filter"]`)?.addEventListener("click", () => {
       const wasOpen = this._state.isFilterOpen;
