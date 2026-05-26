@@ -41,7 +41,10 @@ import {
 } from '../../lib/requirements';
 
 export default function UniqueOptionGroupEditor({ userProfile }: { userProfile: any }) {
-  const { id } = useParams();
+  // Defensive: handle stale `/edit/null` URLs the same way ClassEditor
+  // does — treat the literal string as if no id were provided.
+  const { id: rawId } = useParams();
+  const id = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : undefined;
   const navigate = useNavigate();
   const location = useLocation();
   // Route-aware basePath — admin route writes through upsertDocument

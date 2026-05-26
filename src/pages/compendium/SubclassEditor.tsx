@@ -136,7 +136,11 @@ function normalizeSubclassSpellcastingForSave(spellcasting: any) {
 }
 
 export default function SubclassEditor({ userProfile }: { userProfile?: any } = {}) {
-  const { id } = useParams();
+  // Same defensive sanitisation as ClassEditor — guards against pre-
+  // `ce906dc` URLs that put the literal string "null" in the :id slot
+  // for CREATE drafts.
+  const { id: rawId } = useParams();
+  const id = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : undefined;
   const [searchParams] = useSearchParams();
   const classId = searchParams.get('classId');
   const navigate = useNavigate();

@@ -450,7 +450,17 @@ function normalizeClassSpellcastingForSave(spellcasting: any) {
 }
 
 export default function ClassEditor({ userProfile }: { userProfile: any }) {
-  const { id } = useParams();
+  // Sanitize the route param: pre-`ce906dc` releases of MyProposals
+  // generated `/proposals/edit/classes/edit/null` for CREATE drafts
+  // (entity_id is null server-side; the real id lives in
+  // proposed_payload.id). React Router hands us the literal string
+  // "null" — fetchDocument('classes', 'null') then errors with
+  // "Class document null does not exist" and the form loads blank
+  // even though the draft IS in classDrafts.byId. Belt-and-braces:
+  // treat the string "null" / "undefined" as if no id were provided
+  // so the editor falls through to its create-mode behaviour.
+  const { id: rawId } = useParams();
+  const id = rawId && rawId !== 'null' && rawId !== 'undefined' ? rawId : undefined;
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = userProfile?.role === 'admin';
