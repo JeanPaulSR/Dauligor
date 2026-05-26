@@ -1185,11 +1185,29 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
+  // Reentrancy guard. If a pre-flush callback fires handleSave({silent:true})
+  // while an outer handleSave is still mid-execution, we'd run the heavy
+  // normalization pipeline twice in nested fashion — wasteful at best,
+  // a debugging nightmare if any state-setter inside the inner call
+  // triggers a re-render that cascades. Short-circuit the re-entry.
+  // (The wrapper's `submitting` state + applyProposalWrite's silent gate
+  // already prevent the *common* case; this is belt-and-braces for
+  // anything that slips through.)
+  const handleSaveInFlight = useRef(false);
+
   const handleSave = async (e?: React.FormEvent, opts: { silent?: boolean } = {}) => {
     if (e) {
       e.preventDefault();
     }
+    if (handleSaveInFlight.current) {
+      console.warn('[ClassEditor] handleSave called while already in flight — skipping recursive entry.');
+      return;
+    }
+    handleSaveInFlight.current = true;
     if (!opts.silent) setLoading(true);
+    if (!opts.silent) {
+      console.log('[ClassEditor] handleSave start', { effectiveId, isProposalMode, isCreate: !effectiveId });
+    }
 
     try {
       const normalizedProficiencies = sanitizeProficiencyCollection({
@@ -1301,12 +1319,20 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
         // branch.
         const { updated_at: _droppedUpdatedAt, ...proposalPayload } = d1Data;
         const isCreate = !effectiveId;
+        if (!opts.silent) {
+          console.log('[ClassEditor] proposal-mode save → applyProposalWrite', {
+            saveId, isCreate, hasSubmitNow: !!proposalContext?.submitNow,
+          });
+        }
         await applyProposalWrite(classWriter, proposalPayload, {
           id: saveId,
           isCreate,
           silent: opts.silent,
           submitNow: proposalContext?.submitNow,
         });
+        if (!opts.silent) {
+          console.log('[ClassEditor] applyProposalWrite returned', { saveId, isCreate });
+        }
         if (isCreate) recordCreate(saveId);
       } else {
         await upsertDocument('classes', saveId, d1Data);
@@ -1343,6 +1369,10 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
       else throw error;
     } finally {
       if (!opts.silent) setLoading(false);
+      handleSaveInFlight.current = false;
+      if (!opts.silent) {
+        console.log('[ClassEditor] handleSave done');
+      }
     }
   };
 

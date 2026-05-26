@@ -85,12 +85,16 @@ export function useProposalPreFlushSave(opts: UseProposalPreFlushSaveOpts): void
 
   useEffect(() => {
     if (!opts.enabled || !opts.proposalContext) return;
+    console.log('[useProposalPreFlushSave] registering pre-flush callback');
     return opts.proposalContext.registerPreFlush(async () => {
       const should = shouldRunRef.current ? shouldRunRef.current() : true;
+      console.log('[useProposalPreFlushSave] callback fired', { should });
       if (!should) return;
       try {
         await handleSaveRef.current(undefined, { silent: true });
+        console.log('[useProposalPreFlushSave] handleSave returned');
       } catch (err) {
+        console.error('[useProposalPreFlushSave] handleSave threw:', err);
         if (onErrorRef.current) onErrorRef.current(err);
       }
     });

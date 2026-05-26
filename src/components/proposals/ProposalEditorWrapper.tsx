@@ -187,11 +187,23 @@ export function ProposalEditorWrapper({
   const preFlushCallbacks = useRef<Set<() => Promise<void> | void>>(
     new Set(),
   );
+  // Mirror the ref's size into state so the render-side `hasPreFlush`
+  // check is reactive. Without this, an editor's registerPreFlush call
+  // (which runs in a useEffect AFTER the wrapper's initial render)
+  // adds to the ref's Set but doesn't trigger a re-render. The Save
+  // Progress button reads `hasPreFlush` from the ref at render time,
+  // sees size=0 from the initial render, and stays disabled forever
+  // even though the editor IS ready to be flushed. Bug surfaced in
+  // 2026-05-21 prod testing: users reported Save Progress greyed out
+  // after navigating back to a class in their block.
+  const [preFlushCount, setPreFlushCount] = useState(0);
   const registerPreFlush = useCallback(
     (callback: () => Promise<void> | void) => {
       preFlushCallbacks.current.add(callback);
+      setPreFlushCount(preFlushCallbacks.current.size);
       return () => {
         preFlushCallbacks.current.delete(callback);
+        setPreFlushCount(preFlushCallbacks.current.size);
       };
     },
     [],
@@ -240,6 +252,11 @@ export function ProposalEditorWrapper({
   // in the same bundle).
   const flushToBundle = useCallback(
     async (bundleId: string) => {
+      console.log('[ProposalEditorWrapper] flushToBundle start', {
+        bundleId,
+        queueLength: queueRef.current.length,
+        preFlushCount: preFlushCallbacks.current.size,
+      });
       setSubmitting(true);
       try {
         // Run pre-flush callbacks first. Editors register these to
@@ -248,8 +265,12 @@ export function ProposalEditorWrapper({
         // wrapper's Submit Changes button stand in for per-editor
         // Save buttons. Sequential await so editors don't race each
         // other.
+        let cbIndex = 0;
         for (const cb of preFlushCallbacks.current) {
+          console.log(`[ProposalEditorWrapper] preFlush callback ${cbIndex}/${preFlushCallbacks.current.size} start`);
           await cb();
+          console.log(`[ProposalEditorWrapper] preFlush callback ${cbIndex}/${preFlushCallbacks.current.size} done`);
+          cbIndex++;
         }
 
         // After pre-flush, `queueRef.current` is the authoritative
@@ -263,18 +284,27 @@ export function ProposalEditorWrapper({
         const sameBundleDrafts = drafts.filter(
           (d) => d.bundle_id === bundleId,
         );
+        console.log('[ProposalEditorWrapper] postQueuedChanges start', {
+          queueLength: currentQueue.length,
+          sameBundleDraftCount: sameBundleDrafts.length,
+        });
         const result = await postQueuedChanges(
           currentQueue,
           bundleId,
           sameBundleDrafts,
         );
+        console.log('[ProposalEditorWrapper] postQueuedChanges done', result);
         resetQueue();
         // Refresh the BlockProvider's local cache so the navbar
         // pill + Block tab show the new draft count immediately.
         void refreshBlock();
         return result;
+      } catch (err) {
+        console.error('[ProposalEditorWrapper] flushToBundle failed:', err);
+        throw err;
       } finally {
         setSubmitting(false);
+        console.log('[ProposalEditorWrapper] flushToBundle finally — submitting=false');
       }
     },
     [drafts, refreshBlock, resetQueue],
@@ -398,16 +428,24 @@ export function ProposalEditorWrapper({
   const handleSubmit = useCallback(
     async (opts?: { silent?: boolean }) => {
       const silent = !!opts?.silent;
+      console.log('[ProposalEditorWrapper] handleSubmit start', {
+        silent,
+        queueLength: queue.length,
+        preFlushCount: preFlushCallbacks.current.size,
+        activeBundleId,
+      });
       // Pre-flush registered → editor will capture form state at flush
       // time, so an empty queue here is normal. Skip the "nothing to
       // save" short-circuit and let flushToBundle decide (it returns
       // `{ submitted: 0 }` if pre-flush ends up not queuing anything).
       const canFlush = queue.length > 0 || preFlushCallbacks.current.size > 0;
       if (!canFlush) {
+        console.log('[ProposalEditorWrapper] handleSubmit early-exit: no queue + no pre-flush');
         if (!silent) toast.message('No queued changes to save.');
         return;
       }
       if (!activeBundleId) {
+        console.log('[ProposalEditorWrapper] handleSubmit no activeBundle → opening picker');
         // Refresh the open-blocks list so the picker is up to date.
         void refreshOpenBlocks();
         setPickerOpen(true);
@@ -522,7 +560,10 @@ export function ProposalEditorWrapper({
   //   - there's something queued, OR an editor has registered a
   //     pre-flush callback (the editor will capture form state at
   //     click time, replacing per-editor Save buttons).
-  const hasPreFlush = preFlushCallbacks.current.size > 0;
+  // `preFlushCount` mirrors `preFlushCallbacks.current.size` into state
+  // so this check is reactive — see the comment on the ref above for
+  // the race condition this fixes.
+  const hasPreFlush = preFlushCount > 0;
   const submitDisabled = submitting || (queue.length === 0 && !hasPreFlush);
   // Button label is "Save Progress" — this stages everything currently
   // queued (plus anything pre-flush callbacks emit at click time) into
