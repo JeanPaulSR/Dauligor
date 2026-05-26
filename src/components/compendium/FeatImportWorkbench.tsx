@@ -118,6 +118,49 @@ function buildDisplayHtml(html: string) {
   return formatFoundryFeatDescriptionForDisplay(html || '');
 }
 
+// Per-candidate edit overrides. The detail panel surfaces editable
+// inputs for these three fields so authors can fix identifier
+// collisions, rename a feat, or correct a wrong source match before
+// committing the import. Any field the user leaves blank falls back
+// to the candidate's parser-derived value.
+type CandidateOverrides = { name?: string; identifier?: string; sourceId?: string };
+
+// Resolve the effective (name, identifier, source_id) for a candidate
+// given the current override map, and re-run the existing-entry
+// dedup against the EDITED (identifier, sourceId) pair so the upsert
+// flips between create / update correctly when the user changes
+// either field. Pulled out of the component so handleImportSelected,
+// handleImportVisible, and the UI can all read the same projection.
+function effectiveCandidateValues(
+  candidate: FeatImportCandidate,
+  overrides: CandidateOverrides | undefined,
+  existingEntries: ExistingFeatRow[],
+) {
+  const o = overrides || {};
+  // Defensive trim+fallback: empty-string overrides fall through to
+  // the candidate's parsed values so the importer never tries to
+  // write an empty name or identifier.
+  const name = String(o.name ?? candidate.name).trim() || candidate.name;
+  const identifier = String(o.identifier ?? candidate.identifier).trim() || candidate.identifier;
+  const sourceId = String(o.sourceId ?? candidate.matchedSourceId ?? '');
+  const existingEntry = existingEntries.find((entry) =>
+    String(entry.identifier ?? '') === identifier
+    && String(entry.sourceId ?? '') === sourceId,
+  );
+  return {
+    name,
+    identifier,
+    sourceId,
+    existingEntryId: existingEntry?.id || '',
+    existingEntryName: existingEntry?.name || '',
+    // `sourceResolved` is recomputed off the effective value so the
+    // detail-panel "Import" button enables/disables correctly when
+    // the user picks an override source that resolves a previously
+    // unresolved row.
+    sourceResolved: !!sourceId,
+  };
+}
+
 export default function FeatImportWorkbench({
   userProfile,
   onImportComplete,
@@ -147,6 +190,18 @@ export default function FeatImportWorkbench({
   const [tagSearch, setTagSearch] = useState('');
   const [selectedFilterTagIds, setSelectedFilterTagIds] = useState<string[]>([]);
   const [candidateTagIds, setCandidateTagIds] = useState<Record<string, string[]>>({});
+  // Per-candidate edit overrides (name / identifier / source_id).
+  // Empty by default — each row falls back to its parser-derived
+  // values unless the author types into one of the detail-panel
+  // inputs. Persists for the session so editing → switching rows →
+  // coming back preserves the edits.
+  const [candidateOverrides, setCandidateOverrides] = useState<Record<string, CandidateOverrides>>({});
+  const setCandidateOverride = (candidateId: string, field: keyof CandidateOverrides, value: string) => {
+    setCandidateOverrides((prev) => ({
+      ...prev,
+      [candidateId]: { ...(prev[candidateId] || {}), [field]: value },
+    }));
+  };
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -398,6 +453,23 @@ export default function FeatImportWorkbench({
     || candidates.find((candidate) => candidate.candidateId === selectedCandidateId)
     || null;
 
+  // Effective values for the selected row (= original parsed values
+  // overlaid with any per-candidate overrides). Used by every label /
+  // input / button check in the detail panel so the rename / re-source
+  // edits flow through consistently.
+  const selectedEff = selectedCandidate
+    ? effectiveCandidateValues(selectedCandidate, candidateOverrides[selectedCandidate.candidateId], existingEntries)
+    : null;
+
+  // Resolve the effective source's display label off the sources list
+  // when the user picks an override source — the candidate's
+  // matchedSourceLabel is stale once overrides apply.
+  const selectedEffSourceLabel = (() => {
+    if (!selectedEff?.sourceId) return '';
+    const src = sources.find((s) => s.id === selectedEff.sourceId);
+    return String(src?.abbreviation || src?.shortName || src?.name || src?.id || '');
+  })();
+
   const batchSummary = useMemo(() => {
     return {
       totalFeats: candidates.length,
@@ -501,8 +573,18 @@ export default function FeatImportWorkbench({
   };
 
   const saveCandidate = async (candidate: FeatImportCandidate) => {
+    // Merge in any per-candidate edit overrides (name / identifier /
+    // source_id) before building the upsert payload. existingEntryId
+    // is re-resolved off the effective (identifier, sourceId) pair
+    // so editing either field correctly switches between create and
+    // update — matching the (source_id, identifier) composite UNIQUE
+    // index the schema now enforces.
+    const eff = effectiveCandidateValues(candidate, candidateOverrides[candidate.candidateId], existingEntries);
     const payload = {
       ...candidate.savePayload,
+      name: eff.name,
+      identifier: eff.identifier,
+      source_id: eff.sourceId || null,
       updated_at: new Date().toISOString(),
       created_at: undefined,
     } as Record<string, any>;
@@ -511,16 +593,16 @@ export default function FeatImportWorkbench({
       if (payload[key] === undefined) delete payload[key];
     });
 
-    if (candidate.existingEntryId) {
-      const existingCreatedAt = existingEntries.find((entry) => entry.id === candidate.existingEntryId)?.createdAt
-        || existingEntries.find((entry) => entry.id === candidate.existingEntryId)?.created_at
+    if (eff.existingEntryId) {
+      const existingCreatedAt = existingEntries.find((entry) => entry.id === eff.existingEntryId)?.createdAt
+        || existingEntries.find((entry) => entry.id === eff.existingEntryId)?.created_at
         || new Date().toISOString();
       const updatedPayload = {
         ...payload,
         tagIds: candidateTagIds[candidate.candidateId] || [],
         created_at: existingCreatedAt,
       };
-      await upsertFeat(candidate.existingEntryId, updatedPayload);
+      await upsertFeat(eff.existingEntryId, updatedPayload);
       return 'updated';
     }
 
@@ -534,7 +616,11 @@ export default function FeatImportWorkbench({
 
   const handleImportSelected = async () => {
     if (!selectedCandidate) return;
-    if (!selectedCandidate.sourceResolved) {
+    // Re-check resolution against the effective sourceId — the user
+    // may have picked an override source that fixes a previously
+    // unresolved row.
+    const eff = effectiveCandidateValues(selectedCandidate, candidateOverrides[selectedCandidate.candidateId], existingEntries);
+    if (!eff.sourceResolved) {
       toast.error('Resolve the source mapping before importing this feat.');
       return;
     }
@@ -560,7 +646,15 @@ export default function FeatImportWorkbench({
   };
 
   const handleImportVisible = async () => {
-    const importable = visibleCandidates.filter((candidate) => candidate.sourceResolved);
+    // Use the effective sourceResolved (post-overrides) so a row the
+    // user just rescued by picking a source no longer gets filtered
+    // out of the batch.
+    const importable = visibleCandidates
+      .map((candidate) => ({
+        candidate,
+        eff: effectiveCandidateValues(candidate, candidateOverrides[candidate.candidateId], existingEntries),
+      }))
+      .filter(({ eff }) => eff.sourceResolved);
     if (!importable.length) {
       toast.error('No visible feats are ready to import.');
       return;
@@ -568,14 +662,17 @@ export default function FeatImportWorkbench({
 
     setSaving(true);
     try {
-      const entries = importable.map((candidate) => {
-        const existing = existingEntries.find((entry) => entry.id === candidate.existingEntryId);
+      const entries = importable.map(({ candidate, eff }) => {
+        const existing = existingEntries.find((entry) => entry.id === eff.existingEntryId);
         const existingCreatedAt = existing?.createdAt || existing?.created_at || new Date().toISOString();
         const payload = {
           ...candidate.savePayload,
+          name: eff.name,
+          identifier: eff.identifier,
+          source_id: eff.sourceId || null,
           tagIds: candidateTagIds[candidate.candidateId] || [],
           updated_at: new Date().toISOString(),
-          created_at: candidate.existingEntryId ? existingCreatedAt : new Date().toISOString(),
+          created_at: eff.existingEntryId ? existingCreatedAt : new Date().toISOString(),
         } as Record<string, any>;
 
         Object.keys(payload).forEach((key) => {
@@ -583,7 +680,7 @@ export default function FeatImportWorkbench({
         });
 
         return {
-          id: candidate.existingEntryId || null,
+          id: eff.existingEntryId || null,
           data: payload,
         };
       });
@@ -849,11 +946,21 @@ export default function FeatImportWorkbench({
                       <CardContent className="p-0">
                         <div className="border-b border-gold/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),transparent)] px-6 py-5">
                           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                            <div className="space-y-2">
+                            <div className="space-y-2 flex-1 min-w-0">
                               <div className="flex items-center gap-3">
-                                <h3 className="font-serif text-4xl font-bold text-ink">{selectedCandidate.name}</h3>
-                                {selectedCandidate.matchedSourceLabel ? (
-                                  <Badge className="border-gold/20 bg-gold/10 text-gold">{selectedCandidate.matchedSourceLabel}</Badge>
+                                {/* Editable name. Styled to look like the
+                                    original h3 so the visual weight of the
+                                    detail panel header doesn't change — the
+                                    border-bottom only shows on focus. */}
+                                <input
+                                  type="text"
+                                  value={selectedEff?.name ?? selectedCandidate.name}
+                                  onChange={(e) => setCandidateOverride(selectedCandidate.candidateId, 'name', e.target.value)}
+                                  className="font-serif text-4xl font-bold text-ink bg-transparent border-0 border-b border-transparent outline-none focus:border-gold/40 focus:bg-background/40 px-1 -mx-1 flex-1 min-w-0"
+                                  spellCheck={false}
+                                />
+                                {selectedEffSourceLabel ? (
+                                  <Badge className="border-gold/20 bg-gold/10 text-gold">{selectedEffSourceLabel}</Badge>
                                 ) : null}
                                 {selectedCandidate.sourcePage ? (
                                   <span className="text-xs uppercase tracking-widest text-ink/40">p{selectedCandidate.sourcePage}</span>
@@ -870,10 +977,10 @@ export default function FeatImportWorkbench({
                                 type="button"
                                 className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
                                 onClick={handleImportSelected}
-                                disabled={saving || !selectedCandidate.sourceResolved}
+                                disabled={saving || !(selectedEff?.sourceResolved)}
                               >
                                 <Download className="h-4 w-4" />
-                                {selectedCandidate.existingEntryId ? 'Update Feat' : 'Import Feat'}
+                                {selectedEff?.existingEntryId ? 'Update Feat' : 'Import Feat'}
                               </Button>
                             </div>
                           </div>
@@ -962,15 +1069,32 @@ export default function FeatImportWorkbench({
                               ) : null}
 
                               <InfoBlock title="Batch File" value={selectedCandidate.batchLabel} />
-                              <InfoBlock title="Identifier" value={selectedCandidate.identifier} />
-                              <InfoBlock
+                              {/* Editable identifier. Edits feed into
+                                  candidateOverrides; effectiveCandidateValues
+                                  re-resolves the existing-entry match so
+                                  the row flips between create / update
+                                  as you type. */}
+                              <EditableInfoBlock
+                                title="Identifier"
+                                value={selectedEff?.identifier ?? selectedCandidate.identifier}
+                                onChange={(value) => setCandidateOverride(selectedCandidate.candidateId, 'identifier', value)}
+                                hint="Slug must be unique within its source. Two sources can share an identifier."
+                              />
+                              {/* Editable source picker. Defaults to the
+                                  parser's matched source. Selecting a
+                                  different source can rescue rows the
+                                  Foundry book/page lookup couldn't
+                                  resolve. */}
+                              <EditableSourceBlock
                                 title="Source Match"
-                                value={selectedCandidate.sourceResolved ? (selectedCandidate.matchedSourceLabel || selectedCandidate.matchedSourceId) : 'Unresolved'}
+                                value={selectedEff?.sourceId ?? selectedCandidate.matchedSourceId}
+                                sources={sources}
+                                onChange={(value) => setCandidateOverride(selectedCandidate.candidateId, 'sourceId', value)}
                               />
                               <InfoBlock title="Activities" value={String(selectedCandidate.activities.length)} />
                               <InfoBlock title="Effects" value={String(selectedCandidate.effects.length)} />
-                              {selectedCandidate.existingEntryId ? (
-                                <InfoBlock title="Existing Draft" value={selectedCandidate.existingEntryName || selectedCandidate.existingEntryId} />
+                              {selectedEff?.existingEntryId ? (
+                                <InfoBlock title="Existing Draft" value={selectedEff.existingEntryName || selectedEff.existingEntryId} />
                               ) : null}
                             </div>
                           </div>
@@ -1040,6 +1164,78 @@ function InfoBlock({ title, value }: { title: string; value: string }) {
     <div className="rounded-lg border border-gold/10 bg-background/30 px-4 py-3">
       <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">{title}</div>
       <div className="mt-2 break-words text-sm text-ink/90">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * Editable variant of InfoBlock. Same visual frame, but renders a
+ * full-width text input under the label so authors can override the
+ * field's value (identifier, name, etc.) before commit. Optional
+ * `hint` line shows in a smaller dim font under the input.
+ */
+function EditableInfoBlock({
+  title,
+  value,
+  onChange,
+  hint,
+}: {
+  title: string;
+  value: string;
+  onChange: (next: string) => void;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-gold/10 bg-background/30 px-4 py-3">
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">{title}</div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 w-full bg-transparent border border-gold/15 rounded px-2 py-1 text-sm text-ink/90 outline-none focus:border-gold/40 focus:bg-background/40"
+        spellCheck={false}
+      />
+      {hint ? <div className="mt-1.5 text-[10px] text-ink/40 italic">{hint}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * Editable source picker. Renders a native `<select>` so authors can
+ * override the parser's source match — useful when the Foundry
+ * `system.source.book` field is empty or points at a homebrew label
+ * the source library doesn't have a row for yet.
+ *
+ * Empty value (`""`) means "no source" / unresolved. The select
+ * shows it as "— Unresolved —" so it's visible at a glance.
+ */
+function EditableSourceBlock({
+  title,
+  value,
+  sources,
+  onChange,
+}: {
+  title: string;
+  value: string;
+  sources: SourceRecord[];
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-gold/10 bg-background/30 px-4 py-3">
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">{title}</div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 w-full bg-background/40 border border-gold/15 rounded px-2 py-1 text-sm text-ink/90 outline-none focus:border-gold/40"
+      >
+        <option value="">— Unresolved —</option>
+        {sources.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.abbreviation || s.shortName || s.name || s.id}
+            {s.name && (s.abbreviation || s.shortName) ? ` · ${s.name}` : ''}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
