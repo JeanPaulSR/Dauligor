@@ -1,6 +1,6 @@
 # Handoff — Items completeness + proficiency split (2026-05-26)
 
-> **Status:** 5 of 8 commits landed on `main`. Remote D1 migration NOT applied yet
+> **Status:** 6 of 8 commits landed on `main`. Remote D1 migration NOT applied yet
 > (will batch with the C7 facilities migration when it lands). Context budget for the
 > work session ran out before C6/C7/C8 — this doc picks up where the live agent left off.
 >
@@ -17,11 +17,12 @@
 |---|---|---|---|
 | `cd3257a` | feat(items): completeness columns + proficiency source/melee-ranged filter + Foundry slug alignment | migration + itemImport.ts | ✅ |
 | `a626395` | feat(proficiency): polymorphic item-proficiency resolver + melee/ranged data shape | new `proficiencyResolver.ts` + classExport.ts + ClassEditor.tsx | ✅ |
-| `b821f99` | feat(class-editor): melee/ranged 3-button category grants in Proficiencies + Multiclass | ClassEditor.tsx | ✅ |
+| `b821f99` | feat(class-editor): melee/ranged category grants in Proficiencies + Multiclass (initial standalone section — superseded by `207baca`) | ClassEditor.tsx | ✅ |
 | `96e47cd` | feat(class-export): trait advancement carries melee/ranged-restricted category arrays | classExport.ts (export-side only — UI deferred) | ✅ |
 | `8fc884a` | feat(compendium): ItemUsesField — drop-in editor for items.uses block | new `ItemUsesField.tsx` | ✅ |
+| `207baca` | refactor(class-editor): inline Melee/Ranged pills into category headers — drop standalone section | ClassEditor.tsx | ✅ |
 
-The 5 commits hold all the **data-model + library + proficiency-UI** infrastructure. The
+The 6 commits hold all the **data-model + library + proficiency-UI** infrastructure. The
 remaining 3 commits are **UI + new pages + docs**, summarized below.
 
 ---
@@ -30,10 +31,17 @@ remaining 3 commits are **UI + new pages + docs**, summarized below.
 
 These were settled by the user 2026-05-26. Honor them in remaining work.
 
-1. **Split UI**: 3 checkboxes per weapon category (`All` / `Melee only` / `Ranged only`)
-   with mutually-aware behavior. Already shipped for the Class Proficiencies +
-   Multiclass Proficiencies tabs (commit `b821f99`); the same pattern needs to land in
-   the trait-advancement weapon picker (C4-UI, below).
+1. **Split UI**: inline Melee/Ranged pill buttons next to each existing weapon
+   category-header checkbox in BOTH the Weapon Options and Fixed Weapons columns —
+   not a standalone "Category-Level Grants" section. The Options-column pills bulk-
+   toggle individual weapons in `optionIds`; the Fixed-column pills bulk-toggle
+   `fixedIds` AND maintain section-level `categoryMeleeIds` / `categoryRangedIds`
+   arrays for export round-trip. Toggling the existing "All" header checkbox clears
+   any melee/ranged restriction for that category (canonical whole-category
+   representation lives only in `categoryIds`). Already shipped for the Class
+   Proficiencies + Multiclass Proficiencies tabs (commit `207baca`, superseding
+   `b821f99`'s initial separate-section attempt); the same inline-pill pattern needs
+   to land in the trait-advancement weapon picker (C4-UI, below).
 
 2. **Existing class proficiency UI preserved.** Per-weapon checkboxes, category-header
    "All Selected" toggles, and display-name override fields all stay. The melee/ranged
@@ -80,17 +88,25 @@ These were settled by the user 2026-05-26. Honor them in remaining work.
 **Where:** Lines ~2527-2597 (the `Object.entries(groupedTraitEntries)` loop that renders
 the category headers with Fixed/Options/Replace columns).
 
-**What to add:** When `traitType === 'weapons'`, render a small 3-pill row under each
-category header (or in the header itself) for All/Melee/Ranged restriction. The 3 pills
-toggle entries in:
-- `editingAdv.configuration.categoryIds`
-- `editingAdv.configuration.categoryMeleeIds` (currently undefined — initialize)
-- `editingAdv.configuration.categoryRangedIds`
+**What to add:** When `traitType === 'weapons'`, render inline Melee/Ranged pill buttons
+next to the existing category-header column toggles (Fixed / Options / Replacements).
+Same pattern as the Class Editor's `renderWeaponTypePills` in commit `207baca`. Each
+pill toggle:
+- Bulk-toggles individual weapon entries in `editingAdv.configuration.fixed`
+  (Fixed column) or `editingAdv.configuration.options` (Options column) — filtered by
+  the weapon's `weaponType` / `weapon_type` field.
+- For the Fixed column: additionally maintains section-level
+  `editingAdv.configuration.categoryMeleeIds` / `categoryRangedIds` so the export
+  carries the restriction. (`categoryIds` for whole-category grants is already there.)
+- Mutually-aware: clicking Melee when Ranged is set promotes the category to "All"
+  (clears both restricted arrays + adds to `categoryIds`). Existing All toggle clears
+  any restricted entries for that category.
 
-**Helper to add:** A new `toggleTraitCategoryRestriction(category, restriction: 'all' |
-'melee' | 'ranged')` function next to the existing `toggleTraitCategory`. Mutually-aware
-behavior — copy the logic from `toggleCategoryWeaponRestriction` in `ClassEditor.tsx`
-(commit `b821f99`).
+**Helper to add:** Port the pair `toggleCategoryByWeaponType` + `renderWeaponTypePills`
+from `ClassEditor.tsx` (defined in commit `207baca`, ~line 1490-1560). Bind to
+`editingAdv.configuration.*` instead of `proficiencies.weapons.*`. Add a
+`patchTraitConfig` helper that updates `editingAdv.configuration` in the same way the
+existing `toggleTraitCategory` mutates it.
 
 **Export side**: Already done (commit `96e47cd`). When the UI starts populating these
 arrays, the export normalizer will fan them out into Foundry trait keys automatically.
