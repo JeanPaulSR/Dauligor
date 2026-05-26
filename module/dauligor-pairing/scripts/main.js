@@ -1,6 +1,6 @@
 import { CLASS_CATALOG_FILE, MODULE_ID, SETTINGS } from "./constants.js";
 import { registerDauligorCharacterSheet } from "./dauligor-character-sheet.js";
-import { exportActorFolder, exportApplicationWindow, exportFeatFolder, exportItemFolder, exportSpellFolder } from "./export-service.js";
+import { exportActorFolder, exportApplicationWindow, exportBackgroundFolder, exportFeatFolder, exportItemFolder, exportSpeciesFolder, exportSpellFolder } from "./export-service.js";
 import { openFeatureManager, promptLongRestCommit } from "./feature-manager-app.js";
 import { openDauligorImporter } from "./importer-app.js";
 import { initializeSocket } from "./import-service.js";
@@ -715,6 +715,14 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
       <i class="fas fa-box-archive"></i>
       <span>Export Item Folder</span>
     </button>
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-background-folder" title="Export a Foundry background folder for Dauligor background import research">
+      <i class="fas fa-scroll"></i>
+      <span>Export Background Folder</span>
+    </button>
+    <button type="button" class="dauligor-directory-tools__button" data-action="export-species-folder" title="Export a Foundry species (race) folder for Dauligor species import research">
+      <i class="fas fa-dna"></i>
+      <span>Export Species Folder</span>
+    </button>
   `;
   } else if (directoryType === "Actor") {
     exportButtons = `
@@ -747,6 +755,12 @@ function injectSidebarDirectoryButtons(root, { directoryType = "" } = {}) {
   });
   wrapper.querySelector(`[data-action="export-item-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportItemFolder();
+  });
+  wrapper.querySelector(`[data-action="export-background-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportBackgroundFolder();
+  });
+  wrapper.querySelector(`[data-action="export-species-folder"]`)?.addEventListener("click", async () => {
+    await promptAndExportSpeciesFolder();
   });
   wrapper.querySelector(`[data-action="export-actor-folder"]`)?.addEventListener("click", async () => {
     await promptAndExportActorFolder();
@@ -1050,6 +1064,207 @@ async function promptAndExportItemFolder() {
   }
 
   await exportItemFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+// ─── Background folder export ───────────────────────────────────────
+//
+// Same picker shape as the spell / feat / item dropdowns. Background
+// documents live alongside other items in the Item directory
+// (`Item.type === "background"`), so this picker filters the Item
+// folders list down to those that actually contain backgrounds.
+//
+// The set of item.types counted here MUST stay in sync with
+// BACKGROUND_FOLDER_TYPES in export-service.js.
+
+const BACKGROUND_FOLDER_EXPORT_TYPES = ["background"];
+
+function collectBackgroundFolderChoices() {
+  const folders = Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Item")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Item") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+
+      const backgroundCount = Array.from(game.items ?? []).filter((item) =>
+        BACKGROUND_FOLDER_EXPORT_TYPES.includes(item.type)
+        && descendants.has(item.folder?.id ?? "")
+      ).length;
+
+      return {
+        folder,
+        path: getItemFolderPath(folder),
+        backgroundCount,
+      };
+    })
+    .filter((entry) => entry.backgroundCount > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  return folders;
+}
+
+async function promptAndExportBackgroundFolder() {
+  const choices = collectBackgroundFolderChoices();
+  if (!choices.length) {
+    notifyWarn("No Item folders containing backgrounds were found in this world.");
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.backgroundCount} backgrounds)`)}
+    </option>
+  `).join("");
+
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Export Background Folder" },
+      content: `
+        <div class="form-group">
+          <label>Background folder</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all native Foundry background items in the selected Item folder as a Dauligor research/import batch. Each background's ItemGrant / ItemChoice advancement references are resolved and the granted feature documents are embedded alongside the parent so the importer is self-contained.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked),
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected background folder could not be found.");
+    return;
+  }
+
+  await exportBackgroundFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
+}
+
+// ─── Species (race) folder export ────────────────────────────────────
+//
+// dnd5e v5 calls these "Species" in the UI but the Item document type
+// is still `race`. Same picker shape as the background export — filter
+// the Item folder list to those containing race documents.
+//
+// The set of item.types counted here MUST stay in sync with
+// SPECIES_FOLDER_TYPES in export-service.js.
+
+const SPECIES_FOLDER_EXPORT_TYPES = ["race"];
+
+function collectSpeciesFolderChoices() {
+  const folders = Array.from(game.folders ?? [])
+    .filter((folder) => folder.type === "Item")
+    .map((folder) => {
+      const descendants = new Set([folder.id]);
+      const queue = [folder.id];
+      while (queue.length) {
+        const parentId = queue.shift();
+        for (const candidate of Array.from(game.folders ?? [])) {
+          if (candidate.type !== "Item") continue;
+          if ((candidate.folder?.id ?? null) !== parentId) continue;
+          if (descendants.has(candidate.id)) continue;
+          descendants.add(candidate.id);
+          queue.push(candidate.id);
+        }
+      }
+
+      const speciesCount = Array.from(game.items ?? []).filter((item) =>
+        SPECIES_FOLDER_EXPORT_TYPES.includes(item.type)
+        && descendants.has(item.folder?.id ?? "")
+      ).length;
+
+      return {
+        folder,
+        path: getItemFolderPath(folder),
+        speciesCount,
+      };
+    })
+    .filter((entry) => entry.speciesCount > 0)
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  return folders;
+}
+
+async function promptAndExportSpeciesFolder() {
+  const choices = collectSpeciesFolderChoices();
+  if (!choices.length) {
+    notifyWarn("No Item folders containing species (races) were found in this world.");
+    return;
+  }
+
+  const optionsHtml = choices.map((entry) => `
+    <option value="${foundry.utils.escapeHTML(entry.folder.id)}">
+      ${foundry.utils.escapeHTML(`${entry.path} (${entry.speciesCount} species)`)}
+    </option>
+  `).join("");
+
+  let result = null;
+  try {
+    result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Export Species Folder" },
+      content: `
+        <div class="form-group">
+          <label>Species folder</label>
+          <select name="folderId" autofocus>
+            ${optionsHtml}
+          </select>
+          <p class="hint">Exports all native Foundry species (Item.type === "race") in the selected Item folder. Movement / senses / creature-type are preserved verbatim, and each ItemGrant / ItemChoice advancement reference is resolved so granted racial feature feats travel with the parent.</p>
+        </div>
+        <div class="form-group">
+          <label class="checkbox">
+            <input type="checkbox" name="includeSubfolders" checked>
+            <span>Include subfolders</span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Export",
+        callback: (_event, button) => ({
+          folderId: button.form.elements.folderId.value,
+          includeSubfolders: Boolean(button.form.elements.includeSubfolders.checked),
+        }),
+      },
+      rejectClose: false,
+      modal: true,
+    });
+  } catch {
+    return;
+  }
+
+  const folder = game.folders.get(result?.folderId ?? "");
+  if (!folder) {
+    notifyWarn("The selected species folder could not be found.");
+    return;
+  }
+
+  await exportSpeciesFolder(folder, { includeSubfolders: result?.includeSubfolders !== false });
 }
 
 // ─── Actor folder export ────────────────────────────────────────────

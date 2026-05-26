@@ -1186,6 +1186,381 @@ export async function exportActorFolder(folder, { includeSubfolders = true } = {
   if (shouldDownload) downloadJson(payload, `${folder.name}-actors-export`);
 }
 
+// ─── Background folder export ───────────────────────────────────────
+//
+// A dnd5e v5 Background (`Item.type === "background"`) is a singleton
+// document. Its payload lives almost entirely in the advancement
+// chain (with the 2024 default being AbilityScoreImprovement +
+// Trait×2 + ItemGrant) plus `system.startingEquipment[]`. The class
+// itself adds no own fields — see `module/data/item/background.mjs`
+// in `foundryvtt/dnd5e@5.x` (extends ItemDataModel via
+// `AdvancementTemplate, ItemDescriptionTemplate, StartingEquipmentTemplate`).
+//
+// To keep the export self-contained for app-side import, we resolve
+// each ItemGrant / ItemChoice advancement's referenced feat documents
+// via `fromUuidSync` and embed them alongside the parent as
+// `grantedFeatures[]`. Unresolved refs surface in
+// `unresolvedReferences[]` so the importer can warn instead of
+// silently dropping data.
+//
+// Schema kind: `dauligor.foundry-background-folder-export.v1`.
+
+const BACKGROUND_FOLDER_TYPES = ["background"];
+
+/**
+ * Walk `system.advancement[]` and resolve any ItemGrant / ItemChoice
+ * `configuration.items[].uuid` references. Used by both the
+ * background and species folder exports — their primary payload
+ * lives in the advancement chain, and downstream import is much
+ * easier when the child feat documents travel with the parent.
+ */
+function resolveAdvancementChildren(source) {
+  const resolved = [];
+  const unresolved = [];
+  const advancement = Array.isArray(source.system?.advancement) ? source.system.advancement : [];
+
+  for (const adv of advancement) {
+    const type = String(adv?.type ?? "");
+    if (type !== "ItemGrant" && type !== "ItemChoice") continue;
+
+    // ItemGrant stores `configuration.items: [{uuid, optional, _id}]`.
+    // ItemChoice stores `configuration.pool: [{uuid, ...}]` per level
+    // bucket — but recent dnd5e versions also accept `items` for
+    // back-compat. Walk both so we don't miss either shape.
+    const refs = []
+      .concat(Array.isArray(adv?.configuration?.items) ? adv.configuration.items : [])
+      .concat(Array.isArray(adv?.configuration?.pool) ? adv.configuration.pool : []);
+
+    for (const ref of refs) {
+      const uuid = ref?.uuid;
+      if (!uuid || typeof uuid !== "string") continue;
+
+      let doc = null;
+      try { doc = fromUuidSync(uuid); } catch (_err) { doc = null; }
+
+      if (doc) {
+        resolved.push({
+          uuid,
+          advancementId: adv._id ?? null,
+          advancementType: type,
+          document: getCleanSource(doc),
+        });
+      } else {
+        // Surface but don't fail — most failures are compendium
+        // references the user hasn't loaded yet. The importer can
+        // either re-resolve on the app side or surface a warning.
+        unresolved.push({
+          uuid,
+          advancementId: adv._id ?? null,
+          advancementType: type,
+        });
+      }
+    }
+  }
+
+  return { resolved, unresolved };
+}
+
+function summarizeBackgroundCounts(backgrounds) {
+  const counts = {
+    backgroundCount: backgrounds.length,
+    advancementsByType: {},
+    totalGrantedFeatures: 0,
+    backgroundsWithStartingEquipment: 0,
+    backgroundsWithIdentifier: 0,
+  };
+
+  for (const bg of backgrounds) {
+    const source = getCleanSource(bg);
+    const advancement = Array.isArray(source.system?.advancement) ? source.system.advancement : [];
+    for (const adv of advancement) {
+      const t = String(adv?.type ?? "");
+      if (!t) continue;
+      counts.advancementsByType[t] = (counts.advancementsByType[t] ?? 0) + 1;
+      if (t === "ItemGrant" || t === "ItemChoice") {
+        const refs = []
+          .concat(Array.isArray(adv?.configuration?.items) ? adv.configuration.items : [])
+          .concat(Array.isArray(adv?.configuration?.pool) ? adv.configuration.pool : []);
+        counts.totalGrantedFeatures += refs.length;
+      }
+    }
+    if (Array.isArray(source.system?.startingEquipment) && source.system.startingEquipment.length > 0) {
+      counts.backgroundsWithStartingEquipment += 1;
+    }
+    if (source.system?.identifier) counts.backgroundsWithIdentifier += 1;
+  }
+
+  return counts;
+}
+
+function buildBackgroundExportEntry(bg, rootFolder) {
+  const source = getCleanSource(bg);
+  const folderPath = bg.folder ? getFolderPath(bg.folder) : "";
+  const { resolved, unresolved } = resolveAdvancementChildren(source);
+
+  return {
+    id: bg.id,
+    uuid: bg.uuid,
+    name: bg.name,
+    type: bg.type, // always "background" for this builder
+    folderId: bg.folder?.id ?? null,
+    folderPath,
+    relativeFolderPath: folderPath && rootFolder
+      ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+      : "",
+    source: {
+      book: source.system?.source?.book ?? "",
+      page: source.system?.source?.page ?? null,
+      rules: source.system?.source?.rules ?? "",
+    },
+    backgroundSummary: {
+      identifier: source.system?.identifier ?? "",
+      advancementCount: Array.isArray(source.system?.advancement) ? source.system.advancement.length : 0,
+      startingEquipmentCount: Array.isArray(source.system?.startingEquipment)
+        ? source.system.startingEquipment.length
+        : 0,
+      grantedFeatureCount: resolved.length,
+      unresolvedReferenceCount: unresolved.length,
+    },
+    grantedFeatures: resolved,
+    unresolvedReferences: unresolved,
+    sourceDocument: source,
+  };
+}
+
+export function buildBackgroundFolderExport(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const backgrounds = Array.from(game.items ?? []).filter((item) =>
+    BACKGROUND_FOLDER_TYPES.includes(item.type)
+    && includedFolderIds.has(item.folder?.id ?? "")
+  );
+
+  const folderPath = getFolderPath(folder);
+
+  return {
+    kind: "dauligor.foundry-background-folder-export.v1",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    game: {
+      worldId: game.world?.id ?? null,
+      worldTitle: game.world?.title ?? null,
+      systemId: game.system?.id ?? null,
+      systemVersion: game.system?.version ?? null,
+      coreVersion: game.release?.version ?? null,
+    },
+    folder: {
+      id: folder.id,
+      uuid: folder.uuid ?? null,
+      name: folder.name,
+      type: folder.type,
+      path: folderPath,
+      includeSubfolders,
+      includedFolderIds: Array.from(includedFolderIds),
+      parentId: folder.folder?.id ?? null,
+    },
+    summary: summarizeBackgroundCounts(backgrounds),
+    backgrounds: backgrounds
+      .slice()
+      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
+      .map((bg) => buildBackgroundExportEntry(bg, folder)),
+  };
+}
+
+export async function exportBackgroundFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") {
+    notifyWarn("Select an Item folder before exporting backgrounds.");
+    return;
+  }
+
+  const payload = buildBackgroundFolderExport(folder, { includeSubfolders });
+  const count = payload?.summary?.backgroundCount ?? 0;
+  if (!count) {
+    notifyWarn(`No background items were found in "${folder.name}".`);
+    return;
+  }
+
+  log("Prepared background folder export", payload);
+  notifyInfo(`Prepared ${count} backgrounds from "${folder.name}". See console for the full object.`);
+
+  const shouldDownload = await chooseDownload({
+    title: "Export Background Folder",
+    name: `${folder.name} (${count} backgrounds)`,
+  });
+
+  if (shouldDownload) downloadJson(payload, `${folder.name}-backgrounds-export`);
+}
+
+// ─── Species (race) folder export ────────────────────────────────────
+//
+// dnd5e v5 surfaces these as "Species" in the UI but the Item document
+// type is still `race`. Per `module/data/item/race.mjs`, RaceData
+// extends ItemDataModel via `AdvancementTemplate, ItemDescriptionTemplate`
+// and adds three race-specific structured fields:
+//   - `system.movement` (walk/burrow/climb/fly/swim + units)
+//   - `system.senses`   (darkvision/blindsight/tremorsense/truesight + special)
+//   - `system.type`     (creature type — humanoid by default, no swarm)
+// The advancement chain typically carries Size, AbilityScoreImprovement,
+// Trait, and ItemGrant entries that reference racial feature feats.
+//
+// Same child-resolution pattern as backgrounds — ItemGrant /
+// ItemChoice targets travel with the parent.
+//
+// Schema kind: `dauligor.foundry-species-folder-export.v1`. We use
+// "species" in the kind + downstream nouns (matching the dnd5e v5
+// UI label) while still filtering on `item.type === "race"` (the
+// unchanged data-layer type).
+
+const SPECIES_FOLDER_TYPES = ["race"];
+
+function summarizeSpeciesCounts(species) {
+  const counts = {
+    speciesCount: species.length,
+    advancementsByType: {},
+    totalGrantedFeatures: 0,
+    speciesWithDarkvision: 0,
+    speciesWithFlySpeed: 0,
+    creatureTypes: {},
+  };
+
+  for (const sp of species) {
+    const source = getCleanSource(sp);
+    const advancement = Array.isArray(source.system?.advancement) ? source.system.advancement : [];
+    for (const adv of advancement) {
+      const t = String(adv?.type ?? "");
+      if (!t) continue;
+      counts.advancementsByType[t] = (counts.advancementsByType[t] ?? 0) + 1;
+      if (t === "ItemGrant" || t === "ItemChoice") {
+        const refs = []
+          .concat(Array.isArray(adv?.configuration?.items) ? adv.configuration.items : [])
+          .concat(Array.isArray(adv?.configuration?.pool) ? adv.configuration.pool : []);
+        counts.totalGrantedFeatures += refs.length;
+      }
+    }
+
+    // Darkvision is the most common "is this species low-light-capable"
+    // signal; flag any non-zero senses.darkvision. Fly speed is
+    // similarly the marquee "is this species mobile in 3D" signal.
+    if (Number(source.system?.senses?.darkvision) > 0) counts.speciesWithDarkvision += 1;
+    if (Number(source.system?.movement?.fly) > 0) counts.speciesWithFlySpeed += 1;
+
+    const ct = String(source.system?.type?.value ?? "");
+    if (ct) counts.creatureTypes[ct] = (counts.creatureTypes[ct] ?? 0) + 1;
+  }
+
+  return counts;
+}
+
+function buildSpeciesExportEntry(species, rootFolder) {
+  const source = getCleanSource(species);
+  const folderPath = species.folder ? getFolderPath(species.folder) : "";
+  const { resolved, unresolved } = resolveAdvancementChildren(source);
+
+  return {
+    id: species.id,
+    uuid: species.uuid,
+    name: species.name,
+    type: species.type, // always "race" for this builder (the data-layer name)
+    folderId: species.folder?.id ?? null,
+    folderPath,
+    relativeFolderPath: folderPath && rootFolder
+      ? folderPath.replace(new RegExp(`^${escapeRegex(getFolderPath(rootFolder))}/?`), "")
+      : "",
+    source: {
+      book: source.system?.source?.book ?? "",
+      page: source.system?.source?.page ?? null,
+      rules: source.system?.source?.rules ?? "",
+    },
+    speciesSummary: {
+      identifier: source.system?.identifier ?? "",
+      // Foundry dnd5e v5 keeps creature type as a structured object
+      // with `value` (the slug like "humanoid") + `subtype` +
+      // `custom` + `swarm`. Preserve both pieces so the app side can
+      // route to category filters AND surface the subtype label.
+      creatureType: source.system?.type?.value ?? "",
+      creatureSubtype: source.system?.type?.subtype ?? "",
+      // Movement / senses ship as MovementField / SensesField
+      // objects. Pass them through verbatim — they're already
+      // shaped the way the importer will want them.
+      movement: source.system?.movement ?? {},
+      senses: source.system?.senses ?? {},
+      advancementCount: Array.isArray(source.system?.advancement) ? source.system.advancement.length : 0,
+      grantedFeatureCount: resolved.length,
+      unresolvedReferenceCount: unresolved.length,
+    },
+    grantedFeatures: resolved,
+    unresolvedReferences: unresolved,
+    sourceDocument: source,
+  };
+}
+
+export function buildSpeciesFolderExport(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") return null;
+
+  const includedFolderIds = includeSubfolders ? collectDescendantFolderIds(folder) : new Set([folder.id]);
+  const species = Array.from(game.items ?? []).filter((item) =>
+    SPECIES_FOLDER_TYPES.includes(item.type)
+    && includedFolderIds.has(item.folder?.id ?? "")
+  );
+
+  const folderPath = getFolderPath(folder);
+
+  return {
+    kind: "dauligor.foundry-species-folder-export.v1",
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    moduleId: MODULE_ID,
+    game: {
+      worldId: game.world?.id ?? null,
+      worldTitle: game.world?.title ?? null,
+      systemId: game.system?.id ?? null,
+      systemVersion: game.system?.version ?? null,
+      coreVersion: game.release?.version ?? null,
+    },
+    folder: {
+      id: folder.id,
+      uuid: folder.uuid ?? null,
+      name: folder.name,
+      type: folder.type,
+      path: folderPath,
+      includeSubfolders,
+      includedFolderIds: Array.from(includedFolderIds),
+      parentId: folder.folder?.id ?? null,
+    },
+    summary: summarizeSpeciesCounts(species),
+    species: species
+      .slice()
+      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
+      .map((sp) => buildSpeciesExportEntry(sp, folder)),
+  };
+}
+
+export async function exportSpeciesFolder(folder, { includeSubfolders = true } = {}) {
+  if (!folder || folder.documentName !== "Folder" || folder.type !== "Item") {
+    notifyWarn("Select an Item folder before exporting species.");
+    return;
+  }
+
+  const payload = buildSpeciesFolderExport(folder, { includeSubfolders });
+  const count = payload?.summary?.speciesCount ?? 0;
+  if (!count) {
+    notifyWarn(`No species items were found in "${folder.name}".`);
+    return;
+  }
+
+  log("Prepared species folder export", payload);
+  notifyInfo(`Prepared ${count} species from "${folder.name}". See console for the full object.`);
+
+  const shouldDownload = await chooseDownload({
+    title: "Export Species Folder",
+    name: `${folder.name} (${count} species)`,
+  });
+
+  if (shouldDownload) downloadJson(payload, `${folder.name}-species-export`);
+}
+
 function serializeForJson(value, { seen = new WeakSet(), depth = 0, maxDepth = 10 } = {}) {
   if (value == null) return value;
   if (depth > maxDepth) return "[MaxDepth]";
