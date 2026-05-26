@@ -75,6 +75,11 @@ These are the files that should be treated as the primary references.
 
 - `docs/item-import-contract.md`
   - canonical item import contract
+- `docs/property-mapping.md`
+  - canonical app↔Foundry property slug vocabulary contract
+  - standard 5e slugs (`fin` / `hvy` / `lgt` / etc.) ship 1:1; 4 app-custom
+    slugs (`lance` / `net` / `range` / `improvised-weapons`) ship verbatim;
+    Foundry-side homebrew slugs pass through both directions unchanged
 - `docs/spell-import-contract.md`
   - canonical spell import contract
 - `docs/spell-preparation-manager-guide.md`

@@ -1,6 +1,11 @@
-# Compendium — Feats & Items
+# Compendium — Feats
 
-Feats and item records share the same editor scaffolding as features in [compendium-classes.md](compendium-classes.md): description, details, activities, effects.
+> **Items split-out (2026-05-26)**: this file used to cover both feats and items.
+> Items are now documented separately at [`compendium-items.md`](compendium-items.md)
+> — the items editor grew a type-dispatching dynamic body that needed its own page.
+> Facilities (Bastions) live at [`compendium-facilities.md`](compendium-facilities.md).
+
+Feats and feature records share the same editor scaffolding as features in [compendium-classes.md](compendium-classes.md): description, details, activities, effects.
 
 ## Pages
 
@@ -8,18 +13,19 @@ Feats and item records share the same editor scaffolding as features in [compend
 |---|---|---|
 | `/compendium/feats` | [FeatList.tsx](../../src/pages/compendium/FeatList.tsx) | Public feat browser (filter / search / detail panel) |
 | `/compendium/feats/manage` | [FeatsEditor.tsx](../../src/pages/compendium/FeatsEditor.tsx) | Admin authoring manager |
-| `/compendium/items` | [ItemsEditor.tsx](../../src/pages/compendium/ItemsEditor.tsx) | Item browser + editor (still admin-only) |
 
-Feats now follow the same public-list / admin-manager split spells use: anyone can browse and read feat detail pages at `/compendium/feats`; admins see a "Feat Manager" button in the page header that links to the master-detail authoring surface at `/compendium/feats/manage`. The sidebar lists "Feats" alongside "Spells" for all users (no longer admin-gated). Items still travel through the legacy admin-only single-page editor — that overhaul is a future task.
+Feats follow the same public-list / admin-manager split spells use: anyone can browse and read feat detail pages at `/compendium/feats`; admins see a "Feat Manager" button in the page header that links to the master-detail authoring surface at `/compendium/feats/manage`. The sidebar lists "Feats" alongside "Spells" for all users (no longer admin-gated).
 
 ## Data layer (D1)
 
 | Table | Key columns |
 |---|---|
 | `feats` | `id`, `name`, `identifier`, `feat_type` (= `system.type.value`), `feat_subtype` (= `system.type.subtype`), `source_type`, `requirements`, `requirements_tree` (JSON tree), `repeatable`, `uses_max`, `uses_spent`, `uses_recovery` (JSON array), `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
-| `items` | `id`, `name`, `identifier`, `item_type`, `rarity`, `quantity`, `weight`, `price_value`, `price_denomination`, `attunement` (BOOL), `equipped`, `identified`, `magical`, `description`, `image_url`, `activities` (JSON), `effects` (JSON), `source_id`, `page`, `tags` (JSON) |
 
 Schema: [../database/structure/](../database/structure/), [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md).
+
+For items, see [compendium-items.md](compendium-items.md) and
+[items.md](../database/structure/items.md).
 
 ## Feats
 
@@ -80,27 +86,13 @@ Same shape as features. See [compendium-classes.md](compendium-classes.md) for t
 ### Use by character builder
 The character builder pulls feat options when resolving an `AbilityScoreImprovement` advancement that the user chose to spend on a feat. The Dauligor ASI prompt (Foundry module) also queries the source feat catalog when resolving in Foundry.
 
-## Items
-
-### Item types
-`item_type` covers: `weapon`, `armor`, `consumable`, `tool`, `container`, `equipment`, `loot`, `treasure`. The editor's tabs change based on type — weapons get damage / property fields, armor gets AC / dexterity-cap fields, consumables expose uses / recovery.
-
-`equipped` and `attunement` are character-side state (when the item is owned), not authored on the catalog item.
-
-### Activities and effects
-Same scaffolding as feats and features. Magic items typically have effects like "+1 to weapon attacks" expressed as ActiveEffect changes.
-
-### Magical / identified flags
-- `magical` — reflects rules categorisation (anti-magic field interactions, etc.)
-- `identified` — character-side; an unidentified magic item shows as "unidentified ____" until identified
-
 ## Tags
 
-Both feats and items support tags via the `tags` JSON column. Tags are managed in [compendium-options.md](compendium-options.md).
+Feats support tags via the `tags` JSON column. Tags are managed in [compendium-options.md](compendium-options.md).
 
 ## Image handling
 
-Feat / item icons go to `images/feats/<id>/` or `images/items/<id>/` in R2. Compact upload component used in the icon slot.
+Feat icons go to `images/feats/<id>/` in R2. Compact upload component used in the icon slot.
 
 ## Common tasks
 
@@ -109,12 +101,6 @@ Feat / item icons go to `images/feats/<id>/` or `images/items/<id>/` in R2. Comp
 2. Set `feat_type` and `source_type`.
 3. Author the description (BBCode), activities (JSON), and effects.
 4. Tag with the relevant feat group.
-
-### Add a new magic item
-1. Create a row in `items` via the editor.
-2. Set `item_type`, `rarity`, `magical = true`.
-3. Add the activity (e.g., damage roll on attack) and the effect (e.g., +1 to attack rolls).
-4. Set `attunement` if the item requires attunement on the character side.
 
 ### Find unused feats
 ```sql
@@ -127,8 +113,10 @@ ORDER BY name;
 
 ## Related docs
 
+- [compendium-items.md](compendium-items.md) — items catalog (split out 2026-05-26)
+- [compendium-facilities.md](compendium-facilities.md) — Bastion facilities (separate table)
 - [compendium-classes.md](compendium-classes.md) — same editor scaffolding for features
 - [compendium-options.md](compendium-options.md) — tags
-- [character-builder.md](character-builder.md) — how feats and items end up on a character
-- [foundry-export.md](foundry-export.md) — feats/items in actor bundle export
+- [character-builder.md](character-builder.md) — how feats end up on a character
+- [foundry-export.md](foundry-export.md) — feats in actor bundle export
 - [../_archive/migration-details/phase-4-compendium.md](../_archive/migration-details/phase-4-compendium.md)

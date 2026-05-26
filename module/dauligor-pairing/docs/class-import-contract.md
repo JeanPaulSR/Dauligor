@@ -578,6 +578,74 @@ Verified example:
 }
 ```
 
+#### Weapon trait — category-level grant arrays (post 20260526)
+
+When `configuration.type === 'weapons'`, the export may carry three additional
+category-level grant arrays alongside the per-weapon `fixed[]` / `options[]` /
+`replacements[]` lists. They express whole-category grants and the 2024 Melee /
+Ranged split:
+
+```json
+{
+  "_id": "fighterWeaponProficiencies",
+  "type": "Trait",
+  "level": 1,
+  "configuration": {
+    "type": "weapons",
+    "mode": "default",
+    "allowReplacements": false,
+    "fixed": [],
+    "options": [],
+    "replacements": [],
+    "categoryIds": ["simple", "martial"],
+    "categoryMeleeIds": [],
+    "categoryRangedIds": []
+  }
+}
+```
+
+Module-side expansion rules (`normalizeSemanticFeatureTraitAdvancement` →
+`expandWeaponCategoryGrants` in `class-import-service.js`):
+
+| Source array | Expansion |
+|---|---|
+| `categoryIds: ["simple"]` | `["weapon:simpleM", "weapon:simpleR"]` (both halves — whole category) |
+| `categoryMeleeIds: ["simple"]` | `["weapon:simpleM"]` (Melee half only) |
+| `categoryRangedIds: ["simple"]` | `["weapon:simpleR"]` (Ranged half only) |
+| `categoryIds: ["natural"]` | `["weapon:natural"]` (non-splitting categories use the bare slug) |
+
+The module probes `CONFIG.DND5E.weaponTypes` at runtime to decide which scheme
+applies. dnd5e 2024 splits Simple / Martial into Melee + Ranged variants
+(`simpleM` / `simpleR` / `martialM` / `martialR`); Natural / Improvised / Siege
+stay whole (`natural` / `improv` / `siege`). Whole-category grants over
+non-splitting categories fall back to the bare slug.
+
+These arrays expand INTO `configuration.grants[]` at module-bridge time — they
+are NOT preserved on the embedded actor advancement. After expansion, the
+resulting advancement has the standard `grants: ["weapon:simpleM", ...]` shape
+the rest of the import pipeline already understands.
+
+#### Weapon trait — character proficiency rows
+
+A class trait advancement with weapon grants produces matching
+`character_proficiencies` rows on the actor's Dauligor character record. The
+schema mirrors the trait shape:
+
+| Trait grant | character_proficiencies row |
+|---|---|
+| `categoryIds: ["simple"]` | `entity_type='weapon_category', entity_id=<simple>, weapon_type_filter=NULL` |
+| `categoryMeleeIds: ["simple"]` | `entity_type='weapon_category', entity_id=<simple>, weapon_type_filter='Melee'` |
+| `categoryRangedIds: ["simple"]` | `entity_type='weapon_category', entity_id=<simple>, weapon_type_filter='Ranged'` |
+| `fixed: ["greatsword-id"]` | `entity_type='weapon', entity_id=<greatsword-id>` |
+| `options: [...]` | (no row — options are per-choice grants, set when the user picks) |
+
+The `source_entity_type='class'` / `source_entity_id=<class-id>` columns on
+each row attribute the grant to the class for tooltip display and clean
+deletion on re-import. See
+[`docs/database/structure/character_proficiencies.md`](../../../docs/database/structure/character_proficiencies.md)
+and [`docs/architecture/proficiency-resolution.md`](../../../docs/architecture/proficiency-resolution.md)
+for the full app-side schema + resolver walk.
+
 ### `ScaleValue`
 
 Use `ScaleValue` for class progression tracks such as:

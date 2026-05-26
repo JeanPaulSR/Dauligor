@@ -82,3 +82,11 @@ The server copy uses [`api/_lib/d1-fetchers-server.ts`](../../api/_lib/d1-fetche
 ### Module-side contracts (canonical)
 
 For the actual import shape — class data, spell data, feature activities, advancements, character bundles — the canonical contracts live in the module repository under [`module/dauligor-pairing/docs/`](../../module/dauligor-pairing/docs/). Master index: [`module/dauligor-pairing/docs/import-contract-index.md`](../../module/dauligor-pairing/docs/import-contract-index.md). Read those before changing anything in `_classExport.ts` or `classExport.ts` — they describe the exact shape the Foundry module expects to receive.
+
+### Property slug vocabulary
+
+The `items.properties` array (and the per-weapon `weapons.property_ids` table) share their slug vocabulary with Foundry's `CONFIG.DND5E.itemProperties`. The 11 standard 5e codes (`fin` / `hvy` / `lgt` / `lod` / `two` / `ver` / `thr` / `rch` / `amm` / `spc` / `sil`) round-trip 1:1; 4 app-custom slugs (`lance` / `net` / `range` / `improvised-weapons`) ship verbatim and are interpreted by the module side. Foundry-side homebrew slugs (e.g. Zweihänder's `superHeavy`) pass through both directions unchanged. Full contract: [`property-mapping.md`](../../module/dauligor-pairing/docs/property-mapping.md).
+
+### Item proficiency resolution
+
+Items reference the proficiency-definition tables (`weapons` / `armor` / `tools`) via polymorphic FK columns (`base_weapon_id` / `base_armor_id` / `base_tool_id`). The character sheet computes proficiency badges by walking the `character_proficiencies` table hierarchically (specific → category → property) — see [`proficiency-resolution.md`](proficiency-resolution.md) for the walker logic and the `weapon_type_filter` semantics that differentiate "Simple Weapons" from "Simple Melee Weapons" in the 2024 split.
