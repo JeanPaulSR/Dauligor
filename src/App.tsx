@@ -56,6 +56,8 @@ import FeatsEditor from './pages/compendium/FeatsEditor';
 import FeatList from './pages/compendium/FeatList';
 import ItemsEditor from './pages/compendium/ItemsEditor';
 import ItemList from './pages/compendium/ItemList';
+import FacilitiesEditor from './pages/compendium/FacilitiesEditor';
+import FacilitiesList from './pages/compendium/FacilitiesList';
 import RacesList from './pages/compendium/RacesList';
 import RaceEditor from './pages/compendium/RaceEditor';
 import BackgroundsList from './pages/compendium/BackgroundsList';
@@ -267,6 +269,12 @@ export default function App() {
                       /<entity>/manage for the admin CRUD surface). */}
                   <Route path="/compendium/items" element={<ItemList userProfile={effectiveProfile} />} />
                   <Route path="/compendium/items/manage" element={<ItemsEditor userProfile={effectiveProfile} />} />
+                  {/* Facilities (Bastions, 2024 DMG) — separate table
+                      + page from items. Public browser at /facilities,
+                      admin editor at /facilities/manage. Migration
+                      20260526-2000 (C7 of items-completeness work). */}
+                  <Route path="/compendium/facilities" element={<FacilitiesList userProfile={effectiveProfile} />} />
+                  <Route path="/compendium/facilities/manage" element={<FacilitiesEditor userProfile={effectiveProfile} />} />
                   {/* Races + Backgrounds — public list pages plus
                       admin /manage editors. Both currently live in the
                       `feats` table with a `feat_type='race'/'background'`

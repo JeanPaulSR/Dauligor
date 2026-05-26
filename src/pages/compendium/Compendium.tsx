@@ -8,6 +8,7 @@ import {
   Scroll,
   Users,
   Hammer,
+  Castle,
   Dna,
   Brain,
   ChevronRight,
@@ -39,9 +40,14 @@ export default function Compendium({ userProfile }: { userProfile: any }) {
         // tools, and the catch-all items table. Admins get a separate
         // "Item Manager" tile that links to the CRUD surface.
         { name: 'Items', icon: Hammer, path: '/compendium/items', description: 'Unified browser for weapons, armor, tools, and gear.' },
+        // Facilities (Bastions, 2024 DMG) — separate table because
+        // the shape is heavier (orders / progress / trade / craft).
+        // Migration 20260526-2000.
+        { name: 'Facilities', icon: Castle, path: '/compendium/facilities', description: 'Bastion facilities — basic + special rooms from the 2024 DMG.' },
         ...(userProfile?.role === 'admin' ? [
           { name: 'Spell Manager', icon: Wand2, path: '/compendium/spells/manage', description: 'Admin-only import and development manager for Foundry-facing spells.' },
           { name: 'Item Manager', icon: Hammer, path: '/compendium/items/manage', description: 'Admin-only Foundry import + manual editor for items.' },
+          { name: 'Facility Manager', icon: Castle, path: '/compendium/facilities/manage', description: 'Admin-only editor for bastion facilities.' },
         ] : []),
       ]
     },

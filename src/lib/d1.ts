@@ -318,6 +318,11 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // `ammunition` is the weapon ammunition reference ({type,
         // quantity, denomination}).
         'uses', 'capacity', 'currency', 'ammunition',
+        // facilities JSON sub-blocks added 2026-05-26 (migration
+        // 20260526-2000). `progress`={value, max, order, pct};
+        // `trade`={creatures, profit, stock, pending}; `craft`={item,
+        // quantity}; `defenders` / `hirelings`={value:uuid[], max}.
+        'progress', 'trade', 'craft', 'defenders', 'hirelings',
         // spells.foundry_data — JSON column storing the Foundry system
         // block (activation, range, duration, target, materials, uses,
         // description.value, plus the `_dauligorImport` round-trip

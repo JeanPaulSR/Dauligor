@@ -67,6 +67,13 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     baseWeaponId: 'base_weapon_id',
     baseArmorId: 'base_armor_id',
     baseToolId: 'base_tool_id',
+    // 20260526-2000 facilities columns. The JSON sub-blocks
+    // (progress / trade / craft / defenders / hirelings) match the
+    // column name as-is, no rename needed. Same with `size`,
+    // `level`, `built`, `free`, `disabled`, `enlargeable`.
+    facilityType: 'facility_type',
+    facilitySubtype: 'facility_subtype',
+    facilityOrder: 'facility_order',
   };
 
   const normalized: Record<string, any> = {};
@@ -317,6 +324,10 @@ export function denormalizeCompendiumData(row: any): any {
     base_weapon_id: 'baseWeaponId',
     base_armor_id: 'baseArmorId',
     base_tool_id: 'baseToolId',
+    // 20260526-2000 facilities columns.
+    facility_type: 'facilityType',
+    facility_subtype: 'facilitySubtype',
+    facility_order: 'facilityOrder',
   };
 
   const denormalized: any = { ...row };

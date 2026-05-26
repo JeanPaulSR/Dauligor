@@ -200,6 +200,9 @@ export default function Sidebar({
           // and backgrounds are placeholder routes until their
           // schemas land.
           { label: 'Items', path: '/compendium/items' },
+          // Facilities (Bastions, 2024 DMG) — separate browser at
+          // /compendium/facilities, admin editor at /facilities/manage.
+          { label: 'Facilities', path: '/compendium/facilities' },
           { label: 'Races', path: '/compendium/races' },
           { label: 'Backgrounds', path: '/compendium/backgrounds' },
           // Admin-only editor links. Content-creators reach the same

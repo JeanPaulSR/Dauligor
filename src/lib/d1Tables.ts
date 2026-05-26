@@ -38,6 +38,10 @@ export const D1_TABLE_MAP: Record<string, string> = {
   campaigns: 'campaigns',
   items: 'items',
   feats: 'feats',
+  // dnd5e v5 Bastion facilities (2024 DMG). Separate table from items
+  // — distinct shape (orders/progress/trade/craft/defenders/hirelings)
+  // + smaller catalog. Migration 20260526-2000.
+  facilities: 'facilities',
   features: 'features',
   users: 'users',
   eras: 'eras',
