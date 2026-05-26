@@ -1,13 +1,13 @@
 # Handoff — Items completeness + proficiency split (2026-05-26)
 
-> **Status:** 6 of 8 commits landed on `main`. Remote D1 migration NOT applied yet
-> (will batch with the C7 facilities migration when it lands). Context budget for the
-> work session ran out before C6/C7/C8 — this doc picks up where the live agent left off.
+> **Status:** 7 of 8 commits landed on `main`. Remote D1 migration NOT applied yet
+> (will batch with the C7 facilities migration when it lands). C4-UI complete; C6/C7/C8
+> still pending — this doc picks up where the live agent left off.
 >
 > **Read first:**
 > - `docs/handoff-compendium-shell-2026-05-25.md` — preceding session's context
 > - `module/dauligor-pairing/docs/import-contract-index.md` — module contract index
-> - This file's "Decisions locked" section before starting any C4-UI / C6 / C7 work
+> - This file's "Decisions locked" section before starting any C6 / C7 work
 
 ---
 
@@ -21,9 +21,11 @@
 | `96e47cd` | feat(class-export): trait advancement carries melee/ranged-restricted category arrays | classExport.ts (export-side only — UI deferred) | ✅ |
 | `8fc884a` | feat(compendium): ItemUsesField — drop-in editor for items.uses block | new `ItemUsesField.tsx` | ✅ |
 | `207baca` | refactor(class-editor): inline Melee/Ranged pills into category headers — drop standalone section | ClassEditor.tsx | ✅ |
+| _next_ | feat(trait-adv): weapon picker melee/ranged pills + module-side category-grant expansion | AdvancementManager.tsx + class-import-service.js | ✅ (C4-UI) |
 
-The 6 commits hold all the **data-model + library + proficiency-UI** infrastructure. The
-remaining 3 commits are **UI + new pages + docs**, summarized below.
+The 7 commits hold all the **data-model + library + proficiency-UI + trait-advancement**
+infrastructure. The remaining 3 commits are **dynamic ItemsEditor + new facilities page +
+docs**, summarized below.
 
 ---
 
@@ -82,40 +84,41 @@ These were settled by the user 2026-05-26. Honor them in remaining work.
 
 ## Pending work — concrete next steps
 
-### C4-UI — Trait advancement weapon picker melee/ranged pills
+### Known gaps from the melee/ranged work (not blocking C6+ but worth picking up)
 
-**File:** `src/components/compendium/AdvancementManager.tsx`
-**Where:** Lines ~2527-2597 (the `Object.entries(groupedTraitEntries)` loop that renders
-the category headers with Fixed/Options/Replace columns).
+The C4-UI commit added weapon-category expansion to `normalizeSemanticFeatureTraitAdvancement`
+(via the new `expandWeaponCategoryGrants` helper) — that handles **trait advancements**.
+Two parallel module paths still consume only `categoryIds` (not the new Melee/Ranged
+arrays) and emit a single `weapon:simple` token which dnd5e v5 doesn't recognize:
 
-**What to add:** When `traitType === 'weapons'`, render inline Melee/Ranged pill buttons
-next to the existing category-header column toggles (Fixed / Options / Replacements).
-Same pattern as the Class Editor's `renderWeaponTypePills` in commit `207baca`. Each
-pill toggle:
-- Bulk-toggles individual weapon entries in `editingAdv.configuration.fixed`
-  (Fixed column) or `editingAdv.configuration.options` (Options column) — filtered by
-  the weapon's `weaponType` / `weapon_type` field.
-- For the Fixed column: additionally maintains section-level
-  `editingAdv.configuration.categoryMeleeIds` / `categoryRangedIds` so the export
-  carries the restriction. (`categoryIds` for whole-category grants is already there.)
-- Mutually-aware: clicking Melee when Ranged is set promotes the category to "All"
-  (clears both restricted arrays + adds to `categoryIds`). Existing All toggle clears
-  any restricted entries for that category.
+- **`module/dauligor-pairing/scripts/class-import-service.js:4633`** —
+  `buildTraitKeysFromProfileBlock(type, block, …)`. Used by `applyActorTraitProfile`
+  for **multiclass proficiencies**. When `block.categoryIds` / `categoryMeleeIds` /
+  `categoryRangedIds` come through, emit `weapon:simpleM` etc. via the same probe-and-
+  split logic as `expandWeaponCategoryGrants`. Hoist that helper into a shared spot or
+  copy the logic into `normalizeProfileTraitKey` so the M/R split is honored.
 
-**Helper to add:** Port the pair `toggleCategoryByWeaponType` + `renderWeaponTypePills`
-from `ClassEditor.tsx` (defined in commit `207baca`, ~line 1490-1560). Bind to
-`editingAdv.configuration.*` instead of `proficiencies.weapons.*`. Add a
-`patchTraitConfig` helper that updates `editingAdv.configuration` in the same way the
-existing `toggleTraitCategory` mutates it.
+- **`module/dauligor-pairing/scripts/importer-base-features.js:130`** —
+  `'base-weapons': { kind: 'weapons', block: profile.weapons }`. The importer wizard
+  builds advancement entries from the class's main `proficiencies.weapons` block here.
+  It currently only reads `fixedIds` / `optionIds`. Should also expand
+  `categoryIds` / `categoryMeleeIds` / `categoryRangedIds` into advancement entries
+  (probably mapped into `entry.fixed` with the right Foundry trait keys via the same
+  helper).
 
-**Export side**: Already done (commit `96e47cd`). When the UI starts populating these
-arrays, the export normalizer will fan them out into Foundry trait keys automatically.
+These are class-level proficiency block consumers — separate from the trait-advancement
+path C4-UI just wired. Until they're updated, multiclass weapon-category grants and the
+importer wizard's base-weapon row won't honor the new Melee/Ranged split. Low priority
+because most class-level weapon grants are still expressed per-item; the homebrew exotic
+ones authored via the new pills are the only ones affected today.
 
-**Module side**: `module/dauligor-pairing/scripts/class-import-service.js` →
-`applyActorTraitAdvancements`. When it sees `configuration.categoryMeleeIds: ['simple']`
-on a weapons trait, write the Foundry trait grant as `weapon:simpleM` (or the right
-foundry-alias key). When it sees `categoryIds: ['simple']`, write BOTH `weapon:simpleM`
-AND `weapon:simpleR`. Existing handler should be ~50 LOC change.
+**Module canonical doc updates needed (flag for next session):**
+- `module/dauligor-pairing/docs/class-import-contract.md` — document the
+  `categoryMeleeIds` / `categoryRangedIds` arrays on proficiency blocks AND on trait
+  advancement configurations, and the fan-out to Foundry trait keys (`weapon:simpleM` /
+  `weapon:simpleR` / both when `categoryIds`).
+- `module/dauligor-pairing/docs/class-semantic-export-notes.md` — already shows the
+  `categoryIds` example block; extend with `categoryMeleeIds` / `categoryRangedIds`.
 
 ---
 
