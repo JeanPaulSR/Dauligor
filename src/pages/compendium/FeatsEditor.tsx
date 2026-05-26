@@ -35,6 +35,15 @@ import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertFeat, deleteFeat, fetchFeat, denormalizeCompendiumData } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
 import { slugify, cn } from '../../lib/utils';
+import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
+import { useAxisFilters } from '../../hooks/useAxisFilters';
+import {
+  deriveFeatPropertyFlags,
+  FEAT_PROPERTY_LABELS,
+  FEAT_PROPERTY_ORDER,
+  FEAT_TYPE_LABELS,
+  FEAT_TYPE_ORDER,
+} from '../../lib/featFilters';
 import {
   CompendiumEditorShell,
   type EditorMode,
@@ -42,6 +51,7 @@ import {
   type TagsSubTab,
   type EditorListColumn,
 } from '../../components/compendium/CompendiumEditorShell';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { Checkbox } from '../../components/ui/checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
@@ -79,6 +89,34 @@ const SOURCE_TYPES: [string, string][] = [
   ['classFeature', 'Class Feature'],
   ['subclassFeature', 'Subclass Feature'],
 ];
+
+// Advancement-type axis vocabulary. Mirrors `AdvancementManager`'s
+// supported types — used by the filter modal to surface "feats that
+// grant an ItemGrant" / "feats with a ScaleValue" etc. Slug values
+// match the canonical `Advancement.type` strings dnd5e ships.
+const ADVANCEMENT_TYPE_VALUES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'Trait',                     label: 'Trait' },
+  { value: 'ItemGrant',                 label: 'Item Grant' },
+  { value: 'ItemChoice',                label: 'Item Choice' },
+  { value: 'AbilityScoreImprovement',   label: 'Ability Score Improvement' },
+  { value: 'HitPoints',                 label: 'Hit Points' },
+  { value: 'ScaleValue',                label: 'Scale Value' },
+  { value: 'Size',                      label: 'Size' },
+];
+
+// Axis keys this page consumes. Drives `useAxisFilters`'s
+// `activeFilterCount` summation so stale keys don't inflate the
+// modal-button badge.
+const FEAT_AXIS_KEYS = [
+  'featType', 'source', 'sourceType', 'property', 'advancementType',
+] as const;
+
+// No-op tag-axis handlers. Feats don't surface tag-kind axes today
+// (their tag picker lives on the Tags super-tab as a list, not a
+// filter); SectionFilterPanel still requires the prop pair.
+const NOOP_CYCLE_TAG = () => { /* no tag axes on feats */ };
+const NOOP_SET_TAG_STATES: React.Dispatch<React.SetStateAction<Record<string, number>>> = () => { /* no tag axes on feats */ };
+const EMPTY_TAG_STATES: Record<string, number> = {};
 
 type UsesRecoveryRule = {
   period: string;
@@ -215,6 +253,13 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
   const [formData, setFormData] = useState<FeatFormData>(makeInitialFeatForm());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  // ── Filter state ──────────────────────────────────────────────
+  // useAxisFilters bundles every cycler the SectionFilterPanel needs.
+  // Items + spells use the same hook — keeping the per-editor wiring
+  // consistent means changes to the filter UX land in one spot.
+  const { axisFilters, cyclers, activeFilterCount, resetAll: resetAxisFilters } =
+    useAxisFilters(FEAT_AXIS_KEYS);
+
   // Cascade dependent state.
   const cascadeDep = useCascadeDependent('feat', editingId);
   const [replaceTagPickerOpen, setReplaceTagPickerOpen] = useState(false);
@@ -280,6 +325,27 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
 
         const mapped = featRows.map((row: any) => {
           const normalized = normalizeLegacyFeatType(row.feat_type);
+          // Pre-compute the boolean property flags (hasUses / has
+          // Activities / hasEffects / hasPrereqs / repeatable) once at
+          // load time — the filter modal reads these per entry. Same
+          // helper FeatList uses for its public-side chips.
+          const propertyFlags = deriveFeatPropertyFlags(row);
+          // Aggregate the set of advancement.type slugs the feat
+          // declares — drives the "Advancements" multi-axis filter
+          // ("feats that grant an ItemGrant" etc.). Tolerates the
+          // advancements column being either a parsed array, a JSON
+          // string, or absent.
+          const advRaw = row.advancements;
+          const advancements: any[] = Array.isArray(advRaw)
+            ? advRaw
+            : typeof advRaw === 'string'
+              ? (() => { try { return JSON.parse(advRaw); } catch { return []; } })()
+              : [];
+          const advancementTypeSet = new Set<string>();
+          for (const a of advancements) {
+            const t = String(a?.type ?? '').trim();
+            if (t) advancementTypeSet.add(t);
+          }
           return {
             ...row,
             sourceId: row.source_id,
@@ -289,6 +355,9 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
             sourceType: row.source_type,
             requirementsTree: parseRequirementTree(row.requirements_tree ?? row.requirementsTree),
             tagIds: Array.isArray(row.tags) ? row.tags : [],
+            // Filter-axis precomputes:
+            ...propertyFlags,
+            advancementTypeSet,
           };
         });
         setEntries(mapped);
@@ -428,9 +497,25 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         const isMyWork = draftedFeatIds.has(id) || unlockedBaseIds.has(id);
         if (!isMyWork) return false;
       }
+      // ── Axis filters ─────────────────────────────────────────
+      // Each axis is independently ANDed; multi-axis filters
+      // (property / advancementType) honor per-axis combineMode +
+      // exclusionMode via matchesMultiAxisFilter.
+      if (!matchesSingleAxisFilter(String(entry.featType ?? ''), axisFilters.featType)) return false;
+      if (!matchesSingleAxisFilter(String(entry.sourceId ?? ''), axisFilters.source)) return false;
+      if (!matchesSingleAxisFilter(String(entry.sourceType ?? ''), axisFilters.sourceType)) return false;
+      const propsHave = new Set<string>();
+      for (const p of FEAT_PROPERTY_ORDER) {
+        if ((entry as any)[p]) propsHave.add(p);
+      }
+      if (!matchesMultiAxisFilter(propsHave, axisFilters.property)) return false;
+      if (!matchesMultiAxisFilter(
+        (entry.advancementTypeSet as Set<string>) || new Set<string>(),
+        axisFilters.advancementType,
+      )) return false;
       return true;
     });
-  }, [displayEntries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds, unlockedBaseIds, scopeFeatType]);
+  }, [displayEntries, search, sourceNameById, focusModeEnabled, focusMode, draftedFeatIds, unlockedBaseIds, scopeFeatType, axisFilters]);
 
   const requirementsLookups: RequirementsEditorLookups = useMemo(() => ({
     classes: classes.map((c: any) => ({ id: c.id, name: c.name })),
@@ -1218,6 +1303,36 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
     },
   ], [sourceAbbrevById, focusModeEnabled, draftedFeatIds]);
 
+  // ── Filter axes (drives the modal body) ──────────────────────
+  // Feat type + source come from the loaded entry shape; property +
+  // advancementType use the pre-computed flags / set on each entry.
+  const filterAxes = useMemo<FilterSection[]>(() => ([
+    {
+      key: 'featType', name: 'Feat Type', kind: 'axis',
+      values: FEAT_TYPE_ORDER.map((value) => ({ value, label: FEAT_TYPE_LABELS[value] })),
+    },
+    {
+      key: 'sourceType', name: 'Authoring Slot', kind: 'axis',
+      values: SOURCE_TYPES.map(([value, label]) => ({ value, label })),
+    },
+    {
+      key: 'property', name: 'Properties', kind: 'axis',
+      values: FEAT_PROPERTY_ORDER.map((value) => ({ value, label: FEAT_PROPERTY_LABELS[value] })),
+    },
+    {
+      key: 'advancementType', name: 'Advancements', kind: 'axis',
+      values: ADVANCEMENT_TYPE_VALUES.map((v) => ({ ...v })),
+    },
+    {
+      key: 'source', name: 'Sources', kind: 'axis',
+      values: sources.map((s) => ({
+        value: s.id,
+        label: String(s.abbreviation || s.shortName || s.name || s.id),
+        labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
+      })),
+    },
+  ]), [sources]);
+
   // ── Inert pendingDelete handling ──────────────────────────────
   const handleListSelect = (id: string) => {
     const entry = filteredEntries.find((e) => String(e.id) === id);
@@ -1311,10 +1426,36 @@ export default function FeatsEditor({ userProfile, scopeFeatType }: FeatsEditorP
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search feat name, type, source, or identifier"
-        activeFilterCount={0}
+        activeFilterCount={activeFilterCount}
         isFilterOpen={isFilterOpen}
         setIsFilterOpen={setIsFilterOpen}
-        resetFilters={() => setSearch('')}
+        resetFilters={() => { setSearch(''); resetAxisFilters(); }}
+        renderFilters={
+          <SectionFilterPanel
+            axes={filterAxes}
+            axisFilters={axisFilters}
+            tagStates={EMPTY_TAG_STATES}
+            setTagStates={NOOP_SET_TAG_STATES}
+            cycleAxisState={cyclers.cycleAxisState}
+            cycleAxisStateReverse={cyclers.cycleAxisStateReverse}
+            cycleTagState={NOOP_CYCLE_TAG}
+            cycleTagStateReverse={NOOP_CYCLE_TAG}
+            cycleAxisCombineMode={cyclers.cycleAxisCombineMode}
+            cycleAxisCombineModeReverse={cyclers.cycleAxisCombineModeReverse}
+            cycleAxisExclusionMode={cyclers.cycleAxisExclusionMode}
+            cycleAxisExclusionModeReverse={cyclers.cycleAxisExclusionModeReverse}
+            axisIncludeAll={cyclers.axisIncludeAll}
+            axisExcludeAll={cyclers.axisExcludeAll}
+            axisClear={cyclers.axisClear}
+            search={search}
+            setSearch={setSearch}
+            searchPlaceholder="Search feat name, type, source, or identifier"
+            activeFilterCount={activeFilterCount}
+            resetAll={() => { setSearch(''); resetAxisFilters(); }}
+            embedded
+          />
+        }
+        filterTitle="Filter Feats"
         identityName={formData.name}
         identitySourceAbbrev={formData.sourceId ? String(sourceAbbrevById[formData.sourceId] || formData.sourceId) : undefined}
         identitySourceFullName={formData.sourceId ? String(sourceNameById[formData.sourceId] || formData.sourceId) : undefined}

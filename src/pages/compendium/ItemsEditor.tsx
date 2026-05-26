@@ -24,6 +24,8 @@ import { reportClientError, OperationType } from '../../lib/firebase';
 import { upsertItem, deleteItem, fetchItem, denormalizeCompendiumData } from '../../lib/compendium';
 import { fetchCollection } from '../../lib/d1';
 import { slugify, cn } from '../../lib/utils';
+import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
+import { useAxisFilters } from '../../hooks/useAxisFilters';
 import {
   CompendiumEditorShell,
   type EditorMode,
@@ -31,6 +33,7 @@ import {
   type TagsSubTab,
   type EditorListColumn,
 } from '../../components/compendium/CompendiumEditorShell';
+import { SectionFilterPanel, type FilterSection } from '../../components/compendium/SectionFilterPanel';
 import { Checkbox } from '../../components/ui/checkbox';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { Input } from '../../components/ui/input';
@@ -296,6 +299,29 @@ const EMPTY_BUCKET: ProficiencyBucket = {
   weapons: [], armor: [], tools: [], abilities: [], weaponProperties: [],
 };
 
+// Property axis values — surfaced via the multi-axis property filter.
+// Each item row pre-computes a Set<string> with the slugs that apply.
+const ITEM_PROPERTY_AXIS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'magical',    label: 'Magical' },
+  { value: 'attunement', label: 'Requires Attunement' },
+];
+
+// Axis keys this page consumes. Drives `useAxisFilters`'s
+// `activeFilterCount` summation so stale keys from older versions
+// don't inflate the badge.
+const ITEM_AXIS_KEYS = [
+  'itemType', 'rarity', 'source', 'weaponCategory',
+  'armorCategory', 'toolCategory', 'damageType', 'property',
+] as const;
+
+// No-op tag-axis handlers — items don't have tag-kind axes (only the
+// axis kind), but SectionFilterPanel requires the props. Stable
+// top-level functions so React doesn't see "new" handlers on every
+// render and re-key memoised axes.
+const NOOP_CYCLE_TAG = () => { /* no tag axes on items */ };
+const NOOP_SET_TAG_STATES: React.Dispatch<React.SetStateAction<Record<string, number>>> = () => { /* no tag axes on items */ };
+const EMPTY_TAG_STATES: Record<string, number> = {};
+
 // ─── Page ─────────────────────────────────────────────────────────
 
 export default function ItemsEditor({ userProfile }: { userProfile: any }) {
@@ -330,6 +356,18 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
   // every other tag consumer.
   const [tags, setTags] = useState<Array<{ id: string; name: string; groupId: string | null; parentTagId: string | null }>>([]);
   const [tagGroups, setTagGroups] = useState<Array<{ id: string; name: string }>>([]);
+  // Weapon-category lookup (homebrew-extensible — loaded from D1
+  // alongside weapons themselves). Other category enums (armor / tool)
+  // come from items.armor_type / items.tool_type directly since the
+  // editor authors them as fixed Foundry slugs; no DB lookup needed.
+  const [weaponCategories, setWeaponCategories] = useState<Array<{ id: string; name: string; identifier?: string }>>([]);
+
+  // ── Filter state ──────────────────────────────────────────────
+  // useAxisFilters bundles every cycler + activeFilterCount the
+  // SectionFilterPanel needs. We pass ITEM_AXIS_KEYS so the count
+  // only sums the axes this page actually consumes.
+  const { axisFilters, cyclers, activeFilterCount, resetAll: resetAxisFilters } =
+    useAxisFilters(ITEM_AXIS_KEYS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -375,6 +413,7 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           tools,
           abilities,
           weaponProperties,
+          weaponCategoryRows,
           tagRows,
           tagGroupRows,
         ] = await Promise.all([
@@ -385,18 +424,77 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
           fetchCollection<any>('tools', { orderBy: 'name ASC' }),
           fetchCollection<any>('attributes', { orderBy: 'name ASC' }),
           fetchCollection<any>('weaponProperties', { orderBy: 'name ASC' }),
+          fetchCollection<any>('weaponCategories', { orderBy: '"order", name ASC' }),
           fetchCollection<any>('tags', { orderBy: 'name ASC' }),
           fetchCollection<any>('tagGroups', { orderBy: 'name ASC' }),
         ]);
         if (cancelled) return;
-        const mapped = itemRows.map((row: any) => ({
-          ...row,
-          sourceId: row.source_id,
-          imageUrl: row.image_url,
-          itemType: row.item_type,
-          tagIds: Array.isArray(row.tags) ? row.tags : [],
-        }));
+
+        // Build the weapon-id → category-id map so per-item filter
+        // axes can resolve baseWeaponId → weaponCategoryId without
+        // re-joining at filter time. weapons rows from queryD1 are
+        // snake_case (`category_id`).
+        const weaponCategoryIdByWeaponId = new Map<string, string>();
+        for (const w of weapons) {
+          if (w?.id && w?.category_id) weaponCategoryIdByWeaponId.set(String(w.id), String(w.category_id));
+        }
+
+        const mapped = itemRows.map((row: any) => {
+          const baseWeaponId = row.base_weapon_id ?? null;
+          const weaponCategoryId = baseWeaponId
+            ? (weaponCategoryIdByWeaponId.get(String(baseWeaponId)) || null)
+            : null;
+          // armor_type / tool_type already hold the Foundry slug
+          // (light / medium / heavy / shield / clothing / etc.; art /
+          // game / music) — no DB join needed.
+          const armorCategoryId = row.armor_type ? String(row.armor_type) : null;
+          const toolCategoryId = row.tool_type ? String(row.tool_type) : null;
+
+          // Damage types live on items.damage.base.types[] AND on
+          // items.damage.parts[i].types[]. Aggregate both so a weapon
+          // with a primary + bonus damage type matches either axis pick.
+          const damageTypeSet = new Set<string>();
+          const damage = row.damage;
+          if (damage && typeof damage === 'object') {
+            const baseTypes = Array.isArray(damage.base?.types) ? damage.base.types : [];
+            for (const t of baseTypes) damageTypeSet.add(String(t));
+            const parts = Array.isArray(damage.parts) ? damage.parts : [];
+            for (const p of parts) {
+              const tt = Array.isArray(p?.types) ? p.types : [];
+              for (const t of tt) damageTypeSet.add(String(t));
+            }
+          }
+
+          const attunementRaw = row.attunement;
+          const attunementFlag = !!(
+            attunementRaw === 'required'
+            || attunementRaw === 'optional'
+            || attunementRaw === 1
+            || attunementRaw === true
+          );
+          const magicalFlag = !!(row.magical === 1 || row.magical === true);
+
+          return {
+            ...row,
+            sourceId: row.source_id,
+            imageUrl: row.image_url,
+            itemType: row.item_type,
+            tagIds: Array.isArray(row.tags) ? row.tags : [],
+            // Pre-computed filter-axis fields:
+            weaponCategoryId,
+            armorCategoryId,
+            toolCategoryId,
+            damageTypeSet,
+            magicalFlag,
+            attunementFlag,
+          };
+        });
         setEntries(mapped);
+        setWeaponCategories(weaponCategoryRows.map((r: any) => ({
+          id: String(r.id),
+          name: String(r.name || r.identifier || r.id),
+          identifier: r.identifier ? String(r.identifier) : undefined,
+        })));
         setSources(sourceRows);
         setProfs({
           weapons: weapons.map((r) => denormalizeCompendiumData(r)),
@@ -757,20 +855,79 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
     }
   };
 
-  // ── Filter ────────────────────────────────────────────────────
+  // ── Filter pipeline ───────────────────────────────────────────
+  // Search + each axis ANDed together. Axis filters delegate to
+  // matchesSingleAxisFilter / matchesMultiAxisFilter from spellFilters
+  // — same machinery the public ItemList page and SpellsEditor use.
   const filteredEntries = useMemo(() => {
     const lowered = search.trim().toLowerCase();
-    if (!lowered) return entries;
     return entries.filter((entry) => {
-      const sourceAbbrev = String(sourceAbbrevById[entry.sourceId] || '').toLowerCase();
-      return (
-        String(entry.name || '').toLowerCase().includes(lowered)
-        || String(entry.identifier || '').toLowerCase().includes(lowered)
-        || String(entry.itemType || '').toLowerCase().includes(lowered)
-        || sourceAbbrev.includes(lowered)
-      );
+      if (lowered) {
+        const sourceAbbrev = String(sourceAbbrevById[entry.sourceId] || '').toLowerCase();
+        const hit = String(entry.name || '').toLowerCase().includes(lowered)
+          || String(entry.identifier || '').toLowerCase().includes(lowered)
+          || String(entry.itemType || '').toLowerCase().includes(lowered)
+          || sourceAbbrev.includes(lowered);
+        if (!hit) return false;
+      }
+      if (!matchesSingleAxisFilter(String(entry.itemType ?? ''), axisFilters.itemType)) return false;
+      if (!matchesSingleAxisFilter(String(entry.rarity ?? 'none'), axisFilters.rarity)) return false;
+      if (!matchesSingleAxisFilter(String(entry.sourceId ?? ''), axisFilters.source)) return false;
+      if (!matchesSingleAxisFilter(String(entry.weaponCategoryId ?? ''), axisFilters.weaponCategory)) return false;
+      if (!matchesSingleAxisFilter(String(entry.armorCategoryId ?? ''), axisFilters.armorCategory)) return false;
+      if (!matchesSingleAxisFilter(String(entry.toolCategoryId ?? ''), axisFilters.toolCategory)) return false;
+      if (!matchesMultiAxisFilter(entry.damageTypeSet || new Set<string>(), axisFilters.damageType)) return false;
+      const propsHave = new Set<string>();
+      if (entry.magicalFlag) propsHave.add('magical');
+      if (entry.attunementFlag) propsHave.add('attunement');
+      if (!matchesMultiAxisFilter(propsHave, axisFilters.property)) return false;
+      return true;
     });
-  }, [entries, search, sourceAbbrevById]);
+  }, [entries, search, sourceAbbrevById, axisFilters]);
+
+  // ── Filter axes (drives the modal body) ──────────────────────
+  // Hardcoded enums for axes whose vocab is fixed by Foundry/dnd5e
+  // (item type, rarity, armor/tool subtype, damage type, property
+  // flags). DB-loaded for weapon category since admins can extend it
+  // with homebrew categories.
+  const filterAxes = useMemo<FilterSection[]>(() => ([
+    {
+      key: 'itemType', name: 'Item Type', kind: 'axis',
+      values: ITEM_TYPES.map(([value, label]) => ({ value, label })),
+    },
+    {
+      key: 'rarity', name: 'Rarity', kind: 'axis',
+      values: RARITIES.map(([value, label]) => ({ value, label })),
+    },
+    {
+      key: 'weaponCategory', name: 'Weapon Category', kind: 'axis',
+      values: weaponCategories.map((c) => ({ value: c.id, label: c.name })),
+    },
+    {
+      key: 'armorCategory', name: 'Armor / Equipment Subtype', kind: 'axis',
+      values: EQUIPMENT_SUBTYPES.map(([value, label]) => ({ value, label })),
+    },
+    {
+      key: 'toolCategory', name: 'Tool Category', kind: 'axis',
+      values: TOOL_SUBTYPES.map(([value, label]) => ({ value, label })),
+    },
+    {
+      key: 'damageType', name: 'Damage Type', kind: 'axis',
+      values: DAMAGE_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    },
+    {
+      key: 'source', name: 'Sources', kind: 'axis',
+      values: sources.map((s) => ({
+        value: s.id,
+        label: String(s.abbreviation || s.shortName || s.name || s.id),
+        labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
+      })),
+    },
+    {
+      key: 'property', name: 'Properties', kind: 'axis',
+      values: ITEM_PROPERTY_AXIS.map((v) => ({ ...v })),
+    },
+  ]), [sources, weaponCategories]);
 
   // ── Identity subtitle ─────────────────────────────────────────
   const identitySubtitle = (() => {
@@ -999,10 +1156,36 @@ export default function ItemsEditor({ userProfile }: { userProfile: any }) {
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search item name, type, source, or identifier"
-        activeFilterCount={0}
+        activeFilterCount={activeFilterCount}
         isFilterOpen={isFilterOpen}
         setIsFilterOpen={setIsFilterOpen}
-        resetFilters={() => setSearch('')}
+        resetFilters={() => { setSearch(''); resetAxisFilters(); }}
+        renderFilters={
+          <SectionFilterPanel
+            axes={filterAxes}
+            axisFilters={axisFilters}
+            tagStates={EMPTY_TAG_STATES}
+            setTagStates={NOOP_SET_TAG_STATES}
+            cycleAxisState={cyclers.cycleAxisState}
+            cycleAxisStateReverse={cyclers.cycleAxisStateReverse}
+            cycleTagState={NOOP_CYCLE_TAG}
+            cycleTagStateReverse={NOOP_CYCLE_TAG}
+            cycleAxisCombineMode={cyclers.cycleAxisCombineMode}
+            cycleAxisCombineModeReverse={cyclers.cycleAxisCombineModeReverse}
+            cycleAxisExclusionMode={cyclers.cycleAxisExclusionMode}
+            cycleAxisExclusionModeReverse={cyclers.cycleAxisExclusionModeReverse}
+            axisIncludeAll={cyclers.axisIncludeAll}
+            axisExcludeAll={cyclers.axisExcludeAll}
+            axisClear={cyclers.axisClear}
+            search={search}
+            setSearch={setSearch}
+            searchPlaceholder="Search item name, type, source, or identifier"
+            activeFilterCount={activeFilterCount}
+            resetAll={() => { setSearch(''); resetAxisFilters(); }}
+            embedded
+          />
+        }
+        filterTitle="Filter Items"
         identityName={formData.name}
         identitySourceAbbrev={formData.sourceId ? String(sourceAbbrevById[formData.sourceId] || formData.sourceId) : undefined}
         identitySourceFullName={formData.sourceId ? String(sourceNameById[formData.sourceId] || formData.sourceId) : undefined}
