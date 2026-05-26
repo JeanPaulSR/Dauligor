@@ -1,13 +1,14 @@
 # Handoff — Items completeness + proficiency split (2026-05-26)
 
-> **Status:** 7 of 8 commits landed on `main`. Remote D1 migration NOT applied yet
-> (will batch with the C7 facilities migration when it lands). C4-UI complete; C6/C7/C8
-> still pending — this doc picks up where the live agent left off.
+> **Status:** 8 of 8 commits landed on `main`. Remote D1 migration NOT applied yet
+> (will batch with the C7 facilities migration when it lands). C6 dynamic ItemsEditor
+> shipped; C7 (facilities) and C8 (docs) remain — this doc picks up where the live
+> agent left off.
 >
 > **Read first:**
 > - `docs/handoff-compendium-shell-2026-05-25.md` — preceding session's context
 > - `module/dauligor-pairing/docs/import-contract-index.md` — module contract index
-> - This file's "Decisions locked" section before starting any C6 / C7 work
+> - This file's "Decisions locked" section before starting any C7 work
 
 ---
 
@@ -21,11 +22,12 @@
 | `96e47cd` | feat(class-export): trait advancement carries melee/ranged-restricted category arrays | classExport.ts (export-side only — UI deferred) | ✅ |
 | `8fc884a` | feat(compendium): ItemUsesField — drop-in editor for items.uses block | new `ItemUsesField.tsx` | ✅ |
 | `207baca` | refactor(class-editor): inline Melee/Ranged pills into category headers — drop standalone section | ClassEditor.tsx | ✅ |
-| _next_ | feat(trait-adv): weapon picker melee/ranged pills + module-side category-grant expansion | AdvancementManager.tsx + class-import-service.js | ✅ (C4-UI) |
+| `f038305` | feat(trait-adv): weapon picker melee/ranged pills + module-side category-grant expansion | AdvancementManager.tsx + class-import-service.js | ✅ (C4-UI) |
+| `e2e6911` | feat(items): dynamic ItemsEditor body — type-dispatching shell with per-type sub-forms | ItemsEditor.tsx + compendium.ts + d1.ts + itemImport.ts | ✅ (C6) |
 
-The 7 commits hold all the **data-model + library + proficiency-UI + trait-advancement**
-infrastructure. The remaining 3 commits are **dynamic ItemsEditor + new facilities page +
-docs**, summarized below.
+The 8 commits hold the full **data-model + library + proficiency-UI + trait-advancement +
+dynamic items editor** stack. The remaining work is **new facilities page + docs**,
+summarized below.
 
 ---
 
@@ -122,54 +124,39 @@ ones authored via the new pills are the only ones affected today.
 
 ---
 
-### C6 — Dynamic ItemsEditor body (HEADLINE FEATURE — largest remaining work)
+### C6 — Dynamic ItemsEditor (LANDED, `e2e6911`)
 
-**File:** `src/pages/compendium/ItemsEditor.tsx` (current manual editor is at
-`ItemManualEditor`, lines 107-289). Refactor into a type-dispatching shell.
+The editor's `ItemManualEditor` is now a type-dispatching shell. Sub-forms shipped inline
+in `src/pages/compendium/ItemsEditor.tsx` (~870 LOC total) rather than separate files —
+the originally-spec'd `WeaponItemFields.tsx` / `EquipmentItemFields.tsx` / etc. files
+weren't extracted because the components share enough props + helpers that inlining read
+cleaner. Extract later only if a sub-form gets reused elsewhere.
 
-**Plan:**
+**Known follow-ups for C6** (not blocking — opportunistic):
 
-```tsx
-<ItemTypeDropdown value={itemType} onChange={...} />
-{itemType !== 'loot' && <TypeSubtypeDropdown parentType={itemType} ... />}
-<CommonItemFields ... />          // name/identifier/image/description/source/page
-<PhysicalFields ... />            // weight/price/rarity/quantity
-{itemType !== 'loot' && <EquippableFields ... />}  // attunement (3-state) + equipped + identified
-{shape !== 'loot' && shape !== 'container' && <ItemUsesField uses={formData.uses} ... />}
-{itemType === 'weapon' && <WeaponItemFields ... />}
-{itemType === 'equipment' && <EquipmentItemFields type={typeSubtype} ... />}  // armor block when armor subtype
-{itemType === 'consumable' && <ConsumableItemFields type={typeSubtype} ... />}  // damage when applicable
-{itemType === 'tool' && <ToolItemFields ... />}                                  // ability + chatFlavor
-{itemType === 'container' && <ContainerItemFields ... />}                        // capacity + currency
-{itemType === 'loot' && <LootItemFields type={typeSubtype} ... />}                // subtype only
-```
-
-**New component files to create** (all in `src/components/compendium/`):
-
-| File | Approx LOC | Purpose |
-|---|---|---|
-| `WeaponItemFields.tsx` | ~120 | damage editor (number/denomination/types/bonus), range (value/long/reach/units), base weapon dropdown sourced from `weapons` proficiency table (provides `base_weapon_id` FK), magicalBonus, ammunition dropdown, properties multiselect from `weapon_properties` |
-| `EquipmentItemFields.tsx` | ~160 | type.value dropdown (light/medium/heavy/shield/clothing/ring/rod/trinket/wand/wondrous). When value is light/medium/heavy/shield, show armor.value + armor.dex + magicalBonus + strength + stealthDisadvantage-property toggle. Base armor dropdown from `armor` proficiency table. |
-| `ConsumableItemFields.tsx` | ~140 | type.value dropdown (potion/scroll/poison/ammo/wand/rod/food/trinket/wondrous). Subtype dropdown when applicable (poison subtype, ammo subtype). Damage editor (acid vial, etc.). magicalBonus. |
-| `ToolItemFields.tsx` | ~80 | type.value dropdown (art/game/music), base tool dropdown from `tools` proficiency table, ability dropdown (str/dex/con/int/wis/cha), chat_flavor input, bonus formula input. |
-| `ContainerItemFields.tsx` | ~120 | Capacity shape: toggle between count-based and weight-based; nested {value, units} sub-input. Currency 5-coin grid. weightlessContents property toggle. |
-| `LootItemFields.tsx` | ~60 | Only the type.value dropdown (art/gear/gem/junk/material/resource/trade/treasure) + subtype when applicable. No attunement/equipped (suppress in EquippableFields render). |
-
-**Shared sub-components to extract (optional):**
-- `<CategoryDropdown table="weapons|armor|tools" value={baseId} onChange ... />` — fetches the proficiency table on mount and offers as a `SingleSelectSearch`. Used in Weapon/Equipment/Tool fields.
-- `<PropertiesMultiselect tableSlug="weapon_properties|item_properties" value={slugs[]} onChange ... />` — for the items.properties array. Foundry-aligned slug vocabulary (commit `cd3257a` rename).
-
-**Proficiency badge wiring:** Once the item is saved, lookup the current character's
-`character_proficiencies` (via existing app-side hook) and call
-`resolveItemProficiency(item, profs)` from `src/lib/proficiencyResolver.ts` (committed
-`a626395`). Show a small `[Proficient]` chip + the proficiency level + the `source`
-tooltip. This is most useful on the public ItemList page; on the editor it's
-informational only.
-
-**State change**: Today's `formData` defaults at lines 118-138 don't include `uses`,
-`container_id`, `currency`, `capacity`, `chat_flavor`, `ability_id`, `type_subtype`,
-`unidentified_description`. Add them. Attunement is now a 3-state string (`'' /
-'required' / 'optional'`) — replace the checkbox with a dropdown.
+- **Loot sub-form**: no dedicated section was added because the shared Type section
+  (with its subtype dropdown sourced from `LOOT_SUBTYPES`) already covers everything
+  authors need for loot. If we add weight-bracket / value-tier metadata on loot rows
+  later, a dedicated `LootItemFields` block becomes worth it.
+- **Secondary-axis subtype (consumable.poison.contact, consumable.ammo.arrow)**:
+  Foundry's `system.type.subtype` for the two-axis consumable case currently has no
+  landing column. `itemImport.ts` was repurposed to put the PRIMARY axis
+  (`system.type.value`) into `items.type_subtype` so the primary subtype isn't lost
+  for consumable / loot / equipment-non-armor (which previously had nowhere to land it).
+  The secondary axis is dropped on import until either:
+  - A new `items.type_inner_subtype` column lands, or
+  - A packed-slug convention (`type_subtype = "poison:contact"`) is adopted.
+  Tracked for C8 docs + a follow-up migration if needed.
+- **Proficiency badge**: deliberately not surfaced in the editor (per the original
+  C6 plan — "informational only on editor; useful on the public list pages").
+  `resolveItemProficiency(item, profs)` from `proficiencyResolver.ts` (commit
+  `a626395`) is ready when the C8 docs pass wires it into `/compendium/items`.
+- **`uses` decomposition guard**: `normalizeCompendiumData` now skips the legacy
+  `uses → uses_max/uses_spent/uses_period/uses_recovery` flat-column decomposition
+  when the payload has `item_type` set (i.e. it's an items payload). Features still
+  decompose. If a NEW entity ever adopts the items-style uses JSON column it must
+  either (a) set `item_type` (yuck) or (b) gain its own collection hint — flag for
+  refactor when that lands.
 
 ---
 
