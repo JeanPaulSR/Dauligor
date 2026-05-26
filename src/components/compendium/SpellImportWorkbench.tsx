@@ -7,13 +7,14 @@ import { fetchCollection } from '../../lib/d1';
 import { cn } from '../../lib/utils';
 import { buildSpellImportCandidates, formatFoundrySpellDescriptionForDisplay, type FoundrySpellFolderExport, type SpellImportCandidate } from '../../lib/spellImport';
 import { type SpellSummaryRecord } from '../../lib/spellSummary';
+import { matchesSingleAxisFilter, matchesMultiAxisFilter } from '../../lib/spellFilters';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { ScrollArea } from '../ui/scroll-area';
 import SpellArtPreview from './SpellArtPreview';
+import { FilterBar } from './FilterBar';
+import { SectionFilterPanel, type FilterSection } from './SectionFilterPanel';
 
 type SourceRecord = {
   id: string;
@@ -46,11 +47,36 @@ type UploadedBatch = {
   payload: FoundrySpellFolderExport;
 };
 
-const LEVEL_OPTIONS = [
-  { value: 'all', label: 'All Levels' },
-  { value: '0', label: 'Cantrips' },
-  ...Array.from({ length: 9 }, (_, index) => ({ value: String(index + 1), label: `Level ${index + 1}` }))
+// Level axis values for SectionFilterPanel. No 'all' sentinel — the
+// tri-state pill UX treats "no filter set" as the default; the user
+// includes the levels they want or excludes the ones they don't.
+const LEVEL_AXIS_VALUES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '0', label: 'Cantrip' },
+  ...Array.from({ length: 9 }, (_, index) => ({
+    value: String(index + 1),
+    label: `Lvl ${index + 1}`,
+  })),
 ];
+
+// Match-status axis — surfaces the candidate-level mismatch flags so
+// admins can quickly isolate rows that need attention before bulk
+// import. Each value is checked as set-membership on the candidate's
+// derived flag set (see matchesMultiAxisFilter call below). Include
+// "Unresolved Source" to see only candidates whose source didn't map;
+// exclude "Has Warning" to hide everything with import warnings.
+const STATUS_AXIS_VALUES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'unresolvedSource', label: 'Unresolved Source' },
+  { value: 'hasWarning', label: 'Has Warning' },
+];
+
+// Local mirror of useSpellFilters' AxisState — kept inline so the
+// workbench doesn't need to consume the full filter hook (which also
+// owns tag state, spell match predicates, etc. we don't need here).
+type AxisState = {
+  states: Record<string, number>;
+  combineMode?: 'AND' | 'OR' | 'XOR';
+  exclusionMode?: 'AND' | 'OR' | 'XOR';
+};
 
 function buildDisplayHtml(html: string) {
   return formatFoundrySpellDescriptionForDisplay(html || '');
@@ -65,9 +91,14 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [search, setSearch] = useState('');
-  const [levelFilter, setLevelFilter] = useState('all');
-  const [schoolFilter, setSchoolFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
+  // Rich tri-state axis filters — replaces the single-value Level /
+  // School / Source dropdowns. Same shape useSpellFilters / FeatList
+  // consume so SectionFilterPanel can plug in directly. Each axis:
+  //   { states: { [value]: 1=include | 2=exclude }, combineMode, exclusionMode }
+  const [axisFilters, setAxisFilters] = useState<Record<string, AxisState>>({});
+  // Whether the FilterBar's filter modal is open. The pill wall lives
+  // inside the modal so it doesn't crowd the candidate browser rail.
+  const [filterOpen, setFilterOpen] = useState(false);
   const [tagSearch, setTagSearch] = useState('');
   const [selectedFilterTagIds, setSelectedFilterTagIds] = useState<string[]>([]);
   const [candidateTagIds, setCandidateTagIds] = useState<Record<string, string[]>>({});
@@ -118,6 +149,94 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
     uploadedBatches.flatMap((batch) => buildSpellImportCandidates(batch.payload, batch.fileName, sources, existingEntries))
   ), [uploadedBatches, sources, existingEntries]);
 
+  // Axis-state cyclers + bulk controls — mirrors the FeatList pattern.
+  // Forward + reverse pairs power SectionFilterPanel's left-click /
+  // right-click chip cycling. The reverse cycler lets a user jump
+  // straight to "exclude" from off without first going through include.
+  const cycleAxisState = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      const s = states[value] || 0;
+      const nextState = s === 0 ? 1 : s === 1 ? 2 : 0;
+      if (nextState === 0) delete states[value];
+      else states[value] = nextState;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const cycleAxisStateReverse = (axisKey: string, value: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      const s = states[value] || 0;
+      const nextState = s === 0 ? 2 : s === 2 ? 1 : 0;
+      if (nextState === 0) delete states[value];
+      else states[value] = nextState;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const cycleAxisCombineMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
+  const cycleAxisCombineModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.combineMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, combineMode: next } };
+    });
+  };
+  const cycleAxisExclusionMode = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'AND' : m === 'AND' ? 'XOR' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const cycleAxisExclusionModeReverse = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const m = (cur.exclusionMode || 'OR') as 'OR' | 'AND' | 'XOR';
+      const next = m === 'OR' ? 'XOR' : m === 'XOR' ? 'AND' : 'OR';
+      return { ...prev, [axisKey]: { ...cur, exclusionMode: next } };
+    });
+  };
+  const axisIncludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 1;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisExcludeAll = (axisKey: string, values: readonly string[]) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      const states: Record<string, number> = { ...cur.states };
+      for (const v of values) states[v] = 2;
+      return { ...prev, [axisKey]: { ...cur, states } };
+    });
+  };
+  const axisClear = (axisKey: string) => {
+    setAxisFilters(prev => {
+      const cur = prev[axisKey] || { states: {} };
+      return { ...prev, [axisKey]: { ...cur, states: {} } };
+    });
+  };
+  const resetAxisFilters = () => setAxisFilters({});
+
+  const activeFilterCount =
+    Object.keys(axisFilters.source?.states ?? {}).length
+    + Object.keys(axisFilters.level?.states ?? {}).length
+    + Object.keys(axisFilters.school?.states ?? {}).length
+    + Object.keys(axisFilters.status?.states ?? {}).length;
+
   useEffect(() => {
     if (!candidates.length) return;
 
@@ -136,24 +255,34 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
     });
   }, [candidates, existingEntries]);
 
-  const schoolOptions = useMemo(() => {
-    const schools = Array.from(new Set(candidates.map((candidate) => candidate.school))).filter(Boolean);
-    return [
-      { value: 'all', label: 'All Schools' },
-      ...schools.map((school) => ({
-        value: school,
-        label: candidates.find((candidate) => candidate.school === school)?.schoolLabel || school.toUpperCase()
-      }))
-    ];
+  // School axis values — derived from candidates so the panel only
+  // surfaces schools actually present in the loaded batch. Each value
+  // carries the candidate's schoolLabel for display; falls back to
+  // the raw school code uppercased.
+  const schoolAxisValues = useMemo<ReadonlyArray<{ value: string; label: string }>>(() => {
+    const seen = new Map<string, string>();
+    for (const candidate of candidates) {
+      if (!candidate.school) continue;
+      if (!seen.has(candidate.school)) {
+        seen.set(candidate.school, candidate.schoolLabel || candidate.school.toUpperCase());
+      }
+    }
+    return Array.from(seen.entries()).map(([value, label]) => ({ value, label }));
   }, [candidates]);
 
-  const sourceOptions = useMemo(() => {
-    const sourceLabels = Array.from(new Set(candidates.map((candidate) => candidate.matchedSourceLabel || candidate.sourceBook))).filter(Boolean);
-    return [
-      { value: 'all', label: 'All Sources' },
-      ...sourceLabels.map((label) => ({ value: label, label }))
-    ];
-  }, [candidates]);
+  // Source axis values — built from the loaded Dauligor `sources`
+  // table, NOT from the candidate-side label. Filtering by source id
+  // lets unresolved candidates (no matchedSourceId) fall out cleanly
+  // when a Source include filter is set, and surfaces in the Status
+  // axis's "Unresolved Source" pill instead. Mirrors FeatList's
+  // source-axis pattern (id as value, abbreviation as label).
+  const sourceAxisValues = useMemo<ReadonlyArray<{ value: string; label: string; labelAlt?: string }>>(() => {
+    return sources.map(s => ({
+      value: s.id,
+      label: String(s.abbreviation || s.shortName || s.name || s.id),
+      labelAlt: String(s.name || s.shortName || s.abbreviation || s.id),
+    }));
+  }, [sources]);
 
   const tagsByGroup = useMemo(() => {
     const map: Record<string, TagRecord[]> = {};
@@ -169,10 +298,17 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
     return candidates.filter((candidate) => {
       const sourceLabel = candidate.matchedSourceLabel || candidate.sourceBook;
       const assignedTagIds = candidateTagIds[candidate.candidateId] || [];
+      // Match-status flag set — surfaced via the Status axis. Each
+      // value corresponds to a derived boolean on the candidate; the
+      // multi-axis matcher checks set membership.
+      const statusFlags = new Set<string>();
+      if (!candidate.sourceResolved) statusFlags.add('unresolvedSource');
+      if (candidate.importWarnings.length > 0) statusFlags.add('hasWarning');
       return (
-        (levelFilter === 'all' || String(candidate.level) === levelFilter)
-        && (schoolFilter === 'all' || candidate.school === schoolFilter)
-        && (sourceFilter === 'all' || sourceLabel === sourceFilter)
+        matchesSingleAxisFilter(String(candidate.level), axisFilters.level)
+        && matchesSingleAxisFilter(candidate.school, axisFilters.school)
+        && matchesSingleAxisFilter(candidate.matchedSourceId || '', axisFilters.source)
+        && matchesMultiAxisFilter(statusFlags, axisFilters.status)
         && (selectedFilterTagIds.length === 0 || selectedFilterTagIds.every((tagId) => assignedTagIds.includes(tagId)))
         && (
           !search.trim()
@@ -182,7 +318,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
         )
       );
     });
-  }, [candidates, candidateTagIds, levelFilter, schoolFilter, sourceFilter, selectedFilterTagIds, search]);
+  }, [candidates, candidateTagIds, axisFilters, selectedFilterTagIds, search]);
 
   useEffect(() => {
     if (!visibleCandidates.length) {
@@ -206,6 +342,31 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
       scalingSpells: candidates.filter((candidate) => candidate.descriptionHtml.toLowerCase().includes('higher level')).length
     };
   }, [candidates]);
+
+  // Axis descriptors for SectionFilterPanel. Four axes — Source,
+  // Level, School, Status — built once per render. Source uses the
+  // Dauligor `sources` table so filtering by source id pairs cleanly
+  // with the candidate-side `matchedSourceId`. Status surfaces the
+  // unresolved-source / has-warning flags so admins can isolate rows
+  // that need triage before bulk import.
+  const filterAxes = useMemo<FilterSection[]>(() => ([
+    {
+      key: 'source', name: 'Sources', kind: 'axis',
+      values: sourceAxisValues.map(v => ({ ...v })),
+    },
+    {
+      key: 'level', name: 'Level', kind: 'axis',
+      values: LEVEL_AXIS_VALUES.map(v => ({ ...v })),
+    },
+    {
+      key: 'school', name: 'School', kind: 'axis',
+      values: schoolAxisValues.map(v => ({ ...v })),
+    },
+    {
+      key: 'status', name: 'Match Status', kind: 'axis',
+      values: STATUS_AXIS_VALUES.map(v => ({ ...v })),
+    },
+  ]), [sourceAxisValues, schoolAxisValues]);
 
   const selectedCandidateTagIds = selectedCandidate ? (candidateTagIds[selectedCandidate.candidateId] || []) : [];
 
@@ -375,26 +536,27 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
 
   if (!isAdmin) return null;
 
+  // Outer layout: viewport-locked via `h-full flex flex-col` so the
+  // compact header pins to the top and the body grid claims the
+  // remaining viewport. Without this, the body's `spell-list-fullscreen`
+  // class hides the browser scrollbar but the page can't scroll either
+  // — the detail pane runs off the bottom edge of the viewport.
   return (
-    <div className="space-y-6">
-      <Card className="border-gold/20 bg-card/50 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="border-b border-gold/10 bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%),linear-gradient(180deg,rgba(12,16,24,0.75),rgba(12,16,24,0.98))] p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 text-gold">
-                  <Wand2 className="h-5 w-5" />
-                  <span className="text-xs font-bold uppercase tracking-[0.3em]">Foundry Spell Import</span>
-                </div>
-                <div className="space-y-2">
-                  <h2 className="text-3xl font-serif font-bold uppercase tracking-tight text-ink">Spell Browser</h2>
-                  <p className="max-w-3xl font-serif italic text-ink/60">
-                    Load one or more Foundry spell-folder exports, review them in a 5etools-style browser, and import single spells or the entire visible batch into Dauligor.
-                  </p>
-                </div>
+    <div className="h-full flex flex-col">
+      <Card className="border-gold/20 bg-card/50 overflow-hidden h-full flex flex-col">
+        <CardContent className="p-0 flex-1 flex flex-col min-h-0">
+          {/* Compact header — title + actions on one row, inline stat
+              pills below. Replaces the previous ~280px hero block to
+              give the candidate browser most of the viewport. */}
+          <div className="border-b border-gold/10 bg-card px-6 py-3 relative overflow-hidden shrink-0">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(192,160,96,0.14),transparent_52%)] pointer-events-none" aria-hidden />
+            <div className="relative flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 text-gold">
+                <Wand2 className="h-4 w-4 shrink-0" />
+                <h2 className="text-base font-bold uppercase tracking-[0.22em] text-ink">Spell Browser</h2>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -409,33 +571,42 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                 <Button
                   type="button"
                   variant="outline"
-                  className="gap-2 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
+                  size="sm"
+                  className="gap-2 h-8 border-gold/20 bg-background/40 text-ink hover:bg-gold/5"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Upload className="h-4 w-4" />
-                  Load Foundry Exports
+                  <Upload className="h-3.5 w-3.5" />
+                  Load Exports
                 </Button>
                 <Button
                   type="button"
-                  className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+                  size="sm"
+                  className="gap-2 h-8 bg-primary hover:bg-primary/90 text-primary-foreground"
                   onClick={handleImportVisible}
                   disabled={saving || !visibleCandidates.some((candidate) => candidate.sourceResolved)}
                 >
-                  <Download className="h-4 w-4" />
-                  Import Visible Batch
+                  <Download className="h-3.5 w-3.5" />
+                  Import Visible
                 </Button>
               </div>
             </div>
 
-            <div className="mt-6 grid gap-3 md:grid-cols-4">
-              <SummaryStat icon={Layers3} label="Loaded Spells" value={String(batchSummary.totalSpells)} />
-              <SummaryStat icon={AlertTriangle} label="Unresolved Sources" value={String(batchSummary.unresolvedSources)} />
-              <SummaryStat icon={BookOpen} label="Existing Matches" value={String(batchSummary.existingMatches)} />
-              <SummaryStat icon={Sparkles} label="Scaling Spells" value={String(batchSummary.scalingSpells)} />
+            <div className="relative mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink/70">
+              <InlineStat icon={Layers3} label="loaded" value={batchSummary.totalSpells} />
+              <InlineStat icon={AlertTriangle} label="unresolved" value={batchSummary.unresolvedSources} tone="warn" />
+              <InlineStat icon={BookOpen} label="existing" value={batchSummary.existingMatches} />
+              <InlineStat icon={Sparkles} label="scaling" value={batchSummary.scalingSpells} />
             </div>
           </div>
 
-          <div className="p-6">
+          {/* Body — FilterBar owns the search + filter button at the
+              top; the pill wall (the SectionFilterPanel) lives inside
+              FilterBar's modal — clicking Filters pops it open as a
+              full-screen overlay. The candidate-list rail below is no
+              longer crowded by the filter wall.
+              `flex-1 min-h-0 flex flex-col gap-4` gives the grid the
+              remaining height so the detail pane can scroll inside. */}
+          <div className="p-6 flex-1 min-h-0 flex flex-col gap-4">
             {!uploadedBatches.length ? (
               <div className="rounded-xl border border-dashed border-gold/20 bg-background/30 px-6 py-12 text-center">
                 <FileJson className="mx-auto mb-4 h-10 w-10 text-gold/60" />
@@ -445,33 +616,49 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                 </p>
               </div>
             ) : (
-              <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-                <div className="space-y-4">
-                  <div className="grid gap-3">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">Search</Label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink/30" />
-                        <Input
-                          value={search}
-                          onChange={(event) => setSearch(event.target.value)}
-                          placeholder="Search spell name, source, or identifier"
-                          className="bg-background/50 border-gold/10 pl-9 focus:border-gold"
-                          autoComplete="off"
-                          spellCheck={false}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                      <FilterSelect label="Level" value={levelFilter} onChange={setLevelFilter} options={LEVEL_OPTIONS} />
-                      <FilterSelect label="School" value={schoolFilter} onChange={setSchoolFilter} options={schoolOptions} />
-                      <FilterSelect label="Source" value={sourceFilter} onChange={setSourceFilter} options={sourceOptions} />
-                    </div>
-                  </div>
-
+              <>
+                <FilterBar
+                  search={search}
+                  setSearch={setSearch}
+                  isFilterOpen={filterOpen}
+                  setIsFilterOpen={setFilterOpen}
+                  activeFilterCount={activeFilterCount}
+                  resetFilters={resetAxisFilters}
+                  searchPlaceholder="Search spell name, source, or identifier"
+                  filterTitle="Spell Import Filters"
+                  resetLabel="Reset Filters"
+                  renderFilters={
+                    <SectionFilterPanel
+                      axes={filterAxes}
+                      axisFilters={axisFilters}
+                      tagStates={{}}
+                      cycleAxisState={cycleAxisState}
+                      cycleAxisStateReverse={cycleAxisStateReverse}
+                      cycleTagState={() => {}}
+                      cycleTagStateReverse={() => {}}
+                      cycleAxisCombineMode={cycleAxisCombineMode}
+                      cycleAxisCombineModeReverse={cycleAxisCombineModeReverse}
+                      cycleAxisExclusionMode={cycleAxisExclusionMode}
+                      cycleAxisExclusionModeReverse={cycleAxisExclusionModeReverse}
+                      axisIncludeAll={axisIncludeAll}
+                      axisExcludeAll={axisExcludeAll}
+                      axisClear={axisClear}
+                      search=""
+                      setSearch={() => {}}
+                      activeFilterCount={activeFilterCount}
+                      resetAll={resetAxisFilters}
+                      embedded
+                    />
+                  }
+                />
+              {/* Flex master-detail — mirrors TagsExplorer's working
+                  pattern. Grid was inconsistent on row sizing; flex
+                  + flex-1 + min-h-0 is reliable across browsers. */}
+              <div className="flex gap-6 flex-1 min-h-0">
+                <div className="w-[360px] shrink-0 flex flex-col gap-4 min-h-0">
                   {tagGroups.length ? (
-                    <Card className="border-gold/10 bg-background/20">
-                      <CardContent className="space-y-4 p-4">
+                    <Card className="border-gold/10 bg-background/20 shrink-0 max-h-[40%] py-0 gap-0">
+                      <CardContent className="space-y-4 p-4 overflow-y-auto custom-scrollbar">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gold/70">
                             <Tag className="h-3.5 w-3.5" />
@@ -525,9 +712,12 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                     </Card>
                   ) : null}
 
-                  <Card className="border-gold/10 bg-background/20">
-                    <CardContent className="p-0">
-                      <ScrollArea className="h-[850px]">
+                  {/* Candidate list — plain `overflow-y-auto` div
+                      with `flex-1 min-h-0` so it claims the rest of
+                      the rail height after the optional tag picker.
+                      Card + CardContent + ScrollArea was an extra
+                      layer of opinions that fought the height chain. */}
+                  <div className="flex-1 min-h-0 rounded-xl border border-gold/10 bg-background/20 overflow-y-auto custom-scrollbar">
                         <div className="space-y-2 p-3">
                           {visibleCandidates.map((candidate) => {
                             const unresolved = !candidate.sourceResolved;
@@ -580,12 +770,13 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                             );
                           })}
                         </div>
-                      </ScrollArea>
-                    </CardContent>
-                  </Card>
+                  </div>
                 </div>
 
-                <div className="space-y-4">
+                {/* Detail column — direct child of the flex container,
+                    `flex-1 min-h-0` gives it a defined height; the
+                    `overflow-y-auto` engages when content overflows. */}
+                <div className="flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar space-y-4 pr-1">
                   {selectedCandidate ? (
                     <>
                       <Card className="border-gold/10 bg-background/25 overflow-hidden">
@@ -730,6 +921,7 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
                   )}
                 </div>
               </div>
+              </>
             )}
           </div>
         </CardContent>
@@ -738,42 +930,36 @@ export default function SpellImportWorkbench({ userProfile }: { userProfile: any
   );
 }
 
-function SummaryStat({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-gold/10 bg-background/35 px-4 py-3">
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-gold/70">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <div className="mt-2 font-serif text-2xl text-ink">{value}</div>
-    </div>
-  );
-}
-
-function FilterSelect({
+/**
+ * Inline stat pill — icon + bold value + dim label, all on one line.
+ * Replaces the older vertical SummaryStat card so the header collapses
+ * to a single compact row of metrics instead of a grid of cards.
+ *
+ * `tone="warn"` swaps the value color to blood so unresolved /
+ * warning counts read distinct from the neutral routing counts.
+ */
+function InlineStat({
+  icon: Icon,
   label,
   value,
-  onChange,
-  options
+  tone,
 }: {
+  icon: any;
   label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
+  value: number;
+  tone?: 'warn';
 }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-xs font-bold uppercase tracking-widest text-ink/40">{label}</Label>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-md border border-gold/10 bg-background/50 px-3 text-sm outline-none focus:border-gold"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </div>
+    <span className="inline-flex items-center gap-1">
+      <Icon className="h-3 w-3 text-gold/60 shrink-0" />
+      <span className={cn(
+        'font-bold tabular-nums',
+        tone === 'warn' && value > 0 ? 'text-blood' : 'text-ink',
+      )}>
+        {value}
+      </span>
+      <span className="text-ink/50 uppercase tracking-widest text-[10px]">{label}</span>
+    </span>
   );
 }
 

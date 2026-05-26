@@ -569,6 +569,12 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
   // Groups for selection
   const [allOptionGroups, setAllOptionGroups] = useState<any[]>([]);
   const [allOptionItems, setAllOptionItems] = useState<any[]>([]);
+  // Feats catalog for AdvancementManager's ItemGrant / ItemChoice
+  // "Feat" pool. Loaded once in the foundation effect alongside option
+  // groups; the runtime walker in CharacterBuilder reads feat refs back
+  // out of `optionsCache`, so the authoring side just needs the catalog
+  // here to populate the picker.
+  const [allFeats, setAllFeats] = useState<any[]>([]);
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allTags, setAllTags] = useState<any[]>([]);
   const [scalingColumns, setScalingColumns] = useState<any[]>([]);
@@ -680,7 +686,8 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           optGroupsData,
           optItemsData,
           tagGroupsData,
-          allTagsData
+          allTagsData,
+          featsData
         ] = await Promise.all([
           fetchCollection('sources', { orderBy: 'name ASC' }),
           fetchCollection('spellcastingTypes', { orderBy: 'name ASC' }),
@@ -698,10 +705,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           fetchCollection('attributes'),
           fetchCollection('uniqueOptionGroups', { orderBy: 'name ASC' }),
           fetchCollection('uniqueOptionItems'),
-          fetchCollection('tagGroups', { 
-            where: "classifications LIKE '%\"class\"%'" 
+          fetchCollection('tagGroups', {
+            where: "classifications LIKE '%\"class\"%'"
           }),
-          fetchCollection('tags')
+          fetchCollection('tags'),
+          // Feats catalog feeds AdvancementManager's "Feat" pool.
+          // Snake_case `feat_subtype` is normalized to camelCase below
+          // so the picker can read `featSubtype` directly.
+          fetchCollection('feats', { orderBy: 'name ASC' })
         ]);
 
         setSources(sourcesData.map(s => denormalizeCompendiumData(s)));
@@ -749,6 +760,14 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
           classifications: typeof tg.classifications === 'string' ? JSON.parse(tg.classifications) : (tg.classifications || [])
         })));
         setAllTags(allTagsData.map(t => denormalizeCompendiumData(t)));
+        setAllFeats(featsData.map((f: any) => {
+          const d = denormalizeCompendiumData(f);
+          return {
+            ...d,
+            featType: d.featType ?? d.feat_type,
+            featSubtype: d.featSubtype ?? d.feat_subtype,
+          };
+        }));
       } catch (err) {
         console.error("[ClassEditor] Error loading foundation data:", err);
       }
@@ -4023,6 +4042,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                     availableScalingColumns={scalingColumns}
                     availableOptionGroups={allOptionGroups}
                     availableOptionItems={allOptionItems}
+                    availableFeats={allFeats}
                     classId={id}
                     defaultHitDie={hitDie}
                     referenceContext={classReferenceContext}
@@ -4520,6 +4540,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       availableFeatures={features}
                       availableScalingColumns={scalingColumns}
                       availableOptionGroups={allOptionGroups}
+                      availableFeats={allFeats}
                       classId={id}
                       isInsideFeature={true}
                       featureId={editingFeature.id}

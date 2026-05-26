@@ -1,0 +1,21 @@
+-- Migration: Feats — advancements column
+-- Date: 2026-05-25
+--
+-- Adds the dnd5e `system.advancement` analogue to the feats table so
+-- general feats can carry the same authored advancement set classes
+-- and subclasses already use (HitPoints minus, of course — HitPoints
+-- and Size are class/race-shaped concerns and aren't surfaced for
+-- feats). Mirrors the column shape on `features`
+-- (worker/migrations/0007_features.sql): a TEXT column holding a JSON
+-- array, defaulting to `'[]'` so legacy rows stay valid without a
+-- backfill pass.
+--
+-- Runtime level resolution (see CharacterBuilder feat walker) is
+-- grant-edge-inferred — feats granted by a class or subclass use the
+-- granting class's level; standalone feats use the character's total
+-- level. There is no per-advancement UI toggle. The AdvancementManager
+-- mounted on the feats editor is the same component class / subclass
+-- editors use, gated by a new `parentContext="feat"` prop that hides
+-- HitPoints + Size from the type menu and relabels the level input.
+
+ALTER TABLE feats ADD COLUMN advancements TEXT DEFAULT '[]';

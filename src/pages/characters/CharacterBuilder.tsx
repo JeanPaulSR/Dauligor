@@ -159,6 +159,7 @@ import {
 } from "lucide-react";
 import { ClassList } from "../compendium/ClassList";
 import BBCodeRenderer from "../../components/BBCodeRenderer";
+import FeatPickerDialog from "../../components/characters/FeatPickerDialog";
 import { exportCharacterJSON } from "../../lib/characterExport";
 import { calculateEffectiveCastingLevel, getSpellSlotsForLevel } from "../../lib/spellcasting";
 import {
@@ -1957,6 +1958,99 @@ export default function CharacterBuilder({
     ruleId: string;
   } | null>(null);
 
+  // ── ASI feat-choice picker (Layer-A: feat-or-stats flow) ──
+  // Lazy-loaded `feats` catalog used by FeatPickerDialog when the
+  // player opens an ASI advancement set to `choiceType: 'feat'` or
+  // `'either'` and picks "Take a Feat". Loaded on first open so a
+  // character that never opens the picker doesn't pay the fetch cost.
+  // Filtered to `feat_type='feat'` so the picker doesn't surface
+  // class / subclass / race / background features (those live in the
+  // same table but aren't "feats" in the player-facing sense).
+  const [allFeatsCatalog, setAllFeatsCatalog] = useState<any[] | null>(null);
+  const [featPickerDialog, setFeatPickerDialog] = useState<{
+    name: string;
+    advId: string;
+    level: number;
+    sourceScope: string;
+  } | null>(null);
+
+  // Re-fetches the feats catalog from D1 and updates state. Called
+  // both on first picker-open and after a Foundry-import inside the
+  // picker so a freshly-imported feat appears live.
+  const refreshFeatsCatalog = async () => {
+    try {
+      const rows = await fetchCollection<any>('feats', { orderBy: 'name ASC' });
+      // Match FeatsEditor's mapping: D1 row → camelCased row. We only
+      // need the fields the picker renders (name, featSubtype,
+      // description) plus the id, but keeping the row intact lets the
+      // selection flow stamp the row into optionsCache cleanly.
+      const mapped = rows.map((row: any) => ({
+        ...row,
+        sourceId: row.source_id,
+        featType: row.feat_type,
+        featSubtype: row.feat_subtype,
+        sourceType: row.source_type,
+      }));
+      const playerFeats = mapped.filter(
+        (row: any) => String(row.featType || '').toLowerCase() === 'feat',
+      );
+      setAllFeatsCatalog(playerFeats);
+      return playerFeats;
+    } catch (err) {
+      console.error('Failed to load feats catalog for picker', err);
+      return [];
+    }
+  };
+
+  const handleOpenFeatPicker = async (params: {
+    name: string;
+    advId: string;
+    level: number;
+    sourceScope: string;
+  }) => {
+    if (!allFeatsCatalog) {
+      await refreshFeatsCatalog();
+    }
+    setFeatPickerDialog(params);
+  };
+
+  // Called by the FeatPickerDialog's Confirm. Writes the chosen feat
+  // id(s) into `selectedOptions` under a `choice:feat`-discriminated
+  // key so the synthesis walker (which looks up rows by `__sourceTable`)
+  // can attribute them. Also stamps the row into optionsCache so the
+  // walker doesn't need a second fetch.
+  const handleFeatPickerSelect = (
+    feats: any[],
+    dlg: { advId: string; level: number; sourceScope: string },
+  ) => {
+    if (!feats || feats.length === 0) return;
+    const stamped = feats.map((feat: any) => ({ ...feat, __sourceTable: 'feats' }));
+    setOptionsCache((prev) => {
+      const next = { ...prev };
+      stamped.forEach((row: any) => {
+        next[row.id] = row;
+      });
+      return next;
+    });
+    setCharacter((prev: any) =>
+      updateCharacterAdvancementSelectionState(
+        prev,
+        {
+          sourceScope: dlg.sourceScope,
+          advancementId: dlg.advId,
+          level: dlg.level,
+          // `choice:feat` discriminator keeps the feat pick on its
+          // own selection-map key, separate from any future
+          // `choice:stats` artifact. The synthesis walker strips
+          // `choice:` from the key when parsing source scope, so this
+          // does not interfere with attribution.
+          choiceId: 'feat',
+        },
+        stamped.map((row: any) => String(row.id)),
+      ),
+    );
+  };
+
   const handleOpenOptionDialog = async (choice: {
     name: string;
     count: number;
@@ -2000,6 +2094,27 @@ export default function CharacterBuilder({
           setOptionsCache((prev) => {
             const nc = { ...prev };
             items.forEach((i: any) => (nc[i.id] = i));
+            return nc;
+          });
+        }
+      } else if (choice.configuration?.choiceType === "feat") {
+        // Mirror the `feature` branch but target the feats table —
+        // ItemChoice over feats is the Tasha's "pick a sub-feat" path.
+        // The row is stamped with `__sourceTable: 'feats'` so the
+        // feat-synthesis walker picks it up when the player commits.
+        const pool = choice.configuration?.pool || [];
+        if (pool.length > 0) {
+          const slice = pool.slice(0, 30);
+          const placeholders = slice.map(() => '?').join(',');
+          const items = await fetchCollection<any>("feats", {
+            where: `id IN (${placeholders})`,
+            params: slice,
+          });
+          const stamped = items.map((i: any) => ({ ...i, __sourceTable: "feats" }));
+          setAvailableOptions(stamped);
+          setOptionsCache((prev) => {
+            const nc = { ...prev };
+            stamped.forEach((i: any) => (nc[i.id] = i));
             return nc;
           });
         }
@@ -2261,17 +2376,26 @@ export default function CharacterBuilder({
 
         for (const id of missingIds) {
           let row: any = null;
+          let sourceTable: string | null = null;
           for (const tbl of fallbackTables) {
             try {
               row = await fetchDocument<any>(tbl, id);
-              if (row && (row.id || row.name)) break;
+              if (row && (row.id || row.name)) {
+                sourceTable = tbl;
+                break;
+              }
             } catch {
               // Individual fetch failure is benign — fall through to
               // the next table or mark as still-missing.
             }
           }
           if (row && (row.id || row.name)) {
-            resolved.push({ id, row });
+            // Stamp the row with the table it came from so the
+            // feat-synthesis walker (built around line 4400) can pick
+            // feat-table rows out of the cache without re-querying.
+            // Non-destructive — readers that don't care about this key
+            // simply ignore it.
+            resolved.push({ id, row: { ...row, __sourceTable: sourceTable } });
           } else {
             stillMissing.push(id);
           }
@@ -2630,6 +2754,79 @@ export default function CharacterBuilder({
       });
     });
 
+    // ── Feat-advancement pass (Trait collection) ────────────────────
+    // Per the locked level-resolution rule:
+    //   if feat.grantedByType in ('class', 'subclass'):
+    //     effective_level = level of the granting class
+    //   else:
+    //     effective_level = character total level
+    //   if advancement.level <= 0 or advancement.level <= effective_level:
+    //     process
+    // Most authored feat advancements use `level: 0` ("always on while
+    // owned"); the gate only matters when authors set level > 0.
+    //
+    // `character.feats` is now synthesized each render by the owned-
+    // feat-synthesis effect just above this pass. It walks
+    // `selectedOptionsMap` + class/subclass/feature ItemGrant
+    // advancements and produces `{id, advancements, grantedByType,
+    // grantedById, grantedByAdvancementId}` entries. There are no
+    // `feats.granted_by_*` columns on the catalog table — grant edges
+    // are instance-level (the same pattern Layer 2 spells use on
+    // character_spells.granted_by_*).
+    const ownedFeats: any[] = Array.isArray(character.feats) ? character.feats : [];
+    if (ownedFeats.length > 0) {
+      const totalCharacterLevel = getTotalCharacterLevel(
+        currentProgression,
+        character.level,
+      );
+      const classLevelByKey: Record<string, number> = {};
+      classEntries.forEach((entry: any) => {
+        classLevelByKey[String(entry.classKey || entry.classId || "")] =
+          Number(entry.classLevel || 0) || 0;
+      });
+
+      ownedFeats.forEach((feat: any) => {
+        const featAdvancements = Array.isArray(feat?.advancements) ? feat.advancements : [];
+        if (featAdvancements.length === 0) return;
+
+        const grantedByType = String(feat?.grantedByType || "").toLowerCase();
+        const grantedById = String(feat?.grantedById || "");
+        let grantingClassDoc: any = null;
+        let effectiveLevel = totalCharacterLevel;
+        if (grantedByType === "class" || grantedByType === "subclass") {
+          grantingClassDoc = classCache[grantedById]
+            || (grantedByType === "subclass"
+              ? classCache[subclassCache[grantedById]?.classId || ""] || null
+              : null);
+          const grantingKey = String(grantingClassDoc?.id || grantedById);
+          effectiveLevel = classLevelByKey[grantingKey] ?? totalCharacterLevel;
+        }
+
+        normalizeProgressionAdvancements(
+          featAdvancements,
+          0,
+          8,
+        ).forEach((advancement: any) => {
+          if (advancement.type !== "Trait") return;
+          const advLevel = Number(advancement.level || 0) || 0;
+          if (advLevel > 0 && advLevel > effectiveLevel) return;
+          applyTraitValuesToCharacterGrants(
+            nextClassGrantedTraits,
+            advancement.configuration?.type,
+            collectTraitValuesFromAdvancement(
+              advancement,
+              selectedOptionsMap,
+              buildAdvancementSourceContext({
+                parentType: "feat",
+                classDocument: grantingClassDoc,
+                parentDocument: feat,
+              }),
+            ),
+          );
+        });
+      });
+    }
+
     setCharacter((prev: any) => {
       const previousClassGranted =
         prev.classGrantedTraits || buildEmptyClassGrantedTraits();
@@ -2679,6 +2876,363 @@ export default function CharacterBuilder({
     classCache,
     featureCache,
     subclassCache,
+    // Feat-advancement pass — pulls Trait values from owned feats.
+    character.feats,
+  ]);
+
+  // ── ItemGrant feat pre-fetch (synthesis walker cache-warming) ──
+  // Pass-2 of the owned-feat synthesis walker (below) attributes feats
+  // granted directly by class / subclass / feature ItemGrant
+  // advancements — but only if the feat row is already in
+  // `optionsCache`. The selectedOptions fetcher above only warms ids
+  // that appear in `selectedOptionsMap`, so direct grants would
+  // silently no-op until something else triggered a fetch.
+  //
+  // This effect scans the visible progression's ItemGrant advancements
+  // for feat refs that aren't cached yet and bulk-fetches them. Stamps
+  // each row with `__sourceTable: 'feats'` so the synthesis walker's
+  // type guard matches.
+  useEffect(() => {
+    const currentProgression = buildCurrentProgression(character);
+    const classEntries = buildProgressionClassGroups(
+      currentProgression,
+      classCache,
+      subclassCache,
+      character.subclassId,
+    );
+
+    const refsToCheck = new Set<string>();
+    const collectFromAdvancements = (advs: any[] = [], maxLevel: number) => {
+      if (!Array.isArray(advs)) return;
+      advs.forEach((adv: any) => {
+        if (!adv || adv.type !== "ItemGrant") return;
+        if ((Number(adv.level || 1) || 1) > maxLevel) return;
+        const cfg = adv.configuration || {};
+        // Only feat-targeted ItemGrants — feature/option-group grants
+        // already route through other warm-up paths.
+        if (cfg.choiceType && cfg.choiceType !== "feat") return;
+        collectGrantedItemReferences(adv).forEach((ref: string) => {
+          if (ref) refsToCheck.add(String(ref));
+        });
+      });
+    };
+
+    classEntries.forEach((entry: any) => {
+      const classDocument =
+        entry.classDocument ||
+        classCache[entry.classKey || ""] ||
+        Object.values(classCache).find((c: any) => c?.id === entry?.classId);
+      if (!classDocument) return;
+      const classLevel = Number(entry.classLevel || 0) || 0;
+      if (classLevel <= 0) return;
+
+      collectFromAdvancements(classDocument.advancements || [], classLevel);
+
+      const subclassDocument =
+        entry.subclassId &&
+        subclassCache[entry.subclassId]?.classId === classDocument.id
+          ? subclassCache[entry.subclassId]
+          : null;
+      if (subclassDocument) {
+        collectFromAdvancements(
+          subclassDocument.advancements || [],
+          classLevel,
+        );
+      }
+
+      const classFeatures = (featureCache[classDocument.id] || []).filter(
+        (feature: any) => (Number(feature.level || 1) || 1) <= classLevel,
+      );
+      classFeatures.forEach((feature: any) => {
+        collectFromAdvancements(feature.advancements || [], classLevel);
+      });
+
+      if (subclassDocument) {
+        const subFeatures = (featureCache[subclassDocument.id] || []).filter(
+          (feature: any) => (Number(feature.level || 1) || 1) <= classLevel,
+        );
+        subFeatures.forEach((feature: any) => {
+          collectFromAdvancements(feature.advancements || [], classLevel);
+        });
+      }
+    });
+
+    const missing = Array.from(refsToCheck).filter(
+      (id) => !optionsCache[id],
+    );
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        // Chunk to avoid massive IN-clauses; D1 has no hard cap here,
+        // but 30/chunk matches the pattern used elsewhere in this file.
+        const fetched: any[] = [];
+        for (let i = 0; i < missing.length; i += 30) {
+          const slice = missing.slice(i, i + 30);
+          const placeholders = slice.map(() => "?").join(",");
+          const rows = await fetchCollection<any>("feats", {
+            where: `id IN (${placeholders})`,
+            params: slice,
+          });
+          fetched.push(...rows);
+        }
+        if (cancelled || fetched.length === 0) return;
+        setOptionsCache((prev) => {
+          const next = { ...prev };
+          fetched.forEach((row: any) => {
+            next[row.id] = { ...row, __sourceTable: "feats" };
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error("Failed to pre-fetch ItemGrant feat refs", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    character.progression,
+    character.subclassId,
+    classCache,
+    subclassCache,
+    featureCache,
+  ]);
+
+  // ── Owned-feat synthesis ────────────────────────────────────────
+  // `character.feats` is the runtime array the feat-advancement
+  // walker (around line 2651 and 7965) consumes. Nothing on disk
+  // stores it directly — the feats table is the catalog, and the
+  // grant edges live implicitly in `selectedOptions` + the class/
+  // subclass advancements that listed each feat in their pool.
+  //
+  // This effect synthesizes that array each render by walking:
+  //
+  //   1. `selectedOptionsMap` entries — every picked option whose
+  //      resolved row in `optionsCache` came from the `feats` table
+  //      (tagged with `__sourceTable: 'feats'` by the option fetcher
+  //      above). The selection key's `sourceScope` tells us which
+  //      class/subclass/feature advancement triggered the pick, so
+  //      we can attribute the grant for the level-resolution rule.
+  //
+  //   2. ItemGrant advancements on class/subclass/feature documents
+  //      that name feat-table rows directly (no player choice).
+  //      These come through `optionsCache` only if some other path
+  //      pre-loaded them; the walker tolerates missing entries (it
+  //      no-ops on feats with empty `advancements`).
+  //
+  // Each entry carries `{id, name, source, description,
+  // advancements, grantedByType, grantedById, grantedByAdvancementId}`
+  // — the same shape the walker reads. `grantedByType` /
+  // `grantedById` follow the locked rule: 'class' / 'subclass' use
+  // the granting class level; anything else falls through to
+  // character total level. Feature-level grants attribute to the
+  // owning class (features live under classes/subclasses), so the
+  // level gate still resolves correctly.
+  useEffect(() => {
+    const synthesizedFeats: any[] = [];
+    const seenFeatIds = new Set<string>();
+
+    const pushFeat = (
+      featRow: any,
+      grantedByType: string,
+      grantedById: string,
+      grantedByAdvancementId: string,
+    ) => {
+      const featId = String(featRow?.id || "").trim();
+      if (!featId) return;
+      const dedupeKey = `${featId}|${grantedByType}|${grantedById}`;
+      if (seenFeatIds.has(dedupeKey)) return;
+      seenFeatIds.add(dedupeKey);
+      synthesizedFeats.push({
+        id: featId,
+        name: featRow.name || "",
+        source: featRow.sourceType || featRow.featType || "feat",
+        description: featRow.description || "",
+        advancements: Array.isArray(featRow.advancements) ? featRow.advancements : [],
+        grantedByType,
+        grantedById,
+        grantedByAdvancementId,
+      });
+    };
+
+    // 1. Walk selectedOptionsMap entries. The key encodes the
+    //    advancement source scope; the values are picked option ids.
+    //    Any value that resolves to a `feats`-table row is a feat the
+    //    character owns by virtue of an ASI / feat-grant / etc. pick.
+    Object.entries(selectedOptionsMap || {}).forEach(([key, values]) => {
+      if (!Array.isArray(values) || values.length === 0) return;
+
+      // Parse the key: "type:X|class:Y|subclass:Z|parent:W|adv:A|level:L"
+      // We only care about the source-scope portion for attribution.
+      const parts = String(key || "").split("|");
+      const scopeParts = parts.filter(
+        (p) => !p.startsWith("adv:") && !p.startsWith("level:") && !p.startsWith("choice:"),
+      );
+      const advPart = parts.find((p) => p.startsWith("adv:")) || "";
+      const advId = advPart.replace(/^adv:/, "").trim();
+      const scope = parseAdvancementSourceScope(scopeParts.join("|"));
+      const parentType = String(scope.type || "").toLowerCase();
+      const classId = String(scope.class || "").trim();
+      const subclassId = String(scope.subclass || "").trim();
+
+      // Map source scope → (grantedByType, grantedById). Per the
+      // locked rule the runtime walker only special-cases 'class' /
+      // 'subclass'; feature-level grants attribute to the owning
+      // class so the level gate still resolves correctly.
+      let grantedByType = "feat";
+      let grantedById = "";
+      if (parentType === "class") {
+        grantedByType = "class";
+        grantedById = classId && classId !== "none" ? classId : "";
+      } else if (parentType === "subclass") {
+        grantedByType = "subclass";
+        grantedById = subclassId && subclassId !== "none" ? subclassId : "";
+      } else if (parentType === "feature" || parentType === "subclass-feature") {
+        // Features attribute to their owning class (or subclass's
+        // class) so the level resolution rule still applies.
+        if (subclassId && subclassId !== "none") {
+          grantedByType = "subclass";
+          grantedById = subclassId;
+        } else if (classId && classId !== "none") {
+          grantedByType = "class";
+          grantedById = classId;
+        }
+      }
+
+      values.forEach((optionId: string) => {
+        const row = optionsCache[optionId];
+        if (!row) return;
+        if (row.__sourceTable !== "feats") return;
+        pushFeat(row, grantedByType, grantedById, advId);
+      });
+    });
+
+    // 2. Walk class/subclass/feature ItemGrant advancements that
+    //    name feat ids directly (no player choice). These appear in
+    //    `optionsCache` only when something else pre-fetched them,
+    //    so this pass is best-effort — the walker no-ops cleanly on
+    //    feats whose advancements are absent.
+    const currentProgression = buildCurrentProgression(character);
+    const classEntries = buildProgressionClassGroups(
+      currentProgression,
+      classCache,
+      subclassCache,
+      character.subclassId,
+    );
+
+    const walkDirectGrants = (
+      advancements: any[],
+      grantedByType: string,
+      grantedById: string,
+      maxLevel: number,
+    ) => {
+      if (!Array.isArray(advancements)) return;
+      advancements.forEach((adv: any) => {
+        if (!adv || adv.type !== "ItemGrant") return;
+        if ((Number(adv.level || 1) || 1) > maxLevel) return;
+        const refs = collectGrantedItemReferences(adv);
+        refs.forEach((ref: string) => {
+          const row = optionsCache[ref];
+          if (!row) return;
+          if (row.__sourceTable !== "feats") return;
+          pushFeat(row, grantedByType, grantedById, String(adv._id || ""));
+        });
+      });
+    };
+
+    classEntries.forEach((entry: any) => {
+      const classDocument =
+        entry.classDocument ||
+        classCache[entry.classKey || ""] ||
+        Object.values(classCache).find(
+          (c: any) => c?.id === entry?.classId,
+        );
+      if (!classDocument) return;
+      const classLevel = Number(entry.classLevel || 0) || 0;
+      if (classLevel <= 0) return;
+
+      walkDirectGrants(
+        classDocument.advancements || [],
+        "class",
+        classDocument.id,
+        classLevel,
+      );
+
+      const subclassDocument =
+        entry.subclassId &&
+        subclassCache[entry.subclassId]?.classId === classDocument.id
+          ? subclassCache[entry.subclassId]
+          : null;
+      if (subclassDocument) {
+        walkDirectGrants(
+          subclassDocument.advancements || [],
+          "subclass",
+          subclassDocument.id,
+          classLevel,
+        );
+      }
+
+      const classFeatures = (featureCache[classDocument.id] || []).filter(
+        (feature: any) => (Number(feature.level || 1) || 1) <= classLevel,
+      );
+      classFeatures.forEach((feature: any) => {
+        walkDirectGrants(
+          feature.advancements || [],
+          "class",
+          classDocument.id,
+          classLevel,
+        );
+      });
+
+      if (subclassDocument) {
+        const subclassFeatures = (featureCache[subclassDocument.id] || []).filter(
+          (feature: any) => (Number(feature.level || 1) || 1) <= classLevel,
+        );
+        subclassFeatures.forEach((feature: any) => {
+          walkDirectGrants(
+            feature.advancements || [],
+            "subclass",
+            subclassDocument.id,
+            classLevel,
+          );
+        });
+      }
+    });
+
+    // Stable order — dedup key (`id|grantedByType|grantedById`) keeps
+    // each (feat, source) pair once; sort by feat id so re-renders
+    // don't reshuffle the display tab.
+    synthesizedFeats.sort((a, b) =>
+      String(a.id).localeCompare(String(b.id)),
+    );
+
+    setCharacter((prev: any) => {
+      const prevFeats: any[] = Array.isArray(prev?.feats) ? prev.feats : [];
+      // Cheap structural equality — `id|grantedById|advCount` triple
+      // is enough to detect meaningful changes (the walker only cares
+      // about feat id + attribution + advancements array). Avoids a
+      // setState loop on every render.
+      const fingerprint = (list: any[]) =>
+        list
+          .map(
+            (f) =>
+              `${f.id}|${f.grantedByType}|${f.grantedById}|${(f.advancements || []).length}`,
+          )
+          .join(";");
+      if (fingerprint(prevFeats) === fingerprint(synthesizedFeats)) return prev;
+      return { ...prev, feats: synthesizedFeats };
+    });
+  }, [
+    selectedOptionsMap,
+    optionsCache,
+    character.progression,
+    character.subclassId,
+    classCache,
+    subclassCache,
+    featureCache,
   ]);
 
   useEffect(() => {
@@ -7868,6 +8422,81 @@ export default function CharacterBuilder({
                                   }
                                 });
 
+                                // ── Owned-feat advancements ───────────────────────────
+                                // Iterates `character.feats` (general feats catalogue) and
+                                // surfaces each feat's advancements as level-aware choice
+                                // rows, mirroring the class / subclass / feature walkers
+                                // above. Level-resolution rule (locked):
+                                //   - feat.grantedByType in ('class','subclass') → uses
+                                //     the granting class's level. Synthesized by the
+                                //     owned-feat-synthesis effect from selectedOptionsMap
+                                //     entries (the source scope's class/subclass tokens).
+                                //   - otherwise → character total level.
+                                //   - advancement.level <= 0 → always processed.
+                                //   - advancement.level > effective_level → skipped.
+                                //
+                                // The walker only fires for the first progression row
+                                // (the L1 entry of the primary class) so feats — which
+                                // are character-wide, not per-class-level — don't repeat
+                                // across multiclass entries. Once feats grow a stable
+                                // `grantedAtCharacterLevel` field we can surface them at
+                                // the level the player picked them up; for now they all
+                                // land at the bottom of the L1 row's choice list.
+                                if (idx === 0 && Array.isArray(character.feats)) {
+                                  const totalCharacterLevel = getTotalCharacterLevel(
+                                    currentProgression,
+                                    character.level,
+                                  );
+                                  character.feats.forEach((feat: any) => {
+                                    const featAdvancements = Array.isArray(feat?.advancements)
+                                      ? feat.advancements
+                                      : [];
+                                    if (featAdvancements.length === 0) return;
+
+                                    const grantedByType = String(feat?.grantedByType || "").toLowerCase();
+                                    const grantedById = String(feat?.grantedById || "");
+                                    let grantingClassDoc: any = null;
+                                    let effectiveLevel = totalCharacterLevel;
+                                    if (grantedByType === "class" || grantedByType === "subclass") {
+                                      grantingClassDoc = classCache[grantedById]
+                                        || (grantedByType === "subclass"
+                                          ? classCache[subclassCache[grantedById]?.classId || ""] || null
+                                          : null);
+                                      // The granting-class level lookup falls back to
+                                      // character total level when the grant edge isn't
+                                      // resolvable (e.g. the column doesn't exist yet on
+                                      // `feats`). Safe default per the locked rule.
+                                      const grantingProg = currentProgression.find((p: any) =>
+                                        String(p?.classId || "") === String(grantingClassDoc?.id || grantedById),
+                                      );
+                                      effectiveLevel = Number(grantingProg?.classLevel ?? totalCharacterLevel) || totalCharacterLevel;
+                                    }
+
+                                    featAdvancements.forEach((adv: any) => {
+                                      const advLevel = Number(adv?.level || 0) || 0;
+                                      if (advLevel > 0 && advLevel > effectiveLevel) return;
+                                      processAdvancement(
+                                        {
+                                          ...adv,
+                                          // Pin the row to the L1 line for now; the
+                                          // synthetic level keeps the existing
+                                          // `processAdvancement` short-circuits (which
+                                          // gate on `advLevel !== prog.level`) from
+                                          // dropping the row on the floor.
+                                          level: prog.level,
+                                          featureId: feat.id,
+                                        },
+                                        buildAdvancementSourceContext({
+                                          parentType: "feat",
+                                          classDocument: grantingClassDoc,
+                                          parentDocument: feat,
+                                        }),
+                                        false,
+                                      );
+                                    });
+                                  });
+                                }
+
                                 // ── Per-level status (Foundry-importer-inspired) ─────
                                 // After processAdvancement has populated
                                 // choicesAtThisLevel, classify each row as
@@ -8094,6 +8723,35 @@ export default function CharacterBuilder({
                                                   choice.type ===
                                                   "asi-trigger"
                                                 ) {
+                                                  // ── ASI feat-or-stats flow ──
+                                                  // `configuration.choiceType` (added 2026-05-25)
+                                                  // discriminates which buttons render:
+                                                  //   - 'stats' (default / undefined): the
+                                                  //     legacy Point Buy-only card.
+                                                  //   - 'feat': only the Take a Feat button.
+                                                  //   - 'either': both buttons, player picks one.
+                                                  // Undefined preserves the prior behavior on
+                                                  // any class that hasn't been re-authored.
+                                                  const asiChoiceType = String(
+                                                    choice.configuration?.choiceType || 'stats',
+                                                  ).toLowerCase();
+                                                  const showStats =
+                                                    asiChoiceType === 'stats' || asiChoiceType === 'either';
+                                                  const showFeat =
+                                                    asiChoiceType === 'feat' || asiChoiceType === 'either';
+                                                  // Selected feat ids for this ASI advancement
+                                                  // (under the `choice:feat` selection-key slot).
+                                                  // Used to render chips + disable the picker
+                                                  // when the player has already committed.
+                                                  const featSel = getAdvancementSelectionValues(
+                                                    selectedOptionsMap,
+                                                    {
+                                                      sourceScope: choice.sourceScope,
+                                                      advancementId: choice.advId,
+                                                      level: choice.level,
+                                                      choiceId: 'feat',
+                                                    },
+                                                  );
                                                   return (
                                                     <div
                                                       key={`asi-${cidx}`}
@@ -8109,18 +8767,70 @@ export default function CharacterBuilder({
                                                         </span>
                                                       </div>
                                                       <p className="text-xs text-ink/60 font-serif mb-4 italic">
-                                                        This level grants an ability score improvement. Use Point Buy below to rebudget your scores, or apply the increase via the
-                                                        ± controls on the sheet.
+                                                        {asiChoiceType === 'feat'
+                                                          ? 'This level grants a feat. Open the picker to choose one.'
+                                                          : asiChoiceType === 'either'
+                                                            ? 'This level grants an ability score improvement OR a feat. Pick one path.'
+                                                            : 'This level grants an ability score improvement. Use Point Buy below to rebudget your scores, or apply the increase via the ± controls on the sheet.'}
                                                       </p>
-                                                      <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => setShowPointBuy(true)}
-                                                        className="w-full border-dashed border-sky-500/40 text-sky-700 hover:bg-sky-500/10 hover:border-sky-500 font-bold tracking-widest uppercase text-[10px]"
+                                                      {featSel.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mb-3">
+                                                          {featSel.map((fid: string) => {
+                                                            const fname =
+                                                              optionsCache[fid]?.name || fid;
+                                                            return (
+                                                              <span
+                                                                key={fid}
+                                                                className="bg-indigo-500/10 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-500/20 text-[10px] font-bold uppercase tracking-widest"
+                                                              >
+                                                                {fname}
+                                                              </span>
+                                                            );
+                                                          })}
+                                                        </div>
+                                                      )}
+                                                      <div
+                                                        className={
+                                                          showStats && showFeat
+                                                            ? 'grid grid-cols-2 gap-2'
+                                                            : 'flex'
+                                                        }
                                                       >
-                                                        <Edit2 className="w-3 h-3 mr-2" />
-                                                        Open Point Buy
-                                                      </Button>
+                                                        {showStats && (
+                                                          <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => setShowPointBuy(true)}
+                                                            className="w-full border-dashed border-sky-500/40 text-sky-700 hover:bg-sky-500/10 hover:border-sky-500 font-bold tracking-widest uppercase text-[10px]"
+                                                          >
+                                                            <Edit2 className="w-3 h-3 mr-2" />
+                                                            {asiChoiceType === 'either'
+                                                              ? 'Improve Stats'
+                                                              : 'Open Point Buy'}
+                                                          </Button>
+                                                        )}
+                                                        {showFeat && (
+                                                          <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                              void handleOpenFeatPicker({
+                                                                name: choice.name,
+                                                                advId: choice.advId,
+                                                                level: choice.level,
+                                                                sourceScope:
+                                                                  choice.sourceScope || '',
+                                                              });
+                                                            }}
+                                                            className="w-full border-dashed border-indigo-500/40 text-indigo-700 hover:bg-indigo-500/10 hover:border-indigo-500 font-bold tracking-widest uppercase text-[10px]"
+                                                          >
+                                                            <Plus className="w-3 h-3 mr-2" />
+                                                            {featSel.length > 0
+                                                              ? 'Change Feat'
+                                                              : 'Take a Feat'}
+                                                          </Button>
+                                                        )}
+                                                      </div>
                                                     </div>
                                                   );
                                                 }
@@ -11143,6 +11853,38 @@ export default function CharacterBuilder({
           </div>
         );
       })()}
+
+      {/* ── ASI feat-or-stats flow — FeatPickerDialog ──
+          Mounted unconditionally; `open` controls visibility. The
+          dialog's pool is the lazy `allFeatsCatalog` (filtered to
+          `feat_type='feat'`). `alreadyOwnedIds` excludes feats the
+          character already owns via the synthesis walker so a player
+          can't double-pick the same feat from another ASI level. */}
+      <FeatPickerDialog
+        open={!!featPickerDialog}
+        onOpenChange={(next) => {
+          if (!next) setFeatPickerDialog(null);
+        }}
+        pool={allFeatsCatalog || []}
+        count={1}
+        alreadyOwnedIds={(character.feats || []).map((f: any) => String(f.id))}
+        onSelect={(feats) => {
+          if (!featPickerDialog) return;
+          handleFeatPickerSelect(feats, {
+            advId: featPickerDialog.advId,
+            level: featPickerDialog.level,
+            sourceScope: featPickerDialog.sourceScope,
+          });
+        }}
+        userProfile={userProfile}
+        onCatalogRefresh={refreshFeatsCatalog}
+        title={featPickerDialog?.name || 'Pick a Feat'}
+        subtitle={
+          featPickerDialog
+            ? `Level ${featPickerDialog.level} · choose one feat`
+            : undefined
+        }
+      />
 
       {isSelectingSubclass.open && (
         <div className="fixed inset-0 bg-ink/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">

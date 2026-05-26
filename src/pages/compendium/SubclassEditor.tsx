@@ -209,6 +209,10 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
   const [tagGroups, setTagGroups] = useState<any[]>([]);
   const [allOptionGroups, setAllOptionGroups] = useState<any[]>([]);
   const [allOptionItems, setAllOptionItems] = useState<any[]>([]);
+  // Feats catalog for AdvancementManager's ItemGrant / ItemChoice "Feat"
+  // pool. Mirrors the wiring added to ClassEditor — runtime synthesis
+  // already handles feat refs; the authoring side just needs the list.
+  const [allFeats, setAllFeats] = useState<any[]>([]);
   const [progressionScalings, setProgressionScalings] = useState<any[]>([]);
   const [knownScalings, setKnownScalings] = useState<any[]>([]);
   const [parentClass, setParentClass] = useState<any>(null);
@@ -244,7 +248,8 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           optGroupsData,
           optItemsData,
           progData,
-          knownData
+          knownData,
+          featsData
         ] = await Promise.all([
           fetchCollection('sources'),
           fetchCollection('tagGroups', { where: "classifications LIKE '%subclass%'" }),
@@ -252,7 +257,9 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           fetchCollection('uniqueOptionGroups'),
           fetchCollection('uniqueOptionItems'),
           fetchCollection('spellcastingScalings', { where: "type = 'standard'" }),
-          fetchCollection('spellsKnownScalings', { where: "type = 'known'" })
+          fetchCollection('spellsKnownScalings', { where: "type = 'known'" }),
+          // Feats catalog for AdvancementManager's "Feat" pool.
+          fetchCollection('feats', { orderBy: 'name ASC' })
         ]);
 
         setSources(sourcesData.map(s => denormalizeCompendiumData(s)));
@@ -276,6 +283,14 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
           ...k,
           levels: typeof k.levels === 'string' ? JSON.parse(k.levels) : (k.levels || [])
         })));
+        setAllFeats(featsData.map((f: any) => {
+          const d = denormalizeCompendiumData(f);
+          return {
+            ...d,
+            featType: d.featType ?? d.feat_type,
+            featSubtype: d.featSubtype ?? d.feat_subtype,
+          };
+        }));
 
       } catch (err) {
         console.error("[SubclassEditor] Error loading foundation data:", err);
@@ -1090,6 +1105,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                 availableScalingColumns={[...scalingColumns, ...parentScalingColumns]}
                 availableOptionGroups={allOptionGroups}
                 availableOptionItems={allOptionItems}
+                availableFeats={allFeats}
                 classId={classId || parentClass?.id}
                 defaultHitDie={parentClass?.hitDie}
                 referenceContext={subclassReferenceContext}
@@ -1669,6 +1685,7 @@ export default function SubclassEditor({ userProfile }: { userProfile?: any } = 
                            ...parentScalingColumns.map((c: any) => ({ ...c, name: `${c.name} (Class)` }))
                          ]}
                          availableOptionGroups={allOptionGroups}
+                         availableFeats={allFeats}
                          classId={classId || parentClass?.id}
                          isInsideFeature={true}
                          featureId={editingFeature.id}
