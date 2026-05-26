@@ -195,14 +195,29 @@ export default function Sidebar({
           // the spells list; the admin Feat Manager hangs off the page
           // itself for admins (same pattern as Spells).
           { label: 'Feats', path: '/compendium/feats' },
+          // Public browsers for the remaining catalog surfaces. Items
+          // unifies items+weapons+armor+tools into one page; races
+          // and backgrounds are placeholder routes until their
+          // schemas land.
+          { label: 'Items', path: '/compendium/items' },
+          { label: 'Races', path: '/compendium/races' },
+          { label: 'Backgrounds', path: '/compendium/backgrounds' },
           // Admin-only editor links. Content-creators reach the same
           // editors via the "Proposals" section's `/proposals/edit/*`
           // links — direct-write paths are admin-only post Phase 4.4.
+          //
+          // The `/compendium/<entity>/manage` admin editors (Items /
+          // Races / Backgrounds Manager + Spell Manager / Feat
+          // Manager) are reachable from each public list page's
+          // header instead of getting their own sidebar entry —
+          // keeps the rail focused on browse surfaces and removes
+          // the "two Items rows in the sidebar" confusion. Direct
+          // links: `/compendium/items/manage`, `/compendium/races/manage`,
+          // `/compendium/backgrounds/manage`.
           ...(isAdmin ? [
             { label: 'Tags', path: '/compendium/tags' },
             { label: 'Spell Rules', path: '/compendium/spell-rules' },
             { label: 'Spell Lists', path: '/compendium/spell-lists' },
-            { label: 'Items', path: '/compendium/items' },
           ] : []),
         ]
       },
