@@ -265,12 +265,20 @@ export function ProposalEditorWrapper({
         // wrapper's Submit Changes button stand in for per-editor
         // Save buttons. Sequential await so editors don't race each
         // other.
-        let cbIndex = 0;
-        for (const cb of preFlushCallbacks.current) {
-          console.log(`[ProposalEditorWrapper] preFlush callback ${cbIndex}/${preFlushCallbacks.current.size} start`);
-          await cb();
-          console.log(`[ProposalEditorWrapper] preFlush callback ${cbIndex}/${preFlushCallbacks.current.size} done`);
-          cbIndex++;
+        //
+        // SNAPSHOT THE SET before iterating. A callback that runs
+        // queueChange (its whole purpose) triggers a wrapper re-render,
+        // which used to cause useProposalPreFlushSave to unregister-
+        // then-reregister into the same Set — and JS for...of of a Set
+        // happily visits the newly-added entry, leading to an infinite
+        // queueing loop. The hook was patched (2026-05-26) to not
+        // re-register on context-value change; the snapshot here is the
+        // belt-and-braces second layer of defence.
+        const snapshot = Array.from(preFlushCallbacks.current);
+        for (let i = 0; i < snapshot.length; i++) {
+          console.log(`[ProposalEditorWrapper] preFlush callback ${i + 1}/${snapshot.length} start`);
+          await snapshot[i]();
+          console.log(`[ProposalEditorWrapper] preFlush callback ${i + 1}/${snapshot.length} done`);
         }
 
         // After pre-flush, `queueRef.current` is the authoritative
@@ -611,6 +619,7 @@ export function ProposalEditorWrapper({
             submitting={submitting}
             disabled={submitDisabled}
             onSubmit={handleSubmit}
+            onDiscardQueue={resetQueue}
             focusModeEnabled={enableFocusMode}
             focusMode={focusMode}
             onFocusModeChange={setFocusMode}
@@ -659,6 +668,10 @@ type HeaderProps = {
   submitting: boolean;
   disabled: boolean;
   onSubmit: () => void;
+  /** Drops every entry in the in-memory queue without flushing.
+   *  Visible only when queueCount > 0 — escape hatch for when the
+   *  queue gets polluted (e.g. a buggy flush left junk entries). */
+  onDiscardQueue: () => void;
   focusModeEnabled: boolean;
   focusMode: FocusMode;
   onFocusModeChange: (next: FocusMode) => void;
@@ -673,6 +686,7 @@ function ProposalEditorHeader({
   submitting,
   disabled,
   onSubmit,
+  onDiscardQueue,
   focusModeEnabled,
   focusMode,
   onFocusModeChange,
@@ -728,6 +742,30 @@ function ProposalEditorHeader({
         <div className="flex items-center gap-2 flex-shrink-0">
           {focusModeEnabled && (
             <FocusModeToggle value={focusMode} onChange={onFocusModeChange} />
+          )}
+          {/* Discard queued — only visible when the queue has entries.
+              Escape hatch for when the queue gets polluted (e.g. the
+              pre-flush re-registration loop from 2026-05-26 stuffed 53
+              junk CREATEs into the queue). Confirms via native confirm
+              since this is a rare, destructive escape hatch — not worth
+              a full ConfirmDialog. */}
+          {queueCount > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (window.confirm(
+                  `Discard ${queueCount} unsaved change${queueCount === 1 ? '' : 's'} from this session? This cannot be undone (already-saved drafts in the block are unaffected).`,
+                )) {
+                  onDiscardQueue();
+                }
+              }}
+              className="gap-1.5 border-blood/30 text-blood hover:bg-blood/5"
+              title="Discard everything queued in this session"
+            >
+              Discard {queueCount}
+            </Button>
           )}
           <Button
             onClick={onSubmit}

@@ -83,10 +83,24 @@ export function useProposalPreFlushSave(opts: UseProposalPreFlushSaveOpts): void
     onErrorRef.current = opts.onError;
   });
 
+  // Extract registerPreFlush by reference. It's a useCallback inside
+  // the wrapper with empty deps, so its identity is stable across
+  // wrapper re-renders even when the surrounding context value gets
+  // a fresh memo ref. Depending on the full `proposalContext` object
+  // here caused an infinite loop: the callback runs queueChange →
+  // queue state change → wrapper re-render → contextValue re-memo →
+  // this effect re-runs → unregisters the in-flight callback and
+  // registers a fresh one INTO the Set that flushToBundle is currently
+  // iterating with a for...of. JS visits the new entry, runs it,
+  // queueChange fires again, and so on until React error #185 fires
+  // (and the queue is by then bloated past the 50-revision server cap).
+  // 2026-05-26 prod incident — see commit history for the full
+  // diagnosis.
+  const registerPreFlush = opts.proposalContext?.registerPreFlush ?? null;
   useEffect(() => {
-    if (!opts.enabled || !opts.proposalContext) return;
+    if (!opts.enabled || !registerPreFlush) return;
     console.log('[useProposalPreFlushSave] registering pre-flush callback');
-    return opts.proposalContext.registerPreFlush(async () => {
+    return registerPreFlush(async () => {
       const should = shouldRunRef.current ? shouldRunRef.current() : true;
       console.log('[useProposalPreFlushSave] callback fired', { should });
       if (!should) return;
@@ -98,5 +112,5 @@ export function useProposalPreFlushSave(opts: UseProposalPreFlushSaveOpts): void
         if (onErrorRef.current) onErrorRef.current(err);
       }
     });
-  }, [opts.enabled, opts.proposalContext]);
+  }, [opts.enabled, registerPreFlush]);
 }
