@@ -54,6 +54,19 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     armorMagicalBonus: 'armor_magical_bonus',
     armorType: 'armor_type',
     toolType: 'tool_type',
+    // 20260526-1700 items completeness columns. `currency` /
+    // `capacity` aren't in the map — they're already lowercase
+    // single words that match the column name. `attunement` is
+    // also column-name-equivalent (3-state TEXT post 20260526-1700,
+    // not the legacy boolean).
+    chatFlavor: 'chat_flavor',
+    containerId: 'container_id',
+    typeSubtype: 'type_subtype',
+    unidentifiedDescription: 'unidentified_description',
+    abilityId: 'ability_id',
+    baseWeaponId: 'base_weapon_id',
+    baseArmorId: 'base_armor_id',
+    baseToolId: 'base_tool_id',
   };
 
   const normalized: Record<string, any> = {};
@@ -71,20 +84,34 @@ export function normalizeCompendiumData(data: Record<string, any>): Record<strin
     delete normalized.automation;
   }
 
-  // 3. Map legacy 'uses' object if it exists
+  // 3. Map legacy 'uses' object if it exists.
+  //
+  // Features and other legacy entities decompose `uses` into the flat
+  // `uses_max` / `uses_spent` / `uses_period` / `uses_recovery` columns
+  // their schema actually has. The items table — post-20260526-1700 —
+  // stores `uses` as a single JSON column and DOES NOT have those flat
+  // columns. Decomposing for items would (a) silently strand the data
+  // (no flat columns to land in), and (b) drop the `uses` JSON column
+  // via the `delete normalized.uses` at the end. Detect items payloads
+  // via the `item_type` discriminator (already snake_cased by step 1)
+  // and skip the decomposition so the items.uses JSON column gets the
+  // object intact.
   if (normalized.uses && typeof normalized.uses === 'object') {
-    if (normalized.uses.max !== undefined) normalized.uses_max = String(normalized.uses.max);
-    if (normalized.uses.spent !== undefined) normalized.uses_spent = Number(normalized.uses.spent);
-    if (normalized.uses.value !== undefined && normalized.uses.spent === undefined) {
-      const max = Number(normalized.uses.max || 0);
-      const val = Number(normalized.uses.value || 0);
-      normalized.uses_spent = Math.max(0, max - val);
+    const isItemsPayload = !!normalized.item_type;
+    if (!isItemsPayload) {
+      if (normalized.uses.max !== undefined) normalized.uses_max = String(normalized.uses.max);
+      if (normalized.uses.spent !== undefined) normalized.uses_spent = Number(normalized.uses.spent);
+      if (normalized.uses.value !== undefined && normalized.uses.spent === undefined) {
+        const max = Number(normalized.uses.max || 0);
+        const val = Number(normalized.uses.value || 0);
+        normalized.uses_spent = Math.max(0, max - val);
+      }
+      if (normalized.uses.per !== undefined) normalized.uses_period = normalized.uses.per;
+      if (normalized.uses.period !== undefined) normalized.uses_period = normalized.uses.period;
+      if (normalized.uses.recovery !== undefined) normalized.uses_recovery = normalized.uses.recovery;
+
+      delete normalized.uses;
     }
-    if (normalized.uses.per !== undefined) normalized.uses_period = normalized.uses.per;
-    if (normalized.uses.period !== undefined) normalized.uses_period = normalized.uses.period;
-    if (normalized.uses.recovery !== undefined) normalized.uses_recovery = normalized.uses.recovery;
-    
-    delete normalized.uses;
   }
 
   // 4. Map 'components' object if it exists (for Spells)
@@ -280,6 +307,16 @@ export function denormalizeCompendiumData(row: any): any {
     armor_magical_bonus: 'armorMagicalBonus',
     armor_type: 'armorType',
     tool_type: 'toolType',
+    // 20260526-1700 items completeness columns. Mirrors the new
+    // mappings on the normalize side so the editor reads them as
+    // camelCase consistently.
+    chat_flavor: 'chatFlavor',
+    container_id: 'containerId',
+    type_subtype: 'typeSubtype',
+    unidentified_description: 'unidentifiedDescription',
+    base_weapon_id: 'baseWeaponId',
+    base_armor_id: 'baseArmorId',
+    base_tool_id: 'baseToolId',
   };
 
   const denormalized: any = { ...row };

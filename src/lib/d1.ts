@@ -310,6 +310,14 @@ export async function queryD1<T>(sql: string, params: any[] = [], options: { noC
         // and the nested shape round-trips to Foundry without
         // unflattening on export.
         'weight', 'price', 'damage', 'range',
+        // items completeness columns added 2026-05-26 (migration
+        // 20260526-1700). `uses` is the consolidated UsesField shape
+        // ({max, spent, recovery[], autoDestroy}); `capacity` is
+        // container capacity ({type, value, units, weightlessContents});
+        // `currency` is the 5-coin grid ({cp, sp, ep, gp, pp}).
+        // `ammunition` is the weapon ammunition reference ({type,
+        // quantity, denomination}).
+        'uses', 'capacity', 'currency', 'ammunition',
         // spells.foundry_data — JSON column storing the Foundry system
         // block (activation, range, duration, target, materials, uses,
         // description.value, plus the `_dauligorImport` round-trip

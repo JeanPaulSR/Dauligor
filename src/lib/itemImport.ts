@@ -463,12 +463,22 @@ function buildUnifiedItemSavePayload(
     autoDestroy: !!usesBlock.autoDestroy,
   } : null;
 
-  // ── type.subtype ──
-  // Foundry uses `system.type.subtype` for items where the parent type
-  // dropdown drives a second axis (poison subtype, ammo subtype, loot
-  // subtype). Stored as a plain slug; UI consumers look it up against the
-  // CONFIG.DND5E enum for the parent type.
-  const typeSubtype = String(system.type?.subtype ?? '').trim() || null;
+  // ── type.value (stored in items.type_subtype) ──
+  // We use items.type_subtype as the unified primary-subtype column —
+  // Foundry's `system.type.value` (potion/scroll/light/art/etc.). For
+  // weapons/armor/tools the same info also lives in dedicated columns
+  // (the weapons proficiency row's weapon_type, items.armor_type,
+  // items.tool_type), but type_subtype stays the canonical read-path
+  // for the dynamic items editor so its dropdown logic doesn't have
+  // to branch by shape.
+  //
+  // The rare two-axis case (poison delivery contact/inhaled/ammo
+  // arrow/bolt) currently has nowhere to land — Foundry's
+  // `system.type.subtype` is dropped here on import. A future schema
+  // addition (e.g. items.type_inner_subtype) or a packed-slug
+  // convention ("poison:contact") would close that gap. Tracked in
+  // the C8 docs pass; not in scope for the C6 dynamic-editor landing.
+  const typeSubtype = String(system.type?.value ?? '').trim() || null;
 
   // ── unidentified description ──
   const unidentifiedDescription = system.unidentified?.description
