@@ -649,14 +649,73 @@ export default function FeatImportWorkbench({
     // Use the effective sourceResolved (post-overrides) so a row the
     // user just rescued by picking a source no longer gets filtered
     // out of the batch.
-    const importable = visibleCandidates
+    const resolved = visibleCandidates
       .map((candidate) => ({
         candidate,
         eff: effectiveCandidateValues(candidate, candidateOverrides[candidate.candidateId], existingEntries),
       }))
       .filter(({ eff }) => eff.sourceResolved);
+
+    const unresolvedCount = visibleCandidates.length - resolved.length;
+
+    // ── Intra-batch dedup ─────────────────────────────────────
+    // The schema enforces UNIQUE(COALESCE(source_id, ''), identifier)
+    // — two rows in the same batch with the same effective
+    // (sourceId, identifier) would have BOTH passed the dedup vs.
+    // existingEntries check (because existingEntries is the DB
+    // snapshot at load time, not the in-flight batch), then BOTH
+    // tried to INSERT, and the second one would fail with the new
+    // composite UNIQUE.
+    //
+    // Common causes:
+    //   - Multiple homebrew sources ship a "tough" / "athlete" /
+    //     "grappler" identifier; user picks the same source override
+    //     for several rows; collision.
+    //   - Two rows share an identifier because their Foundry
+    //     `system.identifier` field is the same string.
+    //
+    // We keep the FIRST candidate per (sourceId, identifier) and
+    // surface the rest in a toast + console table so the author
+    // can edit identifier/source/name on the duplicates and re-run.
+    const byKey = new Map<string, { candidate: FeatImportCandidate; eff: ReturnType<typeof effectiveCandidateValues> }>();
+    const dupSkipped: Array<{ name: string; keptName: string; sourceLabel: string; identifier: string }> = [];
+    for (const row of resolved) {
+      const key = `${row.eff.sourceId}||${row.eff.identifier}`;
+      const existing = byKey.get(key);
+      if (existing) {
+        // Resolve a human-readable source label for the toast.
+        const src = sources.find((s) => s.id === row.eff.sourceId);
+        const sourceLabel = String(src?.abbreviation || src?.shortName || src?.name || row.eff.sourceId || '(none)');
+        dupSkipped.push({
+          name: row.candidate.name,
+          keptName: existing.candidate.name,
+          sourceLabel,
+          identifier: row.eff.identifier,
+        });
+      } else {
+        byKey.set(key, row);
+      }
+    }
+    const importable = [...byKey.values()];
+
+    if (dupSkipped.length) {
+      // Loud + actionable warning. The table goes to console too so
+      // the author can copy-paste the dropped names back into the
+      // filter rail and edit them one by one.
+      console.warn('Skipped duplicates within batch (same source + identifier):', dupSkipped);
+      const preview = dupSkipped.slice(0, 3).map((d) => `"${d.name}"`).join(', ');
+      const suffix = dupSkipped.length > 3 ? ` +${dupSkipped.length - 3} more` : '';
+      toast.warning(
+        `Skipping ${dupSkipped.length} duplicate ${dupSkipped.length === 1 ? 'feat' : 'feats'} (same source + identifier): ${preview}${suffix}. Edit identifier or source on the duplicates and re-run.`,
+        { duration: 8000 },
+      );
+    }
+
     if (!importable.length) {
-      toast.error('No visible feats are ready to import.');
+      const msg = unresolvedCount > 0
+        ? `No visible feats are ready to import (${unresolvedCount} have an unresolved source — edit the Source Match dropdown to import them).`
+        : 'No visible feats are ready to import.';
+      toast.error(msg);
       return;
     }
 
@@ -690,7 +749,16 @@ export default function FeatImportWorkbench({
       const createdCount = entries.filter((e) => !e.id).length;
       const updatedCount = entries.filter((e) => !!e.id).length;
 
-      toast.success(`Imported ${entries.length} feats (${createdCount} new, ${updatedCount} updated).`);
+      // Compose a success message that also accounts for skipped
+      // rows (unresolved source + intra-batch duplicates) so the
+      // author has a complete picture of what landed vs. what
+      // needs follow-up edits.
+      const successParts = [
+        `Imported ${entries.length} ${entries.length === 1 ? 'feat' : 'feats'} (${createdCount} new, ${updatedCount} updated)`,
+      ];
+      if (unresolvedCount > 0) successParts.push(`${unresolvedCount} skipped (no source match)`);
+      if (dupSkipped.length > 0) successParts.push(`${dupSkipped.length} skipped (in-batch duplicate)`);
+      toast.success(successParts.join(' · ') + '.');
       if (onImportComplete) await onImportComplete();
     } catch (error) {
       console.error('Error importing visible feats:', error);
