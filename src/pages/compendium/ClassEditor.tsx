@@ -1729,9 +1729,16 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
               <div className="w-full grid grid-cols-2 lg:grid-cols-5 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="proficiencies">Proficiencies</TabsTrigger>
-                <TabsTrigger value="features" disabled={!id}>Class Features</TabsTrigger>
+                {/* Gate on effectiveId, not id, so the tab unlocks after
+                    Create Class even in proposal mode (where the route
+                    stays on /new and only pendingCreateId is set — see
+                    useProposalSingleWorkId for the convention). Pre-fix
+                    behaviour: admin route unlocked instantly (post-save
+                    navigate updated useParams.id); proposal route stayed
+                    locked until a manual refresh. */}
+                <TabsTrigger value="features" disabled={!effectiveId}>Class Features</TabsTrigger>
                 <TabsTrigger value="spellcasting">Spellcasting</TabsTrigger>
-                <TabsTrigger value="subclasses" disabled={!id}>Subclasses</TabsTrigger>
+                <TabsTrigger value="subclasses" disabled={!effectiveId}>Subclasses</TabsTrigger>
               </div>
               <div className="w-full grid grid-cols-2 lg:grid-cols-6 gap-1 bg-card/50 border border-gold/10 p-1 rounded-md">
                 <TabsTrigger value="equipment">Equipment</TabsTrigger>
