@@ -174,7 +174,94 @@ Actor embedded feat matching order:
 1. `flags.dauligor-pairing.sourceId`
 2. `name` + `type`
 
-## Recommended Endpoints
+## Endpoints (shipped)
 
-1. `GET /api/foundry/feats/catalog`
-2. `GET /api/foundry/feats/:sourceId`
+The Foundry side feat importer pulls from two live read-through
+endpoints, mirroring the spell importer's surface. The same source
+catalog at `/api/module/sources/catalog.json` carries each source's
+`counts.feats` and adds `"feats"` to `supportedImportTypes` whenever
+a source has at least one feat row — the wizard filters by both.
+
+1. **Per-source feat list (lightweight summaries)**
+
+   ```
+   GET /api/module/<source-slug>/feats.json
+   ```
+
+   Returns a `dauligor.source-feat-list.v1` bundle:
+
+   ```jsonc
+   {
+     "kind": "dauligor.source-feat-list.v1",
+     "schemaVersion": 1,
+     "sourceId": "<row-id>",
+     "sourceSlug": "<slug>",
+     "sourceSemanticId": "source-phb-2014",
+     "feats": [
+       {
+         "name": "War Caster",
+         "type": "feat",
+         "img": "https://images.dauligor.com/...",
+         "flags": {
+           "dauligor-pairing": {
+             "schemaVersion": 1,
+             "entityKind": "feat",
+             "sourceId": "feat-war-caster",
+             "dbId": "<row-id>",
+             "featSourceType": "feat",
+             "featType": "feat",
+             "featSubtype": "",
+             "featSpellSourceId": "source-phb-2014",
+             "repeatable": false,
+             "hasUses": false,
+             "hasActivities": false,
+             "hasEffects": false,
+             "hasAdvancements": false,
+             "hasPrereqs": true,
+             "requirements": "Level 4+ and Initiate of High Sorcery",
+             "tagIds": []
+           }
+         }
+       }
+     ],
+     "generatedAt": 1779754000000
+   }
+   ```
+
+2. **Per-feat full item (heavy)**
+
+   ```
+   GET /api/module/feats/<dbId>.json
+   ```
+
+   Returns a `dauligor.feat-item.v1` bundle containing the full
+   Foundry-ready `Item` document. The `feat` field is what the
+   importer hands to `actor.createEmbeddedDocuments("Item", [feat])`.
+
+   The `system.advancement` block is rebuilt as a Foundry-shape
+   keyed-object map (`{ "<_id>": Advancement, ... }`) from the
+   Dauligor-side `feats.advancements` array — `_id` keys are
+   preserved verbatim so a round-trip through the export side
+   doesn't mint new advancement IDs. `system.activities` follows
+   the same convention.
+
+The split keeps the picker's initial pool fetch lightweight (~600
+bytes/feat) and only pays the full-feat cost (~2-5 KB) for the
+feats the user actually picks.
+
+## Requirements Rendering
+
+The `requirements` field on the summary (and `system.requirements`
+on the full feat) is produced by `api/_lib/_featRequirements.ts`,
+which mirrors the website's `formatRequirementText` pipeline from
+`src/lib/requirements.ts`. The render walks `feats.requirements_tree`
+(the structured tree authored alongside Modular Option features
+and Choice-of-Feature advancements) and resolves referenced
+entities (classes, subclasses, features, spells, spell rules) to
+their names via a single batched fetch per leaf-type.
+
+Rows that pre-date `requirements_tree` (or have a `null` tree) fall
+back to the legacy `feats.requirements` free-text column so older
+content keeps working unchanged. Both code paths feed the same
+`requirements` field on the wire, so the picker doesn't need to
+distinguish.

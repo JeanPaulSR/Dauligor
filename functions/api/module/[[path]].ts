@@ -12,6 +12,8 @@
 //   /api/module/<source>/classes/<class>/spells.json   (live, no R2)
 //   /api/module/spells/<dbId>.json                     (live, no R2)
 //   /api/module/<source>/spells.json                   (live, no R2)
+//   /api/module/feats/<dbId>.json                      (live, no R2)
+//   /api/module/<source>/feats.json                    (live, no R2)
 //   /api/module/tags/catalog.json                      (live, no R2)
 //
 // Write endpoints (staff-only, POST):
@@ -33,6 +35,8 @@ import {
 import { buildClassSpellListByIdentifier } from "../../../api/_lib/_classSpellList.js";
 import { buildSourceSpellListBundle } from "../../../api/_lib/_sourceSpellList.js";
 import { buildSpellItemBundle } from "../../../api/_lib/_spellExport.js";
+import { buildSourceFeatListBundle } from "../../../api/_lib/_sourceFeatList.js";
+import { buildFeatItemBundle } from "../../../api/_lib/_featExport.js";
 import { buildTagCatalog } from "../../../api/_lib/_tagCatalog.js";
 import { SERVER_EXPORT_FETCHERS } from "../../../api/_lib/d1-fetchers-server.js";
 import {
@@ -250,13 +254,22 @@ export const onRequest = async (context: any): Promise<Response> => {
       // spell-capable sources, so a stale catalog leaves the picker
       // empty. Rebuilding on detection lets the cache self-heal
       // without a manual rebake.
+      //
+      // Also reject catalogs that pre-date the feat-count patch — the
+      // `counts.feats` field is part of the shape now (Number, not
+      // missing), and the Foundry Feats wizard reads it the same way
+      // the Spells wizard reads `counts.spells`.
       const result = await getOrBuild(
         topLevelCatalogKey(),
         buildTopLevelCatalog,
         (cached: any) => {
           const entries = cached?.entries ?? [];
           if (!entries.length) return true; // empty catalog is fine
-          return entries.every((e: any) => Array.isArray(e?.supportedImportTypes));
+          return entries.every(
+            (e: any) =>
+              Array.isArray(e?.supportedImportTypes)
+              && typeof e?.counts?.feats === "number",
+          );
         },
       );
       if (result) return serveCached(result);
@@ -334,6 +347,37 @@ export const onRequest = async (context: any): Promise<Response> => {
     ) {
       const slug = pathParts[0].toLowerCase();
       const result = await buildSourceSpellListBundle(slug, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if the source slug didn't match.
+    }
+
+    // Per-feat full item — live read-through. URL:
+    //   /api/module/feats/<dbId>.json
+    // Mirrors `/api/module/spells/<dbId>.json`. The Foundry feat
+    // browser fetches the full feat from this endpoint after the user
+    // picks a row in the lightweight summary pool.
+    else if (
+      pathParts.length === 2
+      && pathParts[0] === "feats"
+      && pathParts[1].endsWith(".json")
+    ) {
+      const dbId = pathParts[1].replace(".json", "");
+      const result = await buildFeatItemBundle(dbId, SERVER_EXPORT_FETCHERS);
+      if (result) return serveLive(result);
+      // Fall through to 404 if no feat row matched.
+    }
+
+    // Per-source feat list — live read-through, no R2 cache. URL:
+    //   /api/module/<source>/feats.json
+    // Mirrors the per-source spell list endpoint. Ordered AFTER the
+    // `pathParts[0] === "feats"` arm so `/api/module/feats/<dbId>.json`
+    // still routes to the per-feat handler.
+    else if (
+      pathParts.length === 2
+      && pathParts[1] === "feats.json"
+    ) {
+      const slug = pathParts[0].toLowerCase();
+      const result = await buildSourceFeatListBundle(slug, SERVER_EXPORT_FETCHERS);
       if (result) return serveLive(result);
       // Fall through to 404 if the source slug didn't match.
     }

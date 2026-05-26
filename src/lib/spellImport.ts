@@ -1,5 +1,6 @@
 import { slugify } from './utils';
 import { htmlToBbcode } from './bbcode';
+import { cleanFoundryHtml } from './foundryHtmlCleanup';
 import { fetchCollection, updateDocument } from './d1';
 
 const IMAGE_CDN_BASE = 'https://images.dauligor.com';
@@ -128,14 +129,6 @@ function resolveFoundryImageUrl(value: string) {
   return raw;
 }
 
-function toDisplayTokenLabel(value: string) {
-  return String(value ?? '')
-    .split(/[._-]+/g)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
 function matchSourceRecord(book: string, rules: string, sources: SourceRecord[]) {
   const normalizedBook = toCleanUpper(book);
   const normalizedRules = normalizeRules(rules);
@@ -254,33 +247,18 @@ export function formatComponentsLabel(properties: string[], materials: any) {
 }
 
 export function formatFoundrySpellDescriptionForDisplay(html: string) {
-  return String(html ?? '')
-    .replace(/\[\[\/r\s+([^\]]+?)\]\]/giu, '$1')
-    .replace(/\[\[\/damage\s+([^\]\s]+)\s+type=([a-z-]+)(?:[^\]]*)\]\]/giu, '$1 $2')
-    .replace(/\[\[\/damage\s+([^\]]+?)\]\]/giu, '$1')
-    .replace(/@[^[]+\[([^|\]]+)(?:\|\|([^\]]+))?\]/giu, (_match, raw, display) => display || toDisplayTokenLabel(raw))
-    // Strip Foundry HTML noise but preserve our own cross-reference
-    // markers: data-ref-* and any class containing `ref-` (e.g.
-    // `ref-link ref-spell`). bbcodeToHtml emits those when rendering
-    // [ref|kind|id]...[/ref] tags; without this allowlist they get
-    // stripped here and the SPA click intercept loses the kind+id
-    // signal it needs to route correctly.
-    .replace(/\sdata-(?!ref-)[a-z0-9-]+="[^"]*"/giu, '')
-    .replace(/\sclass="(?![^"]*\bref-)[^"]*"/giu, '')
-    .replace(/<p>\s*<\/p>/giu, '')
-    .trim();
-}
-
-function sanitizeFoundrySpellHtmlForStorage(html: string) {
-  return String(html ?? '')
-    .replace(/\sdata-[a-z0-9-]+="[^"]*"/giu, '')
-    .replace(/\sclass="[^"]*"/giu, '')
-    .replace(/<p>\s*<\/p>/giu, '')
-    .trim();
+  // Delegates to the shared `cleanFoundryHtml` so the enricher
+  // grammar stays consistent across spells / feats / items. Spells
+  // skip the prereqs-line stripper — they don't have prerequisites.
+  return cleanFoundryHtml(html);
 }
 
 function convertFoundrySpellHtmlToBbcode(html: string) {
-  return htmlToBbcode(sanitizeFoundrySpellHtmlForStorage(html));
+  // Run the cleanup BEFORE `htmlToBbcode` so enrichers (`@feat[…]`,
+  // `[[/r …]]`, `@UUID[…]{label}`, etc.) become plain text before
+  // the converter sees them. Otherwise raw tokens survive into the
+  // BBCode column and surface as literal text in every consumer.
+  return htmlToBbcode(cleanFoundryHtml(html));
 }
 
 function buildImportWarnings(entry: FoundrySpellExportEntry, matchedSource: SourceRecord | null) {
