@@ -1,14 +1,13 @@
 # Handoff — Items completeness + proficiency split (2026-05-26)
 
-> **Status:** 8 of 8 commits landed on `main`. Remote D1 migration NOT applied yet
-> (will batch with the C7 facilities migration when it lands). C6 dynamic ItemsEditor
-> shipped; C7 (facilities) and C8 (docs) remain — this doc picks up where the live
-> agent left off.
+> **Status:** 9 of 9 commits landed on `main`. Remote D1 migration NOT applied yet
+> (two migrations now batch-pending: 20260526-1700 + 20260526-2000). C7 facilities
+> shipped; only C8 docs pass remains.
 >
 > **Read first:**
 > - `docs/handoff-compendium-shell-2026-05-25.md` — preceding session's context
 > - `module/dauligor-pairing/docs/import-contract-index.md` — module contract index
-> - This file's "Decisions locked" section before starting any C7 work
+> - This file's "Decisions locked" section
 
 ---
 
@@ -24,10 +23,11 @@
 | `207baca` | refactor(class-editor): inline Melee/Ranged pills into category headers — drop standalone section | ClassEditor.tsx | ✅ |
 | `f038305` | feat(trait-adv): weapon picker melee/ranged pills + module-side category-grant expansion | AdvancementManager.tsx + class-import-service.js | ✅ (C4-UI) |
 | `e2e6911` | feat(items): dynamic ItemsEditor body — type-dispatching shell with per-type sub-forms | ItemsEditor.tsx + compendium.ts + d1.ts + itemImport.ts | ✅ (C6) |
+| `7772972` | feat(facilities): bastions table + manage page + public browser | new migration + FacilitiesEditor.tsx + FacilitiesList.tsx + routes/nav | ✅ (C7) |
 
-The 8 commits hold the full **data-model + library + proficiency-UI + trait-advancement +
-dynamic items editor** stack. The remaining work is **new facilities page + docs**,
-summarized below.
+The 9 commits hold the full **data-model + library + proficiency-UI + trait-advancement +
+dynamic items editor + facilities** stack. The only remaining work is **C8 documentation
+pass** (+ the batched remote D1 migration application).
 
 ---
 
@@ -160,76 +160,37 @@ cleaner. Extract later only if a sub-form gets reused elsewhere.
 
 ---
 
-### C7 — Facilities (Bastions) — separate table + page
+### C7 — Facilities (Bastions) — LANDED (`7772972`)
 
-**Migration:** `worker/migrations/20260526-XXXX_facilities.sql`
+Schema shipped at `worker/migrations/20260526-2000_facilities.sql` (applied LOCAL).
+The editor (`FacilitiesEditor.tsx`, ~440 LOC) and public browser (`FacilitiesList.tsx`,
+~320 LOC) live at `/compendium/facilities` and `/compendium/facilities/manage`. Routes
+wired in `App.tsx`; sidebar entry next to Items; Compendium hub tile in Magic & Equipment.
 
-```sql
-CREATE TABLE facilities (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    identifier TEXT NOT NULL UNIQUE,
-    -- Foundry's system.type.value: 'basic' | 'special'
-    facility_type TEXT NOT NULL DEFAULT 'basic',
-    -- Foundry's system.type.subtype — see CONFIG.DND5E.facilityTypes
-    -- {basic: bedroom/diningRoom/parlor/courtyard/kitchen/storage,
-    --  special: arcaneStudy/armory/garden/library/.../warRoom (~30)}
-    facility_subtype TEXT,
-    -- Size: 'cramped' | 'roomy' | 'vast' — affects price, sq, upkeep
-    size TEXT NOT NULL DEFAULT 'cramped',
-    level INTEGER NOT NULL DEFAULT 5,
-    built INTEGER NOT NULL DEFAULT 0,    -- bool: physically constructed?
-    free INTEGER NOT NULL DEFAULT 0,     -- bool: granted free vs paid
-    disabled INTEGER NOT NULL DEFAULT 0, -- bool: forces order='repair'
-    -- Order drives sub-block visibility:
-    -- build|change|craft|empower|enlarge|harvest|maintain|recruit|repair|research|trade
-    facility_order TEXT,
-    -- Progress JSON: {value, max, order, pct}
-    progress TEXT,
-    -- Trade JSON: {creatures, pending, stock, profit} — only when order='trade'
-    trade TEXT,
-    -- Craft JSON: {item, quantity} — only when order='craft'
-    craft TEXT,
-    -- Roster JSON: {value: [actor-uuid], max}
-    defenders TEXT,
-    hirelings TEXT,
-    -- Standard catalog fields
-    description TEXT,
-    image_url TEXT,
-    source_id TEXT REFERENCES sources(id),
-    page TEXT,
-    tags TEXT DEFAULT '[]',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+**Known follow-ups for C7** (flag for next session, not blocking):
 
-CREATE INDEX idx_facilities_type ON facilities(facility_type);
-CREATE INDEX idx_facilities_subtype ON facilities(facility_subtype);
-CREATE INDEX idx_facilities_source ON facilities(source_id);
-```
+- **Foundry Import**: `src/lib/itemImport.ts` `classifyItemShape` returns
+  `'items' | 'weapons' | 'armor' | 'tools'`. Adding `'facilities'` as a fifth target
+  needs the `ItemImportWorkbench` per-shape routing to grow a new branch and a new
+  write path (facilities go into `facilities`, not `items`). Punted because the
+  workbench's per-shape preview + write code is item-specific and would need a
+  reasonable refactor.
+- **Foundry Export**: `module/dauligor-pairing/scripts/export-service.js` already
+  has a generic items folder export but doesn't currently surface facilities.
+  Either a `facilityFolderExport` parallel to the items one, or a single generic
+  "compendium folder" export that includes all item-shaped Foundry documents
+  including facility items.
+- **Actor picker for defenders / hirelings**: the editor surfaces them as
+  line-separated UUID textareas. The character sheet rewrite will close this gap
+  by introducing an actor-UUID picker control.
+- **Facility favorites**: shell's favorites pane is wired with empty no-op props.
+  A `useFacilityFavorites` hook parallel to `useFeatFavorites` would enable
+  starring; the catalog is small enough this hasn't been requested yet.
 
-**Editor page**: `src/pages/compendium/FacilitiesEditor.tsx` — uses
-`DevelopmentCompendiumManager` as base (same pattern as ItemsEditor). The order
-dropdown drives conditional visibility:
-- `order === 'trade'` → show Trade JSON sub-form (creatures/stock/profit)
-- `order === 'craft'` → show Craft JSON sub-form (item/quantity)
-- All other orders → minimal additional fields
-
-**List page**: `src/pages/compendium/FacilitiesList.tsx` — use
-`CompendiumBrowserShell`. Filter axes: facility_type (basic/special), size, has order,
-source. ~150 LOC.
-
-**Routes**: Add `/compendium/facilities` (list) + `/compendium/facilities/manage`
-(editor) to `App.tsx`. Add nav entry in `Sidebar.tsx`.
-
-**Importer**: Extend `src/lib/itemImport.ts` `classifyItemShape` to route `foundryType
-=== 'facility'` to a new `'facilities'` shape that writes to the facilities table. The
-ItemImportWorkbench already supports per-shape routing — add the facilities branch.
-
-**Foundry export contract**: The module already supports a generic items folder export
-(`module/dauligor-pairing/scripts/export-service.js`). Verify it includes facility
-items; if not, add a `facilityFolderExport` parallel to the items one. Probably out of
-scope this commit; add as a follow-up.
+The original spec block (CREATE TABLE plus editor/list plans) has been removed —
+the migration header at `worker/migrations/20260526-2000_facilities.sql` and the
+file-level docs in `FacilitiesEditor.tsx` / `FacilitiesList.tsx` are now the
+canonical references.
 
 ---
 
