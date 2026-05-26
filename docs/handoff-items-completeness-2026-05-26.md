@@ -1,13 +1,18 @@
 # Handoff — Items completeness + proficiency split (2026-05-26)
 
-> **Status:** 9 of 9 commits landed on `main`. Remote D1 migration NOT applied yet
-> (two migrations now batch-pending: 20260526-1700 + 20260526-2000). C7 facilities
-> shipped; only C8 docs pass remains.
+> **Status:** 10 of 10 commits landed on `main`. C8 docs pass complete.
+> Remote D1 migration NOT applied yet (two migrations batch-pending:
+> 20260526-1700 + 20260526-2000). This work stream is otherwise done;
+> the canonical docs in `docs/features/compendium-items.md`,
+> `compendium-facilities.md`, `architecture/proficiency-resolution.md`,
+> and the new schema docs are now the references — this handoff exists
+> for archival continuity.
 >
 > **Read first:**
 > - `docs/handoff-compendium-shell-2026-05-25.md` — preceding session's context
 > - `module/dauligor-pairing/docs/import-contract-index.md` — module contract index
-> - This file's "Decisions locked" section
+> - `docs/features/compendium-items.md` + `compendium-facilities.md` — feature docs
+> - `docs/architecture/proficiency-resolution.md` — the polymorphic resolver walk
 
 ---
 
@@ -24,10 +29,13 @@
 | `f038305` | feat(trait-adv): weapon picker melee/ranged pills + module-side category-grant expansion | AdvancementManager.tsx + class-import-service.js | ✅ (C4-UI) |
 | `e2e6911` | feat(items): dynamic ItemsEditor body — type-dispatching shell with per-type sub-forms | ItemsEditor.tsx + compendium.ts + d1.ts + itemImport.ts | ✅ (C6) |
 | `7772972` | feat(facilities): bastions table + manage page + public browser | new migration + FacilitiesEditor.tsx + FacilitiesList.tsx + routes/nav | ✅ (C7) |
+| `73140b5` | docs: items completeness + facilities + proficiency-resolution docs pass | 6 new + 6 updated app + module docs | ✅ (C8) |
 
-The 9 commits hold the full **data-model + library + proficiency-UI + trait-advancement +
-dynamic items editor + facilities** stack. The only remaining work is **C8 documentation
-pass** (+ the batched remote D1 migration application).
+All ten commits land the full **data-model + library + proficiency-UI +
+trait-advancement + dynamic items editor + facilities + docs** stack. The only
+remaining task is applying the two batched migrations (20260526-1700 + 20260526-2000)
+to remote D1 — both are schema-only, zero data risk. Per AGENTS.md #7 this requires
+explicit per-migration permission, so it stays out of this commit chain.
 
 ---
 
@@ -194,24 +202,32 @@ canonical references.
 
 ---
 
-### C8 — Documentation pass
+### C8 — Documentation pass — LANDED (`73140b5`)
 
-Write/update these:
+All 12 doc files written or updated. The full set is now the canonical reference
+chain — no further "spec" block is needed here. Files (NEW unless noted):
 
-| File | Status | Notes |
-|---|---|---|
-| `docs/features/compendium-items.md` | **NEW** | Full guide: item types, dynamic field map, type.value drives subtype dropdowns, proficiency-resolution flow, custom-property contract |
-| `docs/features/compendium-facilities.md` | **NEW** | Bastions page guide; order-driven sub-blocks |
-| `docs/architecture/proficiency-resolution.md` | **NEW** | The polymorphic FK chain. Explain entity_type values + weapon_type_filter + source_entity_*. Reference `src/lib/proficiencyResolver.ts` as canonical impl |
-| `docs/database/structure/items.md` | **UPDATE** | New columns added in 20260526-1700: uses, container_id, currency, capacity, chat_flavor, ability_id, type_subtype, unidentified_description. attunement is now TEXT 3-state. stealth dropped. |
-| `docs/database/structure/character_proficiencies.md` | **UPDATE** or **NEW** | Document the 3 new columns. Cover the polymorphic source pattern. |
-| `docs/database/structure/proficiencies_weapons.md` | **UPDATE** | Note the 11 standard 5e slugs renamed to Foundry codes. The `name` column stays human-readable. The 4 app-custom properties listed with explanation. |
-| `module/dauligor-pairing/docs/property-mapping.md` | **NEW** | The app/foundry property slug contract. Standard ones are 1:1 (no translation). 4 app-custom listed. Module is responsible for interpreting custom properties (Zweihänder's superHeavy etc.) when round-tripping. |
-| `docs/architecture/foundry-integration.md` | **UPDATE** | Link to property-mapping doc |
-| `module/dauligor-pairing/docs/class-import-contract.md` | **UPDATE** | Note the new `categoryMeleeIds` / `categoryRangedIds` arrays on weapon proficiency blocks + trait advancements. Document the fan-out to Foundry trait keys. |
+- `docs/features/compendium-items.md` — items catalog feature guide
+- `docs/features/compendium-facilities.md` — facilities feature guide
+- `docs/architecture/proficiency-resolution.md` — resolver walk + worked example
+- `docs/database/structure/items.md` — full column reference
+- `docs/database/structure/character_proficiencies.md` — polymorphic grants table
+- `docs/database/structure/facilities.md` — facilities table reference
+- `docs/database/structure/proficiencies_weapons.md` — **UPDATE**: slug rename
+  section + cross-refs
+- `docs/architecture/foundry-integration.md` — **UPDATE**: links property-mapping +
+  proficiency-resolution
+- `docs/features/compendium-feats-items.md` — **UPDATE**: items split out;
+  retitled "Compendium — Feats"
+- `module/dauligor-pairing/docs/property-mapping.md` — app↔Foundry slug contract
+- `module/dauligor-pairing/docs/class-import-contract.md` — **UPDATE**: weapon-
+  trait categoryMeleeIds / categoryRangedIds subsection
+- `module/dauligor-pairing/docs/import-contract-index.md` — **UPDATE**: indexes
+  the new property-mapping doc
 
-Update `docs/architecture/proposal-editor-pattern.md` if any of the new fields end up
-proposal-mode-aware.
+The module-side canonical docs were updated with explicit user permission as part
+of the C8 docs pass (per dauligor-guardian protocol). Changes were additive only —
+no contract semantics were retroactively altered.
 
 ---
 
