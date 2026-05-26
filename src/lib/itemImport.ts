@@ -436,6 +436,45 @@ function buildUnifiedItemSavePayload(
   const isMagical = properties.includes('mgc')
     || (system.rarity && system.rarity !== 'none' && system.rarity !== '');
 
+  // ── attunement ──
+  // Foundry stores attunement as a 3-state string. We mirror it verbatim
+  // now (post 20260526-1700) — was lossy boolean before.
+  //   ''         — does not require attunement
+  //   'required' — must be attuned to use any attunement-gated effect
+  //   'optional' — can be attuned but works without
+  const attunementValue = (() => {
+    const raw = String(system.attunement ?? '').trim().toLowerCase();
+    if (raw === 'required' || raw === 'optional') return raw;
+    // Legacy boolean true → 'required' for back-compat with older exports
+    if (system.attunement === true) return 'required';
+    return '';
+  })();
+
+  // ── uses ──
+  // Foundry's UsesField shape: {max:string, spent:number, recovery:[{period,type,formula}], autoDestroy:boolean}.
+  // Shared across consumable / equipment / tool / weapon. Stash the
+  // whole object as JSON; the new ItemUsesField (C5) and the existing
+  // ConsumptionTabEditor consume the same shape.
+  const usesBlock = system.uses && typeof system.uses === 'object' ? system.uses : null;
+  const usesPayload = usesBlock ? {
+    max: String(usesBlock.max ?? ''),
+    spent: Number(usesBlock.spent ?? 0) || 0,
+    recovery: Array.isArray(usesBlock.recovery) ? usesBlock.recovery : [],
+    autoDestroy: !!usesBlock.autoDestroy,
+  } : null;
+
+  // ── type.subtype ──
+  // Foundry uses `system.type.subtype` for items where the parent type
+  // dropdown drives a second axis (poison subtype, ammo subtype, loot
+  // subtype). Stored as a plain slug; UI consumers look it up against the
+  // CONFIG.DND5E enum for the parent type.
+  const typeSubtype = String(system.type?.subtype ?? '').trim() || null;
+
+  // ── unidentified description ──
+  const unidentifiedDescription = system.unidentified?.description
+    ? convertFoundryHtmlToBbcode(String(system.unidentified.description))
+    : null;
+
   // Common fields — same shape every Foundry item type carries.
   const commonPayload: Record<string, any> = {
     name: item.name || sourceDocument.name || 'Item',
@@ -448,15 +487,27 @@ function buildUnifiedItemSavePayload(
     quantity: Number(system.quantity ?? 1) || 1,
     weight: system.weight ?? { value: 0, units: 'lb' },
     price: system.price ?? { value: 0, denomination: 'gp' },
-    attunement: !!(system.attunement && system.attunement !== '' && system.attunement !== 'none'),
+    attunement: attunementValue,
     equipped: !!system.equipped,
     identified: system.identified !== false,
     magical: !!isMagical,
+    // Properties pass-through. Per the 20260526-1700 weapon-properties
+    // slug rename, our identifier vocabulary now matches dnd5e's
+    // CONFIG.DND5E.itemProperties (fin / hvy / lgt / lod / two / ver /
+    // thr / rch / amm / spc / sil) for the 11 standard 5e ones. Custom
+    // properties (lance / net / range / improvised-weapons / module-
+    // defined extensions like 'superHeavy') pass through verbatim — the
+    // module-side property-mapping contract handles their interpretation
+    // when re-exporting. We do not attempt to invent reverse-mappings
+    // for unknown Foundry codes (per user direction 2026-05-26).
     properties,
     base_item: baseItemSlug || null,
     page: String(item.source?.page ?? system.source?.page ?? '') || null,
     activities: Object.values(system.activities ?? {}),
     effects: Array.isArray(sourceDocument.effects) ? sourceDocument.effects : [],
+    uses: usesPayload,
+    type_subtype: typeSubtype,
+    unidentified_description: unidentifiedDescription,
     tagIds: [],
   };
 
@@ -469,6 +520,10 @@ function buildUnifiedItemSavePayload(
     const magicalBonus = Number(String(system.magicalBonus ?? '').replace(/[^0-9-]/g, '')) || 0;
     shapePayload.damage = system.damage ?? null;
     shapePayload.range = system.range ?? null;
+    // Mastery is a 2024-only feature. We're a 2014-rules base game (per
+    // user direction 2026-05-26) — mastery will be null in practice but
+    // we still capture the imported value so 2024-marked items round-trip
+    // cleanly back to Foundry.
     shapePayload.mastery = String(system.mastery ?? '').trim() || null;
     shapePayload.magical_bonus = magicalBonus;
     shapePayload.ammunition = system.ammunition ?? null;
@@ -482,15 +537,42 @@ function buildUnifiedItemSavePayload(
     shapePayload.strength = system.strength === null || system.strength === undefined || system.strength === ''
       ? null
       : Number(system.strength);
-    shapePayload.stealth = system.stealth ? 1 : 0;
+    // Stealth-disadvantage is now stored as the `stealthDisadvantage`
+    // slug in items.properties (per the 20260526-1700 column drop).
+    // dnd5e v5 already migrates legacy boolean exports into the property
+    // set, so by the time we see `system.properties` the slug should be
+    // there. If it isn't (very old export), surface as a property add.
+    if (system.stealth && !properties.includes('stealthDisadvantage')) {
+      commonPayload.properties = [...properties, 'stealthDisadvantage'];
+    }
     shapePayload.armor_type = foundryCategory || 'light';
   } else if (shape === 'tools') {
     shapePayload.tool_type = foundryCategory || 'art';
     shapePayload.bonus = String(system.bonus ?? '').trim() || null;
-    // Tools carry a `system.ability` slug ("dex"/"str"/etc.) but we
-    // don't have a place to store it on the items table (no ability_id
-    // column). Admins can wire scaling via Activities post-import.
-    void matchAbilityId(String(system.ability ?? '').trim(), abilities);
+    // Tool ability check slug ("dex"/"str"/etc) → attributes(id) FK.
+    // Now persisted (per 20260526-1700 items.ability_id column add) so
+    // the character sheet can score tool checks without an Activity
+    // wire-up. matchAbilityId returns null on miss; that's fine — the
+    // tool just falls back to manual ability selection at use time.
+    shapePayload.ability_id = matchAbilityId(String(system.ability ?? '').trim(), abilities);
+    shapePayload.chat_flavor = String(system.chatFlavor ?? '').trim() || null;
+  }
+
+  // Container shape fields. Containers don't go through the
+  // classifyItemShape branch (it returns 'items' for them), but they
+  // still carry capacity + currency that need their own columns. Detect
+  // via foundryType rather than shape so we don't muddy the shape API.
+  if (foundryType === 'container' || foundryType === 'backpack') {
+    shapePayload.capacity = system.capacity ?? null;
+    shapePayload.currency = system.currency ?? null;
+  }
+
+  // Nested-container reference. Foundry uses a `system.container` UUID
+  // pointing at another item document. Carry the string for now; the
+  // C6 dynamic editor will surface a container picker that turns this
+  // into a Dauligor items.id FK on save.
+  if (system.container) {
+    shapePayload.container_id = String(system.container);
   }
 
   // Polymorphic base-item FK. Only ever fills one of the three.
