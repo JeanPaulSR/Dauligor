@@ -250,14 +250,28 @@ function buildNextGroupedProficiencyCollection(
       : Array.from(new Set([...currentCatIds, categoryId]));
   }
 
+  const nextSection: any = {
+    ...section,
+    [target]: nextIds,
+    [otherTarget]: nextOtherIds,
+    categoryIds: nextCatIds
+  };
+
+  // 20260526: "All" overrides melee/ranged restrictions for the same category.
+  // When toggling a weapons category ON (becoming the canonical whole-category
+  // grant), clear that category from both restricted arrays. Symmetric is true
+  // by omission — toggling OFF doesn't touch the restricted arrays (the user
+  // may want to deselect the whole-category grant and then re-tick just Melee).
+  if (type === 'weapons' && categoryId && !allExist) {
+    nextSection.categoryMeleeIds = (section.categoryMeleeIds || [])
+      .filter((id: string) => id !== categoryId);
+    nextSection.categoryRangedIds = (section.categoryRangedIds || [])
+      .filter((id: string) => id !== categoryId);
+  }
+
   return {
     ...collection,
-    [type]: {
-      ...section,
-      [target]: nextIds,
-      [otherTarget]: nextOtherIds,
-      categoryIds: nextCatIds
-    }
+    [type]: nextSection
   };
 }
 
@@ -1419,76 +1433,147 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
     setMulticlassProficiencies(buildNextGroupedProficiencyCollection(multiclassProficiencies, items, type, target, categoryId));
   };
 
-  // ── Category-level weapon restriction toggle ──
+  // ── Weapon-type-filtered category toggle (inline column buttons) ──
   // Added 2026-05-26 to support split grants like "Simple Melee Weapons".
-  // Three independent flags per category (All / Melee / Ranged) maintained
-  // in three parallel arrays on `weapons`. Mutually-aware behavior:
-  //   - Toggling 'all' on        → adds to categoryIds; removes from melee+ranged arrays
-  //                                (clean canonical "whole category" representation)
-  //   - Toggling 'melee' on      → adds to categoryMeleeIds; if categoryRangedIds also
-  //                                contains it after, promote to categoryIds and clear
-  //                                both (canonicalize back to "all")
-  //   - Toggling 'ranged' on     → symmetric to melee
-  //   - Toggling any flag off    → removes from that array. If toggling 'all' off
-  //                                and the user wants to express "still grant melee",
-  //                                they tick melee separately afterward.
-  // This keeps the data shape minimal — never both `categoryIds` AND `category*Ids`
-  // for the same category simultaneously.
-  const toggleCategoryWeaponRestriction = (
+  // Used by the small Melee/Ranged pills next to each category header
+  // checkbox in BOTH the Weapon Options and Fixed Weapons columns.
+  //
+  // Behavior per column:
+  //   target='optionIds' (Weapon Options column):
+  //     Bulk-toggles the matching melee/ranged weapons in the choice pool.
+  //     No section-level category state — choice pools are inherently
+  //     per-weapon and a melee-restricted choice ("choose 3 from simple
+  //     melee weapons") is just a curated optionIds list, not a separate
+  //     category-level concept.
+  //
+  //   target='fixedIds' (Fixed Weapons column):
+  //     Bulk-toggles the matching melee/ranged weapons in the automatic
+  //     grant list AND maintains the section-level categoryMeleeIds /
+  //     categoryRangedIds arrays so the class export carries the
+  //     "restricted-to-melee" semantic. Mutually-aware with the existing
+  //     "All" toggle (which writes to categoryIds): clicking Melee when
+  //     Ranged is already set promotes to "All" (clears both restricted
+  //     arrays and adds to categoryIds via the existing toggleGroup path).
+  //
+  // The weapon's category membership comes from the categoryItems param
+  // (typically `groupedWeapons[category]`). Each weapon's `.weaponType`
+  // or `.weapon_type` field decides which bucket it falls into — both
+  // shapes are tolerated since fetchCollection doesn't always camelCase.
+  const toggleCategoryByWeaponType = (
     collection: any,
     setter: (next: any) => void,
-    categoryId: string,
-    restriction: 'all' | 'melee' | 'ranged',
+    categoryItems: any[],
+    categoryId: string | undefined,
+    weaponType: 'Melee' | 'Ranged',
+    target: 'fixedIds' | 'optionIds',
   ) => {
-    const section = collection?.weapons || {};
-    const inAll = new Set<string>(section.categoryIds || []);
-    const inMelee = new Set<string>(section.categoryMeleeIds || []);
-    const inRanged = new Set<string>(section.categoryRangedIds || []);
+    const matchType = (w: any) => String(w?.weaponType ?? w?.weapon_type ?? '').trim() === weaponType;
+    const matching = (categoryItems || []).filter(matchType);
+    if (matching.length === 0) return;
+    const matchingIds = matching.map((w) => w.id).filter(Boolean) as string[];
+    const matchingSet = new Set(matchingIds);
 
-    if (restriction === 'all') {
-      if (inAll.has(categoryId)) {
-        inAll.delete(categoryId);
-      } else {
-        inAll.add(categoryId);
-        inMelee.delete(categoryId);
-        inRanged.delete(categoryId);
-      }
-    } else if (restriction === 'melee') {
-      if (inMelee.has(categoryId)) {
-        inMelee.delete(categoryId);
-      } else {
-        // Promote to "all" if the other half is already selected.
-        if (inRanged.has(categoryId)) {
-          inRanged.delete(categoryId);
-          inAll.add(categoryId);
-        } else {
-          inMelee.add(categoryId);
-          inAll.delete(categoryId);
-        }
-      }
+    const section = collection?.weapons || {};
+    const currentIds = new Set<string>((section[target] || []) as string[]);
+    const allMatchingTicked = matchingIds.every((id) => currentIds.has(id));
+
+    let nextIds: string[];
+    if (allMatchingTicked) {
+      nextIds = Array.from(currentIds).filter((id) => !matchingSet.has(id));
     } else {
-      if (inRanged.has(categoryId)) {
-        inRanged.delete(categoryId);
-      } else {
-        if (inMelee.has(categoryId)) {
-          inMelee.delete(categoryId);
-          inAll.add(categoryId);
-        } else {
-          inRanged.add(categoryId);
-          inAll.delete(categoryId);
-        }
-      }
+      nextIds = Array.from(new Set([...Array.from(currentIds), ...matchingIds]));
     }
 
-    setter({
-      ...collection,
-      weapons: {
-        ...section,
-        categoryIds: Array.from(inAll),
-        categoryMeleeIds: Array.from(inMelee),
-        categoryRangedIds: Array.from(inRanged),
-      },
-    });
+    const nextSection: any = { ...section, [target]: nextIds };
+
+    // Section-level category state is maintained ONLY for the Fixed column.
+    if (target === 'fixedIds' && categoryId) {
+      const inAll = new Set<string>(section.categoryIds || []);
+      const inMelee = new Set<string>(section.categoryMeleeIds || []);
+      const inRanged = new Set<string>(section.categoryRangedIds || []);
+      const targetSet = weaponType === 'Melee' ? inMelee : inRanged;
+      const oppositeSet = weaponType === 'Melee' ? inRanged : inMelee;
+
+      if (allMatchingTicked) {
+        // Untick: remove this category from the restricted array. Also
+        // remove from categoryIds because "All" implies both halves were
+        // present — turning off one half breaks that invariant.
+        targetSet.delete(categoryId);
+        inAll.delete(categoryId);
+      } else {
+        // Tick: if the opposite half was already restricted, promote to
+        // "All" (clears both halves, adds to categoryIds). Otherwise just
+        // add to the matching restricted array.
+        if (oppositeSet.has(categoryId)) {
+          oppositeSet.delete(categoryId);
+          inAll.add(categoryId);
+        } else {
+          targetSet.add(categoryId);
+          inAll.delete(categoryId);
+        }
+      }
+      nextSection.categoryIds = Array.from(inAll);
+      nextSection.categoryMeleeIds = Array.from(inMelee);
+      nextSection.categoryRangedIds = Array.from(inRanged);
+    }
+
+    setter({ ...collection, weapons: nextSection });
+  };
+
+  // Renders the inline Melee/Ranged pills that appear next to each weapon
+  // category-header checkbox. Bails (returns null) for non-weapons so it can
+  // be called from any proficiency section without harm — the helper checks
+  // that the items in the category carry a weaponType/weapon_type field.
+  const renderWeaponTypePills = (
+    collection: any,
+    setter: (next: any) => void,
+    items: any[],
+    category: string,
+    target: 'optionIds' | 'fixedIds',
+  ): React.ReactNode => {
+    if (!items || items.length === 0) return null;
+    const matchType = (w: any) => String(w?.weaponType ?? w?.weapon_type ?? '').trim();
+    const meleeItems = items.filter((w) => matchType(w) === 'Melee');
+    const rangedItems = items.filter((w) => matchType(w) === 'Ranged');
+    if (meleeItems.length === 0 && rangedItems.length === 0) return null;
+
+    // Resolve the category id from the rendered category name. groupedWeapons
+    // keys are either the base category name ("Simple Weapon") or, when the
+    // weapons have weaponType set per their data, the suffixed form
+    // ("Simple Melee"). The find tolerates both — the unsuffixed match wins.
+    const baseCategory = category.replace(/ (Melee|Ranged)$/i, '').trim();
+    const catId = allWeaponCategories.find((c: any) => c.name === category)?.id
+      ?? allWeaponCategories.find((c: any) => c.name === baseCategory)?.id;
+
+    const section = collection?.weapons || {};
+    const targetIds = new Set<string>(section[target] || []);
+    const meleeActive = meleeItems.length > 0 && meleeItems.every((w) => targetIds.has(w.id));
+    const rangedActive = rangedItems.length > 0 && rangedItems.every((w) => targetIds.has(w.id));
+
+    const pillBase = 'ml-1 px-1.5 py-0.5 rounded text-[8px] uppercase tracking-widest font-black transition-all border';
+    const pillOn = 'bg-gold/80 text-white border-gold/80';
+    const pillOff = 'bg-card/50 text-gold/40 border-gold/15 hover:border-gold/40';
+
+    return (
+      <>
+        {meleeItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => toggleCategoryByWeaponType(collection, setter, items, catId, 'Melee', target)}
+            className={`${pillBase} ${meleeActive ? pillOn : pillOff}`}
+            title="Toggle all melee weapons in this category"
+          >Melee</button>
+        )}
+        {rangedItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => toggleCategoryByWeaponType(collection, setter, items, catId, 'Ranged', target)}
+            className={`${pillBase} ${rangedActive ? pillOn : pillOff}`}
+            title="Toggle all ranged weapons in this category"
+          >Ranged</button>
+        )}
+      </>
+    );
   };
 
   const syncGroupedDisplayName = (
@@ -2193,63 +2278,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       </div>
                     </div>
 
-                    {/* Category-level grants (All / Melee / Ranged) per weapon category.
-                        Independent of the per-weapon Options/Fixed columns below. Use this
-                        for class descriptions like "Simple Melee Weapons" or "All Martial".
-                        Tri-state model — see toggleCategoryWeaponRestriction docstring. */}
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Category-Level Grants</label>
-                      <div className="p-3 border border-gold/10 bg-background/30 rounded-md space-y-2">
-                        {allWeaponCategories.map((category: any) => {
-                          const catId = category.id;
-                          const inAll = (proficiencies.weapons.categoryIds || []).includes(catId);
-                          const inMelee = (proficiencies.weapons.categoryMeleeIds || []).includes(catId);
-                          const inRanged = (proficiencies.weapons.categoryRangedIds || []).includes(catId);
-                          // "All" badge active when ticked OR when both melee+ranged are ticked.
-                          const showAllActive = inAll || (inMelee && inRanged);
-                          const pillBase = 'px-2.5 py-1 rounded text-[10px] font-bold transition-all border cursor-pointer select-none';
-                          const pillOn = 'bg-gold text-white border-gold';
-                          const pillOff = 'bg-card text-gold/60 border-gold/10 hover:border-gold/30';
-                          return (
-                            <div key={`weapon-cat-restrict-${catId}`} className="flex items-center gap-3">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-ink/60 flex-1 truncate">
-                                {category.name}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => toggleCategoryWeaponRestriction(proficiencies, setProficiencies, catId, 'all')}
-                                className={`${pillBase} ${showAllActive ? pillOn : pillOff}`}
-                                title="Grant all weapons in this category (both melee and ranged)"
-                              >
-                                All
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => toggleCategoryWeaponRestriction(proficiencies, setProficiencies, catId, 'melee')}
-                                className={`${pillBase} ${inMelee && !showAllActive ? pillOn : pillOff}`}
-                                title="Grant only melee weapons in this category"
-                              >
-                                Melee
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => toggleCategoryWeaponRestriction(proficiencies, setProficiencies, catId, 'ranged')}
-                                className={`${pillBase} ${inRanged && !showAllActive ? pillOn : pillOff}`}
-                                title="Grant only ranged weapons in this category"
-                              >
-                                Ranged
-                              </button>
-                            </div>
-                          );
-                        })}
-                        {allWeaponCategories.length === 0 && (
-                          <p className="text-[10px] text-ink/30 italic">
-                            No weapon categories defined. <Link to="/admin/proficiencies" className="text-gold underline">Manage</Link>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Weapon Options</label>
@@ -2275,6 +2303,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                     />
                                     <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
                                   </label>
+                                  {renderWeaponTypePills(proficiencies, setProficiencies, items as any[], category, 'optionIds')}
                                   {allExist && <span className="text-[9px] text-ink/20 ml-auto italic">All Selected</span>}
                                 </div>
                                 {!allExist && (
@@ -2333,6 +2362,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                     />
                                     <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
                                   </label>
+                                  {renderWeaponTypePills(proficiencies, setProficiencies, items as any[], category, 'fixedIds')}
                                   {allFixed && <span className="text-[9px] text-ink/20 ml-auto italic">All Fixed</span>}
                                 </div>
                                 {!allFixed && (
@@ -3590,61 +3620,6 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                       </div>
                     </div>
 
-                    {/* Category-level grants (All / Melee / Ranged) per weapon category.
-                        Multiclass variant — same UX as the primary Proficiencies tab but
-                        bound to multiclassProficiencies state. */}
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Category-Level Grants</label>
-                      <div className="p-3 border border-gold/10 bg-background/30 rounded-md space-y-2">
-                        {allWeaponCategories.map((category: any) => {
-                          const catId = category.id;
-                          const inAll = (multiclassProficiencies.weapons.categoryIds || []).includes(catId);
-                          const inMelee = (multiclassProficiencies.weapons.categoryMeleeIds || []).includes(catId);
-                          const inRanged = (multiclassProficiencies.weapons.categoryRangedIds || []).includes(catId);
-                          const showAllActive = inAll || (inMelee && inRanged);
-                          const pillBase = 'px-2.5 py-1 rounded text-[10px] font-bold transition-all border cursor-pointer select-none';
-                          const pillOn = 'bg-gold text-white border-gold';
-                          const pillOff = 'bg-card text-gold/60 border-gold/10 hover:border-gold/30';
-                          return (
-                            <div key={`mc-weapon-cat-restrict-${catId}`} className="flex items-center gap-3">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-ink/60 flex-1 truncate">
-                                {category.name}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => toggleCategoryWeaponRestriction(multiclassProficiencies, setMulticlassProficiencies, catId, 'all')}
-                                className={`${pillBase} ${showAllActive ? pillOn : pillOff}`}
-                                title="Grant all weapons in this category"
-                              >
-                                All
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => toggleCategoryWeaponRestriction(multiclassProficiencies, setMulticlassProficiencies, catId, 'melee')}
-                                className={`${pillBase} ${inMelee && !showAllActive ? pillOn : pillOff}`}
-                                title="Grant only melee weapons in this category"
-                              >
-                                Melee
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => toggleCategoryWeaponRestriction(multiclassProficiencies, setMulticlassProficiencies, catId, 'ranged')}
-                                className={`${pillBase} ${inRanged && !showAllActive ? pillOn : pillOff}`}
-                                title="Grant only ranged weapons in this category"
-                              >
-                                Ranged
-                              </button>
-                            </div>
-                          );
-                        })}
-                        {allWeaponCategories.length === 0 && (
-                          <p className="text-[10px] text-ink/30 italic">
-                            No weapon categories defined.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-bold uppercase tracking-widest text-gold/60">Weapon Options</label>
@@ -3670,6 +3645,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                     />
                                     <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
                                   </label>
+                                  {renderWeaponTypePills(multiclassProficiencies, setMulticlassProficiencies, items as any[], category, 'optionIds')}
                                   {allExist && <span className="text-[9px] text-ink/20 ml-auto italic">All Selected</span>}
                                 </div>
                                 {!allExist && (
@@ -3728,6 +3704,7 @@ export default function ClassEditor({ userProfile }: { userProfile: any }) {
                                     />
                                     <span className="text-[10px] font-black uppercase tracking-widest text-gold/40 italic">{category}</span>
                                   </label>
+                                  {renderWeaponTypePills(multiclassProficiencies, setMulticlassProficiencies, items as any[], category, 'fixedIds')}
                                   {allFixed && <span className="text-[9px] text-ink/20 ml-auto italic">All Fixed</span>}
                                 </div>
                                 {!allFixed && (
