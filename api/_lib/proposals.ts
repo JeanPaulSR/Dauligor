@@ -171,9 +171,17 @@ const ENTITY_CONFIGS: Record<EntityType, EntityConfig> = {
     ]),
     jsonColumns: new Set([
       "tag_ids", "saving_throws", "proficiencies", "starting_equipment",
-      "multiclassing", "primary_ability_choice", "spellcasting", "advancements",
+      "multiclassing", "primary_ability", "primary_ability_choice",
+      "spellcasting", "advancements",
       "subclass_feature_levels", "multiclass_proficiencies",
       "excluded_option_ids", "asi_levels", "unique_option_mappings",
+      // Display-config columns are stored as JSON objects in D1
+      // (see migrations/0008_classes.sql comments). Missing them
+      // here caused admin approval of class CREATE proposals to fail
+      // with D1_TYPE_ERROR — the client sends them as JS objects and
+      // sanitizePayload would pass them through unstringified. Fixed
+      // 2026-05-26 prod incident.
+      "card_display", "image_display", "preview_display",
     ]),
   },
   subclass: {
